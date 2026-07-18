@@ -23,10 +23,19 @@ streamlit run app.py
 
 For two users, run the app on one always-on computer or NAS-accessible Docker host and let both people open its local network address. SQLite is suitable for this low-write workload, but keep only one app process pointed at the database and use the built-in database backup regularly.
 
+## Back up before migration
+
+Keep the SQLite app and at least one verified database backup until the Google Sheets migration has been fully checked. Create a consistent, non-overwriting backup with:
+
+```powershell
+python scripts/backup_sqlite.py data/ledger.db data/ledger-pre-google-migration.db
+```
+
+The command validates SQLite integrity and the required ledger tables before reporting success.
+
 ## Notes
 
 - Transfers change account balances but do not affect income or expenses.
 - Credit card and loan opening balances should normally be negative.
 - CSV import validates account and category names before writing any rows.
 - This is a record-keeping tool, not tax or accounting advice.
-

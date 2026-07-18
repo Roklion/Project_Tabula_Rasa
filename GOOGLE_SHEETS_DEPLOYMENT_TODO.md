@@ -6,11 +6,11 @@ Expected required service cost: $0/month under normal personal usage.
 
 ## 1. Prepare the project
 
-- [ ] Put the project in a private GitHub repository.
-- [ ] Confirm that no ledger data, passwords, or credentials are committed.
+- [x] Put the project in a private GitHub repository.
+- [x] Confirm that no ledger data, passwords, or credentials are committed.
 - [x] Add `.streamlit/secrets.toml`, service-account JSON files, `.env`, CSV exports, and `ledger.db` to `.gitignore`.
-- [ ] Keep the existing SQLite version and database backup until migration is verified.
-- [ ] Pin dependency versions in `requirements.txt`.
+- [x] Keep the existing SQLite version and database backup until migration is verified.
+- [x] Pin dependency versions in `requirements.txt`.
 
 ## 2. Create the Google workbook
 
