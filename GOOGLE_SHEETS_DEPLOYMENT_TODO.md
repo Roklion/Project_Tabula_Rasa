@@ -14,13 +14,13 @@ Expected required service cost: $0/month under normal personal usage.
 
 ## 2. Create the Google workbook
 
-- [ ] Create a private Google Sheets workbook named `Plain Ledger Data`.
-- [ ] Create an `Accounts` worksheet with columns: `id`, `name`, `type`, `opening_balance`, `active`, `created_at`.
-- [ ] Create a `Categories` worksheet with columns: `id`, `name`, `kind`.
-- [ ] Create a `Transactions` worksheet with columns: `id`, `txn_date`, `kind`, `amount`, `account_id`, `to_account_id`, `category_id`, `payee`, `description`, `reference`, `created_at`.
-- [ ] Freeze and protect each header row.
-- [ ] Avoid merged cells, formulas in data columns, and manual column renaming.
-- [ ] Record the spreadsheet ID from its URL.
+- [x] Create a private Google Sheets workbook named `ledger_data_raw`.
+- [x] Create an `Accounts` worksheet with columns: `id`, `name`, `type`, `opening_balance`, `active`, `created_at`.
+- [x] Create a `Categories` worksheet with columns: `id`, `name`, `kind`.
+- [x] Create a `Transactions` worksheet with columns: `id`, `txn_date`, `kind`, `amount`, `account_id`, `to_account_id`, `category_id`, `payee`, `description`, `reference`, `created_at`.
+- [x] Freeze and protect each header row.
+- [x] Avoid merged cells, formulas in data columns, and manual column renaming.
+- [x] Record the spreadsheet ID from its URL (store outside the repository).
 
 ## 3. Configure Google Cloud
 
