@@ -35,18 +35,19 @@ Expected required service cost: $0/month under normal personal usage.
 
 ## 4. Configure secrets and authentication
 
-- [ ] Create a local `.streamlit/secrets.toml` for development.
-- [ ] Store the spreadsheet ID and service-account credentials in secrets.
+- [x] Create a local `.streamlit/secrets.toml` for development.
+- [x] Store the spreadsheet ID and service-account credentials in secrets.
 - [ ] Deploy the Streamlit app as private and restrict viewer access.
 - [ ] Optionally add a second application password.
 - [ ] Store only the password hash in Streamlit Secrets.
-- [ ] Block all pages and data operations until authentication succeeds.
-- [ ] Add logout behavior.
+- [x] Block all pages and data operations until authentication succeeds.
+- [x] Add logout behavior.
 - [ ] Ensure logs and error messages never expose credentials.
 
 ## 5. Build the Google Sheets storage layer
 
-- [ ] Add the required Google API or Sheets client dependencies.
+- [x] Add the required Google API or Sheets client dependencies.
+- [ ] Verify create, read, update, and delete access using a disposable worksheet.
 - [ ] Isolate workbook access in a dedicated storage module.
 - [ ] Implement worksheet and header validation.
 - [ ] Implement account listing, creation, editing, and deactivation.

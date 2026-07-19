@@ -11,6 +11,8 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from ledger_auth import logout, require_authentication
+
 
 APP_DIR = Path(__file__).resolve().parent
 DB_PATH = Path(os.environ.get("LEDGER_DB_PATH", APP_DIR / "data" / "ledger.db"))
@@ -158,6 +160,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+require_authentication()
 init_db()
 
 with st.sidebar:
@@ -166,6 +169,8 @@ with st.sidebar:
     page = st.radio("Navigate", ["Dashboard", "Transactions", "Accounts", "Categories", "Reports", "Data & backup"])
     st.divider()
     st.caption(f"Database: {DB_PATH.name}")
+    if st.button("Log out", use_container_width=True):
+        logout()
 
 
 if page == "Dashboard":
@@ -370,4 +375,3 @@ else:
                     st.rerun()
         except Exception as exc:
             st.error(f"Could not read this file: {exc}")
-
