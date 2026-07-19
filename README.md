@@ -5,7 +5,9 @@ A private Google Sheets-backed bookkeeping app for one person or a small group o
 ## Run it
 
 1. Install Python 3.11 or newer.
-2. Configure the ignored `.streamlit/secrets.toml` with the spreadsheet ID, service-account credential, and application password hash.
+2. Follow the profile setup below, then configure the ignored
+   `.streamlit/secrets.toml` with each spreadsheet, service-account credential,
+   and the application password hash.
 3. In this folder, run:
 
    ```powershell
@@ -19,9 +21,94 @@ The app reads and writes the private Google workbook through its narrowly scoped
 
 ## Multiple business profiles
 
+Repeat the following setup for every business. A business may use a Google Cloud
+project and Google Drive owned by a different Google account from the other
+profiles.
+
+### 1. Create or select a Google Cloud project
+
+1. Sign in to the [Google Cloud console](https://console.cloud.google.com/)
+   with the Google account that will administer this business's integration.
+2. Create a new project, or select an existing project dedicated to this
+   business. Record its project ID.
+3. Open **APIs & Services > Library**, search for **Google Sheets API**, and
+   click **Enable**. The API must be enabled in the project that owns the
+   service account, even when the spreadsheet belongs to another Google
+   account. See Google's
+   [Sheets API overview](https://developers.google.com/workspace/sheets/api/guides/concepts).
+
+The app only uses the Google Sheets API. The Google Drive API is not required
+for normal ledger operations or for backups written through Google Drive for
+desktop.
+
+### 2. Create the service account and JSON key
+
+1. In the selected Cloud project, open **IAM & Admin > Service Accounts**.
+2. Click **Create service account**. Use a recognizable name such as
+   `tabula-rasa-heathcote`, then click **Create and continue**.
+3. Do not grant project-wide Owner or Editor access. This app gets access by
+   sharing one specific spreadsheet with the service account, so no Google
+   Cloud project role is required for its normal use. Finish creating the
+   account.
+4. Open the new service account, select **Keys > Add key > Create new key**,
+   choose **JSON**, and download the file. Google documents the current process
+   under [Create and delete service-account keys](https://cloud.google.com/iam/docs/keys-create-delete).
+5. Record the `client_email` from the downloaded JSON. You will share the
+   spreadsheet with this address and copy the complete JSON values into
+   Streamlit secrets.
+
+Treat the JSON file like a password: never email it, upload it to Drive, commit
+it to Git, or paste it into an issue or log. It is ignored by this repository,
+but should still be moved to protected credential storage or securely deleted
+after local and hosted secrets have been configured. A Workspace organization
+may prohibit JSON key creation; in that case an administrator must approve the
+organization-policy exception or a different deployment authentication method
+will be needed.
+
+### 3. Create and organize the spreadsheet in Drive
+
+1. Sign in to the Google account that should own the business records.
+2. In Google Drive, create a restricted folder for the business, for example
+   `Tabula Rasa - Heathcote`. Do not enable **Anyone with the link**.
+3. Inside that folder, create a blank Google spreadsheet and give it a clear
+   name such as `Heathcote Advisory Ledger`.
+4. Create these three worksheet tabs with the exact names and first-row headers
+   below. Header spelling, capitalization, and order must match.
+
+   | Worksheet | Row 1 headers, from left to right |
+   | --- | --- |
+   | `Accounts` | `id`, `name`, `type`, `opening_balance`, `active`, `created_at` |
+   | `Categories` | `id`, `name`, `kind` |
+   | `Transactions` | `id`, `txn_date`, `kind`, `amount`, `account_id`, `to_account_id`, `category_id`, `payee`, `description`, `reference`, `created_at` |
+
+   The default `Sheet1` tab may be deleted. Leave rows below the headers empty;
+   the app seeds its initial account and categories on first access.
+5. Click **Share**, enter the service account's `client_email`, select
+   **Editor**, clear **Notify people** if Google offers it, and click **Share**.
+   Keep **General access** set to **Restricted**. Google's
+   [Drive sharing guide](https://support.google.com/drive/answer/2494822)
+   describes these permission levels.
+6. Copy the spreadsheet ID from its URL. It is the value between `/d/` and
+   `/edit`:
+
+   ```text
+   https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit
+   ```
+
+Sharing the containing folder with the service account is optional and grants
+broader inherited access. Sharing only the spreadsheet is the least-privilege
+choice. If the business uses Google Workspace Shared Drives, confirm that its
+administrator permits the external service-account address and grant only the
+minimum role needed. Files in a Shared Drive are owned by the organization,
+whereas a spreadsheet in personal My Drive remains owned by the Google account
+that created it.
+
+### 4. Add the profile to Streamlit secrets
+
 Use one top-level application password and put each isolated business under
-`business_profiles` in `.streamlit/secrets.toml` (and in the hosted deployment's
-Secrets settings):
+`business_profiles` in the ignored local `.streamlit/secrets.toml`. Add the same
+TOML to the hosted deployment's **Secrets** settings. Copy every field from the
+downloaded JSON key; do not copy the example placeholders literally.
 
 ```toml
 app_password_hash = "scrypt$..."
@@ -47,7 +134,7 @@ name = "Second Shop"
 spreadsheet_id = "SECOND_SPREADSHEET_ID"
 
 [business_profiles.second_shop.gcp_service_account]
-# Paste the complete service-account values for this business here.
+# Paste the complete JSON service-account values for this business here.
 type = "service_account"
 project_id = "different-google-cloud-project"
 private_key_id = "..."
@@ -74,6 +161,39 @@ The original single-profile `spreadsheet_id` and `[gcp_service_account]` format
 continues to work, so existing deployments do not require an immediate secrets
 migration.
 
+### 5. Validate before using the profile
+
+Verify read access and the worksheet headers without displaying ledger rows:
+
+```powershell
+python scripts/validate_google_sheets.py --profile heathcote
+```
+
+Then run the reversible permission test. It creates, reads, updates, and
+deletes a disposable worksheet without modifying ledger rows:
+
+```powershell
+python scripts/validate_google_sheets.py --profile heathcote --write-test
+```
+
+After both commands pass, start or redeploy the app, sign in, choose the new
+business in the sidebar, and confirm that its workbook title is shown. Repeat
+the validation for every configured profile.
+
+Common failures:
+
+- **Authentication or workbook access failed:** confirm that the profile's
+  spreadsheet ID and complete JSON key belong together, the Sheets API is
+  enabled in the service account's project, and the spreadsheet is shared as
+  Editor with that profile's exact `client_email`.
+- **Header mismatch or missing worksheet:** correct the three tab names and
+  first-row headers exactly as listed above.
+- **Organization policy blocks sharing:** a Google Workspace administrator may
+  need to permit sharing with the service-account address. Do not make the
+  spreadsheet public as a workaround.
+- **Service-account key creation is disabled:** consult the Workspace/Cloud
+  administrator. Newer organizations may enforce this restriction by default.
+
 ## Legacy SQLite backup
 
 The pre-cutover SQLite backup remains available until the Google Sheets implementation has been fully checked. Create another consistent, non-overwriting legacy backup with:
@@ -83,22 +203,6 @@ python scripts/backup_sqlite.py data/ledger.db data/ledger-pre-google-migration.
 ```
 
 The command validates SQLite integrity and the required ledger tables before reporting success.
-
-## Validate Google Sheets access
-
-After configuring the ignored `.streamlit/secrets.toml`, verify the private workbook and its headers with:
-
-```powershell
-python scripts/validate_google_sheets.py --profile heathcote
-```
-
-To verify create, read, update, and delete permissions, run the reversible disposable-worksheet test:
-
-```powershell
-python scripts/validate_google_sheets.py --profile heathcote --write-test
-```
-
-The test removes its temporary worksheet during cleanup and does not read or modify ledger rows.
 
 ## Run automated tests
 
