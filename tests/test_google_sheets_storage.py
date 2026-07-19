@@ -6,11 +6,13 @@ import re
 import unittest
 import zipfile
 from copy import deepcopy
+from unittest.mock import Mock
 
 from storage.google_sheets import (
     GoogleSheetsStorage,
     StorageConflictError,
     StorageNotFoundError,
+    StorageUnavailableError,
     StorageValidationError,
     WORKSHEET_HEADERS,
 )
@@ -108,6 +110,11 @@ class GoogleSheetsStorageTests(unittest.TestCase):
         self.storage.deactivate_account(created["id"])
         self.assertEqual(self.storage.list_accounts(), [])
         self.assertEqual(len(self.storage.list_accounts(active_only=False)), 1)
+
+    def test_category_uniqueness_is_case_insensitive(self) -> None:
+        self.storage.create_category("Software", "Expense")
+        with self.assertRaises(StorageConflictError):
+            self.storage.create_category("software", "Expense")
 
     def test_category_and_transaction_crud(self) -> None:
         source = self.storage.create_account("Checking", "Bank")
@@ -207,6 +214,18 @@ class GoogleSheetsStorageTests(unittest.TestCase):
             manifest = json.loads(archive.read("manifest.json"))
             self.assertEqual(manifest["row_counts"]["Accounts"], 1)
             self.assertIn("backup_time", manifest)
+
+    def test_temporary_api_failure_returns_safe_error(self) -> None:
+        self.workbook.sheets["Accounts"].get_all_values = Mock(
+            side_effect=OSError("credential-content-must-not-leak")
+        )
+        with self.assertRaises(StorageUnavailableError) as raised:
+            self.storage.list_accounts()
+        self.assertEqual(
+            str(raised.exception),
+            "Google Sheets is temporarily unavailable; no success was reported",
+        )
+        self.assertNotIn("credential-content", str(raised.exception))
 
 
 if __name__ == "__main__":

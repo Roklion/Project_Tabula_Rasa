@@ -78,7 +78,7 @@ def require_authentication() -> None:
     with st.form("login_form"):
         password = st.text_input("Password", type="password")
         submitted = st.form_submit_button(
-            "Sign in", type="primary", use_container_width=True
+            "Sign in", type="primary", width="stretch"
         )
 
     if submitted:

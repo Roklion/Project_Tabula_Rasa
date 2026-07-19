@@ -100,13 +100,17 @@ Expected required service cost: $0/month under normal personal usage.
 
 ## 10. Test the application
 
-- [ ] Test account and category management.
-- [ ] Test income, expenses, transfers, edits, and deletions.
-- [ ] Test CSV imports, duplicate validation, and report totals.
-- [ ] Test simultaneous browser tabs and repeated submissions.
-- [ ] Test temporary Google API failures.
-- [ ] Test authentication, logout, and unauthorized access.
-- [ ] Test the complete workflow on a phone.
+- [ ] Test account and category management after the Google Sheets UI cutover.
+  - [x] Test the current SQLite UI workflow and Google storage-layer behavior.
+- [ ] Test income, expenses, transfers, edits, and deletions after the Google Sheets UI cutover.
+  - [x] Test SQLite UI entry/deletion and Google storage-layer CRUD.
+- [ ] Test CSV imports, duplicate validation, and report totals after the Google Sheets UI cutover.
+  - [x] Test batch CSV prevalidation, account/category duplicates, balances, transfers, and P&L calculations.
+- [ ] Test simultaneous browser tabs and repeated submissions after concurrency controls are implemented.
+- [ ] Test temporary Google API failures through the integrated UI.
+  - [x] Test safe storage-layer failure handling without credential leakage.
+- [x] Test application-password authentication, logout, and unauthorized page blocking.
+- [ ] Test the complete workflow on a phone after deployment.
 
 ## 11. Deploy and cut over
 

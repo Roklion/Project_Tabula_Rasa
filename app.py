@@ -169,7 +169,7 @@ with st.sidebar:
     page = st.radio("Navigate", ["Dashboard", "Transactions", "Accounts", "Categories", "Reports", "Data & backup"])
     st.divider()
     st.caption(f"Database: {DB_PATH.name}")
-    if st.button("Log out", use_container_width=True):
+    if st.button("Log out", width="stretch"):
         logout()
 
 
@@ -200,10 +200,10 @@ if page == "Dashboard":
         else:
             display = recent[["Date", "Type", "Payee", "Category", "Account", "Amount"]].copy()
             display["Amount"] = display.apply(lambda r: (-r.Amount if r.Type == "Expense" else r.Amount), axis=1)
-            st.dataframe(display, hide_index=True, use_container_width=True, column_config={"Amount": st.column_config.NumberColumn(format="$%.2f")})
+            st.dataframe(display, hide_index=True, width="stretch", column_config={"Amount": st.column_config.NumberColumn(format="$%.2f")})
     with right:
         st.subheader("Account balances")
-        st.dataframe(bals[["Account", "Type", "Balance"]], hide_index=True, use_container_width=True, column_config={"Balance": st.column_config.NumberColumn(format="$%.2f")})
+        st.dataframe(bals[["Account", "Type", "Balance"]], hide_index=True, width="stretch", column_config={"Balance": st.column_config.NumberColumn(format="$%.2f")})
 
 
 elif page == "Transactions":
@@ -231,7 +231,7 @@ elif page == "Transactions":
             payee = c1.text_input("Payee / customer")
             reference = c2.text_input("Reference (optional)")
             description = st.text_input("Description / memo")
-            submitted = st.form_submit_button("Save transaction", type="primary", use_container_width=True)
+            submitted = st.form_submit_button("Save transaction", type="primary", width="stretch")
             if submitted:
                 if kind == "Transfer" and not to_account:
                     st.error("Create a second account before recording a transfer.")
@@ -252,7 +252,7 @@ elif page == "Transactions":
             sql += " AND t.kind=?"
             params += (filter_type,)
         txns = ledger(sql, params)
-        st.dataframe(txns, hide_index=True, use_container_width=True, column_config={"Amount": st.column_config.NumberColumn(format="$%.2f")})
+        st.dataframe(txns, hide_index=True, width="stretch", column_config={"Amount": st.column_config.NumberColumn(format="$%.2f")})
         if not txns.empty:
             with st.expander("Delete a transaction"):
                 delete_id = st.selectbox("Transaction", txns.ID.tolist(), format_func=lambda i: f"#{i} — {txns.loc[txns.ID==i, 'Date'].iloc[0]} — {money(txns.loc[txns.ID==i, 'Amount'].iloc[0])}")
@@ -267,7 +267,7 @@ elif page == "Accounts":
     st.title("Accounts")
     st.caption("Track bank, cash, credit card, and other manual balances.")
     bals = balances()
-    st.dataframe(bals[["Account", "Type", "Balance"]], hide_index=True, use_container_width=True, column_config={"Balance": st.column_config.NumberColumn(format="$%.2f")})
+    st.dataframe(bals[["Account", "Type", "Balance"]], hide_index=True, width="stretch", column_config={"Balance": st.column_config.NumberColumn(format="$%.2f")})
     with st.expander("Add account", expanded=True):
         with st.form("add_account"):
             c1, c2, c3 = st.columns(3)
@@ -286,7 +286,7 @@ elif page == "Accounts":
 elif page == "Categories":
     st.title("Categories")
     cats = query("SELECT id AS ID,name AS Category,kind AS Type FROM categories ORDER BY kind,name")
-    st.dataframe(cats, hide_index=True, use_container_width=True)
+    st.dataframe(cats, hide_index=True, width="stretch")
     with st.form("add_category"):
         c1, c2 = st.columns(2)
         name = c1.text_input("Category name")
@@ -331,12 +331,12 @@ elif page == "Reports":
     with left:
         st.subheader("Monthly performance")
         if not monthly.empty:
-            st.plotly_chart(px.bar(monthly, x="Month", y=["Income", "Expenses"], barmode="group", color_discrete_sequence=["#206a4b", "#d47b55"]), use_container_width=True)
+            st.plotly_chart(px.bar(monthly, x="Month", y=["Income", "Expenses"], barmode="group", color_discrete_sequence=["#206a4b", "#d47b55"]), width="stretch")
         else: st.info("No activity in this period.")
     with right:
         st.subheader("Expenses by category")
         if not by_cat.empty:
-            st.plotly_chart(px.bar(by_cat, x="Total", y="Category", orientation="h", color_discrete_sequence=["#d47b55"]), use_container_width=True)
+            st.plotly_chart(px.bar(by_cat, x="Total", y="Category", orientation="h", color_discrete_sequence=["#d47b55"]), width="stretch")
         else: st.info("No expenses in this period.")
 
 
@@ -344,9 +344,9 @@ else:
     st.title("Data & backup")
     st.caption("Your records stay in a single SQLite file. Back it up regularly.")
     all_txns = ledger()
-    st.download_button("Download transactions CSV", all_txns.to_csv(index=False).encode(), f"plain-ledger-{date.today()}.csv", "text/csv", use_container_width=True)
+    st.download_button("Download transactions CSV", all_txns.to_csv(index=False).encode(), f"plain-ledger-{date.today()}.csv", "text/csv", width="stretch")
     if DB_PATH.exists():
-        st.download_button("Download full database backup", DB_PATH.read_bytes(), f"plain-ledger-backup-{date.today()}.db", "application/octet-stream", use_container_width=True)
+        st.download_button("Download full database backup", DB_PATH.read_bytes(), f"plain-ledger-backup-{date.today()}.db", "application/octet-stream", width="stretch")
     st.subheader("Import transactions")
     st.write("Upload a CSV with: Date, Type, Amount, Account, Category, Payee, Description, Reference. Type must be Income or Expense; account and category names must already exist.")
     upload = st.file_uploader("CSV file", type="csv")
@@ -358,7 +358,7 @@ else:
             if missing:
                 st.error(f"Missing columns: {', '.join(sorted(missing))}")
             else:
-                st.dataframe(incoming.head(20), hide_index=True, use_container_width=True)
+                st.dataframe(incoming.head(20), hide_index=True, width="stretch")
                 if st.button("Import rows", type="primary"):
                     accounts = {r["name"]: r["id"] for r in account_rows(False)}
                     categories = {(r["name"], r["kind"]): r["id"] for r in category_rows()}

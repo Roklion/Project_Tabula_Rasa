@@ -49,6 +49,16 @@ python scripts/validate_google_sheets.py --write-test
 
 The test removes its temporary worksheet during cleanup and does not read or modify ledger rows.
 
+## Run automated tests
+
+Run the isolated authentication, UI workflow, Google storage, and reporting tests with:
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+The UI tests use disposable databases and a test-only password hash. They do not read the local ledger, application password, or Google credentials.
+
 ## Notes
 
 - Transfers change account balances but do not affect income or expenses.
