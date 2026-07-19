@@ -1,0 +1,23 @@
+# Normalize text in the repository and keep cross-platform project files as LF.
+* text=auto
+
+/.gitattributes text eol=lf
+/.gitignore text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.toml text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.csv text eol=lf
+
+# Never apply line-ending conversion to binary artifacts.
+*.db binary
+*.db-* binary
+*.zip binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pdf binary
