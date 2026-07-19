@@ -131,6 +131,30 @@ counts before writing. It refuses the configured live workbook and refuses any
 target whose required ledger worksheets already contain data. After writing, it
 rereads every restored row and verifies it against the archive.
 
+## Credentials and recovery
+
+- Local development credentials live only in the ignored
+  `.streamlit/secrets.toml` file.
+- The hosted app uses a separate copy of those TOML values in Streamlit
+  Community Cloud's encrypted Secrets settings.
+- Required secret entries are `spreadsheet_id`, `app_password_hash`, and the
+  `[gcp_service_account]` table. Never store their values in Git, README files,
+  issue trackers, or deployment logs.
+- The original service-account JSON is not required after both secrets stores
+  are configured. If retained for disaster recovery, keep it only in protected
+  credential storage outside the repository.
+- To rotate the Google credential, disable the old key in Google Cloud, create
+  a replacement, update local and hosted secrets, verify access, and then delete
+  the old key.
+- To replace a forgotten application password, run
+  `python scripts/set_app_password.py`, then copy the new hash to the hosted
+  Secrets settings.
+- Recovery uses a verified versioned ZIP and
+  `scripts/restore_google_sheets_backup.py` with a new blank workbook. Never
+  test restoration against the live workbook.
+- Google Drive holds the newest 30 generations. The optional DS220j Cloud Sync
+  copy should use one-way download with destination deletions disabled.
+
 ## Notes
 
 - Transfers change account balances but do not affect income or expenses.

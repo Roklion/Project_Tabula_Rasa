@@ -116,16 +116,17 @@ Expected required service cost: $0/month under normal personal usage.
 
 ## 11. Deploy and cut over
 
-- [ ] Push the sanitized project to the private GitHub repository.
+- [x] Push the sanitized project to the private GitHub repository.
 - [ ] Deploy `app.py` through Streamlit Community Cloud.
 - [ ] Copy secret values into the deployment's Secrets settings.
 - [ ] Confirm service-account workbook access and private viewer restrictions.
 - [ ] Review deployment logs for sensitive or overly detailed output.
-- [ ] Put the SQLite app temporarily into read-only mode.
-- [ ] Run and verify the final migration.
+- [x] Skip SQLite read-only mode because SQLite is not active and has no user-entered data.
+- [x] Skip the final SQLite migration because Step 8 was declared not applicable.
 - [ ] Begin entering all new transactions through the hosted app.
-- [ ] Retain the final SQLite backup and verify the first Drive/NAS backup.
-- [ ] Document credential locations and the recovery procedure.
+- [x] Verify the first versioned Google Drive backup; no final SQLite backup is required.
+- [ ] Verify the first optional DS220j Cloud Sync copy after NAS setup.
+- [x] Document credential locations and the recovery procedure without recording secret values.
 
 ## Security notes
 
