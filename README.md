@@ -1,11 +1,12 @@
 # Plain Ledger
 
-A local-first bookkeeping app for one person or a very small business. It tracks income, expenses, transfers, accounts, categories, and simple profit-and-loss reports without connecting to a bank.
+A private Google Sheets-backed bookkeeping app for one person or a very small business. It tracks income, expenses, transfers, accounts, categories, and simple profit-and-loss reports without connecting to a bank.
 
 ## Run it
 
 1. Install Python 3.11 or newer.
-2. In this folder, run:
+2. Configure the ignored `.streamlit/secrets.toml` with the spreadsheet ID, service-account credential, and application password hash.
+3. In this folder, run:
 
    ```powershell
    python -m venv .venv
@@ -14,18 +15,11 @@ A local-first bookkeeping app for one person or a very small business. It tracks
    streamlit run app.py
    ```
 
-The app creates `data/ledger.db` automatically. Set `LEDGER_DB_PATH` to place the database elsewhere, including a mounted Synology folder:
+The app reads and writes the private Google workbook through its narrowly scoped service account. It does not use a local SQLite database as its active datastore.
 
-```powershell
-$env:LEDGER_DB_PATH = "Z:\Bookkeeping\ledger.db"
-streamlit run app.py
-```
+## Legacy SQLite backup
 
-For two users, run the app on one always-on computer or NAS-accessible Docker host and let both people open its local network address. SQLite is suitable for this low-write workload, but keep only one app process pointed at the database and use the built-in database backup regularly.
-
-## Back up before migration
-
-Keep the SQLite app and at least one verified database backup until the Google Sheets migration has been fully checked. Create a consistent, non-overwriting backup with:
+The pre-cutover SQLite backup remains available until the Google Sheets implementation has been fully checked. Create another consistent, non-overwriting legacy backup with:
 
 ```powershell
 python scripts/backup_sqlite.py data/ledger.db data/ledger-pre-google-migration.db
@@ -57,7 +51,13 @@ Run the isolated authentication, UI workflow, Google storage, and reporting test
 python -m unittest discover -s tests -v
 ```
 
-The UI tests use disposable databases and a test-only password hash. They do not read the local ledger, application password, or Google credentials.
+The UI tests use an in-memory Google workbook and a test-only password hash. They do not read the live ledger, application password, or Google credentials.
+
+Run a read-only end-to-end dashboard check against the configured live workbook with:
+
+```powershell
+python scripts/validate_app_google.py
+```
 
 ## Notes
 

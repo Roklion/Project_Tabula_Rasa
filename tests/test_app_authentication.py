@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
 from streamlit.testing.v1 import AppTest
 
 from ledger_auth import hash_password
+from storage import GoogleSheetsStorage
+from tests.fakes import FakeWorkbook
 
 
 TEST_PASSWORD = "test-password-123"
@@ -16,13 +15,13 @@ TEST_PASSWORD = "test-password-123"
 
 class AppAuthenticationTests(unittest.TestCase):
     def test_unauthorized_login_success_and_logout(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory, patch.dict(
-            os.environ,
-            {"LEDGER_DB_PATH": str(Path(temporary_directory) / "ledger.db")},
-        ):
-            app = AppTest.from_file("app.py", default_timeout=30)
-            app.secrets["app_password_hash"] = hash_password(TEST_PASSWORD)
+        app = AppTest.from_file("app.py", default_timeout=30)
+        app.secrets["app_password_hash"] = hash_password(TEST_PASSWORD)
+        fake_storage = GoogleSheetsStorage(FakeWorkbook())
 
+        with patch.object(
+            GoogleSheetsStorage, "from_secrets", return_value=fake_storage
+        ):
             app.run()
             self.assertEqual(len(app.exception), 0)
             self.assertEqual(app.text_input[0].label, "Password")

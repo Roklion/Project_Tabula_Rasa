@@ -3,6 +3,7 @@
 from .google_sheets import (
     GoogleSheetsStorage,
     StorageConflictError,
+    StorageError,
     StorageNotFoundError,
     StorageUnavailableError,
     StorageValidationError,
@@ -11,6 +12,7 @@ from .google_sheets import (
 __all__ = [
     "GoogleSheetsStorage",
     "StorageConflictError",
+    "StorageError",
     "StorageNotFoundError",
     "StorageUnavailableError",
     "StorageValidationError",

@@ -9,6 +9,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import math
 import zipfile
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
@@ -43,6 +44,24 @@ ACCOUNT_TYPES = {"Bank", "Cash", "Credit card", "Loan", "Other"}
 CATEGORY_KINDS = {"Income", "Expense"}
 TRANSACTION_KINDS = {"Income", "Expense", "Transfer"}
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
+DEFAULT_ACCOUNTS = (("Checking", "Bank"), ("Cash", "Cash"))
+DEFAULT_CATEGORIES = {
+    "Income": ("Sales", "Services", "Interest", "Other income"),
+    "Expense": (
+        "Advertising",
+        "Bank fees",
+        "Insurance",
+        "Meals",
+        "Office",
+        "Professional fees",
+        "Rent",
+        "Software",
+        "Supplies",
+        "Travel",
+        "Utilities",
+        "Other expense",
+    ),
+}
 
 
 class StorageError(RuntimeError):
@@ -79,7 +98,10 @@ def _utc_now() -> str:
 
 
 def _clean_text(value: Any, field: str, *, required: bool = False) -> str:
-    text = "" if value is None else str(value).strip()
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        text = ""
+    else:
+        text = str(value).strip()
     if required and not text:
         raise StorageValidationError(f"{field} is required")
     return text
@@ -201,6 +223,40 @@ class GoogleSheetsStorage:
             )
         for title in WORKSHEET_HEADERS:
             self._headers(title)
+
+    def ensure_defaults(self) -> dict[str, int]:
+        """Seed only missing default accounts/categories using batch writes."""
+        existing_accounts = self.list_accounts(active_only=False)
+        account_names = {account["name"].casefold() for account in existing_accounts}
+        timestamp = _utc_now()
+        new_accounts = [
+            {
+                "id": str(uuid4()),
+                "name": name,
+                "type": account_type,
+                "opening_balance": "0.00",
+                "active": "TRUE",
+                "created_at": timestamp,
+            }
+            for name, account_type in DEFAULT_ACCOUNTS
+            if name.casefold() not in account_names
+        ]
+
+        existing_categories = self.list_categories()
+        category_keys = {
+            (category["name"].casefold(), category["kind"])
+            for category in existing_categories
+        }
+        new_categories = [
+            {"id": str(uuid4()), "name": name, "kind": kind}
+            for kind, names in DEFAULT_CATEGORIES.items()
+            for name in names
+            if (name.casefold(), kind) not in category_keys
+        ]
+
+        self._append_many("Accounts", new_accounts)
+        self._append_many("Categories", new_categories)
+        return {"accounts": len(new_accounts), "categories": len(new_categories)}
 
     def _rows(self, title: str) -> list[_StoredRow]:
         worksheet = self._worksheet(title)

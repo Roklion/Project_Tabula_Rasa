@@ -1,147 +1,91 @@
 from __future__ import annotations
 
-import io
-import os
-import sqlite3
-from contextlib import contextmanager
-from datetime import date, datetime
-from pathlib import Path
+from datetime import date
 
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 
 from ledger_auth import logout, require_authentication
-
-
-APP_DIR = Path(__file__).resolve().parent
-DB_PATH = Path(os.environ.get("LEDGER_DB_PATH", APP_DIR / "data" / "ledger.db"))
+from ledger_reporting import (
+    account_balances,
+    expenses_by_category,
+    monthly_performance,
+    profit_and_loss,
+)
+from storage import (
+    GoogleSheetsStorage,
+    StorageError,
+    StorageValidationError,
+)
 
 
 def money(value: float) -> str:
     return f"${value:,.2f}"
 
 
-@contextmanager
-def db():
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    try:
-        yield conn
-        conn.commit()
-    finally:
-        conn.close()
+@st.cache_resource
+def get_storage() -> GoogleSheetsStorage:
+    return GoogleSheetsStorage.from_secrets(st.secrets)
 
 
-def init_db() -> None:
-    with db() as conn:
-        conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS accounts (
-                id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL UNIQUE,
-                type TEXT NOT NULL,
-                opening_balance REAL NOT NULL DEFAULT 0,
-                active INTEGER NOT NULL DEFAULT 1,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS categories (
-                id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL,
-                kind TEXT NOT NULL CHECK(kind IN ('Income','Expense')),
-                UNIQUE(name, kind)
-            );
-            CREATE TABLE IF NOT EXISTS transactions (
-                id INTEGER PRIMARY KEY,
-                txn_date TEXT NOT NULL,
-                kind TEXT NOT NULL CHECK(kind IN ('Income','Expense','Transfer')),
-                amount REAL NOT NULL CHECK(amount > 0),
-                account_id INTEGER NOT NULL REFERENCES accounts(id),
-                to_account_id INTEGER REFERENCES accounts(id),
-                category_id INTEGER REFERENCES categories(id),
-                payee TEXT NOT NULL DEFAULT '',
-                description TEXT NOT NULL DEFAULT '',
-                reference TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                CHECK(kind != 'Transfer' OR to_account_id IS NOT NULL),
-                CHECK(kind = 'Transfer' OR to_account_id IS NULL)
-            );
-            CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(txn_date);
-            CREATE INDEX IF NOT EXISTS idx_transactions_account ON transactions(account_id);
-            """
-        )
-        if not conn.execute("SELECT 1 FROM accounts LIMIT 1").fetchone():
-            conn.executemany(
-                "INSERT INTO accounts(name,type,opening_balance) VALUES(?,?,?)",
-                [("Checking", "Bank", 0), ("Cash", "Cash", 0)],
-            )
-        defaults = {
-            "Income": ["Sales", "Services", "Interest", "Other income"],
-            "Expense": ["Advertising", "Bank fees", "Insurance", "Meals", "Office", "Professional fees", "Rent", "Software", "Supplies", "Travel", "Utilities", "Other expense"],
+def ledger_frame(
+    transactions: list[dict],
+    accounts: list[dict],
+    categories: list[dict],
+) -> pd.DataFrame:
+    account_names = {account["id"]: account["name"] for account in accounts}
+    category_names = {category["id"]: category["name"] for category in categories}
+    rows = [
+        {
+            "ID": transaction["id"],
+            "Date": transaction["txn_date"],
+            "Type": transaction["kind"],
+            "Account": account_names.get(transaction["account_id"], "Unknown"),
+            "To account": account_names.get(transaction.get("to_account_id"), ""),
+            "Category": category_names.get(transaction.get("category_id"), ""),
+            "Payee": transaction.get("payee", ""),
+            "Description": transaction.get("description", ""),
+            "Reference": transaction.get("reference", ""),
+            "Amount": float(transaction["amount"]),
         }
-        for kind, names in defaults.items():
-            conn.executemany(
-                "INSERT OR IGNORE INTO categories(name,kind) VALUES(?,?)",
-                [(name, kind) for name in names],
-            )
-
-
-def query(sql: str, params: tuple = ()) -> pd.DataFrame:
-    with db() as conn:
-        return pd.read_sql_query(sql, conn, params=params)
-
-
-def execute(sql: str, params: tuple = ()) -> None:
-    with db() as conn:
-        conn.execute(sql, params)
-
-
-def account_rows(active_only: bool = True):
-    where = "WHERE active=1" if active_only else ""
-    with db() as conn:
-        return conn.execute(f"SELECT * FROM accounts {where} ORDER BY name").fetchall()
-
-
-def category_rows(kind: str | None = None):
-    with db() as conn:
-        if kind:
-            return conn.execute("SELECT * FROM categories WHERE kind=? ORDER BY name", (kind,)).fetchall()
-        return conn.execute("SELECT * FROM categories ORDER BY kind,name").fetchall()
-
-
-def balances() -> pd.DataFrame:
-    return query(
-        """
-        SELECT a.id, a.name AS Account, a.type AS Type,
-          a.opening_balance
-          + COALESCE(SUM(CASE
-              WHEN t.kind='Income' AND t.account_id=a.id THEN t.amount
-              WHEN t.kind='Expense' AND t.account_id=a.id THEN -t.amount
-              WHEN t.kind='Transfer' AND t.account_id=a.id THEN -t.amount
-              WHEN t.kind='Transfer' AND t.to_account_id=a.id THEN t.amount
-              ELSE 0 END),0) AS Balance
-        FROM accounts a LEFT JOIN transactions t
-          ON a.id=t.account_id OR a.id=t.to_account_id
-        GROUP BY a.id ORDER BY a.active DESC,a.name
-        """
+        for transaction in transactions
+    ]
+    return pd.DataFrame(
+        rows,
+        columns=[
+            "ID",
+            "Date",
+            "Type",
+            "Account",
+            "To account",
+            "Category",
+            "Payee",
+            "Description",
+            "Reference",
+            "Amount",
+        ],
     )
 
 
-def ledger(where: str = "", params: tuple = ()) -> pd.DataFrame:
-    return query(
-        f"""
-        SELECT t.id AS ID,t.txn_date AS Date,t.kind AS Type,a.name AS Account,
-          ta.name AS "To account",c.name AS Category,t.payee AS Payee,
-          t.description AS Description,t.reference AS Reference,t.amount AS Amount
-        FROM transactions t JOIN accounts a ON a.id=t.account_id
-        LEFT JOIN accounts ta ON ta.id=t.to_account_id
-        LEFT JOIN categories c ON c.id=t.category_id
-        {where} ORDER BY t.txn_date DESC,t.id DESC
-        """,
-        params,
+def balances_frame(accounts: list[dict], transactions: list[dict]) -> pd.DataFrame:
+    rows = account_balances(accounts, transactions)
+    return pd.DataFrame(
+        [
+            {
+                "ID": account["id"],
+                "Account": account["name"],
+                "Type": account["type"],
+                "Active": account["active"],
+                "Balance": account["balance"],
+            }
+            for account in rows
+        ]
     )
+
+
+def report_storage_error(error: StorageError) -> None:
+    st.error(str(error))
 
 
 st.set_page_config(page_title="Plain Ledger", page_icon="📒", layout="wide")
@@ -161,198 +105,466 @@ st.markdown(
 )
 
 require_authentication()
-init_db()
+
+try:
+    storage = get_storage()
+    if not st.session_state.get("defaults_initialized"):
+        storage.ensure_defaults()
+        st.session_state["defaults_initialized"] = True
+except StorageError as error:
+    report_storage_error(error)
+    st.stop()
 
 with st.sidebar:
     st.title("Plain Ledger")
     st.caption("Simple books. Clear numbers.")
-    page = st.radio("Navigate", ["Dashboard", "Transactions", "Accounts", "Categories", "Reports", "Data & backup"])
+    page = st.radio(
+        "Navigate",
+        ["Dashboard", "Transactions", "Accounts", "Categories", "Reports", "Data & backup"],
+    )
     st.divider()
-    st.caption(f"Database: {DB_PATH.name}")
+    st.caption(f"Workbook: {storage.workbook_title}")
     if st.button("Log out", width="stretch"):
         logout()
 
 
 if page == "Dashboard":
     st.title("Your books at a glance")
-    st.markdown('<p class="muted">A current view of cash, income, and spending.</p>', unsafe_allow_html=True)
-    today = date.today()
-    month_start = today.replace(day=1).isoformat()
-    totals = query(
-        """SELECT
-        COALESCE(SUM(CASE WHEN kind='Income' THEN amount ELSE 0 END),0) income,
-        COALESCE(SUM(CASE WHEN kind='Expense' THEN amount ELSE 0 END),0) expense
-        FROM transactions WHERE txn_date>=? AND txn_date<=?""",
-        (month_start, today.isoformat()),
-    ).iloc[0]
-    bals = balances()
+    st.markdown(
+        '<p class="muted">A current view of cash, income, and spending.</p>',
+        unsafe_allow_html=True,
+    )
+    try:
+        today = date.today()
+        month_start = today.replace(day=1)
+        accounts = storage.list_accounts(active_only=False)
+        categories = storage.list_categories()
+        transactions = storage.list_transactions()
+        monthly_totals = profit_and_loss(
+            transactions, start=month_start, end=today
+        )
+        balances = balances_frame(accounts, transactions)
+    except StorageError as error:
+        report_storage_error(error)
+        st.stop()
+
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total balance", money(bals.Balance.sum()))
-    c2.metric("Income this month", money(totals.income))
-    c3.metric("Expenses this month", money(totals.expense))
-    c4.metric("Net this month", money(totals.income - totals.expense))
+    c1.metric("Total balance", money(float(balances["Balance"].sum())))
+    c2.metric("Income this month", money(monthly_totals["income"]))
+    c3.metric("Expenses this month", money(monthly_totals["expenses"]))
+    c4.metric("Net this month", money(monthly_totals["net"]))
     left, right = st.columns([1.4, 1])
     with left:
         st.subheader("Recent activity")
-        recent = ledger().head(8)
+        recent = ledger_frame(transactions[:8], accounts, categories)
         if recent.empty:
             st.info("No transactions yet. Add your first one from Transactions.")
         else:
-            display = recent[["Date", "Type", "Payee", "Category", "Account", "Amount"]].copy()
-            display["Amount"] = display.apply(lambda r: (-r.Amount if r.Type == "Expense" else r.Amount), axis=1)
-            st.dataframe(display, hide_index=True, width="stretch", column_config={"Amount": st.column_config.NumberColumn(format="$%.2f")})
+            display = recent[
+                ["Date", "Type", "Payee", "Category", "Account", "Amount"]
+            ].copy()
+            display["Amount"] = display.apply(
+                lambda row: -row.Amount if row.Type == "Expense" else row.Amount,
+                axis=1,
+            )
+            st.dataframe(
+                display,
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    "Amount": st.column_config.NumberColumn(format="$%.2f")
+                },
+            )
     with right:
         st.subheader("Account balances")
-        st.dataframe(bals[["Account", "Type", "Balance"]], hide_index=True, width="stretch", column_config={"Balance": st.column_config.NumberColumn(format="$%.2f")})
+        st.dataframe(
+            balances[["Account", "Type", "Balance"]],
+            hide_index=True,
+            width="stretch",
+            column_config={"Balance": st.column_config.NumberColumn(format="$%.2f")},
+        )
 
 
 elif page == "Transactions":
     st.title("Transactions")
     tab_add, tab_ledger = st.tabs(["Add transaction", "View & edit ledger"])
-    accounts = account_rows()
-    account_map = {r["name"]: r["id"] for r in accounts}
+    try:
+        accounts = storage.list_accounts(active_only=False)
+        active_accounts = [account for account in accounts if account["active"]]
+        categories = storage.list_categories()
+    except StorageError as error:
+        report_storage_error(error)
+        st.stop()
+
+    account_map = {account["name"]: account["id"] for account in active_accounts}
     with tab_add:
-        kind = st.segmented_control("Transaction type", ["Income", "Expense", "Transfer"], default="Expense")
-        with st.form("add_transaction", clear_on_submit=True):
-            c1, c2 = st.columns(2)
-            txn_date = c1.date_input("Date", date.today())
-            amount = c2.number_input("Amount", min_value=0.01, step=1.0, format="%.2f")
-            source = st.selectbox("Account" if kind != "Transfer" else "From account", list(account_map))
-            to_account = None
-            category_id = None
-            if kind == "Transfer":
-                choices = [n for n in account_map if n != source]
-                to_account = st.selectbox("To account", choices) if choices else None
+        kind = st.segmented_control(
+            "Transaction type",
+            ["Income", "Expense", "Transfer"],
+            default="Expense",
+        )
+        if not account_map:
+            st.warning("Create an active account before recording transactions.")
+        else:
+            categories_for_kind = [
+                category for category in categories if category["kind"] == kind
+            ]
+            if kind != "Transfer" and not categories_for_kind:
+                st.warning(f"Create a {kind.lower()} category first.")
             else:
-                cats = category_rows(kind)
-                cat_map = {r["name"]: r["id"] for r in cats}
-                category_id = cat_map[st.selectbox("Category", list(cat_map))]
-            c1, c2 = st.columns(2)
-            payee = c1.text_input("Payee / customer")
-            reference = c2.text_input("Reference (optional)")
-            description = st.text_input("Description / memo")
-            submitted = st.form_submit_button("Save transaction", type="primary", width="stretch")
-            if submitted:
-                if kind == "Transfer" and not to_account:
-                    st.error("Create a second account before recording a transfer.")
-                else:
-                    execute(
-                        "INSERT INTO transactions(txn_date,kind,amount,account_id,to_account_id,category_id,payee,description,reference) VALUES(?,?,?,?,?,?,?,?,?)",
-                        (txn_date.isoformat(), kind, amount, account_map[source], account_map.get(to_account), category_id, payee.strip(), description.strip(), reference.strip()),
+                with st.form("add_transaction", clear_on_submit=True):
+                    c1, c2 = st.columns(2)
+                    transaction_date = c1.date_input("Date", date.today())
+                    amount = c2.number_input(
+                        "Amount", min_value=0.01, step=1.0, format="%.2f"
                     )
-                    st.success("Transaction saved.")
+                    source = st.selectbox(
+                        "Account" if kind != "Transfer" else "From account",
+                        list(account_map),
+                    )
+                    to_account = None
+                    category_id = None
+                    if kind == "Transfer":
+                        choices = [name for name in account_map if name != source]
+                        to_account = (
+                            st.selectbox("To account", choices) if choices else None
+                        )
+                    else:
+                        category_map = {
+                            category["name"]: category["id"]
+                            for category in categories_for_kind
+                        }
+                        category_id = category_map[
+                            st.selectbox("Category", list(category_map))
+                        ]
+                    c1, c2 = st.columns(2)
+                    payee = c1.text_input("Payee / customer")
+                    reference = c2.text_input("Reference (optional)")
+                    description = st.text_input("Description / memo")
+                    submitted = st.form_submit_button(
+                        "Save transaction", type="primary", width="stretch"
+                    )
+                    if submitted:
+                        if kind == "Transfer" and not to_account:
+                            st.error(
+                                "Create a second active account before recording a transfer."
+                            )
+                        else:
+                            try:
+                                storage.create_transaction(
+                                    txn_date=transaction_date,
+                                    kind=kind,
+                                    amount=amount,
+                                    account_id=account_map[source],
+                                    to_account_id=account_map.get(to_account, ""),
+                                    category_id=category_id or "",
+                                    payee=payee,
+                                    description=description,
+                                    reference=reference,
+                                )
+                                st.success("Transaction saved.")
+                                st.rerun()
+                            except StorageError as error:
+                                report_storage_error(error)
+
     with tab_ledger:
         c1, c2, c3 = st.columns(3)
-        start = c1.date_input("From", date(date.today().year, 1, 1), key="ledger_start")
+        start = c1.date_input(
+            "From", date(date.today().year, 1, 1), key="ledger_start"
+        )
         end = c2.date_input("To", date.today(), key="ledger_end")
-        filter_type = c3.selectbox("Type", ["All", "Income", "Expense", "Transfer"])
-        sql = "WHERE t.txn_date BETWEEN ? AND ?"
-        params: tuple = (start.isoformat(), end.isoformat())
-        if filter_type != "All":
-            sql += " AND t.kind=?"
-            params += (filter_type,)
-        txns = ledger(sql, params)
-        st.dataframe(txns, hide_index=True, width="stretch", column_config={"Amount": st.column_config.NumberColumn(format="$%.2f")})
-        if not txns.empty:
+        filter_type = c3.selectbox(
+            "Type", ["All", "Income", "Expense", "Transfer"]
+        )
+        try:
+            transactions = storage.list_transactions(
+                start=start,
+                end=end,
+                kind=None if filter_type == "All" else filter_type,
+            )
+        except StorageError as error:
+            report_storage_error(error)
+            st.stop()
+        transaction_frame = ledger_frame(transactions, accounts, categories)
+        st.dataframe(
+            transaction_frame,
+            hide_index=True,
+            width="stretch",
+            column_config={"Amount": st.column_config.NumberColumn(format="$%.2f")},
+        )
+        if not transaction_frame.empty:
+            transaction_ids = transaction_frame["ID"].tolist()
+
+            def transaction_label(transaction_id: str) -> str:
+                row = transaction_frame.loc[
+                    transaction_frame["ID"] == transaction_id
+                ].iloc[0]
+                return f"{row['Date']} — {row['Type']} — {money(row['Amount'])} — {transaction_id[:8]}"
+
+            with st.expander("Edit a transaction"):
+                edit_id = st.selectbox(
+                    "Transaction to edit",
+                    transaction_ids,
+                    format_func=transaction_label,
+                )
+                selected = next(
+                    transaction for transaction in transactions if transaction["id"] == edit_id
+                )
+                with st.form("edit_transaction"):
+                    c1, c2 = st.columns(2)
+                    edited_date = c1.date_input(
+                        "Edit date", date.fromisoformat(selected["txn_date"])
+                    )
+                    edited_amount = c2.number_input(
+                        "Edit amount",
+                        min_value=0.01,
+                        value=float(selected["amount"]),
+                        format="%.2f",
+                    )
+                    edited_payee = st.text_input(
+                        "Edit payee / customer", value=selected.get("payee", "")
+                    )
+                    edited_reference = st.text_input(
+                        "Edit reference", value=selected.get("reference", "")
+                    )
+                    edited_description = st.text_input(
+                        "Edit description", value=selected.get("description", "")
+                    )
+                    if st.form_submit_button("Save changes", type="primary"):
+                        try:
+                            storage.edit_transaction(
+                                edit_id,
+                                txn_date=edited_date,
+                                amount=edited_amount,
+                                payee=edited_payee,
+                                reference=edited_reference,
+                                description=edited_description,
+                            )
+                            st.success("Transaction updated.")
+                            st.rerun()
+                        except StorageError as error:
+                            report_storage_error(error)
+
             with st.expander("Delete a transaction"):
-                delete_id = st.selectbox("Transaction", txns.ID.tolist(), format_func=lambda i: f"#{i} — {txns.loc[txns.ID==i, 'Date'].iloc[0]} — {money(txns.loc[txns.ID==i, 'Amount'].iloc[0])}")
-                confirm = st.checkbox("I understand this permanently removes the record")
+                delete_id = st.selectbox(
+                    "Transaction to delete",
+                    transaction_ids,
+                    format_func=transaction_label,
+                )
+                confirm = st.checkbox(
+                    "I understand this permanently removes the record"
+                )
                 if st.button("Delete", disabled=not confirm):
-                    execute("DELETE FROM transactions WHERE id=?", (int(delete_id),))
-                    st.success("Transaction deleted.")
-                    st.rerun()
+                    try:
+                        storage.delete_transaction(delete_id)
+                        st.success("Transaction deleted.")
+                        st.rerun()
+                    except StorageError as error:
+                        report_storage_error(error)
 
 
 elif page == "Accounts":
     st.title("Accounts")
     st.caption("Track bank, cash, credit card, and other manual balances.")
-    bals = balances()
-    st.dataframe(bals[["Account", "Type", "Balance"]], hide_index=True, width="stretch", column_config={"Balance": st.column_config.NumberColumn(format="$%.2f")})
+    try:
+        accounts = storage.list_accounts(active_only=False)
+        transactions = storage.list_transactions()
+        balances = balances_frame(accounts, transactions)
+    except StorageError as error:
+        report_storage_error(error)
+        st.stop()
+    st.dataframe(
+        balances[["Account", "Type", "Active", "Balance"]],
+        hide_index=True,
+        width="stretch",
+        column_config={"Balance": st.column_config.NumberColumn(format="$%.2f")},
+    )
     with st.expander("Add account", expanded=True):
         with st.form("add_account"):
             c1, c2, c3 = st.columns(3)
             name = c1.text_input("Account name")
-            account_type = c2.selectbox("Type", ["Bank", "Cash", "Credit card", "Loan", "Other"])
-            opening = c3.number_input("Opening balance", value=0.0, format="%.2f", help="Use a negative value for money owed.")
+            account_type = c2.selectbox(
+                "Type", ["Bank", "Cash", "Credit card", "Loan", "Other"]
+            )
+            opening = c3.number_input(
+                "Opening balance",
+                value=0.0,
+                format="%.2f",
+                help="Use a negative value for money owed.",
+            )
             if st.form_submit_button("Add account", type="primary"):
                 try:
-                    execute("INSERT INTO accounts(name,type,opening_balance) VALUES(?,?,?)", (name.strip(), account_type, opening))
+                    storage.create_account(name, account_type, opening)
                     st.success("Account added.")
                     st.rerun()
-                except sqlite3.IntegrityError:
-                    st.error("Account names must be unique and cannot be blank.")
+                except StorageError as error:
+                    report_storage_error(error)
+
+    if accounts:
+        with st.expander("Edit or deactivate account"):
+            account_by_id = {account["id"]: account for account in accounts}
+            account_id = st.selectbox(
+                "Account to manage",
+                list(account_by_id),
+                format_func=lambda value: account_by_id[value]["name"],
+            )
+            selected = account_by_id[account_id]
+            with st.form("edit_account"):
+                edited_name = st.text_input("Edit account name", value=selected["name"])
+                edited_type = st.selectbox(
+                    "Edit account type",
+                    ["Bank", "Cash", "Credit card", "Loan", "Other"],
+                    index=["Bank", "Cash", "Credit card", "Loan", "Other"].index(
+                        selected["type"]
+                    ),
+                )
+                edited_opening = st.number_input(
+                    "Edit opening balance",
+                    value=float(selected["opening_balance"]),
+                    format="%.2f",
+                )
+                edited_active = st.checkbox("Active", value=selected["active"])
+                if st.form_submit_button("Save account changes", type="primary"):
+                    try:
+                        storage.edit_account(
+                            account_id,
+                            name=edited_name,
+                            type=edited_type,
+                            opening_balance=edited_opening,
+                            active=edited_active,
+                        )
+                        st.success("Account updated.")
+                        st.rerun()
+                    except StorageError as error:
+                        report_storage_error(error)
+            st.caption(
+                "Accounts are deactivated rather than deleted so transaction references remain valid."
+            )
 
 
 elif page == "Categories":
     st.title("Categories")
-    cats = query("SELECT id AS ID,name AS Category,kind AS Type FROM categories ORDER BY kind,name")
-    st.dataframe(cats, hide_index=True, width="stretch")
+    try:
+        categories = storage.list_categories()
+    except StorageError as error:
+        report_storage_error(error)
+        st.stop()
+    category_frame = pd.DataFrame(
+        [
+            {"ID": category["id"], "Category": category["name"], "Type": category["kind"]}
+            for category in categories
+        ]
+    )
+    st.dataframe(category_frame, hide_index=True, width="stretch")
     with st.form("add_category"):
         c1, c2 = st.columns(2)
         name = c1.text_input("Category name")
         kind = c2.selectbox("Type", ["Expense", "Income"])
         if st.form_submit_button("Add category", type="primary"):
             try:
-                execute("INSERT INTO categories(name,kind) VALUES(?,?)", (name.strip(), kind))
+                storage.create_category(name, kind)
                 st.success("Category added.")
                 st.rerun()
-            except sqlite3.IntegrityError:
-                st.error("That category already exists or the name is blank.")
+            except StorageError as error:
+                report_storage_error(error)
+    st.caption(
+        "Categories are not deleted so existing transaction references remain valid."
+    )
 
 
 elif page == "Reports":
     st.title("Reports")
     c1, c2 = st.columns(2)
-    start = c1.date_input("From", date(date.today().year, 1, 1), key="report_start")
+    start = c1.date_input(
+        "From", date(date.today().year, 1, 1), key="report_start"
+    )
     end = c2.date_input("To", date.today(), key="report_end")
-    summary = query(
-        """SELECT kind AS Type,COALESCE(SUM(amount),0) AS Total FROM transactions
-        WHERE txn_date BETWEEN ? AND ? AND kind IN ('Income','Expense') GROUP BY kind""",
-        (start.isoformat(), end.isoformat()),
-    )
-    inc = float(summary.loc[summary.Type == "Income", "Total"].sum())
-    exp = float(summary.loc[summary.Type == "Expense", "Total"].sum())
+    try:
+        transactions = storage.list_transactions()
+        categories = storage.list_categories()
+    except StorageError as error:
+        report_storage_error(error)
+        st.stop()
+    summary = profit_and_loss(transactions, start=start, end=end)
     a, b, c = st.columns(3)
-    a.metric("Income", money(inc)); b.metric("Expenses", money(exp)); c.metric("Net", money(inc-exp))
-    monthly = query(
-        """SELECT substr(txn_date,1,7) Month,
-        SUM(CASE WHEN kind='Income' THEN amount ELSE 0 END) Income,
-        SUM(CASE WHEN kind='Expense' THEN amount ELSE 0 END) Expenses
-        FROM transactions WHERE txn_date BETWEEN ? AND ? GROUP BY Month ORDER BY Month""",
-        (start.isoformat(), end.isoformat()),
-    )
-    by_cat = query(
-        """SELECT COALESCE(c.name,'Uncategorized') Category,SUM(t.amount) Total
-        FROM transactions t LEFT JOIN categories c ON c.id=t.category_id
-        WHERE t.kind='Expense' AND t.txn_date BETWEEN ? AND ? GROUP BY c.name ORDER BY Total DESC""",
-        (start.isoformat(), end.isoformat()),
-    )
+    a.metric("Income", money(summary["income"]))
+    b.metric("Expenses", money(summary["expenses"]))
+    c.metric("Net", money(summary["net"]))
+    monthly = pd.DataFrame(
+        monthly_performance(transactions, start=start, end=end)
+    ).rename(columns={"month": "Month", "income": "Income", "expenses": "Expenses"})
+    by_category = pd.DataFrame(
+        expenses_by_category(transactions, categories, start=start, end=end)
+    ).rename(columns={"category": "Category", "total": "Total"})
     left, right = st.columns(2)
     with left:
         st.subheader("Monthly performance")
         if not monthly.empty:
-            st.plotly_chart(px.bar(monthly, x="Month", y=["Income", "Expenses"], barmode="group", color_discrete_sequence=["#206a4b", "#d47b55"]), width="stretch")
-        else: st.info("No activity in this period.")
+            st.plotly_chart(
+                px.bar(
+                    monthly,
+                    x="Month",
+                    y=["Income", "Expenses"],
+                    barmode="group",
+                    color_discrete_sequence=["#206a4b", "#d47b55"],
+                ),
+                width="stretch",
+            )
+        else:
+            st.info("No activity in this period.")
     with right:
         st.subheader("Expenses by category")
-        if not by_cat.empty:
-            st.plotly_chart(px.bar(by_cat, x="Total", y="Category", orientation="h", color_discrete_sequence=["#d47b55"]), width="stretch")
-        else: st.info("No expenses in this period.")
+        if not by_category.empty:
+            st.plotly_chart(
+                px.bar(
+                    by_category,
+                    x="Total",
+                    y="Category",
+                    orientation="h",
+                    color_discrete_sequence=["#d47b55"],
+                ),
+                width="stretch",
+            )
+        else:
+            st.info("No expenses in this period.")
 
 
 else:
     st.title("Data & backup")
-    st.caption("Your records stay in a single SQLite file. Back it up regularly.")
-    all_txns = ledger()
-    st.download_button("Download transactions CSV", all_txns.to_csv(index=False).encode(), f"plain-ledger-{date.today()}.csv", "text/csv", width="stretch")
-    if DB_PATH.exists():
-        st.download_button("Download full database backup", DB_PATH.read_bytes(), f"plain-ledger-backup-{date.today()}.db", "application/octet-stream", width="stretch")
+    st.caption("Your live records are stored in the private Google Sheets workbook.")
+    try:
+        accounts = storage.list_accounts(active_only=False)
+        categories = storage.list_categories()
+        transactions = storage.list_transactions()
+        all_transactions = ledger_frame(transactions, accounts, categories)
+        backup_zip = storage.export_backup_zip()
+    except StorageError as error:
+        report_storage_error(error)
+        st.stop()
+    st.download_button(
+        "Download transactions CSV",
+        all_transactions.to_csv(index=False).encode("utf-8"),
+        f"plain-ledger-{date.today()}.csv",
+        "text/csv",
+        width="stretch",
+    )
+    st.download_button(
+        "Download complete workbook backup",
+        backup_zip,
+        f"plain-ledger-backup-{date.today()}.zip",
+        "application/zip",
+        width="stretch",
+    )
     st.subheader("Import transactions")
-    st.write("Upload a CSV with: Date, Type, Amount, Account, Category, Payee, Description, Reference. Type must be Income or Expense; account and category names must already exist.")
+    st.write(
+        "Upload a CSV with: Date, Type, Amount, Account, Category, Payee, "
+        "Description, Reference. Type must be Income or Expense; account and "
+        "category names must already exist."
+    )
     upload = st.file_uploader("CSV file", type="csv")
     if upload:
         try:
-            incoming = pd.read_csv(upload)
+            incoming = pd.read_csv(upload).where(lambda frame: frame.notna(), "")
             required = {"Date", "Type", "Amount", "Account", "Category"}
             missing = required - set(incoming.columns)
             if missing:
@@ -360,18 +572,12 @@ else:
             else:
                 st.dataframe(incoming.head(20), hide_index=True, width="stretch")
                 if st.button("Import rows", type="primary"):
-                    accounts = {r["name"]: r["id"] for r in account_rows(False)}
-                    categories = {(r["name"], r["kind"]): r["id"] for r in category_rows()}
-                    rows = []
-                    for n, r in incoming.iterrows():
-                        kind = str(r.Type).title()
-                        if kind not in ("Income", "Expense") or r.Account not in accounts or (r.Category, kind) not in categories:
-                            raise ValueError(f"Row {n+2} has an unknown type, account, or category")
-                        txn_date = pd.to_datetime(r.Date).date().isoformat()
-                        rows.append((txn_date, kind, abs(float(r.Amount)), accounts[r.Account], categories[(r.Category, kind)], str(r.get("Payee", "")), str(r.get("Description", "")), str(r.get("Reference", ""))))
-                    with db() as conn:
-                        conn.executemany("INSERT INTO transactions(txn_date,kind,amount,account_id,category_id,payee,description,reference) VALUES(?,?,?,?,?,?,?,?)", rows)
-                    st.success(f"Imported {len(rows)} transactions.")
+                    imported = storage.import_csv_transactions(
+                        incoming.to_dict(orient="records")
+                    )
+                    st.success(f"Imported {len(imported)} transactions.")
                     st.rerun()
-        except Exception as exc:
-            st.error(f"Could not read this file: {exc}")
+        except StorageValidationError as error:
+            report_storage_error(error)
+        except (ValueError, pd.errors.ParserError, UnicodeError):
+            st.error("Could not read this CSV file. Check its format and encoding.")

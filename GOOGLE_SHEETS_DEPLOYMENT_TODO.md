@@ -59,15 +59,15 @@ Expected required service cost: $0/month under normal personal usage.
 
 ## 6. Replace SQLite behavior safely
 
-- [ ] Replace integer IDs with UUID strings; never use worksheet row numbers as IDs.
-- [ ] Enforce unique account names in the application.
-- [ ] Enforce unique category name-and-kind combinations.
-- [ ] Validate every account and category reference before writing.
-- [ ] Validate positive numeric amounts and valid dates.
-- [ ] Require a different destination account for transfers.
-- [ ] Prevent deletion of referenced accounts or categories.
-- [ ] Store timestamps consistently in ISO 8601 format.
-- [ ] Preserve existing balance, transfer, income, expense, and P&L behavior.
+- [x] Replace integer IDs with UUID strings; never use worksheet row numbers as IDs.
+- [x] Enforce unique account names in the application.
+- [x] Enforce unique category name-and-kind combinations.
+- [x] Validate every account and category reference before writing.
+- [x] Validate positive numeric amounts and valid dates.
+- [x] Require a different destination account for transfers.
+- [x] Prevent deletion of referenced accounts or categories.
+- [x] Store timestamps consistently in ISO 8601 format.
+- [x] Preserve existing balance, transfer, income, expense, and P&L behavior.
 
 ## 7. Handle spreadsheet-specific concerns
 
@@ -100,10 +100,10 @@ Expected required service cost: $0/month under normal personal usage.
 
 ## 10. Test the application
 
-- [ ] Test account and category management after the Google Sheets UI cutover.
-  - [x] Test the current SQLite UI workflow and Google storage-layer behavior.
-- [ ] Test income, expenses, transfers, edits, and deletions after the Google Sheets UI cutover.
-  - [x] Test SQLite UI entry/deletion and Google storage-layer CRUD.
+- [x] Test account and category management after the Google Sheets UI cutover.
+  - [x] Test the in-memory Google-backed UI workflow and storage-layer behavior.
+- [x] Test income, expenses, transfers, edits, and deletions after the Google Sheets UI cutover.
+  - [x] Test Google-backed UI entry/deletion and storage-layer CRUD/editing.
 - [ ] Test CSV imports, duplicate validation, and report totals after the Google Sheets UI cutover.
   - [x] Test batch CSV prevalidation, account/category duplicates, balances, transfers, and P&L calculations.
 - [ ] Test simultaneous browser tabs and repeated submissions after concurrency controls are implemented.
