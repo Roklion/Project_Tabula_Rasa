@@ -71,14 +71,14 @@ Expected required service cost: $0/month under normal personal usage.
 
 ## 7. Handle spreadsheet-specific concerns
 
-- [ ] Address columns by header name rather than relying on fixed positions where possible.
-- [ ] Use batch updates for related changes.
-- [ ] Re-read records before editing or deleting them.
-- [ ] Cache reads briefly and clear affected caches immediately after writes.
-- [ ] Add retries with exponential backoff for temporary Google API failures.
-- [ ] Display clear availability errors and report success only after confirmed writes.
-- [ ] Prevent duplicate submissions caused by repeated button clicks.
-- [ ] Consider an append-only audit worksheet for important changes.
+- [x] Address columns by header name rather than relying on fixed positions where possible.
+- [x] Use batch updates for related changes.
+- [x] Re-read records before editing or deleting them.
+- [x] Cache reads briefly and clear affected caches immediately after writes.
+- [x] Add retries with exponential backoff for temporary Google API failures.
+- [x] Display clear availability errors and report success only after confirmed writes.
+- [x] Prevent duplicate submissions caused by repeated button clicks.
+- [x] Consider an append-only audit worksheet; defer it until audit writes can be made reliably without implying atomicity.
 
 ## 8. Migrate existing data
 
@@ -106,8 +106,9 @@ Expected required service cost: $0/month under normal personal usage.
   - [x] Test Google-backed UI entry/deletion and storage-layer CRUD/editing.
 - [ ] Test CSV imports, duplicate validation, and report totals after the Google Sheets UI cutover.
   - [x] Test batch CSV prevalidation, account/category duplicates, balances, transfers, and P&L calculations.
-- [ ] Test simultaneous browser tabs and repeated submissions after concurrency controls are implemented.
-- [ ] Test temporary Google API failures through the integrated UI.
+- [ ] Test simultaneous browser tabs after deployment.
+  - [x] Test short-window suppression of repeated identical submissions.
+- [x] Test temporary Google API failures through the integrated UI.
   - [x] Test safe storage-layer failure handling without credential leakage.
 - [x] Test application-password authentication, logout, and unauthorized page blocking.
 - [ ] Test the complete workflow on a phone after deployment.

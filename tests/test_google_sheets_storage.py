@@ -20,7 +20,7 @@ from tests.fakes import FakeWorkbook
 class GoogleSheetsStorageTests(unittest.TestCase):
     def setUp(self) -> None:
         self.workbook = FakeWorkbook()
-        self.storage = GoogleSheetsStorage(self.workbook)
+        self.storage = GoogleSheetsStorage(self.workbook, sleeper=lambda _: None)
 
     def test_reordered_headers_are_addressed_by_name(self) -> None:
         headers = dict(WORKSHEET_HEADERS)
@@ -187,6 +187,100 @@ class GoogleSheetsStorageTests(unittest.TestCase):
             "Google Sheets is temporarily unavailable; no success was reported",
         )
         self.assertNotIn("credential-content", str(raised.exception))
+
+    def test_reads_are_cached_and_invalidated_after_write(self) -> None:
+        worksheet = self.workbook.sheets["Accounts"]
+        original = worksheet.get_all_values
+        worksheet.get_all_values = Mock(wraps=original)
+
+        self.storage.list_accounts(active_only=False)
+        self.storage.list_accounts(active_only=False)
+        self.assertEqual(worksheet.get_all_values.call_count, 1)
+
+        self.storage.create_account("Checking", "Bank")
+        self.storage.list_accounts(active_only=False)
+        self.assertEqual(worksheet.get_all_values.call_count, 3)
+
+    def test_edit_forces_reread_before_replacing_row(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        self.storage.list_accounts(active_only=False)
+        headers = self.workbook.sheets["Accounts"].rows[0]
+        name_index = headers.index("name")
+        self.workbook.sheets["Accounts"].rows[1][name_index] = "Externally renamed"
+
+        edited = self.storage.edit_account(account["id"], type="Cash")
+
+        self.assertEqual(edited["name"], "Externally renamed")
+        self.assertEqual(edited["type"], "Cash")
+
+    def test_temporary_failure_retries_with_exponential_backoff(self) -> None:
+        delays: list[float] = []
+        storage = GoogleSheetsStorage(
+            self.workbook,
+            retry_attempts=4,
+            retry_base_delay_seconds=0.25,
+            sleeper=delays.append,
+        )
+        worksheet = self.workbook.sheets["Accounts"]
+        successful_values = worksheet.get_all_values()
+        worksheet.get_all_values = Mock(
+            side_effect=[OSError("temporary"), OSError("temporary"), successful_values]
+        )
+
+        storage.list_accounts(active_only=False, _force_refresh=True)
+
+        self.assertEqual(delays, [0.25, 0.5])
+        self.assertEqual(worksheet.get_all_values.call_count, 3)
+
+    def test_lost_append_response_is_confirmed_by_uuid_without_duplicate(self) -> None:
+        worksheet = self.workbook.sheets["Accounts"]
+        original_append = worksheet.append_row
+
+        def commit_then_timeout(values: list[str], **kwargs: object) -> None:
+            original_append(values, **kwargs)
+            raise OSError("response lost after commit")
+
+        worksheet.append_row = Mock(side_effect=commit_then_timeout)
+
+        created = self.storage.create_account("Checking", "Bank")
+
+        accounts = self.storage.list_accounts(active_only=False)
+        self.assertEqual([account["id"] for account in accounts], [created["id"]])
+        self.assertEqual(worksheet.append_row.call_count, 1)
+
+    def test_lost_delete_response_does_not_delete_following_row(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Software", "Expense")
+        first = self.storage.create_transaction(
+            txn_date="2026-07-18",
+            kind="Expense",
+            amount=1,
+            account_id=account["id"],
+            category_id=category["id"],
+        )
+        second = self.storage.create_transaction(
+            txn_date="2026-07-19",
+            kind="Expense",
+            amount=2,
+            account_id=account["id"],
+            category_id=category["id"],
+        )
+        worksheet = self.workbook.sheets["Transactions"]
+        original_delete = worksheet.delete_rows
+
+        def commit_then_timeout(row_number: int) -> None:
+            original_delete(row_number)
+            raise OSError("response lost after commit")
+
+        worksheet.delete_rows = Mock(side_effect=commit_then_timeout)
+
+        self.storage.delete_transaction(first["id"])
+
+        remaining_ids = {
+            transaction["id"] for transaction in self.storage.list_transactions()
+        }
+        self.assertEqual(remaining_ids, {second["id"]})
+        self.assertEqual(worksheet.delete_rows.call_count, 1)
 
 
 if __name__ == "__main__":

@@ -10,6 +10,8 @@ import csv
 import io
 import json
 import math
+import threading
+import time
 import zipfile
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
@@ -70,6 +72,10 @@ class StorageError(RuntimeError):
 
 class StorageUnavailableError(StorageError):
     """Raised when Google Sheets cannot complete an API operation."""
+
+    def __init__(self, message: str, *, retryable: bool = False):
+        super().__init__(message)
+        self.retryable = retryable
 
 
 class StorageValidationError(StorageError):
@@ -155,8 +161,22 @@ def _as_bool(value: Any, field: str = "active") -> bool:
 class GoogleSheetsStorage:
     """Validated CRUD and export operations for the ledger workbook."""
 
-    def __init__(self, workbook: Any):
+    def __init__(
+        self,
+        workbook: Any,
+        *,
+        cache_ttl_seconds: float = 10.0,
+        retry_attempts: int = 4,
+        retry_base_delay_seconds: float = 0.25,
+        sleeper: Callable[[float], None] = time.sleep,
+    ):
         self._workbook = workbook
+        self._cache_ttl_seconds = cache_ttl_seconds
+        self._retry_attempts = retry_attempts
+        self._retry_base_delay_seconds = retry_base_delay_seconds
+        self._sleeper = sleeper
+        self._row_cache: dict[str, tuple[float, list[_StoredRow]]] = {}
+        self._cache_lock = threading.RLock()
         self.validate_headers()
 
     @classmethod
@@ -179,21 +199,42 @@ class GoogleSheetsStorage:
     def workbook_title(self) -> str:
         return str(self._workbook.title)
 
-    def _api(self, operation: Callable[[], T]) -> T:
-        try:
-            return operation()
-        except (GoogleAuthError, gspread.GSpreadException, OSError) as exc:
-            raise StorageUnavailableError(
-                "Google Sheets is temporarily unavailable; no success was reported"
-            ) from exc
+    def _api(self, operation: Callable[[], T], *, retry_safe: bool = True) -> T:
+        attempts = self._retry_attempts if retry_safe else 1
+        for attempt in range(attempts):
+            try:
+                return operation()
+            except (GoogleAuthError, gspread.GSpreadException, OSError) as exc:
+                response = getattr(exc, "response", None)
+                status_code = getattr(response, "status_code", None)
+                temporary = isinstance(exc, OSError) or status_code in {
+                    408,
+                    429,
+                    500,
+                    502,
+                    503,
+                    504,
+                }
+                if not temporary or attempt + 1 >= attempts:
+                    raise StorageUnavailableError(
+                        "Google Sheets is temporarily unavailable; no success was reported",
+                        retryable=temporary,
+                    ) from exc
+                self._sleeper(self._retry_base_delay_seconds * (2**attempt))
+        raise AssertionError("Retry loop exited unexpectedly")
 
     def _worksheet(self, title: str) -> Any:
         return self._api(lambda: self._workbook.worksheet(title))
 
     def _headers(self, title: str) -> list[str]:
-        headers = [str(value).strip() for value in self._api(
-            lambda: self._worksheet(title).row_values(1)
-        )]
+        headers = [
+            str(value).strip()
+            for value in self._api(lambda: self._worksheet(title).row_values(1))
+        ]
+        self._validate_header_values(title, headers)
+        return headers
+
+    def _validate_header_values(self, title: str, headers: list[str]) -> None:
         required = set(WORKSHEET_HEADERS[title])
         if not headers:
             raise StorageValidationError(f"{title} header row is empty")
@@ -206,7 +247,6 @@ class GoogleSheetsStorage:
             raise StorageValidationError(
                 f"{title} is missing headers: {', '.join(missing)}"
             )
-        return headers
 
     def validate_headers(self) -> None:
         """Validate required worksheets and headers without relying on positions."""
@@ -226,7 +266,9 @@ class GoogleSheetsStorage:
 
     def ensure_defaults(self) -> dict[str, int]:
         """Seed only missing default accounts/categories using batch writes."""
-        existing_accounts = self.list_accounts(active_only=False)
+        existing_accounts = self.list_accounts(
+            active_only=False, _force_refresh=True
+        )
         account_names = {account["name"].casefold() for account in existing_accounts}
         timestamp = _utc_now()
         new_accounts = [
@@ -242,7 +284,7 @@ class GoogleSheetsStorage:
             if name.casefold() not in account_names
         ]
 
-        existing_categories = self.list_categories()
+        existing_categories = self.list_categories(_force_refresh=True)
         category_keys = {
             (category["name"].casefold(), category["kind"])
             for category in existing_categories
@@ -258,13 +300,20 @@ class GoogleSheetsStorage:
         self._append_many("Categories", new_categories)
         return {"accounts": len(new_accounts), "categories": len(new_categories)}
 
-    def _rows(self, title: str) -> list[_StoredRow]:
+    def _rows(self, title: str, *, force_refresh: bool = False) -> list[_StoredRow]:
+        now = time.monotonic()
+        if not force_refresh and self._cache_ttl_seconds > 0:
+            with self._cache_lock:
+                cached = self._row_cache.get(title)
+                if cached and now - cached[0] < self._cache_ttl_seconds:
+                    return list(cached[1])
+
         worksheet = self._worksheet(title)
         values = self._api(worksheet.get_all_values)
         if not values:
             raise StorageValidationError(f"{title} header row is empty")
         headers = [str(value).strip() for value in values[0]]
-        self._headers(title)
+        self._validate_header_values(title, headers)
         rows: list[_StoredRow] = []
         for row_number, raw_row in enumerate(values[1:], start=2):
             padded = [str(value) for value in raw_row] + [""] * (
@@ -273,11 +322,21 @@ class GoogleSheetsStorage:
             record = dict(zip(headers, padded[: len(headers)]))
             if any(value.strip() for value in record.values()):
                 rows.append(_StoredRow(row_number, record))
-        return rows
+        with self._cache_lock:
+            self._row_cache[title] = (time.monotonic(), rows)
+        return list(rows)
+
+    def _invalidate(self, title: str) -> None:
+        with self._cache_lock:
+            self._row_cache.pop(title, None)
 
     def _find_row(self, title: str, record_id: str) -> _StoredRow:
         record_id = _clean_text(record_id, "ID", required=True)
-        matches = [row for row in self._rows(title) if row.values.get("id") == record_id]
+        matches = [
+            row
+            for row in self._rows(title, force_refresh=True)
+            if row.values.get("id") == record_id
+        ]
         if not matches:
             raise StorageNotFoundError(f"{title[:-1]} no longer exists")
         if len(matches) > 1:
@@ -288,7 +347,30 @@ class GoogleSheetsStorage:
         headers = self._headers(title)
         values = [str(record.get(header, "")) for header in headers]
         worksheet = self._worksheet(title)
-        self._api(lambda: worksheet.append_row(values, value_input_option="RAW"))
+        record_id = str(record.get("id", ""))
+        for attempt in range(self._retry_attempts):
+            try:
+                self._api(
+                    lambda: worksheet.append_row(values, value_input_option="RAW"),
+                    retry_safe=False,
+                )
+                self._invalidate(title)
+                return
+            except StorageUnavailableError as error:
+                self._invalidate(title)
+                if not error.retryable:
+                    raise
+                try:
+                    if record_id and any(
+                        row.values.get("id") == record_id
+                        for row in self._rows(title, force_refresh=True)
+                    ):
+                        return
+                except StorageError:
+                    pass
+                if attempt + 1 >= self._retry_attempts:
+                    raise
+                self._sleeper(self._retry_base_delay_seconds * (2**attempt))
 
     def _append_many(self, title: str, records: Iterable[Mapping[str, Any]]) -> None:
         records = list(records)
@@ -299,7 +381,36 @@ class GoogleSheetsStorage:
             [str(record.get(header, "")) for header in headers] for record in records
         ]
         worksheet = self._worksheet(title)
-        self._api(lambda: worksheet.append_rows(values, value_input_option="RAW"))
+        record_ids = {str(record.get("id", "")) for record in records}
+        for attempt in range(self._retry_attempts):
+            try:
+                self._api(
+                    lambda: worksheet.append_rows(values, value_input_option="RAW"),
+                    retry_safe=False,
+                )
+                self._invalidate(title)
+                return
+            except StorageUnavailableError as error:
+                self._invalidate(title)
+                if not error.retryable:
+                    raise
+                try:
+                    existing_ids = {
+                        row.values.get("id", "")
+                        for row in self._rows(title, force_refresh=True)
+                    }
+                    present = record_ids & existing_ids
+                    if present == record_ids:
+                        return
+                    if present:
+                        raise StorageConflictError(
+                            "Batch write completion could not be confirmed safely"
+                        )
+                except StorageUnavailableError:
+                    pass
+                if attempt + 1 >= self._retry_attempts:
+                    raise
+                self._sleeper(self._retry_base_delay_seconds * (2**attempt))
 
     def _replace_row(self, title: str, row: _StoredRow, record: Mapping[str, Any]) -> None:
         headers = self._headers(title)
@@ -310,10 +421,13 @@ class GoogleSheetsStorage:
                 [values], range_name=f"A{row.row_number}", raw=True
             )
         )
+        self._invalidate(title)
 
-    def list_accounts(self, *, active_only: bool = True) -> list[dict[str, Any]]:
+    def list_accounts(
+        self, *, active_only: bool = True, _force_refresh: bool = False
+    ) -> list[dict[str, Any]]:
         accounts = []
-        for row in self._rows("Accounts"):
+        for row in self._rows("Accounts", force_refresh=_force_refresh):
             record: dict[str, Any] = dict(row.values)
             record["active"] = _as_bool(record.get("active", ""))
             record["opening_balance"] = float(
@@ -332,7 +446,9 @@ class GoogleSheetsStorage:
             raise StorageValidationError("Unknown account type")
         if any(
             account["name"].casefold() == name.casefold()
-            for account in self.list_accounts(active_only=False)
+            for account in self.list_accounts(
+                active_only=False, _force_refresh=True
+            )
         ):
             raise StorageConflictError("Account names must be unique")
         record = {
@@ -358,7 +474,9 @@ class GoogleSheetsStorage:
         if any(
             account["id"] != account_id
             and account["name"].casefold() == name.casefold()
-            for account in self.list_accounts(active_only=False)
+            for account in self.list_accounts(
+                active_only=False, _force_refresh=True
+            )
         ):
             raise StorageConflictError("Account names must be unique")
         updated.update(
@@ -379,10 +497,15 @@ class GoogleSheetsStorage:
     def deactivate_account(self, account_id: str) -> dict[str, Any]:
         return self.edit_account(account_id, active=False)
 
-    def list_categories(self, kind: str | None = None) -> list[dict[str, str]]:
+    def list_categories(
+        self, kind: str | None = None, *, _force_refresh: bool = False
+    ) -> list[dict[str, str]]:
         if kind is not None and kind not in CATEGORY_KINDS:
             raise StorageValidationError("Unknown category kind")
-        categories = [dict(row.values) for row in self._rows("Categories")]
+        categories = [
+            dict(row.values)
+            for row in self._rows("Categories", force_refresh=_force_refresh)
+        ]
         if kind is not None:
             categories = [item for item in categories if item["kind"] == kind]
         return sorted(categories, key=lambda item: (item["kind"], item["name"].casefold()))
@@ -395,20 +518,28 @@ class GoogleSheetsStorage:
         if any(
             category["name"].casefold() == name.casefold()
             and category["kind"] == kind
-            for category in self.list_categories()
+            for category in self.list_categories(_force_refresh=True)
         ):
             raise StorageConflictError("That category already exists")
         record = {"id": str(uuid4()), "name": name, "kind": kind}
         self._append("Categories", record)
         return record
 
-    def _account_lookup(self) -> dict[str, dict[str, Any]]:
+    def _account_lookup(self, *, force_refresh: bool = False) -> dict[str, dict[str, Any]]:
         return {
-            account["id"]: account for account in self.list_accounts(active_only=False)
+            account["id"]: account
+            for account in self.list_accounts(
+                active_only=False, _force_refresh=force_refresh
+            )
         }
 
-    def _category_lookup(self) -> dict[str, dict[str, str]]:
-        return {category["id"]: category for category in self.list_categories()}
+    def _category_lookup(
+        self, *, force_refresh: bool = False
+    ) -> dict[str, dict[str, str]]:
+        return {
+            category["id"]: category
+            for category in self.list_categories(_force_refresh=force_refresh)
+        }
 
     def _prepare_transaction(
         self,
@@ -419,8 +550,8 @@ class GoogleSheetsStorage:
         accounts: Mapping[str, Mapping[str, Any]] | None = None,
         categories: Mapping[str, Mapping[str, str]] | None = None,
     ) -> dict[str, str]:
-        accounts = accounts or self._account_lookup()
-        categories = categories or self._category_lookup()
+        accounts = accounts or self._account_lookup(force_refresh=True)
+        categories = categories or self._category_lookup(force_refresh=True)
         kind = _clean_text(data.get("kind"), "Transaction kind", required=True).title()
         if kind not in TRANSACTION_KINDS:
             raise StorageValidationError("Unknown transaction kind")
@@ -511,16 +642,34 @@ class GoogleSheetsStorage:
         return updated
 
     def delete_transaction(self, transaction_id: str) -> None:
-        current = self._find_row("Transactions", transaction_id)
-        worksheet = self._worksheet("Transactions")
-        self._api(lambda: worksheet.delete_rows(current.row_number))
+        for attempt in range(self._retry_attempts):
+            current = self._find_row("Transactions", transaction_id)
+            worksheet = self._worksheet("Transactions")
+            try:
+                self._api(
+                    lambda: worksheet.delete_rows(current.row_number),
+                    retry_safe=False,
+                )
+                self._invalidate("Transactions")
+                return
+            except StorageUnavailableError as error:
+                self._invalidate("Transactions")
+                if not error.retryable:
+                    raise
+                try:
+                    self._find_row("Transactions", transaction_id)
+                except StorageNotFoundError:
+                    return
+                if attempt + 1 >= self._retry_attempts:
+                    raise
+                self._sleeper(self._retry_base_delay_seconds * (2**attempt))
 
     def import_csv_transactions(
         self, rows: Iterable[Mapping[str, Any]]
     ) -> list[dict[str, str]]:
         """Validate all CSV-style rows, then append them in one API request."""
-        accounts = self._account_lookup()
-        categories = self._category_lookup()
+        accounts = self._account_lookup(force_refresh=True)
+        categories = self._category_lookup(force_refresh=True)
         accounts_by_name = {
             account["name"].casefold(): account for account in accounts.values()
         }

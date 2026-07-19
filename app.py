@@ -18,6 +18,7 @@ from storage import (
     StorageError,
     StorageValidationError,
 )
+from submission_guard import is_recent_duplicate, mark_completed
 
 
 def money(value: float) -> str:
@@ -86,6 +87,25 @@ def balances_frame(accounts: list[dict], transactions: list[dict]) -> pd.DataFra
 
 def report_storage_error(error: StorageError) -> None:
     st.error(str(error))
+
+
+def confirmed_write(
+    action: str,
+    payload: dict,
+    operation,
+    success_message,
+) -> None:
+    if is_recent_duplicate(st.session_state, action, payload):
+        st.warning("This submission was already completed. No duplicate was created.")
+        return
+    try:
+        result = operation()
+    except StorageError as error:
+        report_storage_error(error)
+        return
+    mark_completed(st.session_state, action, payload)
+    st.success(success_message(result) if callable(success_message) else success_message)
+    st.rerun()
 
 
 st.set_page_config(page_title="Plain Ledger", page_icon="📒", layout="wide")
@@ -250,22 +270,23 @@ elif page == "Transactions":
                                 "Create a second active account before recording a transfer."
                             )
                         else:
-                            try:
-                                storage.create_transaction(
-                                    txn_date=transaction_date,
-                                    kind=kind,
-                                    amount=amount,
-                                    account_id=account_map[source],
-                                    to_account_id=account_map.get(to_account, ""),
-                                    category_id=category_id or "",
-                                    payee=payee,
-                                    description=description,
-                                    reference=reference,
-                                )
-                                st.success("Transaction saved.")
-                                st.rerun()
-                            except StorageError as error:
-                                report_storage_error(error)
+                            payload = {
+                                "txn_date": transaction_date,
+                                "kind": kind,
+                                "amount": amount,
+                                "account_id": account_map[source],
+                                "to_account_id": account_map.get(to_account, ""),
+                                "category_id": category_id or "",
+                                "payee": payee,
+                                "description": description,
+                                "reference": reference,
+                            }
+                            confirmed_write(
+                                "create_transaction",
+                                payload,
+                                lambda: storage.create_transaction(**payload),
+                                "Transaction saved.",
+                            )
 
     with tab_ledger:
         c1, c2, c3 = st.columns(3)
@@ -331,19 +352,27 @@ elif page == "Transactions":
                         "Edit description", value=selected.get("description", "")
                     )
                     if st.form_submit_button("Save changes", type="primary"):
-                        try:
-                            storage.edit_transaction(
+                        payload = {
+                            "id": edit_id,
+                            "txn_date": edited_date,
+                            "amount": edited_amount,
+                            "payee": edited_payee,
+                            "reference": edited_reference,
+                            "description": edited_description,
+                        }
+                        confirmed_write(
+                            "edit_transaction",
+                            payload,
+                            lambda: storage.edit_transaction(
                                 edit_id,
                                 txn_date=edited_date,
                                 amount=edited_amount,
                                 payee=edited_payee,
                                 reference=edited_reference,
                                 description=edited_description,
-                            )
-                            st.success("Transaction updated.")
-                            st.rerun()
-                        except StorageError as error:
-                            report_storage_error(error)
+                            ),
+                            "Transaction updated.",
+                        )
 
             with st.expander("Delete a transaction"):
                 delete_id = st.selectbox(
@@ -355,12 +384,13 @@ elif page == "Transactions":
                     "I understand this permanently removes the record"
                 )
                 if st.button("Delete", disabled=not confirm):
-                    try:
-                        storage.delete_transaction(delete_id)
-                        st.success("Transaction deleted.")
-                        st.rerun()
-                    except StorageError as error:
-                        report_storage_error(error)
+                    payload = {"id": delete_id}
+                    confirmed_write(
+                        "delete_transaction",
+                        payload,
+                        lambda: storage.delete_transaction(delete_id),
+                        "Transaction deleted.",
+                    )
 
 
 elif page == "Accounts":
@@ -393,12 +423,17 @@ elif page == "Accounts":
                 help="Use a negative value for money owed.",
             )
             if st.form_submit_button("Add account", type="primary"):
-                try:
-                    storage.create_account(name, account_type, opening)
-                    st.success("Account added.")
-                    st.rerun()
-                except StorageError as error:
-                    report_storage_error(error)
+                payload = {
+                    "name": name,
+                    "account_type": account_type,
+                    "opening_balance": opening,
+                }
+                confirmed_write(
+                    "create_account",
+                    payload,
+                    lambda: storage.create_account(name, account_type, opening),
+                    "Account added.",
+                )
 
     if accounts:
         with st.expander("Edit or deactivate account"):
@@ -425,18 +460,25 @@ elif page == "Accounts":
                 )
                 edited_active = st.checkbox("Active", value=selected["active"])
                 if st.form_submit_button("Save account changes", type="primary"):
-                    try:
-                        storage.edit_account(
+                    payload = {
+                        "id": account_id,
+                        "name": edited_name,
+                        "type": edited_type,
+                        "opening_balance": edited_opening,
+                        "active": edited_active,
+                    }
+                    confirmed_write(
+                        "edit_account",
+                        payload,
+                        lambda: storage.edit_account(
                             account_id,
                             name=edited_name,
                             type=edited_type,
                             opening_balance=edited_opening,
                             active=edited_active,
-                        )
-                        st.success("Account updated.")
-                        st.rerun()
-                    except StorageError as error:
-                        report_storage_error(error)
+                        ),
+                        "Account updated.",
+                    )
             st.caption(
                 "Accounts are deactivated rather than deleted so transaction references remain valid."
             )
@@ -461,12 +503,13 @@ elif page == "Categories":
         name = c1.text_input("Category name")
         kind = c2.selectbox("Type", ["Expense", "Income"])
         if st.form_submit_button("Add category", type="primary"):
-            try:
-                storage.create_category(name, kind)
-                st.success("Category added.")
-                st.rerun()
-            except StorageError as error:
-                report_storage_error(error)
+            payload = {"name": name, "kind": kind}
+            confirmed_write(
+                "create_category",
+                payload,
+                lambda: storage.create_category(name, kind),
+                "Category added.",
+            )
     st.caption(
         "Categories are not deleted so existing transaction references remain valid."
     )
@@ -572,11 +615,13 @@ else:
             else:
                 st.dataframe(incoming.head(20), hide_index=True, width="stretch")
                 if st.button("Import rows", type="primary"):
-                    imported = storage.import_csv_transactions(
-                        incoming.to_dict(orient="records")
+                    records = incoming.to_dict(orient="records")
+                    confirmed_write(
+                        "import_csv_transactions",
+                        {"rows": records},
+                        lambda: storage.import_csv_transactions(records),
+                        lambda imported: f"Imported {len(imported)} transactions.",
                     )
-                    st.success(f"Imported {len(imported)} transactions.")
-                    st.rerun()
         except StorageValidationError as error:
             report_storage_error(error)
         except (ValueError, pd.errors.ParserError, UnicodeError):

@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
+import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 from ledger_auth import hash_password
@@ -15,6 +16,7 @@ TEST_PASSWORD = "test-password-123"
 
 class AppAuthenticationTests(unittest.TestCase):
     def test_unauthorized_login_success_and_logout(self) -> None:
+        st.cache_resource.clear()
         app = AppTest.from_file("app.py", default_timeout=30)
         app.secrets["app_password_hash"] = hash_password(TEST_PASSWORD)
         fake_storage = GoogleSheetsStorage(FakeWorkbook())

@@ -59,6 +59,17 @@ Run a read-only end-to-end dashboard check against the configured live workbook 
 python scripts/validate_app_google.py
 ```
 
+## Spreadsheet reliability
+
+- Worksheet reads are cached for 10 seconds and the affected cache is cleared immediately after every confirmed write.
+- Edits, deletions, uniqueness checks, and reference checks force a fresh read before writing.
+- Temporary network and quota failures are retried up to four times with exponential backoff.
+- Identical completed submissions are suppressed for 10 seconds within the same application session.
+- CSV imports and default seeding use batch appends after complete validation.
+- Availability errors are generic and success is shown only after the Google API confirms the write.
+
+An append-only audit worksheet was considered but deferred. A separate audit append cannot currently be guaranteed atomic with its ledger write, so it could create a misleading or incomplete history. Versioned ZIP backups are the current recovery record.
+
 ## Notes
 
 - Transfers change account balances but do not affect income or expenses.
