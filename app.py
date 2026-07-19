@@ -112,7 +112,7 @@ st.set_page_config(page_title="Plain Ledger", page_icon="📒", layout="wide")
 st.markdown(
     """
     <style>
-    :root { --ink:#17211b; --green:#206a4b; --cream:#f7f5ef; }
+    :root { color-scheme:light; --ink:#17211b; --green:#206a4b; --cream:#f7f5ef; }
     .stApp { background: var(--cream); color: var(--ink); }
     [data-testid="stMetric"] { background:white; border:1px solid #dedbd2; padding:18px; border-radius:14px; }
     [data-testid="stSidebar"] { background:#173f32; }
