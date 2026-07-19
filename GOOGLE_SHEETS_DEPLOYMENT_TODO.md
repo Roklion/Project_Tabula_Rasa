@@ -38,11 +38,11 @@ Expected required service cost: $0/month under normal personal usage.
 - [x] Create a local `.streamlit/secrets.toml` for development.
 - [x] Store the spreadsheet ID and service-account credentials in secrets.
 - [ ] Deploy the Streamlit app as private and restrict viewer access.
-- [ ] Optionally add a second application password.
-- [ ] Store only the password hash in Streamlit Secrets.
+- [x] Add a second application password.
+- [x] Store only the password hash in Streamlit Secrets.
 - [x] Block all pages and data operations until authentication succeeds.
 - [x] Add logout behavior.
-- [ ] Ensure logs and error messages never expose credentials.
+- [x] Ensure logs and error messages never expose credentials.
 
 ## 5. Build the Google Sheets storage layer
 
