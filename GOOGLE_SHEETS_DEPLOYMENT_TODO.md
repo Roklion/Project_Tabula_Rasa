@@ -80,14 +80,10 @@ Expected required service cost: $0/month under normal personal usage.
 - [x] Prevent duplicate submissions caused by repeated button clicks.
 - [x] Consider an append-only audit worksheet; defer it until audit writes can be made reliably without implying atomicity.
 
-## 8. Migrate existing data
+## 8. Migrate existing data — not applicable
 
-- [ ] Back up `data/ledger.db`.
-- [ ] Build a one-time SQLite-to-Google-Sheets migration tool.
-- [ ] Migrate accounts, then categories, then transactions.
-- [ ] Map old integer IDs to new UUIDs while preserving relationships.
-- [ ] Compare row counts, account balances, income, expenses, transfers, and P&L totals.
-- [ ] Do not retire SQLite until every comparison passes.
+- [x] Skip the SQLite migration because there is no existing user-entered SQLite data to preserve.
+- [x] Use the initialized Google Sheets workbook as the starting data set.
 
 ## 9. Add and test backups
 
