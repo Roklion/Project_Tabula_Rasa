@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$BackupDirectory,
+    [string]$Profile,
     [string]$TaskName = "Tabula Rosa Weekly Backup"
 )
 
@@ -20,6 +21,9 @@ if (-not (Test-Path -LiteralPath $BackupDirectory -PathType Container)) {
 }
 
 $arguments = '"{0}" --output-dir "{1}" --keep 30 --once-per-week' -f $backupScript, $BackupDirectory
+if ($Profile) {
+    $arguments += ' --profile "{0}"' -f $Profile
+}
 $action = New-ScheduledTaskAction `
     -Execute $pythonPath `
     -Argument $arguments `

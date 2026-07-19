@@ -6,6 +6,11 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from business_profiles import (
+    BusinessProfileConfigurationError,
+    load_business_profiles,
+    select_profile_secrets,
+)
 from ledger_auth import logout, require_authentication
 from ledger_reporting import (
     account_balances,
@@ -26,8 +31,10 @@ def money(value: float) -> str:
 
 
 @st.cache_resource
-def get_storage() -> GoogleSheetsStorage:
-    return GoogleSheetsStorage.from_secrets(st.secrets)
+def get_storage(profile_key: str) -> GoogleSheetsStorage:
+    return GoogleSheetsStorage.from_secrets(
+        select_profile_secrets(st.secrets, profile_key)
+    )
 
 
 def ledger_frame(
@@ -95,7 +102,8 @@ def confirmed_write(
     operation,
     success_message,
 ) -> None:
-    if is_recent_duplicate(st.session_state, action, payload):
+    profile_action = f"{st.session_state.get('business_profile', 'default')}:{action}"
+    if is_recent_duplicate(st.session_state, profile_action, payload):
         st.warning("This submission was already completed. No duplicate was created.")
         return
     try:
@@ -103,7 +111,7 @@ def confirmed_write(
     except StorageError as error:
         report_storage_error(error)
         return
-    mark_completed(st.session_state, action, payload)
+    mark_completed(st.session_state, profile_action, payload)
     st.success(success_message(result) if callable(success_message) else success_message)
     st.rerun()
 
@@ -127,17 +135,35 @@ st.markdown(
 require_authentication()
 
 try:
-    storage = get_storage()
-    if not st.session_state.get("defaults_initialized"):
+    profiles = load_business_profiles(st.secrets)
+except BusinessProfileConfigurationError as error:
+    st.error(str(error))
+    st.stop()
+
+profile_by_key = {profile.key: profile for profile in profiles}
+with st.sidebar:
+    selected_profile_key = st.selectbox(
+        "Business",
+        list(profile_by_key),
+        key="business_profile",
+        format_func=lambda key: profile_by_key[key].name,
+    )
+
+try:
+    storage = get_storage(selected_profile_key)
+    initialized_profiles = st.session_state.setdefault(
+        "defaults_initialized_profiles", set()
+    )
+    if selected_profile_key not in initialized_profiles:
         storage.ensure_defaults()
-        st.session_state["defaults_initialized"] = True
+        initialized_profiles.add(selected_profile_key)
 except StorageError as error:
     report_storage_error(error)
     st.stop()
 
 with st.sidebar:
     st.title("Plain Ledger")
-    st.caption("Simple books. Clear numbers.")
+    st.caption(profile_by_key[selected_profile_key].name)
     page = st.radio(
         "Navigate",
         ["Dashboard", "Transactions", "Accounts", "Categories", "Reports", "Data & backup"],

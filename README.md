@@ -1,6 +1,6 @@
 # Plain Ledger
 
-A private Google Sheets-backed bookkeeping app for one person or a very small business. It tracks income, expenses, transfers, accounts, categories, and simple profit-and-loss reports without connecting to a bank.
+A private Google Sheets-backed bookkeeping app for one person or a small group of businesses. Each business can use its own spreadsheet and Google service account while sharing one Streamlit deployment.
 
 ## Run it
 
@@ -17,6 +17,63 @@ A private Google Sheets-backed bookkeeping app for one person or a very small bu
 
 The app reads and writes the private Google workbook through its narrowly scoped service account. It does not use a local SQLite database as its active datastore.
 
+## Multiple business profiles
+
+Use one top-level application password and put each isolated business under
+`business_profiles` in `.streamlit/secrets.toml` (and in the hosted deployment's
+Secrets settings):
+
+```toml
+app_password_hash = "scrypt$..."
+
+[business_profiles.heathcote]
+name = "Heathcote Advisory"
+spreadsheet_id = "FIRST_SPREADSHEET_ID"
+
+[business_profiles.heathcote.gcp_service_account]
+type = "service_account"
+project_id = "first-google-cloud-project"
+private_key_id = "..."
+private_key = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+client_email = "ledger@first-google-cloud-project.iam.gserviceaccount.com"
+client_id = "..."
+auth_uri = "https://accounts.google.com/o/oauth2/auth"
+token_uri = "https://oauth2.googleapis.com/token"
+auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
+client_x509_cert_url = "..."
+
+[business_profiles.second_shop]
+name = "Second Shop"
+spreadsheet_id = "SECOND_SPREADSHEET_ID"
+
+[business_profiles.second_shop.gcp_service_account]
+# Paste the complete service-account values for this business here.
+type = "service_account"
+project_id = "different-google-cloud-project"
+private_key_id = "..."
+private_key = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+client_email = "ledger@different-google-cloud-project.iam.gserviceaccount.com"
+client_id = "..."
+auth_uri = "https://accounts.google.com/o/oauth2/auth"
+token_uri = "https://oauth2.googleapis.com/token"
+auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
+client_x509_cert_url = "..."
+```
+
+Share each spreadsheet as Editor with the `client_email` from that same
+profile. The Google Cloud projects and owning Google accounts may be different;
+each profile authenticates independently. After signing in, choose the active
+business in the sidebar. Storage clients, default initialization, and duplicate
+submission protection are isolated by profile.
+
+The application password currently grants access to every configured profile.
+Use separate deployments or add profile-level authorization if different users
+must only see particular businesses.
+
+The original single-profile `spreadsheet_id` and `[gcp_service_account]` format
+continues to work, so existing deployments do not require an immediate secrets
+migration.
+
 ## Legacy SQLite backup
 
 The pre-cutover SQLite backup remains available until the Google Sheets implementation has been fully checked. Create another consistent, non-overwriting legacy backup with:
@@ -32,13 +89,13 @@ The command validates SQLite integrity and the required ledger tables before rep
 After configuring the ignored `.streamlit/secrets.toml`, verify the private workbook and its headers with:
 
 ```powershell
-python scripts/validate_google_sheets.py
+python scripts/validate_google_sheets.py --profile heathcote
 ```
 
 To verify create, read, update, and delete permissions, run the reversible disposable-worksheet test:
 
 ```powershell
-python scripts/validate_google_sheets.py --write-test
+python scripts/validate_google_sheets.py --profile heathcote --write-test
 ```
 
 The test removes its temporary worksheet during cleanup and does not read or modify ledger rows.
@@ -80,7 +137,7 @@ and SHA-256 checksums.
 Create and validate a timestamped backup from the command line with:
 
 ```powershell
-python scripts/backup_google_sheets.py --keep 30
+python scripts/backup_google_sheets.py --profile heathcote --output-dir backups\heathcote --keep 30
 ```
 
 By default, this writes to the ignored `backups/` directory, never overwrites an
@@ -89,7 +146,7 @@ ledger data and must not be committed. To place backups in a Google Drive
 Desktop or NAS-synchronized folder, pass its local path:
 
 ```powershell
-python scripts/backup_google_sheets.py --output-dir "G:\My Drive\Tabula Rosa Backups" --keep 30
+python scripts/backup_google_sheets.py --profile heathcote --output-dir "G:\My Drive\Tabula Rosa Backups\heathcote" --keep 30
 ```
 
 The configured Windows task runs at 10:00 PM every Monday, Tuesday, and
@@ -107,8 +164,12 @@ again. Starting Drive after a missed run does not trigger an immediate catch-up.
 Recreate or update the task with:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\register_weekly_backup_task.ps1 -BackupDirectory "G:\My Drive\path\to\backup"
+powershell -ExecutionPolicy Bypass -File scripts\register_weekly_backup_task.ps1 -BackupDirectory "G:\My Drive\path\to\backup\heathcote" -Profile heathcote -TaskName "Tabula Rosa Backup - Heathcote"
 ```
+
+Register one task with a distinct backup directory and task name for each
+profile. This prevents archives with identical timestamps from different
+businesses being mixed together.
 
 An optional future upgrade is to replace the local mount with a cloud-native
 Google Apps Script or Google user OAuth flow that uploads directly through the
@@ -123,7 +184,7 @@ spreadsheet but cannot own newly created backup files in a personal My Drive.
 3. Restore a selected archive with:
 
 ```powershell
-python scripts/restore_google_sheets_backup.py backups\tabula-rosa-backup-YYYYMMDDTHHMMSSZ.zip --target-spreadsheet-id NEW_ID --initialize
+python scripts/restore_google_sheets_backup.py backups\heathcote\tabula-rosa-backup-YYYYMMDDTHHMMSSZ.zip --profile heathcote --target-spreadsheet-id NEW_ID --initialize
 ```
 
 The restore command verifies checksums, headers, IDs, relationships, and row
@@ -137,9 +198,10 @@ rereads every restored row and verifies it against the archive.
   `.streamlit/secrets.toml` file.
 - The hosted app uses a separate copy of those TOML values in Streamlit
   Community Cloud's encrypted Secrets settings.
-- Required secret entries are `spreadsheet_id`, `app_password_hash`, and the
-  `[gcp_service_account]` table. Never store their values in Git, README files,
-  issue trackers, or deployment logs.
+- Required secret entries are `app_password_hash` plus either the legacy
+  `spreadsheet_id` and `[gcp_service_account]` entries or one or more
+  `[business_profiles.PROFILE]` configurations. Never store their real values
+  in Git, README files, issue trackers, or deployment logs.
 - The original service-account JSON is not required after both secrets stores
   are configured. If retained for disaster recovery, keep it only in protected
   credential storage outside the repository.

@@ -14,6 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from storage import GoogleSheetsStorage
+from business_profiles import load_business_profiles, select_profile_secrets
 
 
 BACKUP_NAME = re.compile(r"^tabula-rosa-backup-\d{8}T\d{6}Z\.zip$")
@@ -106,7 +107,15 @@ def main() -> None:
         action="store_true",
         help="Exit successfully when this folder already has a verified backup for the local ISO week",
     )
+    parser.add_argument("--profile", help="Business profile key to back up")
     args = parser.parse_args()
+
+    with args.secrets.open("rb") as secrets_file:
+        all_secrets = tomllib.load(secrets_file)
+    profiles = load_business_profiles(all_secrets)
+    if len(profiles) > 1 and not args.profile:
+        raise SystemExit("Multiple profiles are configured; pass --profile PROFILE_KEY")
+    secrets = select_profile_secrets(all_secrets, args.profile)
 
     if args.once_per_week:
         existing = verified_backup_for_week(args.output_dir)
@@ -114,8 +123,6 @@ def main() -> None:
             print(f"Weekly backup already verified: {existing}")
             return
 
-    with args.secrets.open("rb") as secrets_file:
-        secrets = tomllib.load(secrets_file)
     storage = GoogleSheetsStorage.from_secrets(secrets)
     destination = write_versioned_backup(storage, args.output_dir, keep=args.keep)
     print(f"Verified backup created: {destination}")

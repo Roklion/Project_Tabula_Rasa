@@ -23,6 +23,8 @@ class AppStorageFailureTests(unittest.TestCase):
         )
         app = AppTest.from_file("app.py", default_timeout=30)
         app.secrets["app_password_hash"] = hash_password(TEST_PASSWORD)
+        app.secrets["spreadsheet_id"] = "test-sheet"
+        app.secrets["gcp_service_account"] = {"type": "service_account"}
 
         with patch.object(
             GoogleSheetsStorage,

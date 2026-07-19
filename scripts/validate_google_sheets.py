@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import argparse
+import sys
 import tomllib
 from pathlib import Path
 from uuid import uuid4
 
 import gspread
 from google.oauth2.service_account import Credentials
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from business_profiles import load_business_profiles, select_profile_secrets
 
 
 EXPECTED_HEADERS = {
@@ -30,9 +37,15 @@ EXPECTED_HEADERS = {
 }
 
 
-def validate(secrets_path: Path, write_test: bool = False) -> None:
+def validate(
+    secrets_path: Path, write_test: bool = False, profile_key: str | None = None
+) -> None:
     with secrets_path.open("rb") as secrets_file:
-        secrets = tomllib.load(secrets_file)
+        all_secrets = tomllib.load(secrets_file)
+    profiles = load_business_profiles(all_secrets)
+    if len(profiles) > 1 and not profile_key:
+        raise RuntimeError("Multiple profiles are configured; pass --profile PROFILE_KEY")
+    secrets = select_profile_secrets(all_secrets, profile_key)
 
     credentials = Credentials.from_service_account_info(
         secrets["gcp_service_account"],
@@ -88,8 +101,9 @@ def main() -> None:
         action="store_true",
         help="Run a reversible CRUD test using a disposable worksheet",
     )
+    parser.add_argument("--profile", help="Business profile key to validate")
     args = parser.parse_args()
-    validate(args.secrets, write_test=args.write_test)
+    validate(args.secrets, write_test=args.write_test, profile_key=args.profile)
 
 
 if __name__ == "__main__":

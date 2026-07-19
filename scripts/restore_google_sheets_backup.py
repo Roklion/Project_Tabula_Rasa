@@ -16,6 +16,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from storage import GoogleSheetsStorage, StorageValidationError
 from storage.google_sheets import SHEETS_SCOPE, WORKSHEET_HEADERS
+from business_profiles import load_business_profiles, select_profile_secrets
 
 
 def initialize_blank_ledger_sheets(workbook: object) -> None:
@@ -58,10 +59,17 @@ def main() -> None:
         action="store_true",
         help="Create or header missing ledger sheets in an otherwise blank workbook",
     )
+    parser.add_argument(
+        "--profile", help="Business profile whose Google credential should be used"
+    )
     args = parser.parse_args()
 
     with args.secrets.open("rb") as secrets_file:
-        secrets = tomllib.load(secrets_file)
+        all_secrets = tomllib.load(secrets_file)
+    profiles = load_business_profiles(all_secrets)
+    if len(profiles) > 1 and not args.profile:
+        raise SystemExit("Multiple profiles are configured; pass --profile PROFILE_KEY")
+    secrets = select_profile_secrets(all_secrets, args.profile)
     if args.target_spreadsheet_id == str(secrets["spreadsheet_id"]):
         raise SystemExit("Refusing to restore into the configured live workbook")
 

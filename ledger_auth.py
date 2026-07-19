@@ -91,5 +91,5 @@ def require_authentication() -> None:
 
 def logout() -> None:
     """Clear the authenticated session and return to the login screen."""
-    st.session_state.pop("authenticated", None)
+    st.session_state.clear()
     st.rerun()
