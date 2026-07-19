@@ -18,6 +18,7 @@ ledger.db-*
 data/*.db
 data/*.db-*
 *.csv
+/backups/
 
 # Python/tool caches
 *.py[cod]

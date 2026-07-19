@@ -7,6 +7,7 @@ Google worksheet objects, row numbers, and API exceptions stay inside this layer
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import json
 import math
@@ -45,6 +46,7 @@ WORKSHEET_HEADERS = {
 ACCOUNT_TYPES = {"Bank", "Cash", "Credit card", "Loan", "Other"}
 CATEGORY_KINDS = {"Income", "Expense"}
 TRANSACTION_KINDS = {"Income", "Expense", "Transfer"}
+BACKUP_FORMAT_VERSION = 1
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 DEFAULT_ACCOUNTS = (("Checking", "Bank"), ("Cash", "Cash"))
 DEFAULT_CATEGORIES = {
@@ -156,6 +158,91 @@ def _as_bool(value: Any, field: str = "active") -> bool:
     if text in {"false", "0", "no"}:
         return False
     raise StorageValidationError(f"{field} must be true or false")
+
+
+def _parse_backup_zip(
+    backup: bytes,
+) -> tuple[dict[str, Any], dict[str, tuple[list[str], list[dict[str, str]]]]]:
+    """Validate a ledger backup without extracting files to disk."""
+    required_files = {f"{title}.csv" for title in WORKSHEET_HEADERS} | {
+        "manifest.json"
+    }
+    try:
+        with zipfile.ZipFile(io.BytesIO(backup)) as archive:
+            names = archive.namelist()
+            if len(names) != len(set(names)) or set(names) != required_files:
+                raise StorageValidationError(
+                    "Backup must contain exactly the ledger CSV files and manifest.json"
+                )
+            if sum(item.file_size for item in archive.infolist()) > 100 * 1024 * 1024:
+                raise StorageValidationError("Backup is too large to restore safely")
+            manifest_bytes = archive.read("manifest.json")
+            csv_files = {
+                title: archive.read(f"{title}.csv") for title in WORKSHEET_HEADERS
+            }
+    except (zipfile.BadZipFile, OSError, RuntimeError) as exc:
+        raise StorageValidationError("Backup is not a readable ZIP archive") from exc
+
+    try:
+        manifest = json.loads(manifest_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise StorageValidationError("Backup manifest is not valid UTF-8 JSON") from exc
+    if manifest.get("format_version") != BACKUP_FORMAT_VERSION:
+        raise StorageValidationError("Backup format version is unsupported")
+
+    row_counts = manifest.get("row_counts")
+    file_hashes = manifest.get("sha256")
+    worksheet_headers = manifest.get("worksheet_headers")
+    if not all(isinstance(value, dict) for value in (row_counts, file_hashes, worksheet_headers)):
+        raise StorageValidationError("Backup manifest is missing validation metadata")
+
+    tables: dict[str, tuple[list[str], list[dict[str, str]]]] = {}
+    for title, content in csv_files.items():
+        if hashlib.sha256(content).hexdigest() != file_hashes.get(f"{title}.csv"):
+            raise StorageValidationError(f"{title} backup checksum does not match")
+        try:
+            parsed_rows = list(csv.reader(io.StringIO(content.decode("utf-8"), newline="")))
+        except (UnicodeDecodeError, csv.Error) as exc:
+            raise StorageValidationError(f"{title} backup CSV is invalid") from exc
+        if not parsed_rows:
+            raise StorageValidationError(f"{title} backup has no header row")
+        headers = [value.strip() for value in parsed_rows[0]]
+        required_headers = set(WORKSHEET_HEADERS[title])
+        if (
+            any(not value for value in headers)
+            or len(headers) != len(set(headers))
+            or not required_headers.issubset(headers)
+            or worksheet_headers.get(title) != headers
+        ):
+            raise StorageValidationError(f"{title} backup headers are invalid")
+        records: list[dict[str, str]] = []
+        for raw_row in parsed_rows[1:]:
+            if len(raw_row) > len(headers):
+                raise StorageValidationError(f"{title} backup has an over-wide row")
+            padded = raw_row + [""] * (len(headers) - len(raw_row))
+            if any(value.strip() for value in padded):
+                records.append(dict(zip(headers, padded)))
+        if row_counts.get(title) != len(records):
+            raise StorageValidationError(f"{title} backup row count does not match")
+        record_ids = [record.get("id", "").strip() for record in records]
+        if any(not record_id for record_id in record_ids) or len(record_ids) != len(
+            set(record_ids)
+        ):
+            raise StorageValidationError(f"{title} backup IDs are missing or duplicated")
+        tables[title] = (headers, records)
+
+    account_ids = {record["id"] for record in tables["Accounts"][1]}
+    category_ids = {record["id"] for record in tables["Categories"][1]}
+    for transaction in tables["Transactions"][1]:
+        if transaction.get("account_id") not in account_ids:
+            raise StorageValidationError("Backup contains an unknown transaction account")
+        to_account_id = transaction.get("to_account_id", "")
+        if to_account_id and to_account_id not in account_ids:
+            raise StorageValidationError("Backup contains an unknown transfer account")
+        category_id = transaction.get("category_id", "")
+        if category_id and category_id not in category_ids:
+            raise StorageValidationError("Backup contains an unknown transaction category")
+    return manifest, tables
 
 
 class GoogleSheetsStorage:
@@ -712,30 +799,83 @@ class GoogleSheetsStorage:
         return prepared
 
     def export_backup_zip(self) -> bytes:
-        """Return all ledger worksheets plus a timestamped row-count manifest."""
+        """Return a fresh, checksummed backup of every ledger worksheet."""
         generated_at = _utc_now()
         row_counts: dict[str, int] = {}
+        worksheet_headers: dict[str, list[str]] = {}
+        csv_files: dict[str, bytes] = {}
         archive_buffer = io.BytesIO()
+        for title in WORKSHEET_HEADERS:
+            headers = self._headers(title)
+            rows = self._rows(title, force_refresh=True)
+            row_counts[title] = len(rows)
+            worksheet_headers[title] = headers
+            csv_buffer = io.StringIO(newline="")
+            writer = csv.writer(csv_buffer, lineterminator="\n")
+            writer.writerow(headers)
+            for row in rows:
+                writer.writerow([row.values.get(header, "") for header in headers])
+            csv_files[f"{title}.csv"] = csv_buffer.getvalue().encode("utf-8")
+
+        manifest = {
+            "backup_time": generated_at,
+            "format_version": BACKUP_FORMAT_VERSION,
+            "row_counts": row_counts,
+            "sha256": {
+                name: hashlib.sha256(content).hexdigest()
+                for name, content in csv_files.items()
+            },
+            "workbook_title": self.workbook_title,
+            "worksheet_headers": worksheet_headers,
+        }
         with zipfile.ZipFile(
             archive_buffer, mode="w", compression=zipfile.ZIP_DEFLATED
         ) as archive:
-            for title in WORKSHEET_HEADERS:
-                headers = self._headers(title)
-                rows = self._rows(title)
-                row_counts[title] = len(rows)
-                csv_buffer = io.StringIO(newline="")
-                writer = csv.writer(csv_buffer, lineterminator="\n")
-                writer.writerow(headers)
-                for row in rows:
-                    writer.writerow([row.values.get(header, "") for header in headers])
-                archive.writestr(f"{title}.csv", csv_buffer.getvalue())
+            for name, content in csv_files.items():
+                archive.writestr(name, content)
             archive.writestr(
                 "manifest.json",
-                json.dumps(
-                    {"backup_time": generated_at, "row_counts": row_counts},
-                    indent=2,
-                    sort_keys=True,
-                )
-                + "\n",
+                (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode(
+                    "utf-8"
+                ),
             )
         return archive_buffer.getvalue()
+
+    @staticmethod
+    def validate_backup_zip(backup: bytes) -> dict[str, Any]:
+        """Return a validated manifest or raise a safe validation error."""
+        manifest, _ = _parse_backup_zip(backup)
+        return manifest
+
+    def restore_backup_zip(self, backup: bytes) -> dict[str, int]:
+        """Restore a validated backup into a blank initialized workbook."""
+        _, tables = _parse_backup_zip(backup)
+        for title, (backup_headers, _) in tables.items():
+            target_headers = self._headers(title)
+            if set(target_headers) != set(backup_headers):
+                raise StorageValidationError(
+                    f"{title} target headers do not match the backup"
+                )
+            if self._rows(title, force_refresh=True):
+                raise StorageConflictError(
+                    "Restore target must have empty ledger worksheets"
+                )
+
+        counts: dict[str, int] = {}
+        for title in ("Accounts", "Categories", "Transactions"):
+            _, records = tables[title]
+            self._append_many(title, records)
+            restored = self._rows(title, force_refresh=True)
+            expected_by_id = {record["id"]: record for record in records}
+            actual_by_id = {row.values.get("id", ""): row.values for row in restored}
+            headers = tables[title][0]
+            if len(restored) != len(records) or any(
+                [actual_by_id.get(record_id, {}).get(header, "") for header in headers]
+                != [record.get(header, "") for header in headers]
+                for record_id, record in expected_by_id.items()
+            ):
+                raise StorageUnavailableError(
+                    "Restore verification failed; the target may contain partial data"
+                )
+            counts[title] = len(records)
+        return counts

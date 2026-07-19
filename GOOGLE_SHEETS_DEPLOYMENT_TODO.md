@@ -87,12 +87,16 @@ Expected required service cost: $0/month under normal personal usage.
 
 ## 9. Add and test backups
 
-- [ ] Export all worksheets as CSV files or a single ZIP archive.
-- [ ] Include a manifest with backup time and row counts.
-- [ ] Save periodic backup copies in a separate Google Drive folder.
+- [x] Export all worksheets as CSV files in a single ZIP archive.
+- [x] Include a versioned manifest with backup time, workbook title, headers, row counts, and checksums.
+- [x] Save periodic backup copies in a separate Google Drive folder through Google Drive Desktop.
+  - [x] Create and verify the first backup in the Google Drive Desktop-synchronized `backup` folder.
+  - [x] Schedule one weekly backup for Monday at 10:00 PM, with Tuesday and Wednesday at 10:00 PM as retry opportunities only.
+- [ ] Optional upgrade: replace the local Drive mount with cloud-native Google Apps Script or user OAuth Drive API uploads.
 - [ ] Optionally synchronize the backup folder to the DS220j.
-- [ ] Test restoration into a blank workbook.
-- [ ] Retain several historical backups instead of overwriting one file.
+- [ ] Test restoration into a disposable blank Google workbook.
+  - [x] Test verified restoration into a blank in-memory workbook without changing live data.
+- [x] Retain several timestamped historical backups instead of overwriting one file (default: 30).
 
 ## 10. Test the application
 
@@ -100,8 +104,9 @@ Expected required service cost: $0/month under normal personal usage.
   - [x] Test the in-memory Google-backed UI workflow and storage-layer behavior.
 - [x] Test income, expenses, transfers, edits, and deletions after the Google Sheets UI cutover.
   - [x] Test Google-backed UI entry/deletion and storage-layer CRUD/editing.
-- [ ] Test CSV imports, duplicate validation, and report totals after the Google Sheets UI cutover.
+- [x] Test CSV imports, duplicate validation, and report totals after the Google Sheets UI cutover.
   - [x] Test batch CSV prevalidation, account/category duplicates, balances, transfers, and P&L calculations.
+  - [x] Test malformed and valid CSV uploads, duplicate UI submissions, and exact dashboard/report totals through Streamlit.
 - [ ] Test simultaneous browser tabs after deployment.
   - [x] Test short-window suppression of repeated identical submissions.
 - [x] Test temporary Google API failures through the integrated UI.

@@ -175,6 +175,67 @@ class GoogleSheetsStorageTests(unittest.TestCase):
             manifest = json.loads(archive.read("manifest.json"))
             self.assertEqual(manifest["row_counts"]["Accounts"], 1)
             self.assertIn("backup_time", manifest)
+            self.assertEqual(manifest["format_version"], 1)
+            self.assertIn("Accounts.csv", manifest["sha256"])
+        validated = self.storage.validate_backup_zip(backup)
+        self.assertEqual(validated["workbook_title"], "Test Ledger")
+
+    def test_backup_forces_fresh_worksheet_reads(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        self.storage.list_accounts(active_only=False)
+        headers = self.workbook.sheets["Accounts"].rows[0]
+        self.workbook.sheets["Accounts"].rows[1][headers.index("name")] = "External"
+
+        backup = self.storage.export_backup_zip()
+
+        with zipfile.ZipFile(io.BytesIO(backup)) as archive:
+            self.assertIn(account["id"], archive.read("Accounts.csv").decode("utf-8"))
+            self.assertIn("External", archive.read("Accounts.csv").decode("utf-8"))
+
+    def test_restore_backup_into_blank_workbook_and_verify_rows(self) -> None:
+        account = self.storage.create_account("Checking", "Bank", 125)
+        category = self.storage.create_category("Sales", "Income")
+        transaction = self.storage.create_transaction(
+            txn_date="2026-07-19",
+            kind="Income",
+            amount=25,
+            account_id=account["id"],
+            category_id=category["id"],
+            payee="Customer",
+        )
+        backup = self.storage.export_backup_zip()
+        restored_storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+
+        counts = restored_storage.restore_backup_zip(backup)
+
+        self.assertEqual(counts, {"Accounts": 1, "Categories": 1, "Transactions": 1})
+        self.assertEqual(restored_storage.list_accounts()[0]["id"], account["id"])
+        self.assertEqual(restored_storage.list_transactions()[0]["id"], transaction["id"])
+
+    def test_restore_refuses_nonblank_target(self) -> None:
+        self.storage.create_account("Checking", "Bank")
+        backup = self.storage.export_backup_zip()
+        target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+        target.create_account("Existing", "Cash")
+
+        with self.assertRaises(StorageConflictError):
+            target.restore_backup_zip(backup)
+
+    def test_restore_rejects_tampered_csv(self) -> None:
+        self.storage.create_account("Checking", "Bank")
+        backup = self.storage.export_backup_zip()
+        output = io.BytesIO()
+        with zipfile.ZipFile(io.BytesIO(backup)) as source, zipfile.ZipFile(
+            output, "w"
+        ) as destination:
+            for name in source.namelist():
+                content = source.read(name)
+                if name == "Accounts.csv":
+                    content += b"tampered,row\n"
+                destination.writestr(name, content)
+
+        with self.assertRaises(StorageValidationError):
+            self.storage.validate_backup_zip(output.getvalue())
 
     def test_temporary_api_failure_returns_safe_error(self) -> None:
         self.workbook.sheets["Accounts"].get_all_values = Mock(
