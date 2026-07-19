@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import tomllib
 from pathlib import Path
+from uuid import uuid4
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -29,13 +30,17 @@ EXPECTED_HEADERS = {
 }
 
 
-def validate(secrets_path: Path) -> None:
+def validate(secrets_path: Path, write_test: bool = False) -> None:
     with secrets_path.open("rb") as secrets_file:
         secrets = tomllib.load(secrets_file)
 
     credentials = Credentials.from_service_account_info(
         secrets["gcp_service_account"],
-        scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"],
+        scopes=[
+            "https://www.googleapis.com/auth/spreadsheets"
+            if write_test
+            else "https://www.googleapis.com/auth/spreadsheets.readonly"
+        ],
     )
     client = gspread.authorize(credentials)
     workbook = client.open_by_key(secrets["spreadsheet_id"])
@@ -56,14 +61,35 @@ def validate(secrets_path: Path) -> None:
     print(f"Workbook access verified: {workbook.title}")
     print("Worksheet headers verified: Accounts, Categories, Transactions")
 
+    if write_test:
+        title = f"_access_test_{uuid4().hex[:8]}"
+        worksheet = None
+        try:
+            worksheet = workbook.add_worksheet(title=title, rows=2, cols=1)
+            worksheet.update_acell("A1", "created")
+            if worksheet.acell("A1").value != "created":
+                raise RuntimeError("Create/read verification failed")
+            worksheet.update_acell("A1", "updated")
+            if worksheet.acell("A1").value != "updated":
+                raise RuntimeError("Update verification failed")
+        finally:
+            if worksheet is not None:
+                workbook.del_worksheet(worksheet)
+        print("Disposable worksheet create/read/update/delete test passed")
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--secrets", type=Path, default=Path(".streamlit/secrets.toml")
     )
+    parser.add_argument(
+        "--write-test",
+        action="store_true",
+        help="Run a reversible CRUD test using a disposable worksheet",
+    )
     args = parser.parse_args()
-    validate(args.secrets)
+    validate(args.secrets, write_test=args.write_test)
 
 
 if __name__ == "__main__":

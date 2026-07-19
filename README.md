@@ -33,6 +33,22 @@ python scripts/backup_sqlite.py data/ledger.db data/ledger-pre-google-migration.
 
 The command validates SQLite integrity and the required ledger tables before reporting success.
 
+## Validate Google Sheets access
+
+After configuring the ignored `.streamlit/secrets.toml`, verify the private workbook and its headers with:
+
+```powershell
+python scripts/validate_google_sheets.py
+```
+
+To verify create, read, update, and delete permissions, run the reversible disposable-worksheet test:
+
+```powershell
+python scripts/validate_google_sheets.py --write-test
+```
+
+The test removes its temporary worksheet during cleanup and does not read or modify ledger rows.
+
 ## Notes
 
 - Transfers change account balances but do not affect income or expenses.

@@ -47,15 +47,15 @@ Expected required service cost: $0/month under normal personal usage.
 ## 5. Build the Google Sheets storage layer
 
 - [x] Add the required Google API or Sheets client dependencies.
-- [ ] Verify create, read, update, and delete access using a disposable worksheet.
-- [ ] Isolate workbook access in a dedicated storage module.
-- [ ] Implement worksheet and header validation.
-- [ ] Implement account listing, creation, editing, and deactivation.
-- [ ] Implement category listing and creation.
-- [ ] Implement transaction listing, creation, editing, and deletion.
-- [ ] Implement CSV transaction import.
-- [ ] Implement backup and export functions.
-- [ ] Keep Google-specific code out of the Streamlit UI where practical.
+- [x] Verify create, read, update, and delete access using a disposable worksheet.
+- [x] Isolate workbook access in a dedicated storage module.
+- [x] Implement worksheet and header validation.
+- [x] Implement account listing, creation, editing, and deactivation.
+- [x] Implement category listing and creation.
+- [x] Implement transaction listing, creation, editing, and deletion.
+- [x] Implement CSV transaction import.
+- [x] Implement backup and export functions.
+- [x] Keep Google-specific code out of the Streamlit UI where practical.
 
 ## 6. Replace SQLite behavior safely
 
