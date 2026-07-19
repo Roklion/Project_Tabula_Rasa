@@ -37,7 +37,7 @@ Expected required service cost: $0/month under normal personal usage.
 
 - [x] Create a local `.streamlit/secrets.toml` for development.
 - [x] Store the spreadsheet ID and service-account credentials in secrets.
-- [ ] Deploy the Streamlit app as private and restrict viewer access.
+- [x] Deploy the Streamlit app as private and restrict viewer access.
 - [x] Add a second application password.
 - [x] Store only the password hash in Streamlit Secrets.
 - [x] Block all pages and data operations until authentication succeeds.
@@ -117,9 +117,11 @@ Expected required service cost: $0/month under normal personal usage.
 ## 11. Deploy and cut over
 
 - [x] Push the sanitized project to the private GitHub repository.
-- [ ] Deploy `app.py` through Streamlit Community Cloud.
-- [ ] Copy secret values into the deployment's Secrets settings.
+- [x] Deploy `app.py` through Streamlit Community Cloud.
+- [x] Copy secret values into the deployment's Secrets settings.
 - [ ] Confirm service-account workbook access and private viewer restrictions.
+  - [ ] Sign in with the application password and confirm the hosted dashboard reads the live workbook.
+  - [x] Confirm an unauthenticated browser is denied access to the deployed app.
 - [ ] Review deployment logs for sensitive or overly detailed output.
 - [x] Skip SQLite read-only mode because SQLite is not active and has no user-entered data.
 - [x] Skip the final SQLite migration because Step 8 was declared not applicable.
