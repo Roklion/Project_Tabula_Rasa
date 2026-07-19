@@ -2,6 +2,7 @@
 __pycache__/
 
 # Local configuration and credentials
+/cred/
 .env
 .env.*
 !.env.example
@@ -9,6 +10,7 @@ __pycache__/
 *service-account*.json
 *service_account*.json
 google-credentials*.json
+tabula-rosa-heathcote-advisory-*.json
 
 # Ledger data and exports
 ledger.db

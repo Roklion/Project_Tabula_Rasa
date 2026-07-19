@@ -14,7 +14,7 @@ Expected required service cost: $0/month under normal personal usage.
 
 ## 2. Create the Google workbook
 
-- [x] Create a private Google Sheets workbook named `ledger_data_raw`.
+- [x] Create a private Google Sheets workbook named `tabula_rosa_data_raw`.
 - [x] Create an `Accounts` worksheet with columns: `id`, `name`, `type`, `opening_balance`, `active`, `created_at`.
 - [x] Create a `Categories` worksheet with columns: `id`, `name`, `kind`.
 - [x] Create a `Transactions` worksheet with columns: `id`, `txn_date`, `kind`, `amount`, `account_id`, `to_account_id`, `category_id`, `payee`, `description`, `reference`, `created_at`.
@@ -24,13 +24,14 @@ Expected required service cost: $0/month under normal personal usage.
 
 ## 3. Configure Google Cloud
 
-- [ ] Create a Google Cloud project.
-- [ ] Enable the Google Sheets API.
-- [ ] Enable the Google Drive API if backups or exports will use it.
-- [ ] Create a service account and credentials.
-- [ ] Share only the ledger workbook with the service account email.
-- [ ] Give the service account Editor access to that workbook.
-- [ ] Keep the workbook private and never commit service-account credentials.
+- [x] Create Google Cloud project `tabula-rosa-heathcote-advisory`.
+- [x] Enable the Google Sheets API.
+- [x] Enable the Google Drive API for backups and exports.
+- [x] Create service account `tabula-rosa-app@tabula-rosa-heathcote-advisory.iam.gserviceaccount.com`.
+- [x] Create service-account credentials and store them in the ignored local `cred/` directory.
+- [x] Share only the ledger workbook with the service account email.
+- [x] Give the service account Editor access to that workbook.
+- [x] Keep the workbook private and exclude service-account credentials from Git.
 
 ## 4. Configure secrets and authentication
 
