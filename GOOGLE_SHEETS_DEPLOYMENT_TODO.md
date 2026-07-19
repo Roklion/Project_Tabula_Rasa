@@ -94,8 +94,9 @@ Expected required service cost: $0/month under normal personal usage.
   - [x] Schedule one weekly backup for Monday at 10:00 PM, with Tuesday and Wednesday at 10:00 PM as retry opportunities only.
 - [ ] Optional upgrade: replace the local Drive mount with cloud-native Google Apps Script or user OAuth Drive API uploads.
 - [ ] Optionally synchronize the backup folder to the DS220j.
-- [ ] Test restoration into a disposable blank Google workbook.
+- [x] Test restoration into a disposable blank Google workbook.
   - [x] Test verified restoration into a blank in-memory workbook without changing live data.
+  - [x] Restore the latest versioned archive into a separate shared Google workbook and verify every restored row.
 - [x] Retain several timestamped historical backups instead of overwriting one file (default: 30).
 
 ## 10. Test the application
@@ -107,22 +108,22 @@ Expected required service cost: $0/month under normal personal usage.
 - [x] Test CSV imports, duplicate validation, and report totals after the Google Sheets UI cutover.
   - [x] Test batch CSV prevalidation, account/category duplicates, balances, transfers, and P&L calculations.
   - [x] Test malformed and valid CSV uploads, duplicate UI submissions, and exact dashboard/report totals through Streamlit.
-- [ ] Test simultaneous browser tabs after deployment.
+- [x] Test simultaneous browser tabs after deployment.
   - [x] Test short-window suppression of repeated identical submissions.
 - [x] Test temporary Google API failures through the integrated UI.
   - [x] Test safe storage-layer failure handling without credential leakage.
 - [x] Test application-password authentication, logout, and unauthorized page blocking.
-- [ ] Test the complete workflow on a phone after deployment.
+- [x] Test the complete workflow on a phone after deployment.
 
 ## 11. Deploy and cut over
 
 - [x] Push the sanitized project to the private GitHub repository.
 - [x] Deploy `app.py` through Streamlit Community Cloud.
 - [x] Copy secret values into the deployment's Secrets settings.
-- [ ] Confirm service-account workbook access and private viewer restrictions.
-  - [ ] Sign in with the application password and confirm the hosted dashboard reads the live workbook.
+- [x] Confirm service-account workbook access and private viewer restrictions.
+  - [x] Sign in with the application password and confirm the hosted dashboard reads and writes the live workbook.
   - [x] Confirm an unauthenticated browser is denied access to the deployed app.
-- [ ] Review deployment logs for sensitive or overly detailed output.
+- [x] Review deployment logs for sensitive or overly detailed output.
 - [x] Skip SQLite read-only mode because SQLite is not active and has no user-entered data.
 - [x] Skip the final SQLite migration because Step 8 was declared not applicable.
 - [ ] Begin entering all new transactions through the hosted app.
