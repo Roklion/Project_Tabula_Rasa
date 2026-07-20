@@ -28,7 +28,7 @@ def load_business_profiles(secrets: Mapping[str, Any]) -> list[BusinessProfile]:
         return [
             BusinessProfile(
                 key="default",
-                name=str(secrets.get("business_name", "Business")),
+                name=str(secrets.get("business_name", "Heathcote Advisory LLC")),
                 secrets=secrets,
             )
         ]

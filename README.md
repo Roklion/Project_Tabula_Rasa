@@ -114,7 +114,7 @@ downloaded JSON key; do not copy the example placeholders literally.
 app_password_hash = "scrypt$..."
 
 [business_profiles.heathcote]
-name = "Heathcote Advisory"
+name = "Heathcote Advisory LLC"
 spreadsheet_id = "FIRST_SPREADSHEET_ID"
 
 [business_profiles.heathcote.gcp_service_account]
