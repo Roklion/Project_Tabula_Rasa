@@ -317,3 +317,38 @@ rereads every restored row and verifies it against the archive.
 - Credit card and loan opening balances should normally be negative.
 - CSV import validates account and category names before writing any rows.
 - This is a record-keeping tool, not tax or accounting advice.
+
+## Import from QuickBooks Online
+
+In QuickBooks Online, open **Reports > Transaction Detail by Account**, choose
+the desired date range, and export the report to CSV. The importer supports the
+English-language column names `Date`, `Transaction Type`, `Num`, `Name`,
+`Memo/Description`, `Account`, `Split`, and `Amount`. Remove report title,
+subtotal, and footer rows before uploading; the first CSV row must be the header.
+
+QuickBooks Self-Employed users can instead use **Settings > Export data**, turn
+on **General ledger**, and select **Export to Excel**. Upload either the exported
+ZIP or its `General_ledger.xlsx` file directly. The importer pairs the report's
+debit and credit entries so each accounting event becomes one ledger transaction;
+a separate chart-of-accounts export is not required.
+
+Account and category names must already exist in Plain Ledger (matching is
+case-insensitive). `Account` maps to the source ledger account. For non-transfer
+rows, `Split` maps to a category; positive amounts become income and negative or
+parenthesized amounts become expenses. For `Transfer` or `Funds Transfer` rows,
+`Split` maps to the destination account and the category is left blank. `Name`,
+`Memo/Description`, and `Num` map to payee, description, and reference.
+
+The upload screen validates every row and shows counts for income, expenses,
+transfers, and duplicates before enabling import. A duplicate has the same date,
+type, amount, source/destination account, category, payee, description, and
+reference as an existing or earlier uploaded row; duplicates are skipped. Fix
+all reported row errors and preview again before committing. Import writes all
+validated rows in one batch.
+
+Optionally enable **Automatically create missing accounts and categories** in
+the preview. The preview lists every proposed addition. Imported accounts use
+a zero opening balance and infer Bank, Cash, Credit card, or Loan from the name;
+unrecognized and equity-style names use `Other`. Review the proposed types
+before import. Category type is inferred from the amount (`Income` for positive and
+`Expense` for negative). Existing names are matched case-insensitively.

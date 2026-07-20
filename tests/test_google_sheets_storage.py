@@ -14,6 +14,7 @@ from storage.google_sheets import (
     StorageValidationError,
     WORKSHEET_HEADERS,
 )
+from quickbooks_import import general_ledger_rows
 from tests.fakes import FakeWorkbook
 
 
@@ -163,6 +164,79 @@ class GoogleSheetsStorageTests(unittest.TestCase):
         imported = self.storage.import_csv_transactions(rows[:1])
         self.assertEqual(len(imported), 1)
         self.assertEqual(len(self.storage.list_transactions()), 1)
+
+    def test_quickbooks_preview_maps_income_expense_transfer_and_duplicates(self) -> None:
+        checking = self.storage.create_account("Checking", "Bank")
+        savings = self.storage.create_account("Savings", "Bank")
+        self.storage.create_category("Sales", "Income")
+        self.storage.create_category("Office", "Expense")
+        rows = [
+            {"Date": "07/01/2026", "Transaction Type": "Deposit", "Num": "1", "Name": "Client", "Memo/Description": "Invoice", "Account": "Checking", "Split": "Sales", "Amount": "125.00"},
+            {"Date": "07/02/2026", "Transaction Type": "Expense", "Num": "2", "Name": "Shop", "Memo/Description": "Paper", "Account": "Checking", "Split": "Office", "Amount": "(20.50)"},
+            {"Date": "07/03/2026", "Transaction Type": "Transfer", "Num": "3", "Name": "", "Memo/Description": "Reserve", "Account": "Checking", "Split": "Savings", "Amount": "50"},
+        ]
+        preview = self.storage.preview_quickbooks_transactions(rows)
+        self.assertEqual(preview["summary"], {"ready": 3, "duplicates": 0, "Income": 1, "Expense": 1, "Transfer": 1})
+        imported = self.storage.import_quickbooks_transactions(rows)
+        self.assertEqual([item["kind"] for item in imported], ["Income", "Expense", "Transfer"])
+        self.assertEqual(imported[2]["account_id"], checking["id"])
+        self.assertEqual(imported[2]["to_account_id"], savings["id"])
+        duplicate_preview = self.storage.preview_quickbooks_transactions(rows + rows[:1])
+        self.assertEqual(duplicate_preview["summary"]["ready"], 0)
+        self.assertEqual(duplicate_preview["summary"]["duplicates"], 4)
+
+    def test_quickbooks_import_reports_all_errors_and_writes_nothing(self) -> None:
+        self.storage.create_account("Checking", "Bank")
+        rows = [
+            {"Date": "bad", "Transaction Type": "Deposit", "Num": "", "Name": "", "Memo/Description": "", "Account": "Checking", "Split": "Missing", "Amount": "10"},
+            {"Date": "07/02/2026", "Transaction Type": "Transfer", "Num": "", "Name": "", "Memo/Description": "", "Account": "Missing", "Split": "Checking", "Amount": "1"},
+        ]
+        preview = self.storage.preview_quickbooks_transactions(rows)
+        self.assertEqual(len(preview["errors"]), 2)
+        with self.assertRaises(StorageValidationError):
+            self.storage.import_quickbooks_transactions(rows)
+        self.assertEqual(self.storage.list_transactions(), [])
+
+    def test_quickbooks_import_can_create_missing_references(self) -> None:
+        rows = [
+            {"Date": "07/01/2026", "Transaction Type": "Deposit", "Num": "1", "Name": "Client", "Memo/Description": "Invoice", "Account": "Operating", "Split": "Consulting", "Amount": "100"},
+            {"Date": "07/02/2026", "Transaction Type": "Transfer", "Num": "2", "Name": "", "Memo/Description": "Reserve", "Account": "Operating", "Split": "Savings", "Amount": "25"},
+        ]
+        strict = self.storage.preview_quickbooks_transactions(rows)
+        self.assertTrue(strict["errors"])
+        preview = self.storage.preview_quickbooks_transactions(rows, auto_create=True)
+        self.assertEqual(preview["errors"], [])
+        self.assertEqual(preview["new_accounts"], ["Operating", "Savings"])
+        self.assertEqual(preview["new_account_types"], {"Operating": "Other", "Savings": "Bank"})
+        self.assertEqual(preview["new_categories"], [("Consulting", "Income")])
+        imported = self.storage.import_quickbooks_transactions(rows, auto_create=True)
+        self.assertEqual(len(imported), 2)
+        self.assertEqual(
+            [(item["name"], item["type"]) for item in self.storage.list_accounts()],
+            [("Operating", "Other"), ("Savings", "Bank")],
+        )
+        self.assertEqual(
+            [(item["name"], item["kind"]) for item in self.storage.list_categories()],
+            [("Consulting", "Income")],
+        )
+
+    def test_general_ledger_export_collapses_double_entries(self) -> None:
+        matrix = [
+            ["Example LLC"],
+            [None, "Date", "Transaction Type", "Num", "Name", "Memo/Description", "Account", "Debit", "Credit", "Balance"],
+            [None, "06/01/2026", "Transfer", "", "", "Reserve", "Checking", "", 50, 950],
+            [None, "06/01/2026", "Transfer", "", "", "Reserve", "Savings", 50, "", 50],
+            [None, "06/02/2026", "Deposit", "1", "Client", "Invoice", "Checking", 100, "", 1050],
+            [None, "06/02/2026", "Deposit", "1", "Client", "Invoice", "Services", "", 100, 100],
+            [None, "06/03/2026", "Expense", "2", "", "Paper", "Checking", "", 10, 1040],
+            [None, "06/03/2026", "Expense", "2", "Store", "Paper", "Office", 10, "", 10],
+        ]
+        rows, errors = general_ledger_rows(matrix)
+        self.assertEqual(errors, [])
+        self.assertEqual(len(rows), 3)
+        self.assertEqual((rows[0]["Account"], rows[0]["Split"], rows[0]["Transaction Type"]), ("Checking", "Savings", "Transfer"))
+        self.assertEqual((rows[1]["Split"], rows[1]["Amount"]), ("Services", "100.00"))
+        self.assertEqual((rows[2]["Name"], rows[2]["Split"], rows[2]["Amount"]), ("Store", "Office", "-10.00"))
 
     def test_backup_contains_csv_files_and_manifest(self) -> None:
         self.storage.create_account("Checking", "Bank")

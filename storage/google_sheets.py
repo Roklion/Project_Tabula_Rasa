@@ -25,6 +25,13 @@ import gspread
 from google.auth.exceptions import GoogleAuthError
 from google.oauth2.service_account import Credentials
 
+from quickbooks_import import (
+    fingerprint,
+    missing_references,
+    normalize_rows,
+    suggested_account_type,
+)
+
 
 WORKSHEET_HEADERS = {
     "Accounts": ("id", "name", "type", "opening_balance", "active", "created_at"),
@@ -795,6 +802,80 @@ class GoogleSheetsStorage:
                     categories=categories,
                 )
             )
+        self._append_many("Transactions", prepared)
+        return prepared
+
+    def preview_quickbooks_transactions(
+        self, rows: Iterable[Mapping[str, Any]], *, auto_create: bool = False
+    ) -> dict[str, Any]:
+        """Validate and summarize a QuickBooks export without writing anything."""
+        source_rows = list(rows)
+        accounts = self._account_lookup(force_refresh=True)
+        categories = self._category_lookup(force_refresh=True)
+        new_accounts, new_categories = missing_references(
+            source_rows, accounts.values(), categories.values()
+        )
+        if auto_create:
+            for name in new_accounts:
+                item = {"id": f"pending-account:{name.casefold()}", "name": name, "active": True}
+                accounts[item["id"]] = item
+            for name, kind in new_categories:
+                item = {"id": f"pending-category:{kind}:{name.casefold()}", "name": name, "kind": kind}
+                categories[item["id"]] = item
+        normalized, errors = normalize_rows(
+            source_rows, accounts.values(), categories.values()
+        )
+        existing = {fingerprint(item) for item in self.list_transactions()}
+        seen: set[str] = set()
+        ready: list[dict[str, str]] = []
+        duplicate_rows: list[int] = []
+        for item in normalized:
+            row_number = int(item.pop("_source_row"))
+            identity = fingerprint(item)
+            if identity in existing or identity in seen:
+                duplicate_rows.append(row_number)
+            else:
+                seen.add(identity)
+                ready.append(item)
+        counts = {kind: sum(item["kind"] == kind for item in ready) for kind in TRANSACTION_KINDS}
+        return {
+            "rows": ready,
+            "errors": errors,
+            "duplicate_rows": duplicate_rows,
+            "new_accounts": new_accounts,
+            "new_account_types": {
+                name: suggested_account_type(name) for name in new_accounts
+            },
+            "new_categories": new_categories,
+            "summary": {"ready": len(ready), "duplicates": len(duplicate_rows), **counts},
+        }
+
+    def import_quickbooks_transactions(
+        self, rows: Iterable[Mapping[str, Any]], *, auto_create: bool = False
+    ) -> list[dict[str, str]]:
+        """Revalidate a QuickBooks export, then atomically batch append unique rows."""
+        source_rows = list(rows)
+        preview = self.preview_quickbooks_transactions(source_rows, auto_create=auto_create)
+        if preview["errors"]:
+            raise StorageValidationError("\n".join(preview["errors"]))
+        if auto_create:
+            now = _utc_now()
+            account_records = [
+                {"id": str(uuid4()), "name": name, "type": preview["new_account_types"][name], "opening_balance": "0.00", "active": "TRUE", "created_at": now}
+                for name in preview["new_accounts"]
+            ]
+            category_records = [
+                {"id": str(uuid4()), "name": name, "kind": kind}
+                for name, kind in preview["new_categories"]
+            ]
+            self._append_many("Accounts", account_records)
+            self._append_many("Categories", category_records)
+            preview = self.preview_quickbooks_transactions(source_rows)
+            if preview["errors"]:
+                raise StorageValidationError("\n".join(preview["errors"]))
+        prepared = [
+            self._prepare_transaction(item) for item in preview["rows"]
+        ]
         self._append_many("Transactions", prepared)
         return prepared
 

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import date
+import io
+import zipfile
 
 import pandas as pd
 import plotly.express as px
@@ -24,6 +26,10 @@ from storage import (
     StorageValidationError,
 )
 from submission_guard import is_recent_duplicate, mark_completed
+from quickbooks_import import (
+    REQUIRED_COLUMNS as QUICKBOOKS_REQUIRED_COLUMNS,
+    general_ledger_rows,
+)
 
 
 def money(value: float) -> str:
@@ -624,31 +630,112 @@ else:
         "application/zip",
         width="stretch",
     )
-    st.subheader("Import transactions")
+    with st.expander("Import Plain Ledger CSV"):
+        st.write(
+            "Upload a CSV with: Date, Type, Amount, Account, Category, Payee, "
+            "Description, Reference. Type must be Income or Expense."
+        )
+        plain_upload = st.file_uploader("CSV file", type="csv")
+        if plain_upload:
+            try:
+                plain_incoming = pd.read_csv(plain_upload).where(
+                    lambda frame: frame.notna(), ""
+                )
+                plain_required = {"Date", "Type", "Amount", "Account", "Category"}
+                plain_missing = plain_required - set(plain_incoming.columns)
+                if plain_missing:
+                    st.error(f"Missing columns: {', '.join(sorted(plain_missing))}")
+                else:
+                    st.dataframe(plain_incoming.head(20), hide_index=True, width="stretch")
+                    if st.button("Import rows", type="primary"):
+                        plain_records = plain_incoming.to_dict(orient="records")
+                        confirmed_write(
+                            "import_csv_transactions",
+                            {"rows": plain_records},
+                            lambda: storage.import_csv_transactions(plain_records),
+                            lambda imported: f"Imported {len(imported)} transactions.",
+                        )
+            except StorageValidationError as error:
+                report_storage_error(error)
+            except (ValueError, pd.errors.ParserError, UnicodeError):
+                st.error("Could not read this CSV file. Check its format and encoding.")
+    st.subheader("Import QuickBooks transactions")
     st.write(
-        "Upload a CSV with: Date, Type, Amount, Account, Category, Payee, "
-        "Description, Reference. Type must be Income or Expense; account and "
-        "category names must already exist."
+        "Upload a QuickBooks Online **Transaction Detail by Account** CSV. "
+        "Review the validation results and summary before committing."
     )
-    upload = st.file_uploader("CSV file", type="csv")
+    upload = st.file_uploader("QuickBooks export", type=["csv", "xlsx", "zip"])
     if upload:
         try:
-            incoming = pd.read_csv(upload).where(lambda frame: frame.notna(), "")
-            required = {"Date", "Type", "Amount", "Account", "Category"}
-            missing = required - set(incoming.columns)
+            upload_bytes = upload.getvalue()
+            upload_name = upload.name.casefold()
+            conversion_errors: list[str] = []
+            if upload_name.endswith(".csv"):
+                incoming = pd.read_csv(io.BytesIO(upload_bytes)).where(lambda frame: frame.notna(), "")
+            else:
+                if upload_name.endswith(".zip"):
+                    with zipfile.ZipFile(io.BytesIO(upload_bytes)) as archive:
+                        workbooks = [name for name in archive.namelist() if name.casefold().endswith(".xlsx") and not name.startswith("__MACOSX/")]
+                        if len(workbooks) != 1:
+                            raise ValueError("The ZIP must contain exactly one QuickBooks .xlsx workbook")
+                        if archive.getinfo(workbooks[0]).file_size > 25 * 1024 * 1024:
+                            raise ValueError("The QuickBooks workbook is larger than 25 MB")
+                        workbook_bytes = archive.read(workbooks[0])
+                else:
+                    workbook_bytes = upload_bytes
+                ledger = pd.read_excel(io.BytesIO(workbook_bytes), sheet_name="General Ledger", header=None).where(lambda frame: frame.notna(), "")
+                records, conversion_errors = general_ledger_rows(ledger.values.tolist())
+                incoming = pd.DataFrame(records, columns=sorted(QUICKBOOKS_REQUIRED_COLUMNS))
+            missing = QUICKBOOKS_REQUIRED_COLUMNS - set(incoming.columns)
             if missing:
                 st.error(f"Missing columns: {', '.join(sorted(missing))}")
             else:
-                st.dataframe(incoming.head(20), hide_index=True, width="stretch")
-                if st.button("Import rows", type="primary"):
-                    records = incoming.to_dict(orient="records")
+                records = incoming.to_dict(orient="records")
+                auto_create = st.checkbox(
+                    "Automatically create missing accounts and categories",
+                    help="New accounts use an inferred type and zero opening balance. Category type is inferred from the amount.",
+                )
+                preview = storage.preview_quickbooks_transactions(
+                    records, auto_create=auto_create
+                )
+                summary = preview["summary"]
+                c1, c2, c3, c4, c5 = st.columns(5)
+                c1.metric("Ready", summary["ready"])
+                c2.metric("Duplicates", summary["duplicates"])
+                c3.metric("Income", summary["Income"])
+                c4.metric("Expenses", summary["Expense"])
+                c5.metric("Transfers", summary["Transfer"])
+                if preview["errors"]:
+                    st.error("\n".join(preview["errors"]))
+                if conversion_errors:
+                    st.error("\n".join(conversion_errors))
+                if auto_create and (preview["new_accounts"] or preview["new_categories"]):
+                    additions = [
+                        f"Account: {name} ({preview['new_account_types'][name]})"
+                        for name in preview["new_accounts"]
+                    ]
+                    additions += [f"{kind} category: {name}" for name, kind in preview["new_categories"]]
+                    st.info("Will create:\n\n- " + "\n- ".join(additions))
+                if preview["duplicate_rows"]:
+                    st.warning(
+                        "Already imported or repeated rows will be skipped: "
+                        + ", ".join(map(str, preview["duplicate_rows"]))
+                    )
+                st.dataframe(incoming.head(50), hide_index=True, width="stretch")
+                if st.button(
+                    "Import validated rows",
+                    type="primary",
+                    disabled=bool(preview["errors"] or conversion_errors) or not summary["ready"],
+                ):
                     confirmed_write(
-                        "import_csv_transactions",
-                        {"rows": records},
-                        lambda: storage.import_csv_transactions(records),
+                        "import_quickbooks_transactions",
+                        {"rows": records, "auto_create": auto_create},
+                        lambda: storage.import_quickbooks_transactions(
+                            records, auto_create=auto_create
+                        ),
                         lambda imported: f"Imported {len(imported)} transactions.",
                     )
         except StorageValidationError as error:
             report_storage_error(error)
-        except (ValueError, pd.errors.ParserError, UnicodeError):
-            st.error("Could not read this CSV file. Check its format and encoding.")
+        except (ValueError, KeyError, zipfile.BadZipFile, pd.errors.ParserError, UnicodeError):
+            st.error("Could not read this QuickBooks export. Check its format and file integrity.")
