@@ -73,7 +73,7 @@ def require_authentication() -> None:
         st.error("Application authentication is not configured.")
         st.stop()
 
-    st.title("Plain Ledger")
+    st.title("Tabula Rosa")
     st.caption("Enter the application password to continue.")
     with st.form("login_form"):
         password = st.text_input("Password", type="password")

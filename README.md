@@ -1,4 +1,4 @@
-# Plain Ledger
+# Tabula Rosa
 
 A private Google Sheets-backed bookkeeping app for one person or a small group of businesses. Each business can use its own spreadsheet and Google service account while sharing one Streamlit deployment.
 
@@ -332,7 +332,7 @@ ZIP or its `General_ledger.xlsx` file directly. The importer pairs the report's
 debit and credit entries so each accounting event becomes one ledger transaction;
 a separate chart-of-accounts export is not required.
 
-Account and category names must already exist in Plain Ledger (matching is
+Account and category names must already exist in Tabula Rosa (matching is
 case-insensitive). `Account` maps to the source ledger account. For non-transfer
 rows, `Split` maps to a category; positive amounts become income and negative or
 parenthesized amounts become expenses. For `Transfer` or `Funds Transfer` rows,

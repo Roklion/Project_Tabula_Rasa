@@ -1,4 +1,4 @@
-"""Google Sheets persistence for Plain Ledger.
+"""Google Sheets persistence for Tabula Rosa.
 
 The UI interacts with this module through dictionaries containing domain fields;
 Google worksheet objects, row numbers, and API exceptions stay inside this layer.

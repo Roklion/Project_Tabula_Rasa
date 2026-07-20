@@ -1,4 +1,4 @@
-"""Storage backends for Plain Ledger."""
+"""Storage backends for Tabula Rosa."""
 
 from .google_sheets import (
     GoogleSheetsStorage,

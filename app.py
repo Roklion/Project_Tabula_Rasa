@@ -122,7 +122,7 @@ def confirmed_write(
     st.rerun()
 
 
-st.set_page_config(page_title="Plain Ledger", page_icon="📒", layout="wide")
+st.set_page_config(page_title="Tabula Rosa", page_icon="📒", layout="wide")
 st.markdown(
     """
     <style>
@@ -168,7 +168,7 @@ except StorageError as error:
     st.stop()
 
 with st.sidebar:
-    st.title("Plain Ledger")
+    st.title("Tabula Rosa")
     st.caption(profile_by_key[selected_profile_key].name)
     page = st.radio(
         "Navigate",
@@ -619,18 +619,18 @@ else:
     st.download_button(
         "Download transactions CSV",
         all_transactions.to_csv(index=False).encode("utf-8"),
-        f"plain-ledger-{date.today()}.csv",
+        f"tabula-rosa-{date.today()}.csv",
         "text/csv",
         width="stretch",
     )
     st.download_button(
         "Download complete workbook backup",
         backup_zip,
-        f"plain-ledger-backup-{date.today()}.zip",
+        f"tabula-rosa-backup-{date.today()}.zip",
         "application/zip",
         width="stretch",
     )
-    with st.expander("Import Plain Ledger CSV"):
+    with st.expander("Import Tabula Rosa CSV"):
         st.write(
             "Upload a CSV with: Date, Type, Amount, Account, Category, Payee, "
             "Description, Reference. Type must be Income or Expense."
