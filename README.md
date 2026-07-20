@@ -194,16 +194,6 @@ Common failures:
 - **Service-account key creation is disabled:** consult the Workspace/Cloud
   administrator. Newer organizations may enforce this restriction by default.
 
-## Legacy SQLite backup
-
-The pre-cutover SQLite backup remains available until the Google Sheets implementation has been fully checked. Create another consistent, non-overwriting legacy backup with:
-
-```powershell
-python scripts/backup_sqlite.py data/ledger.db data/ledger-pre-google-migration.db
-```
-
-The command validates SQLite integrity and the required ledger tables before reporting success.
-
 ## Run automated tests
 
 Run the isolated authentication, UI workflow, Google storage, and reporting tests with:
