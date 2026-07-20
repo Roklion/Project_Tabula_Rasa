@@ -32,12 +32,21 @@ from quickbooks_import import (
 )
 
 
+STORAGE_IMPLEMENTATION_VERSION = 2
+
+
 def money(value: float) -> str:
     return f"${value:,.2f}"
 
 
 @st.cache_resource
-def get_storage(profile_key: str) -> GoogleSheetsStorage:
+def get_storage(
+    profile_key: str, implementation_version: int
+) -> GoogleSheetsStorage:
+    # Include the implementation version in Streamlit's cache key. Otherwise a
+    # storage instance created before a deployment can survive with an older
+    # class definition that does not contain newly added methods.
+    del implementation_version
     return GoogleSheetsStorage.from_secrets(
         select_profile_secrets(st.secrets, profile_key)
     )
@@ -156,7 +165,7 @@ with st.sidebar:
     )
 
 try:
-    storage = get_storage(selected_profile_key)
+    storage = get_storage(selected_profile_key, STORAGE_IMPLEMENTATION_VERSION)
     initialized_profiles = st.session_state.setdefault(
         "defaults_initialized_profiles", set()
     )
