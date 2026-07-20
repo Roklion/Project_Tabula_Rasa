@@ -542,6 +542,41 @@ elif page == "Categories":
                 lambda: storage.create_category(name, kind),
                 "Category added.",
             )
+    if categories:
+        with st.expander("Edit category"):
+            category_by_id = {category["id"]: category for category in categories}
+            category_id = st.selectbox(
+                "Category to edit",
+                list(category_by_id),
+                format_func=lambda value: (
+                    f'{category_by_id[value]["name"]} '
+                    f'({category_by_id[value]["kind"]})'
+                ),
+            )
+            selected = category_by_id[category_id]
+            with st.form("edit_category"):
+                edited_name = st.text_input(
+                    "Edit category name", value=selected["name"]
+                )
+                edited_kind = st.selectbox(
+                    "Edit category type",
+                    ["Expense", "Income"],
+                    index=["Expense", "Income"].index(selected["kind"]),
+                )
+                if st.form_submit_button("Save category changes", type="primary"):
+                    payload = {
+                        "id": category_id,
+                        "name": edited_name,
+                        "kind": edited_kind,
+                    }
+                    confirmed_write(
+                        "edit_category",
+                        payload,
+                        lambda: storage.edit_category(
+                            category_id, name=edited_name, kind=edited_kind
+                        ),
+                        "Category updated.",
+                    )
     st.caption(
         "Categories are not deleted so existing transaction references remain valid."
     )

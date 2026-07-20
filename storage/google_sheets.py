@@ -619,6 +619,28 @@ class GoogleSheetsStorage:
         self._append("Categories", record)
         return record
 
+    def edit_category(self, category_id: str, **changes: Any) -> dict[str, str]:
+        current = self._find_row("Categories", category_id)
+        updated = dict(current.values)
+        name = _clean_text(
+            changes.get("name", updated["name"]), "Category name", required=True
+        )
+        kind = _clean_text(
+            changes.get("kind", updated["kind"]), "Category kind", required=True
+        ).title()
+        if kind not in CATEGORY_KINDS:
+            raise StorageValidationError("Category kind must be Income or Expense")
+        if any(
+            category["id"] != category_id
+            and category["name"].casefold() == name.casefold()
+            and category["kind"] == kind
+            for category in self.list_categories(_force_refresh=True)
+        ):
+            raise StorageConflictError("That category already exists")
+        updated.update({"name": name, "kind": kind})
+        self._replace_row("Categories", current, updated)
+        return updated
+
     def _account_lookup(self, *, force_refresh: bool = False) -> dict[str, dict[str, Any]]:
         return {
             account["id"]: account

@@ -78,6 +78,25 @@ class GoogleSheetsStorageTests(unittest.TestCase):
         with self.assertRaises(StorageConflictError):
             self.storage.create_category("software", "Expense")
 
+    def test_edit_category_name_and_kind(self) -> None:
+        category = self.storage.create_category("Consulting", "Income")
+
+        edited = self.storage.edit_category(
+            category["id"], name="Professional services", kind="expense"
+        )
+
+        self.assertEqual(edited["id"], category["id"])
+        self.assertEqual(edited["name"], "Professional services")
+        self.assertEqual(edited["kind"], "Expense")
+        self.assertEqual(self.storage.list_categories(), [edited])
+
+    def test_edit_category_rejects_duplicate_name_and_kind(self) -> None:
+        first = self.storage.create_category("Services", "Income")
+        self.storage.create_category("services", "Expense")
+
+        with self.assertRaises(StorageConflictError):
+            self.storage.edit_category(first["id"], kind="Expense")
+
     def test_category_and_transaction_crud(self) -> None:
         source = self.storage.create_account("Checking", "Bank")
         destination = self.storage.create_account("Savings", "Bank")
