@@ -126,6 +126,11 @@ def missing_references(
         if txn_type in TRANSFER_TYPES:
             if split_name and split_name.casefold() not in account_names:
                 missing_accounts.setdefault(split_name.casefold(), split_name)
+        elif split_name.casefold() in account_names:
+            # QuickBooks often labels owner contributions, draws, and other
+            # balance-sheet movements as deposits, checks, or expenses even
+            # though both sides of the transaction are accounts.
+            continue
         else:
             try:
                 kind = "Income" if _amount(source.get("Amount")) > 0 else "Expense"
@@ -277,25 +282,41 @@ def normalize_rows(
             if account is None:
                 raise ValueError(f"Account '{source_name}' does not exist")
             amount = _amount(source.get("Amount"))
+            split_account = account_map.get(split_name.casefold())
             if txn_type.casefold() in TRANSFER_TYPES:
-                destination = account_map.get(split_name.casefold())
-                if destination is None:
+                if split_account is None:
                     raise ValueError(f"destination account '{split_name}' does not exist")
-                if destination["id"] == account["id"]:
+                if split_account["id"] == account["id"]:
                     raise ValueError("transfer accounts must be different")
-                kind, category_id, to_account_id = "Transfer", "", destination["id"]
+                kind = "Transfer"
+                account_id = account["id"]
+                category_id = ""
+                to_account_id = split_account["id"]
+            elif split_account is not None:
+                if split_account["id"] == account["id"]:
+                    raise ValueError("transfer accounts must be different")
+                kind = "Transfer"
+                category_id = ""
+                if amount > 0:
+                    account_id = split_account["id"]
+                    to_account_id = account["id"]
+                else:
+                    account_id = account["id"]
+                    to_account_id = split_account["id"]
             else:
                 kind = "Income" if amount > 0 else "Expense"
                 category = category_map.get((split_name.casefold(), kind))
                 if category is None:
                     raise ValueError(f"{kind.lower()} category '{split_name}' does not exist")
-                category_id, to_account_id = category["id"], ""
+                account_id = account["id"]
+                category_id = category["id"]
+                to_account_id = ""
             normalized.append({
                 "_source_row": str(number),
                 "txn_date": _date(source.get("Date")),
                 "kind": kind,
                 "amount": f"{abs(amount):.2f}",
-                "account_id": str(account["id"]),
+                "account_id": str(account_id),
                 "to_account_id": str(to_account_id),
                 "category_id": str(category_id),
                 "payee": _text(source.get("Name")),

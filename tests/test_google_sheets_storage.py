@@ -259,6 +259,50 @@ class GoogleSheetsStorageTests(unittest.TestCase):
         self.assertEqual(duplicate_preview["summary"]["ready"], 0)
         self.assertEqual(duplicate_preview["summary"]["duplicates"], 4)
 
+    def test_quickbooks_account_splits_become_sign_aware_transfers(self) -> None:
+        checking = self.storage.create_account("Checking", "Bank")
+        investment = self.storage.create_account(
+            "Owners investment", "Equity"
+        )
+        owners_pay = self.storage.create_account("Owners pay", "Equity")
+        rows = [
+            {
+                "Date": "07/01/2026",
+                "Transaction Type": "Deposit",
+                "Num": "1",
+                "Name": "Owner",
+                "Memo/Description": "Contribution",
+                "Account": "Checking",
+                "Split": "Owners investment",
+                "Amount": "100.00",
+            },
+            {
+                "Date": "07/02/2026",
+                "Transaction Type": "Check",
+                "Num": "2",
+                "Name": "Owner",
+                "Memo/Description": "Draw",
+                "Account": "Checking",
+                "Split": "Owners pay",
+                "Amount": "(25.00)",
+            },
+        ]
+
+        preview = self.storage.preview_quickbooks_transactions(rows)
+
+        self.assertEqual(preview["errors"], [])
+        self.assertEqual(preview["new_categories"], [])
+        self.assertEqual(
+            [
+                (row["kind"], row["account_id"], row["to_account_id"])
+                for row in preview["rows"]
+            ],
+            [
+                ("Transfer", investment["id"], checking["id"]),
+                ("Transfer", checking["id"], owners_pay["id"]),
+            ],
+        )
+
     def test_quickbooks_import_reports_all_errors_and_writes_nothing(self) -> None:
         self.storage.create_account("Checking", "Bank")
         rows = [
