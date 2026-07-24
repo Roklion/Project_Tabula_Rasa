@@ -4,6 +4,7 @@ import unittest
 
 from ledger_reporting import (
     account_balances,
+    balance_sheet,
     expenses_by_category,
     monthly_performance,
     profit_and_loss,
@@ -79,6 +80,49 @@ class LedgerReportingTests(unittest.TestCase):
             expenses_by_category(self.transactions, self.categories),
             [{"category": "Software", "total": 20.0}],
         )
+
+    def test_balance_sheet_classifies_accounts_and_includes_earnings(self) -> None:
+        accounts = [
+            {
+                "id": "bank",
+                "name": "Checking",
+                "type": "Bank",
+                "classification": "Asset",
+                "opening_balance": "1000.00",
+            },
+            {
+                "id": "card",
+                "name": "Credit card",
+                "type": "Credit card",
+                "classification": "Liability",
+                "opening_balance": "-200.00",
+            },
+            {
+                "id": "capital",
+                "name": "Owner capital",
+                "type": "Equity",
+                "classification": "Equity",
+                "opening_balance": "-800.00",
+            },
+        ]
+        transactions = [
+            {
+                "txn_date": "2026-07-01",
+                "kind": "Expense",
+                "amount": "50.00",
+                "account_id": "card",
+                "to_account_id": "",
+                "category_id": "software",
+            }
+        ]
+
+        report = balance_sheet(accounts, transactions)
+
+        self.assertEqual(report["total_assets"], 1000.0)
+        self.assertEqual(report["total_liabilities"], 250.0)
+        self.assertEqual(report["current_earnings"], -50.0)
+        self.assertEqual(report["total_equity"], 750.0)
+        self.assertEqual(report["difference"], 0.0)
 
 
 if __name__ == "__main__":

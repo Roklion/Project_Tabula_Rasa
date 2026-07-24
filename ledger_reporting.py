@@ -61,6 +61,68 @@ def account_balances(
     ]
 
 
+def balance_sheet(
+    accounts: Iterable[Mapping[str, Any]],
+    transactions: Iterable[Mapping[str, Any]],
+    *,
+    as_of: date | str | None = None,
+) -> dict[str, Any]:
+    """Return classified balances and an accounting-equation check."""
+    transaction_rows = [
+        dict(transaction)
+        for transaction in transactions
+        if as_of is None
+        or str(transaction["txn_date"]) <= str(_date_text(as_of))
+    ]
+    balance_rows = account_balances(accounts, transaction_rows)
+    sections: dict[str, list[dict[str, Any]]] = {
+        "Asset": [],
+        "Liability": [],
+        "Equity": [],
+    }
+    totals = {classification: Decimal("0") for classification in sections}
+    for account in balance_rows:
+        classification = str(account.get("classification", "Asset")).title()
+        if classification not in sections:
+            classification = "Asset"
+        raw_balance = _decimal(account["balance"])
+        presented_balance = (
+            raw_balance if classification == "Asset" else -raw_balance
+        )
+        sections[classification].append(
+            {
+                "id": account["id"],
+                "name": account["name"],
+                "type": account["type"],
+                "balance": float(presented_balance),
+            }
+        )
+        totals[classification] += presented_balance
+
+    current_earnings = sum(
+        (
+            _decimal(transaction["amount"])
+            if transaction["kind"] == "Income"
+            else -_decimal(transaction["amount"])
+            if transaction["kind"] == "Expense"
+            else Decimal("0")
+        )
+        for transaction in transaction_rows
+    )
+    total_equity = totals["Equity"] + current_earnings
+    difference = totals["Asset"] - totals["Liability"] - total_equity
+    return {
+        "assets": sections["Asset"],
+        "liabilities": sections["Liability"],
+        "equity": sections["Equity"],
+        "current_earnings": float(current_earnings),
+        "total_assets": float(totals["Asset"]),
+        "total_liabilities": float(totals["Liability"]),
+        "total_equity": float(total_equity),
+        "difference": float(difference),
+    }
+
+
 def profit_and_loss(
     transactions: Iterable[Mapping[str, Any]],
     *,

@@ -26,11 +26,24 @@ class FakeWorksheet:
     def update(
         self, values: list[list[str]], range_name: str, **_: object
     ) -> None:
-        match = re.fullmatch(r"A(\d+)", range_name)
+        match = re.fullmatch(r"([A-Z]+)(\d+)(?::[A-Z]+\d+)?", range_name)
         if not match:
             raise AssertionError(f"Unexpected range: {range_name}")
-        row_index = int(match.group(1)) - 1
-        self.rows[row_index] = list(values[0])
+        column_text, row_text = match.groups()
+        column_index = 0
+        for character in column_text:
+            column_index = column_index * 26 + ord(character) - 64
+        column_index -= 1
+        row_index = int(row_text) - 1
+        for row_offset, source_row in enumerate(values):
+            target_index = row_index + row_offset
+            while len(self.rows) <= target_index:
+                self.rows.append([])
+            target_row = self.rows[target_index]
+            required_width = column_index + len(source_row)
+            if len(target_row) < required_width:
+                target_row.extend([""] * (required_width - len(target_row)))
+            target_row[column_index:required_width] = list(source_row)
 
     def delete_rows(self, row_number: int) -> None:
         del self.rows[row_number - 1]

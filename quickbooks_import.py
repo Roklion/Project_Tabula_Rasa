@@ -25,6 +25,17 @@ GENERAL_LEDGER_COLUMNS = (
     "Date", "Transaction Type", "Num", "Name", "Memo/Description",
     "Account", "Debit", "Credit", "Balance",
 )
+EQUITY_NAME_TERMS = (
+    "equity",
+    "owner investment",
+    "owners investment",
+    "owner's investment",
+    "capital",
+    "retained earnings",
+    "opening balance equity",
+    "drawing",
+    "draws",
+)
 
 
 def _text(value: Any) -> str:
@@ -57,6 +68,8 @@ def _amount(value: Any) -> Decimal:
 def suggested_account_type(name: str) -> str:
     """Infer a conservative ledger account type from a QuickBooks account name."""
     lowered = name.casefold()
+    if any(term in lowered for term in EQUITY_NAME_TERMS):
+        return "Equity"
     if "credit card" in lowered or "card payable" in lowered:
         return "Credit card"
     if any(word in lowered for word in ("checking", "savings", "bank")):
@@ -66,6 +79,19 @@ def suggested_account_type(name: str) -> str:
     if "loan" in lowered:
         return "Loan"
     return "Other"
+
+
+def suggested_account_classification(name: str, account_type: str) -> str:
+    """Infer the balance-sheet classification for an account."""
+    if account_type in {"Bank", "Cash"}:
+        return "Asset"
+    if account_type in {"Credit card", "Loan"}:
+        return "Liability"
+    if account_type == "Equity" or any(
+        term in name.casefold() for term in EQUITY_NAME_TERMS
+    ):
+        return "Equity"
+    return "Asset"
 
 
 def fingerprint(row: Mapping[str, Any]) -> str:

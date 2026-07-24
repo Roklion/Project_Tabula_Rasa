@@ -83,6 +83,9 @@ def main() -> None:
             "Income": "$100.00",
             "Expenses": "$40.00",
             "Net": "$60.00",
+            "Total assets": "$60.00",
+            "Total liabilities": "$0.00",
+            "Total equity": "$60.00",
         }
 
         app.radio[0].set_value("Dashboard").run()

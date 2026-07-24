@@ -77,12 +77,14 @@ will be needed.
 
    | Worksheet | Row 1 headers, from left to right |
    | --- | --- |
-   | `Accounts` | `id`, `name`, `type`, `opening_balance`, `active`, `created_at` |
+   | `Accounts` | `id`, `name`, `type`, `classification`, `opening_balance`, `active`, `created_at` |
    | `Categories` | `id`, `name`, `kind` |
    | `Transactions` | `id`, `txn_date`, `kind`, `amount`, `account_id`, `to_account_id`, `category_id`, `payee`, `description`, `reference`, `created_at` |
 
    The default `Sheet1` tab may be deleted. Leave rows below the headers empty;
-   the app seeds its initial account and categories on first access.
+   the app seeds its initial account and categories on first access. Existing
+   workbooks created without `classification` are upgraded automatically when
+   this version first connects.
 5. Click **Share**, enter the service account's `client_email`, select
    **Editor**, clear **Notify people** if Google offers it, and click **Share**.
    Keep **General access** set to **Restricted**. Google's
@@ -314,7 +316,17 @@ rereads every restored row and verifies it against the archive.
 ## Notes
 
 - Transfers change account balances but do not affect income or expenses.
-- Credit card and loan opening balances should normally be negative.
+- Account names, balance-sheet classifications, and subtypes are stored in
+  separate fields.
+- Bank and Cash accounts are assets; Credit card and Loan accounts are
+  liabilities; Equity accounts are equity. The flexible Other subtype can be
+  classified as an asset, liability, or equity.
+- Asset opening balances should normally be positive. Liability and equity
+  opening ledger balances should normally be negative; the balance-sheet report
+  presents them as conventional positive balances.
+- Current earnings are calculated from income minus expenses and included in
+  total equity. The report flags any difference in the accounting equation
+  `Assets = Liabilities + Equity`.
 - CSV import validates account and category names before writing any rows.
 - This is a record-keeping tool, not tax or accounting advice.
 
@@ -347,8 +359,10 @@ all reported row errors and preview again before committing. Import writes all
 validated rows in one batch.
 
 Optionally enable **Automatically create missing accounts and categories** in
-the preview. The preview lists every proposed addition. Imported accounts use
-a zero opening balance and infer Bank, Cash, Credit card, or Loan from the name;
-unrecognized and equity-style names use `Other`. Review the proposed types
-before import. Category type is inferred from the amount (`Income` for positive and
-`Expense` for negative). Existing names are matched case-insensitively.
+the preview. The preview lists every proposed addition. Imported accounts use a
+zero opening balance and infer their classification and subtype from the name.
+Bank, Cash, Credit card, Loan, and common equity-style names are recognized;
+other names use the flexible `Other` subtype and default to Asset. Review the
+proposed classification and type before import. Category type is inferred from
+the amount (`Income` for positive and `Expense` for negative). Existing names
+are matched case-insensitively.

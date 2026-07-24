@@ -16,6 +16,7 @@ from business_profiles import (
 from ledger_auth import logout, require_authentication
 from ledger_reporting import (
     account_balances,
+    balance_sheet,
     expenses_by_category,
     monthly_performance,
     profit_and_loss,
@@ -32,7 +33,16 @@ from quickbooks_import import (
 )
 
 
-STORAGE_IMPLEMENTATION_VERSION = 2
+STORAGE_IMPLEMENTATION_VERSION = 3
+ACCOUNT_TYPES = ["Bank", "Cash", "Credit card", "Loan", "Equity", "Other"]
+ACCOUNT_CLASSIFICATIONS = ["Asset", "Liability", "Equity"]
+FIXED_TYPE_CLASSIFICATIONS = {
+    "Bank": "Asset",
+    "Cash": "Asset",
+    "Credit card": "Liability",
+    "Loan": "Liability",
+    "Equity": "Equity",
+}
 
 
 def money(value: float) -> str:
@@ -104,6 +114,7 @@ def balances_frame(accounts: list[dict], transactions: list[dict]) -> pd.DataFra
                 "ID": account["id"],
                 "Account": account["name"],
                 "Type": account["type"],
+                "Classification": account["classification"],
                 "Active": account["active"],
                 "Balance": account["balance"],
             }
@@ -244,7 +255,7 @@ if page == "Dashboard":
     with right:
         st.subheader("Account balances")
         st.dataframe(
-            balances[["Account", "Type", "Balance"]],
+            balances[["Account", "Classification", "Type", "Balance"]],
             hide_index=True,
             width="stretch",
             column_config={"Balance": st.column_config.NumberColumn(format="$%.2f")},
@@ -450,34 +461,49 @@ elif page == "Accounts":
         report_storage_error(error)
         st.stop()
     st.dataframe(
-        balances[["Account", "Type", "Active", "Balance"]],
+        balances[["Account", "Classification", "Type", "Active", "Balance"]],
         hide_index=True,
         width="stretch",
         column_config={"Balance": st.column_config.NumberColumn(format="$%.2f")},
     )
     with st.expander("Add account", expanded=True):
         with st.form("add_account"):
-            c1, c2, c3 = st.columns(3)
+            c1, c2, c3, c4 = st.columns(4)
             name = c1.text_input("Account name")
-            account_type = c2.selectbox(
-                "Type", ["Bank", "Cash", "Credit card", "Loan", "Other"]
+            account_type = c2.selectbox("Type", ACCOUNT_TYPES)
+            classification_options = [
+                FIXED_TYPE_CLASSIFICATIONS[account_type]
+            ] if account_type in FIXED_TYPE_CLASSIFICATIONS else ACCOUNT_CLASSIFICATIONS
+            classification = c3.selectbox(
+                "Balance-sheet classification",
+                classification_options,
+                key=f"new_account_classification_{account_type}",
             )
-            opening = c3.number_input(
+            opening = c4.number_input(
                 "Opening balance",
                 value=0.0,
                 format="%.2f",
-                help="Use a negative value for money owed.",
+                help=(
+                    "Use positive balances for assets and negative balances for "
+                    "liabilities and equity."
+                ),
             )
             if st.form_submit_button("Add account", type="primary"):
                 payload = {
                     "name": name,
                     "account_type": account_type,
+                    "classification": classification,
                     "opening_balance": opening,
                 }
                 confirmed_write(
                     "create_account",
                     payload,
-                    lambda: storage.create_account(name, account_type, opening),
+                    lambda: storage.create_account(
+                        name,
+                        account_type,
+                        opening,
+                        classification=classification,
+                    ),
                     "Account added.",
                 )
 
@@ -494,9 +520,23 @@ elif page == "Accounts":
                 edited_name = st.text_input("Edit account name", value=selected["name"])
                 edited_type = st.selectbox(
                     "Edit account type",
-                    ["Bank", "Cash", "Credit card", "Loan", "Other"],
-                    index=["Bank", "Cash", "Credit card", "Loan", "Other"].index(
-                        selected["type"]
+                    ACCOUNT_TYPES,
+                    index=ACCOUNT_TYPES.index(selected["type"]),
+                )
+                edited_classification_options = [
+                    FIXED_TYPE_CLASSIFICATIONS[edited_type]
+                ] if edited_type in FIXED_TYPE_CLASSIFICATIONS else ACCOUNT_CLASSIFICATIONS
+                edited_classification = st.selectbox(
+                    "Edit balance-sheet classification",
+                    edited_classification_options,
+                    index=edited_classification_options.index(
+                        FIXED_TYPE_CLASSIFICATIONS.get(
+                            edited_type,
+                            selected["classification"],
+                        )
+                    ),
+                    key=(
+                        f"edit_account_classification_{account_id}_{edited_type}"
                     ),
                 )
                 edited_opening = st.number_input(
@@ -510,6 +550,7 @@ elif page == "Accounts":
                         "id": account_id,
                         "name": edited_name,
                         "type": edited_type,
+                        "classification": edited_classification,
                         "opening_balance": edited_opening,
                         "active": edited_active,
                     }
@@ -520,6 +561,7 @@ elif page == "Accounts":
                             account_id,
                             name=edited_name,
                             type=edited_type,
+                            classification=edited_classification,
                             opening_balance=edited_opening,
                             active=edited_active,
                         ),
@@ -606,6 +648,7 @@ elif page == "Reports":
     try:
         transactions = storage.list_transactions()
         categories = storage.list_categories()
+        accounts = storage.list_accounts(active_only=False)
     except StorageError as error:
         report_storage_error(error)
         st.stop()
@@ -651,6 +694,86 @@ elif page == "Reports":
             )
         else:
             st.info("No expenses in this period.")
+
+    st.divider()
+    st.subheader("Balance sheet")
+    as_of = st.date_input("As of", date.today(), key="balance_sheet_date")
+    statement = balance_sheet(accounts, transactions, as_of=as_of)
+    asset_metric, liability_metric, equity_metric = st.columns(3)
+    asset_metric.metric("Total assets", money(statement["total_assets"]))
+    liability_metric.metric(
+        "Total liabilities", money(statement["total_liabilities"])
+    )
+    equity_metric.metric("Total equity", money(statement["total_equity"]))
+
+    def statement_frame(
+        rows: list[dict],
+        *,
+        current_earnings: float | None = None,
+    ) -> pd.DataFrame:
+        display_rows = [
+            {
+                "Account": row["name"],
+                "Type": row["type"],
+                "Balance": row["balance"],
+            }
+            for row in rows
+        ]
+        if current_earnings is not None:
+            display_rows.append(
+                {
+                    "Account": "Current earnings",
+                    "Type": "Calculated",
+                    "Balance": current_earnings,
+                }
+            )
+        return pd.DataFrame(
+            display_rows,
+            columns=["Account", "Type", "Balance"],
+        )
+
+    asset_column, liability_column, equity_column = st.columns(3)
+    for column, title, frame in (
+        (asset_column, "Assets", statement_frame(statement["assets"])),
+        (
+            liability_column,
+            "Liabilities",
+            statement_frame(statement["liabilities"]),
+        ),
+        (
+            equity_column,
+            "Equity",
+            statement_frame(
+                statement["equity"],
+                current_earnings=statement["current_earnings"],
+            ),
+        ),
+    ):
+        with column:
+            st.markdown(f"**{title}**")
+            if frame.empty:
+                st.caption("No accounts")
+            else:
+                st.dataframe(
+                    frame,
+                    hide_index=True,
+                    width="stretch",
+                    column_config={
+                        "Balance": st.column_config.NumberColumn(format="$%.2f")
+                    },
+                )
+    if abs(statement["difference"]) < 0.005:
+        st.success("Balance sheet is balanced.")
+    else:
+        st.warning(
+            "Balance sheet is out of balance by "
+            f"{money(statement['difference'])}. Review opening balances and "
+            "account classifications."
+        )
+    st.caption(
+        "Liabilities and equity are presented with conventional positive "
+        "balances. Enter their opening ledger balances as negative amounts."
+    )
 
 
 else:
@@ -770,7 +893,11 @@ else:
                     )
                 if auto_create and (preview["new_accounts"] or preview["new_categories"]):
                     additions = [
-                        f"Account name: {name} — Type: {preview['new_account_types'][name]}"
+                        (
+                            f"Account name: {name} — Classification: "
+                            f"{preview['new_account_classifications'][name]} — "
+                            f"Type: {preview['new_account_types'][name]}"
+                        )
                         for name in preview["new_accounts"]
                     ]
                     additions += [f"{kind} category: {name}" for name, kind in preview["new_categories"]]
