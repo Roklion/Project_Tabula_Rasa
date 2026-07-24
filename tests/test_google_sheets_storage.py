@@ -283,7 +283,7 @@ class GoogleSheetsStorageTests(unittest.TestCase):
                 "Name": "Owner",
                 "Memo/Description": "Draw",
                 "Account": "Checking",
-                "Split": "Owners pay",
+                "Split": "Owners\u00a0pay",
                 "Amount": "(25.00)",
             },
         ]
@@ -301,6 +301,42 @@ class GoogleSheetsStorageTests(unittest.TestCase):
                 ("Transfer", investment["id"], checking["id"]),
                 ("Transfer", checking["id"], owners_pay["id"]),
             ],
+        )
+
+    def test_quickbooks_auto_creates_missing_owner_pay_as_equity_account(self) -> None:
+        checking = self.storage.create_account("Checking", "Bank")
+        rows = [
+            {
+                "Date": "07/02/2026",
+                "Transaction Type": "Check",
+                "Num": "2",
+                "Name": "Owner",
+                "Memo/Description": "Draw",
+                "Account": "Checking",
+                "Split": "Owners pay",
+                "Amount": "(25.00)",
+            }
+        ]
+
+        strict = self.storage.preview_quickbooks_transactions(rows)
+        preview = self.storage.preview_quickbooks_transactions(
+            rows, auto_create=True
+        )
+
+        self.assertEqual(strict["new_accounts"], ["Owners pay"])
+        self.assertEqual(strict["new_categories"], [])
+        self.assertIn("destination account", strict["errors"][0])
+        self.assertEqual(preview["errors"], [])
+        self.assertEqual(preview["new_account_types"], {"Owners pay": "Equity"})
+        self.assertEqual(
+            preview["new_account_classifications"],
+            {"Owners pay": "Equity"},
+        )
+        self.assertEqual(preview["rows"][0]["kind"], "Transfer")
+        self.assertEqual(preview["rows"][0]["account_id"], checking["id"])
+        self.assertEqual(
+            preview["rows"][0]["to_account_id"],
+            "pending-account:owners pay",
         )
 
     def test_quickbooks_import_reports_all_errors_and_writes_nothing(self) -> None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import unicodedata
 from collections.abc import Iterable, Mapping
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -30,6 +31,9 @@ EQUITY_NAME_TERMS = (
     "owner investment",
     "owners investment",
     "owner's investment",
+    "owner pay",
+    "owners pay",
+    "owner's pay",
     "capital",
     "retained earnings",
     "opening balance equity",
@@ -40,6 +44,12 @@ EQUITY_NAME_TERMS = (
 
 def _text(value: Any) -> str:
     return "" if value is None else str(value).strip()
+
+
+def _name_key(value: Any) -> str:
+    """Normalize equivalent Unicode and whitespace for reference matching."""
+    normalized = unicodedata.normalize("NFKC", _text(value))
+    return " ".join(normalized.split()).casefold()
 
 
 def _date(value: Any) -> str:
@@ -81,15 +91,17 @@ def suggested_account_type(name: str) -> str:
     return "Other"
 
 
+def _is_equity_account_name(name: str) -> bool:
+    return any(term in name.casefold() for term in EQUITY_NAME_TERMS)
+
+
 def suggested_account_classification(name: str, account_type: str) -> str:
     """Infer the balance-sheet classification for an account."""
     if account_type in {"Bank", "Cash"}:
         return "Asset"
     if account_type in {"Credit card", "Loan"}:
         return "Liability"
-    if account_type == "Equity" or any(
-        term in name.casefold() for term in EQUITY_NAME_TERMS
-    ):
+    if account_type == "Equity" or _is_equity_account_name(name):
         return "Equity"
     return "Asset"
 
@@ -110,33 +122,37 @@ def missing_references(
     categories: Iterable[Mapping[str, Any]],
 ) -> tuple[list[str], list[tuple[str, str]]]:
     """Return missing account names and inferred (category, kind) pairs."""
-    account_names = {_text(item["name"]).casefold() for item in accounts}
+    account_names = {_name_key(item["name"]) for item in accounts}
     category_keys = {
-        (_text(item["name"]).casefold(), _text(item["kind"]).title())
+        (_name_key(item["name"]), _text(item["kind"]).title())
         for item in categories
     }
     missing_accounts: dict[str, str] = {}
     missing_categories: dict[tuple[str, str], tuple[str, str]] = {}
     for source in rows:
         source_name = _text(source.get("Account"))
-        if source_name and source_name.casefold() not in account_names:
-            missing_accounts.setdefault(source_name.casefold(), source_name)
+        source_key = _name_key(source_name)
+        if source_name and source_key not in account_names:
+            missing_accounts.setdefault(source_key, source_name)
         txn_type = _text(source.get("Transaction Type")).casefold()
         split_name = _text(source.get("Split"))
+        split_key = _name_key(split_name)
         if txn_type in TRANSFER_TYPES:
-            if split_name and split_name.casefold() not in account_names:
-                missing_accounts.setdefault(split_name.casefold(), split_name)
-        elif split_name.casefold() in account_names:
+            if split_name and split_key not in account_names:
+                missing_accounts.setdefault(split_key, split_name)
+        elif split_key in account_names:
             # QuickBooks often labels owner contributions, draws, and other
             # balance-sheet movements as deposits, checks, or expenses even
             # though both sides of the transaction are accounts.
             continue
+        elif _is_equity_account_name(split_name):
+            missing_accounts.setdefault(split_key, split_name)
         else:
             try:
                 kind = "Income" if _amount(source.get("Amount")) > 0 else "Expense"
             except ValueError:
                 continue
-            key = (split_name.casefold(), kind)
+            key = (split_key, kind)
             if split_name and key not in category_keys:
                 missing_categories.setdefault(key, (split_name, kind))
     return list(missing_accounts.values()), list(missing_categories.values())
@@ -266,9 +282,9 @@ def normalize_rows(
     categories: Iterable[Mapping[str, Any]],
 ) -> tuple[list[dict[str, str]], list[str]]:
     """Map QuickBooks rows to ledger fields, collecting every actionable error."""
-    account_map = {_text(item["name"]).casefold(): item for item in accounts}
+    account_map = {_name_key(item["name"]): item for item in accounts}
     category_map = {
-        (_text(item["name"]).casefold(), _text(item["kind"]).title()): item
+        (_name_key(item["name"]), _text(item["kind"]).title()): item
         for item in categories
     }
     normalized: list[dict[str, str]] = []
@@ -278,11 +294,11 @@ def normalize_rows(
             txn_type = _text(source.get("Transaction Type"))
             source_name = _text(source.get("Account"))
             split_name = _text(source.get("Split"))
-            account = account_map.get(source_name.casefold())
+            account = account_map.get(_name_key(source_name))
             if account is None:
                 raise ValueError(f"Account '{source_name}' does not exist")
             amount = _amount(source.get("Amount"))
-            split_account = account_map.get(split_name.casefold())
+            split_account = account_map.get(_name_key(split_name))
             if txn_type.casefold() in TRANSFER_TYPES:
                 if split_account is None:
                     raise ValueError(f"destination account '{split_name}' does not exist")
@@ -303,9 +319,13 @@ def normalize_rows(
                 else:
                     account_id = account["id"]
                     to_account_id = split_account["id"]
+            elif _is_equity_account_name(split_name):
+                raise ValueError(
+                    f"destination account '{split_name}' does not exist"
+                )
             else:
                 kind = "Income" if amount > 0 else "Expense"
-                category = category_map.get((split_name.casefold(), kind))
+                category = category_map.get((_name_key(split_name), kind))
                 if category is None:
                     raise ValueError(f"{kind.lower()} category '{split_name}' does not exist")
                 account_id = account["id"]
