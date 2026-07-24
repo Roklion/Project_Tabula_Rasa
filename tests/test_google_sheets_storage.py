@@ -73,6 +73,7 @@ class GoogleSheetsStorageTests(unittest.TestCase):
 
         storage = GoogleSheetsStorage(workbook)
 
+        self.assertEqual(workbook.sheets["Accounts"].col_count, 7)
         self.assertIn("classification", workbook.sheets["Accounts"].rows[0])
         self.assertEqual(
             [account["classification"] for account in storage.list_accounts()],

@@ -10,6 +10,7 @@ class FakeWorksheet:
     def __init__(self, title: str, headers: tuple[str, ...]):
         self.title = title
         self.rows = [list(headers)]
+        self.col_count = len(headers)
 
     def row_values(self, row: int) -> list[str]:
         return list(self.rows[row - 1]) if row <= len(self.rows) else []
@@ -22,6 +23,11 @@ class FakeWorksheet:
 
     def append_rows(self, values: list[list[str]], **_: object) -> None:
         self.rows.extend(deepcopy(values))
+
+    def add_cols(self, columns: int) -> None:
+        self.col_count += columns
+        for row in self.rows:
+            row.extend([""] * columns)
 
     def update(
         self, values: list[list[str]], range_name: str, **_: object

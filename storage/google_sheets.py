@@ -311,7 +311,15 @@ class GoogleSheetsStorage:
         self._sleeper = sleeper
         self._row_cache: dict[str, tuple[float, list[_StoredRow]]] = {}
         self._cache_lock = threading.RLock()
-        self._ensure_account_classification_column()
+        try:
+            self._ensure_account_classification_column()
+        except StorageUnavailableError as exc:
+            raise StorageUnavailableError(
+                "The Accounts worksheet could not be upgraded with the new "
+                "classification column. Confirm that the service account has "
+                "Editor access and the sheet permits adding columns.",
+                retryable=exc.retryable,
+            ) from exc
         self.validate_headers()
 
     @classmethod
@@ -392,6 +400,15 @@ class GoogleSheetsStorage:
             remainder, offset = divmod(remainder - 1, 26)
             column_letter = chr(65 + offset) + column_letter
         if not classification_header_exists:
+            current_column_count = int(
+                getattr(worksheet, "col_count", len(headers))
+            )
+            if current_column_count < column_number:
+                self._api(
+                    lambda: worksheet.add_cols(
+                        column_number - current_column_count
+                    )
+                )
             self._api(
                 lambda: worksheet.update(
                     [["classification"]],
