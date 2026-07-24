@@ -41,6 +41,26 @@ def main() -> None:
         by_label(app.button, "Add account").click().run()
         assert len(app.exception) == 0
 
+        savings = next(
+            account
+            for account in storage.list_accounts(active_only=False)
+            if account["name"] == "Savings"
+        )
+        by_label(app.selectbox, "Account to manage").set_value(savings["id"]).run()
+        by_label(app.selectbox, "Edit account type").set_value("Loan").run()
+        assert (
+            by_label(app.selectbox, "Edit balance-sheet classification").value
+            == "Liability"
+        )
+        by_label(app.button, "Save account changes").click().run()
+        savings = next(
+            account
+            for account in storage.list_accounts(active_only=False)
+            if account["id"] == savings["id"]
+        )
+        assert savings["type"] == "Loan"
+        assert savings["classification"] == "Liability"
+
         app.radio[0].set_value("Categories").run()
         by_label(app.text_input, "Category name").input("Testing expense")
         by_label(app.selectbox, "Type").set_value("Expense")

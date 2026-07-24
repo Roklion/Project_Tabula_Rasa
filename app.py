@@ -584,12 +584,17 @@ elif page == "Accounts":
                 format_func=lambda value: account_by_id[value]["name"],
             )
             selected = account_by_id[account_id]
-            with st.form("edit_account"):
-                edited_name = st.text_input("Edit account name", value=selected["name"])
+            with st.container(border=True):
+                edited_name = st.text_input(
+                    "Edit account name",
+                    value=selected["name"],
+                    key=f"edit_account_name_{account_id}",
+                )
                 edited_type = st.selectbox(
                     "Edit account type",
                     ACCOUNT_TYPES,
                     index=ACCOUNT_TYPES.index(selected["type"]),
+                    key=f"edit_account_type_{account_id}",
                 )
                 edited_classification_options = [
                     FIXED_TYPE_CLASSIFICATIONS[edited_type]
@@ -611,9 +616,18 @@ elif page == "Accounts":
                     "Edit opening balance",
                     value=float(selected["opening_balance"]),
                     format="%.2f",
+                    key=f"edit_account_opening_{account_id}",
                 )
-                edited_active = st.checkbox("Active", value=selected["active"])
-                if st.form_submit_button("Save account changes", type="primary"):
+                edited_active = st.checkbox(
+                    "Active",
+                    value=selected["active"],
+                    key=f"edit_account_active_{account_id}",
+                )
+                if st.button(
+                    "Save account changes",
+                    type="primary",
+                    key=f"save_account_{account_id}",
+                ):
                     payload = {
                         "id": account_id,
                         "name": edited_name,
