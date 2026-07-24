@@ -535,10 +535,14 @@ elif page == "Accounts":
         column_config={"Balance": st.column_config.NumberColumn(format="$%.2f")},
     )
     with st.expander("Add account", expanded=True):
-        with st.form("add_account"):
+        with st.container(border=True):
             c1, c2, c3, c4 = st.columns(4)
             name = c1.text_input("Account name")
-            account_type = c2.selectbox("Type", ACCOUNT_TYPES)
+            account_type = c2.selectbox(
+                "Type",
+                ACCOUNT_TYPES,
+                key="new_account_type",
+            )
             classification_options = [
                 FIXED_TYPE_CLASSIFICATIONS[account_type]
             ] if account_type in FIXED_TYPE_CLASSIFICATIONS else ACCOUNT_CLASSIFICATIONS
@@ -556,7 +560,7 @@ elif page == "Accounts":
                     "liabilities and equity."
                 ),
             )
-            if st.form_submit_button("Add account", type="primary"):
+            if st.button("Add account", type="primary"):
                 payload = {
                     "name": name,
                     "account_type": account_type,

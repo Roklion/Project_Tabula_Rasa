@@ -11,6 +11,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from streamlit.testing.v1 import AppTest
 
 from ledger_auth import hash_password
+from ledger_reporting import balance_sheet
 from storage import GoogleSheetsStorage
 from tests.fakes import FakeWorkbook
 
@@ -61,6 +62,20 @@ def main() -> None:
         assert savings["type"] == "Loan"
         assert savings["classification"] == "Liability"
 
+        by_label(app.text_input, "Account name").input("Owner-paid expenses")
+        by_label(app.selectbox, "Type").set_value("Equity").run()
+        assert (
+            by_label(app.selectbox, "Balance-sheet classification").value
+            == "Equity"
+        )
+        by_label(app.number_input, "Opening balance").set_value(0)
+        by_label(app.button, "Add account").click().run()
+        owner_equity = next(
+            account
+            for account in storage.list_accounts(active_only=False)
+            if account["name"] == "Owner-paid expenses"
+        )
+
         app.radio[0].set_value("Categories").run()
         by_label(app.text_input, "Category name").input("Testing expense")
         by_label(app.selectbox, "Type").set_value("Expense")
@@ -70,11 +85,28 @@ def main() -> None:
         app.radio[0].set_value("Transactions").run()
         by_label(app.segmented_control, "Transaction type").set_value("Expense").run()
         by_label(app.number_input, "Amount").set_value(25)
-        by_label(app.selectbox, "Account").set_value("Checking")
+        by_label(app.selectbox, "Account").set_value("Owner-paid expenses")
         by_label(app.selectbox, "Category").set_value("Testing expense")
         by_label(app.text_input, "Payee / customer").input("Test vendor")
         by_label(app.button, "Save transaction").click().run()
         assert len(app.exception) == 0
+        owner_expense = next(
+            item
+            for item in storage.list_transactions()
+            if item["kind"] == "Expense"
+        )
+        assert owner_expense["account_id"] == owner_equity["id"]
+        statement = balance_sheet(
+            storage.list_accounts(active_only=False),
+            storage.list_transactions(),
+        )
+        assert statement["total_equity"] == 0
+        assert statement["current_earnings"] == -25
+        assert next(
+            item
+            for item in statement["equity"]
+            if item["id"] == owner_equity["id"]
+        )["balance"] == 25
 
         by_label(app.segmented_control, "Transaction type").set_value("Income").run()
         by_label(app.number_input, "Amount").set_value(75)
