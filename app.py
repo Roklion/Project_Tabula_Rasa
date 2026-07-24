@@ -39,6 +39,11 @@ def money(value: float) -> str:
     return f"${value:,.2f}"
 
 
+def alert_list(title: str, messages: list[str]) -> str:
+    """Format multiple alert messages as a readable Markdown list."""
+    return f"**{title}**\n\n- " + "\n- ".join(messages)
+
+
 @st.cache_resource
 def get_storage(
     profile_key: str, implementation_version: int
@@ -750,12 +755,22 @@ else:
                 c4.metric("Expenses", summary["Expense"])
                 c5.metric("Transfers", summary["Transfer"])
                 if preview["errors"]:
-                    st.error("\n".join(preview["errors"]))
+                    st.error(
+                        alert_list(
+                            "Fix these import errors before continuing:",
+                            preview["errors"],
+                        )
+                    )
                 if conversion_errors:
-                    st.error("\n".join(conversion_errors))
+                    st.error(
+                        alert_list(
+                            "Some QuickBooks rows could not be converted:",
+                            conversion_errors,
+                        )
+                    )
                 if auto_create and (preview["new_accounts"] or preview["new_categories"]):
                     additions = [
-                        f"Account: {name} ({preview['new_account_types'][name]})"
+                        f"Account name: {name} — Type: {preview['new_account_types'][name]}"
                         for name in preview["new_accounts"]
                     ]
                     additions += [f"{kind} category: {name}" for name, kind in preview["new_categories"]]
