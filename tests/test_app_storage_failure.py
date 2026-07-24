@@ -38,7 +38,8 @@ class AppStorageFailureTests(unittest.TestCase):
         self.assertEqual(len(app.exception), 0)
         self.assertEqual(app.error[0].value, SAFE_MESSAGE)
         self.assertEqual(len(app.success), 0)
-        self.assertEqual(len(app.radio), 0)
+        self.assertEqual(app.radio[0].label, "Navigate")
+        self.assertEqual(len(app.metric), 0)
 
 
 if __name__ == "__main__":

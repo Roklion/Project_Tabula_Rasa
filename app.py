@@ -21,6 +21,14 @@ from ledger_reporting import (
     monthly_performance,
     profit_and_loss,
 )
+from local_profile_admin import render_local_profile_admin
+from local_profile_store import (
+    LOCAL_PROFILE_STORE_PATH,
+    LocalProfileStoreError,
+    local_profile_admin_available,
+    local_profile_revision,
+    merged_profile_secrets,
+)
 from storage import (
     GoogleSheetsStorage,
     StorageError,
@@ -33,7 +41,7 @@ from quickbooks_import import (
 )
 
 
-STORAGE_IMPLEMENTATION_VERSION = 3
+STORAGE_IMPLEMENTATION_VERSION = 4
 ACCOUNT_TYPES = ["Bank", "Cash", "Credit card", "Loan", "Equity", "Other"]
 ACCOUNT_CLASSIFICATIONS = ["Asset", "Liability", "Equity"]
 FIXED_TYPE_CLASSIFICATIONS = {
@@ -56,14 +64,22 @@ def alert_list(title: str, messages: list[str]) -> str:
 
 @st.cache_resource
 def get_storage(
-    profile_key: str, implementation_version: int
+    profile_key: str,
+    implementation_version: int,
+    configuration_revision: str,
 ) -> GoogleSheetsStorage:
     # Include the implementation version in Streamlit's cache key. Otherwise a
     # storage instance created before a deployment can survive with an older
     # class definition that does not contain newly added methods.
-    del implementation_version
+    del implementation_version, configuration_revision
+    include_local = local_profile_admin_available(st.get_option("server.address"))
+    secrets = merged_profile_secrets(
+        st.secrets,
+        include_local=include_local,
+        path=LOCAL_PROFILE_STORE_PATH,
+    )
     return GoogleSheetsStorage.from_secrets(
-        select_profile_secrets(st.secrets, profile_key)
+        select_profile_secrets(secrets, profile_key)
     )
 
 
@@ -165,44 +181,96 @@ st.markdown(
 
 require_authentication()
 
+profile_admin_enabled = local_profile_admin_available(
+    st.get_option("server.address")
+)
 try:
-    profiles = load_business_profiles(st.secrets)
-except BusinessProfileConfigurationError as error:
-    st.error(str(error))
+    effective_secrets = merged_profile_secrets(
+        st.secrets,
+        include_local=profile_admin_enabled,
+        path=LOCAL_PROFILE_STORE_PATH,
+    )
+    profiles = load_business_profiles(effective_secrets)
+except LocalProfileStoreError:
+    st.error(
+        "The local business-profile file is malformed or unavailable. "
+        "Repair or move .streamlit/local_business_profiles.json and restart."
+    )
     st.stop()
+except BusinessProfileConfigurationError as error:
+    if not profile_admin_enabled:
+        st.error(str(error))
+        st.stop()
+    profiles = []
 
 profile_by_key = {profile.key: profile for profile in profiles}
 with st.sidebar:
-    selected_profile_key = st.selectbox(
-        "Business",
-        list(profile_by_key),
-        key="business_profile",
-        format_func=lambda key: profile_by_key[key].name,
-    )
-
-try:
-    storage = get_storage(selected_profile_key, STORAGE_IMPLEMENTATION_VERSION)
-    initialized_profiles = st.session_state.setdefault(
-        "defaults_initialized_profiles", set()
-    )
-    if selected_profile_key not in initialized_profiles:
-        storage.ensure_defaults()
-        initialized_profiles.add(selected_profile_key)
-except StorageError as error:
-    report_storage_error(error)
-    st.stop()
-
-with st.sidebar:
     st.title("Tabula Rosa")
-    st.caption(profile_by_key[selected_profile_key].name)
-    page = st.radio(
-        "Navigate",
-        ["Dashboard", "Transactions", "Accounts", "Categories", "Reports", "Data & backup"],
-    )
+    if profiles:
+        selected_profile_key = st.selectbox(
+            "Business",
+            list(profile_by_key),
+            key="business_profile",
+            format_func=lambda key: profile_by_key[key].name,
+        )
+        st.caption(profile_by_key[selected_profile_key].name)
+    else:
+        selected_profile_key = None
+        st.info("Add the first business profile to continue.")
+
+    pages = [
+        "Dashboard",
+        "Transactions",
+        "Accounts",
+        "Categories",
+        "Reports",
+        "Data & backup",
+    ]
+    if profile_admin_enabled:
+        pages.append("Business profiles")
+    if not profiles:
+        pages = ["Business profiles"]
+    page = st.radio("Navigate", pages)
     st.divider()
-    st.caption(f"Workbook: {storage.workbook_title}")
     if st.button("Log out", width="stretch"):
         logout()
+
+if page == "Business profiles":
+    notice = st.session_state.pop("local_profile_admin_notice", None)
+    if notice:
+        st.success(notice)
+    render_local_profile_admin(
+        st.secrets,
+        effective_secrets,
+        store_path=LOCAL_PROFILE_STORE_PATH,
+    )
+else:
+    try:
+        revision = (
+            local_profile_revision(LOCAL_PROFILE_STORE_PATH)
+            if profile_admin_enabled
+            else "streamlit-secrets"
+        )
+        storage = get_storage(
+            selected_profile_key,
+            STORAGE_IMPLEMENTATION_VERSION,
+            revision,
+        )
+        initialized_profiles = st.session_state.setdefault(
+            "defaults_initialized_profiles", set()
+        )
+        if selected_profile_key not in initialized_profiles:
+            storage.ensure_defaults()
+            initialized_profiles.add(selected_profile_key)
+    except (LocalProfileStoreError, StorageError) as error:
+        if isinstance(error, StorageError):
+            report_storage_error(error)
+        else:
+            st.error("The local business-profile file could not be read safely.")
+        st.stop()
+
+    with st.sidebar:
+        st.caption(f"Workbook: {storage.workbook_title}")
 
 
 if page == "Dashboard":
@@ -776,7 +844,7 @@ elif page == "Reports":
     )
 
 
-else:
+elif page == "Data & backup":
     st.title("Data & backup")
     st.caption("Your live records are stored in the private Google Sheets workbook.")
     try:

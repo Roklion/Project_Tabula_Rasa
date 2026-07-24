@@ -163,7 +163,62 @@ The original single-profile `spreadsheet_id` and `[gcp_service_account]` format
 continues to work, so existing deployments do not require an immediate secrets
 migration.
 
-### 5. Validate before using the profile
+### 5. Optional local profile onboarding UI
+
+For local deployments, an authenticated **Business profiles** page can add or
+replace profiles in the ignored
+`.streamlit/local_business_profiles.json` file. The page is fail-closed and is
+not present unless the server process has exactly the following flag **and**
+Streamlit is bound to `localhost`, `127.0.0.1`, or another loopback address:
+
+```text
+TABULA_LOCAL_PROFILE_ADMIN=1
+```
+
+Use the provided launcher, which enables the flag only for that process and
+binds Streamlit to the loopback interface:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\run_local_profile_admin.ps1
+```
+
+If the launcher reports that `.venv` is not runnable, remove and recreate that
+ignored virtual environment using the installation commands under **Run it**.
+
+Then:
+
+1. Sign in to Tabula Rosa normally.
+2. Open **Business profiles** and re-enter the application password.
+3. Enter a business name, safe profile key, and Google spreadsheet URL or ID.
+4. Upload the complete service-account JSON downloaded from Google Cloud.
+5. Confirm replacement only when intentionally overriding an existing key.
+6. Select **Validate and save**. Validation opens the workbook and initializes
+   the required worksheets before the credential is stored locally.
+
+The uploaded private key is never displayed, written to Google Sheets, or put
+in the ledger. It exists briefly in browser/server memory and is then stored in
+the ignored local JSON profile file so the app can authenticate after a
+restart. The file is plaintext and inherits access controls from the project
+directory. Do not put the project on a shared or automatically synchronized
+folder, and ensure other operating-system users cannot read it.
+
+Profiles already supplied through `.streamlit/secrets.toml` remain visible but
+read-only on this page. A local profile with the same key overrides it only in
+local-admin mode; it does not change the original Streamlit secret.
+
+The local profile file is not committed or synchronized to the hosted app.
+After onboarding a business locally, manually add the equivalent
+`[business_profiles.PROFILE]` and
+`[business_profiles.PROFILE.gcp_service_account]` tables to the deployed app's
+Streamlit **Settings > Secrets**, save, and let the hosted app restart. Never set
+`TABULA_LOCAL_PROFILE_ADMIN=1` for a hosted deployment.
+
+Stopping the launcher removes the flag from its PowerShell process. A regular
+local launch without the flag reads only Streamlit Secrets, so locally managed
+profiles are intentionally unavailable until the local-admin launcher is used
+again.
+
+### 6. Validate before using the profile
 
 Verify read access and the worksheet headers without displaying ledger rows:
 
