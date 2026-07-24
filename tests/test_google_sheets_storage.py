@@ -378,6 +378,37 @@ class GoogleSheetsStorageTests(unittest.TestCase):
             [("Consulting", "Income")],
         )
 
+    def test_quickbooks_batch_import_reuses_reference_reads(self) -> None:
+        self.storage.create_account("Checking", "Bank")
+        self.storage.create_category("Sales", "Income")
+        account_sheet = self.workbook.sheets["Accounts"]
+        category_sheet = self.workbook.sheets["Categories"]
+        account_sheet.get_all_values = Mock(
+            wraps=account_sheet.get_all_values
+        )
+        category_sheet.get_all_values = Mock(
+            wraps=category_sheet.get_all_values
+        )
+        rows = [
+            {
+                "Date": "07/01/2026",
+                "Transaction Type": "Deposit",
+                "Num": str(index),
+                "Name": "Client",
+                "Memo/Description": "Invoice",
+                "Account": "Checking",
+                "Split": "Sales",
+                "Amount": "1.00",
+            }
+            for index in range(35)
+        ]
+
+        imported = self.storage.import_quickbooks_transactions(rows)
+
+        self.assertEqual(len(imported), 35)
+        self.assertEqual(account_sheet.get_all_values.call_count, 1)
+        self.assertEqual(category_sheet.get_all_values.call_count, 1)
+
     def test_general_ledger_export_collapses_double_entries(self) -> None:
         matrix = [
             ["Example LLC"],

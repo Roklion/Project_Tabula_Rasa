@@ -1068,8 +1068,15 @@ class GoogleSheetsStorage:
             preview = self.preview_quickbooks_transactions(source_rows)
             if preview["errors"]:
                 raise StorageValidationError("\n".join(preview["errors"]))
+        accounts = self._account_lookup()
+        categories = self._category_lookup()
         prepared = [
-            self._prepare_transaction(item) for item in preview["rows"]
+            self._prepare_transaction(
+                item,
+                accounts=accounts,
+                categories=categories,
+            )
+            for item in preview["rows"]
         ]
         self._append_many("Transactions", prepared)
         return prepared
