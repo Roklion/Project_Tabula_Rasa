@@ -149,9 +149,10 @@ def main() -> None:
         assert edited_transaction["account_id"] == checking["id"]
 
         by_label(
-            app.checkbox, "I understand deleting this transaction is permanent"
+            app.checkbox,
+            "I understand this transaction will be permanently deleted",
         ).check()
-        by_label(app.button, "Delete transaction").click().run()
+        by_label(app.button, "Permanently delete").click().run()
         assert len(storage.list_transactions()) == 2
 
 

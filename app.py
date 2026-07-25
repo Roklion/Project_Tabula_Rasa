@@ -172,6 +172,16 @@ st.markdown(
     [data-testid="stMetric"] { background:white; border:1px solid #dedbd2; padding:18px; border-radius:14px; }
     [data-testid="stSidebar"] { background:#173f32; }
     [data-testid="stSidebar"] * { color:#f7f5ef; }
+    .st-key-edit_transaction [data-testid="stFormSubmitButton"]:has([data-testid="stIconMaterial"]) button {
+        background:#b42318;
+        border-color:#b42318;
+        color:white;
+    }
+    .st-key-edit_transaction [data-testid="stFormSubmitButton"]:has([data-testid="stIconMaterial"]) button:hover {
+        background:#912018;
+        border-color:#912018;
+        color:white;
+    }
     h1,h2,h3 { letter-spacing:-.025em; }
     .muted { color:#67716b; margin-top:-.8rem; }
     </style>
@@ -542,15 +552,21 @@ elif page == "Transactions":
                     edited_description = st.text_input(
                         "Edit description", value=selected.get("description", "")
                     )
+                    st.warning(
+                        "Deleting this transaction is permanent and cannot be undone.",
+                        icon="⚠️",
+                    )
                     confirm_delete = st.checkbox(
-                        "I understand deleting this transaction is permanent"
+                        "I understand this transaction will be permanently deleted"
                     )
                     save_column, delete_column = st.columns(2)
                     save_requested = save_column.form_submit_button(
                         "Save changes", type="primary", width="stretch"
                     )
                     delete_requested = delete_column.form_submit_button(
-                        "Delete transaction",
+                        "Permanently delete",
+                        icon=":material/delete_forever:",
+                        help="Permanently delete this transaction",
                         width="stretch",
                     )
                     if save_requested:
