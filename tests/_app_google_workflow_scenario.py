@@ -137,9 +137,9 @@ def main() -> None:
         )["amount"] == "30.00"
 
         by_label(
-            app.checkbox, "I understand this permanently removes the record"
+            app.checkbox, "I understand deleting this transaction is permanent"
         ).check()
-        by_label(app.button, "Delete").click().run()
+        by_label(app.button, "Delete transaction").click().run()
         assert len(storage.list_transactions()) == 2
 
 

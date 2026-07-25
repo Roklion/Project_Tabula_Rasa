@@ -432,14 +432,28 @@ elif page == "Transactions":
             report_storage_error(error)
             st.stop()
         transaction_frame = ledger_frame(transactions, accounts, categories)
-        st.dataframe(
+        transaction_ids = transaction_frame["ID"].tolist()
+
+        def select_ledger_transaction() -> None:
+            selected_rows = st.session_state["transaction_ledger"].selection.rows
+            if selected_rows:
+                st.session_state["edit_transaction_id"] = transaction_ids[
+                    selected_rows[0]
+                ]
+
+        ledger_event = st.dataframe(
             transaction_frame,
             hide_index=True,
             width="stretch",
+            key="transaction_ledger",
+            on_select=select_ledger_transaction,
+            selection_mode="single-row",
             column_config={"Amount": st.column_config.NumberColumn(format="$%.2f")},
         )
         if not transaction_frame.empty:
-            transaction_ids = transaction_frame["ID"].tolist()
+            selected_rows = ledger_event.selection.rows
+            if st.session_state.get("edit_transaction_id") not in transaction_ids:
+                st.session_state["edit_transaction_id"] = transaction_ids[0]
 
             def transaction_label(transaction_id: str) -> str:
                 row = transaction_frame.loc[
@@ -447,11 +461,13 @@ elif page == "Transactions":
                 ].iloc[0]
                 return f"{row['Date']} — {row['Type']} — {money(row['Amount'])} — {transaction_id[:8]}"
 
-            with st.expander("Edit a transaction"):
+            st.caption("Select a ledger row (or double-click it) to edit it.")
+            with st.expander("Edit transaction", expanded=bool(selected_rows)):
                 edit_id = st.selectbox(
                     "Transaction to edit",
                     transaction_ids,
                     format_func=transaction_label,
+                    key="edit_transaction_id",
                 )
                 selected = next(
                     transaction for transaction in transactions if transaction["id"] == edit_id
@@ -476,7 +492,19 @@ elif page == "Transactions":
                     edited_description = st.text_input(
                         "Edit description", value=selected.get("description", "")
                     )
-                    if st.form_submit_button("Save changes", type="primary"):
+                    confirm_delete = st.checkbox(
+                        "I understand deleting this transaction is permanent"
+                    )
+                    save_column, delete_column = st.columns(2)
+                    save_requested = save_column.form_submit_button(
+                        "Save changes", type="primary", width="stretch"
+                    )
+                    delete_requested = delete_column.form_submit_button(
+                        "Delete transaction",
+                        disabled=not confirm_delete,
+                        width="stretch",
+                    )
+                    if save_requested:
                         payload = {
                             "id": edit_id,
                             "txn_date": edited_date,
@@ -498,24 +526,14 @@ elif page == "Transactions":
                             ),
                             "Transaction updated.",
                         )
-
-            with st.expander("Delete a transaction"):
-                delete_id = st.selectbox(
-                    "Transaction to delete",
-                    transaction_ids,
-                    format_func=transaction_label,
-                )
-                confirm = st.checkbox(
-                    "I understand this permanently removes the record"
-                )
-                if st.button("Delete", disabled=not confirm):
-                    payload = {"id": delete_id}
-                    confirmed_write(
-                        "delete_transaction",
-                        payload,
-                        lambda: storage.delete_transaction(delete_id),
-                        "Transaction deleted.",
-                    )
+                    if delete_requested:
+                        payload = {"id": edit_id}
+                        confirmed_write(
+                            "delete_transaction",
+                            payload,
+                            lambda: storage.delete_transaction(edit_id),
+                            "Transaction deleted.",
+                        )
 
 
 elif page == "Accounts":
