@@ -115,18 +115,32 @@ class GoogleSheetsStorageTests(unittest.TestCase):
         edited = self.storage.edit_account(
             created["id"],
             name="Primary checking",
-            type="Loan",
+            type="Short-term debt",
             classification="Liability",
             opening_balance=-10,
         )
         self.assertEqual(edited["name"], "Primary checking")
-        self.assertEqual(edited["type"], "Loan")
+        self.assertEqual(edited["type"], "Short-term debt")
         self.assertEqual(edited["classification"], "Liability")
         self.assertEqual(edited["opening_balance"], "-10.00")
 
         self.storage.deactivate_account(created["id"])
         self.assertEqual(self.storage.list_accounts(), [])
         self.assertEqual(len(self.storage.list_accounts(active_only=False)), 1)
+
+    def test_legacy_loan_type_is_normalized_to_short_term_debt(self) -> None:
+        created = self.storage.create_account(
+            "Legacy loan",
+            "Loan",
+            -100,
+            classification="Liability",
+        )
+
+        self.assertEqual(created["type"], "Short-term debt")
+        self.assertEqual(
+            self.storage.list_accounts(active_only=False)[0]["type"],
+            "Short-term debt",
+        )
 
     def test_category_uniqueness_is_case_insensitive(self) -> None:
         self.storage.create_category("Software", "Expense")

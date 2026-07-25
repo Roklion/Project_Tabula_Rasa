@@ -42,13 +42,13 @@ from quickbooks_import import (
 
 
 STORAGE_IMPLEMENTATION_VERSION = 4
-ACCOUNT_TYPES = ["Bank", "Cash", "Credit card", "Loan", "Equity", "Other"]
+ACCOUNT_TYPES = ["Bank", "Cash", "Credit card", "Short-term debt", "Equity", "Other"]
 ACCOUNT_CLASSIFICATIONS = ["Asset", "Liability", "Equity"]
 FIXED_TYPE_CLASSIFICATIONS = {
     "Bank": "Asset",
     "Cash": "Asset",
     "Credit card": "Liability",
-    "Loan": "Liability",
+    "Short-term debt": "Liability",
     "Equity": "Equity",
 }
 

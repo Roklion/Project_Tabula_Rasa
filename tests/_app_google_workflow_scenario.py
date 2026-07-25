@@ -48,7 +48,7 @@ def main() -> None:
             if account["name"] == "Savings"
         )
         by_label(app.selectbox, "Account to manage").set_value(savings["id"]).run()
-        by_label(app.selectbox, "Edit account type").set_value("Loan").run()
+        by_label(app.selectbox, "Edit account type").set_value("Short-term debt").run()
         assert (
             by_label(app.selectbox, "Edit balance-sheet classification").value
             == "Liability"
@@ -59,7 +59,7 @@ def main() -> None:
             for account in storage.list_accounts(active_only=False)
             if account["id"] == savings["id"]
         )
-        assert savings["type"] == "Loan"
+        assert savings["type"] == "Short-term debt"
         assert savings["classification"] == "Liability"
 
         by_label(app.text_input, "Account name").input("Owner-paid expenses")

@@ -373,7 +373,7 @@ rereads every restored row and verifies it against the archive.
 - Transfers change account balances but do not affect income or expenses.
 - Account names, balance-sheet classifications, and subtypes are stored in
   separate fields.
-- Bank and Cash accounts are assets; Credit card and Loan accounts are
+- Bank and Cash accounts are assets; Credit card and Short-term debt accounts are
   liabilities; Equity accounts are equity. The flexible Other subtype can be
   classified as an asset, liability, or equity.
 - Asset opening balances should normally be positive. Liability and equity
@@ -416,7 +416,7 @@ validated rows in one batch.
 Optionally enable **Automatically create missing accounts and categories** in
 the preview. The preview lists every proposed addition. Imported accounts use a
 zero opening balance and infer their classification and subtype from the name.
-Bank, Cash, Credit card, Loan, and common equity-style names are recognized;
+Bank, Cash, Credit card, Short-term debt, and common equity-style names are recognized;
 other names use the flexible `Other` subtype and default to Asset. Review the
 proposed classification and type before import. Category type is inferred from
 the amount (`Income` for positive and `Expense` for negative). Existing names

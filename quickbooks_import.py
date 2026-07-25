@@ -87,7 +87,7 @@ def suggested_account_type(name: str) -> str:
     if "cash" in lowered:
         return "Cash"
     if "loan" in lowered:
-        return "Loan"
+        return "Short-term debt"
     return "Other"
 
 
@@ -99,7 +99,7 @@ def suggested_account_classification(name: str, account_type: str) -> str:
     """Infer the balance-sheet classification for an account."""
     if account_type in {"Bank", "Cash"}:
         return "Asset"
-    if account_type in {"Credit card", "Loan"}:
+    if account_type in {"Credit card", "Loan", "Short-term debt"}:
         return "Liability"
     if account_type == "Equity" or _is_equity_account_name(name):
         return "Equity"

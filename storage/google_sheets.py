@@ -59,13 +59,20 @@ WORKSHEET_HEADERS = {
         "created_at",
     ),
 }
-ACCOUNT_TYPES = {"Bank", "Cash", "Credit card", "Loan", "Equity", "Other"}
+ACCOUNT_TYPES = {
+    "Bank",
+    "Cash",
+    "Credit card",
+    "Short-term debt",
+    "Equity",
+    "Other",
+}
 ACCOUNT_CLASSIFICATIONS = {"Asset", "Liability", "Equity"}
 FIXED_TYPE_CLASSIFICATIONS = {
     "Bank": "Asset",
     "Cash": "Asset",
     "Credit card": "Liability",
-    "Loan": "Liability",
+    "Short-term debt": "Liability",
     "Equity": "Equity",
 }
 CATEGORY_KINDS = {"Income", "Expense"}
@@ -169,6 +176,11 @@ def _validate_account_classification(
         raise StorageValidationError(
             f"{account_type} accounts must be classified as {expected}"
         )
+
+
+def _normalize_account_type(account_type: str) -> str:
+    """Map legacy stored account types to their current display name."""
+    return "Short-term debt" if account_type == "Loan" else account_type
 
 
 def _iso_date(value: Any) -> str:
@@ -659,6 +671,7 @@ class GoogleSheetsStorage:
         accounts = []
         for row in self._rows("Accounts", force_refresh=_force_refresh):
             record: dict[str, Any] = dict(row.values)
+            record["type"] = _normalize_account_type(record.get("type", "Other"))
             record["active"] = _as_bool(record.get("active", ""))
             record["opening_balance"] = float(
                 _balance_amount(record.get("opening_balance", ""))
@@ -676,7 +689,9 @@ class GoogleSheetsStorage:
         classification: str | None = None,
     ) -> dict[str, Any]:
         name = _clean_text(name, "Account name", required=True)
-        account_type = _clean_text(account_type, "Account type", required=True)
+        account_type = _normalize_account_type(
+            _clean_text(account_type, "Account type", required=True)
+        )
         if account_type not in ACCOUNT_TYPES:
             raise StorageValidationError("Unknown account type")
         classification = _clean_text(
@@ -710,8 +725,10 @@ class GoogleSheetsStorage:
         current = self._find_row("Accounts", account_id)
         updated = dict(current.values)
         name = _clean_text(changes.get("name", updated["name"]), "Account name", required=True)
-        account_type = _clean_text(
-            changes.get("type", updated["type"]), "Account type", required=True
+        account_type = _normalize_account_type(
+            _clean_text(
+                changes.get("type", updated["type"]), "Account type", required=True
+            )
         )
         if account_type not in ACCOUNT_TYPES:
             raise StorageValidationError("Unknown account type")
