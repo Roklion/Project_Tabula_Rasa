@@ -551,7 +551,6 @@ elif page == "Transactions":
                     )
                     delete_requested = delete_column.form_submit_button(
                         "Delete transaction",
-                        disabled=not confirm_delete,
                         width="stretch",
                     )
                     if save_requested:
@@ -589,13 +588,18 @@ elif page == "Transactions":
                                 "Transaction updated.",
                             )
                     if delete_requested:
-                        payload = {"id": edit_id}
-                        confirmed_write(
-                            "delete_transaction",
-                            payload,
-                            lambda: storage.delete_transaction(edit_id),
-                            "Transaction deleted.",
-                        )
+                        if not confirm_delete:
+                            st.error(
+                                "Confirm that you understand deletion is permanent."
+                            )
+                        else:
+                            payload = {"id": edit_id}
+                            confirmed_write(
+                                "delete_transaction",
+                                payload,
+                                lambda: storage.delete_transaction(edit_id),
+                                "Transaction deleted.",
+                            )
 
 
 elif page == "Accounts":
