@@ -15,6 +15,7 @@ import re
 import stat
 import tempfile
 import threading
+import tomllib
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -26,7 +27,7 @@ LOCAL_PROFILE_ADMIN_ENV = "TABULA_LOCAL_PROFILE_ADMIN"
 LOCAL_PROFILE_STORE_PATH = (
     Path(__file__).resolve().parent
     / ".streamlit"
-    / "local_business_profiles.json"
+    / "business_profiles.json"
 )
 STORE_VERSION = 1
 MAX_CREDENTIAL_BYTES = 64 * 1024
@@ -314,39 +315,37 @@ def merged_profile_secrets(
     include_local: bool,
     path: Path = LOCAL_PROFILE_STORE_PATH,
 ) -> Mapping[str, Any]:
-    """Merge local profiles over Streamlit-managed profiles when explicitly enabled."""
-    if not include_local:
-        return base_secrets
+    """Load canonical JSON profiles, falling back to legacy Streamlit settings."""
+    del include_local
     local_profiles = load_local_profiles(path)
     if not local_profiles:
         return base_secrets
-
-    configured = base_secrets.get("business_profiles")
-    if isinstance(configured, Mapping):
-        profiles = {
-            str(key): dict(settings)
-            for key, settings in configured.items()
-            if isinstance(settings, Mapping)
-        }
-    elif (
-        "spreadsheet_id" in base_secrets
-        and "gcp_service_account" in base_secrets
-    ):
-        profiles = {
-            "default": {
-                "name": str(
-                    base_secrets.get("business_name", "Heathcote Advisory LLC")
-                ),
-                "spreadsheet_id": str(base_secrets["spreadsheet_id"]),
-                "gcp_service_account": dict(base_secrets["gcp_service_account"]),
-            }
-        }
-    else:
-        profiles = {}
-    profiles.update(local_profiles)
     merged = dict(base_secrets)
-    merged["business_profiles"] = profiles
+    merged.pop("spreadsheet_id", None)
+    merged.pop("business_name", None)
+    merged.pop("gcp_service_account", None)
+    merged["business_profiles"] = local_profiles
     return merged
+
+
+def load_business_profile_document(
+    secrets_path: Path,
+    *,
+    profiles_path: Path = LOCAL_PROFILE_STORE_PATH,
+) -> Mapping[str, Any]:
+    """Load app secrets plus canonical JSON business profiles."""
+    try:
+        with secrets_path.open("rb") as secrets_file:
+            base_secrets = tomllib.load(secrets_file)
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        raise LocalProfileStoreError(
+            "Application secrets could not be read safely."
+        ) from exc
+    return merged_profile_secrets(
+        base_secrets,
+        include_local=True,
+        path=profiles_path,
+    )
 
 
 def local_profile_revision(path: Path = LOCAL_PROFILE_STORE_PATH) -> str:

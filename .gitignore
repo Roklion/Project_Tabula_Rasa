@@ -6,7 +6,8 @@ __pycache__/
 .env
 .env.*
 !.env.example
-.streamlit/secrets.toml
+.streamlit/secrets*.toml
+.streamlit/business_profiles.json
 .streamlit/local_business_profiles.json
 *service-account*.json
 *service_account*.json

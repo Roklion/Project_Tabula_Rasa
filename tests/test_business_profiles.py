@@ -60,6 +60,17 @@ class BusinessProfileTests(unittest.TestCase):
 
         self.assertEqual(profiles[0].name, "Heathcote Advisory LLC")
 
+    def test_names_blank_legacy_profile_heathcote_advisory(self) -> None:
+        profiles = load_business_profiles(
+            {
+                "business_name": "   ",
+                "spreadsheet_id": "legacy-sheet",
+                "gcp_service_account": {"client_email": "legacy@example.test"},
+            }
+        )
+
+        self.assertEqual(profiles[0].name, "Heathcote Advisory LLC")
+
     def test_rejects_profile_without_credential(self) -> None:
         with self.assertRaises(BusinessProfileConfigurationError):
             load_business_profiles(

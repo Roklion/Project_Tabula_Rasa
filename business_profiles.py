@@ -25,10 +25,13 @@ def load_business_profiles(secrets: Mapping[str, Any]) -> list[BusinessProfile]:
             raise BusinessProfileConfigurationError(
                 "No business profiles or legacy Google Sheets settings are configured."
             )
+        legacy_name = str(
+            secrets.get("business_name", "Heathcote Advisory LLC")
+        ).strip()
         return [
             BusinessProfile(
                 key="default",
-                name=str(secrets.get("business_name", "Heathcote Advisory LLC")),
+                name=legacy_name or "Heathcote Advisory LLC",
                 secrets=secrets,
             )
         ]

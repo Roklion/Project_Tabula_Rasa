@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-import tomllib
 from pathlib import Path
 from uuid import uuid4
 
@@ -16,6 +15,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from business_profiles import load_business_profiles, select_profile_secrets
+from local_profile_store import load_business_profile_document
 
 
 EXPECTED_HEADERS = {
@@ -40,8 +40,7 @@ EXPECTED_HEADERS = {
 def validate(
     secrets_path: Path, write_test: bool = False, profile_key: str | None = None
 ) -> None:
-    with secrets_path.open("rb") as secrets_file:
-        all_secrets = tomllib.load(secrets_file)
+    all_secrets = load_business_profile_document(secrets_path)
     profiles = load_business_profiles(all_secrets)
     if len(profiles) > 1 and not profile_key:
         raise RuntimeError("Multiple profiles are configured; pass --profile PROFILE_KEY")

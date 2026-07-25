@@ -42,7 +42,7 @@ from quickbooks_import import (
 from receipt_storage import GoogleDriveReceiptStorage
 
 
-STORAGE_IMPLEMENTATION_VERSION = 4
+STORAGE_IMPLEMENTATION_VERSION = 5
 ACCOUNT_TYPES = ["Bank", "Cash", "Credit card", "Short-term debt", "Equity", "Other"]
 ACCOUNT_CLASSIFICATIONS = ["Asset", "Liability", "Equity"]
 FIXED_TYPE_CLASSIFICATIONS = {
@@ -73,10 +73,9 @@ def get_storage(
     # storage instance created before a deployment can survive with an older
     # class definition that does not contain newly added methods.
     del implementation_version, configuration_revision
-    include_local = local_profile_admin_available(st.get_option("server.address"))
     secrets = merged_profile_secrets(
         st.secrets,
-        include_local=include_local,
+        include_local=True,
         path=LOCAL_PROFILE_STORE_PATH,
     )
     return GoogleSheetsStorage.from_secrets(
@@ -91,10 +90,9 @@ def get_receipt_storage(
     configuration_revision: str,
 ) -> GoogleDriveReceiptStorage:
     del implementation_version, configuration_revision
-    include_local = local_profile_admin_available(st.get_option("server.address"))
     secrets = merged_profile_secrets(
         st.secrets,
-        include_local=include_local,
+        include_local=True,
         path=LOCAL_PROFILE_STORE_PATH,
     )
     return GoogleDriveReceiptStorage.from_secrets(
@@ -191,6 +189,22 @@ st.markdown(
     [data-testid="stMetric"] { background:white; border:1px solid #dedbd2; padding:18px; border-radius:14px; }
     [data-testid="stSidebar"] { background:#173f32; }
     [data-testid="stSidebar"] * { color:#f7f5ef; }
+    [data-testid="stWidgetLabel"] {
+        width:fit-content !important;
+        max-width:100%;
+        justify-content:flex-start;
+        gap:.3rem;
+    }
+    [data-testid="stWidgetLabel"] > [data-testid="stMarkdownContainer"] {
+        width:fit-content !important;
+        flex:0 1 auto;
+    }
+    [data-testid="stWidgetLabel"] p {
+        flex:0 0 auto;
+    }
+    [data-testid="stWidgetLabel"] [data-testid="stTooltipIcon"] {
+        flex:0 0 auto;
+    }
     .st-key-edit_transaction [data-testid="stFormSubmitButton"]:has([data-testid="stIconMaterial"]) button {
         background:#b42318;
         border-color:#b42318;
@@ -216,7 +230,7 @@ profile_admin_enabled = local_profile_admin_available(
 try:
     effective_secrets = merged_profile_secrets(
         st.secrets,
-        include_local=profile_admin_enabled,
+        include_local=True,
         path=LOCAL_PROFILE_STORE_PATH,
     )
     profiles = load_business_profiles(effective_secrets)
@@ -277,8 +291,6 @@ else:
     try:
         revision = (
             local_profile_revision(LOCAL_PROFILE_STORE_PATH)
-            if profile_admin_enabled
-            else "streamlit-secrets"
         )
         storage = get_storage(
             selected_profile_key,

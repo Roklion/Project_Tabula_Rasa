@@ -7,10 +7,12 @@ from receipt_storage import (
     parse_drive_folder_id,
     receipt_filename,
 )
-from storage import StorageValidationError
+from storage import StorageUnavailableError, StorageValidationError
 
 
 class _Response:
+    status_code = 200
+
     def raise_for_status(self) -> None:
         return None
 
@@ -25,6 +27,23 @@ class _Session:
     def post(self, url: str, **kwargs):
         self.request = {"url": url, **kwargs}
         return _Response()
+
+
+class _QuotaResponse(_Response):
+    status_code = 403
+
+    def json(self) -> dict:
+        return {
+            "error": {
+                "errors": [{"reason": "storageQuotaExceeded"}],
+            }
+        }
+
+
+class _QuotaSession(_Session):
+    def post(self, url: str, **kwargs):
+        self.request = {"url": url, **kwargs}
+        return _QuotaResponse()
 
 
 class ReceiptStorageTests(unittest.TestCase):
@@ -53,6 +72,7 @@ class ReceiptStorageTests(unittest.TestCase):
         self.assertEqual(uploaded["id"], "file-id")
         self.assertIn(b'"parents":["receiptfolder123456"]', session.request["data"])
         self.assertIn(b'"name":"txn-1-receipt.pdf"', session.request["data"])
+        self.assertIn("supportsAllDrives=true", session.request["url"])
 
     def test_rejects_unsupported_or_empty_upload(self) -> None:
         storage = GoogleDriveReceiptStorage(
@@ -62,6 +82,16 @@ class ReceiptStorageTests(unittest.TestCase):
             storage.upload("txn-1", "receipt.exe", b"data")
         with self.assertRaises(StorageValidationError):
             storage.upload("txn-1", "receipt.pdf", b"")
+
+    def test_explains_service_account_storage_quota_failure(self) -> None:
+        storage = GoogleDriveReceiptStorage(
+            object(), "receiptfolder123456", session=_QuotaSession()
+        )
+
+        with self.assertRaises(StorageUnavailableError) as raised:
+            storage.upload("txn-1", "receipt.pdf", b"%PDF-data")
+
+        self.assertIn("Shared Drive", str(raised.exception))
 
 
 if __name__ == "__main__":

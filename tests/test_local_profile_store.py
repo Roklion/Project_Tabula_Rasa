@@ -123,7 +123,7 @@ class LocalProfileStoreTests(unittest.TestCase):
                 "Replacement",
             )
 
-    def test_merges_local_profile_with_legacy_streamlit_secrets(self) -> None:
+    def test_json_profiles_replace_legacy_streamlit_profiles(self) -> None:
         base = {
             "app_password_hash": "hash",
             "business_name": "Original Business",
@@ -139,11 +139,11 @@ class LocalProfileStoreTests(unittest.TestCase):
 
         self.assertEqual(
             [profile.key for profile in profiles],
-            ["default", "north"],
+            ["north"],
         )
-        self.assertIs(
-            merged_profile_secrets(base, include_local=False, path=path),
-            base,
+        self.assertEqual(
+            merged["business_profiles"]["north"]["name"],
+            "North Shop",
         )
 
     def test_refuses_corrupt_store_instead_of_overwriting_it(self) -> None:

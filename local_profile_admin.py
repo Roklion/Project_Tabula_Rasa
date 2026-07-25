@@ -34,7 +34,7 @@ def _profile_rows(
     for profile in load_business_profiles(effective_secrets):
         credential = profile.secrets.get("gcp_service_account", {})
         source = (
-            "Local profile file"
+            "Business profiles JSON"
             if profile.key in local_profiles
             else "Streamlit Secrets (read-only here)"
         )
@@ -67,8 +67,8 @@ def render_local_profile_admin(
     """Render the reauthenticated local profile-administration page."""
     st.title("Business profiles")
     st.caption(
-        "Local-only profile onboarding. Private keys are written to the ignored "
-        "local profile file and are never displayed after upload."
+        "Profile onboarding. Private keys are written to the ignored "
+        "business profile JSON file and are never displayed after upload."
     )
 
     if not st.session_state.get("local_profile_admin_unlocked"):
@@ -119,14 +119,29 @@ def render_local_profile_admin(
         )
         spreadsheet = st.text_input("Google Sheets URL or spreadsheet ID")
         receipt_folder = st.text_input(
-            "Google Drive receipt folder URL or folder ID"
+            "Google Drive receipt folder URL or folder ID",
+            help=(
+                "Receipts are uploaded directly through the Google Drive API. "
+                "Paste the folder URL or the ID shown after /folders/ in its URL. "
+                "Google Drive Desktop is not required, but the folder must be "
+                "shared with this profile's service account."
+            ),
         )
         backup_folder_path = st.text_input(
             "Google Drive Desktop backup folder path",
             help=(
-                r"Absolute local path, for example "
-                r"G:\My Drive\Tabula Rosa Backups\business."
+                "Backups are ZIP files written by the local backup process, not "
+                "uploaded through the Drive API. Enter the absolute folder path "
+                "provided by Google Drive Desktop, for example "
+                r"G:\My Drive\Tabula Rosa Backups\business. Google Drive Desktop "
+                "must be installed, signed in, and running when backups execute."
             ),
+        )
+        st.caption(
+            "Why are these different? Receipt files are sent directly to Google "
+            "Drive using a folder ID. Backup ZIP files are currently written to "
+            "your computer first and synchronized by Google Drive Desktop, so "
+            "they require an absolute local path."
         )
         credential_file = st.file_uploader(
             "Google service-account JSON",
@@ -136,8 +151,7 @@ def render_local_profile_admin(
         replace = st.checkbox(
             "Replace an existing profile with this key",
             help=(
-                "This replaces only the local profile. A hosted Streamlit secret "
-                "with the same key is not modified."
+                "This replaces the profile with this key in business_profiles.json."
             ),
         )
         submitted = st.form_submit_button("Validate and save", type="primary")

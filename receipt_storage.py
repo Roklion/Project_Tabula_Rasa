@@ -46,6 +46,40 @@ def receipt_filename(transaction_id: str, original_name: str) -> str:
     return f"{identifier}-{basename}"
 
 
+def _drive_error_message(response: Any) -> str:
+    """Translate common Drive API failures without exposing response details."""
+    reason = ""
+    try:
+        payload = response.json()
+        errors = payload.get("error", {}).get("errors", [])
+        if errors:
+            reason = str(errors[0].get("reason", ""))
+    except (AttributeError, TypeError, ValueError):
+        pass
+    if reason in {"storageQuotaExceeded", "storageQuotaLimitExceeded"}:
+        return (
+            "Google Drive rejected the receipt because service accounts have no "
+            "personal Drive storage quota. Use a Google Workspace Shared Drive "
+            "folder, or configure user OAuth instead of a service account."
+        )
+    if getattr(response, "status_code", None) == 404:
+        return (
+            "The configured receipt folder was not found. Confirm the folder ID "
+            "and add the service account as a member of its Shared Drive."
+        )
+    if getattr(response, "status_code", None) == 403:
+        return (
+            "Google Drive denied the receipt upload. Confirm the Drive API is "
+            "enabled and the service account has Contributor access to the "
+            "Shared Drive containing the receipt folder."
+        )
+    return (
+        "Receipt upload to Google Drive failed. Confirm that the Drive API is "
+        "enabled and the configured Shared Drive folder is accessible to the "
+        "service account."
+    )
+
+
 class GoogleDriveReceiptStorage:
     """Upload transaction receipts to a configured Drive folder."""
 
@@ -110,17 +144,25 @@ class GoogleDriveReceiptStorage:
         try:
             response = self._session.post(
                 "https://www.googleapis.com/upload/drive/v3/files"
-                "?uploadType=multipart&fields=id,name,webViewLink",
+                "?uploadType=multipart&supportsAllDrives=true"
+                "&fields=id,name,webViewLink",
                 data=body,
                 headers={"Content-Type": f"multipart/related; boundary={boundary}"},
                 timeout=30,
             )
+            if getattr(response, "status_code", 200) >= 400:
+                raise StorageUnavailableError(
+                    _drive_error_message(response),
+                    retryable=getattr(response, "status_code", None) >= 500,
+                )
             response.raise_for_status()
             uploaded = response.json()
+        except StorageUnavailableError:
+            raise
         except Exception as exc:
             raise StorageUnavailableError(
-                "Receipt upload to Google Drive failed. Confirm that the Drive API "
-                "is enabled and the configured folder is shared with the service account.",
+                "Receipt upload to Google Drive failed because Google could not "
+                "be reached. Try again shortly.",
                 retryable=True,
             ) from exc
         return {

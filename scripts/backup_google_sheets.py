@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-import tomllib
 from collections.abc import Mapping
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -17,6 +16,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from storage import GoogleSheetsStorage
 from business_profiles import load_business_profiles, select_profile_secrets
+from local_profile_store import load_business_profile_document
 
 
 BACKUP_NAME = re.compile(r"^tabula-rosa-backup-\d{8}T\d{6}Z\.zip$")
@@ -125,8 +125,7 @@ def main() -> None:
     parser.add_argument("--profile", help="Business profile key to back up")
     args = parser.parse_args()
 
-    with args.secrets.open("rb") as secrets_file:
-        all_secrets = tomllib.load(secrets_file)
+    all_secrets = load_business_profile_document(args.secrets)
     profiles = load_business_profiles(all_secrets)
     if len(profiles) > 1 and not args.profile:
         raise SystemExit("Multiple profiles are configured; pass --profile PROFILE_KEY")

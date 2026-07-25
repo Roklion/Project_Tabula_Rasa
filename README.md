@@ -5,9 +5,9 @@ A private Google Sheets-backed bookkeeping app for one person or a small group o
 ## Run it
 
 1. Install Python 3.11 or newer.
-2. Follow the profile setup below, then configure the ignored
-   `.streamlit/secrets.toml` with each spreadsheet, service-account credential,
-   and the application password hash.
+2. Follow the profile setup below. Keep the application password hash in
+   `.streamlit/secrets.toml`; all business settings and credentials live in
+   `.streamlit/business_profiles.json`.
 3. In this folder, run:
 
    ```powershell
@@ -109,52 +109,15 @@ minimum role needed. Files in a Shared Drive are owned by the organization,
 whereas a spreadsheet in personal My Drive remains owned by the Google account
 that created it.
 
-### 4. Add the profile to Streamlit secrets
+### 4. Add the profile to the business profiles JSON
 
-Use one top-level application password and put each isolated business under
-`business_profiles` in the ignored local `.streamlit/secrets.toml`. Add the same
-TOML to the hosted deployment's **Secrets** settings. Copy every field from the
-downloaded JSON key; do not copy the example placeholders literally.
+Use the authenticated **Business profiles** page described below. It writes
+each business's spreadsheet, Drive locations, and complete service-account
+credential together in the ignored `.streamlit/business_profiles.json`.
+`.streamlit/secrets.toml` should contain only application-level secrets:
 
 ```toml
 app_password_hash = "scrypt$..."
-
-[business_profiles.heathcote]
-name = "Heathcote Advisory LLC"
-spreadsheet_id = "FIRST_SPREADSHEET_ID"
-receipt_folder_id = "FIRST_RECEIPT_FOLDER_ID"
-backup_folder_path = "G:\\My Drive\\Tabula Rosa Backups\\heathcote"
-
-[business_profiles.heathcote.gcp_service_account]
-type = "service_account"
-project_id = "first-google-cloud-project"
-private_key_id = "..."
-private_key = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-client_email = "ledger@first-google-cloud-project.iam.gserviceaccount.com"
-client_id = "..."
-auth_uri = "https://accounts.google.com/o/oauth2/auth"
-token_uri = "https://oauth2.googleapis.com/token"
-auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
-client_x509_cert_url = "..."
-
-[business_profiles.second_shop]
-name = "Second Shop"
-spreadsheet_id = "SECOND_SPREADSHEET_ID"
-receipt_folder_id = "SECOND_RECEIPT_FOLDER_ID"
-backup_folder_path = "G:\\My Drive\\Tabula Rosa Backups\\second-shop"
-
-[business_profiles.second_shop.gcp_service_account]
-# Paste the complete JSON service-account values for this business here.
-type = "service_account"
-project_id = "different-google-cloud-project"
-private_key_id = "..."
-private_key = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-client_email = "ledger@different-google-cloud-project.iam.gserviceaccount.com"
-client_id = "..."
-auth_uri = "https://accounts.google.com/o/oauth2/auth"
-token_uri = "https://oauth2.googleapis.com/token"
-auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
-client_x509_cert_url = "..."
 ```
 
 Share each spreadsheet as Editor with the `client_email` from that same
@@ -167,15 +130,13 @@ The application password currently grants access to every configured profile.
 Use separate deployments or add profile-level authorization if different users
 must only see particular businesses.
 
-The original single-profile `spreadsheet_id` and `[gcp_service_account]` format
-continues to work, so existing deployments do not require an immediate secrets
-migration.
+Legacy profiles in `secrets.toml` remain readable only as a migration fallback.
 
-### 5. Optional local profile onboarding UI
+### 5. Business profile onboarding UI
 
 For local deployments, an authenticated **Business profiles** page can add or
-replace profiles in the ignored
-`.streamlit/local_business_profiles.json` file. The page is fail-closed and is
+replace profiles in the ignored `.streamlit/business_profiles.json` file. The
+page is fail-closed and is
 not present unless the server process has exactly the following flag **and**
 Streamlit is bound to `localhost`, `127.0.0.1`, or another loopback address:
 
@@ -211,20 +172,25 @@ restart. The file is plaintext and inherits access controls from the project
 directory. Do not put the project on a shared or automatically synchronized
 folder, and ensure other operating-system users cannot read it.
 
-Profiles already supplied through `.streamlit/secrets.toml` remain visible but
-read-only on this page. A local profile with the same key overrides it only in
-local-admin mode; it does not change the original Streamlit secret.
+The profile file is read during normal app and backup-script execution. The
+loopback-only launcher controls editing, not reading. Never commit, email, or
+synchronize this plaintext credential file.
 
-The local profile file is not committed or synchronized to the hosted app.
-After onboarding a business locally, manually add the equivalent
-`[business_profiles.PROFILE]` and
-`[business_profiles.PROFILE.gcp_service_account]` tables to the deployed app's
-Streamlit **Settings > Secrets**, save, and let the hosted app restart. Never set
-`TABULA_LOCAL_PROFILE_ADMIN=1` for a hosted deployment.
+### Migrate existing profiles from secrets.toml
 
-Stopping the launcher removes the flag from its PowerShell process. A regular
-local launch without the flag reads only Streamlit Secrets, so locally managed
-profiles are intentionally unavailable until the local-admin launcher is used
+Stop the app, make a protected copy of `.streamlit/secrets.toml`, then run:
+
+```powershell
+python scripts/migrate_profiles_to_json.py
+```
+
+The command refuses to overwrite an existing `.streamlit/business_profiles.json`.
+Restart with the local profile administration launcher, replace each migrated
+profile as needed to add its receipt folder ID and backup folder path, and
+verify the app and backup command. Finally, remove the `business_profiles`,
+legacy `spreadsheet_id`, `business_name`, and `gcp_service_account` entries from
+`.streamlit/secrets.toml`, leaving `app_password_hash`. Securely delete the
+temporary secrets backup after verification.
 again.
 
 ### 6. Validate before using the profile

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-import tomllib
 from pathlib import Path
 
 import gspread
@@ -17,6 +16,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from storage import GoogleSheetsStorage, StorageValidationError
 from storage.google_sheets import SHEETS_SCOPE, WORKSHEET_HEADERS
 from business_profiles import load_business_profiles, select_profile_secrets
+from local_profile_store import load_business_profile_document
 
 
 def initialize_blank_ledger_sheets(workbook: object) -> None:
@@ -64,8 +64,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    with args.secrets.open("rb") as secrets_file:
-        all_secrets = tomllib.load(secrets_file)
+    all_secrets = load_business_profile_document(args.secrets)
     profiles = load_business_profiles(all_secrets)
     if len(profiles) > 1 and not args.profile:
         raise SystemExit("Multiple profiles are configured; pass --profile PROFILE_KEY")
