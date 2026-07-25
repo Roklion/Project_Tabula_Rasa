@@ -43,6 +43,7 @@ from receipt_storage import GoogleDriveReceiptStorage
 
 
 STORAGE_IMPLEMENTATION_VERSION = 5
+RECEIPT_UPLOAD_ENABLED = False
 ACCOUNT_TYPES = ["Bank", "Cash", "Credit card", "Short-term debt", "Equity", "Other"]
 ACCOUNT_CLASSIFICATIONS = ["Asset", "Liability", "Equity"]
 FIXED_TYPE_CLASSIFICATIONS = {
@@ -649,33 +650,44 @@ elif page == "Transactions":
                             )
                 st.divider()
                 st.subheader("Receipt")
-                receipt = st.file_uploader(
-                    "Attach a receipt image or PDF",
-                    type=["jpg", "jpeg", "png", "webp", "heic", "pdf"],
-                    accept_multiple_files=False,
-                    key=f"receipt_{edit_id}",
-                )
-                if st.button(
-                    "Upload receipt",
-                    disabled=receipt is None,
-                    key=f"upload_receipt_{edit_id}",
-                ):
-                    try:
-                        receipt_storage = get_receipt_storage(
-                            selected_profile_key,
-                            STORAGE_IMPLEMENTATION_VERSION,
-                            revision,
-                        )
-                        uploaded = receipt_storage.upload(
-                            edit_id,
-                            receipt.name,
-                            receipt.getvalue(),
-                            receipt.type,
-                        )
-                    except StorageError as error:
-                        report_storage_error(error)
-                    else:
-                        st.success(f"Receipt uploaded as {uploaded['name']}.")
+                if not RECEIPT_UPLOAD_ENABLED:
+                    st.info(
+                        "Receipt uploads are temporarily unavailable while Google "
+                        "Drive OAuth support is developed. Store the receipt "
+                        f"manually as `{edit_id}-original-file-name`."
+                    )
+                    st.link_button(
+                        "Track Google Drive OAuth support",
+                        "https://github.com/Roklion/Project_Tabula_Rasa/issues/7",
+                    )
+                else:
+                    receipt = st.file_uploader(
+                        "Attach a receipt image or PDF",
+                        type=["jpg", "jpeg", "png", "webp", "heic", "pdf"],
+                        accept_multiple_files=False,
+                        key=f"receipt_{edit_id}",
+                    )
+                    if st.button(
+                        "Upload receipt",
+                        disabled=receipt is None,
+                        key=f"upload_receipt_{edit_id}",
+                    ):
+                        try:
+                            receipt_storage = get_receipt_storage(
+                                selected_profile_key,
+                                STORAGE_IMPLEMENTATION_VERSION,
+                                revision,
+                            )
+                            uploaded = receipt_storage.upload(
+                                edit_id,
+                                receipt.name,
+                                receipt.getvalue(),
+                                receipt.type,
+                            )
+                        except StorageError as error:
+                            report_storage_error(error)
+                        else:
+                            st.success(f"Receipt uploaded as {uploaded['name']}.")
 
 
 elif page == "Accounts":
