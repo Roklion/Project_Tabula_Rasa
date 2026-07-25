@@ -191,6 +191,23 @@ verify the app and backup command. Finally, remove the `business_profiles`,
 legacy `spreadsheet_id`, `business_name`, and `gcp_service_account` entries from
 `.streamlit/secrets.toml`, leaving `app_password_hash`. Securely delete the
 temporary secrets backup after verification.
+
+### Export profiles to Streamlit Community Cloud
+
+Generate a temporary TOML document containing the app-level secrets and every
+business profile:
+
+```powershell
+python scripts/export_streamlit_secrets.py
+```
+
+The command prints the path to a randomly named, ignored file under
+`.streamlit/`. Paste its complete contents into
+**Streamlit App settings > Secrets**, save, then delete the generated file
+immediately. The command never prints credential values, never overwrites an
+existing output, and does not include
+`.streamlit/config.toml` because server configuration is not part of Streamlit
+Secrets.
 again.
 
 ### 6. Validate before using the profile
