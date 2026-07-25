@@ -45,7 +45,6 @@ def settings(name: str = "North Shop") -> dict:
         name,
         "https://docs.google.com/spreadsheets/d/abcdefghij1234567890/edit",
         json.dumps(credential()).encode("utf-8"),
-        "https://drive.google.com/drive/folders/receiptfolder123456",
         r"G:\My Drive\Tabula Rosa Backups\north",
     )
 
@@ -123,18 +122,13 @@ class LocalProfileStoreTests(unittest.TestCase):
                 "Replacement",
             )
 
-    def test_json_profiles_replace_legacy_streamlit_profiles(self) -> None:
-        base = {
-            "app_password_hash": "hash",
-            "business_name": "Original Business",
-            "spreadsheet_id": "legacy-sheet",
-            "gcp_service_account": {"client_email": "legacy@example.test"},
-        }
+    def test_json_profiles_are_merged_with_app_secrets(self) -> None:
+        base = {"app_password_hash": "hash"}
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "local_business_profiles.json"
             save_local_profile("north", settings(), path=path)
 
-            merged = merged_profile_secrets(base, include_local=True, path=path)
+            merged = merged_profile_secrets(base, path=path)
             profiles = load_business_profiles(merged)
 
         self.assertEqual(

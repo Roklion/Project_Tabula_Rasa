@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import csv
-import hashlib
 import io
 import json
 import unittest
@@ -37,6 +35,7 @@ class GoogleSheetsStorageTests(unittest.TestCase):
             "active",
             "created_at",
             "type",
+            "classification",
             "opening_balance",
         )
         workbook = FakeWorkbook(headers)
@@ -49,36 +48,15 @@ class GoogleSheetsStorageTests(unittest.TestCase):
         self.assertEqual(stored["name"], "Checking")
         self.assertEqual(stored["opening_balance"], "25.00")
 
-    def test_legacy_accounts_sheet_is_migrated_and_classified(self) -> None:
+    def test_accounts_sheet_without_classification_is_rejected(self) -> None:
         headers = dict(WORKSHEET_HEADERS)
         headers["Accounts"] = tuple(
             header
             for header in headers["Accounts"]
             if header != "classification"
         )
-        workbook = FakeWorkbook(headers)
-        workbook.sheets["Accounts"].append_rows(
-            [
-                ["asset-1", "Checking", "Bank", "100.00", "TRUE", "now"],
-                [
-                    "equity-1",
-                    "Owners investment",
-                    "Other",
-                    "-100.00",
-                    "TRUE",
-                    "now",
-                ],
-            ]
-        )
-
-        storage = GoogleSheetsStorage(workbook)
-
-        self.assertEqual(workbook.sheets["Accounts"].col_count, 7)
-        self.assertIn("classification", workbook.sheets["Accounts"].rows[0])
-        self.assertEqual(
-            [account["classification"] for account in storage.list_accounts()],
-            ["Asset", "Equity"],
-        )
+        with self.assertRaises(StorageValidationError):
+            GoogleSheetsStorage(FakeWorkbook(headers))
 
     def test_default_seed_is_idempotent(self) -> None:
         first = self.storage.ensure_defaults()
@@ -128,19 +106,14 @@ class GoogleSheetsStorageTests(unittest.TestCase):
         self.assertEqual(self.storage.list_accounts(), [])
         self.assertEqual(len(self.storage.list_accounts(active_only=False)), 1)
 
-    def test_legacy_loan_type_is_normalized_to_short_term_debt(self) -> None:
-        created = self.storage.create_account(
-            "Legacy loan",
-            "Loan",
-            -100,
-            classification="Liability",
-        )
-
-        self.assertEqual(created["type"], "Short-term debt")
-        self.assertEqual(
-            self.storage.list_accounts(active_only=False)[0]["type"],
-            "Short-term debt",
-        )
+    def test_unknown_account_type_is_rejected(self) -> None:
+        with self.assertRaises(StorageValidationError):
+            self.storage.create_account(
+                "Old loan",
+                "Loan",
+                -100,
+                classification="Liability",
+            )
 
     def test_category_uniqueness_is_case_insensitive(self) -> None:
         self.storage.create_category("Software", "Expense")
@@ -452,7 +425,7 @@ class GoogleSheetsStorageTests(unittest.TestCase):
             manifest = json.loads(archive.read("manifest.json"))
             self.assertEqual(manifest["row_counts"]["Accounts"], 1)
             self.assertIn("backup_time", manifest)
-            self.assertEqual(manifest["format_version"], 1)
+            self.assertEqual(manifest["format_version"], 2)
             self.assertIn("Accounts.csv", manifest["sha256"])
         validated = self.storage.validate_backup_zip(backup)
         self.assertEqual(validated["workbook_title"], "Test Ledger")
@@ -488,51 +461,6 @@ class GoogleSheetsStorageTests(unittest.TestCase):
         self.assertEqual(counts, {"Accounts": 1, "Categories": 1, "Transactions": 1})
         self.assertEqual(restored_storage.list_accounts()[0]["id"], account["id"])
         self.assertEqual(restored_storage.list_transactions()[0]["id"], transaction["id"])
-
-    def test_restore_upgrades_backup_without_account_classification(self) -> None:
-        account = self.storage.create_account("Owners investment", "Equity", -100)
-        backup = self.storage.export_backup_zip()
-        output = io.BytesIO()
-        with zipfile.ZipFile(io.BytesIO(backup)) as source:
-            manifest = json.loads(source.read("manifest.json"))
-            account_rows = list(
-                csv.reader(
-                    io.StringIO(source.read("Accounts.csv").decode("utf-8"))
-                )
-            )
-            classification_index = account_rows[0].index("classification")
-            legacy_rows = [
-                row[:classification_index] + row[classification_index + 1 :]
-                for row in account_rows
-            ]
-            legacy_buffer = io.StringIO(newline="")
-            csv.writer(legacy_buffer, lineterminator="\n").writerows(legacy_rows)
-            legacy_accounts = legacy_buffer.getvalue().encode("utf-8")
-            manifest["worksheet_headers"]["Accounts"] = legacy_rows[0]
-            manifest["sha256"]["Accounts.csv"] = hashlib.sha256(
-                legacy_accounts
-            ).hexdigest()
-
-            with zipfile.ZipFile(output, "w") as destination:
-                for name in source.namelist():
-                    if name == "Accounts.csv":
-                        content = legacy_accounts
-                    elif name == "manifest.json":
-                        content = (
-                            json.dumps(manifest, indent=2, sort_keys=True) + "\n"
-                        ).encode("utf-8")
-                    else:
-                        content = source.read(name)
-                    destination.writestr(name, content)
-
-        restored_storage = GoogleSheetsStorage(
-            FakeWorkbook(), sleeper=lambda _: None
-        )
-        restored_storage.restore_backup_zip(output.getvalue())
-
-        restored = restored_storage.list_accounts()[0]
-        self.assertEqual(restored["id"], account["id"])
-        self.assertEqual(restored["classification"], "Equity")
 
     def test_restore_refuses_nonblank_target(self) -> None:
         self.storage.create_account("Checking", "Bank")

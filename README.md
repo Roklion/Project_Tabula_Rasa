@@ -31,14 +31,10 @@ profiles.
    with the Google account that will administer this business's integration.
 2. Create a new project, or select an existing project dedicated to this
    business. Record its project ID.
-3. Open **APIs & Services > Library**, enable both **Google Sheets API** and
-   **Google Drive API**. The APIs must be enabled in the project that owns the
-   service account, even when the spreadsheet belongs to another Google
-   account. See Google's
+3. Open **APIs & Services > Library** and enable the **Google Sheets API**. The
+   API must be enabled in the project that owns the service account, even when
+   the spreadsheet belongs to another Google account. See Google's
    [Sheets API overview](https://developers.google.com/workspace/sheets/api/guides/concepts).
-
-The Drive API is used to upload transaction receipt images and PDFs. Backup
-folders synchronized by Google Drive for desktop remain a separate feature.
 
 ### 2. Create the service account and JSON key
 
@@ -71,9 +67,9 @@ will be needed.
    `Tabula Rasa - Heathcote`. Do not enable **Anyone with the link**.
 3. Inside that folder, create a blank Google spreadsheet and give it a clear
    name such as `Heathcote Advisory Ledger`.
-   Also create a restricted `Receipts` subfolder.
 4. Create these three worksheet tabs with the exact names and first-row headers
-   below. Header spelling, capitalization, and order must match.
+   below. Header spelling and capitalization must match; column order may
+   differ.
 
    | Worksheet | Row 1 headers, from left to right |
    | --- | --- |
@@ -82,11 +78,8 @@ will be needed.
    | `Transactions` | `id`, `txn_date`, `kind`, `amount`, `account_id`, `to_account_id`, `category_id`, `payee`, `description`, `reference`, `created_at` |
 
    The default `Sheet1` tab may be deleted. Leave rows below the headers empty;
-   the app seeds its initial account and categories on first access. Existing
-   workbooks created without `classification` are upgraded automatically when
-   this version first connects.
-5. Share both the spreadsheet and the `Receipts` folder with the service
-   account's `client_email`, select
+   the app seeds its initial account and categories on first access.
+5. Share the spreadsheet with the service account's `client_email`, select
    **Editor**, clear **Notify people** if Google offers it, and click **Share**.
    Keep **General access** set to **Restricted**. Google's
    [Drive sharing guide](https://support.google.com/drive/answer/2494822)
@@ -97,9 +90,6 @@ will be needed.
    ```text
    https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit
    ```
-
-7. Open the `Receipts` folder and copy its folder ID from the value after
-   `/folders/` in the URL. Use it as that profile's `receipt_folder_id`.
 
 Sharing the containing folder with the service account is optional and grants
 broader inherited access. Sharing only the spreadsheet is the least-privilege
@@ -130,8 +120,6 @@ The application password currently grants access to every configured profile.
 Use separate deployments or add profile-level authorization if different users
 must only see particular businesses.
 
-Legacy profiles in `secrets.toml` remain readable only as a migration fallback.
-
 ### 5. Business profile onboarding UI
 
 For local deployments, an authenticated **Business profiles** page can add or
@@ -158,8 +146,8 @@ Then:
 
 1. Sign in to Tabula Rosa normally.
 2. Open **Business profiles** and re-enter the application password.
-3. Enter a business name, safe profile key, Google spreadsheet URL or ID,
-   receipt folder ID, and the absolute Google Drive Desktop backup folder path.
+3. Enter a business name, safe profile key, Google spreadsheet URL or ID, and
+   the absolute Google Drive Desktop backup folder path.
 4. Upload the complete service-account JSON downloaded from Google Cloud.
 5. Confirm replacement only when intentionally overriding an existing key.
 6. Select **Validate and save**. Validation opens the workbook and initializes
@@ -175,22 +163,6 @@ folder, and ensure other operating-system users cannot read it.
 The profile file is read during normal app and backup-script execution. The
 loopback-only launcher controls editing, not reading. Never commit, email, or
 synchronize this plaintext credential file.
-
-### Migrate existing profiles from secrets.toml
-
-Stop the app, make a protected copy of `.streamlit/secrets.toml`, then run:
-
-```powershell
-python scripts/migrate_profiles_to_json.py
-```
-
-The command refuses to overwrite an existing `.streamlit/business_profiles.json`.
-Restart with the local profile administration launcher, replace each migrated
-profile as needed to add its receipt folder ID and backup folder path, and
-verify the app and backup command. Finally, remove the `business_profiles`,
-legacy `spreadsheet_id`, `business_name`, and `gcp_service_account` entries from
-`.streamlit/secrets.toml`, leaving `app_password_hash`. Securely delete the
-temporary secrets backup after verification.
 
 ### Export profiles to Streamlit Community Cloud
 
@@ -208,7 +180,6 @@ immediately. The command never prints credential values, never overwrites an
 existing output, and does not include
 `.streamlit/config.toml` because server configuration is not part of Streamlit
 Secrets.
-again.
 
 ### 6. Validate before using the profile
 
@@ -253,7 +224,9 @@ python -m unittest discover -s tests -v
 
 The UI tests use an in-memory Google workbook and a test-only password hash. They do not read the live ledger, application password, or Google credentials.
 
-Run a read-only end-to-end dashboard check against the configured live workbook with:
+Run read-only end-to-end dashboard checks against the configured live workbook
+in both secrets modes—split local files and the combined hosted Streamlit
+Secrets export—with:
 
 ```powershell
 python scripts/validate_app_google.py
@@ -337,12 +310,12 @@ rereads every restored row and verifies it against the archive.
 
 ## Credentials and recovery
 
-- Local development credentials live only in the ignored
-  `.streamlit/secrets.toml` file.
+- Local service-account credentials live only in the ignored
+  `.streamlit/business_profiles.json` file. The ignored
+  `.streamlit/secrets.toml` contains the application password hash.
 - The hosted app uses a separate copy of those TOML values in Streamlit
   Community Cloud's encrypted Secrets settings.
-- Required secret entries are `app_password_hash` plus either the legacy
-  `spreadsheet_id` and `[gcp_service_account]` entries or one or more
+- Hosted Secrets requires `app_password_hash` plus one or more
   `[business_profiles.PROFILE]` configurations. Never store their real values
   in Git, README files, issue trackers, or deployment logs.
 - The original service-account JSON is not required after both secrets stores

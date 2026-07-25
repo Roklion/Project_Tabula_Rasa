@@ -46,8 +46,6 @@ def set_password(secrets_path: Path) -> None:
     parsed = tomllib.loads(updated)
     if parsed.get("app_password_hash") != encoded_hash:
         raise RuntimeError("Generated password hash failed validation")
-    if "gcp_service_account" not in parsed or "spreadsheet_id" not in parsed:
-        raise RuntimeError("Refusing to replace incomplete Streamlit secrets")
 
     with tempfile.NamedTemporaryFile(
         mode="w",

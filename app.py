@@ -39,11 +39,9 @@ from quickbooks_import import (
     REQUIRED_COLUMNS as QUICKBOOKS_REQUIRED_COLUMNS,
     general_ledger_rows,
 )
-from receipt_storage import GoogleDriveReceiptStorage
 
 
-STORAGE_IMPLEMENTATION_VERSION = 5
-RECEIPT_UPLOAD_ENABLED = False
+STORAGE_IMPLEMENTATION_VERSION = 6
 ACCOUNT_TYPES = ["Bank", "Cash", "Credit card", "Short-term debt", "Equity", "Other"]
 ACCOUNT_CLASSIFICATIONS = ["Asset", "Liability", "Equity"]
 FIXED_TYPE_CLASSIFICATIONS = {
@@ -76,27 +74,9 @@ def get_storage(
     del implementation_version, configuration_revision
     secrets = merged_profile_secrets(
         st.secrets,
-        include_local=True,
         path=LOCAL_PROFILE_STORE_PATH,
     )
     return GoogleSheetsStorage.from_secrets(
-        select_profile_secrets(secrets, profile_key)
-    )
-
-
-@st.cache_resource
-def get_receipt_storage(
-    profile_key: str,
-    implementation_version: int,
-    configuration_revision: str,
-) -> GoogleDriveReceiptStorage:
-    del implementation_version, configuration_revision
-    secrets = merged_profile_secrets(
-        st.secrets,
-        include_local=True,
-        path=LOCAL_PROFILE_STORE_PATH,
-    )
-    return GoogleDriveReceiptStorage.from_secrets(
         select_profile_secrets(secrets, profile_key)
     )
 
@@ -231,14 +211,13 @@ profile_admin_enabled = local_profile_admin_available(
 try:
     effective_secrets = merged_profile_secrets(
         st.secrets,
-        include_local=True,
         path=LOCAL_PROFILE_STORE_PATH,
     )
     profiles = load_business_profiles(effective_secrets)
 except LocalProfileStoreError:
     st.error(
         "The local business-profile file is malformed or unavailable. "
-        "Repair or move .streamlit/local_business_profiles.json and restart."
+        "Repair or move .streamlit/business_profiles.json and restart."
     )
     st.stop()
 except BusinessProfileConfigurationError as error:
@@ -650,44 +629,15 @@ elif page == "Transactions":
                             )
                 st.divider()
                 st.subheader("Receipt")
-                if not RECEIPT_UPLOAD_ENABLED:
-                    st.info(
-                        "Receipt uploads are temporarily unavailable while Google "
-                        "Drive OAuth support is developed. Store the receipt "
-                        f"manually as `{edit_id}-original-file-name`."
-                    )
-                    st.link_button(
-                        "Track Google Drive OAuth support",
-                        "https://github.com/Roklion/Project_Tabula_Rasa/issues/7",
-                    )
-                else:
-                    receipt = st.file_uploader(
-                        "Attach a receipt image or PDF",
-                        type=["jpg", "jpeg", "png", "webp", "heic", "pdf"],
-                        accept_multiple_files=False,
-                        key=f"receipt_{edit_id}",
-                    )
-                    if st.button(
-                        "Upload receipt",
-                        disabled=receipt is None,
-                        key=f"upload_receipt_{edit_id}",
-                    ):
-                        try:
-                            receipt_storage = get_receipt_storage(
-                                selected_profile_key,
-                                STORAGE_IMPLEMENTATION_VERSION,
-                                revision,
-                            )
-                            uploaded = receipt_storage.upload(
-                                edit_id,
-                                receipt.name,
-                                receipt.getvalue(),
-                                receipt.type,
-                            )
-                        except StorageError as error:
-                            report_storage_error(error)
-                        else:
-                            st.success(f"Receipt uploaded as {uploaded['name']}.")
+                st.info(
+                    "Receipt uploads are temporarily unavailable while Google "
+                    "Drive OAuth support is developed. Store the receipt "
+                    f"manually as `{edit_id}-original-file-name`."
+                )
+                st.link_button(
+                    "Track Google Drive OAuth support",
+                    "https://github.com/Roklion/Project_Tabula_Rasa/issues/7",
+                )
 
 
 elif page == "Accounts":

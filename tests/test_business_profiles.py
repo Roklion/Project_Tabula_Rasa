@@ -36,40 +36,14 @@ class BusinessProfileTests(unittest.TestCase):
             selected["gcp_service_account"]["client_email"], "south@example.test"
         )
 
-    def test_preserves_legacy_single_profile_secrets(self) -> None:
-        secrets = {
-            "business_name": "Original Business",
-            "spreadsheet_id": "legacy-sheet",
-            "gcp_service_account": {"client_email": "legacy@example.test"},
-        }
-
-        profiles = load_business_profiles(secrets)
-
-        self.assertEqual(len(profiles), 1)
-        self.assertEqual(profiles[0].key, "default")
-        self.assertEqual(profiles[0].name, "Original Business")
-        self.assertIs(profiles[0].secrets, secrets)
-
-    def test_names_unnamed_legacy_profile_heathcote_advisory(self) -> None:
-        profiles = load_business_profiles(
-            {
-                "spreadsheet_id": "legacy-sheet",
-                "gcp_service_account": {"client_email": "legacy@example.test"},
-            }
-        )
-
-        self.assertEqual(profiles[0].name, "Heathcote Advisory LLC")
-
-    def test_names_blank_legacy_profile_heathcote_advisory(self) -> None:
-        profiles = load_business_profiles(
-            {
-                "business_name": "   ",
-                "spreadsheet_id": "legacy-sheet",
-                "gcp_service_account": {"client_email": "legacy@example.test"},
-            }
-        )
-
-        self.assertEqual(profiles[0].name, "Heathcote Advisory LLC")
+    def test_rejects_removed_single_profile_format(self) -> None:
+        with self.assertRaises(BusinessProfileConfigurationError):
+            load_business_profiles(
+                {
+                    "spreadsheet_id": "old-sheet",
+                    "gcp_service_account": {"client_email": "old@example.test"},
+                }
+            )
 
     def test_rejects_profile_without_credential(self) -> None:
         with self.assertRaises(BusinessProfileConfigurationError):

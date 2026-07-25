@@ -18,23 +18,12 @@ class BusinessProfile:
 
 
 def load_business_profiles(secrets: Mapping[str, Any]) -> list[BusinessProfile]:
-    """Return configured profiles, including the legacy single-profile format."""
+    """Return configured business profiles."""
     configured = secrets.get("business_profiles")
     if configured is None:
-        if "spreadsheet_id" not in secrets or "gcp_service_account" not in secrets:
-            raise BusinessProfileConfigurationError(
-                "No business profiles or legacy Google Sheets settings are configured."
-            )
-        legacy_name = str(
-            secrets.get("business_name", "Heathcote Advisory LLC")
-        ).strip()
-        return [
-            BusinessProfile(
-                key="default",
-                name=legacy_name or "Heathcote Advisory LLC",
-                secrets=secrets,
-            )
-        ]
+        raise BusinessProfileConfigurationError(
+            "No business profiles are configured."
+        )
 
     try:
         items = list(configured.items())

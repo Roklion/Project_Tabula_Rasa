@@ -77,7 +77,7 @@ FIXED_TYPE_CLASSIFICATIONS = {
 }
 CATEGORY_KINDS = {"Income", "Expense"}
 TRANSACTION_KINDS = {"Income", "Expense", "Transfer"}
-BACKUP_FORMAT_VERSION = 1
+BACKUP_FORMAT_VERSION = 2
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 DEFAULT_ACCOUNTS = (("Checking", "Bank"), ("Cash", "Cash"))
 DEFAULT_CATEGORIES = {
@@ -178,11 +178,6 @@ def _validate_account_classification(
         )
 
 
-def _normalize_account_type(account_type: str) -> str:
-    """Map legacy stored account types to their current display name."""
-    return "Short-term debt" if account_type == "Loan" else account_type
-
-
 def _iso_date(value: Any) -> str:
     if isinstance(value, datetime):
         value = value.date()
@@ -198,12 +193,10 @@ def _iso_date(value: Any) -> str:
 def _as_bool(value: Any, field: str = "active") -> bool:
     if isinstance(value, bool):
         return value
-    if isinstance(value, int) and value in (0, 1):
-        return bool(value)
     text = str(value).strip().casefold()
-    if text in {"true", "1", "yes"}:
+    if text == "true":
         return True
-    if text in {"false", "0", "no"}:
+    if text == "false":
         return False
     raise StorageValidationError(f"{field} must be true or false")
 
@@ -256,10 +249,6 @@ def _parse_backup_zip(
             raise StorageValidationError(f"{title} backup has no header row")
         headers = [value.strip() for value in parsed_rows[0]]
         required_headers = set(WORKSHEET_HEADERS[title])
-        if title == "Accounts":
-            # Version 1 backups created before balance-sheet classifications
-            # remain restorable and are upgraded in memory below.
-            required_headers.discard("classification")
         if (
             any(not value for value in headers)
             or len(headers) != len(set(headers))
@@ -281,13 +270,6 @@ def _parse_backup_zip(
             set(record_ids)
         ):
             raise StorageValidationError(f"{title} backup IDs are missing or duplicated")
-        if title == "Accounts" and "classification" not in headers:
-            headers.append("classification")
-            for record in records:
-                record["classification"] = suggested_account_classification(
-                    record.get("name", ""),
-                    record.get("type", "Other"),
-                )
         tables[title] = (headers, records)
 
     account_ids = {record["id"] for record in tables["Accounts"][1]}
@@ -323,15 +305,6 @@ class GoogleSheetsStorage:
         self._sleeper = sleeper
         self._row_cache: dict[str, tuple[float, list[_StoredRow]]] = {}
         self._cache_lock = threading.RLock()
-        try:
-            self._ensure_account_classification_column()
-        except StorageUnavailableError as exc:
-            raise StorageUnavailableError(
-                "The Accounts worksheet could not be upgraded with the new "
-                "classification column. Confirm that the service account has "
-                "Editor access and the sheet permits adding columns.",
-                retryable=exc.retryable,
-            ) from exc
         self.validate_headers()
 
     @classmethod
@@ -380,90 +353,6 @@ class GoogleSheetsStorage:
 
     def _worksheet(self, title: str) -> Any:
         return self._api(lambda: self._workbook.worksheet(title))
-
-    def _ensure_account_classification_column(self) -> None:
-        """Upgrade a legacy Accounts sheet without changing existing fields."""
-        try:
-            worksheet_titles = {
-                worksheet.title
-                for worksheet in self._api(self._workbook.worksheets)
-            }
-        except AttributeError:
-            return
-        if "Accounts" not in worksheet_titles:
-            return
-        worksheet = self._worksheet("Accounts")
-        values = self._api(worksheet.get_all_values)
-        if not values:
-            return
-        headers = [str(value).strip() for value in values[0]]
-        legacy_headers = set(WORKSHEET_HEADERS["Accounts"]) - {"classification"}
-        if not legacy_headers.issubset(headers):
-            return
-
-        classification_header_exists = "classification" in headers
-        if classification_header_exists:
-            column_number = headers.index("classification") + 1
-        else:
-            column_number = len(headers) + 1
-        column_letter = ""
-        remainder = column_number
-        while remainder:
-            remainder, offset = divmod(remainder - 1, 26)
-            column_letter = chr(65 + offset) + column_letter
-        if not classification_header_exists:
-            current_column_count = int(
-                getattr(worksheet, "col_count", len(headers))
-            )
-            if current_column_count < column_number:
-                self._api(
-                    lambda: worksheet.add_cols(
-                        column_number - current_column_count
-                    )
-                )
-            self._api(
-                lambda: worksheet.update(
-                    [["classification"]],
-                    range_name=f"{column_letter}1",
-                    raw=True,
-                )
-            )
-
-        classifications: list[list[str]] = []
-        needs_backfill = not classification_header_exists
-        for raw_row in values[1:]:
-            padded = [str(value) for value in raw_row] + [""] * (
-                len(headers) - len(raw_row)
-            )
-            record = dict(zip(headers, padded[: len(headers)]))
-            if any(value.strip() for value in record.values()):
-                existing_classification = record.get("classification", "").title()
-                needs_backfill = (
-                    needs_backfill
-                    or existing_classification not in ACCOUNT_CLASSIFICATIONS
-                )
-                account_type = record.get("type", "Other")
-                classifications.append(
-                    [
-                        existing_classification
-                        if existing_classification in ACCOUNT_CLASSIFICATIONS
-                        else suggested_account_classification(
-                            record.get("name", ""),
-                            account_type,
-                        )
-                    ]
-                )
-            else:
-                classifications.append([""])
-        if classifications and needs_backfill:
-            last_row = len(classifications) + 1
-            self._api(
-                lambda: worksheet.update(
-                    classifications,
-                    range_name=f"{column_letter}2:{column_letter}{last_row}",
-                    raw=True,
-                )
-            )
 
     def _headers(self, title: str) -> list[str]:
         headers = [
@@ -671,7 +560,19 @@ class GoogleSheetsStorage:
         accounts = []
         for row in self._rows("Accounts", force_refresh=_force_refresh):
             record: dict[str, Any] = dict(row.values)
-            record["type"] = _normalize_account_type(record.get("type", "Other"))
+            account_type = _clean_text(
+                record.get("type"), "Account type", required=True
+            )
+            classification = _clean_text(
+                record.get("classification"),
+                "Account classification",
+                required=True,
+            )
+            if account_type not in ACCOUNT_TYPES:
+                raise StorageValidationError("Unknown account type")
+            _validate_account_classification(account_type, classification)
+            record["type"] = account_type
+            record["classification"] = classification
             record["active"] = _as_bool(record.get("active", ""))
             record["opening_balance"] = float(
                 _balance_amount(record.get("opening_balance", ""))
@@ -689,9 +590,7 @@ class GoogleSheetsStorage:
         classification: str | None = None,
     ) -> dict[str, Any]:
         name = _clean_text(name, "Account name", required=True)
-        account_type = _normalize_account_type(
-            _clean_text(account_type, "Account type", required=True)
-        )
+        account_type = _clean_text(account_type, "Account type", required=True)
         if account_type not in ACCOUNT_TYPES:
             raise StorageValidationError("Unknown account type")
         classification = _clean_text(
@@ -725,10 +624,8 @@ class GoogleSheetsStorage:
         current = self._find_row("Accounts", account_id)
         updated = dict(current.values)
         name = _clean_text(changes.get("name", updated["name"]), "Account name", required=True)
-        account_type = _normalize_account_type(
-            _clean_text(
-                changes.get("type", updated["type"]), "Account type", required=True
-            )
+        account_type = _clean_text(
+            changes.get("type", updated["type"]), "Account type", required=True
         )
         if account_type not in ACCOUNT_TYPES:
             raise StorageValidationError("Unknown account type")

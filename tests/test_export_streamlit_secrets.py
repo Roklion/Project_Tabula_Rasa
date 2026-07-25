@@ -21,7 +21,6 @@ class ExportStreamlitSecretsTests(unittest.TestCase):
             "north-shop": {
                 "name": "North Shop",
                 "spreadsheet_id": "north-sheet-id",
-                "receipt_folder_id": "north-folder-id",
                 "backup_folder_path": r"G:\My Drive\North",
                 "gcp_service_account": {
                     "type": "service_account",

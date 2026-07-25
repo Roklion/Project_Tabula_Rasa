@@ -45,9 +45,6 @@ def _profile_rows(
                 "Spreadsheet": _masked_spreadsheet_id(
                     profile.secrets.get("spreadsheet_id", "")
                 ),
-                "Receipt folder": _masked_spreadsheet_id(
-                    profile.secrets.get("receipt_folder_id", "")
-                ),
                 "Backup folder": str(
                     profile.secrets.get("backup_folder_path", "")
                 ),
@@ -108,7 +105,7 @@ def render_local_profile_admin(
     st.subheader("Add or replace a local profile")
     st.write(
         "Share the spreadsheet with the uploaded service account as Editor before "
-        "saving. Validation opens the workbook and initializes required worksheets."
+        "saving. Validation opens the workbook and checks the required worksheets."
     )
     with st.form("local_profile_form", clear_on_submit=True):
         name = st.text_input("Business name", max_chars=100)
@@ -118,15 +115,6 @@ def render_local_profile_admin(
             help="Lowercase letters, numbers, underscores, and hyphens.",
         )
         spreadsheet = st.text_input("Google Sheets URL or spreadsheet ID")
-        receipt_folder = st.text_input(
-            "Google Drive receipt folder URL or folder ID",
-            help=(
-                "Receipts are uploaded directly through the Google Drive API. "
-                "Paste the folder URL or the ID shown after /folders/ in its URL. "
-                "Google Drive Desktop is not required, but the folder must be "
-                "shared with this profile's service account."
-            ),
-        )
         backup_folder_path = st.text_input(
             "Google Drive Desktop backup folder path",
             help=(
@@ -136,12 +124,6 @@ def render_local_profile_admin(
                 r"G:\My Drive\Tabula Rosa Backups\business. Google Drive Desktop "
                 "must be installed, signed in, and running when backups execute."
             ),
-        )
-        st.caption(
-            "Why are these different? Receipt files are sent directly to Google "
-            "Drive using a folder ID. Backup ZIP files are currently written to "
-            "your computer first and synchronized by Google Drive Desktop, so "
-            "they require an absolute local path."
         )
         credential_file = st.file_uploader(
             "Google service-account JSON",
@@ -175,7 +157,6 @@ def render_local_profile_admin(
             name,
             spreadsheet,
             credential_file.getvalue(),
-            receipt_folder,
             backup_folder_path,
         )
         folded_name = settings["name"].casefold()

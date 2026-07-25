@@ -31,7 +31,7 @@ DEFAULT_SECRETS_PATH = PROJECT_ROOT / ".streamlit" / "secrets.toml"
 EXPORT_DIRECTORY = PROJECT_ROOT / ".streamlit"
 EXPORT_PREFIX = "tabula-rasa-streamlit-secrets-"
 EXPORT_SUFFIX = ".toml"
-LEGACY_PROFILE_KEYS = {
+PROFILE_CONFIG_KEYS = {
     "business_name",
     "spreadsheet_id",
     "gcp_service_account",
@@ -99,7 +99,7 @@ def build_streamlit_secrets_toml(
     combined: dict[str, Any] = {
         str(key): value
         for key, value in app_secrets.items()
-        if key not in LEGACY_PROFILE_KEYS
+        if key not in PROFILE_CONFIG_KEYS
     }
     combined["business_profiles"] = profiles
 

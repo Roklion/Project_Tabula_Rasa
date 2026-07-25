@@ -56,7 +56,7 @@ def resolve_backup_output_dir(
     profile_secrets: Mapping[str, Any],
     override: Path | None,
 ) -> Path:
-    """Resolve an explicit override, profile path, or legacy local default."""
+    """Resolve an explicit override, profile path, or local default."""
     if override is not None:
         return override
     configured = str(profile_secrets.get("backup_folder_path", "")).strip()
@@ -108,7 +108,7 @@ def main() -> None:
         type=Path,
         help=(
             "Override the profile's backup_folder_path; defaults to the profile "
-            "setting or the project backups directory for legacy profiles"
+            "setting or the project backups directory"
         ),
     )
     parser.add_argument(
