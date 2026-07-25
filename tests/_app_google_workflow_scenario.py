@@ -129,12 +129,24 @@ def main() -> None:
         transaction = next(
             item for item in storage.list_transactions() if item["kind"] == "Expense"
         )
-        storage.edit_transaction(transaction["id"], amount=30)
-        assert next(
+        checking = next(
+            account
+            for account in storage.list_accounts(active_only=False)
+            if account["name"] == "Checking"
+        )
+        by_label(app.selectbox, "Transaction to edit").set_value(
+            transaction["id"]
+        ).run()
+        by_label(app.selectbox, "Edit account").set_value(checking["id"])
+        by_label(app.number_input, "Edit amount").set_value(30)
+        by_label(app.button, "Save changes").click().run()
+        edited_transaction = next(
             item
             for item in storage.list_transactions()
             if item["id"] == transaction["id"]
-        )["amount"] == "30.00"
+        )
+        assert edited_transaction["amount"] == "30.00"
+        assert edited_transaction["account_id"] == checking["id"]
 
         by_label(
             app.checkbox, "I understand deleting this transaction is permanent"

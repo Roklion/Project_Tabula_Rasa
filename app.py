@@ -473,6 +473,56 @@ elif page == "Transactions":
                     transaction for transaction in transactions if transaction["id"] == edit_id
                 )
                 with st.form("edit_transaction"):
+                    active_account_ids = [account["id"] for account in active_accounts]
+                    current_account_ids = [
+                        selected["account_id"],
+                        selected.get("to_account_id", ""),
+                    ]
+                    editable_account_ids = active_account_ids + [
+                        account_id
+                        for account_id in current_account_ids
+                        if account_id and account_id not in active_account_ids
+                    ]
+                    account_names_by_id = {
+                        account["id"]: account["name"] for account in accounts
+                    }
+                    edited_account_id = st.selectbox(
+                        (
+                            "Edit from account"
+                            if selected["kind"] == "Transfer"
+                            else "Edit account"
+                        ),
+                        editable_account_ids,
+                        index=editable_account_ids.index(selected["account_id"]),
+                        format_func=account_names_by_id.get,
+                    )
+                    edited_to_account_id = ""
+                    edited_category_id = ""
+                    if selected["kind"] == "Transfer":
+                        edited_to_account_id = st.selectbox(
+                            "Edit to account",
+                            editable_account_ids,
+                            index=editable_account_ids.index(
+                                selected["to_account_id"]
+                            ),
+                            format_func=account_names_by_id.get,
+                        )
+                    else:
+                        category_ids = [
+                            category["id"]
+                            for category in categories
+                            if category["kind"] == selected["kind"]
+                        ]
+                        category_names_by_id = {
+                            category["id"]: category["name"]
+                            for category in categories
+                        }
+                        edited_category_id = st.selectbox(
+                            "Edit category",
+                            category_ids,
+                            index=category_ids.index(selected["category_id"]),
+                            format_func=category_names_by_id.get,
+                        )
                     c1, c2 = st.columns(2)
                     edited_date = c1.date_input(
                         "Edit date", date.fromisoformat(selected["txn_date"])
@@ -509,23 +559,35 @@ elif page == "Transactions":
                             "id": edit_id,
                             "txn_date": edited_date,
                             "amount": edited_amount,
+                            "account_id": edited_account_id,
+                            "to_account_id": edited_to_account_id,
+                            "category_id": edited_category_id,
                             "payee": edited_payee,
                             "reference": edited_reference,
                             "description": edited_description,
                         }
-                        confirmed_write(
-                            "edit_transaction",
-                            payload,
-                            lambda: storage.edit_transaction(
-                                edit_id,
-                                txn_date=edited_date,
-                                amount=edited_amount,
-                                payee=edited_payee,
-                                reference=edited_reference,
-                                description=edited_description,
-                            ),
-                            "Transaction updated.",
-                        )
+                        if (
+                            selected["kind"] == "Transfer"
+                            and edited_account_id == edited_to_account_id
+                        ):
+                            st.error("Transfer accounts must be different.")
+                        else:
+                            confirmed_write(
+                                "edit_transaction",
+                                payload,
+                                lambda: storage.edit_transaction(
+                                    edit_id,
+                                    txn_date=edited_date,
+                                    amount=edited_amount,
+                                    account_id=edited_account_id,
+                                    to_account_id=edited_to_account_id,
+                                    category_id=edited_category_id,
+                                    payee=edited_payee,
+                                    reference=edited_reference,
+                                    description=edited_description,
+                                ),
+                                "Transaction updated.",
+                            )
                     if delete_requested:
                         payload = {"id": edit_id}
                         confirmed_write(
