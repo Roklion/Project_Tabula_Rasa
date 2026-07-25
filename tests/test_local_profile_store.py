@@ -45,6 +45,8 @@ def settings(name: str = "North Shop") -> dict:
         name,
         "https://docs.google.com/spreadsheets/d/abcdefghij1234567890/edit",
         json.dumps(credential()).encode("utf-8"),
+        "https://drive.google.com/drive/folders/receiptfolder123456",
+        r"G:\My Drive\Tabula Rosa Backups\north",
     )
 
 

@@ -137,6 +137,16 @@ class AppAuthenticationTests(unittest.TestCase):
                     for field in app.text_input
                     if field.label == "Google Sheets URL or spreadsheet ID"
                 ).input("abcdefghij1234567890")
+                next(
+                    field
+                    for field in app.text_input
+                    if field.label == "Google Drive receipt folder URL or folder ID"
+                ).input("receiptfolder123456")
+                next(
+                    field
+                    for field in app.text_input
+                    if field.label == "Google Drive Desktop backup folder path"
+                ).input(r"G:\My Drive\Tabula Rosa Backups\north")
                 credential = {
                     "type": "service_account",
                     "project_id": "test-project",

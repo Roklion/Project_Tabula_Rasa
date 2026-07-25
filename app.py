@@ -39,6 +39,7 @@ from quickbooks_import import (
     REQUIRED_COLUMNS as QUICKBOOKS_REQUIRED_COLUMNS,
     general_ledger_rows,
 )
+from receipt_storage import GoogleDriveReceiptStorage
 
 
 STORAGE_IMPLEMENTATION_VERSION = 4
@@ -79,6 +80,24 @@ def get_storage(
         path=LOCAL_PROFILE_STORE_PATH,
     )
     return GoogleSheetsStorage.from_secrets(
+        select_profile_secrets(secrets, profile_key)
+    )
+
+
+@st.cache_resource
+def get_receipt_storage(
+    profile_key: str,
+    implementation_version: int,
+    configuration_revision: str,
+) -> GoogleDriveReceiptStorage:
+    del implementation_version, configuration_revision
+    include_local = local_profile_admin_available(st.get_option("server.address"))
+    secrets = merged_profile_secrets(
+        st.secrets,
+        include_local=include_local,
+        path=LOCAL_PROFILE_STORE_PATH,
+    )
+    return GoogleDriveReceiptStorage.from_secrets(
         select_profile_secrets(secrets, profile_key)
     )
 
@@ -616,6 +635,35 @@ elif page == "Transactions":
                                 lambda: storage.delete_transaction(edit_id),
                                 "Transaction deleted.",
                             )
+                st.divider()
+                st.subheader("Receipt")
+                receipt = st.file_uploader(
+                    "Attach a receipt image or PDF",
+                    type=["jpg", "jpeg", "png", "webp", "heic", "pdf"],
+                    accept_multiple_files=False,
+                    key=f"receipt_{edit_id}",
+                )
+                if st.button(
+                    "Upload receipt",
+                    disabled=receipt is None,
+                    key=f"upload_receipt_{edit_id}",
+                ):
+                    try:
+                        receipt_storage = get_receipt_storage(
+                            selected_profile_key,
+                            STORAGE_IMPLEMENTATION_VERSION,
+                            revision,
+                        )
+                        uploaded = receipt_storage.upload(
+                            edit_id,
+                            receipt.name,
+                            receipt.getvalue(),
+                            receipt.type,
+                        )
+                    except StorageError as error:
+                        report_storage_error(error)
+                    else:
+                        st.success(f"Receipt uploaded as {uploaded['name']}.")
 
 
 elif page == "Accounts":

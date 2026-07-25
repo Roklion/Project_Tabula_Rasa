@@ -5,12 +5,35 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from scripts.backup_google_sheets import verified_backup_for_week, write_versioned_backup
+from scripts.backup_google_sheets import (
+    PROJECT_ROOT,
+    resolve_backup_output_dir,
+    verified_backup_for_week,
+    write_versioned_backup,
+)
 from storage import GoogleSheetsStorage
 from tests.fakes import FakeWorkbook
 
 
 class BackupScriptTests(unittest.TestCase):
+    def test_profile_backup_path_is_default_and_cli_override_wins(self) -> None:
+        configured = Path(r"G:\My Drive\Backups\north")
+        override = Path(r"D:\Emergency Backups")
+
+        self.assertEqual(
+            resolve_backup_output_dir(
+                {"backup_folder_path": str(configured)}, None
+            ),
+            configured,
+        )
+        self.assertEqual(
+            resolve_backup_output_dir(
+                {"backup_folder_path": str(configured)}, override
+            ),
+            override,
+        )
+        self.assertEqual(resolve_backup_output_dir({}, None), PROJECT_ROOT / "backups")
+
     def test_versioned_backup_retains_newest_generations(self) -> None:
         storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
         with tempfile.TemporaryDirectory() as temporary_directory:

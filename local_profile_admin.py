@@ -45,6 +45,12 @@ def _profile_rows(
                 "Spreadsheet": _masked_spreadsheet_id(
                     profile.secrets.get("spreadsheet_id", "")
                 ),
+                "Receipt folder": _masked_spreadsheet_id(
+                    profile.secrets.get("receipt_folder_id", "")
+                ),
+                "Backup folder": str(
+                    profile.secrets.get("backup_folder_path", "")
+                ),
                 "Service account": str(credential.get("client_email", "")),
                 "Source": source,
             }
@@ -112,6 +118,16 @@ def render_local_profile_admin(
             help="Lowercase letters, numbers, underscores, and hyphens.",
         )
         spreadsheet = st.text_input("Google Sheets URL or spreadsheet ID")
+        receipt_folder = st.text_input(
+            "Google Drive receipt folder URL or folder ID"
+        )
+        backup_folder_path = st.text_input(
+            "Google Drive Desktop backup folder path",
+            help=(
+                r"Absolute local path, for example "
+                r"G:\My Drive\Tabula Rosa Backups\business."
+            ),
+        )
         credential_file = st.file_uploader(
             "Google service-account JSON",
             type=["json"],
@@ -145,6 +161,8 @@ def render_local_profile_admin(
             name,
             spreadsheet,
             credential_file.getvalue(),
+            receipt_folder,
+            backup_folder_path,
         )
         folded_name = settings["name"].casefold()
         if any(

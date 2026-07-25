@@ -6,8 +6,10 @@ import argparse
 import re
 import sys
 import tomllib
+from collections.abc import Mapping
 from datetime import date, datetime, timezone
 from pathlib import Path
+from typing import Any
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -48,6 +50,17 @@ def verified_backup_for_week(
             continue
         return path
     return None
+
+
+def resolve_backup_output_dir(
+    profile_secrets: Mapping[str, Any],
+    override: Path | None,
+) -> Path:
+    """Resolve an explicit override, profile path, or legacy local default."""
+    if override is not None:
+        return override
+    configured = str(profile_secrets.get("backup_folder_path", "")).strip()
+    return Path(configured) if configured else PROJECT_ROOT / "backups"
 
 
 def write_versioned_backup(
@@ -93,8 +106,10 @@ def main() -> None:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=PROJECT_ROOT / "backups",
-        help="Local, Google Drive Desktop, or NAS-synchronized backup directory",
+        help=(
+            "Override the profile's backup_folder_path; defaults to the profile "
+            "setting or the project backups directory for legacy profiles"
+        ),
     )
     parser.add_argument(
         "--keep",
@@ -116,15 +131,16 @@ def main() -> None:
     if len(profiles) > 1 and not args.profile:
         raise SystemExit("Multiple profiles are configured; pass --profile PROFILE_KEY")
     secrets = select_profile_secrets(all_secrets, args.profile)
+    output_dir = resolve_backup_output_dir(secrets, args.output_dir)
 
     if args.once_per_week:
-        existing = verified_backup_for_week(args.output_dir)
+        existing = verified_backup_for_week(output_dir)
         if existing is not None:
             print(f"Weekly backup already verified: {existing}")
             return
 
     storage = GoogleSheetsStorage.from_secrets(secrets)
-    destination = write_versioned_backup(storage, args.output_dir, keep=args.keep)
+    destination = write_versioned_backup(storage, output_dir, keep=args.keep)
     print(f"Verified backup created: {destination}")
 
 

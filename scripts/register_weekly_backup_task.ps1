@@ -1,5 +1,4 @@
 param(
-    [Parameter(Mandatory = $true)]
     [string]$BackupDirectory,
     [string]$Profile,
     [string]$TaskName = "Tabula Rosa Weekly Backup"
@@ -16,11 +15,14 @@ if (-not (Test-Path -LiteralPath $pythonPath -PathType Leaf)) {
 if (-not (Test-Path -LiteralPath $backupScript -PathType Leaf)) {
     throw "Backup script was not found: $backupScript"
 }
-if (-not (Test-Path -LiteralPath $BackupDirectory -PathType Container)) {
+if ($BackupDirectory -and -not (Test-Path -LiteralPath $BackupDirectory -PathType Container)) {
     throw "Backup directory was not found: $BackupDirectory"
 }
 
-$arguments = '"{0}" --output-dir "{1}" --keep 30 --once-per-week' -f $backupScript, $BackupDirectory
+$arguments = '"{0}" --keep 30 --once-per-week' -f $backupScript
+if ($BackupDirectory) {
+    $arguments += ' --output-dir "{0}"' -f $BackupDirectory
+}
 if ($Profile) {
     $arguments += ' --profile "{0}"' -f $Profile
 }

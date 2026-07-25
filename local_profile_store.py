@@ -35,6 +35,10 @@ SPREADSHEET_URL_PATTERN = re.compile(
     r"https://docs\.google\.com/spreadsheets/d/([A-Za-z0-9_-]+)"
 )
 SPREADSHEET_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{10,}$")
+DRIVE_FOLDER_URL_PATTERN = re.compile(
+    r"https://drive\.google\.com/(?:drive/(?:u/\d+/)?folders|open\?id=)/([A-Za-z0-9_-]+)"
+)
+DRIVE_FOLDER_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{10,}$")
 REQUIRED_CREDENTIAL_FIELDS = {
     "type",
     "project_id",
@@ -81,6 +85,32 @@ def parse_spreadsheet_id(value: str) -> str:
             "Enter a valid Google Sheets URL or spreadsheet ID."
         )
     return spreadsheet_id
+
+
+def parse_drive_folder_id(value: str) -> str:
+    """Return a validated folder ID from a raw ID or standard Drive URL."""
+    candidate = value.strip()
+    match = DRIVE_FOLDER_URL_PATTERN.search(candidate)
+    folder_id = match.group(1) if match else candidate
+    if not DRIVE_FOLDER_ID_PATTERN.fullmatch(folder_id):
+        raise LocalProfileStoreError(
+            "Enter a valid Google Drive folder URL or folder ID."
+        )
+    return folder_id
+
+
+def validate_backup_folder_path(value: str) -> str:
+    """Return a normalized absolute local backup folder path."""
+    candidate = value.strip()
+    if not candidate or any(ord(character) < 32 for character in candidate):
+        raise LocalProfileStoreError("Enter a valid backup folder path.")
+    path = Path(candidate)
+    if not path.is_absolute():
+        raise LocalProfileStoreError(
+            "Backup folder path must be absolute, such as "
+            r"G:\My Drive\Tabula Rosa Backups\business."
+        )
+    return str(path)
 
 
 def validate_profile_key(value: str) -> str:
@@ -134,6 +164,8 @@ def build_profile_settings(
     name: str,
     spreadsheet: str,
     credential_upload: bytes,
+    receipt_folder: str | None = None,
+    backup_folder_path: str | None = None,
 ) -> dict[str, Any]:
     """Validate form values and return one profile settings mapping."""
     display_name = name.strip()
@@ -141,11 +173,18 @@ def build_profile_settings(
         raise LocalProfileStoreError(
             "Business name must contain between 1 and 100 characters."
         )
-    return {
+    settings = {
         "name": display_name,
         "spreadsheet_id": parse_spreadsheet_id(spreadsheet),
         "gcp_service_account": parse_service_account_json(credential_upload),
     }
+    if receipt_folder is not None:
+        settings["receipt_folder_id"] = parse_drive_folder_id(receipt_folder)
+    if backup_folder_path is not None:
+        settings["backup_folder_path"] = validate_backup_folder_path(
+            backup_folder_path
+        )
+    return settings
 
 
 def _validate_stored_profiles(profiles: object) -> dict[str, dict[str, Any]]:
@@ -161,6 +200,16 @@ def _validate_stored_profiles(profiles: object) -> dict[str, dict[str, Any]]:
                 str(raw_settings.get("name", "")),
                 str(raw_settings.get("spreadsheet_id", "")),
                 json.dumps(raw_settings.get("gcp_service_account", {})).encode("utf-8"),
+                (
+                    str(raw_settings["receipt_folder_id"])
+                    if "receipt_folder_id" in raw_settings
+                    else None
+                ),
+                (
+                    str(raw_settings["backup_folder_path"])
+                    if "backup_folder_path" in raw_settings
+                    else None
+                ),
             )
         except (TypeError, LocalProfileStoreError) as exc:
             raise LocalProfileStoreError(

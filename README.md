@@ -31,15 +31,14 @@ profiles.
    with the Google account that will administer this business's integration.
 2. Create a new project, or select an existing project dedicated to this
    business. Record its project ID.
-3. Open **APIs & Services > Library**, search for **Google Sheets API**, and
-   click **Enable**. The API must be enabled in the project that owns the
+3. Open **APIs & Services > Library**, enable both **Google Sheets API** and
+   **Google Drive API**. The APIs must be enabled in the project that owns the
    service account, even when the spreadsheet belongs to another Google
    account. See Google's
    [Sheets API overview](https://developers.google.com/workspace/sheets/api/guides/concepts).
 
-The app only uses the Google Sheets API. The Google Drive API is not required
-for normal ledger operations or for backups written through Google Drive for
-desktop.
+The Drive API is used to upload transaction receipt images and PDFs. Backup
+folders synchronized by Google Drive for desktop remain a separate feature.
 
 ### 2. Create the service account and JSON key
 
@@ -72,6 +71,7 @@ will be needed.
    `Tabula Rasa - Heathcote`. Do not enable **Anyone with the link**.
 3. Inside that folder, create a blank Google spreadsheet and give it a clear
    name such as `Heathcote Advisory Ledger`.
+   Also create a restricted `Receipts` subfolder.
 4. Create these three worksheet tabs with the exact names and first-row headers
    below. Header spelling, capitalization, and order must match.
 
@@ -85,7 +85,8 @@ will be needed.
    the app seeds its initial account and categories on first access. Existing
    workbooks created without `classification` are upgraded automatically when
    this version first connects.
-5. Click **Share**, enter the service account's `client_email`, select
+5. Share both the spreadsheet and the `Receipts` folder with the service
+   account's `client_email`, select
    **Editor**, clear **Notify people** if Google offers it, and click **Share**.
    Keep **General access** set to **Restricted**. Google's
    [Drive sharing guide](https://support.google.com/drive/answer/2494822)
@@ -96,6 +97,9 @@ will be needed.
    ```text
    https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit
    ```
+
+7. Open the `Receipts` folder and copy its folder ID from the value after
+   `/folders/` in the URL. Use it as that profile's `receipt_folder_id`.
 
 Sharing the containing folder with the service account is optional and grants
 broader inherited access. Sharing only the spreadsheet is the least-privilege
@@ -118,6 +122,8 @@ app_password_hash = "scrypt$..."
 [business_profiles.heathcote]
 name = "Heathcote Advisory LLC"
 spreadsheet_id = "FIRST_SPREADSHEET_ID"
+receipt_folder_id = "FIRST_RECEIPT_FOLDER_ID"
+backup_folder_path = "G:\\My Drive\\Tabula Rosa Backups\\heathcote"
 
 [business_profiles.heathcote.gcp_service_account]
 type = "service_account"
@@ -134,6 +140,8 @@ client_x509_cert_url = "..."
 [business_profiles.second_shop]
 name = "Second Shop"
 spreadsheet_id = "SECOND_SPREADSHEET_ID"
+receipt_folder_id = "SECOND_RECEIPT_FOLDER_ID"
+backup_folder_path = "G:\\My Drive\\Tabula Rosa Backups\\second-shop"
 
 [business_profiles.second_shop.gcp_service_account]
 # Paste the complete JSON service-account values for this business here.
@@ -189,7 +197,8 @@ Then:
 
 1. Sign in to Tabula Rosa normally.
 2. Open **Business profiles** and re-enter the application password.
-3. Enter a business name, safe profile key, and Google spreadsheet URL or ID.
+3. Enter a business name, safe profile key, Google spreadsheet URL or ID,
+   receipt folder ID, and the absolute Google Drive Desktop backup folder path.
 4. Upload the complete service-account JSON downloaded from Google Cloud.
 5. Confirm replacement only when intentionally overriding an existing key.
 6. Select **Validate and save**. Validation opens the workbook and initializes
@@ -297,7 +306,7 @@ ledger data and must not be committed. To place backups in a Google Drive
 Desktop or NAS-synchronized folder, pass its local path:
 
 ```powershell
-python scripts/backup_google_sheets.py --profile heathcote --output-dir "G:\My Drive\Tabula Rosa Backups\heathcote" --keep 30
+python scripts/backup_google_sheets.py --profile heathcote --keep 30
 ```
 
 The configured Windows task runs at 10:00 PM every Monday, Tuesday, and
@@ -315,7 +324,7 @@ again. Starting Drive after a missed run does not trigger an immediate catch-up.
 Recreate or update the task with:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\register_weekly_backup_task.ps1 -BackupDirectory "G:\My Drive\path\to\backup\heathcote" -Profile heathcote -TaskName "Tabula Rosa Backup - Heathcote"
+powershell -ExecutionPolicy Bypass -File scripts\register_weekly_backup_task.ps1 -Profile heathcote -TaskName "Tabula Rosa Backup - Heathcote"
 ```
 
 Register one task with a distinct backup directory and task name for each
