@@ -272,6 +272,74 @@ class GoogleSheetsStorageTests(unittest.TestCase):
                 business_purpose="Meeting",
             )
 
+    def test_quickbooks_mileage_preview_import_and_duplicates(self) -> None:
+        business = {
+            "Date": "07/20/2026",
+            "Type": "Business",
+            "Trip Purpose": "Client meeting",
+            "Vehicle": "Blue car",
+            "Start Address": "Office",
+            "End Address": "Client site",
+            "Distance": "12.4",
+            "Deduction": "8.68",
+            "Logging Method": "Auto-tracked",
+        }
+        personal = {
+            **business,
+            "Date": "07/21/2026",
+            "Type": "Personal",
+            "Trip Purpose": "",
+        }
+        unreviewed = {
+            **business,
+            "Date": "07/22/2026",
+            "Type": "",
+            "Trip Purpose": "",
+        }
+        invalid = {
+            **business,
+            "Date": "07/23/2026",
+            "Trip Purpose": "",
+        }
+
+        blocked = self.storage.preview_quickbooks_mileage(
+            [business, personal, unreviewed, invalid]
+        )
+        self.assertEqual(blocked["summary"]["ready"], 1)
+        self.assertEqual(blocked["summary"]["personal_skipped"], 1)
+        self.assertEqual(blocked["summary"]["unreviewed_skipped"], 1)
+        self.assertEqual(len(blocked["errors"]), 1)
+        with self.assertRaises(StorageValidationError):
+            self.storage.import_quickbooks_mileage(
+                [business, personal, unreviewed, invalid]
+            )
+        self.assertEqual(self.storage.list_mileage_trips(), [])
+
+        preview = self.storage.preview_quickbooks_mileage(
+            [business, business, personal, unreviewed]
+        )
+        self.assertEqual(
+            preview["summary"],
+            {
+                "ready": 1,
+                "duplicates": 1,
+                "personal_skipped": 1,
+                "unreviewed_skipped": 1,
+            },
+        )
+        self.assertEqual(preview["duplicate_rows"], [3])
+
+        imported = self.storage.import_quickbooks_mileage(
+            [business, business, personal, unreviewed]
+        )
+        self.assertEqual(len(imported), 1)
+        self.assertEqual(imported[0]["miles"], "12.4")
+        self.assertEqual(imported[0]["business_purpose"], "Client meeting")
+
+        repeated = self.storage.preview_quickbooks_mileage([business])
+        self.assertEqual(repeated["summary"]["ready"], 0)
+        self.assertEqual(repeated["duplicate_rows"], [2])
+
     def test_csv_import_validates_all_rows_before_batch_append(self) -> None:
         self.storage.create_account("Checking", "Bank")
         self.storage.create_category("Sales", "Income")

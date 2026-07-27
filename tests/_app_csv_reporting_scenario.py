@@ -82,6 +82,30 @@ def main() -> None:
         assert len(storage.list_transactions()) == 2
         assert any("already completed" in str(item.value) for item in app.warning)
 
+        quickbooks_mileage_csv = (
+            "Date,Type,Trip Purpose,Vehicle,Start Address,End Address,"
+            "Distance,Deduction,Logging Method\n"
+            f"{date.today().strftime('%m/%d/%Y')},Business,Client meeting,"
+            "Blue car,Office,Client site,14.6,10.22,Auto-tracked\n"
+            f"{date.today().strftime('%m/%d/%Y')},Personal,,"
+            "Blue car,Home,Store,3.2,0,Auto-tracked\n"
+        ).encode("utf-8")
+        by_label(app.file_uploader, "QuickBooks mileage CSV").set_value(
+            ("quickbooks-trips.csv", quickbooks_mileage_csv, "text/csv")
+        ).run()
+        mileage_metrics = {metric.label: metric.value for metric in app.metric}
+        assert mileage_metrics == {
+            "Mileage ready": "1",
+            "Mileage duplicates": "0",
+            "Personal skipped": "1",
+            "Unreviewed skipped": "0",
+        }
+        by_label(app.button, "Import validated mileage").click().run()
+        imported_mileage = storage.list_mileage_trips()
+        assert len(imported_mileage) == 1
+        assert imported_mileage[0]["miles"] == "14.6"
+        assert imported_mileage[0]["business_purpose"] == "Client meeting"
+
         app.radio[0].set_value("Reports").run()
         report_metrics = {metric.label: metric.value for metric in app.metric}
         assert report_metrics == {

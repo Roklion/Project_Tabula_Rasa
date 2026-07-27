@@ -394,3 +394,23 @@ other names use the flexible `Other` subtype and default to Asset. Review the
 proposed classification and type before import. Category type is inferred from
 the amount (`Income` for positive and `Expense` for negative). Existing names
 are matched case-insensitively.
+
+### Import QuickBooks mileage
+
+In QuickBooks Online, open **Expenses & Bills > Mileage**, select the dropdown
+next to **Add trip**, and choose **Download Trips**. QuickBooks downloads a CSV
+containing the trip date, classification, purpose, vehicle, start and end
+addresses, and distance. Upload it under **Data & backup > Import QuickBooks
+mileage**.
+
+Only rows classified as `Business` are imported. `Personal` and `Unreviewed`
+rows are reported separately and skipped. Every business row must have a date,
+trip purpose, start address, end address, and positive distance. Common
+QuickBooks header variants are recognized, and distance columns explicitly
+labeled in kilometers are converted to miles.
+
+The preview reports ready, duplicate, personal, and unreviewed counts before
+enabling import. A mileage duplicate has the same date, distance, vehicle,
+start address, end address, and business purpose as an existing or earlier
+uploaded trip. Fix all reported business-row errors before committing; valid
+business trips are written to the `Mileage` worksheet in one batch.

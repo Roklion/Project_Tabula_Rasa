@@ -32,6 +32,11 @@ from quickbooks_import import (
     suggested_account_classification,
     suggested_account_type,
 )
+from quickbooks_mileage_import import (
+    mileage_fingerprint,
+    missing_required_columns as missing_quickbooks_mileage_columns,
+    normalize_rows as normalize_quickbooks_mileage_rows,
+)
 
 
 WORKSHEET_HEADERS = {
@@ -1001,6 +1006,72 @@ class GoogleSheetsStorage:
                 if attempt + 1 >= self._retry_attempts:
                     raise
                 self._sleeper(self._retry_base_delay_seconds * (2**attempt))
+
+    def preview_quickbooks_mileage(
+        self, rows: Iterable[Mapping[str, Any]]
+    ) -> dict[str, Any]:
+        """Validate a QuickBooks Download Trips export without writing it."""
+        source_rows = list(rows)
+        source_columns = {
+            str(column)
+            for row in source_rows
+            for column in row
+        }
+        missing = missing_quickbooks_mileage_columns(source_columns)
+        if missing:
+            normalized = {
+                "rows": [],
+                "errors": [
+                    "QuickBooks mileage export is missing columns: "
+                    + ", ".join(missing)
+                ],
+                "personal_rows": [],
+                "unreviewed_rows": [],
+            }
+        else:
+            normalized = normalize_quickbooks_mileage_rows(source_rows)
+
+        existing = {
+            mileage_fingerprint(item) for item in self.list_mileage_trips()
+        }
+        seen: set[str] = set()
+        ready: list[dict[str, str]] = []
+        duplicate_rows: list[int] = []
+        for source_item in normalized["rows"]:
+            item = dict(source_item)
+            row_number = int(item.pop("_source_row"))
+            identity = mileage_fingerprint(item)
+            if identity in existing or identity in seen:
+                duplicate_rows.append(row_number)
+            else:
+                seen.add(identity)
+                ready.append(item)
+        return {
+            "rows": ready,
+            "errors": normalized["errors"],
+            "duplicate_rows": duplicate_rows,
+            "personal_rows": normalized["personal_rows"],
+            "unreviewed_rows": normalized["unreviewed_rows"],
+            "summary": {
+                "ready": len(ready),
+                "duplicates": len(duplicate_rows),
+                "personal_skipped": len(normalized["personal_rows"]),
+                "unreviewed_skipped": len(normalized["unreviewed_rows"]),
+            },
+        }
+
+    def import_quickbooks_mileage(
+        self, rows: Iterable[Mapping[str, Any]]
+    ) -> list[dict[str, str]]:
+        """Revalidate and batch append unique business mileage trips."""
+        preview = self.preview_quickbooks_mileage(list(rows))
+        if preview["errors"]:
+            raise StorageValidationError("\n".join(preview["errors"]))
+        prepared = [
+            self._prepare_mileage_trip(item) for item in preview["rows"]
+        ]
+        self._append_many("Mileage", prepared)
+        return prepared
 
     def import_csv_transactions(
         self, rows: Iterable[Mapping[str, Any]]

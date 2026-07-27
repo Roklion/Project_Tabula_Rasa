@@ -39,6 +39,9 @@ from quickbooks_import import (
     REQUIRED_COLUMNS as QUICKBOOKS_REQUIRED_COLUMNS,
     general_ledger_rows,
 )
+from quickbooks_mileage_import import (
+    missing_required_columns as missing_quickbooks_mileage_columns,
+)
 
 
 STORAGE_IMPLEMENTATION_VERSION = 7
@@ -1392,3 +1395,103 @@ elif page == "Data & backup":
             report_storage_error(error)
         except (ValueError, KeyError, zipfile.BadZipFile, pd.errors.ParserError, UnicodeError):
             st.error("Could not read this QuickBooks export. Check its format and file integrity.")
+
+    st.subheader("Import QuickBooks mileage")
+    st.write(
+        "In QuickBooks Online, open **Expenses & Bills > Mileage**, use the "
+        "dropdown next to **Add trip**, and select **Download Trips**. Upload "
+        "that CSV here. Business trips are imported; Personal and Unreviewed "
+        "trips are skipped."
+    )
+    mileage_upload = st.file_uploader(
+        "QuickBooks mileage CSV",
+        type="csv",
+        key="quickbooks_mileage_upload",
+    )
+    if mileage_upload:
+        try:
+            mileage_incoming = pd.read_csv(mileage_upload).where(
+                lambda frame: frame.notna(), ""
+            )
+            mileage_missing = missing_quickbooks_mileage_columns(
+                mileage_incoming.columns
+            )
+            if mileage_missing:
+                st.error(
+                    "Missing QuickBooks mileage columns: "
+                    + ", ".join(mileage_missing)
+                )
+            else:
+                mileage_records = mileage_incoming.to_dict(orient="records")
+                mileage_preview = storage.preview_quickbooks_mileage(
+                    mileage_records
+                )
+                mileage_summary = mileage_preview["summary"]
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Mileage ready", mileage_summary["ready"])
+                c2.metric(
+                    "Mileage duplicates", mileage_summary["duplicates"]
+                )
+                c3.metric(
+                    "Personal skipped",
+                    mileage_summary["personal_skipped"],
+                )
+                c4.metric(
+                    "Unreviewed skipped",
+                    mileage_summary["unreviewed_skipped"],
+                )
+                if mileage_preview["errors"]:
+                    st.error(
+                        alert_list(
+                            "Fix these mileage import errors before continuing:",
+                            mileage_preview["errors"],
+                        )
+                    )
+                if mileage_preview["duplicate_rows"]:
+                    st.warning(
+                        "Already imported or repeated mileage rows will be "
+                        "skipped: "
+                        + ", ".join(
+                            map(str, mileage_preview["duplicate_rows"])
+                        )
+                    )
+                if mileage_preview["personal_rows"]:
+                    st.info(
+                        "Personal mileage rows will be skipped: "
+                        + ", ".join(map(str, mileage_preview["personal_rows"]))
+                    )
+                if mileage_preview["unreviewed_rows"]:
+                    st.info(
+                        "Unreviewed mileage rows will be skipped: "
+                        + ", ".join(
+                            map(str, mileage_preview["unreviewed_rows"])
+                        )
+                    )
+                st.dataframe(
+                    mileage_incoming.head(50),
+                    hide_index=True,
+                    width="stretch",
+                )
+                if st.button(
+                    "Import validated mileage",
+                    type="primary",
+                    disabled=bool(mileage_preview["errors"])
+                    or not mileage_summary["ready"],
+                ):
+                    confirmed_write(
+                        "import_quickbooks_mileage",
+                        {"rows": mileage_records},
+                        lambda: storage.import_quickbooks_mileage(
+                            mileage_records
+                        ),
+                        lambda imported: (
+                            f"Imported {len(imported)} mileage trips."
+                        ),
+                    )
+        except StorageValidationError as error:
+            report_storage_error(error)
+        except (ValueError, pd.errors.ParserError, UnicodeError):
+            st.error(
+                "Could not read this QuickBooks mileage CSV. "
+                "Check its format and encoding."
+            )
