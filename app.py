@@ -472,11 +472,27 @@ elif page == "Transactions":
         filter_type = c3.selectbox(
             "Type", ["All", "Income", "Expense", "Transfer"]
         )
+        ledger_account_map = {
+            account["name"]: account["id"] for account in accounts
+        }
+        selected_account_names = st.multiselect(
+            "Accounts",
+            list(ledger_account_map),
+            placeholder="All accounts",
+            help=(
+                "Includes transactions where a selected account is either side "
+                "of a transfer."
+            ),
+        )
+        selected_account_ids = [
+            ledger_account_map[name] for name in selected_account_names
+        ]
         try:
             transactions = storage.list_transactions(
                 start=start,
                 end=end,
                 kind=None if filter_type == "All" else filter_type,
+                account_ids=selected_account_ids or None,
             )
         except StorageError as error:
             report_storage_error(error)

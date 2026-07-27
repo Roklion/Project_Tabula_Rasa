@@ -838,9 +838,15 @@ class GoogleSheetsStorage:
         start: date | str | None = None,
         end: date | str | None = None,
         kind: str | None = None,
+        account_ids: Iterable[str] | None = None,
     ) -> list[dict[str, str]]:
         start_text = _iso_date(start) if start is not None else None
         end_text = _iso_date(end) if end is not None else None
+        selected_account_ids = (
+            {str(account_id) for account_id in account_ids}
+            if account_ids is not None
+            else None
+        )
         if kind is not None:
             kind = kind.title()
             if kind not in TRANSACTION_KINDS:
@@ -853,6 +859,14 @@ class GoogleSheetsStorage:
             if end_text and item["txn_date"] > end_text:
                 continue
             if kind and item["kind"] != kind:
+                continue
+            if selected_account_ids is not None and not (
+                {
+                    item["account_id"],
+                    item.get("to_account_id", ""),
+                }
+                & selected_account_ids
+            ):
                 continue
             transactions.append(item)
         return sorted(

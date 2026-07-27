@@ -122,7 +122,7 @@ def main() -> None:
 
         by_label(app.segmented_control, "Transaction type").set_value("Transfer").run()
         by_label(app.number_input, "Amount").set_value(10)
-        by_label(app.selectbox, "From account").set_value("Checking")
+        by_label(app.selectbox, "From account").set_value("Checking").run()
         by_label(app.selectbox, "To account").set_value("Savings")
         by_label(app.button, "Save transaction").click().run()
         assert {item["kind"] for item in storage.list_transactions()} == {
@@ -130,6 +130,18 @@ def main() -> None:
             "Income",
             "Transfer",
         }
+        assert [
+            item["kind"]
+            for item in storage.list_transactions(account_ids=[savings["id"]])
+        ] == ["Transfer"]
+        account_filter = by_label(app.multiselect, "Accounts")
+        account_filter.set_value(["Savings"]).run()
+        assert app.dataframe[0].value["Type"].tolist() == ["Transfer"]
+        by_label(app.multiselect, "Accounts").set_value(
+            ["Savings", "Owner-paid expenses"]
+        ).run()
+        assert set(app.dataframe[0].value["Type"]) == {"Expense", "Transfer"}
+        by_label(app.multiselect, "Accounts").set_value([]).run()
 
         transaction = next(
             item for item in storage.list_transactions() if item["kind"] == "Expense"

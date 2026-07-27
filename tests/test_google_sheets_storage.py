@@ -174,6 +174,21 @@ class GoogleSheetsStorageTests(unittest.TestCase):
             to_account_id=destination["id"],
         )
         self.assertEqual(transfer["category_id"], "")
+        self.assertEqual(
+            [item["id"] for item in self.storage.list_transactions(
+                account_ids=[destination["id"]]
+            )],
+            [transfer["id"]],
+        )
+        self.assertEqual(
+            {
+                item["id"]
+                for item in self.storage.list_transactions(
+                    account_ids=[source["id"], destination["id"]]
+                )
+            },
+            {transaction["id"], transfer["id"]},
+        )
 
         self.storage.delete_transaction(transaction["id"])
         with self.assertRaises(StorageNotFoundError):
