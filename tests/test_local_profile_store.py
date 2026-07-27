@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 import tempfile
-import unittest
 from pathlib import Path
+
+import pytest
 
 from tabula_rasa.business_profiles import load_business_profiles
 from tabula_rasa.local_profile_store import (
@@ -33,9 +34,7 @@ def credential(private_key: str = "test-private-key") -> dict[str, str]:
         "client_id": "123456789",
         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
         "token_uri": "https://oauth2.googleapis.com/token",
-        "auth_provider_x509_cert_url": (
-            "https://www.googleapis.com/oauth2/v1/certs"
-        ),
+        "auth_provider_x509_cert_url": ("https://www.googleapis.com/oauth2/v1/certs"),
         "client_x509_cert_url": "https://example.test/certificate",
     }
 
@@ -49,42 +48,34 @@ def settings(name: str = "North Shop") -> dict:
     )
 
 
-class LocalProfileStoreTests(unittest.TestCase):
+class TestLocalProfileStore:
     def test_admin_flag_is_strict_and_fail_closed(self) -> None:
-        self.assertFalse(local_profile_admin_enabled({}))
-        self.assertFalse(
-            local_profile_admin_enabled({LOCAL_PROFILE_ADMIN_ENV: "true"})
+        assert not local_profile_admin_enabled({})
+        assert not local_profile_admin_enabled({LOCAL_PROFILE_ADMIN_ENV: "true"})
+        assert local_profile_admin_enabled({LOCAL_PROFILE_ADMIN_ENV: "1"})
+        assert not local_profile_admin_available(
+            "0.0.0.0",
+            {LOCAL_PROFILE_ADMIN_ENV: "1"},
         )
-        self.assertTrue(local_profile_admin_enabled({LOCAL_PROFILE_ADMIN_ENV: "1"}))
-        self.assertFalse(
-            local_profile_admin_available(
-                "0.0.0.0",
-                {LOCAL_PROFILE_ADMIN_ENV: "1"},
-            )
+        assert local_profile_admin_available(
+            "127.0.0.1",
+            {LOCAL_PROFILE_ADMIN_ENV: "1"},
         )
-        self.assertTrue(
-            local_profile_admin_available(
-                "127.0.0.1",
-                {LOCAL_PROFILE_ADMIN_ENV: "1"},
-            )
-        )
-        self.assertTrue(
-            local_profile_admin_available(
-                "::1",
-                {LOCAL_PROFILE_ADMIN_ENV: "1"},
-            )
+        assert local_profile_admin_available(
+            "::1",
+            {LOCAL_PROFILE_ADMIN_ENV: "1"},
         )
 
     def test_rejects_malformed_credential_without_echoing_secret(self) -> None:
         secret = "credential-content-must-not-leak"
-        upload = json.dumps(
-            {"type": "service_account", "private_key": secret}
-        ).encode("utf-8")
+        upload = json.dumps({"type": "service_account", "private_key": secret}).encode(
+            "utf-8"
+        )
 
-        with self.assertRaises(LocalProfileStoreError) as raised:
+        with pytest.raises(LocalProfileStoreError) as raised:
             parse_service_account_json(upload)
 
-        self.assertNotIn(secret, str(raised.exception))
+        assert secret not in str(raised.value)
 
     def test_atomically_saves_and_loads_profile(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -93,14 +84,13 @@ class LocalProfileStoreTests(unittest.TestCase):
             save_local_profile("north", settings(), path=path)
 
             stored = load_local_profiles(path)
-            self.assertEqual(stored["north"]["name"], "North Shop")
-            self.assertEqual(
-                stored["north"]["gcp_service_account"]["client_email"],
-                "ledger@test-project.iam.gserviceaccount.com",
+            assert stored["north"]["name"] == "North Shop"
+            assert (
+                stored["north"]["gcp_service_account"]["client_email"]
+                == "ledger@test-project.iam.gserviceaccount.com"
             )
-            self.assertNotIn(
-                "credential-content-must-not-leak",
-                path.read_text(encoding="utf-8"),
+            assert "credential-content-must-not-leak" not in path.read_text(
+                encoding="utf-8"
             )
 
     def test_requires_explicit_replacement(self) -> None:
@@ -108,7 +98,7 @@ class LocalProfileStoreTests(unittest.TestCase):
             path = Path(directory) / "local_business_profiles.json"
             save_local_profile("north", settings(), path=path)
 
-            with self.assertRaises(LocalProfileStoreError):
+            with pytest.raises(LocalProfileStoreError):
                 save_local_profile("north", settings("Replacement"), path=path)
 
             save_local_profile(
@@ -117,10 +107,7 @@ class LocalProfileStoreTests(unittest.TestCase):
                 replace=True,
                 path=path,
             )
-            self.assertEqual(
-                load_local_profiles(path)["north"]["name"],
-                "Replacement",
-            )
+            assert load_local_profiles(path)["north"]["name"] == "Replacement"
 
     def test_json_profiles_are_merged_with_app_secrets(self) -> None:
         base = {"app_password_hash": "hash"}
@@ -131,28 +118,15 @@ class LocalProfileStoreTests(unittest.TestCase):
             merged = merged_profile_secrets(base, path=path)
             profiles = load_business_profiles(merged)
 
-        self.assertEqual(
-            [profile.key for profile in profiles],
-            ["north"],
-        )
-        self.assertEqual(
-            merged["business_profiles"]["north"]["name"],
-            "North Shop",
-        )
+        assert [profile.key for profile in profiles] == ["north"]
+        assert merged["business_profiles"]["north"]["name"] == "North Shop"
 
     def test_refuses_corrupt_store_instead_of_overwriting_it(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "local_business_profiles.json"
             path.write_text('{"private_key": "do-not-overwrite"}', encoding="utf-8")
 
-            with self.assertRaises(LocalProfileStoreError):
+            with pytest.raises(LocalProfileStoreError):
                 save_local_profile("north", settings(), path=path)
 
-            self.assertIn(
-                "do-not-overwrite",
-                path.read_text(encoding="utf-8"),
-            )
-
-
-if __name__ == "__main__":
-    unittest.main()
+            assert "do-not-overwrite" in path.read_text(encoding="utf-8")

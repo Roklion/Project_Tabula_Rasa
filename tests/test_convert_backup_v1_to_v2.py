@@ -5,9 +5,10 @@ import hashlib
 import io
 import json
 import tempfile
-import unittest
 import zipfile
 from pathlib import Path
+
+import pytest
 
 from scripts.convert_backup_v1_to_v2 import (
     convert_backup_file,
@@ -114,9 +115,7 @@ def _format1_backup(*, tamper_accounts: bool = False) -> bytes:
         csv_files["Accounts.csv"] += b"tampered,row\n"
 
     output = io.BytesIO()
-    with zipfile.ZipFile(
-        output, mode="w", compression=zipfile.ZIP_DEFLATED
-    ) as archive:
+    with zipfile.ZipFile(output, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, content in csv_files.items():
             archive.writestr(name, content)
         archive.writestr(
@@ -126,40 +125,35 @@ def _format1_backup(*, tamper_accounts: bool = False) -> bytes:
     return output.getvalue()
 
 
-class ConvertBackupV1ToV2Tests(unittest.TestCase):
+class TestConvertBackupV1ToV2:
     def test_converts_and_normalizes_legacy_account_schema(self) -> None:
         source = _format1_backup()
 
         converted = convert_backup_v1_to_v2(source)
 
         manifest = GoogleSheetsStorage.validate_backup_zip(converted)
-        self.assertEqual(manifest["format_version"], 2)
-        self.assertEqual(
-            manifest["conversion"]["source_archive_sha256"],
-            hashlib.sha256(source).hexdigest(),
+        assert manifest["format_version"] == 2
+        assert (
+            manifest["conversion"]["source_archive_sha256"]
+            == hashlib.sha256(source).hexdigest()
         )
         with zipfile.ZipFile(io.BytesIO(converted)) as archive:
             accounts = list(
                 csv.DictReader(
-                    io.StringIO(
-                        archive.read("Accounts.csv").decode("utf-8")
-                    )
+                    io.StringIO(archive.read("Accounts.csv").decode("utf-8"))
                 )
             )
-        self.assertEqual(accounts[0]["classification"], "Asset")
-        self.assertEqual(accounts[0]["active"], "TRUE")
-        self.assertEqual(accounts[1]["type"], "Short-term debt")
-        self.assertEqual(accounts[1]["classification"], "Liability")
-        self.assertEqual(accounts[1]["active"], "TRUE")
+        assert accounts[0]["classification"] == "Asset"
+        assert accounts[0]["active"] == "TRUE"
+        assert accounts[1]["type"] == "Short-term debt"
+        assert accounts[1]["classification"] == "Liability"
+        assert accounts[1]["active"] == "TRUE"
 
     def test_refuses_a_tampered_source_archive(self) -> None:
-        with self.assertRaisesRegex(
-            StorageValidationError,
-            "Accounts backup checksum does not match",
+        with pytest.raises(
+            StorageValidationError, match="Accounts backup checksum does not match"
         ):
-            convert_backup_v1_to_v2(
-                _format1_backup(tamper_accounts=True)
-            )
+            convert_backup_v1_to_v2(_format1_backup(tamper_accounts=True))
 
     def test_file_conversion_never_overwrites_existing_output(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -169,12 +163,8 @@ class ConvertBackupV1ToV2Tests(unittest.TestCase):
             destination = default_output_path(source)
             destination.write_bytes(b"existing")
 
-            with self.assertRaises(FileExistsError):
+            with pytest.raises(FileExistsError):
                 convert_backup_file(source)
 
-            self.assertEqual(destination.read_bytes(), b"existing")
-            self.assertEqual(source.read_bytes(), source_bytes)
-
-
-if __name__ == "__main__":
-    unittest.main()
+            assert destination.read_bytes() == b"existing"
+            assert source.read_bytes() == source_bytes

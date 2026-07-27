@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import unittest
 
 from tabula_rasa.ledger_reporting import (
     account_balances,
@@ -11,8 +10,8 @@ from tabula_rasa.ledger_reporting import (
 )
 
 
-class LedgerReportingTests(unittest.TestCase):
-    def setUp(self) -> None:
+class TestLedgerReporting:
+    def setup_method(self) -> None:
         self.accounts = [
             {"id": "checking", "name": "Checking", "opening_balance": "100.00"},
             {"id": "savings", "name": "Savings", "opening_balance": "10.00"},
@@ -56,30 +55,28 @@ class LedgerReportingTests(unittest.TestCase):
             account["id"]: account["balance"]
             for account in account_balances(self.accounts, self.transactions)
         }
-        self.assertEqual(balances, {"checking": 100.0, "savings": 40.0})
+        assert balances == {"checking": 100.0, "savings": 40.0}
 
     def test_profit_and_loss_excludes_transfers_and_honors_dates(self) -> None:
-        self.assertEqual(
-            profit_and_loss(self.transactions),
-            {"income": 50.0, "expenses": 20.0, "net": 30.0},
-        )
-        self.assertEqual(
-            profit_and_loss(self.transactions, start="2026-07-01"),
-            {"income": 0.0, "expenses": 20.0, "net": -20.0},
-        )
+        assert profit_and_loss(self.transactions) == {
+            "income": 50.0,
+            "expenses": 20.0,
+            "net": 30.0,
+        }
+        assert profit_and_loss(self.transactions, start="2026-07-01") == {
+            "income": 0.0,
+            "expenses": 20.0,
+            "net": -20.0,
+        }
 
     def test_monthly_and_category_totals(self) -> None:
-        self.assertEqual(
-            monthly_performance(self.transactions),
-            [
-                {"month": "2026-06", "income": 50.0, "expenses": 0.0},
-                {"month": "2026-07", "income": 0.0, "expenses": 20.0},
-            ],
-        )
-        self.assertEqual(
-            expenses_by_category(self.transactions, self.categories),
-            [{"category": "Software", "total": 20.0}],
-        )
+        assert monthly_performance(self.transactions) == [
+            {"month": "2026-06", "income": 50.0, "expenses": 0.0},
+            {"month": "2026-07", "income": 0.0, "expenses": 20.0},
+        ]
+        assert expenses_by_category(self.transactions, self.categories) == [
+            {"category": "Software", "total": 20.0}
+        ]
 
     def test_balance_sheet_classifies_accounts_and_includes_earnings(self) -> None:
         accounts = [
@@ -118,12 +115,8 @@ class LedgerReportingTests(unittest.TestCase):
 
         report = balance_sheet(accounts, transactions)
 
-        self.assertEqual(report["total_assets"], 1000.0)
-        self.assertEqual(report["total_liabilities"], 250.0)
-        self.assertEqual(report["current_earnings"], -50.0)
-        self.assertEqual(report["total_equity"], 750.0)
-        self.assertEqual(report["difference"], 0.0)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert report["total_assets"] == 1000.0
+        assert report["total_liabilities"] == 250.0
+        assert report["current_earnings"] == -50.0
+        assert report["total_equity"] == 750.0
+        assert report["difference"] == 0.0

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import unittest
 
 from tabula_rasa.quickbooks_mileage_import import (
     mileage_fingerprint,
@@ -9,7 +8,7 @@ from tabula_rasa.quickbooks_mileage_import import (
 )
 
 
-class QuickBooksMileageImportTests(unittest.TestCase):
+class TestQuickBooksMileageImport:
     def test_normalizes_business_trip_and_converts_kilometers(self) -> None:
         result = normalize_rows(
             [
@@ -25,22 +24,19 @@ class QuickBooksMileageImportTests(unittest.TestCase):
             ]
         )
 
-        self.assertEqual(result["errors"], [])
-        self.assertEqual(
-            result["rows"],
-            [
-                {
-                    "_source_row": "2",
-                    "trip_date": "2026-07-20",
-                    "miles": "6.2",
-                    "vehicle": "Blue car",
-                    "start_location": "Office",
-                    "destination": "Client site",
-                    "business_purpose": "Client meeting",
-                    "notes": "",
-                }
-            ],
-        )
+        assert result["errors"] == []
+        assert result["rows"] == [
+            {
+                "_source_row": "2",
+                "trip_date": "2026-07-20",
+                "miles": "6.2",
+                "vehicle": "Blue car",
+                "start_location": "Office",
+                "destination": "Client site",
+                "business_purpose": "Client meeting",
+                "notes": "",
+            }
+        ]
 
     def test_classifies_personal_unreviewed_and_invalid_rows(self) -> None:
         rows = [
@@ -75,19 +71,15 @@ class QuickBooksMileageImportTests(unittest.TestCase):
 
         result = normalize_rows(rows)
 
-        self.assertEqual(result["rows"], [])
-        self.assertEqual(result["personal_rows"], [2])
-        self.assertEqual(result["unreviewed_rows"], [3])
-        self.assertEqual(
-            result["errors"],
-            [
-                "QuickBooks mileage row 4: Trip Purpose is required for "
-                "business trips"
-            ],
-        )
+        assert result["rows"] == []
+        assert result["personal_rows"] == [2]
+        assert result["unreviewed_rows"] == [3]
+        assert result["errors"] == [
+            "QuickBooks mileage row 4: Trip Purpose is required for " "business trips"
+        ]
 
     def test_required_columns_accept_quickbooks_aliases(self) -> None:
-        self.assertEqual(
+        assert (
             missing_required_columns(
                 [
                     "Trip Date",
@@ -98,19 +90,16 @@ class QuickBooksMileageImportTests(unittest.TestCase):
                     "Ending Point",
                     "Distance (mi)",
                 ]
-            ),
-            [],
+            )
+            == []
         )
-        self.assertEqual(
-            missing_required_columns(["Date", "Type"]),
-            [
-                "Trip Purpose",
-                "Vehicle",
-                "Start Address",
-                "End Address",
-                "Distance",
-            ],
-        )
+        assert missing_required_columns(["Date", "Type"]) == [
+            "Trip Purpose",
+            "Vehicle",
+            "Start Address",
+            "End Address",
+            "Distance",
+        ]
 
     def test_fingerprint_ignores_notes_and_whitespace_case(self) -> None:
         first = {
@@ -130,11 +119,4 @@ class QuickBooksMileageImportTests(unittest.TestCase):
             "notes": "Second",
         }
 
-        self.assertEqual(
-            mileage_fingerprint(first),
-            mileage_fingerprint(second),
-        )
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert mileage_fingerprint(first) == mileage_fingerprint(second)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import unittest
+import pytest
 
 from tabula_rasa.business_profiles import (
     BusinessProfileConfigurationError,
@@ -9,7 +9,7 @@ from tabula_rasa.business_profiles import (
 )
 
 
-class BusinessProfileTests(unittest.TestCase):
+class TestBusinessProfiles:
     def test_loads_multiple_isolated_profiles(self) -> None:
         secrets = {
             "app_password_hash": "not-used-here",
@@ -29,15 +29,13 @@ class BusinessProfileTests(unittest.TestCase):
 
         profiles = load_business_profiles(secrets)
 
-        self.assertEqual([profile.key for profile in profiles], ["north", "south"])
+        assert [profile.key for profile in profiles] == ["north", "south"]
         selected = select_profile_secrets(secrets, "south")
-        self.assertEqual(selected["spreadsheet_id"], "south-sheet")
-        self.assertEqual(
-            selected["gcp_service_account"]["client_email"], "south@example.test"
-        )
+        assert selected["spreadsheet_id"] == "south-sheet"
+        assert selected["gcp_service_account"]["client_email"] == "south@example.test"
 
     def test_rejects_removed_single_profile_format(self) -> None:
-        with self.assertRaises(BusinessProfileConfigurationError):
+        with pytest.raises(BusinessProfileConfigurationError):
             load_business_profiles(
                 {
                     "spreadsheet_id": "old-sheet",
@@ -46,11 +44,7 @@ class BusinessProfileTests(unittest.TestCase):
             )
 
     def test_rejects_profile_without_credential(self) -> None:
-        with self.assertRaises(BusinessProfileConfigurationError):
+        with pytest.raises(BusinessProfileConfigurationError):
             load_business_profiles(
                 {"business_profiles": {"broken": {"spreadsheet_id": "sheet"}}}
             )
-
-
-if __name__ == "__main__":
-    unittest.main()

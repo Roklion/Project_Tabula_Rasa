@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import unittest
 from unittest.mock import Mock, patch
 
 import streamlit as st
@@ -9,12 +8,11 @@ from streamlit.testing.v1 import AppTest
 from tabula_rasa.ledger_auth import hash_password
 from tabula_rasa.storage import GoogleSheetsStorage, StorageUnavailableError
 
-
 TEST_PASSWORD = "test-password-123"
 SAFE_MESSAGE = "Google Sheets is temporarily unavailable; no success was reported"
 
 
-class AppStorageFailureTests(unittest.TestCase):
+class TestAppStorageFailure:
     def test_availability_error_is_safe_and_blocks_data_pages(self) -> None:
         st.cache_resource.clear()
         unavailable_storage = Mock(spec=GoogleSheetsStorage)
@@ -40,12 +38,8 @@ class AppStorageFailureTests(unittest.TestCase):
             app.text_input[0].input(TEST_PASSWORD)
             app.button[0].click().run()
 
-        self.assertEqual(len(app.exception), 0)
-        self.assertEqual(app.error[0].value, SAFE_MESSAGE)
-        self.assertEqual(len(app.success), 0)
-        self.assertEqual(app.radio[0].label, "Navigate")
-        self.assertEqual(len(app.metric), 0)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert len(app.exception) == 0
+        assert app.error[0].value == SAFE_MESSAGE
+        assert len(app.success) == 0
+        assert app.radio[0].label == "Navigate"
+        assert len(app.metric) == 0

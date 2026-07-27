@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import tempfile
 import tomllib
-import unittest
 from pathlib import Path
+
+import pytest
 
 from scripts.export_streamlit_secrets import (
     EXPORT_DIRECTORY,
@@ -15,7 +16,7 @@ from scripts.export_streamlit_secrets import (
 )
 
 
-class ExportStreamlitSecretsTests(unittest.TestCase):
+class TestExportStreamlitSecrets:
     def test_combines_app_secrets_and_multiple_profiles(self) -> None:
         profiles = {
             "north-shop": {
@@ -56,25 +57,20 @@ class ExportStreamlitSecretsTests(unittest.TestCase):
         )
         parsed = tomllib.loads(exported)
 
-        self.assertEqual(parsed["app_password_hash"], "scrypt$hash")
-        self.assertNotIn("spreadsheet_id", {
-            key: value
-            for key, value in parsed.items()
-            if key != "business_profiles"
-        })
-        self.assertEqual(
-            set(parsed["business_profiles"]),
-            {"north-shop", "south_shop"},
+        assert parsed["app_password_hash"] == "scrypt$hash"
+        assert "spreadsheet_id" not in {
+            key: value for key, value in parsed.items() if key != "business_profiles"
+        }
+        assert set(parsed["business_profiles"]) == {"north-shop", "south_shop"}
+        assert (
+            parsed["business_profiles"]["north-shop"]["backup_folder_path"]
+            == r"G:\My Drive\North"
         )
-        self.assertEqual(
-            parsed["business_profiles"]["north-shop"]["backup_folder_path"],
-            r"G:\My Drive\North",
-        )
-        self.assertIn(
-            "\nsecret\n",
-            parsed["business_profiles"]["north-shop"]["gcp_service_account"][
+        assert (
+            "\nsecret\n"
+            in parsed["business_profiles"]["north-shop"]["gcp_service_account"][
                 "private_key"
-            ],
+            ]
         )
 
     def test_secure_writer_refuses_to_overwrite(self) -> None:
@@ -82,25 +78,21 @@ class ExportStreamlitSecretsTests(unittest.TestCase):
             output = Path(directory) / "streamlit-secrets.toml"
             output.write_text("existing", encoding="utf-8")
 
-            with self.assertRaises(SecretsExportError):
+            with pytest.raises(SecretsExportError):
                 write_secure_export("replacement", output)
 
     def test_secure_writer_refuses_project_destination(self) -> None:
         output = PROJECT_ROOT / "tabula-rasa-streamlit-secrets-test.toml"
 
-        with self.assertRaises(SecretsExportError):
+        with pytest.raises(SecretsExportError):
             write_secure_export("secret", output)
 
-        self.assertFalse(output.exists())
+        assert not output.exists()
 
     def test_default_export_is_created_in_ignored_streamlit_directory(self) -> None:
-        output = write_secure_export("app_password_hash = \"test\"\n")
+        output = write_secure_export('app_password_hash = "test"\n')
         try:
-            self.assertEqual(output.parent, EXPORT_DIRECTORY)
-            self.assertTrue(output.name.startswith(EXPORT_PREFIX))
+            assert output.parent == EXPORT_DIRECTORY
+            assert output.name.startswith(EXPORT_PREFIX)
         finally:
             output.unlink(missing_ok=True)
-
-
-if __name__ == "__main__":
-    unittest.main()

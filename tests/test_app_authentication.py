@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-import unittest
 from pathlib import Path
 from unittest.mock import patch
 
@@ -19,7 +18,6 @@ from tabula_rasa.local_profile_store import (
 )
 from tabula_rasa.storage import GoogleSheetsStorage
 from tests.fakes import FakeWorkbook
-
 
 TEST_PASSWORD = "test-password-123"
 
@@ -43,7 +41,7 @@ def profile_settings(name: str, spreadsheet_id: str) -> dict:
     )
 
 
-class AppAuthenticationTests(unittest.TestCase):
+class TestAppAuthentication:
     def test_hosted_streamlit_secrets_work_without_local_profile_file(self) -> None:
         st.cache_resource.clear()
         fake_storage = GoogleSheetsStorage(FakeWorkbook())
@@ -74,35 +72,31 @@ class AppAuthenticationTests(unittest.TestCase):
                 }
 
                 app.run()
-                self.assertEqual(len(app.exception), 0)
-                self.assertEqual(app.text_input[0].label, "Password")
-                self.assertEqual(
-                    len(app.radio),
-                    0,
-                    "Navigation must be blocked before login",
-                )
+                assert len(app.exception) == 0
+                assert app.text_input[0].label == "Password"
+                assert len(app.radio) == 0, "Navigation must be blocked before login"
 
                 app.text_input[0].input("incorrect-password")
                 app.button[0].click().run()
-                self.assertEqual(app.error[0].value, "Incorrect password.")
-                self.assertEqual(len(app.radio), 0)
+                assert app.error[0].value == "Incorrect password."
+                assert len(app.radio) == 0
 
                 app.text_input[0].input(TEST_PASSWORD)
                 app.button[0].click().run()
-                self.assertEqual(len(app.exception), 0)
-                self.assertEqual(app.radio[0].label, "Navigate")
-                self.assertNotIn("Business profiles", app.radio[0].options)
-                self.assertEqual(
-                    from_secrets.call_args.args[0]["spreadsheet_id"],
-                    "hosted-sheet-id",
+                assert len(app.exception) == 0
+                assert app.radio[0].label == "Navigate"
+                assert "Business profiles" not in app.radio[0].options
+                assert (
+                    from_secrets.call_args.args[0]["spreadsheet_id"]
+                    == "hosted-sheet-id"
                 )
 
                 logout_button = next(
                     button for button in app.button if button.label == "Log out"
                 )
                 logout_button.click().run()
-                self.assertEqual(app.text_input[0].label, "Password")
-                self.assertNotIn("authenticated", app.session_state)
+                assert app.text_input[0].label == "Password"
+                assert "authenticated" not in app.session_state
 
     def test_split_local_secrets_and_profile_json_work_together(self) -> None:
         st.cache_resource.clear()
@@ -135,11 +129,10 @@ class AppAuthenticationTests(unittest.TestCase):
                 app.text_input[0].input(TEST_PASSWORD)
                 app.button[0].click().run()
 
-                self.assertEqual(len(app.exception), 0)
-                self.assertEqual(app.radio[0].label, "Navigate")
-                self.assertEqual(
-                    from_secrets.call_args.args[0]["spreadsheet_id"],
-                    "local-sheet-id",
+                assert len(app.exception) == 0
+                assert app.radio[0].label == "Navigate"
+                assert (
+                    from_secrets.call_args.args[0]["spreadsheet_id"] == "local-sheet-id"
                 )
 
     def test_local_admin_page_requires_flag_and_reauthentication(self) -> None:
@@ -161,9 +154,7 @@ class AppAuthenticationTests(unittest.TestCase):
                     st,
                     "get_option",
                     side_effect=lambda name: (
-                        "127.0.0.1"
-                        if name == "server.address"
-                        else None
+                        "127.0.0.1" if name == "server.address" else None
                     ),
                 ),
                 patch.object(
@@ -188,16 +179,13 @@ class AppAuthenticationTests(unittest.TestCase):
                 app.run()
                 app.text_input[0].input(TEST_PASSWORD)
                 app.button[0].click().run()
-                self.assertIn("Business profiles", app.radio[0].options)
+                assert "Business profiles" in app.radio[0].options
 
                 app.radio[0].set_value("Business profiles").run()
-                self.assertTrue(
-                    any(
-                        field.label == "Application password"
-                        for field in app.text_input
-                    )
+                assert any(
+                    field.label == "Application password" for field in app.text_input
                 )
-                self.assertEqual(len(app.file_uploader), 0)
+                assert len(app.file_uploader) == 0
 
                 next(
                     field
@@ -210,20 +198,13 @@ class AppAuthenticationTests(unittest.TestCase):
                     if button.label == "Unlock profile administration"
                 ).click().run()
 
-                self.assertEqual(
-                    app.file_uploader[0].label,
-                    "Google service-account JSON",
-                )
+                assert app.file_uploader[0].label == "Google service-account JSON"
 
                 next(
-                    field
-                    for field in app.text_input
-                    if field.label == "Business name"
+                    field for field in app.text_input if field.label == "Business name"
                 ).input("North Shop")
                 next(
-                    field
-                    for field in app.text_input
-                    if field.label == "Profile key"
+                    field for field in app.text_input if field.label == "Profile key"
                 ).input("north")
                 next(
                     field
@@ -240,36 +221,33 @@ class AppAuthenticationTests(unittest.TestCase):
                     for button in app.button
                     if button.label == "Validate and save"
                 ).click().run()
-                self.assertTrue(
-                    any(
-                        "Upload the Google service-account JSON" in str(item.value)
-                        for item in app.error
-                    )
+                assert any(
+                    "Upload the Google service-account JSON" in str(item.value)
+                    for item in app.error
                 )
-                self.assertEqual(
+                assert (
                     next(
                         field
                         for field in app.text_input
                         if field.label == "Business name"
-                    ).value,
-                    "North Shop",
+                    ).value
+                    == "North Shop"
                 )
-                self.assertEqual(
+                assert (
                     next(
                         field
                         for field in app.text_input
                         if field.label == "Profile key"
-                    ).value,
-                    "north",
+                    ).value
+                    == "north"
                 )
-                self.assertEqual(
+                assert (
                     next(
                         field
                         for field in app.text_input
-                        if field.label
-                        == "Google Sheets URL or spreadsheet ID"
-                    ).value,
-                    "abcdefghij1234567890",
+                        if field.label == "Google Sheets URL or spreadsheet ID"
+                    ).value
+                    == "abcdefghij1234567890"
                 )
                 credential = {
                     "type": "service_account",
@@ -295,17 +273,8 @@ class AppAuthenticationTests(unittest.TestCase):
                     if button.label == "Validate and save"
                 ).click().run()
 
-                self.assertEqual(
-                    load_local_profiles(local_store)["north"]["name"],
-                    "North Shop",
+                assert load_local_profiles(local_store)["north"]["name"] == "North Shop"
+                assert any(
+                    "validated and saved locally" in str(item.value)
+                    for item in app.success
                 )
-                self.assertTrue(
-                    any(
-                        "validated and saved locally" in str(item.value)
-                        for item in app.success
-                    )
-                )
-
-
-if __name__ == "__main__":
-    unittest.main()

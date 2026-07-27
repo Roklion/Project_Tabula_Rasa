@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import io
 import json
-import unittest
 import zipfile
 from unittest.mock import Mock
+
+import pytest
 
 from tabula_rasa.storage.google_sheets import (
     GoogleSheetsStorage,
@@ -22,8 +23,8 @@ from tabula_rasa.quickbooks_import import (
 from tests.fakes import FakeWorkbook
 
 
-class GoogleSheetsStorageTests(unittest.TestCase):
-    def setUp(self) -> None:
+class TestGoogleSheetsStorage:
+    def setup_method(self) -> None:
         self.workbook = FakeWorkbook()
         self.storage = GoogleSheetsStorage(self.workbook, sleeper=lambda _: None)
 
@@ -44,50 +45,48 @@ class GoogleSheetsStorageTests(unittest.TestCase):
         created = storage.create_account("Checking", "Bank", 25)
         stored = dict(zip(headers["Accounts"], workbook.sheets["Accounts"].rows[1]))
 
-        self.assertEqual(stored["id"], created["id"])
-        self.assertEqual(stored["name"], "Checking")
-        self.assertEqual(stored["opening_balance"], "25.00")
+        assert stored["id"] == created["id"]
+        assert stored["name"] == "Checking"
+        assert stored["opening_balance"] == "25.00"
 
     def test_accounts_sheet_without_classification_is_rejected(self) -> None:
         headers = dict(WORKSHEET_HEADERS)
         headers["Accounts"] = tuple(
-            header
-            for header in headers["Accounts"]
-            if header != "classification"
+            header for header in headers["Accounts"] if header != "classification"
         )
-        with self.assertRaises(StorageValidationError):
+        with pytest.raises(StorageValidationError):
             GoogleSheetsStorage(FakeWorkbook(headers))
 
     def test_default_seed_is_idempotent(self) -> None:
         first = self.storage.ensure_defaults()
         second = self.storage.ensure_defaults()
-        self.assertEqual(first, {"accounts": 2, "categories": 16})
-        self.assertEqual(second, {"accounts": 0, "categories": 0})
-        self.assertEqual(len(self.storage.list_accounts()), 2)
-        self.assertEqual(len(self.storage.list_categories()), 16)
+        assert first == {"accounts": 2, "categories": 16}
+        assert second == {"accounts": 0, "categories": 0}
+        assert len(self.storage.list_accounts()) == 2
+        assert len(self.storage.list_categories()) == 16
 
     def test_equity_account_inference_keeps_name_and_type_separate(self) -> None:
         account_type = suggested_account_type("Owners investment")
 
-        self.assertEqual(account_type, "Equity")
-        self.assertEqual(
-            suggested_account_classification("Owners investment", account_type),
-            "Equity",
+        assert account_type == "Equity"
+        assert (
+            suggested_account_classification("Owners investment", account_type)
+            == "Equity"
         )
 
     def test_missing_header_is_rejected(self) -> None:
         headers = dict(WORKSHEET_HEADERS)
         headers["Categories"] = ("id", "name")
-        with self.assertRaises(StorageValidationError):
+        with pytest.raises(StorageValidationError):
             GoogleSheetsStorage(FakeWorkbook(headers))
 
     def test_account_crud_and_uniqueness(self) -> None:
         created = self.storage.create_account(
             "Checking", "Bank", "100.25", classification="Asset"
         )
-        self.assertEqual(len(self.storage.list_accounts()), 1)
-        self.assertEqual(created["classification"], "Asset")
-        with self.assertRaises(StorageConflictError):
+        assert len(self.storage.list_accounts()) == 1
+        assert created["classification"] == "Asset"
+        with pytest.raises(StorageConflictError):
             self.storage.create_account("checking", "Cash", 0)
 
         edited = self.storage.edit_account(
@@ -97,17 +96,17 @@ class GoogleSheetsStorageTests(unittest.TestCase):
             classification="Liability",
             opening_balance=-10,
         )
-        self.assertEqual(edited["name"], "Primary checking")
-        self.assertEqual(edited["type"], "Short-term debt")
-        self.assertEqual(edited["classification"], "Liability")
-        self.assertEqual(edited["opening_balance"], "-10.00")
+        assert edited["name"] == "Primary checking"
+        assert edited["type"] == "Short-term debt"
+        assert edited["classification"] == "Liability"
+        assert edited["opening_balance"] == "-10.00"
 
         self.storage.deactivate_account(created["id"])
-        self.assertEqual(self.storage.list_accounts(), [])
-        self.assertEqual(len(self.storage.list_accounts(active_only=False)), 1)
+        assert self.storage.list_accounts() == []
+        assert len(self.storage.list_accounts(active_only=False)) == 1
 
     def test_unknown_account_type_is_rejected(self) -> None:
-        with self.assertRaises(StorageValidationError):
+        with pytest.raises(StorageValidationError):
             self.storage.create_account(
                 "Old loan",
                 "Loan",
@@ -117,7 +116,7 @@ class GoogleSheetsStorageTests(unittest.TestCase):
 
     def test_category_uniqueness_is_case_insensitive(self) -> None:
         self.storage.create_category("Software", "Expense")
-        with self.assertRaises(StorageConflictError):
+        with pytest.raises(StorageConflictError):
             self.storage.create_category("software", "Expense")
 
     def test_edit_category_name_and_kind(self) -> None:
@@ -127,16 +126,16 @@ class GoogleSheetsStorageTests(unittest.TestCase):
             category["id"], name="Professional services", kind="expense"
         )
 
-        self.assertEqual(edited["id"], category["id"])
-        self.assertEqual(edited["name"], "Professional services")
-        self.assertEqual(edited["kind"], "Expense")
-        self.assertEqual(self.storage.list_categories(), [edited])
+        assert edited["id"] == category["id"]
+        assert edited["name"] == "Professional services"
+        assert edited["kind"] == "Expense"
+        assert self.storage.list_categories() == [edited]
 
     def test_edit_category_rejects_duplicate_name_and_kind(self) -> None:
         first = self.storage.create_category("Services", "Income")
         self.storage.create_category("services", "Expense")
 
-        with self.assertRaises(StorageConflictError):
+        with pytest.raises(StorageConflictError):
             self.storage.edit_category(first["id"], kind="Expense")
 
     def test_category_and_transaction_crud(self) -> None:
@@ -153,8 +152,8 @@ class GoogleSheetsStorageTests(unittest.TestCase):
             category_id=expense["id"],
             payee="Vendor",
         )
-        self.assertEqual(transaction["amount"], "12.50")
-        self.assertEqual(len(self.storage.list_transactions()), 1)
+        assert transaction["amount"] == "12.50"
+        assert len(self.storage.list_transactions()) == 1
 
         edited = self.storage.edit_transaction(
             transaction["id"],
@@ -163,8 +162,8 @@ class GoogleSheetsStorageTests(unittest.TestCase):
             category_id=income["id"],
             payee="Customer",
         )
-        self.assertEqual(edited["kind"], "Income")
-        self.assertEqual(edited["created_at"], transaction["created_at"])
+        assert edited["kind"] == "Income"
+        assert edited["created_at"] == transaction["created_at"]
 
         transfer = self.storage.create_transaction(
             txn_date="2026-07-19",
@@ -173,31 +172,26 @@ class GoogleSheetsStorageTests(unittest.TestCase):
             account_id=source["id"],
             to_account_id=destination["id"],
         )
-        self.assertEqual(transfer["category_id"], "")
-        self.assertEqual(
-            [item["id"] for item in self.storage.list_transactions(
-                account_ids=[destination["id"]]
-            )],
-            [transfer["id"]],
-        )
-        self.assertEqual(
-            {
-                item["id"]
-                for item in self.storage.list_transactions(
-                    account_ids=[source["id"], destination["id"]]
-                )
-            },
-            {transaction["id"], transfer["id"]},
-        )
+        assert transfer["category_id"] == ""
+        assert [
+            item["id"]
+            for item in self.storage.list_transactions(account_ids=[destination["id"]])
+        ] == [transfer["id"]]
+        assert {
+            item["id"]
+            for item in self.storage.list_transactions(
+                account_ids=[source["id"], destination["id"]]
+            )
+        } == {transaction["id"], transfer["id"]}
 
         self.storage.delete_transaction(transaction["id"])
-        with self.assertRaises(StorageNotFoundError):
+        with pytest.raises(StorageNotFoundError):
             self.storage.edit_transaction(transaction["id"], amount=1)
 
     def test_invalid_transfer_and_category_reference_are_rejected(self) -> None:
         account = self.storage.create_account("Checking", "Bank")
         category = self.storage.create_category("Sales", "Income")
-        with self.assertRaises(StorageValidationError):
+        with pytest.raises(StorageValidationError):
             self.storage.create_transaction(
                 txn_date="2026-07-19",
                 kind="Transfer",
@@ -205,7 +199,7 @@ class GoogleSheetsStorageTests(unittest.TestCase):
                 account_id=account["id"],
                 to_account_id=account["id"],
             )
-        with self.assertRaises(StorageValidationError):
+        with pytest.raises(StorageValidationError):
             self.storage.create_transaction(
                 txn_date="2026-07-19",
                 kind="Expense",
@@ -232,30 +226,28 @@ class GoogleSheetsStorageTests(unittest.TestCase):
             business_purpose="Return trip",
         )
 
-        self.assertEqual(first["miles"], "12.3")
-        self.assertEqual(
-            [trip["id"] for trip in self.storage.list_mileage_trips()],
-            [second["id"], first["id"]],
-        )
-        self.assertEqual(
-            [trip["id"] for trip in self.storage.list_mileage_trips(end="2026-07-19")],
-            [first["id"]],
-        )
+        assert first["miles"] == "12.3"
+        assert [trip["id"] for trip in self.storage.list_mileage_trips()] == [
+            second["id"],
+            first["id"],
+        ]
+        assert [
+            trip["id"] for trip in self.storage.list_mileage_trips(end="2026-07-19")
+        ] == [first["id"]]
 
         edited = self.storage.edit_mileage_trip(
             first["id"],
             miles=14.2,
             destination="Updated client site",
         )
-        self.assertEqual(edited["miles"], "14.2")
-        self.assertEqual(edited["created_at"], first["created_at"])
+        assert edited["miles"] == "14.2"
+        assert edited["created_at"] == first["created_at"]
 
         self.storage.delete_mileage_trip(second["id"])
-        self.assertEqual(
-            [trip["id"] for trip in self.storage.list_mileage_trips()],
-            [first["id"]],
-        )
-        with self.assertRaises(StorageValidationError):
+        assert [trip["id"] for trip in self.storage.list_mileage_trips()] == [
+            first["id"]
+        ]
+        with pytest.raises(StorageValidationError):
             self.storage.create_mileage_trip(
                 trip_date="2026-07-20",
                 miles=0,
@@ -263,7 +255,7 @@ class GoogleSheetsStorageTests(unittest.TestCase):
                 destination="Client",
                 business_purpose="Meeting",
             )
-        with self.assertRaises(StorageValidationError):
+        with pytest.raises(StorageValidationError):
             self.storage.create_mileage_trip(
                 trip_date="2026-07-20",
                 miles=1,
@@ -287,29 +279,23 @@ class GoogleSheetsStorageTests(unittest.TestCase):
             notes="Parking receipt saved",
         )
 
-        self.assertEqual(len(records), 2)
-        self.assertEqual(worksheet.append_rows.call_count, 1)
-        self.assertNotEqual(records[0]["id"], records[1]["id"])
-        self.assertEqual(records[0]["created_at"], records[1]["created_at"])
-        self.assertEqual(
-            [
-                (
-                    record["start_location"],
-                    record["destination"],
-                    record["miles"],
-                )
-                for record in records
-            ],
-            [
-                ("Office", "Client site", "12.6"),
-                ("Client site", "Office", "12.6"),
-            ],
-        )
-        self.assertEqual(
-            {record["business_purpose"] for record in records},
-            {"Project meeting"},
-        )
-        self.assertEqual(len(self.storage.list_mileage_trips()), 2)
+        assert len(records) == 2
+        assert worksheet.append_rows.call_count == 1
+        assert records[0]["id"] != records[1]["id"]
+        assert records[0]["created_at"] == records[1]["created_at"]
+        assert [
+            (
+                record["start_location"],
+                record["destination"],
+                record["miles"],
+            )
+            for record in records
+        ] == [
+            ("Office", "Client site", "12.6"),
+            ("Client site", "Office", "12.6"),
+        ]
+        assert {record["business_purpose"] for record in records} == {"Project meeting"}
+        assert len(self.storage.list_mileage_trips()) == 2
 
     def test_quickbooks_mileage_preview_import_and_duplicates(self) -> None:
         business = {
@@ -344,40 +330,37 @@ class GoogleSheetsStorageTests(unittest.TestCase):
         blocked = self.storage.preview_quickbooks_mileage(
             [business, personal, unreviewed, invalid]
         )
-        self.assertEqual(blocked["summary"]["ready"], 1)
-        self.assertEqual(blocked["summary"]["personal_skipped"], 1)
-        self.assertEqual(blocked["summary"]["unreviewed_skipped"], 1)
-        self.assertEqual(len(blocked["errors"]), 1)
-        with self.assertRaises(StorageValidationError):
+        assert blocked["summary"]["ready"] == 1
+        assert blocked["summary"]["personal_skipped"] == 1
+        assert blocked["summary"]["unreviewed_skipped"] == 1
+        assert len(blocked["errors"]) == 1
+        with pytest.raises(StorageValidationError):
             self.storage.import_quickbooks_mileage(
                 [business, personal, unreviewed, invalid]
             )
-        self.assertEqual(self.storage.list_mileage_trips(), [])
+        assert self.storage.list_mileage_trips() == []
 
         preview = self.storage.preview_quickbooks_mileage(
             [business, business, personal, unreviewed]
         )
-        self.assertEqual(
-            preview["summary"],
-            {
-                "ready": 1,
-                "duplicates": 1,
-                "personal_skipped": 1,
-                "unreviewed_skipped": 1,
-            },
-        )
-        self.assertEqual(preview["duplicate_rows"], [3])
+        assert preview["summary"] == {
+            "ready": 1,
+            "duplicates": 1,
+            "personal_skipped": 1,
+            "unreviewed_skipped": 1,
+        }
+        assert preview["duplicate_rows"] == [3]
 
         imported = self.storage.import_quickbooks_mileage(
             [business, business, personal, unreviewed]
         )
-        self.assertEqual(len(imported), 1)
-        self.assertEqual(imported[0]["miles"], "12.4")
-        self.assertEqual(imported[0]["business_purpose"], "Client meeting")
+        assert len(imported) == 1
+        assert imported[0]["miles"] == "12.4"
+        assert imported[0]["business_purpose"] == "Client meeting"
 
         repeated = self.storage.preview_quickbooks_mileage([business])
-        self.assertEqual(repeated["summary"]["ready"], 0)
-        self.assertEqual(repeated["duplicate_rows"], [2])
+        assert repeated["summary"]["ready"] == 0
+        assert repeated["duplicate_rows"] == [2]
 
     def test_csv_import_validates_all_rows_before_batch_append(self) -> None:
         self.storage.create_account("Checking", "Bank")
@@ -398,39 +381,74 @@ class GoogleSheetsStorageTests(unittest.TestCase):
                 "Category": "Sales",
             },
         ]
-        with self.assertRaises(StorageValidationError):
+        with pytest.raises(StorageValidationError):
             self.storage.import_csv_transactions(rows)
-        self.assertEqual(self.storage.list_transactions(), [])
+        assert self.storage.list_transactions() == []
 
         imported = self.storage.import_csv_transactions(rows[:1])
-        self.assertEqual(len(imported), 1)
-        self.assertEqual(len(self.storage.list_transactions()), 1)
+        assert len(imported) == 1
+        assert len(self.storage.list_transactions()) == 1
 
-    def test_quickbooks_preview_maps_income_expense_transfer_and_duplicates(self) -> None:
+    def test_quickbooks_preview_maps_income_expense_transfer_and_duplicates(
+        self,
+    ) -> None:
         checking = self.storage.create_account("Checking", "Bank")
         savings = self.storage.create_account("Savings", "Bank")
         self.storage.create_category("Sales", "Income")
         self.storage.create_category("Office", "Expense")
         rows = [
-            {"Date": "07/01/2026", "Transaction Type": "Deposit", "Num": "1", "Name": "Client", "Memo/Description": "Invoice", "Account": "Checking", "Split": "Sales", "Amount": "125.00"},
-            {"Date": "07/02/2026", "Transaction Type": "Expense", "Num": "2", "Name": "Shop", "Memo/Description": "Paper", "Account": "Checking", "Split": "Office", "Amount": "(20.50)"},
-            {"Date": "07/03/2026", "Transaction Type": "Transfer", "Num": "3", "Name": "", "Memo/Description": "Reserve", "Account": "Checking", "Split": "Savings", "Amount": "50"},
+            {
+                "Date": "07/01/2026",
+                "Transaction Type": "Deposit",
+                "Num": "1",
+                "Name": "Client",
+                "Memo/Description": "Invoice",
+                "Account": "Checking",
+                "Split": "Sales",
+                "Amount": "125.00",
+            },
+            {
+                "Date": "07/02/2026",
+                "Transaction Type": "Expense",
+                "Num": "2",
+                "Name": "Shop",
+                "Memo/Description": "Paper",
+                "Account": "Checking",
+                "Split": "Office",
+                "Amount": "(20.50)",
+            },
+            {
+                "Date": "07/03/2026",
+                "Transaction Type": "Transfer",
+                "Num": "3",
+                "Name": "",
+                "Memo/Description": "Reserve",
+                "Account": "Checking",
+                "Split": "Savings",
+                "Amount": "50",
+            },
         ]
         preview = self.storage.preview_quickbooks_transactions(rows)
-        self.assertEqual(preview["summary"], {"ready": 3, "duplicates": 0, "Income": 1, "Expense": 1, "Transfer": 1})
+        assert preview["summary"] == {
+            "ready": 3,
+            "duplicates": 0,
+            "Income": 1,
+            "Expense": 1,
+            "Transfer": 1,
+        }
         imported = self.storage.import_quickbooks_transactions(rows)
-        self.assertEqual([item["kind"] for item in imported], ["Income", "Expense", "Transfer"])
-        self.assertEqual(imported[2]["account_id"], checking["id"])
-        self.assertEqual(imported[2]["to_account_id"], savings["id"])
-        duplicate_preview = self.storage.preview_quickbooks_transactions(rows + rows[:1])
-        self.assertEqual(duplicate_preview["summary"]["ready"], 0)
-        self.assertEqual(duplicate_preview["summary"]["duplicates"], 4)
+        assert [item["kind"] for item in imported] == ["Income", "Expense", "Transfer"]
+        assert imported[2]["account_id"] == checking["id"]
+        assert imported[2]["to_account_id"] == savings["id"]
+        duplicate_preview = self.storage.preview_quickbooks_transactions(
+            rows + rows[:1]
+        )
+        assert duplicate_preview["summary"]["ready"] == 0
+        assert duplicate_preview["summary"]["duplicates"] == 4
 
     def test_quickbooks_account_splits_become_sign_aware_transfers(self) -> None:
         checking = self.storage.create_account("Checking", "Bank")
-        investment = self.storage.create_account(
-            "Owners investment", "Equity"
-        )
+        investment = self.storage.create_account("Owners investment", "Equity")
         owners_pay = self.storage.create_account("Owners pay", "Equity")
         rows = [
             {
@@ -457,18 +475,15 @@ class GoogleSheetsStorageTests(unittest.TestCase):
 
         preview = self.storage.preview_quickbooks_transactions(rows)
 
-        self.assertEqual(preview["errors"], [])
-        self.assertEqual(preview["new_categories"], [])
-        self.assertEqual(
-            [
-                (row["kind"], row["account_id"], row["to_account_id"])
-                for row in preview["rows"]
-            ],
-            [
-                ("Transfer", investment["id"], checking["id"]),
-                ("Transfer", checking["id"], owners_pay["id"]),
-            ],
-        )
+        assert preview["errors"] == []
+        assert preview["new_categories"] == []
+        assert [
+            (row["kind"], row["account_id"], row["to_account_id"])
+            for row in preview["rows"]
+        ] == [
+            ("Transfer", investment["id"], checking["id"]),
+            ("Transfer", checking["id"], owners_pay["id"]),
+        ]
 
     def test_quickbooks_auto_creates_missing_owner_pay_as_equity_account(self) -> None:
         checking = self.storage.create_account("Checking", "Bank")
@@ -486,76 +501,98 @@ class GoogleSheetsStorageTests(unittest.TestCase):
         ]
 
         strict = self.storage.preview_quickbooks_transactions(rows)
-        preview = self.storage.preview_quickbooks_transactions(
-            rows, auto_create=True
-        )
+        preview = self.storage.preview_quickbooks_transactions(rows, auto_create=True)
 
-        self.assertEqual(strict["new_accounts"], ["Owners pay"])
-        self.assertEqual(strict["new_categories"], [])
-        self.assertIn("destination account", strict["errors"][0])
-        self.assertEqual(preview["errors"], [])
-        self.assertEqual(preview["new_account_types"], {"Owners pay": "Equity"})
-        self.assertEqual(
-            preview["new_account_classifications"],
-            {"Owners pay": "Equity"},
-        )
-        self.assertEqual(preview["rows"][0]["kind"], "Transfer")
-        self.assertEqual(preview["rows"][0]["account_id"], checking["id"])
-        self.assertEqual(
-            preview["rows"][0]["to_account_id"],
-            "pending-account:owners pay",
-        )
+        assert strict["new_accounts"] == ["Owners pay"]
+        assert strict["new_categories"] == []
+        assert "destination account" in strict["errors"][0]
+        assert preview["errors"] == []
+        assert preview["new_account_types"] == {"Owners pay": "Equity"}
+        assert preview["new_account_classifications"] == {"Owners pay": "Equity"}
+        assert preview["rows"][0]["kind"] == "Transfer"
+        assert preview["rows"][0]["account_id"] == checking["id"]
+        assert preview["rows"][0]["to_account_id"] == "pending-account:owners pay"
 
     def test_quickbooks_import_reports_all_errors_and_writes_nothing(self) -> None:
         self.storage.create_account("Checking", "Bank")
         rows = [
-            {"Date": "bad", "Transaction Type": "Deposit", "Num": "", "Name": "", "Memo/Description": "", "Account": "Checking", "Split": "Missing", "Amount": "10"},
-            {"Date": "07/02/2026", "Transaction Type": "Transfer", "Num": "", "Name": "", "Memo/Description": "", "Account": "Missing", "Split": "Checking", "Amount": "1"},
+            {
+                "Date": "bad",
+                "Transaction Type": "Deposit",
+                "Num": "",
+                "Name": "",
+                "Memo/Description": "",
+                "Account": "Checking",
+                "Split": "Missing",
+                "Amount": "10",
+            },
+            {
+                "Date": "07/02/2026",
+                "Transaction Type": "Transfer",
+                "Num": "",
+                "Name": "",
+                "Memo/Description": "",
+                "Account": "Missing",
+                "Split": "Checking",
+                "Amount": "1",
+            },
         ]
         preview = self.storage.preview_quickbooks_transactions(rows)
-        self.assertEqual(len(preview["errors"]), 2)
-        with self.assertRaises(StorageValidationError):
+        assert len(preview["errors"]) == 2
+        with pytest.raises(StorageValidationError):
             self.storage.import_quickbooks_transactions(rows)
-        self.assertEqual(self.storage.list_transactions(), [])
+        assert self.storage.list_transactions() == []
 
     def test_quickbooks_import_can_create_missing_references(self) -> None:
         rows = [
-            {"Date": "07/01/2026", "Transaction Type": "Deposit", "Num": "1", "Name": "Client", "Memo/Description": "Invoice", "Account": "Operating", "Split": "Consulting", "Amount": "100"},
-            {"Date": "07/02/2026", "Transaction Type": "Transfer", "Num": "2", "Name": "", "Memo/Description": "Reserve", "Account": "Operating", "Split": "Savings", "Amount": "25"},
+            {
+                "Date": "07/01/2026",
+                "Transaction Type": "Deposit",
+                "Num": "1",
+                "Name": "Client",
+                "Memo/Description": "Invoice",
+                "Account": "Operating",
+                "Split": "Consulting",
+                "Amount": "100",
+            },
+            {
+                "Date": "07/02/2026",
+                "Transaction Type": "Transfer",
+                "Num": "2",
+                "Name": "",
+                "Memo/Description": "Reserve",
+                "Account": "Operating",
+                "Split": "Savings",
+                "Amount": "25",
+            },
         ]
         strict = self.storage.preview_quickbooks_transactions(rows)
-        self.assertTrue(strict["errors"])
+        assert strict["errors"]
         preview = self.storage.preview_quickbooks_transactions(rows, auto_create=True)
-        self.assertEqual(preview["errors"], [])
-        self.assertEqual(preview["new_accounts"], ["Operating", "Savings"])
-        self.assertEqual(preview["new_account_types"], {"Operating": "Other", "Savings": "Bank"})
-        self.assertEqual(
-            preview["new_account_classifications"],
-            {"Operating": "Asset", "Savings": "Asset"},
-        )
-        self.assertEqual(preview["new_categories"], [("Consulting", "Income")])
+        assert preview["errors"] == []
+        assert preview["new_accounts"] == ["Operating", "Savings"]
+        assert preview["new_account_types"] == {"Operating": "Other", "Savings": "Bank"}
+        assert preview["new_account_classifications"] == {
+            "Operating": "Asset",
+            "Savings": "Asset",
+        }
+        assert preview["new_categories"] == [("Consulting", "Income")]
         imported = self.storage.import_quickbooks_transactions(rows, auto_create=True)
-        self.assertEqual(len(imported), 2)
-        self.assertEqual(
-            [(item["name"], item["type"]) for item in self.storage.list_accounts()],
-            [("Operating", "Other"), ("Savings", "Bank")],
-        )
-        self.assertEqual(
-            [(item["name"], item["kind"]) for item in self.storage.list_categories()],
-            [("Consulting", "Income")],
-        )
+        assert len(imported) == 2
+        assert [
+            (item["name"], item["type"]) for item in self.storage.list_accounts()
+        ] == [("Operating", "Other"), ("Savings", "Bank")]
+        assert [
+            (item["name"], item["kind"]) for item in self.storage.list_categories()
+        ] == [("Consulting", "Income")]
 
     def test_quickbooks_batch_import_reuses_reference_reads(self) -> None:
         self.storage.create_account("Checking", "Bank")
         self.storage.create_category("Sales", "Income")
         account_sheet = self.workbook.sheets["Accounts"]
         category_sheet = self.workbook.sheets["Categories"]
-        account_sheet.get_all_values = Mock(
-            wraps=account_sheet.get_all_values
-        )
-        category_sheet.get_all_values = Mock(
-            wraps=category_sheet.get_all_values
-        )
+        account_sheet.get_all_values = Mock(wraps=account_sheet.get_all_values)
+        category_sheet.get_all_values = Mock(wraps=category_sheet.get_all_values)
         rows = [
             {
                 "Date": "07/01/2026",
@@ -572,27 +609,90 @@ class GoogleSheetsStorageTests(unittest.TestCase):
 
         imported = self.storage.import_quickbooks_transactions(rows)
 
-        self.assertEqual(len(imported), 35)
-        self.assertEqual(account_sheet.get_all_values.call_count, 1)
-        self.assertEqual(category_sheet.get_all_values.call_count, 1)
+        assert len(imported) == 35
+        assert account_sheet.get_all_values.call_count == 1
+        assert category_sheet.get_all_values.call_count == 1
 
     def test_general_ledger_export_collapses_double_entries(self) -> None:
         matrix = [
             ["Example LLC"],
-            [None, "Date", "Transaction Type", "Num", "Name", "Memo/Description", "Account", "Debit", "Credit", "Balance"],
-            [None, "06/01/2026", "Transfer", "", "", "Reserve", "Checking", "", 50, 950],
+            [
+                None,
+                "Date",
+                "Transaction Type",
+                "Num",
+                "Name",
+                "Memo/Description",
+                "Account",
+                "Debit",
+                "Credit",
+                "Balance",
+            ],
+            [
+                None,
+                "06/01/2026",
+                "Transfer",
+                "",
+                "",
+                "Reserve",
+                "Checking",
+                "",
+                50,
+                950,
+            ],
             [None, "06/01/2026", "Transfer", "", "", "Reserve", "Savings", 50, "", 50],
-            [None, "06/02/2026", "Deposit", "1", "Client", "Invoice", "Checking", 100, "", 1050],
-            [None, "06/02/2026", "Deposit", "1", "Client", "Invoice", "Services", "", 100, 100],
+            [
+                None,
+                "06/02/2026",
+                "Deposit",
+                "1",
+                "Client",
+                "Invoice",
+                "Checking",
+                100,
+                "",
+                1050,
+            ],
+            [
+                None,
+                "06/02/2026",
+                "Deposit",
+                "1",
+                "Client",
+                "Invoice",
+                "Services",
+                "",
+                100,
+                100,
+            ],
             [None, "06/03/2026", "Expense", "2", "", "Paper", "Checking", "", 10, 1040],
-            [None, "06/03/2026", "Expense", "2", "Store", "Paper", "Office", 10, "", 10],
+            [
+                None,
+                "06/03/2026",
+                "Expense",
+                "2",
+                "Store",
+                "Paper",
+                "Office",
+                10,
+                "",
+                10,
+            ],
         ]
         rows, errors = general_ledger_rows(matrix)
-        self.assertEqual(errors, [])
-        self.assertEqual(len(rows), 3)
-        self.assertEqual((rows[0]["Account"], rows[0]["Split"], rows[0]["Transaction Type"]), ("Checking", "Savings", "Transfer"))
-        self.assertEqual((rows[1]["Split"], rows[1]["Amount"]), ("Services", "100.00"))
-        self.assertEqual((rows[2]["Name"], rows[2]["Split"], rows[2]["Amount"]), ("Store", "Office", "-10.00"))
+        assert errors == []
+        assert len(rows) == 3
+        assert (rows[0]["Account"], rows[0]["Split"], rows[0]["Transaction Type"]) == (
+            "Checking",
+            "Savings",
+            "Transfer",
+        )
+        assert (rows[1]["Split"], rows[1]["Amount"]) == ("Services", "100.00")
+        assert (rows[2]["Name"], rows[2]["Split"], rows[2]["Amount"]) == (
+            "Store",
+            "Office",
+            "-10.00",
+        )
 
     def test_backup_contains_csv_files_and_manifest(self) -> None:
         self.storage.create_account("Checking", "Bank")
@@ -605,24 +705,21 @@ class GoogleSheetsStorageTests(unittest.TestCase):
         )
         backup = self.storage.export_backup_zip()
         with zipfile.ZipFile(io.BytesIO(backup)) as archive:
-            self.assertEqual(
-                set(archive.namelist()),
-                {
-                    "Accounts.csv",
-                    "Categories.csv",
-                    "Transactions.csv",
-                    "Mileage.csv",
-                    "manifest.json",
-                },
-            )
+            assert set(archive.namelist()) == {
+                "Accounts.csv",
+                "Categories.csv",
+                "Transactions.csv",
+                "Mileage.csv",
+                "manifest.json",
+            }
             manifest = json.loads(archive.read("manifest.json"))
-            self.assertEqual(manifest["row_counts"]["Accounts"], 1)
-            self.assertEqual(manifest["row_counts"]["Mileage"], 1)
-            self.assertIn("backup_time", manifest)
-            self.assertEqual(manifest["format_version"], 3)
-            self.assertIn("Accounts.csv", manifest["sha256"])
+            assert manifest["row_counts"]["Accounts"] == 1
+            assert manifest["row_counts"]["Mileage"] == 1
+            assert "backup_time" in manifest
+            assert manifest["format_version"] == 3
+            assert "Accounts.csv" in manifest["sha256"]
         validated = self.storage.validate_backup_zip(backup)
-        self.assertEqual(validated["workbook_title"], "Test Ledger")
+        assert validated["workbook_title"] == "Test Ledger"
 
     def test_backup_forces_fresh_worksheet_reads(self) -> None:
         account = self.storage.create_account("Checking", "Bank")
@@ -633,8 +730,8 @@ class GoogleSheetsStorageTests(unittest.TestCase):
         backup = self.storage.export_backup_zip()
 
         with zipfile.ZipFile(io.BytesIO(backup)) as archive:
-            self.assertIn(account["id"], archive.read("Accounts.csv").decode("utf-8"))
-            self.assertIn("External", archive.read("Accounts.csv").decode("utf-8"))
+            assert account["id"] in archive.read("Accounts.csv").decode("utf-8")
+            assert "External" in archive.read("Accounts.csv").decode("utf-8")
 
     def test_restore_backup_into_blank_workbook_and_verify_rows(self) -> None:
         account = self.storage.create_account("Checking", "Bank", 125)
@@ -659,13 +756,15 @@ class GoogleSheetsStorageTests(unittest.TestCase):
 
         counts = restored_storage.restore_backup_zip(backup)
 
-        self.assertEqual(
-            counts,
-            {"Accounts": 1, "Categories": 1, "Transactions": 1, "Mileage": 1},
-        )
-        self.assertEqual(restored_storage.list_accounts()[0]["id"], account["id"])
-        self.assertEqual(restored_storage.list_transactions()[0]["id"], transaction["id"])
-        self.assertEqual(restored_storage.list_mileage_trips()[0]["id"], mileage["id"])
+        assert counts == {
+            "Accounts": 1,
+            "Categories": 1,
+            "Transactions": 1,
+            "Mileage": 1,
+        }
+        assert restored_storage.list_accounts()[0]["id"] == account["id"]
+        assert restored_storage.list_transactions()[0]["id"] == transaction["id"]
+        assert restored_storage.list_mileage_trips()[0]["id"] == mileage["id"]
 
     def test_restore_accepts_pre_mileage_backup(self) -> None:
         self.storage.create_account("Checking", "Bank")
@@ -689,15 +788,10 @@ class GoogleSheetsStorageTests(unittest.TestCase):
         target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
         counts = target.restore_backup_zip(legacy_buffer.getvalue())
 
-        self.assertEqual(
-            counts,
-            {"Accounts": 1, "Categories": 0, "Transactions": 0},
-        )
-        self.assertEqual(target.list_mileage_trips(), [])
+        assert counts == {"Accounts": 1, "Categories": 0, "Transactions": 0}
+        assert target.list_mileage_trips() == []
 
-        nonblank_target = GoogleSheetsStorage(
-            FakeWorkbook(), sleeper=lambda _: None
-        )
+        nonblank_target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
         nonblank_target.create_mileage_trip(
             trip_date="2026-07-20",
             miles=2,
@@ -705,7 +799,7 @@ class GoogleSheetsStorageTests(unittest.TestCase):
             destination="Bank",
             business_purpose="Deposit",
         )
-        with self.assertRaises(StorageConflictError):
+        with pytest.raises(StorageConflictError):
             nonblank_target.restore_backup_zip(legacy_buffer.getvalue())
 
     def test_restore_refuses_nonblank_target(self) -> None:
@@ -714,7 +808,7 @@ class GoogleSheetsStorageTests(unittest.TestCase):
         target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
         target.create_account("Existing", "Cash")
 
-        with self.assertRaises(StorageConflictError):
+        with pytest.raises(StorageConflictError):
             target.restore_backup_zip(backup)
 
     def test_restore_rejects_tampered_csv(self) -> None:
@@ -730,20 +824,20 @@ class GoogleSheetsStorageTests(unittest.TestCase):
                     content += b"tampered,row\n"
                 destination.writestr(name, content)
 
-        with self.assertRaises(StorageValidationError):
+        with pytest.raises(StorageValidationError):
             self.storage.validate_backup_zip(output.getvalue())
 
     def test_temporary_api_failure_returns_safe_error(self) -> None:
         self.workbook.sheets["Accounts"].get_all_values = Mock(
             side_effect=OSError("credential-content-must-not-leak")
         )
-        with self.assertRaises(StorageUnavailableError) as raised:
+        with pytest.raises(StorageUnavailableError) as raised:
             self.storage.list_accounts()
-        self.assertEqual(
-            str(raised.exception),
-            "Google Sheets is temporarily unavailable; no success was reported",
+        assert (
+            str(raised.value)
+            == "Google Sheets is temporarily unavailable; no success was reported"
         )
-        self.assertNotIn("credential-content", str(raised.exception))
+        assert "credential-content" not in str(raised.value)
 
     def test_reads_are_cached_and_invalidated_after_write(self) -> None:
         worksheet = self.workbook.sheets["Accounts"]
@@ -752,11 +846,11 @@ class GoogleSheetsStorageTests(unittest.TestCase):
 
         self.storage.list_accounts(active_only=False)
         self.storage.list_accounts(active_only=False)
-        self.assertEqual(worksheet.get_all_values.call_count, 1)
+        assert worksheet.get_all_values.call_count == 1
 
         self.storage.create_account("Checking", "Bank")
         self.storage.list_accounts(active_only=False)
-        self.assertEqual(worksheet.get_all_values.call_count, 3)
+        assert worksheet.get_all_values.call_count == 3
 
     def test_edit_forces_reread_before_replacing_row(self) -> None:
         account = self.storage.create_account("Checking", "Bank")
@@ -767,8 +861,8 @@ class GoogleSheetsStorageTests(unittest.TestCase):
 
         edited = self.storage.edit_account(account["id"], type="Cash")
 
-        self.assertEqual(edited["name"], "Externally renamed")
-        self.assertEqual(edited["type"], "Cash")
+        assert edited["name"] == "Externally renamed"
+        assert edited["type"] == "Cash"
 
     def test_temporary_failure_retries_with_exponential_backoff(self) -> None:
         delays: list[float] = []
@@ -786,8 +880,8 @@ class GoogleSheetsStorageTests(unittest.TestCase):
 
         storage.list_accounts(active_only=False, _force_refresh=True)
 
-        self.assertEqual(delays, [0.25, 0.5])
-        self.assertEqual(worksheet.get_all_values.call_count, 3)
+        assert delays == [0.25, 0.5]
+        assert worksheet.get_all_values.call_count == 3
 
     def test_lost_append_response_is_confirmed_by_uuid_without_duplicate(self) -> None:
         worksheet = self.workbook.sheets["Accounts"]
@@ -802,8 +896,8 @@ class GoogleSheetsStorageTests(unittest.TestCase):
         created = self.storage.create_account("Checking", "Bank")
 
         accounts = self.storage.list_accounts(active_only=False)
-        self.assertEqual([account["id"] for account in accounts], [created["id"]])
-        self.assertEqual(worksheet.append_row.call_count, 1)
+        assert [account["id"] for account in accounts] == [created["id"]]
+        assert worksheet.append_row.call_count == 1
 
     def test_lost_delete_response_does_not_delete_following_row(self) -> None:
         account = self.storage.create_account("Checking", "Bank")
@@ -836,9 +930,5 @@ class GoogleSheetsStorageTests(unittest.TestCase):
         remaining_ids = {
             transaction["id"] for transaction in self.storage.list_transactions()
         }
-        self.assertEqual(remaining_ids, {second["id"]})
-        self.assertEqual(worksheet.delete_rows.call_count, 1)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert remaining_ids == {second["id"]}
+        assert worksheet.delete_rows.call_count == 1

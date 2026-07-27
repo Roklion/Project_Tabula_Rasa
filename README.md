@@ -228,7 +228,8 @@ Common failures:
 Run the isolated authentication, UI workflow, Google storage, and reporting tests with:
 
 ```powershell
-python -m unittest discover -s tests -v
+pip install -r requirements-dev.txt
+python -m pytest
 ```
 
 The UI tests use an in-memory Google workbook and a test-only password hash. They do not read the live ledger, application password, or Google credentials.
