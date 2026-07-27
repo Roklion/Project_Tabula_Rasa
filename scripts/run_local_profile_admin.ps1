@@ -23,7 +23,7 @@ Push-Location $projectRoot
 $previousAdminFlag = $env:TABULA_LOCAL_PROFILE_ADMIN
 try {
     $env:TABULA_LOCAL_PROFILE_ADMIN = "1"
-    & $python -m streamlit run app.py --server.address 127.0.0.1
+    & $python -m streamlit run tabula_rasa/app.py --server.address 127.0.0.1
 }
 finally {
     if ($null -eq $previousAdminFlag) {

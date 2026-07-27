@@ -16,8 +16,11 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import streamlit as st
 from streamlit.testing.v1 import AppTest
 
-from ledger_auth import hash_password
-from local_profile_store import LOCAL_PROFILE_STORE_PATH, load_local_profiles
+from tabula_rasa.ledger_auth import hash_password
+from tabula_rasa.local_profile_store import (
+    LOCAL_PROFILE_STORE_PATH,
+    load_local_profiles,
+)
 from scripts.export_streamlit_secrets import build_streamlit_secrets_toml
 
 
@@ -30,17 +33,23 @@ def _validate_dashboard(
 ) -> None:
     st.cache_resource.clear()
     if local_profile_path is None:
-        app = AppTest.from_file(PROJECT_ROOT / "app.py", default_timeout=60)
+        app = AppTest.from_file(
+            PROJECT_ROOT / "tabula_rasa" / "app.py",
+            default_timeout=60,
+        )
         app.secrets.update(app_secrets)
         app.run()
         app.text_input[0].input(test_password)
         app.button[0].click().run()
     else:
         with patch(
-            "local_profile_store.LOCAL_PROFILE_STORE_PATH",
+            "tabula_rasa.local_profile_store.LOCAL_PROFILE_STORE_PATH",
             local_profile_path,
         ):
-            app = AppTest.from_file(PROJECT_ROOT / "app.py", default_timeout=60)
+            app = AppTest.from_file(
+                PROJECT_ROOT / "tabula_rasa" / "app.py",
+                default_timeout=60,
+            )
             app.secrets.update(app_secrets)
             app.run()
             app.text_input[0].input(test_password)

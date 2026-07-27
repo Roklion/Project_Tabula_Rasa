@@ -11,8 +11,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from streamlit.testing.v1 import AppTest
 
-from ledger_auth import hash_password
-from storage import GoogleSheetsStorage
+from tabula_rasa.ledger_auth import hash_password
+from tabula_rasa.storage import GoogleSheetsStorage
 from tests.fakes import FakeWorkbook
 
 
@@ -29,7 +29,7 @@ def error_values(app: AppTest) -> list[str]:
 
 def main() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook())
-    app = AppTest.from_file("app.py", default_timeout=30)
+    app = AppTest.from_file("tabula_rasa/app.py", default_timeout=30)
     app.secrets["app_password_hash"] = hash_password(TEST_PASSWORD)
     app.secrets["business_profiles"] = {
         "test": {

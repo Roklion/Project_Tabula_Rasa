@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from copy import deepcopy
 
-from storage.google_sheets import WORKSHEET_HEADERS
+from tabula_rasa.storage.google_sheets import WORKSHEET_HEADERS
 
 
 class FakeWorksheet:

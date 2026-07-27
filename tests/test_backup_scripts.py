@@ -11,7 +11,7 @@ from scripts.backup_google_sheets import (
     verified_backup_for_week,
     write_versioned_backup,
 )
-from storage import GoogleSheetsStorage
+from tabula_rasa.storage import GoogleSheetsStorage
 from tests.fakes import FakeWorkbook
 
 

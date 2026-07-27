@@ -5,8 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from business_profiles import load_business_profiles
-from local_profile_store import (
+from tabula_rasa.business_profiles import load_business_profiles
+from tabula_rasa.local_profile_store import (
     LOCAL_PROFILE_ADMIN_ENV,
     LocalProfileStoreError,
     build_profile_settings,

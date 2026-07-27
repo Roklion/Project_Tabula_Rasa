@@ -14,7 +14,7 @@ from scripts.convert_backup_v1_to_v2 import (
     convert_backup_v1_to_v2,
     default_output_path,
 )
-from storage import GoogleSheetsStorage, StorageValidationError
+from tabula_rasa.storage import GoogleSheetsStorage, StorageValidationError
 
 
 def _csv_bytes(headers: list[str], rows: list[list[str]]) -> bytes:

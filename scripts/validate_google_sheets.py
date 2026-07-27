@@ -14,9 +14,9 @@ from google.oauth2.service_account import Credentials
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from business_profiles import load_business_profiles, select_profile_secrets
-from local_profile_store import load_business_profile_document
-from storage import GoogleSheetsStorage
+from tabula_rasa.business_profiles import load_business_profiles, select_profile_secrets
+from tabula_rasa.local_profile_store import load_business_profile_document
+from tabula_rasa.storage import GoogleSheetsStorage
 
 
 def validate(

@@ -8,38 +8,38 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from business_profiles import (
+from tabula_rasa.business_profiles import (
     BusinessProfileConfigurationError,
     load_business_profiles,
     select_profile_secrets,
 )
-from ledger_auth import logout, require_authentication
-from ledger_reporting import (
+from tabula_rasa.ledger_auth import logout, require_authentication
+from tabula_rasa.ledger_reporting import (
     account_balances,
     balance_sheet,
     expenses_by_category,
     monthly_performance,
     profit_and_loss,
 )
-from local_profile_admin import render_local_profile_admin
-from local_profile_store import (
+from tabula_rasa.local_profile_admin import render_local_profile_admin
+from tabula_rasa.local_profile_store import (
     LOCAL_PROFILE_STORE_PATH,
     LocalProfileStoreError,
     local_profile_admin_available,
     local_profile_revision,
     merged_profile_secrets,
 )
-from storage import (
+from tabula_rasa.storage import (
     GoogleSheetsStorage,
     StorageError,
     StorageValidationError,
 )
-from submission_guard import is_recent_duplicate, mark_completed
-from quickbooks_import import (
+from tabula_rasa.submission_guard import is_recent_duplicate, mark_completed
+from tabula_rasa.quickbooks_import import (
     REQUIRED_COLUMNS as QUICKBOOKS_REQUIRED_COLUMNS,
     general_ledger_rows,
 )
-from quickbooks_mileage_import import (
+from tabula_rasa.quickbooks_mileage_import import (
     missing_required_columns as missing_quickbooks_mileage_columns,
 )
 

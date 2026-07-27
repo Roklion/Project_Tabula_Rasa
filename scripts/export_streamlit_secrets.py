@@ -19,8 +19,8 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from business_profiles import load_business_profiles
-from local_profile_store import (
+from tabula_rasa.business_profiles import load_business_profiles
+from tabula_rasa.local_profile_store import (
     LOCAL_PROFILE_STORE_PATH,
     LocalProfileStoreError,
     load_local_profiles,

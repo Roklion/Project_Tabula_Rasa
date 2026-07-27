@@ -14,10 +14,16 @@ A private Google Sheets-backed bookkeeping app for one person or a small group o
    python -m venv .venv
    .venv\Scripts\Activate.ps1
    pip install -r requirements.txt
-   streamlit run app.py
+   streamlit run tabula_rasa/app.py
    ```
 
 The app reads and writes the private Google workbook through its narrowly scoped service account. It does not use a local SQLite database as its active datastore.
+
+## Repository layout
+
+- `tabula_rasa/` contains the Streamlit entry point and application modules.
+- `scripts/` contains setup, validation, backup, and recovery utilities.
+- `tests/` contains the automated test suite and UI workflow scenarios.
 
 ## Multiple business profiles
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from submission_guard import is_recent_duplicate, mark_completed
+from tabula_rasa.submission_guard import is_recent_duplicate, mark_completed
 
 
 class SubmissionGuardTests(unittest.TestCase):

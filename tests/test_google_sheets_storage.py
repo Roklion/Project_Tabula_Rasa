@@ -6,7 +6,7 @@ import unittest
 import zipfile
 from unittest.mock import Mock
 
-from storage.google_sheets import (
+from tabula_rasa.storage.google_sheets import (
     GoogleSheetsStorage,
     StorageConflictError,
     StorageNotFoundError,
@@ -14,7 +14,7 @@ from storage.google_sheets import (
     StorageValidationError,
     WORKSHEET_HEADERS,
 )
-from quickbooks_import import (
+from tabula_rasa.quickbooks_import import (
     general_ledger_rows,
     suggested_account_classification,
     suggested_account_type,

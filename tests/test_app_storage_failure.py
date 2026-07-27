@@ -6,8 +6,8 @@ from unittest.mock import Mock, patch
 import streamlit as st
 from streamlit.testing.v1 import AppTest
 
-from ledger_auth import hash_password
-from storage import GoogleSheetsStorage, StorageUnavailableError
+from tabula_rasa.ledger_auth import hash_password
+from tabula_rasa.storage import GoogleSheetsStorage, StorageUnavailableError
 
 
 TEST_PASSWORD = "test-password-123"
@@ -21,7 +21,7 @@ class AppStorageFailureTests(unittest.TestCase):
         unavailable_storage.ensure_defaults.side_effect = StorageUnavailableError(
             SAFE_MESSAGE
         )
-        app = AppTest.from_file("app.py", default_timeout=30)
+        app = AppTest.from_file("tabula_rasa/app.py", default_timeout=30)
         app.secrets["app_password_hash"] = hash_password(TEST_PASSWORD)
         app.secrets["business_profiles"] = {
             "test": {

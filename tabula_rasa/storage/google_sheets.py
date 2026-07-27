@@ -25,14 +25,14 @@ import gspread
 from google.auth.exceptions import GoogleAuthError
 from google.oauth2.service_account import Credentials
 
-from quickbooks_import import (
+from tabula_rasa.quickbooks_import import (
     fingerprint,
     missing_references,
     normalize_rows,
     suggested_account_classification,
     suggested_account_type,
 )
-from quickbooks_mileage_import import (
+from tabula_rasa.quickbooks_mileage_import import (
     mileage_fingerprint,
     missing_required_columns as missing_quickbooks_mileage_columns,
     normalize_rows as normalize_quickbooks_mileage_rows,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from ledger_reporting import (
+from tabula_rasa.ledger_reporting import (
     account_balances,
     balance_sheet,
     expenses_by_category,

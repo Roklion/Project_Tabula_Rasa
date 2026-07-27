@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from business_profiles import (
+from tabula_rasa.business_profiles import (
     BusinessProfileConfigurationError,
     load_business_profiles,
     select_profile_secrets,

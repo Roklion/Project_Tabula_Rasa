@@ -20,12 +20,15 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from business_profiles import BusinessProfileConfigurationError, load_business_profiles
+from tabula_rasa.business_profiles import (
+    BusinessProfileConfigurationError,
+    load_business_profiles,
+)
 
 
 LOCAL_PROFILE_ADMIN_ENV = "TABULA_LOCAL_PROFILE_ADMIN"
 LOCAL_PROFILE_STORE_PATH = (
-    Path(__file__).resolve().parent
+    Path(__file__).resolve().parents[1]
     / ".streamlit"
     / "business_profiles.json"
 )

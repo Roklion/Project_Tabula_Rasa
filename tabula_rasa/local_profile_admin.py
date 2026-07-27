@@ -8,9 +8,9 @@ from typing import Any
 
 import streamlit as st
 
-from business_profiles import load_business_profiles
-from ledger_auth import verify_password
-from local_profile_store import (
+from tabula_rasa.business_profiles import load_business_profiles
+from tabula_rasa.ledger_auth import verify_password
+from tabula_rasa.local_profile_store import (
     LOCAL_PROFILE_STORE_PATH,
     LocalProfileStoreError,
     build_profile_settings,
@@ -18,7 +18,7 @@ from local_profile_store import (
     save_local_profile,
     validate_profile_key,
 )
-from storage import GoogleSheetsStorage, StorageError
+from tabula_rasa.storage import GoogleSheetsStorage, StorageError
 
 
 def _masked_spreadsheet_id(spreadsheet_id: object) -> str:

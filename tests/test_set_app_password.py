@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ledger_auth import verify_password
+from tabula_rasa.ledger_auth import verify_password
 from scripts.set_app_password import set_password
 
 

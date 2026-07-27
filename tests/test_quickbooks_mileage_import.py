@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from quickbooks_mileage_import import (
+from tabula_rasa.quickbooks_mileage_import import (
     mileage_fingerprint,
     missing_required_columns,
     normalize_rows,

@@ -17,9 +17,9 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from quickbooks_import import suggested_account_classification
-from storage import GoogleSheetsStorage, StorageValidationError
-from storage.google_sheets import (
+from tabula_rasa.quickbooks_import import suggested_account_classification
+from tabula_rasa.storage import GoogleSheetsStorage, StorageValidationError
+from tabula_rasa.storage.google_sheets import (
     ACCOUNT_CLASSIFICATIONS,
     ACCOUNT_TYPES,
     FIXED_TYPE_CLASSIFICATIONS,

@@ -10,14 +10,14 @@ from unittest.mock import patch
 import streamlit as st
 from streamlit.testing.v1 import AppTest
 
-from ledger_auth import hash_password
-from local_profile_store import (
+from tabula_rasa.ledger_auth import hash_password
+from tabula_rasa.local_profile_store import (
     LOCAL_PROFILE_ADMIN_ENV,
     build_profile_settings,
     load_local_profiles,
     save_local_profile,
 )
-from storage import GoogleSheetsStorage
+from tabula_rasa.storage import GoogleSheetsStorage
 from tests.fakes import FakeWorkbook
 
 
@@ -51,7 +51,7 @@ class AppAuthenticationTests(unittest.TestCase):
             absent_local_store = Path(directory) / "business_profiles.json"
             with (
                 patch(
-                    "local_profile_store.LOCAL_PROFILE_STORE_PATH",
+                    "tabula_rasa.local_profile_store.LOCAL_PROFILE_STORE_PATH",
                     absent_local_store,
                 ),
                 patch.object(
@@ -60,7 +60,10 @@ class AppAuthenticationTests(unittest.TestCase):
                     return_value=fake_storage,
                 ) as from_secrets,
             ):
-                app = AppTest.from_file("app.py", default_timeout=30)
+                app = AppTest.from_file(
+                    "tabula_rasa/app.py",
+                    default_timeout=30,
+                )
                 app.secrets["app_password_hash"] = hash_password(TEST_PASSWORD)
                 app.secrets["business_profiles"] = {
                     "hosted": {
@@ -113,7 +116,7 @@ class AppAuthenticationTests(unittest.TestCase):
             )
             with (
                 patch(
-                    "local_profile_store.LOCAL_PROFILE_STORE_PATH",
+                    "tabula_rasa.local_profile_store.LOCAL_PROFILE_STORE_PATH",
                     local_store,
                 ),
                 patch.object(
@@ -122,7 +125,10 @@ class AppAuthenticationTests(unittest.TestCase):
                     return_value=fake_storage,
                 ) as from_secrets,
             ):
-                app = AppTest.from_file("app.py", default_timeout=30)
+                app = AppTest.from_file(
+                    "tabula_rasa/app.py",
+                    default_timeout=30,
+                )
                 app.secrets["app_password_hash"] = hash_password(TEST_PASSWORD)
 
                 app.run()
@@ -148,7 +154,7 @@ class AppAuthenticationTests(unittest.TestCase):
                     clear=False,
                 ),
                 patch(
-                    "local_profile_store.LOCAL_PROFILE_STORE_PATH",
+                    "tabula_rasa.local_profile_store.LOCAL_PROFILE_STORE_PATH",
                     local_store,
                 ),
                 patch.object(
@@ -166,7 +172,10 @@ class AppAuthenticationTests(unittest.TestCase):
                     return_value=fake_storage,
                 ),
             ):
-                app = AppTest.from_file("app.py", default_timeout=30)
+                app = AppTest.from_file(
+                    "tabula_rasa/app.py",
+                    default_timeout=30,
+                )
                 app.secrets["app_password_hash"] = hash_password(TEST_PASSWORD)
                 app.secrets["business_profiles"] = {
                     "test": {
