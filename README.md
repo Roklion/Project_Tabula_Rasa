@@ -223,12 +223,14 @@ Common failures:
 - **Service-account key creation is disabled:** consult the Workspace/Cloud
   administrator. Newer organizations may enforce this restriction by default.
 
-## Run automated tests
+## Run code quality checks
 
-Run the isolated authentication, UI workflow, Google storage, and reporting tests with:
+Install the development dependencies, then run Ruff and the isolated
+authentication, UI workflow, Google storage, and reporting tests with:
 
 ```powershell
 pip install -r requirements-dev.txt
+ruff check .
 python -m pytest
 ```
 
