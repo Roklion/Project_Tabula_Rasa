@@ -712,6 +712,14 @@ elif page == "Mileage":
             c1, c2 = st.columns(2)
             start_location = c1.text_input("Starting location")
             destination = c2.text_input("Destination")
+            round_trip = st.checkbox(
+                "Round trip",
+                help=(
+                    "Creates an outbound entry and a second entry with the "
+                    "starting and ending locations reversed. Each entry uses "
+                    "the mileage entered above."
+                ),
+            )
             business_purpose = st.text_input("Business purpose")
             notes = st.text_area("Notes (optional)")
             submitted = st.form_submit_button(
@@ -726,12 +734,39 @@ elif page == "Mileage":
                     "destination": destination,
                     "business_purpose": business_purpose,
                     "notes": notes,
+                    "round_trip": round_trip,
                 }
                 confirmed_write(
-                    "create_mileage_trip",
+                    "create_mileage_round_trip"
+                    if round_trip
+                    else "create_mileage_trip",
                     payload,
-                    lambda: storage.create_mileage_trip(**payload),
-                    "Mileage trip saved.",
+                    (
+                        lambda: storage.create_mileage_round_trip(
+                            trip_date=trip_date,
+                            miles=miles,
+                            vehicle=vehicle,
+                            start_location=start_location,
+                            destination=destination,
+                            business_purpose=business_purpose,
+                            notes=notes,
+                        )
+                    )
+                    if round_trip
+                    else lambda: storage.create_mileage_trip(
+                        trip_date=trip_date,
+                        miles=miles,
+                        vehicle=vehicle,
+                        start_location=start_location,
+                        destination=destination,
+                        business_purpose=business_purpose,
+                        notes=notes,
+                    ),
+                    (
+                        "Round trip saved as two mileage entries."
+                        if round_trip
+                        else "Mileage trip saved."
+                    ),
                 )
 
     with tab_log:

@@ -272,6 +272,45 @@ class GoogleSheetsStorageTests(unittest.TestCase):
                 business_purpose="Meeting",
             )
 
+    def test_mileage_round_trip_creates_reversed_entries_in_one_batch(self) -> None:
+        worksheet = self.workbook.sheets["Mileage"]
+        original_append_many = worksheet.append_rows
+        worksheet.append_rows = Mock(wraps=original_append_many)
+
+        records = self.storage.create_mileage_round_trip(
+            trip_date="2026-07-20",
+            miles=12.6,
+            vehicle="Blue car",
+            start_location="Office",
+            destination="Client site",
+            business_purpose="Project meeting",
+            notes="Parking receipt saved",
+        )
+
+        self.assertEqual(len(records), 2)
+        self.assertEqual(worksheet.append_rows.call_count, 1)
+        self.assertNotEqual(records[0]["id"], records[1]["id"])
+        self.assertEqual(records[0]["created_at"], records[1]["created_at"])
+        self.assertEqual(
+            [
+                (
+                    record["start_location"],
+                    record["destination"],
+                    record["miles"],
+                )
+                for record in records
+            ],
+            [
+                ("Office", "Client site", "12.6"),
+                ("Client site", "Office", "12.6"),
+            ],
+        )
+        self.assertEqual(
+            {record["business_purpose"] for record in records},
+            {"Project meeting"},
+        )
+        self.assertEqual(len(self.storage.list_mileage_trips()), 2)
+
     def test_quickbooks_mileage_preview_import_and_duplicates(self) -> None:
         business = {
             "Date": "07/20/2026",

@@ -358,7 +358,10 @@ rereads every restored row and verifies it against the archive.
 - Mileage trips are maintained separately from financial transactions. The
   **Mileage** page records the trip date, total business miles, route, business
   purpose, optional vehicle, and notes; it also supports date filtering,
-  editing, deletion, totals, and CSV export.
+  editing, deletion, totals, and CSV export. Select **Round trip** while adding
+  a trip to create two entries in one write: the outbound route and a return
+  entry with the starting and ending locations reversed. Each entry receives
+  the mileage entered in the form.
 - Account names, balance-sheet classifications, and subtypes are stored in
   separate fields.
 - Bank and Cash accounts are assets; Credit card and Short-term debt accounts are

@@ -972,6 +972,27 @@ class GoogleSheetsStorage:
         self._append("Mileage", record)
         return record
 
+    def create_mileage_round_trip(
+        self, **data: Any
+    ) -> list[dict[str, str]]:
+        """Create outbound and reversed return entries in one batch write."""
+        created_at = _utc_now()
+        outbound = self._prepare_mileage_trip(data, created_at=created_at)
+        return_data = dict(data)
+        return_data.update(
+            {
+                "start_location": data.get("destination"),
+                "destination": data.get("start_location"),
+            }
+        )
+        return_trip = self._prepare_mileage_trip(
+            return_data,
+            created_at=created_at,
+        )
+        records = [outbound, return_trip]
+        self._append_many("Mileage", records)
+        return records
+
     def edit_mileage_trip(self, trip_id: str, **changes: Any) -> dict[str, str]:
         current = self._find_row("Mileage", trip_id)
         merged = dict(current.values)
