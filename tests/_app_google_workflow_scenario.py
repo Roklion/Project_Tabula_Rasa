@@ -160,6 +160,29 @@ def main() -> None:
         by_label(app.button, "Permanently delete").click().run()
         assert len(storage.list_transactions()) == 2
 
+        app.radio[0].set_value("Mileage").run()
+        by_label(app.number_input, "Business miles").set_value(18.6)
+        by_label(app.text_input, "Vehicle (optional)").input("Blue car")
+        by_label(app.text_input, "Starting location").input("Office")
+        by_label(app.text_input, "Destination").input("Client site")
+        by_label(app.text_input, "Business purpose").input("Project meeting")
+        by_label(app.button, "Save mileage trip").click().run()
+        assert len(app.exception) == 0
+        trip = storage.list_mileage_trips()[0]
+        assert trip["miles"] == "18.6"
+        assert trip["business_purpose"] == "Project meeting"
+
+        by_label(app.number_input, "Edit business miles").set_value(20.1)
+        by_label(app.button, "Save mileage changes").click().run()
+        assert storage.list_mileage_trips()[0]["miles"] == "20.1"
+
+        by_label(
+            app.checkbox,
+            "I understand this mileage trip will be permanently deleted",
+        ).check()
+        by_label(app.button, "Permanently delete mileage trip").click().run()
+        assert storage.list_mileage_trips() == []
+
 
 if __name__ == "__main__":
     main()

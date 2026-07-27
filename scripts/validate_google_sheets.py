@@ -41,7 +41,7 @@ def validate(
     GoogleSheetsStorage(workbook)
 
     print(f"Workbook access verified: {workbook.title}")
-    print("Worksheet headers verified: Accounts, Categories, Transactions")
+    print("Worksheet headers verified: Accounts, Categories, Transactions, Mileage")
 
     if write_test:
         title = f"_access_test_{uuid4().hex[:8]}"

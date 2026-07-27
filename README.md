@@ -67,7 +67,7 @@ will be needed.
    `Tabula Rasa - Heathcote`. Do not enable **Anyone with the link**.
 3. Inside that folder, create a blank Google spreadsheet and give it a clear
    name such as `Heathcote Advisory Ledger`.
-4. Create these three worksheet tabs with the exact names and first-row headers
+4. Create these four worksheet tabs with the exact names and first-row headers
    below. Header spelling and capitalization must match; column order may
    differ.
 
@@ -76,9 +76,12 @@ will be needed.
    | `Accounts` | `id`, `name`, `type`, `classification`, `opening_balance`, `active`, `created_at` |
    | `Categories` | `id`, `name`, `kind` |
    | `Transactions` | `id`, `txn_date`, `kind`, `amount`, `account_id`, `to_account_id`, `category_id`, `payee`, `description`, `reference`, `created_at` |
+   | `Mileage` | `id`, `trip_date`, `miles`, `vehicle`, `start_location`, `destination`, `business_purpose`, `notes`, `created_at` |
 
    The default `Sheet1` tab may be deleted. Leave rows below the headers empty;
-   the app seeds its initial account and categories on first access.
+   the app seeds its initial account and categories on first access. When an
+   existing three-tab workbook is opened after upgrading, the app creates the
+   new empty `Mileage` worksheet automatically.
 5. Share the spreadsheet with the service account's `client_email`, select
    **Editor**, clear **Notify people** if Google offers it, and click **Share**.
    Keep **General access** set to **Restricted**. Google's
@@ -206,7 +209,7 @@ Common failures:
   spreadsheet ID and complete JSON key belong together, the Sheets API is
   enabled in the service account's project, and the spreadsheet is shared as
   Editor with that profile's exact `client_email`.
-- **Header mismatch or missing worksheet:** correct the three tab names and
+- **Header mismatch or missing worksheet:** correct the four tab names and
   first-row headers exactly as listed above.
 - **Organization policy blocks sharing:** a Google Workspace administrator may
   need to permit sharing with the service-account address. Do not make the
@@ -246,9 +249,10 @@ An append-only audit worksheet was considered but deferred. A separate audit app
 ## Google Sheets backups
 
 The **Data & backup** page can download a complete ZIP archive. Each archive
-contains `Accounts.csv`, `Categories.csv`, `Transactions.csv`, and a JSON
-manifest with the backup time, workbook title, worksheet headers, row counts,
-and SHA-256 checksums.
+contains `Accounts.csv`, `Categories.csv`, `Transactions.csv`, `Mileage.csv`,
+and a JSON manifest with the backup time, workbook title, worksheet headers,
+row counts, and SHA-256 checksums. Restore remains compatible with older
+version 2 backups created before mileage tracking was added.
 
 Create and validate a timestamped backup from the command line with:
 
@@ -336,6 +340,10 @@ rereads every restored row and verifies it against the archive.
 ## Notes
 
 - Transfers change account balances but do not affect income or expenses.
+- Mileage trips are maintained separately from financial transactions. The
+  **Mileage** page records the trip date, total business miles, route, business
+  purpose, optional vehicle, and notes; it also supports date filtering,
+  editing, deletion, totals, and CSV export.
 - Account names, balance-sheet classifications, and subtypes are stored in
   separate fields.
 - Bank and Cash accounts are assets; Credit card and Short-term debt accounts are

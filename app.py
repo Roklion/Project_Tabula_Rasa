@@ -41,7 +41,7 @@ from quickbooks_import import (
 )
 
 
-STORAGE_IMPLEMENTATION_VERSION = 6
+STORAGE_IMPLEMENTATION_VERSION = 7
 ACCOUNT_TYPES = ["Bank", "Cash", "Credit card", "Short-term debt", "Equity", "Other"]
 ACCOUNT_CLASSIFICATIONS = ["Asset", "Liability", "Equity"]
 FIXED_TYPE_CLASSIFICATIONS = {
@@ -134,6 +134,34 @@ def balances_frame(accounts: list[dict], transactions: list[dict]) -> pd.DataFra
             }
             for account in rows
         ]
+    )
+
+
+def mileage_frame(trips: list[dict]) -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "ID": trip["id"],
+                "Date": trip["trip_date"],
+                "Miles": float(trip["miles"]),
+                "Vehicle": trip.get("vehicle", ""),
+                "From": trip.get("start_location", ""),
+                "Destination": trip.get("destination", ""),
+                "Business purpose": trip.get("business_purpose", ""),
+                "Notes": trip.get("notes", ""),
+            }
+            for trip in trips
+        ],
+        columns=[
+            "ID",
+            "Date",
+            "Miles",
+            "Vehicle",
+            "From",
+            "Destination",
+            "Business purpose",
+            "Notes",
+        ],
     )
 
 
@@ -244,6 +272,7 @@ with st.sidebar:
     pages = [
         "Dashboard",
         "Transactions",
+        "Mileage",
         "Accounts",
         "Categories",
         "Reports",
@@ -640,6 +669,210 @@ elif page == "Transactions":
                 )
 
 
+elif page == "Mileage":
+    st.title("Mileage")
+    st.caption(
+        "Keep a dated business-mileage log with the route, purpose, and vehicle."
+    )
+    tab_add, tab_log = st.tabs(["Add trip", "View & edit mileage log"])
+
+    with tab_add:
+        with st.form("add_mileage_trip", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            trip_date = c1.date_input("Trip date", date.today())
+            miles = c2.number_input(
+                "Business miles",
+                min_value=0.1,
+                step=0.1,
+                format="%.1f",
+            )
+            vehicle = st.text_input(
+                "Vehicle (optional)",
+                help="For example: 2022 Honda Civic or Company van.",
+            )
+            c1, c2 = st.columns(2)
+            start_location = c1.text_input("Starting location")
+            destination = c2.text_input("Destination")
+            business_purpose = st.text_input("Business purpose")
+            notes = st.text_area("Notes (optional)")
+            submitted = st.form_submit_button(
+                "Save mileage trip", type="primary", width="stretch"
+            )
+            if submitted:
+                payload = {
+                    "trip_date": trip_date,
+                    "miles": miles,
+                    "vehicle": vehicle,
+                    "start_location": start_location,
+                    "destination": destination,
+                    "business_purpose": business_purpose,
+                    "notes": notes,
+                }
+                confirmed_write(
+                    "create_mileage_trip",
+                    payload,
+                    lambda: storage.create_mileage_trip(**payload),
+                    "Mileage trip saved.",
+                )
+
+    with tab_log:
+        c1, c2 = st.columns(2)
+        start = c1.date_input(
+            "From", date(date.today().year, 1, 1), key="mileage_start"
+        )
+        end = c2.date_input("To", date.today(), key="mileage_end")
+        try:
+            trips = storage.list_mileage_trips(start=start, end=end)
+        except StorageError as error:
+            report_storage_error(error)
+            st.stop()
+
+        trip_frame = mileage_frame(trips)
+        metric_trips, metric_miles = st.columns(2)
+        metric_trips.metric("Trips", len(trips))
+        metric_miles.metric(
+            "Business miles",
+            f"{trip_frame['Miles'].sum():,.1f}" if not trip_frame.empty else "0.0",
+        )
+        st.download_button(
+            "Download filtered mileage CSV",
+            trip_frame.to_csv(index=False).encode("utf-8"),
+            f"tabula-rosa-mileage-{start}-to-{end}.csv",
+            "text/csv",
+        )
+
+        trip_ids = trip_frame["ID"].tolist()
+
+        def select_mileage_trip() -> None:
+            selected_rows = st.session_state["mileage_log"].selection.rows
+            if selected_rows:
+                st.session_state["edit_mileage_trip_id"] = trip_ids[
+                    selected_rows[0]
+                ]
+
+        mileage_event = st.dataframe(
+            trip_frame,
+            hide_index=True,
+            width="stretch",
+            key="mileage_log",
+            on_select=select_mileage_trip,
+            selection_mode="single-row",
+            column_config={
+                "Miles": st.column_config.NumberColumn(format="%.1f"),
+            },
+        )
+        if trip_frame.empty:
+            st.info("No mileage trips in this period.")
+        else:
+            selected_rows = mileage_event.selection.rows
+            if st.session_state.get("edit_mileage_trip_id") not in trip_ids:
+                st.session_state["edit_mileage_trip_id"] = trip_ids[0]
+
+            def mileage_trip_label(trip_id: str) -> str:
+                row = trip_frame.loc[trip_frame["ID"] == trip_id].iloc[0]
+                return (
+                    f"{row['Date']} - {row['Miles']:,.1f} mi - "
+                    f"{row['Destination']} - {trip_id[:8]}"
+                )
+
+            st.caption("Select a mileage row (or double-click it) to edit it.")
+            with st.expander("Edit mileage trip", expanded=bool(selected_rows)):
+                edit_id = st.selectbox(
+                    "Mileage trip to edit",
+                    trip_ids,
+                    format_func=mileage_trip_label,
+                    key="edit_mileage_trip_id",
+                )
+                selected = next(trip for trip in trips if trip["id"] == edit_id)
+                with st.form("edit_mileage_trip"):
+                    c1, c2 = st.columns(2)
+                    edited_date = c1.date_input(
+                        "Edit trip date",
+                        date.fromisoformat(selected["trip_date"]),
+                    )
+                    edited_miles = c2.number_input(
+                        "Edit business miles",
+                        min_value=0.1,
+                        step=0.1,
+                        value=float(selected["miles"]),
+                        format="%.1f",
+                    )
+                    edited_vehicle = st.text_input(
+                        "Edit vehicle", value=selected.get("vehicle", "")
+                    )
+                    c1, c2 = st.columns(2)
+                    edited_start = c1.text_input(
+                        "Edit starting location",
+                        value=selected.get("start_location", ""),
+                    )
+                    edited_destination = c2.text_input(
+                        "Edit destination",
+                        value=selected.get("destination", ""),
+                    )
+                    edited_purpose = st.text_input(
+                        "Edit business purpose",
+                        value=selected.get("business_purpose", ""),
+                    )
+                    edited_notes = st.text_area(
+                        "Edit notes", value=selected.get("notes", "")
+                    )
+                    st.warning(
+                        "Deleting this mileage trip is permanent and cannot be undone."
+                    )
+                    confirm_delete = st.checkbox(
+                        "I understand this mileage trip will be permanently deleted"
+                    )
+                    save_column, delete_column = st.columns(2)
+                    save_requested = save_column.form_submit_button(
+                        "Save mileage changes",
+                        type="primary",
+                        width="stretch",
+                    )
+                    delete_requested = delete_column.form_submit_button(
+                        "Permanently delete mileage trip",
+                        icon=":material/delete_forever:",
+                        width="stretch",
+                    )
+                    if save_requested:
+                        payload = {
+                            "id": edit_id,
+                            "trip_date": edited_date,
+                            "miles": edited_miles,
+                            "vehicle": edited_vehicle,
+                            "start_location": edited_start,
+                            "destination": edited_destination,
+                            "business_purpose": edited_purpose,
+                            "notes": edited_notes,
+                        }
+                        confirmed_write(
+                            "edit_mileage_trip",
+                            payload,
+                            lambda: storage.edit_mileage_trip(
+                                edit_id,
+                                trip_date=edited_date,
+                                miles=edited_miles,
+                                vehicle=edited_vehicle,
+                                start_location=edited_start,
+                                destination=edited_destination,
+                                business_purpose=edited_purpose,
+                                notes=edited_notes,
+                            ),
+                            "Mileage trip updated.",
+                        )
+                    if delete_requested:
+                        if not confirm_delete:
+                            st.error(
+                                "Confirm that you understand deletion is permanent."
+                            )
+                        else:
+                            confirmed_write(
+                                "delete_mileage_trip",
+                                {"id": edit_id},
+                                lambda: storage.delete_mileage_trip(edit_id),
+                                "Mileage trip deleted.",
+                            )
+
+
 elif page == "Accounts":
     st.title("Accounts")
     st.caption("Track bank, cash, credit card, and other manual balances.")
@@ -991,7 +1224,9 @@ elif page == "Data & backup":
         accounts = storage.list_accounts(active_only=False)
         categories = storage.list_categories()
         transactions = storage.list_transactions()
+        mileage_trips = storage.list_mileage_trips()
         all_transactions = ledger_frame(transactions, accounts, categories)
+        all_mileage = mileage_frame(mileage_trips)
         backup_zip = storage.export_backup_zip()
     except StorageError as error:
         report_storage_error(error)
@@ -1000,6 +1235,13 @@ elif page == "Data & backup":
         "Download transactions CSV",
         all_transactions.to_csv(index=False).encode("utf-8"),
         f"tabula-rosa-{date.today()}.csv",
+        "text/csv",
+        width="stretch",
+    )
+    st.download_button(
+        "Download mileage CSV",
+        all_mileage.to_csv(index=False).encode("utf-8"),
+        f"tabula-rosa-mileage-{date.today()}.csv",
         "text/csv",
         width="stretch",
     )

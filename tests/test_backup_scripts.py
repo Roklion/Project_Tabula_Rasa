@@ -57,7 +57,12 @@ class BackupScriptTests(unittest.TestCase):
                 GoogleSheetsStorage.validate_backup_zip(created.read_bytes())[
                     "row_counts"
                 ],
-                {"Accounts": 0, "Categories": 0, "Transactions": 0},
+                {
+                    "Accounts": 0,
+                    "Categories": 0,
+                    "Transactions": 0,
+                    "Mileage": 0,
+                },
             )
             timestamp = created.name.removeprefix(
                 "tabula-rosa-backup-"

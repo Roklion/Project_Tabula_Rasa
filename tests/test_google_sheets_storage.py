@@ -199,6 +199,64 @@ class GoogleSheetsStorageTests(unittest.TestCase):
                 category_id=category["id"],
             )
 
+    def test_mileage_trip_crud_filtering_and_validation(self) -> None:
+        first = self.storage.create_mileage_trip(
+            trip_date="2026-07-18",
+            miles="12.34",
+            vehicle="Blue car",
+            start_location="Office",
+            destination="Client site",
+            business_purpose="Project meeting",
+            notes="Tolls paid separately",
+        )
+        second = self.storage.create_mileage_trip(
+            trip_date="2026-07-20",
+            miles=5,
+            start_location="Client site",
+            destination="Office",
+            business_purpose="Return trip",
+        )
+
+        self.assertEqual(first["miles"], "12.3")
+        self.assertEqual(
+            [trip["id"] for trip in self.storage.list_mileage_trips()],
+            [second["id"], first["id"]],
+        )
+        self.assertEqual(
+            [trip["id"] for trip in self.storage.list_mileage_trips(end="2026-07-19")],
+            [first["id"]],
+        )
+
+        edited = self.storage.edit_mileage_trip(
+            first["id"],
+            miles=14.2,
+            destination="Updated client site",
+        )
+        self.assertEqual(edited["miles"], "14.2")
+        self.assertEqual(edited["created_at"], first["created_at"])
+
+        self.storage.delete_mileage_trip(second["id"])
+        self.assertEqual(
+            [trip["id"] for trip in self.storage.list_mileage_trips()],
+            [first["id"]],
+        )
+        with self.assertRaises(StorageValidationError):
+            self.storage.create_mileage_trip(
+                trip_date="2026-07-20",
+                miles=0,
+                start_location="Office",
+                destination="Client",
+                business_purpose="Meeting",
+            )
+        with self.assertRaises(StorageValidationError):
+            self.storage.create_mileage_trip(
+                trip_date="2026-07-20",
+                miles=1,
+                start_location="Office",
+                destination="",
+                business_purpose="Meeting",
+            )
+
     def test_csv_import_validates_all_rows_before_batch_append(self) -> None:
         self.storage.create_account("Checking", "Bank")
         self.storage.create_category("Sales", "Income")
@@ -416,16 +474,30 @@ class GoogleSheetsStorageTests(unittest.TestCase):
 
     def test_backup_contains_csv_files_and_manifest(self) -> None:
         self.storage.create_account("Checking", "Bank")
+        self.storage.create_mileage_trip(
+            trip_date="2026-07-20",
+            miles=4.5,
+            start_location="Office",
+            destination="Bank",
+            business_purpose="Deposit",
+        )
         backup = self.storage.export_backup_zip()
         with zipfile.ZipFile(io.BytesIO(backup)) as archive:
             self.assertEqual(
                 set(archive.namelist()),
-                {"Accounts.csv", "Categories.csv", "Transactions.csv", "manifest.json"},
+                {
+                    "Accounts.csv",
+                    "Categories.csv",
+                    "Transactions.csv",
+                    "Mileage.csv",
+                    "manifest.json",
+                },
             )
             manifest = json.loads(archive.read("manifest.json"))
             self.assertEqual(manifest["row_counts"]["Accounts"], 1)
+            self.assertEqual(manifest["row_counts"]["Mileage"], 1)
             self.assertIn("backup_time", manifest)
-            self.assertEqual(manifest["format_version"], 2)
+            self.assertEqual(manifest["format_version"], 3)
             self.assertIn("Accounts.csv", manifest["sha256"])
         validated = self.storage.validate_backup_zip(backup)
         self.assertEqual(validated["workbook_title"], "Test Ledger")
@@ -453,14 +525,66 @@ class GoogleSheetsStorageTests(unittest.TestCase):
             category_id=category["id"],
             payee="Customer",
         )
+        mileage = self.storage.create_mileage_trip(
+            trip_date="2026-07-19",
+            miles=8.4,
+            start_location="Office",
+            destination="Customer",
+            business_purpose="Sales meeting",
+        )
         backup = self.storage.export_backup_zip()
         restored_storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
 
         counts = restored_storage.restore_backup_zip(backup)
 
-        self.assertEqual(counts, {"Accounts": 1, "Categories": 1, "Transactions": 1})
+        self.assertEqual(
+            counts,
+            {"Accounts": 1, "Categories": 1, "Transactions": 1, "Mileage": 1},
+        )
         self.assertEqual(restored_storage.list_accounts()[0]["id"], account["id"])
         self.assertEqual(restored_storage.list_transactions()[0]["id"], transaction["id"])
+        self.assertEqual(restored_storage.list_mileage_trips()[0]["id"], mileage["id"])
+
+    def test_restore_accepts_pre_mileage_backup(self) -> None:
+        self.storage.create_account("Checking", "Bank")
+        current_backup = self.storage.export_backup_zip()
+        legacy_buffer = io.BytesIO()
+        with zipfile.ZipFile(io.BytesIO(current_backup)) as source:
+            manifest = json.loads(source.read("manifest.json"))
+            manifest["format_version"] = 2
+            manifest["row_counts"].pop("Mileage")
+            manifest["worksheet_headers"].pop("Mileage")
+            manifest["sha256"].pop("Mileage.csv")
+            with zipfile.ZipFile(legacy_buffer, "w") as legacy:
+                for name in (
+                    "Accounts.csv",
+                    "Categories.csv",
+                    "Transactions.csv",
+                ):
+                    legacy.writestr(name, source.read(name))
+                legacy.writestr("manifest.json", json.dumps(manifest))
+
+        target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+        counts = target.restore_backup_zip(legacy_buffer.getvalue())
+
+        self.assertEqual(
+            counts,
+            {"Accounts": 1, "Categories": 0, "Transactions": 0},
+        )
+        self.assertEqual(target.list_mileage_trips(), [])
+
+        nonblank_target = GoogleSheetsStorage(
+            FakeWorkbook(), sleeper=lambda _: None
+        )
+        nonblank_target.create_mileage_trip(
+            trip_date="2026-07-20",
+            miles=2,
+            start_location="Office",
+            destination="Bank",
+            business_purpose="Deposit",
+        )
+        with self.assertRaises(StorageConflictError):
+            nonblank_target.restore_backup_zip(legacy_buffer.getvalue())
 
     def test_restore_refuses_nonblank_target(self) -> None:
         self.storage.create_account("Checking", "Bank")

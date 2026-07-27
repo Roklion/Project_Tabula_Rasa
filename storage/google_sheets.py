@@ -58,6 +58,22 @@ WORKSHEET_HEADERS = {
         "reference",
         "created_at",
     ),
+    "Mileage": (
+        "id",
+        "trip_date",
+        "miles",
+        "vehicle",
+        "start_location",
+        "destination",
+        "business_purpose",
+        "notes",
+        "created_at",
+    ),
+}
+LEGACY_BACKUP_HEADERS = {
+    title: headers
+    for title, headers in WORKSHEET_HEADERS.items()
+    if title != "Mileage"
 }
 ACCOUNT_TYPES = {
     "Bank",
@@ -77,7 +93,8 @@ FIXED_TYPE_CLASSIFICATIONS = {
 }
 CATEGORY_KINDS = {"Income", "Expense"}
 TRANSACTION_KINDS = {"Income", "Expense", "Transfer"}
-BACKUP_FORMAT_VERSION = 2
+BACKUP_FORMAT_VERSION = 3
+SUPPORTED_BACKUP_FORMAT_VERSIONS = {2, BACKUP_FORMAT_VERSION}
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 DEFAULT_ACCOUNTS = (("Checking", "Bank"), ("Cash", "Cash"))
 DEFAULT_CATEGORIES = {
@@ -156,6 +173,16 @@ def _positive_amount(value: Any) -> str:
     return format(amount.quantize(Decimal("0.01")), "f")
 
 
+def _positive_miles(value: Any) -> str:
+    try:
+        miles = Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        raise StorageValidationError("Miles must be numeric") from None
+    if not miles.is_finite() or miles <= 0:
+        raise StorageValidationError("Miles must be greater than zero")
+    return format(miles.quantize(Decimal("0.1")), "f")
+
+
 def _balance_amount(value: Any) -> str:
     try:
         amount = Decimal(str(value))
@@ -205,31 +232,40 @@ def _parse_backup_zip(
     backup: bytes,
 ) -> tuple[dict[str, Any], dict[str, tuple[list[str], list[dict[str, str]]]]]:
     """Validate a ledger backup without extracting files to disk."""
-    required_files = {f"{title}.csv" for title in WORKSHEET_HEADERS} | {
-        "manifest.json"
-    }
     try:
         with zipfile.ZipFile(io.BytesIO(backup)) as archive:
             names = archive.namelist()
-            if len(names) != len(set(names)) or set(names) != required_files:
-                raise StorageValidationError(
-                    "Backup must contain exactly the ledger CSV files and manifest.json"
-                )
+            if len(names) != len(set(names)) or "manifest.json" not in names:
+                raise StorageValidationError("Backup files are missing or duplicated")
             if sum(item.file_size for item in archive.infolist()) > 100 * 1024 * 1024:
                 raise StorageValidationError("Backup is too large to restore safely")
             manifest_bytes = archive.read("manifest.json")
+            try:
+                manifest = json.loads(manifest_bytes.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise StorageValidationError(
+                    "Backup manifest is not valid UTF-8 JSON"
+                ) from exc
+            format_version = manifest.get("format_version")
+            if format_version not in SUPPORTED_BACKUP_FORMAT_VERSIONS:
+                raise StorageValidationError("Backup format version is unsupported")
+            backup_headers = (
+                WORKSHEET_HEADERS
+                if format_version == BACKUP_FORMAT_VERSION
+                else LEGACY_BACKUP_HEADERS
+            )
+            required_files = {
+                f"{title}.csv" for title in backup_headers
+            } | {"manifest.json"}
+            if set(names) != required_files:
+                raise StorageValidationError(
+                    "Backup must contain exactly the expected CSV files and manifest.json"
+                )
             csv_files = {
-                title: archive.read(f"{title}.csv") for title in WORKSHEET_HEADERS
+                title: archive.read(f"{title}.csv") for title in backup_headers
             }
     except (zipfile.BadZipFile, OSError, RuntimeError) as exc:
         raise StorageValidationError("Backup is not a readable ZIP archive") from exc
-
-    try:
-        manifest = json.loads(manifest_bytes.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise StorageValidationError("Backup manifest is not valid UTF-8 JSON") from exc
-    if manifest.get("format_version") != BACKUP_FORMAT_VERSION:
-        raise StorageValidationError("Backup format version is unsupported")
 
     row_counts = manifest.get("row_counts")
     file_hashes = manifest.get("sha256")
@@ -248,7 +284,7 @@ def _parse_backup_zip(
         if not parsed_rows:
             raise StorageValidationError(f"{title} backup has no header row")
         headers = [value.strip() for value in parsed_rows[0]]
-        required_headers = set(WORKSHEET_HEADERS[title])
+        required_headers = set(backup_headers[title])
         if (
             any(not value for value in headers)
             or len(headers) != len(set(headers))
@@ -317,7 +353,21 @@ class GoogleSheetsStorage:
                 credential_info, scopes=[SHEETS_SCOPE]
             )
             workbook = gspread.authorize(credentials).open_by_key(spreadsheet_id)
-        except (KeyError, TypeError, ValueError, GoogleAuthError, gspread.GSpreadException) as exc:
+            actual_titles = {worksheet.title for worksheet in workbook.worksheets()}
+            if "Mileage" not in actual_titles:
+                headers = WORKSHEET_HEADERS["Mileage"]
+                worksheet = workbook.add_worksheet(
+                    title="Mileage", rows=1000, cols=len(headers)
+                )
+                worksheet.update([list(headers)], range_name="A1", raw=True)
+        except (
+            KeyError,
+            TypeError,
+            ValueError,
+            GoogleAuthError,
+            gspread.GSpreadException,
+            OSError,
+        ) as exc:
             raise StorageUnavailableError(
                 "Google Sheets authentication or workbook access failed"
             ) from exc
@@ -851,6 +901,93 @@ class GoogleSheetsStorage:
                     raise
                 self._sleeper(self._retry_base_delay_seconds * (2**attempt))
 
+    def _prepare_mileage_trip(
+        self,
+        data: Mapping[str, Any],
+        *,
+        trip_id: str | None = None,
+        created_at: str | None = None,
+    ) -> dict[str, str]:
+        return {
+            "id": trip_id or str(uuid4()),
+            "trip_date": _iso_date(data.get("trip_date")),
+            "miles": _positive_miles(data.get("miles")),
+            "vehicle": _clean_text(data.get("vehicle"), "Vehicle"),
+            "start_location": _clean_text(
+                data.get("start_location"), "Starting location", required=True
+            ),
+            "destination": _clean_text(
+                data.get("destination"), "Destination", required=True
+            ),
+            "business_purpose": _clean_text(
+                data.get("business_purpose"), "Business purpose", required=True
+            ),
+            "notes": _clean_text(data.get("notes"), "Notes"),
+            "created_at": created_at or _utc_now(),
+        }
+
+    def list_mileage_trips(
+        self,
+        *,
+        start: date | str | None = None,
+        end: date | str | None = None,
+    ) -> list[dict[str, str]]:
+        start_text = _iso_date(start) if start is not None else None
+        end_text = _iso_date(end) if end is not None else None
+        trips = []
+        for row in self._rows("Mileage"):
+            item = dict(row.values)
+            if start_text and item["trip_date"] < start_text:
+                continue
+            if end_text and item["trip_date"] > end_text:
+                continue
+            trips.append(item)
+        return sorted(
+            trips,
+            key=lambda item: (item["trip_date"], item["created_at"], item["id"]),
+            reverse=True,
+        )
+
+    def create_mileage_trip(self, **data: Any) -> dict[str, str]:
+        record = self._prepare_mileage_trip(data)
+        self._append("Mileage", record)
+        return record
+
+    def edit_mileage_trip(self, trip_id: str, **changes: Any) -> dict[str, str]:
+        current = self._find_row("Mileage", trip_id)
+        merged = dict(current.values)
+        merged.update(changes)
+        updated = self._prepare_mileage_trip(
+            merged,
+            trip_id=trip_id,
+            created_at=current.values["created_at"],
+        )
+        self._replace_row("Mileage", current, updated)
+        return updated
+
+    def delete_mileage_trip(self, trip_id: str) -> None:
+        for attempt in range(self._retry_attempts):
+            current = self._find_row("Mileage", trip_id)
+            worksheet = self._worksheet("Mileage")
+            try:
+                self._api(
+                    lambda: worksheet.delete_rows(current.row_number),
+                    retry_safe=False,
+                )
+                self._invalidate("Mileage")
+                return
+            except StorageUnavailableError as error:
+                self._invalidate("Mileage")
+                if not error.retryable:
+                    raise
+                try:
+                    self._find_row("Mileage", trip_id)
+                except StorageNotFoundError:
+                    return
+                if attempt + 1 >= self._retry_attempts:
+                    raise
+                self._sleeper(self._retry_base_delay_seconds * (2**attempt))
+
     def import_csv_transactions(
         self, rows: Iterable[Mapping[str, Any]]
     ) -> list[dict[str, str]]:
@@ -1047,9 +1184,9 @@ class GoogleSheetsStorage:
     def restore_backup_zip(self, backup: bytes) -> dict[str, int]:
         """Restore a validated backup into a blank initialized workbook."""
         _, tables = _parse_backup_zip(backup)
-        for title, (backup_headers, _) in tables.items():
+        for title in WORKSHEET_HEADERS:
             target_headers = self._headers(title)
-            if set(target_headers) != set(backup_headers):
+            if title in tables and set(target_headers) != set(tables[title][0]):
                 raise StorageValidationError(
                     f"{title} target headers do not match the backup"
                 )
@@ -1059,7 +1196,9 @@ class GoogleSheetsStorage:
                 )
 
         counts: dict[str, int] = {}
-        for title in ("Accounts", "Categories", "Transactions"):
+        for title in WORKSHEET_HEADERS:
+            if title not in tables:
+                continue
             _, records = tables[title]
             self._append_many(title, records)
             restored = self._rows(title, force_refresh=True)
