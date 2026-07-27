@@ -1299,7 +1299,8 @@ elif page == "Data & backup":
                 st.error("Could not read this CSV file. Check its format and encoding.")
     st.subheader("Import QuickBooks transactions")
     st.write(
-        "Upload a QuickBooks Online **Transaction Detail by Account** CSV. "
+        "Upload a QuickBooks Online **Transaction Detail by Account** CSV, "
+        "or a QuickBooks Self-Employed **General ledger** XLSX or ZIP export. "
         "Review the validation results and summary before committing."
     )
     upload = st.file_uploader("QuickBooks export", type=["csv", "xlsx", "zip"])
