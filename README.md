@@ -298,6 +298,21 @@ spreadsheet but cannot own newly created backup files in a personal My Drive.
 
 ### Restore drill
 
+Current restore supports backup formats 2 and 3. Convert a historical format-1
+archive offline before attempting a restore:
+
+```powershell
+python scripts/convert_backup_v1_to_v2.py backups\heathcote\tabula-rosa-backup-YYYYMMDDTHHMMSSZ.zip
+```
+
+The converter fully validates the source, infers any missing account
+classification, renames the legacy `Loan` account type to `Short-term debt`,
+normalizes legacy active values, and creates a separate
+`*-format2.zip` archive. It never modifies or overwrites the original. The
+converted archive records the source SHA-256 hash and conversion timestamp in
+its manifest and is revalidated by the current backup validator. Format 2
+predates mileage tracking, so restoring it leaves the `Mileage` worksheet empty.
+
 1. Create a new blank Google spreadsheet and share it with the service-account
    email as Editor.
 2. Copy the new spreadsheet ID from its URL.
