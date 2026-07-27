@@ -226,6 +226,42 @@ class AppAuthenticationTests(unittest.TestCase):
                     for field in app.text_input
                     if field.label == "Google Drive Desktop backup folder path"
                 ).input(r"G:\My Drive\Tabula Rosa Backups\north")
+                next(
+                    button
+                    for button in app.button
+                    if button.label == "Validate and save"
+                ).click().run()
+                self.assertTrue(
+                    any(
+                        "Upload the Google service-account JSON" in str(item.value)
+                        for item in app.error
+                    )
+                )
+                self.assertEqual(
+                    next(
+                        field
+                        for field in app.text_input
+                        if field.label == "Business name"
+                    ).value,
+                    "North Shop",
+                )
+                self.assertEqual(
+                    next(
+                        field
+                        for field in app.text_input
+                        if field.label == "Profile key"
+                    ).value,
+                    "north",
+                )
+                self.assertEqual(
+                    next(
+                        field
+                        for field in app.text_input
+                        if field.label
+                        == "Google Sheets URL or spreadsheet ID"
+                    ).value,
+                    "abcdefghij1234567890",
+                )
                 credential = {
                     "type": "service_account",
                     "project_id": "test-project",

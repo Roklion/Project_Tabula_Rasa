@@ -75,7 +75,7 @@ def require_authentication() -> None:
 
     st.title("Tabula Rosa")
     st.caption("Enter the application password to continue.")
-    with st.form("login_form"):
+    with st.form("login_form", clear_on_submit=True):
         password = st.text_input("Password", type="password")
         submitted = st.form_submit_button(
             "Sign in", type="primary", width="stretch"

@@ -50,6 +50,8 @@ def main() -> None:
         by_label(app.button, "Add account").click().run()
         assert any("unique" in value.casefold() for value in error_values(app))
         assert len(storage.list_accounts(active_only=False)) == 2
+        assert by_label(app.text_input, "Account name").value == "checking"
+        assert by_label(app.selectbox, "Type").value == "Bank"
 
         app.radio[0].set_value("Categories").run()
         by_label(app.text_input, "Category name").input("sales")
@@ -57,6 +59,8 @@ def main() -> None:
         by_label(app.button, "Add category").click().run()
         assert any("already exists" in value.casefold() for value in error_values(app))
         assert len(storage.list_categories()) == 16
+        assert by_label(app.text_input, "Category name").value == "sales"
+        assert by_label(app.selectbox, "Type").value == "Income"
 
         app.radio[0].set_value("Data & backup").run()
         invalid_csv = b"Date,Type,Amount,Account\n2026-07-19,Income,10,Checking\n"

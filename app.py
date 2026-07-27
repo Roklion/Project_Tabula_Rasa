@@ -172,11 +172,31 @@ def report_storage_error(error: StorageError) -> None:
     st.error(str(error))
 
 
+def reset_widget_state_if_requested(
+    flag: str,
+    *,
+    keys: tuple[str, ...],
+    prefixes: tuple[str, ...] = (),
+) -> None:
+    """Clear create-form widgets only on the rerun after a successful write."""
+    if not st.session_state.pop(flag, False):
+        return
+    for key in list(st.session_state):
+        if key in keys or any(key.startswith(prefix) for prefix in prefixes):
+            st.session_state.pop(key, None)
+
+
+def schedule_widget_reset(flag: str) -> None:
+    st.session_state[flag] = True
+
+
 def confirmed_write(
     action: str,
     payload: dict,
     operation,
     success_message,
+    *,
+    on_success=None,
 ) -> None:
     profile_action = f"{st.session_state.get('business_profile', 'default')}:{action}"
     if is_recent_duplicate(st.session_state, profile_action, payload):
@@ -188,6 +208,8 @@ def confirmed_write(
         report_storage_error(error)
         return
     mark_completed(st.session_state, profile_action, payload)
+    if on_success is not None:
+        on_success()
     st.success(success_message(result) if callable(success_message) else success_message)
     st.rerun()
 
@@ -396,6 +418,23 @@ elif page == "Transactions":
 
     account_map = {account["name"]: account["id"] for account in active_accounts}
     with tab_add:
+        transaction_form_keys = (
+            "add_transaction_date",
+            "add_transaction_amount",
+            "add_transaction_account_income",
+            "add_transaction_account_expense",
+            "add_transaction_account_transfer",
+            "add_transaction_to_account",
+            "add_transaction_category_income",
+            "add_transaction_category_expense",
+            "add_transaction_payee",
+            "add_transaction_reference",
+            "add_transaction_description",
+        )
+        reset_widget_state_if_requested(
+            "reset_add_transaction_form",
+            keys=transaction_form_keys,
+        )
         kind = st.segmented_control(
             "Transaction type",
             ["Income", "Expense", "Transfer"],
@@ -410,22 +449,37 @@ elif page == "Transactions":
             if kind != "Transfer" and not categories_for_kind:
                 st.warning(f"Create a {kind.lower()} category first.")
             else:
-                with st.form("add_transaction", clear_on_submit=True):
+                with st.form("add_transaction", clear_on_submit=False):
                     c1, c2 = st.columns(2)
-                    transaction_date = c1.date_input("Date", date.today())
+                    transaction_date = c1.date_input(
+                        "Date",
+                        date.today(),
+                        key="add_transaction_date",
+                    )
                     amount = c2.number_input(
-                        "Amount", min_value=0.01, step=1.0, format="%.2f"
+                        "Amount",
+                        min_value=0.01,
+                        step=1.0,
+                        format="%.2f",
+                        key="add_transaction_amount",
                     )
                     source = st.selectbox(
                         "Account" if kind != "Transfer" else "From account",
                         list(account_map),
+                        key=f"add_transaction_account_{kind.casefold()}",
                     )
                     to_account = None
                     category_id = None
                     if kind == "Transfer":
                         choices = [name for name in account_map if name != source]
                         to_account = (
-                            st.selectbox("To account", choices) if choices else None
+                            st.selectbox(
+                                "To account",
+                                choices,
+                                key="add_transaction_to_account",
+                            )
+                            if choices
+                            else None
                         )
                     else:
                         category_map = {
@@ -433,12 +487,28 @@ elif page == "Transactions":
                             for category in categories_for_kind
                         }
                         category_id = category_map[
-                            st.selectbox("Category", list(category_map))
+                            st.selectbox(
+                                "Category",
+                                list(category_map),
+                                key=(
+                                    "add_transaction_category_"
+                                    f"{kind.casefold()}"
+                                ),
+                            )
                         ]
                     c1, c2 = st.columns(2)
-                    payee = c1.text_input("Payee / customer")
-                    reference = c2.text_input("Reference (optional)")
-                    description = st.text_input("Description / memo")
+                    payee = c1.text_input(
+                        "Payee / customer",
+                        key="add_transaction_payee",
+                    )
+                    reference = c2.text_input(
+                        "Reference (optional)",
+                        key="add_transaction_reference",
+                    )
+                    description = st.text_input(
+                        "Description / memo",
+                        key="add_transaction_description",
+                    )
                     submitted = st.form_submit_button(
                         "Save transaction", type="primary", width="stretch"
                     )
@@ -464,6 +534,9 @@ elif page == "Transactions":
                                 payload,
                                 lambda: storage.create_transaction(**payload),
                                 "Transaction saved.",
+                                on_success=lambda: schedule_widget_reset(
+                                    "reset_add_transaction_form"
+                                ),
                             )
 
     with tab_ledger:
@@ -696,22 +769,49 @@ elif page == "Mileage":
     tab_add, tab_log = st.tabs(["Add trip", "View & edit mileage log"])
 
     with tab_add:
-        with st.form("add_mileage_trip", clear_on_submit=True):
+        mileage_form_keys = (
+            "add_mileage_trip_date",
+            "add_mileage_miles",
+            "add_mileage_vehicle",
+            "add_mileage_start",
+            "add_mileage_destination",
+            "add_mileage_round_trip",
+            "add_mileage_purpose",
+            "add_mileage_notes",
+        )
+        reset_widget_state_if_requested(
+            "reset_add_mileage_form",
+            keys=mileage_form_keys,
+        )
+
+        with st.form("add_mileage_trip", clear_on_submit=False):
             c1, c2 = st.columns(2)
-            trip_date = c1.date_input("Trip date", date.today())
+            trip_date = c1.date_input(
+                "Trip date",
+                date.today(),
+                key="add_mileage_trip_date",
+            )
             miles = c2.number_input(
                 "Business miles",
                 min_value=0.1,
                 step=0.1,
                 format="%.1f",
+                key="add_mileage_miles",
             )
             vehicle = st.text_input(
                 "Vehicle (optional)",
                 help="For example: 2022 Honda Civic or Company van.",
+                key="add_mileage_vehicle",
             )
             c1, c2 = st.columns(2)
-            start_location = c1.text_input("Starting location")
-            destination = c2.text_input("Destination")
+            start_location = c1.text_input(
+                "Starting location",
+                key="add_mileage_start",
+            )
+            destination = c2.text_input(
+                "Destination",
+                key="add_mileage_destination",
+            )
             round_trip = st.checkbox(
                 "Round trip",
                 help=(
@@ -719,9 +819,16 @@ elif page == "Mileage":
                     "starting and ending locations reversed. Each entry uses "
                     "the mileage entered above."
                 ),
+                key="add_mileage_round_trip",
             )
-            business_purpose = st.text_input("Business purpose")
-            notes = st.text_area("Notes (optional)")
+            business_purpose = st.text_input(
+                "Business purpose",
+                key="add_mileage_purpose",
+            )
+            notes = st.text_area(
+                "Notes (optional)",
+                key="add_mileage_notes",
+            )
             submitted = st.form_submit_button(
                 "Save mileage trip", type="primary", width="stretch"
             )
@@ -766,6 +873,9 @@ elif page == "Mileage":
                         "Round trip saved as two mileage entries."
                         if round_trip
                         else "Mileage trip saved."
+                    ),
+                    on_success=lambda: schedule_widget_reset(
+                        "reset_add_mileage_form"
                     ),
                 )
 
@@ -943,10 +1053,19 @@ elif page == "Accounts":
         width="stretch",
         column_config={"Balance": st.column_config.NumberColumn(format="$%.2f")},
     )
+    reset_widget_state_if_requested(
+        "reset_add_account_form",
+        keys=(
+            "new_account_name",
+            "new_account_type",
+            "new_account_opening",
+        ),
+        prefixes=("new_account_classification_",),
+    )
     with st.expander("Add account", expanded=True):
         with st.container(border=True):
             c1, c2, c3, c4 = st.columns(4)
-            name = c1.text_input("Account name")
+            name = c1.text_input("Account name", key="new_account_name")
             account_type = c2.selectbox(
                 "Type",
                 ACCOUNT_TYPES,
@@ -964,6 +1083,7 @@ elif page == "Accounts":
                 "Opening balance",
                 value=0.0,
                 format="%.2f",
+                key="new_account_opening",
                 help=(
                     "Use positive balances for assets and negative balances for "
                     "liabilities and equity."
@@ -986,6 +1106,9 @@ elif page == "Accounts":
                         classification=classification,
                     ),
                     "Account added.",
+                    on_success=lambda: schedule_widget_reset(
+                        "reset_add_account_form"
+                    ),
                 )
 
     if accounts:
@@ -1081,10 +1204,18 @@ elif page == "Categories":
         ]
     )
     st.dataframe(category_frame, hide_index=True, width="stretch")
-    with st.form("add_category"):
+    reset_widget_state_if_requested(
+        "reset_add_category_form",
+        keys=("new_category_name", "new_category_kind"),
+    )
+    with st.form("add_category", clear_on_submit=False):
         c1, c2 = st.columns(2)
-        name = c1.text_input("Category name")
-        kind = c2.selectbox("Type", ["Expense", "Income"])
+        name = c1.text_input("Category name", key="new_category_name")
+        kind = c2.selectbox(
+            "Type",
+            ["Expense", "Income"],
+            key="new_category_kind",
+        )
         if st.form_submit_button("Add category", type="primary"):
             payload = {"name": name, "kind": kind}
             confirmed_write(
@@ -1092,6 +1223,9 @@ elif page == "Categories":
                 payload,
                 lambda: storage.create_category(name, kind),
                 "Category added.",
+                on_success=lambda: schedule_widget_reset(
+                    "reset_add_category_form"
+                ),
             )
     if categories:
         with st.expander("Edit category"):

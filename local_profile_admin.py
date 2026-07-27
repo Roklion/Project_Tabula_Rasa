@@ -107,14 +107,34 @@ def render_local_profile_admin(
         "Share the spreadsheet with the uploaded service account as Editor before "
         "saving. Validation opens the workbook and checks the required worksheets."
     )
-    with st.form("local_profile_form", clear_on_submit=True):
-        name = st.text_input("Business name", max_chars=100)
+    profile_form_keys = (
+        "local_profile_name",
+        "local_profile_key",
+        "local_profile_spreadsheet",
+        "local_profile_backup_path",
+        "local_profile_credential",
+        "local_profile_replace",
+    )
+    if st.session_state.pop("reset_local_profile_form", False):
+        for form_key in profile_form_keys:
+            st.session_state.pop(form_key, None)
+
+    with st.form("local_profile_form", clear_on_submit=False):
+        name = st.text_input(
+            "Business name",
+            max_chars=100,
+            key="local_profile_name",
+        )
         profile_key = st.text_input(
             "Profile key",
             max_chars=48,
             help="Lowercase letters, numbers, underscores, and hyphens.",
+            key="local_profile_key",
         )
-        spreadsheet = st.text_input("Google Sheets URL or spreadsheet ID")
+        spreadsheet = st.text_input(
+            "Google Sheets URL or spreadsheet ID",
+            key="local_profile_spreadsheet",
+        )
         backup_folder_path = st.text_input(
             "Google Drive Desktop backup folder path",
             help=(
@@ -124,17 +144,20 @@ def render_local_profile_admin(
                 r"G:\My Drive\Tabula Rosa Backups\business. Google Drive Desktop "
                 "must be installed, signed in, and running when backups execute."
             ),
+            key="local_profile_backup_path",
         )
         credential_file = st.file_uploader(
             "Google service-account JSON",
             type=["json"],
             accept_multiple_files=False,
+            key="local_profile_credential",
         )
         replace = st.checkbox(
             "Replace an existing profile with this key",
             help=(
                 "This replaces the profile with this key in business_profiles.json."
             ),
+            key="local_profile_replace",
         )
         submitted = st.form_submit_button("Validate and save", type="primary")
 
@@ -186,6 +209,7 @@ def render_local_profile_admin(
         return
 
     st.cache_resource.clear()
+    st.session_state["reset_local_profile_form"] = True
     st.session_state["local_profile_admin_notice"] = (
         f"Business profile '{key}' was validated and saved locally."
     )

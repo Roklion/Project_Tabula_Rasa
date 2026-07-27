@@ -12,7 +12,7 @@ from streamlit.testing.v1 import AppTest
 
 from ledger_auth import hash_password
 from ledger_reporting import balance_sheet
-from storage import GoogleSheetsStorage
+from storage import GoogleSheetsStorage, StorageValidationError
 from tests.fakes import FakeWorkbook
 
 
@@ -46,6 +46,9 @@ def main() -> None:
         by_label(app.number_input, "Opening balance").set_value(100)
         by_label(app.button, "Add account").click().run()
         assert len(app.exception) == 0
+        assert by_label(app.text_input, "Account name").value == ""
+        assert by_label(app.selectbox, "Type").value == "Bank"
+        assert by_label(app.number_input, "Opening balance").value == 0.0
 
         savings = next(
             account
@@ -86,6 +89,8 @@ def main() -> None:
         by_label(app.selectbox, "Type").set_value("Expense")
         by_label(app.button, "Add category").click().run()
         assert len(app.exception) == 0
+        assert by_label(app.text_input, "Category name").value == ""
+        assert by_label(app.selectbox, "Type").value == "Expense"
 
         app.radio[0].set_value("Transactions").run()
         by_label(app.segmented_control, "Transaction type").set_value("Expense").run()
@@ -93,8 +98,31 @@ def main() -> None:
         by_label(app.selectbox, "Account").set_value("Owner-paid expenses")
         by_label(app.selectbox, "Category").set_value("Testing expense")
         by_label(app.text_input, "Payee / customer").input("Test vendor")
+        by_label(app.text_input, "Description / memo").input("Keep this memo")
+        with patch.object(
+            storage,
+            "create_transaction",
+            side_effect=StorageValidationError("Test validation error"),
+        ):
+            by_label(app.button, "Save transaction").click().run()
+        assert storage.list_transactions() == []
+        assert by_label(app.number_input, "Amount").value == 25
+        assert (
+            by_label(app.selectbox, "Account").value
+            == "Owner-paid expenses"
+        )
+        assert by_label(app.selectbox, "Category").value == "Testing expense"
+        assert by_label(app.text_input, "Payee / customer").value == "Test vendor"
+        assert (
+            by_label(app.text_input, "Description / memo").value
+            == "Keep this memo"
+        )
+
         by_label(app.button, "Save transaction").click().run()
         assert len(app.exception) == 0
+        assert by_label(app.number_input, "Amount").value == 0.01
+        assert by_label(app.text_input, "Payee / customer").value == ""
+        assert by_label(app.text_input, "Description / memo").value == ""
         owner_expense = next(
             item
             for item in storage.list_transactions()
@@ -178,6 +206,20 @@ def main() -> None:
         by_label(app.text_input, "Starting location").input("Office")
         by_label(app.text_input, "Destination").input("Client site")
         by_label(app.checkbox, "Round trip").check()
+        by_label(app.text_area, "Notes (optional)").input("Keep this note")
+        by_label(app.button, "Save mileage trip").click().run()
+        assert storage.list_mileage_trips() == []
+        assert any(
+            "Business purpose is required" in str(error.value)
+            for error in app.error
+        )
+        assert by_label(app.number_input, "Business miles").value == 18.6
+        assert by_label(app.text_input, "Vehicle (optional)").value == "Blue car"
+        assert by_label(app.text_input, "Starting location").value == "Office"
+        assert by_label(app.text_input, "Destination").value == "Client site"
+        assert by_label(app.checkbox, "Round trip").value is True
+        assert by_label(app.text_area, "Notes (optional)").value == "Keep this note"
+
         by_label(app.text_input, "Business purpose").input("Project meeting")
         by_label(app.button, "Save mileage trip").click().run()
         assert len(app.exception) == 0
@@ -197,6 +239,13 @@ def main() -> None:
         assert return_trip["destination"] == "Office"
         assert outbound["miles"] == return_trip["miles"] == "18.6"
         assert outbound["business_purpose"] == "Project meeting"
+        assert by_label(app.number_input, "Business miles").value == 0.1
+        assert by_label(app.text_input, "Vehicle (optional)").value == ""
+        assert by_label(app.text_input, "Starting location").value == ""
+        assert by_label(app.text_input, "Destination").value == ""
+        assert by_label(app.checkbox, "Round trip").value is False
+        assert by_label(app.text_input, "Business purpose").value == ""
+        assert by_label(app.text_area, "Notes (optional)").value == ""
 
         by_label(app.selectbox, "Mileage trip to edit").set_value(
             outbound["id"]
