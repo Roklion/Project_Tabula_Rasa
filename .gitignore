@@ -7,7 +7,7 @@ __pycache__/
 .env.*
 !.env.example
 .streamlit/secrets*.toml
-/.streamlit/*.json
+.streamlit/*.json
 .streamlit/business_profiles.json
 .streamlit/local_business_profiles.json
 tabula-rasa-streamlit-secrets-*.toml

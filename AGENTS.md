@@ -8,6 +8,12 @@ Made-with: Codex
 
 Do not add this trailer to commits created by the user or by other tools.
 
+# Read-only commands
+
+Read-only commands against Git or local files are pre-authorized and do not
+require asking the user for explicit approval. This includes inspecting status,
+diffs, logs, tracked files, configuration, and file contents.
+
 # Completion checks
 
 Running tests, linters, format checks, and other read-only validation commands
