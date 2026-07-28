@@ -3,12 +3,15 @@ from __future__ import annotations
 import io
 import json
 import zipfile
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
+import gspread
 import pytest
+from google.oauth2.service_account import Credentials
 
 from tabula_rasa.storage.google_sheets import (
     GoogleSheetsStorage,
+    SHEETS_SCOPE,
     StorageConflictError,
     StorageNotFoundError,
     StorageUnavailableError,
@@ -27,6 +30,67 @@ class TestGoogleSheetsStorage:
     def setup_method(self) -> None:
         self.workbook = FakeWorkbook()
         self.storage = GoogleSheetsStorage(self.workbook, sleeper=lambda _: None)
+
+    def test_profile_storage_initializes_tabs_and_headers_by_spreadsheet_id(
+        self,
+    ) -> None:
+        workbook = FakeWorkbook({"Sheet1": (), "Accounts": ()})
+        google_client = Mock()
+        google_client.open_by_key.return_value = workbook
+        credential_info = {"type": "service_account"}
+
+        with (
+            patch.object(
+                Credentials,
+                "from_service_account_info",
+                return_value=object(),
+            ) as from_service_account_info,
+            patch.object(gspread, "authorize", return_value=google_client),
+        ):
+            storage = GoogleSheetsStorage.from_secrets(
+                {
+                    "spreadsheet_id": "given-spreadsheet-id",
+                    "gcp_service_account": credential_info,
+                }
+            )
+
+        google_client.open_by_key.assert_called_once_with(
+            "given-spreadsheet-id"
+        )
+        from_service_account_info.assert_called_once_with(
+            credential_info, scopes=[SHEETS_SCOPE]
+        )
+        assert storage.workbook_title == workbook.title
+        assert workbook.sheets["Sheet1"].rows == []
+        for title, headers in WORKSHEET_HEADERS.items():
+            assert workbook.sheets[title].rows == [list(headers)]
+
+    def test_profile_storage_does_not_overwrite_incompatible_tab(self) -> None:
+        headers = dict(WORKSHEET_HEADERS)
+        headers["Accounts"] = ("legacy_id", "legacy_name")
+        workbook = FakeWorkbook(headers)
+        google_client = Mock()
+        google_client.open_by_key.return_value = workbook
+
+        with (
+            patch.object(
+                Credentials,
+                "from_service_account_info",
+                return_value=object(),
+            ),
+            patch.object(gspread, "authorize", return_value=google_client),
+            pytest.raises(StorageValidationError),
+        ):
+            GoogleSheetsStorage.from_secrets(
+                {
+                    "spreadsheet_id": "given-spreadsheet-id",
+                    "gcp_service_account": {"type": "service_account"},
+                }
+            )
+
+        assert workbook.sheets["Accounts"].rows == [
+            ["legacy_id", "legacy_name"]
+        ]
 
     def test_reordered_headers_are_addressed_by_name(self) -> None:
         headers = dict(WORKSHEET_HEADERS)

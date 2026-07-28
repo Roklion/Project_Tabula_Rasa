@@ -105,7 +105,8 @@ def render_local_profile_admin(
     st.subheader("Add or replace a local profile")
     st.write(
         "Share the spreadsheet with the uploaded service account as Editor before "
-        "saving. Validation opens the workbook and checks the required worksheets."
+        "saving. Validation opens the workbook, creates missing ledger worksheets "
+        "and headers, and seeds the default accounts and categories."
     )
     profile_form_keys = (
         "local_profile_name",

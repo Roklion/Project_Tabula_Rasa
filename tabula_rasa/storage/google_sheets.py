@@ -350,7 +350,7 @@ class GoogleSheetsStorage:
 
     @classmethod
     def from_secrets(cls, secrets: Mapping[str, Any]) -> "GoogleSheetsStorage":
-        """Create a storage client from Streamlit-compatible secrets."""
+        """Create and initialize storage from Streamlit-compatible secrets."""
         try:
             credential_info = dict(secrets["gcp_service_account"])
             spreadsheet_id = str(secrets["spreadsheet_id"])
@@ -358,13 +358,23 @@ class GoogleSheetsStorage:
                 credential_info, scopes=[SHEETS_SCOPE]
             )
             workbook = gspread.authorize(credentials).open_by_key(spreadsheet_id)
-            actual_titles = {worksheet.title for worksheet in workbook.worksheets()}
-            if "Mileage" not in actual_titles:
-                headers = WORKSHEET_HEADERS["Mileage"]
-                worksheet = workbook.add_worksheet(
-                    title="Mileage", rows=1000, cols=len(headers)
-                )
-                worksheet.update([list(headers)], range_name="A1", raw=True)
+            actual_worksheets = {
+                worksheet.title: worksheet for worksheet in workbook.worksheets()
+            }
+            for title, headers in WORKSHEET_HEADERS.items():
+                worksheet = actual_worksheets.get(title)
+                if worksheet is None:
+                    worksheet = workbook.add_worksheet(
+                        title=title, rows=1000, cols=len(headers)
+                    )
+                    worksheet.update(
+                        [list(headers)], range_name="A1", raw=True
+                    )
+                    continue
+                if not worksheet.get_all_values():
+                    worksheet.update(
+                        [list(headers)], range_name="A1", raw=True
+                    )
         except (
             KeyError,
             TypeError,

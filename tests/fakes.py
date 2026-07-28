@@ -9,7 +9,7 @@ from tabula_rasa.storage.google_sheets import WORKSHEET_HEADERS
 class FakeWorksheet:
     def __init__(self, title: str, headers: tuple[str, ...]):
         self.title = title
-        self.rows = [list(headers)]
+        self.rows = [list(headers)] if headers else []
         self.col_count = len(headers)
 
     def row_values(self, row: int) -> list[str]:
@@ -59,7 +59,7 @@ class FakeWorkbook:
     title = "Test Ledger"
 
     def __init__(self, headers: dict[str, tuple[str, ...]] | None = None):
-        headers = headers or WORKSHEET_HEADERS
+        headers = WORKSHEET_HEADERS if headers is None else headers
         self.sheets = {
             title: FakeWorksheet(title, columns) for title, columns in headers.items()
         }
@@ -69,3 +69,12 @@ class FakeWorkbook:
 
     def worksheet(self, title: str) -> FakeWorksheet:
         return self.sheets[title]
+
+    def add_worksheet(
+        self, title: str, rows: int, cols: int
+    ) -> FakeWorksheet:
+        del rows
+        worksheet = FakeWorksheet(title, ())
+        worksheet.col_count = cols
+        self.sheets[title] = worksheet
+        return worksheet

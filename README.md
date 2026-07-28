@@ -73,9 +73,9 @@ will be needed.
    `Tabula Rasa - Heathcote`. Do not enable **Anyone with the link**.
 3. Inside that folder, create a blank Google spreadsheet and give it a clear
    name such as `Heathcote Advisory Ledger`.
-4. Create these four worksheet tabs with the exact names and first-row headers
-   below. Header spelling and capitalization must match; column order may
-   differ.
+4. Leave the spreadsheet blank. When the business profile is validated and
+   saved, the app uses the supplied spreadsheet ID to create these four
+   worksheet tabs and first-row headers automatically:
 
    | Worksheet | Row 1 headers, from left to right |
    | --- | --- |
@@ -84,10 +84,11 @@ will be needed.
    | `Transactions` | `id`, `txn_date`, `kind`, `amount`, `account_id`, `to_account_id`, `category_id`, `payee`, `description`, `reference`, `created_at` |
    | `Mileage` | `id`, `trip_date`, `miles`, `vehicle`, `start_location`, `destination`, `business_purpose`, `notes`, `created_at` |
 
-   The default `Sheet1` tab may be deleted. Leave rows below the headers empty;
-   the app seeds its initial account and categories on first access. When an
-   existing three-tab workbook is opened after upgrading, the app creates the
-   new empty `Mileage` worksheet automatically.
+   The default `Sheet1` tab may be left in place or deleted. Existing compatible
+   ledger tabs are preserved, empty required tabs receive their headers, and
+   populated tabs with incompatible headers cause validation to fail instead of
+   being overwritten. The app also seeds its initial accounts and categories
+   while saving the profile.
 5. Share the spreadsheet with the service account's `client_email`, select
    **Editor**, clear **Notify people** if Google offers it, and click **Share**.
    Keep **General access** set to **Restricted**. Google's
