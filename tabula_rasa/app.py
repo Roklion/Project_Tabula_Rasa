@@ -1586,6 +1586,10 @@ elif page == "Data & backup":
                 )
             else:
                 st.warning("No cloud backup has been uploaded for this profile.")
+            st.caption(
+                "Verification downloads the latest backup into the app only to "
+                "check its integrity. It does not restore or change the live workbook."
+            )
             upload_column, verify_column = st.columns(2)
             if upload_column.button(
                 "Upload fresh backup now",

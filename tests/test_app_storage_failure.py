@@ -120,7 +120,7 @@ class TestAppStorageFailure:
             next(
                 button
                 for button in app.button
-                if button.label == "Download and verify latest"
+                if button.label == "Verify latest cloud backup"
             ).click().run()
 
         assert unavailable_export.call_count == 0
