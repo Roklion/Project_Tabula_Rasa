@@ -9,6 +9,42 @@ The application never mounts, authenticates to, or writes directly to the NAS.
 The per-profile Synology fields are non-secret operational records of the Cloud
 Sync task that an administrator must configure and monitor in DSM.
 
+## How the pieces fit together
+
+```text
+Live Google Sheets workbook
+        |
+        | Tabula Rosa creates and validates a versioned ZIP
+        v
+Business-specific Google Drive backup folder
+        |
+        | Synology Cloud Sync downloads remote changes only
+        v
+Business-specific DS220j destination folder
+        |
+        | Administrator copies a selected archive for a drill
+        v
+Safe local recovery folder -> new blank Google workbook
+```
+
+Google Drive is the primary automated backup destination. The DS220j is an
+additional recovery destination with a separate failure boundary. The NAS does
+not read the live workbook, and Tabula Rosa does not send requests to the NAS.
+This means neither Google Drive Desktop nor a permanently mapped NAS drive is
+part of normal backup operation. Temporary File Station or SMB access is needed
+only when an administrator copies an archive out for validation or restoration.
+
+The in-app option is a configuration record, not a Cloud Sync controller.
+Enabling it:
+
+- marks that business as expecting a Synology recovery copy;
+- records the expected NAS destination, schedule, and retention policy; and
+- displays those expectations on **Data & backup**.
+
+It does not install Cloud Sync, create a DSM task, test NAS connectivity, store
+NAS credentials, or prove that a file reached the NAS. DSM remains the source
+of truth for actual transfer status and logs.
+
 ## Prerequisites
 
 - A Google Drive backup folder selected for the business profile
@@ -22,6 +58,71 @@ Sync task that an administrator must configure and monitor in DSM.
 Use the Google account that owns the selected backup folder when authorizing
 Cloud Sync. Do not use a folder visible only through **Shared with me**, a Drive
 shortcut, the **Computers** area, or a Google Workspace Shared Drive.
+
+## Prepare the NAS destination
+
+### Create the shared folder
+
+In DSM, open **Control Panel → Shared Folder**, select **Create**, and use these
+initial settings:
+
+1. Name the shared folder `Tabula_Rosa_Backups`.
+2. Select the intended storage volume. The initial DS220j setup uses
+   **Volume 1 (ext4)**.
+3. Leave the two hide options cleared unless an organization-specific policy
+   requires hiding the share from network browsing.
+4. Enable **Recycle Bin** and **Restrict access to administrators only**. The
+   Recycle Bin protects against accidental manual deletion, but it does not
+   replace Cloud Sync's destination-deletion protection.
+5. At **Enable additional security measure**, the initial availability-focused
+   setup may select **Skip**. The archives contain private financial data, so
+   skipping shared-folder encryption is appropriate only when the NAS is
+   physically secure, DSM administrator access is strongly protected, and
+   untrusted users cannot access the share.
+
+Shared-folder encryption is also supported, but it creates another recovery
+dependency. Before selecting it, store the encryption password and exported
+recovery key outside the NAS, document how to remount the folder after a reboot,
+and test that procedure. Losing the key would defeat the purpose of the recovery
+copy.
+
+### Set explicit permissions
+
+Do not rely on blank permission boxes when DSM's **Preview** column shows
+inherited Read/Write access. Set explicit permissions according to role:
+
+- Give `admin` **Read/Write**.
+- Give the DSM account used to configure and manage Cloud Sync
+  **Read/Write**.
+- Give a recovery-only account **Read Only**, if one is needed.
+- Give unrelated local accounts and `guest` **No Access**.
+- In the permission-type selector, review **System internal users**. If DSM
+  lists the Cloud Sync package or service and requires an explicit permission,
+  give only that service **Read/Write**. Do not grant unrelated packages access.
+
+Use the effective **Preview** column to confirm the final permission for every
+listed account before completing the wizard. Protect DSM administrator accounts
+with strong unique passwords and MFA.
+
+### Create one subfolder per business
+
+After the shared folder is created, open File Station and add a distinct
+subfolder for each business that opts in:
+
+```text
+/volume1/Tabula_Rosa_Backups/heathcote-advisory
+/volume1/Tabula_Rosa_Backups/rok-collectibles
+```
+
+The exact `/volume1/...` path may differ if the shared folder lives on another
+volume. Record the path DSM actually uses instead of copying the example
+blindly. Grant write access only to the administrator and the DSM service
+account that needs it. Recovery users can be given read-only access if needed.
+
+Separate destinations prevent identically named or similarly timed archives
+from different businesses from being mixed together. They also let one business
+disable its NAS copy or use a different schedule and retention policy without
+changing another business.
 
 ## Choose which businesses use the NAS
 
@@ -37,7 +138,7 @@ copy**. For each business:
 1. Choose the business profile.
 2. Select **Maintain an optional Synology recovery copy for this business**.
 3. Record its absolute DSM destination, for example
-   `/volume1/Backups/TabulaRasa/heathcote-advisory`.
+   `/volume1/Tabula_Rosa_Backups/heathcote-advisory`.
 4. Record the actual Cloud Sync schedule.
 5. Record the NAS retention policy.
 6. Save the choice.
@@ -51,10 +152,21 @@ The hosted app can display the same per-profile status after running
 Synology fields contain no NAS username, password, hostname, token, or network
 share credential.
 
+Updating hosted Secrets changes only what the hosted app displays. Cloud Sync
+continues to operate directly between Google Drive and DSM even while the
+Streamlit app or the Windows development computer is turned off.
+
 ## Configure one Cloud Sync task per opted-in business
 
 Create a separate destination folder and task for every business. Do not point
 multiple profiles at the same NAS directory.
+
+Cloud Sync connections represent Google accounts; tasks represent source and
+destination folder pairs. If multiple businesses use the same Drive-owning
+Google account, create one connection for that account and add a separate task
+for each business. If their Drive folders are owned by different Google
+accounts, create a separate connection for each account. Do not expose or copy
+the Google password into Tabula Rosa; DSM completes its own OAuth authorization.
 
 | Setting | Required value |
 | --- | --- |
@@ -66,6 +178,13 @@ multiple profiles at the same NAS directory.
 | Schedule | The value recorded in the business profile |
 | Google document conversion | Disabled |
 
+Use **Continuous** for the initial setup and recovery drill so new archives are
+easy to observe. A restricted schedule can be chosen later, but its run window
+should begin after the Tabula Rosa backup job. If DSM offers **Advanced
+consistency check**, it can be enabled to make Cloud Sync compare supported file
+hashes as well as basic metadata. The application validator remains required
+because it also verifies the archive's internal manifest and ledger structure.
+
 Use a dedicated remote folder containing only names in this form:
 
 ```text
@@ -75,6 +194,13 @@ tabula-rosa-backup-YYYYMMDDTHHMMSSZ.zip
 The manifest is stored inside the ZIP. Never place service-account JSON,
 Streamlit Secrets exports, OAuth tokens, temporary exports, receipt files, or
 source accounting CSV files in the backup folder.
+
+Cloud Sync file filters are exclusion rules rather than a reliable ZIP
+allowlist. A dedicated source folder is therefore the primary safety control.
+As defense in depth, exclude `*.json`, `*.toml`, `*.csv`, and `*.tmp` if those
+filter choices are available. Before completing setup, inspect both the Drive
+source and NAS destination and confirm that only the intended timestamped ZIPs
+are present.
 
 Google Drive retains the newest 30 app-managed generations. With destination
 deletions disabled, older NAS copies remain until an administrator applies the
@@ -162,3 +288,54 @@ Keep a private operational record for each opted-in business containing:
 
 Do not put credentials, tokens, private ledger data, or full service-account
 emails in the GitHub issue.
+
+## Troubleshooting
+
+### The app says Synology recovery is enabled, but no archive appears
+
+The app records the expected setup but cannot observe DSM. In Cloud Sync,
+confirm the connection is authorized, the task is running, the remote and local
+paths match the selected business, and the log does not show a filter,
+permission, or quota error. Also confirm that a Google Drive backup actually
+exists for the profile.
+
+### Cloud Sync cannot find the Drive folder
+
+Confirm DSM is authorized with the account that owns the folder. Folders
+available only through **Shared with me**, **Computers**, or a shortcut are not
+usable for this workflow. If the businesses use different owner accounts, each
+account needs its own Cloud Sync connection.
+
+### An old NAS archive remains after Drive retention removes it
+
+That is expected. The destination-deletion protection deliberately prevents a
+Drive deletion from erasing the recovery copy. Apply only the documented manual
+NAS retention policy, and validate another generation before deleting an old
+one.
+
+### An archive fails validation
+
+Do not restore it and do not modify it in place. Preserve the failed copy for
+private investigation, select another timestamped generation, and run the
+validator again. Check whether Cloud Sync reported the task as fully up to date
+before the archive was copied. A validator failure means that generation must
+not be treated as recoverable.
+
+### A restore command refuses the target
+
+The restore tool intentionally refuses the live workbook and any target with
+populated or incompatible ledger worksheets. Create a new blank workbook, share
+it with the correct profile's Sheets service account as Editor, verify the
+profile and spreadsheet ID in the command, and retry with `--initialize`.
+
+### The Windows computer or mapped drive is offline
+
+Normal cloud-to-NAS synchronization continues because Cloud Sync runs on DSM.
+The computer is required only for creating a manual command-line backup or for
+copying, validating, and restoring an archive during a recovery drill.
+
+## References
+
+- [Synology: back up Google Drive with Cloud Sync](https://kb.synology.com/en-eu/DSM/tutorial/How_to_back_up_the_data_in_my_Google_Drive_with_Synology)
+- [Synology Cloud Sync help](https://kb.synology.com/en-global/DSM/help/CloudSync/cloudsync?version=7)
+- [Synology Cloud Sync technical specifications](https://www.synology.com/en-us/dsm/7.2/software_spec/cloud_sync)

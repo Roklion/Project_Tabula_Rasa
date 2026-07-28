@@ -302,6 +302,8 @@ option can be enabled independently from the same local administration page.
 The setting records only the expected NAS destination, Cloud Sync schedule, and
 retention policy. It does not mount or connect to the NAS. Businesses that leave
 the option disabled continue to use Google Drive backup without a NAS copy.
+DSM must still be configured separately: the option is an operational record
+shown in the app, not a control channel or proof that synchronization succeeded.
 
 The receipt and backup folders can remain **Restricted** in Google Drive. They
 do not need to be shared with the Sheets service account or with the Google
@@ -487,6 +489,13 @@ profile uses a dedicated Synology Cloud Sync task to download its Google Drive
 backup folder into a distinct NAS directory. The required direction is
 **Download remote changes only**, with destination deletions disabled. Neither
 Google Drive Desktop nor a permanently mounted NAS drive is required.
+
+The normal data path is **Google Sheets → verified ZIP in Google Drive → Cloud
+Sync download → profile-specific NAS folder**. Google accounts determine Cloud
+Sync connections, while business folders determine tasks: businesses sharing a
+Drive owner can use separate tasks under one connection; businesses with
+different Drive owners need separate connections. DSM is the authoritative
+place to monitor transfers and retry failures.
 
 Follow [`docs/SYNOLOGY_RECOVERY.md`](docs/SYNOLOGY_RECOVERY.md) to enable a
 profile, configure DSM, validate retained archives, test retry visibility, and
