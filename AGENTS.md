@@ -14,6 +14,9 @@ Read-only commands against Git or local files are pre-authorized and do not
 require asking the user for explicit approval. This includes inspecting status,
 diffs, logs, tracked files, configuration, and file contents.
 
+Read-only access to any file within the project directory is pre-authorized and
+does not require asking the user for explicit approval.
+
 # Completion checks
 
 Running tests, linters, format checks, and other read-only validation commands
