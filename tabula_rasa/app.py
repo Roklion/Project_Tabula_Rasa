@@ -1522,6 +1522,82 @@ elif page == "Reports":
 elif page == "Data & backup":
     st.title("Data & backup")
     st.caption("Your live records are stored in the private Google Sheets workbook.")
+    selected_profile = profile_by_key[selected_profile_key].secrets
+    drive_settings = selected_profile.get("google_drive")
+    backup_folder = (
+        drive_settings.get("backup_folder")
+        if isinstance(drive_settings, Mapping)
+        else None
+    )
+    backup_drive = None
+    latest_cloud = None
+    st.subheader("Google Drive backup")
+    if not isinstance(backup_folder, Mapping):
+        st.info(
+            "Connect Google Drive and select a backup folder from the local "
+            "Business profiles page to enable cloud-native backups."
+        )
+    else:
+        try:
+            backup_drive = get_drive_client(effective_secrets, selected_profile)
+            cloud_backups = backup_drive.list_backups(
+                profile_key=selected_profile_key,
+                folder_id=str(backup_folder["id"]),
+                limit=30,
+            )
+        except GoogleDriveError as error:
+            st.error(str(error))
+        else:
+            st.caption(
+                f"Destination: {backup_folder.get('name', 'Google Drive folder')}"
+            )
+            if cloud_backups:
+                latest_cloud = cloud_backups[0]
+                st.caption(
+                    "Latest cloud backup: "
+                    f"{latest_cloud.get('name', 'Unknown')} "
+                    f"({latest_cloud.get('createdTime', 'time unavailable')})"
+                )
+            else:
+                st.warning("No cloud backup has been uploaded for this profile.")
+            if st.button(
+                "Download and verify latest",
+                disabled=latest_cloud is None,
+                width="stretch",
+            ):
+                try:
+                    downloaded_backup = backup_drive.download_file(
+                        str(latest_cloud["id"])
+                    )
+                    verified_manifest = GoogleSheetsStorage.validate_backup_zip(
+                        downloaded_backup
+                    )
+                    expected_sha256 = (
+                        latest_cloud.get("appProperties", {}).get(
+                            "tabulaRasaSha256",
+                            "",
+                        )
+                    )
+                    if (
+                        expected_sha256
+                        and hashlib.sha256(downloaded_backup).hexdigest()
+                        != str(expected_sha256)
+                    ):
+                        raise RuntimeError(
+                            "The downloaded cloud backup hash does not match."
+                        )
+                except (GoogleDriveError, RuntimeError, KeyError) as error:
+                    st.error(str(error))
+                else:
+                    st.success(
+                        "Latest cloud backup downloaded and verified: "
+                        f"{verified_manifest['backup_time']}."
+                    )
+                # Verification is deliberately Drive-only. Do not continue
+                # into the live Sheets reads and fresh backup generation below.
+                st.stop()
+
+    st.subheader("Live workbook exports")
     try:
         accounts = storage.list_accounts(active_only=False)
         categories = storage.list_categories()
@@ -1554,105 +1630,35 @@ elif page == "Data & backup":
         "application/zip",
         width="stretch",
     )
-    selected_profile = profile_by_key[selected_profile_key].secrets
-    drive_settings = selected_profile.get("google_drive")
-    backup_folder = (
-        drive_settings.get("backup_folder")
-        if isinstance(drive_settings, Mapping)
-        else None
-    )
-    st.subheader("Google Drive backup")
-    if not isinstance(backup_folder, Mapping):
-        st.info(
-            "Connect Google Drive and select a backup folder from the local "
-            "Business profiles page to enable cloud-native backups."
-        )
-    else:
-        try:
-            backup_drive = get_drive_client(effective_secrets, selected_profile)
-            cloud_backups = backup_drive.list_backups(
-                profile_key=selected_profile_key,
-                folder_id=str(backup_folder["id"]),
-                limit=30,
-            )
-        except GoogleDriveError as error:
-            st.error(str(error))
-        else:
-            st.caption(
-                f"Destination: {backup_folder.get('name', 'Google Drive folder')}"
-            )
-            if cloud_backups:
-                latest_cloud = cloud_backups[0]
-                st.caption(
-                    "Latest cloud backup: "
-                    f"{latest_cloud.get('name', 'Unknown')} "
-                    f"({latest_cloud.get('createdTime', 'time unavailable')})"
+    if backup_drive is not None and isinstance(backup_folder, Mapping):
+        if st.button(
+            "Upload verified backup now",
+            type="primary",
+            width="stretch",
+        ):
+            try:
+                manifest = storage.validate_backup_zip(backup_zip)
+                cloud_filename, cloud_sha256 = backup_filename_and_hash(
+                    backup_zip,
+                    manifest,
                 )
+                uploaded_backup = backup_drive.upload_backup(
+                    profile_key=selected_profile_key,
+                    folder_id=str(backup_folder["id"]),
+                    filename=cloud_filename,
+                    content=backup_zip,
+                    sha256=cloud_sha256,
+                    backup_time=str(manifest["backup_time"]),
+                    keep=30,
+                )
+            except (GoogleDriveError, RuntimeError) as error:
+                st.error(str(error))
             else:
-                latest_cloud = None
-                st.warning("No cloud backup has been uploaded for this profile.")
-            upload_column, verify_column = st.columns(2)
-            if upload_column.button(
-                "Upload verified backup now",
-                type="primary",
-                width="stretch",
-            ):
-                try:
-                    manifest = storage.validate_backup_zip(backup_zip)
-                    cloud_filename, cloud_sha256 = backup_filename_and_hash(
-                        backup_zip,
-                        manifest,
-                    )
-                    uploaded_backup = backup_drive.upload_backup(
-                        profile_key=selected_profile_key,
-                        folder_id=str(backup_folder["id"]),
-                        filename=cloud_filename,
-                        content=backup_zip,
-                        sha256=cloud_sha256,
-                        backup_time=str(manifest["backup_time"]),
-                        keep=30,
-                    )
-                except (GoogleDriveError, RuntimeError) as error:
-                    st.error(str(error))
-                else:
-                    st.success(
-                        "Verified backup uploaded to Google Drive: "
-                        f"{uploaded_backup.get('name', cloud_filename)}"
-                    )
-                    st.rerun()
-            if verify_column.button(
-                "Download and verify latest",
-                disabled=latest_cloud is None,
-                width="stretch",
-            ):
-                try:
-                    downloaded_backup = backup_drive.download_file(
-                        str(latest_cloud["id"])
-                    )
-                    verified_manifest = storage.validate_backup_zip(
-                        downloaded_backup
-                    )
-                    expected_sha256 = (
-                        latest_cloud.get("appProperties", {}).get(
-                            "tabulaRasaSha256",
-                            "",
-                        )
-                    )
-                    if (
-                        expected_sha256
-                        and hashlib.sha256(downloaded_backup).hexdigest()
-                        != str(expected_sha256)
-                    ):
-                        raise RuntimeError(
-                            "The downloaded cloud backup hash does not match."
-                        )
-                except (GoogleDriveError, RuntimeError, KeyError) as error:
-                    st.error(str(error))
-                else:
-                    st.success(
-                        "Latest cloud backup downloaded and verified: "
-                        f"{verified_manifest['backup_time']}."
-                    )
+                st.success(
+                    "Verified backup uploaded to Google Drive: "
+                    f"{uploaded_backup.get('name', cloud_filename)}"
+                )
+                st.rerun()
     with st.expander("Import Tabula Rosa CSV"):
         st.write(
             "Upload a CSV with: Date, Type, Amount, Account, Category, Payee, "

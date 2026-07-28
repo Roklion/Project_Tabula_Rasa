@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import hashlib
 from unittest.mock import Mock, patch
 
 import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 from tabula_rasa.ledger_auth import hash_password
+from tabula_rasa.google_drive import GoogleDriveClient
 from tabula_rasa.storage import GoogleSheetsStorage, StorageUnavailableError
+from tests.fakes import FakeWorkbook
 
 TEST_PASSWORD = "test-password-123"
 SAFE_MESSAGE = "Google Sheets is temporarily unavailable; no success was reported"
@@ -43,3 +46,87 @@ class TestAppStorageFailure:
         assert len(app.success) == 0
         assert app.radio[0].label == "Navigate"
         assert len(app.metric) == 0
+
+    def test_cloud_verification_does_not_require_live_sheets_export(self) -> None:
+        st.cache_resource.clear()
+        storage = GoogleSheetsStorage(FakeWorkbook())
+        backup = storage.export_backup_zip()
+        backup_name = "tabula-rosa-backup-20260728T120000Z.zip"
+        unavailable_export = Mock(
+            side_effect=StorageUnavailableError(SAFE_MESSAGE)
+        )
+        storage.export_backup_zip = unavailable_export
+        cloud_backups = [
+            {
+                "id": "cloud-backup-id",
+                "name": backup_name,
+                "createdTime": "2026-07-28T12:00:00Z",
+                "appProperties": {
+                    "tabulaRasaSha256": hashlib.sha256(backup).hexdigest()
+                },
+            }
+        ]
+        download_file = Mock(return_value=backup)
+
+        app = AppTest.from_file("tabula_rasa/app.py", default_timeout=30)
+        app.secrets["app_password_hash"] = hash_password(TEST_PASSWORD)
+        app.secrets["google_drive_oauth"] = {
+            "client_id": "client.apps.googleusercontent.com",
+            "client_secret": "client-secret",
+            "redirect_uris": ["https://tabula-rasa.streamlit.app/"],
+            "picker_api_key": "picker-key",
+            "project_number": "123456789",
+        }
+        app.secrets["business_profiles"] = {
+            "test": {
+                "name": "Test Business",
+                "spreadsheet_id": "test-sheet",
+                "gcp_service_account": {"type": "service_account"},
+                "google_drive": {
+                    "refresh_token": "refresh-token",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "scopes": ["https://www.googleapis.com/auth/drive.file"],
+                    "backup_folder": {
+                        "id": "backupfolder123",
+                        "name": "Backups",
+                    },
+                },
+            }
+        }
+
+        with (
+            patch.object(
+                GoogleSheetsStorage,
+                "from_secrets",
+                return_value=storage,
+            ),
+            patch.object(
+                GoogleDriveClient,
+                "list_backups",
+                return_value=cloud_backups,
+            ),
+            patch.object(
+                GoogleDriveClient,
+                "download_file",
+                download_file,
+            ),
+        ):
+            app.run()
+            app.text_input[0].input(TEST_PASSWORD)
+            app.button[0].click().run()
+            app.radio[0].set_value("Data & backup").run()
+            assert app.error[0].value == SAFE_MESSAGE
+            assert unavailable_export.call_count == 1
+
+            next(
+                button
+                for button in app.button
+                if button.label == "Download and verify latest"
+            ).click().run()
+
+        assert unavailable_export.call_count == 1
+        assert any(
+            "Latest cloud backup downloaded and verified" in success.value
+            for success in app.success
+        )
+        download_file.assert_called_once_with("cloud-backup-id")
