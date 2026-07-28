@@ -212,11 +212,15 @@ the validation for every configured profile.
 
 Common failures:
 
-- **Authentication or workbook access failed:** confirm that the profile's
-  spreadsheet ID and complete JSON key belong together, the Sheets API is
-  enabled in the service account's project, and the spreadsheet is shared as
-  Editor with that profile's exact `client_email`.
-- **Header mismatch or missing worksheet:** correct the four tab names and
+- **Service-account authentication failed:** the uploaded JSON key may be
+  invalid, disabled, revoked, or no longer active. Download a new key and
+  replace the profile credential.
+- **Workbook access failed:** confirm that the spreadsheet ID is correct, the
+  Sheets API is enabled in the service account's project, and the spreadsheet
+  is shared with that profile's exact `client_email`.
+- **Workbook initialization failed:** confirm the service account has Editor
+  access and the ledger tabs or header cells are not protected.
+- **Workbook structure validation failed:** correct the named worksheet and
   first-row headers exactly as listed above.
 - **Organization policy blocks sharing:** a Google Workspace administrator may
   need to permit sharing with the service-account address. Do not make the

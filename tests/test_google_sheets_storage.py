@@ -12,10 +12,13 @@ from google.oauth2.service_account import Credentials
 from tabula_rasa.storage.google_sheets import (
     GoogleSheetsStorage,
     SHEETS_SCOPE,
+    StorageAuthenticationError,
     StorageConflictError,
+    StorageInitializationError,
     StorageNotFoundError,
     StorageUnavailableError,
     StorageValidationError,
+    StorageWorkbookAccessError,
     WORKSHEET_HEADERS,
 )
 from tabula_rasa.quickbooks_import import (
@@ -91,6 +94,79 @@ class TestGoogleSheetsStorage:
         assert workbook.sheets["Accounts"].rows == [
             ["legacy_id", "legacy_name"]
         ]
+
+    def test_profile_storage_reports_invalid_credential_safely(self) -> None:
+        with (
+            patch.object(
+                Credentials,
+                "from_service_account_info",
+                side_effect=ValueError("credential-content-must-not-leak"),
+            ),
+            pytest.raises(StorageAuthenticationError) as raised,
+        ):
+            GoogleSheetsStorage.from_secrets(
+                {
+                    "spreadsheet_id": "given-spreadsheet-id",
+                    "gcp_service_account": {"type": "service_account"},
+                }
+            )
+
+        assert "credential-content-must-not-leak" not in str(raised.value)
+        assert (
+            str(raised.value)
+            == "Google rejected the uploaded service-account credential"
+        )
+
+    def test_profile_storage_reports_inaccessible_workbook(self) -> None:
+        google_client = Mock()
+        google_client.open_by_key.side_effect = gspread.SpreadsheetNotFound()
+
+        with (
+            patch.object(
+                Credentials,
+                "from_service_account_info",
+                return_value=object(),
+            ),
+            patch.object(gspread, "authorize", return_value=google_client),
+            pytest.raises(StorageWorkbookAccessError, match="could not be opened"),
+        ):
+            GoogleSheetsStorage.from_secrets(
+                {
+                    "spreadsheet_id": "given-spreadsheet-id",
+                    "gcp_service_account": {"type": "service_account"},
+                }
+            )
+
+    def test_profile_storage_reports_initialization_permission_failure(
+        self,
+    ) -> None:
+        workbook = FakeWorkbook(
+            {title: () for title in WORKSHEET_HEADERS}
+        )
+        workbook.sheets["Accounts"].update = Mock(
+            side_effect=PermissionError
+        )
+        google_client = Mock()
+        google_client.open_by_key.return_value = workbook
+
+        with (
+            patch.object(
+                Credentials,
+                "from_service_account_info",
+                return_value=object(),
+            ),
+            patch.object(gspread, "authorize", return_value=google_client),
+            pytest.raises(
+                StorageInitializationError,
+                match="worksheet initialization failed",
+            ),
+        ):
+            GoogleSheetsStorage.from_secrets(
+                {
+                    "spreadsheet_id": "given-spreadsheet-id",
+                    "gcp_service_account": {"type": "service_account"},
+                }
+            )
 
     def test_reordered_headers_are_addressed_by_name(self) -> None:
         headers = dict(WORKSHEET_HEADERS)

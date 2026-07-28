@@ -133,6 +133,18 @@ class StorageUnavailableError(StorageError):
         self.retryable = retryable
 
 
+class StorageAuthenticationError(StorageUnavailableError):
+    """Raised when Google rejects a service-account credential."""
+
+
+class StorageWorkbookAccessError(StorageUnavailableError):
+    """Raised when the configured spreadsheet cannot be opened."""
+
+
+class StorageInitializationError(StorageUnavailableError):
+    """Raised when an accessible workbook cannot be initialized."""
+
+
 class StorageValidationError(StorageError):
     """Raised when domain data is invalid."""
 
@@ -353,11 +365,49 @@ class GoogleSheetsStorage:
         """Create and initialize storage from Streamlit-compatible secrets."""
         try:
             credential_info = dict(secrets["gcp_service_account"])
-            spreadsheet_id = str(secrets["spreadsheet_id"])
+            spreadsheet_id = str(secrets["spreadsheet_id"]).strip()
+            if not spreadsheet_id:
+                raise ValueError("spreadsheet_id is empty")
+        except (KeyError, TypeError, ValueError) as exc:
+            raise StorageAuthenticationError(
+                "Profile Google settings are incomplete or malformed"
+            ) from exc
+
+        try:
             credentials = Credentials.from_service_account_info(
                 credential_info, scopes=[SHEETS_SCOPE]
             )
-            workbook = gspread.authorize(credentials).open_by_key(spreadsheet_id)
+            client = gspread.authorize(credentials)
+        except (
+            TypeError,
+            ValueError,
+            GoogleAuthError,
+            gspread.GSpreadException,
+            OSError,
+        ) as exc:
+            raise StorageAuthenticationError(
+                "Google rejected the uploaded service-account credential"
+            ) from exc
+
+        try:
+            workbook = client.open_by_key(spreadsheet_id)
+        except GoogleAuthError as exc:
+            raise StorageAuthenticationError(
+                "Google rejected the uploaded service-account credential"
+            ) from exc
+        except (
+            gspread.SpreadsheetNotFound,
+            PermissionError,
+        ) as exc:
+            raise StorageWorkbookAccessError(
+                "The spreadsheet could not be opened with this service account"
+            ) from exc
+        except (gspread.GSpreadException, OSError) as exc:
+            raise StorageWorkbookAccessError(
+                "Google Sheets could not open the configured spreadsheet"
+            ) from exc
+
+        try:
             actual_worksheets = {
                 worksheet.title: worksheet for worksheet in workbook.worksheets()
             }
@@ -381,17 +431,27 @@ class GoogleSheetsStorage:
                         [list(headers)], range_name="A1", raw=True
                     )
         except (
-            KeyError,
-            TypeError,
-            ValueError,
             GoogleAuthError,
+        ) as exc:
+            raise StorageAuthenticationError(
+                "Google rejected the uploaded service-account credential"
+            ) from exc
+        except (
+            PermissionError,
             gspread.GSpreadException,
             OSError,
         ) as exc:
-            raise StorageUnavailableError(
-                "Google Sheets authentication or workbook access failed"
+            raise StorageInitializationError(
+                "The workbook opened, but worksheet initialization failed"
             ) from exc
-        return cls(workbook)
+        try:
+            return cls(workbook)
+        except StorageValidationError:
+            raise
+        except StorageUnavailableError as exc:
+            raise StorageInitializationError(
+                "The workbook opened, but worksheet validation could not finish"
+            ) from exc
 
     @property
     def workbook_title(self) -> str:

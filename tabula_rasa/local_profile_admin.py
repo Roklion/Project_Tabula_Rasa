@@ -18,12 +18,55 @@ from tabula_rasa.local_profile_store import (
     save_local_profile,
     validate_profile_key,
 )
-from tabula_rasa.storage import GoogleSheetsStorage, StorageError
+from tabula_rasa.storage import (
+    GoogleSheetsStorage,
+    StorageAuthenticationError,
+    StorageError,
+    StorageInitializationError,
+    StorageValidationError,
+    StorageWorkbookAccessError,
+)
 
 
 def _masked_spreadsheet_id(spreadsheet_id: object) -> str:
     value = str(spreadsheet_id)
     return f"…{value[-8:]}" if len(value) > 8 else value
+
+
+def _profile_setup_error_message(
+    error: StorageError,
+    settings: Mapping[str, Any],
+) -> str:
+    spreadsheet = _masked_spreadsheet_id(settings.get("spreadsheet_id", ""))
+    credential = settings.get("gcp_service_account", {})
+    service_account = str(credential.get("client_email", "unknown"))
+
+    if isinstance(error, StorageAuthenticationError):
+        detail = (
+            "Service-account authentication failed. The uploaded key may be "
+            "invalid, disabled, revoked, or no longer active."
+        )
+    elif isinstance(error, StorageWorkbookAccessError):
+        detail = (
+            "Workbook access failed. Verify the spreadsheet ID, enable the "
+            "Google Sheets API in the service-account project, and share the "
+            "spreadsheet with this service account."
+        )
+    elif isinstance(error, StorageInitializationError):
+        detail = (
+            "The workbook opened, but initialization failed. Confirm the "
+            "service account has Editor access and the ledger tabs are not "
+            "protected."
+        )
+    elif isinstance(error, StorageValidationError):
+        detail = f"Workbook structure validation failed: {error}."
+    else:
+        detail = "Google Sheets setup failed unexpectedly. Retry the request."
+
+    return (
+        f"{detail} Spreadsheet: {spreadsheet}. "
+        f"Service account: {service_account}. No profile was saved."
+    )
 
 
 def _profile_rows(
@@ -192,7 +235,15 @@ def render_local_profile_admin(
                 "Business display names must be unique."
             )
         candidate_storage = GoogleSheetsStorage.from_secrets(settings)
-        candidate_storage.ensure_defaults()
+        try:
+            candidate_storage.ensure_defaults()
+        except StorageAuthenticationError:
+            raise
+        except StorageError as error:
+            raise StorageInitializationError(
+                "The workbook opened, but default accounts and categories "
+                "could not be initialized"
+            ) from error
         save_local_profile(
             key,
             settings,
@@ -202,11 +253,8 @@ def render_local_profile_admin(
     except LocalProfileStoreError as error:
         st.error(str(error))
         return
-    except StorageError:
-        st.error(
-            "Google Sheets authentication, workbook access, or initialization "
-            "failed. No profile was saved."
-        )
+    except StorageError as error:
+        st.error(_profile_setup_error_message(error, settings))
         return
 
     st.cache_resource.clear()
