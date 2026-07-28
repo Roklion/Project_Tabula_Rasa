@@ -5,15 +5,31 @@ A private Google Sheets-backed bookkeeping app for one person or a small group o
 ## Run it
 
 1. Install Python 3.11 or newer.
-2. Follow the profile setup below. Keep application-level secrets in
-   `.streamlit/secrets.toml`; all business settings and per-profile
-   credentials live in `.streamlit/business_profiles.json`.
-3. In this folder, run:
+2. Create the virtual environment and install the application dependencies:
 
    ```powershell
    python -m venv .venv
    .venv\Scripts\Activate.ps1
    pip install -r requirements.txt
+   ```
+
+3. Create the ignored local secrets file and set the application password:
+
+   ```powershell
+   New-Item -ItemType Directory -Force .streamlit | Out-Null
+   New-Item -ItemType File -Force .streamlit\secrets.toml | Out-Null
+   python scripts\set_app_password.py
+   ```
+
+   The script stores only a password hash. Keep application-level secrets in
+   `.streamlit/secrets.toml`; business settings and per-profile credentials
+   live in `.streamlit/business_profiles.json`.
+4. Follow **Multiple business profiles** to add the first profile. If receipts
+   or cloud backups are needed, also complete **Google Drive OAuth for receipts
+   and cloud backups** before exporting the hosted secrets.
+5. Start the normal app:
+
+   ```powershell
    streamlit run tabula_rasa/app.py
    ```
 
@@ -115,7 +131,7 @@ Use the authenticated **Business profiles** page described below. It writes
 each business's spreadsheet, Drive locations, and complete service-account
 credential together in the ignored `.streamlit/business_profiles.json`.
 `.streamlit/secrets.toml` should contain only application-level secrets.
-Before Google Drive OAuth is configured it contains:
+At minimum it contains:
 
 ```toml
 app_password_hash = "scrypt$..."
@@ -192,8 +208,8 @@ project dedicated to one business's Sheets service account.
 2. Open **Google Auth Platform** and configure Branding.
 3. Choose **External** audience when profiles may use personal accounts or
    accounts outside one Workspace organization.
-4. While the app is in Testing, add each human Drive-owning Google account as a
-   test user. Do not add service-account `client_email` addresses.
+4. During initial Testing, add each human Drive-owning Google account as a test
+   user. Do not add service-account `client_email` addresses.
 5. Under **Data Access**, add only:
 
    ```text
@@ -221,11 +237,19 @@ project dedicated to one business's Sheets service account.
 9. Record the OAuth client ID, client secret, API key, and numeric Cloud project
    number. The project number is under **IAM & Admin > Settings** and is not the
    project ID.
+10. Before production use, open **Audience**, publish the app, and confirm its
+    publishing status is **In production**. Test-user allowlisting no longer
+    controls access in this state, although Google Workspace administrators can
+    still restrict third-party applications.
 
 Testing-mode Drive grants, including offline refresh tokens, expire after seven
-days. Move the OAuth app to **In production** before relying on unattended
-backups. The narrow `drive.file` scope avoids broad access to the user's Drive;
-Google Picker explicitly authorizes the selected folders.
+days. Google documents the distinction under
+[Manage App Audience](https://support.google.com/cloud/answer/15549945).
+After moving an existing OAuth project from Testing to In production, reconnect
+each business profile once and export the hosted secrets again. This replaces
+any refresh token originally issued under the expiring Testing configuration.
+The narrow `drive.file` scope avoids broad access to the user's Drive; Google
+Picker explicitly authorizes the selected folders.
 
 ### 2. Add the app-wide OAuth secrets locally
 
@@ -273,6 +297,11 @@ Then:
    hosted Streamlit Secrets document so the hosted app receives the new
    per-profile refresh tokens and folder IDs.
 
+The receipt and backup folders can remain **Restricted** in Google Drive. They
+do not need to be shared with the Sheets service account or with the Google
+accounts used by other business profiles. Access comes from the human account
+authorized for that profile and the folders explicitly selected with Picker.
+
 Because Streamlit Community Cloud cannot safely write back to its Secrets,
 connections, reconnections, folder changes, and disconnections are performed
 locally and then exported. A revoked grant produces a reconnect message without
@@ -301,7 +330,7 @@ existing output, and does not include
 `.streamlit/config.toml` because server configuration is not part of Streamlit
 Secrets.
 
-### 6. Validate before using the profile
+### Validate each business profile
 
 Verify read access and the worksheet headers without displaying ledger rows:
 
@@ -361,7 +390,9 @@ python scripts/validate_app_google.py
 
 ## Spreadsheet reliability
 
-- Worksheet reads are cached for 10 seconds and the affected cache is cleared immediately after every confirmed write.
+- Related worksheet reads use one multi-range request when available, are
+  cached for 10 seconds, and have their affected cache cleared immediately
+  after every confirmed write.
 - Edits, deletions, uniqueness checks, and reference checks force a fresh read before writing.
 - Temporary network and quota failures are retried up to four times with exponential backoff.
 - Identical completed submissions are suppressed for 10 seconds within the same application session.
@@ -419,6 +450,11 @@ After connecting OAuth and choosing a backup folder, upload and verify a cloud
 backup from **Data & backup**. The Drive uploader preserves the current ZIP
 format and manifest, records the archive SHA-256 in private app-properties,
 makes retries idempotent, and retains the newest 30 generations.
+
+**Verify latest cloud backup** downloads the newest archive into the running app
+only long enough to validate its manifest, checksums, and stored Drive hash. It
+does not restore the archive, change the live workbook, or download a file to
+the browser. Restoration remains the separate blank-workbook procedure below.
 
 For unattended cloud-native backups, register the existing weekly task with
 the Drive flag:
