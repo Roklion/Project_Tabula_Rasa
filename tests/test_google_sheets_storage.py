@@ -61,7 +61,7 @@ class TestGoogleSheetsStorage:
             credential_info, scopes=[SHEETS_SCOPE]
         )
         assert storage.workbook_title == workbook.title
-        assert workbook.sheets["Sheet1"].rows == []
+        assert workbook.sheets["Sheet1"].rows == [[]]
         for title, headers in WORKSHEET_HEADERS.items():
             assert workbook.sheets[title].rows == [list(headers)]
 

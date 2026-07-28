@@ -9,7 +9,7 @@ from tabula_rasa.storage.google_sheets import WORKSHEET_HEADERS
 class FakeWorksheet:
     def __init__(self, title: str, headers: tuple[str, ...]):
         self.title = title
-        self.rows = [list(headers)] if headers else []
+        self.rows = [list(headers)]
         self.col_count = len(headers)
 
     def row_values(self, row: int) -> list[str]:

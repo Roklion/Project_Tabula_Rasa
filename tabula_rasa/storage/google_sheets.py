@@ -371,7 +371,12 @@ class GoogleSheetsStorage:
                         [list(headers)], range_name="A1", raw=True
                     )
                     continue
-                if not worksheet.get_all_values():
+                values = worksheet.get_all_values()
+                if not any(
+                    str(value).strip()
+                    for row in values
+                    for value in row
+                ):
                     worksheet.update(
                         [list(headers)], range_name="A1", raw=True
                     )

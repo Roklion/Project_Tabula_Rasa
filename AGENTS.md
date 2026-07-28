@@ -10,6 +10,9 @@ Do not add this trailer to commits created by the user or by other tools.
 
 # Completion checks
 
+Running tests, linters, format checks, and other read-only validation commands
+is pre-authorized and does not require asking the user for approval.
+
 Before calling any coding task complete or ready for commit, run both of these
 commands from the repository root using the project's active development
 environment:
