@@ -350,15 +350,28 @@ class GoogleSheetsStorage:
         retry_attempts: int = 4,
         retry_base_delay_seconds: float = 0.25,
         sleeper: Callable[[float], None] = time.sleep,
+        _initial_worksheets: Mapping[str, Any] | None = None,
+        _initial_values: Mapping[str, list[list[Any]]] | None = None,
     ):
         self._workbook = workbook
         self._cache_ttl_seconds = cache_ttl_seconds
         self._retry_attempts = retry_attempts
         self._retry_base_delay_seconds = retry_base_delay_seconds
         self._sleeper = sleeper
+        self._worksheet_cache = dict(_initial_worksheets or {})
+        self._header_cache: dict[str, list[str]] = {}
         self._row_cache: dict[str, tuple[float, list[_StoredRow]]] = {}
         self._cache_lock = threading.RLock()
-        self.validate_headers()
+        if _initial_values is None:
+            self.validate_headers()
+        else:
+            missing = sorted(set(WORKSHEET_HEADERS) - set(_initial_values))
+            if missing:
+                raise StorageValidationError(
+                    "Workbook is missing worksheets: " + ", ".join(missing)
+                )
+            for title in WORKSHEET_HEADERS:
+                self._cache_values(title, _initial_values[title])
 
     @classmethod
     def from_secrets(cls, secrets: Mapping[str, Any]) -> "GoogleSheetsStorage":
@@ -411,6 +424,7 @@ class GoogleSheetsStorage:
             actual_worksheets = {
                 worksheet.title: worksheet for worksheet in workbook.worksheets()
             }
+            initial_values: dict[str, list[list[Any]]] = {}
             for title, headers in WORKSHEET_HEADERS.items():
                 worksheet = actual_worksheets.get(title)
                 if worksheet is None:
@@ -420,16 +434,16 @@ class GoogleSheetsStorage:
                     worksheet.update(
                         [list(headers)], range_name="A1", raw=True
                     )
-                    continue
-                values = worksheet.get_all_values()
-                if not any(
-                    str(value).strip()
-                    for row in values
-                    for value in row
-                ):
+                    actual_worksheets[title] = worksheet
+                    values: list[list[Any]] = [list(headers)]
+                else:
+                    values = worksheet.get_all_values()
+                if not any(str(value).strip() for row in values for value in row):
                     worksheet.update(
                         [list(headers)], range_name="A1", raw=True
                     )
+                    values = [list(headers)]
+                initial_values[title] = values
         except (
             GoogleAuthError,
         ) as exc:
@@ -445,7 +459,11 @@ class GoogleSheetsStorage:
                 "The workbook opened, but worksheet initialization failed"
             ) from exc
         try:
-            return cls(workbook)
+            return cls(
+                workbook,
+                _initial_worksheets=actual_worksheets,
+                _initial_values=initial_values,
+            )
         except StorageValidationError:
             raise
         except StorageUnavailableError as exc:
@@ -482,15 +500,28 @@ class GoogleSheetsStorage:
         raise AssertionError("Retry loop exited unexpectedly")
 
     def _worksheet(self, title: str) -> Any:
-        return self._api(lambda: self._workbook.worksheet(title))
+        with self._cache_lock:
+            worksheet = self._worksheet_cache.get(title)
+        if worksheet is not None:
+            return worksheet
+        worksheet = self._api(lambda: self._workbook.worksheet(title))
+        with self._cache_lock:
+            self._worksheet_cache[title] = worksheet
+        return worksheet
 
     def _headers(self, title: str) -> list[str]:
+        with self._cache_lock:
+            cached = self._header_cache.get(title)
+        if cached is not None:
+            return list(cached)
         headers = [
             str(value).strip()
             for value in self._api(lambda: self._worksheet(title).row_values(1))
         ]
         self._validate_header_values(title, headers)
-        return headers
+        with self._cache_lock:
+            self._header_cache[title] = headers
+        return list(headers)
 
     def _validate_header_values(self, title: str, headers: list[str]) -> None:
         required = set(WORKSHEET_HEADERS[title])
@@ -509,24 +540,26 @@ class GoogleSheetsStorage:
     def validate_headers(self) -> None:
         """Validate required worksheets and headers without relying on positions."""
         try:
-            actual_titles = {
-                worksheet.title for worksheet in self._api(self._workbook.worksheets)
+            worksheets = {
+                worksheet.title: worksheet
+                for worksheet in self._api(self._workbook.worksheets)
             }
         except AttributeError as exc:
             raise StorageValidationError("Invalid workbook object") from exc
-        missing = sorted(set(WORKSHEET_HEADERS) - actual_titles)
+        missing = sorted(set(WORKSHEET_HEADERS) - set(worksheets))
         if missing:
             raise StorageValidationError(
                 "Workbook is missing worksheets: " + ", ".join(missing)
             )
+        with self._cache_lock:
+            self._worksheet_cache.update(worksheets)
         for title in WORKSHEET_HEADERS:
             self._headers(title)
 
     def ensure_defaults(self) -> dict[str, int]:
         """Seed only missing default accounts/categories using batch writes."""
-        existing_accounts = self.list_accounts(
-            active_only=False, _force_refresh=True
-        )
+        self._snapshot(["Accounts", "Categories"], force_refresh=True)
+        existing_accounts = self.list_accounts(active_only=False)
         account_names = {account["name"].casefold() for account in existing_accounts}
         timestamp = _utc_now()
         new_accounts = [
@@ -545,7 +578,7 @@ class GoogleSheetsStorage:
             if name.casefold() not in account_names
         ]
 
-        existing_categories = self.list_categories(_force_refresh=True)
+        existing_categories = self.list_categories()
         category_keys = {
             (category["name"].casefold(), category["kind"])
             for category in existing_categories
@@ -561,16 +594,12 @@ class GoogleSheetsStorage:
         self._append_many("Categories", new_categories)
         return {"accounts": len(new_accounts), "categories": len(new_categories)}
 
-    def _rows(self, title: str, *, force_refresh: bool = False) -> list[_StoredRow]:
-        now = time.monotonic()
-        if not force_refresh and self._cache_ttl_seconds > 0:
-            with self._cache_lock:
-                cached = self._row_cache.get(title)
-                if cached and now - cached[0] < self._cache_ttl_seconds:
-                    return list(cached[1])
-
-        worksheet = self._worksheet(title)
-        values = self._api(worksheet.get_all_values)
+    def _cache_values(
+        self,
+        title: str,
+        values: list[list[Any]],
+    ) -> list[_StoredRow]:
+        """Validate one worksheet response and populate its local caches."""
         if not values:
             raise StorageValidationError(f"{title} header row is empty")
         headers = [str(value).strip() for value in values[0]]
@@ -584,8 +613,88 @@ class GoogleSheetsStorage:
             if any(value.strip() for value in record.values()):
                 rows.append(_StoredRow(row_number, record))
         with self._cache_lock:
+            self._header_cache[title] = headers
             self._row_cache[title] = (time.monotonic(), rows)
         return list(rows)
+
+    def _refresh_rows(self, titles: list[str]) -> None:
+        """Refresh multiple worksheets with one values batch request when available."""
+        if not titles:
+            return
+        batch_get = getattr(self._workbook, "values_batch_get", None)
+        if callable(batch_get) and len(titles) > 1:
+            ranges = ["'{}'".format(title.replace("'", "''")) for title in titles]
+            response = self._api(lambda: batch_get(ranges))
+            value_ranges = response.get("valueRanges", [])
+            if not isinstance(value_ranges, list) or len(value_ranges) != len(titles):
+                raise StorageValidationError(
+                    "Google Sheets returned an incomplete workbook snapshot"
+                )
+            for title, value_range in zip(titles, value_ranges):
+                if not isinstance(value_range, Mapping):
+                    raise StorageValidationError(
+                        "Google Sheets returned an unreadable workbook snapshot"
+                    )
+                values = value_range.get("values", [])
+                if not isinstance(values, list):
+                    raise StorageValidationError(
+                        "Google Sheets returned an unreadable worksheet"
+                    )
+                self._cache_values(title, values)
+            return
+        for title in titles:
+            worksheet = self._worksheet(title)
+            values = self._api(worksheet.get_all_values)
+            self._cache_values(title, values)
+
+    def _snapshot(
+        self,
+        titles: Iterable[str],
+        *,
+        force_refresh: bool = False,
+    ) -> dict[str, list[_StoredRow]]:
+        """Return a consistent cached or freshly batched worksheet snapshot."""
+        requested = list(dict.fromkeys(titles))
+        now = time.monotonic()
+        refresh: list[str] = []
+        with self._cache_lock:
+            for title in requested:
+                cached = self._row_cache.get(title)
+                if (
+                    force_refresh
+                    or self._cache_ttl_seconds <= 0
+                    or cached is None
+                    or now - cached[0] >= self._cache_ttl_seconds
+                ):
+                    refresh.append(title)
+        if refresh:
+            self._refresh_rows(refresh)
+        snapshot: dict[str, list[_StoredRow]] = {}
+        with self._cache_lock:
+            for title in requested:
+                cached = self._row_cache.get(title)
+                if cached is None:
+                    raise StorageValidationError(
+                        f"{title} could not be loaded from Google Sheets"
+                    )
+                snapshot[title] = list(cached[1])
+        return snapshot
+
+    def _rows(self, title: str, *, force_refresh: bool = False) -> list[_StoredRow]:
+        return self._snapshot([title], force_refresh=force_refresh)[title]
+
+    def prefetch_worksheets(
+        self,
+        *titles: str,
+        force_refresh: bool = False,
+    ) -> None:
+        """Warm several worksheet caches through one multi-range values request."""
+        unknown = sorted(set(titles) - set(WORKSHEET_HEADERS))
+        if unknown:
+            raise StorageValidationError(
+                "Unknown worksheets requested: " + ", ".join(unknown)
+            )
+        self._snapshot(titles, force_refresh=force_refresh)
 
     def _invalidate(self, title: str) -> None:
         with self._cache_lock:
@@ -768,9 +877,7 @@ class GoogleSheetsStorage:
         if any(
             account["id"] != account_id
             and account["name"].casefold() == name.casefold()
-            for account in self.list_accounts(
-                active_only=False, _force_refresh=True
-            )
+            for account in self.list_accounts(active_only=False)
         ):
             raise StorageConflictError("Account names must be unique")
         updated.update(
@@ -835,7 +942,7 @@ class GoogleSheetsStorage:
             category["id"] != category_id
             and category["name"].casefold() == name.casefold()
             and category["kind"] == kind
-            for category in self.list_categories(_force_refresh=True)
+            for category in self.list_categories()
         ):
             raise StorageConflictError("That category already exists")
         updated.update({"name": name, "kind": kind})
@@ -867,8 +974,13 @@ class GoogleSheetsStorage:
         accounts: Mapping[str, Mapping[str, Any]] | None = None,
         categories: Mapping[str, Mapping[str, str]] | None = None,
     ) -> dict[str, str]:
-        accounts = accounts or self._account_lookup(force_refresh=True)
-        categories = categories or self._category_lookup(force_refresh=True)
+        if accounts is None and categories is None:
+            self._snapshot(["Accounts", "Categories"], force_refresh=True)
+            accounts = self._account_lookup()
+            categories = self._category_lookup()
+        else:
+            accounts = accounts or self._account_lookup(force_refresh=True)
+            categories = categories or self._category_lookup(force_refresh=True)
         kind = _clean_text(data.get("kind"), "Transaction kind", required=True).title()
         if kind not in TRANSACTION_KINDS:
             raise StorageValidationError("Unknown transaction kind")
@@ -919,6 +1031,7 @@ class GoogleSheetsStorage:
         end: date | str | None = None,
         kind: str | None = None,
         account_ids: Iterable[str] | None = None,
+        _force_refresh: bool = False,
     ) -> list[dict[str, str]]:
         start_text = _iso_date(start) if start is not None else None
         end_text = _iso_date(end) if end is not None else None
@@ -932,7 +1045,7 @@ class GoogleSheetsStorage:
             if kind not in TRANSACTION_KINDS:
                 raise StorageValidationError("Unknown transaction kind")
         transactions = []
-        for row in self._rows("Transactions"):
+        for row in self._rows("Transactions", force_refresh=_force_refresh):
             item = dict(row.values)
             if start_text and item["txn_date"] < start_text:
                 continue
@@ -1025,11 +1138,12 @@ class GoogleSheetsStorage:
         *,
         start: date | str | None = None,
         end: date | str | None = None,
+        _force_refresh: bool = False,
     ) -> list[dict[str, str]]:
         start_text = _iso_date(start) if start is not None else None
         end_text = _iso_date(end) if end is not None else None
         trips = []
-        for row in self._rows("Mileage"):
+        for row in self._rows("Mileage", force_refresh=_force_refresh):
             item = dict(row.values)
             if start_text and item["trip_date"] < start_text:
                 continue
@@ -1104,7 +1218,10 @@ class GoogleSheetsStorage:
                 self._sleeper(self._retry_base_delay_seconds * (2**attempt))
 
     def preview_quickbooks_mileage(
-        self, rows: Iterable[Mapping[str, Any]]
+        self,
+        rows: Iterable[Mapping[str, Any]],
+        *,
+        _force_refresh: bool = False,
     ) -> dict[str, Any]:
         """Validate a QuickBooks Download Trips export without writing it."""
         source_rows = list(rows)
@@ -1128,7 +1245,8 @@ class GoogleSheetsStorage:
             normalized = normalize_quickbooks_mileage_rows(source_rows)
 
         existing = {
-            mileage_fingerprint(item) for item in self.list_mileage_trips()
+            mileage_fingerprint(item)
+            for item in self.list_mileage_trips(_force_refresh=_force_refresh)
         }
         seen: set[str] = set()
         ready: list[dict[str, str]] = []
@@ -1160,7 +1278,10 @@ class GoogleSheetsStorage:
         self, rows: Iterable[Mapping[str, Any]]
     ) -> list[dict[str, str]]:
         """Revalidate and batch append unique business mileage trips."""
-        preview = self.preview_quickbooks_mileage(list(rows))
+        preview = self.preview_quickbooks_mileage(
+            list(rows),
+            _force_refresh=True,
+        )
         if preview["errors"]:
             raise StorageValidationError("\n".join(preview["errors"]))
         prepared = [
@@ -1173,8 +1294,9 @@ class GoogleSheetsStorage:
         self, rows: Iterable[Mapping[str, Any]]
     ) -> list[dict[str, str]]:
         """Validate all CSV-style rows, then append them in one API request."""
-        accounts = self._account_lookup(force_refresh=True)
-        categories = self._category_lookup(force_refresh=True)
+        self._snapshot(["Accounts", "Categories"], force_refresh=True)
+        accounts = self._account_lookup()
+        categories = self._category_lookup()
         accounts_by_name = {
             account["name"].casefold(): account for account in accounts.values()
         }
@@ -1217,12 +1339,20 @@ class GoogleSheetsStorage:
         return prepared
 
     def preview_quickbooks_transactions(
-        self, rows: Iterable[Mapping[str, Any]], *, auto_create: bool = False
+        self,
+        rows: Iterable[Mapping[str, Any]],
+        *,
+        auto_create: bool = False,
+        _force_refresh: bool = False,
     ) -> dict[str, Any]:
         """Validate and summarize a QuickBooks export without writing anything."""
         source_rows = list(rows)
-        accounts = self._account_lookup(force_refresh=True)
-        categories = self._category_lookup(force_refresh=True)
+        self._snapshot(
+            ["Accounts", "Categories", "Transactions"],
+            force_refresh=_force_refresh,
+        )
+        accounts = self._account_lookup()
+        categories = self._category_lookup()
         new_accounts, new_categories = missing_references(
             source_rows, accounts.values(), categories.values()
         )
@@ -1236,7 +1366,10 @@ class GoogleSheetsStorage:
         normalized, errors = normalize_rows(
             source_rows, accounts.values(), categories.values()
         )
-        existing = {fingerprint(item) for item in self.list_transactions()}
+        existing = {
+            fingerprint(item)
+            for item in self.list_transactions()
+        }
         seen: set[str] = set()
         ready: list[dict[str, str]] = []
         duplicate_rows: list[int] = []
@@ -1272,7 +1405,11 @@ class GoogleSheetsStorage:
     ) -> list[dict[str, str]]:
         """Revalidate a QuickBooks export, then atomically batch append unique rows."""
         source_rows = list(rows)
-        preview = self.preview_quickbooks_transactions(source_rows, auto_create=auto_create)
+        preview = self.preview_quickbooks_transactions(
+            source_rows,
+            auto_create=auto_create,
+            _force_refresh=True,
+        )
         if preview["errors"]:
             raise StorageValidationError("\n".join(preview["errors"]))
         if auto_create:
@@ -1297,7 +1434,10 @@ class GoogleSheetsStorage:
             ]
             self._append_many("Accounts", account_records)
             self._append_many("Categories", category_records)
-            preview = self.preview_quickbooks_transactions(source_rows)
+            preview = self.preview_quickbooks_transactions(
+                source_rows,
+                _force_refresh=True,
+            )
             if preview["errors"]:
                 raise StorageValidationError("\n".join(preview["errors"]))
         accounts = self._account_lookup()
@@ -1320,9 +1460,10 @@ class GoogleSheetsStorage:
         worksheet_headers: dict[str, list[str]] = {}
         csv_files: dict[str, bytes] = {}
         archive_buffer = io.BytesIO()
+        snapshot = self._snapshot(WORKSHEET_HEADERS, force_refresh=True)
         for title in WORKSHEET_HEADERS:
             headers = self._headers(title)
-            rows = self._rows(title, force_refresh=True)
+            rows = snapshot[title]
             row_counts[title] = len(rows)
             worksheet_headers[title] = headers
             csv_buffer = io.StringIO(newline="")

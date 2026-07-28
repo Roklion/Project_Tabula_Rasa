@@ -38,6 +38,13 @@ class TestGoogleSheetsStorage:
         self,
     ) -> None:
         workbook = FakeWorkbook({"Sheet1": (), "Accounts": ()})
+        workbook.worksheets = Mock(wraps=workbook.worksheets)
+        workbook.sheets["Accounts"].get_all_values = Mock(
+            wraps=workbook.sheets["Accounts"].get_all_values
+        )
+        workbook.sheets["Accounts"].row_values = Mock(
+            wraps=workbook.sheets["Accounts"].row_values
+        )
         google_client = Mock()
         google_client.open_by_key.return_value = workbook
         credential_info = {"type": "service_account"}
@@ -64,6 +71,9 @@ class TestGoogleSheetsStorage:
             credential_info, scopes=[SHEETS_SCOPE]
         )
         assert storage.workbook_title == workbook.title
+        assert workbook.worksheets.call_count == 1
+        assert workbook.sheets["Accounts"].get_all_values.call_count == 1
+        assert workbook.sheets["Accounts"].row_values.call_count == 0
         assert workbook.sheets["Sheet1"].rows == [[]]
         for title, headers in WORKSHEET_HEADERS.items():
             assert workbook.sheets[title].rows == [list(headers)]
@@ -872,6 +882,46 @@ class TestGoogleSheetsStorage:
         with zipfile.ZipFile(io.BytesIO(backup)) as archive:
             assert account["id"] in archive.read("Accounts.csv").decode("utf-8")
             assert "External" in archive.read("Accounts.csv").decode("utf-8")
+
+    def test_backup_uses_one_multi_range_values_request(self) -> None:
+        class BatchWorkbook(FakeWorkbook):
+            def __init__(self) -> None:
+                super().__init__()
+                self.batch_requests: list[list[str]] = []
+
+            def values_batch_get(self, ranges: list[str]) -> dict[str, object]:
+                self.batch_requests.append(ranges)
+                return {
+                    "valueRanges": [
+                        {
+                            "values": self.sheets[title.strip("'")].get_all_values()
+                        }
+                        for title in ranges
+                    ]
+                }
+
+        workbook = BatchWorkbook()
+        storage = GoogleSheetsStorage(workbook, sleeper=lambda _: None)
+
+        storage.export_backup_zip()
+
+        assert workbook.batch_requests == [
+            [f"'{title}'" for title in WORKSHEET_HEADERS]
+        ]
+
+    def test_import_preview_reuses_cache_but_commit_revalidates(self) -> None:
+        with patch.object(
+            self.storage,
+            "_refresh_rows",
+            wraps=self.storage._refresh_rows,
+        ) as refresh_rows:
+            self.storage.preview_quickbooks_transactions([])
+            preview_refreshes = refresh_rows.call_count
+            self.storage.preview_quickbooks_transactions([])
+            self.storage.import_quickbooks_transactions([])
+
+        assert preview_refreshes == 1
+        assert refresh_rows.call_count == preview_refreshes + 1
 
     def test_restore_backup_into_blank_workbook_and_verify_rows(self) -> None:
         account = self.storage.create_account("Checking", "Bank", 125)

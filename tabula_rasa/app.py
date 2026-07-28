@@ -196,11 +196,18 @@ def current_app_url() -> str:
     return str(getattr(context, "url", "") or "")
 
 
+@st.cache_resource
 def get_drive_client(
-    app_secrets: Mapping[str, object],
-    profile_secrets: Mapping[str, object],
+    profile_key: str,
+    configuration_revision: str,
 ) -> GoogleDriveClient:
     """Build a Drive client only when the selected profile is connected."""
+    del configuration_revision
+    app_secrets = merged_profile_secrets(
+        st.secrets,
+        path=LOCAL_PROFILE_STORE_PATH,
+    )
+    profile_secrets = select_profile_secrets(app_secrets, profile_key)
     config = load_oauth_config(app_secrets)
     drive_settings = profile_secrets.get("google_drive")
     if not isinstance(drive_settings, Mapping):
@@ -248,6 +255,9 @@ def confirmed_write(
     mark_completed(st.session_state, profile_action, payload)
     if on_success is not None:
         on_success()
+    st.session_state["workbook_data_revision"] = (
+        int(st.session_state.get("workbook_data_revision", 0)) + 1
+    )
     st.success(success_message(result) if callable(success_message) else success_message)
     st.rerun()
 
@@ -408,6 +418,11 @@ if page == "Dashboard":
     try:
         today = date.today()
         month_start = today.replace(day=1)
+        storage.prefetch_worksheets(
+            "Accounts",
+            "Categories",
+            "Transactions",
+        )
         accounts = storage.list_accounts(active_only=False)
         categories = storage.list_categories()
         transactions = storage.list_transactions()
@@ -460,6 +475,11 @@ elif page == "Transactions":
     st.title("Transactions")
     tab_add, tab_ledger = st.tabs(["Add transaction", "View & edit ledger"])
     try:
+        storage.prefetch_worksheets(
+            "Accounts",
+            "Categories",
+            "Transactions",
+        )
         accounts = storage.list_accounts(active_only=False)
         active_accounts = [account for account in accounts if account["active"]]
         categories = storage.list_categories()
@@ -817,8 +837,8 @@ elif page == "Transactions":
                 else:
                     try:
                         receipt_drive = get_drive_client(
-                            effective_secrets,
-                            selected_profile,
+                            selected_profile_key,
+                            revision,
                         )
                         receipts = receipt_drive.list_receipts(
                             profile_key=selected_profile_key,
@@ -1155,6 +1175,7 @@ elif page == "Accounts":
     st.title("Accounts")
     st.caption("Track bank, cash, credit card, and other manual balances.")
     try:
+        storage.prefetch_worksheets("Accounts", "Transactions")
         accounts = storage.list_accounts(active_only=False)
         transactions = storage.list_transactions()
         balances = balances_frame(accounts, transactions)
@@ -1389,6 +1410,11 @@ elif page == "Reports":
     )
     end = c2.date_input("To", date.today(), key="report_end")
     try:
+        storage.prefetch_worksheets(
+            "Accounts",
+            "Categories",
+            "Transactions",
+        )
         transactions = storage.list_transactions()
         categories = storage.list_categories()
         accounts = storage.list_accounts(active_only=False)
@@ -1539,7 +1565,7 @@ elif page == "Data & backup":
         )
     else:
         try:
-            backup_drive = get_drive_client(effective_secrets, selected_profile)
+            backup_drive = get_drive_client(selected_profile_key, revision)
             cloud_backups = backup_drive.list_backups(
                 profile_key=selected_profile_key,
                 folder_id=str(backup_folder["id"]),
@@ -1560,8 +1586,41 @@ elif page == "Data & backup":
                 )
             else:
                 st.warning("No cloud backup has been uploaded for this profile.")
-            if st.button(
-                "Download and verify latest",
+            upload_column, verify_column = st.columns(2)
+            if upload_column.button(
+                "Upload fresh backup now",
+                type="primary",
+                width="stretch",
+            ):
+                try:
+                    backup_zip = storage.export_backup_zip()
+                    manifest = storage.validate_backup_zip(backup_zip)
+                    cloud_filename, cloud_sha256 = backup_filename_and_hash(
+                        backup_zip,
+                        manifest,
+                    )
+                    uploaded_backup = backup_drive.upload_backup(
+                        profile_key=selected_profile_key,
+                        folder_id=str(backup_folder["id"]),
+                        filename=cloud_filename,
+                        content=backup_zip,
+                        sha256=cloud_sha256,
+                        backup_time=str(manifest["backup_time"]),
+                        keep=30,
+                    )
+                except (StorageError, GoogleDriveError, RuntimeError) as error:
+                    if isinstance(error, StorageError):
+                        report_storage_error(error)
+                    else:
+                        st.error(str(error))
+                else:
+                    st.success(
+                        "Verified backup uploaded to Google Drive: "
+                        f"{uploaded_backup.get('name', cloud_filename)}"
+                    )
+                    st.rerun()
+            if verify_column.button(
+                "Verify latest cloud backup",
                 disabled=latest_cloud is None,
                 width="stretch",
             ):
@@ -1598,67 +1657,63 @@ elif page == "Data & backup":
                 st.stop()
 
     st.subheader("Live workbook exports")
-    try:
-        accounts = storage.list_accounts(active_only=False)
-        categories = storage.list_categories()
-        transactions = storage.list_transactions()
-        mileage_trips = storage.list_mileage_trips()
-        all_transactions = ledger_frame(transactions, accounts, categories)
-        all_mileage = mileage_frame(mileage_trips)
-        backup_zip = storage.export_backup_zip()
-    except StorageError as error:
-        report_storage_error(error)
-        st.stop()
-    st.download_button(
-        "Download transactions CSV",
-        all_transactions.to_csv(index=False).encode("utf-8"),
-        f"tabula-rosa-{date.today()}.csv",
-        "text/csv",
-        width="stretch",
+    prepared_exports_key = (
+        "prepared-live-exports:"
+        f"{selected_profile_key}:{revision}:"
+        f"{st.session_state.get('workbook_data_revision', 0)}"
     )
-    st.download_button(
-        "Download mileage CSV",
-        all_mileage.to_csv(index=False).encode("utf-8"),
-        f"tabula-rosa-mileage-{date.today()}.csv",
-        "text/csv",
-        width="stretch",
+    prepared_exports = st.session_state.get(prepared_exports_key)
+    prepare_label = (
+        "Refresh downloadable exports"
+        if isinstance(prepared_exports, Mapping)
+        else "Prepare downloadable exports"
     )
-    st.download_button(
-        "Download complete workbook backup",
-        backup_zip,
-        f"tabula-rosa-backup-{date.today()}.zip",
-        "application/zip",
-        width="stretch",
-    )
-    if backup_drive is not None and isinstance(backup_folder, Mapping):
-        if st.button(
-            "Upload verified backup now",
-            type="primary",
+    if st.button(prepare_label, width="stretch"):
+        try:
+            backup_zip = storage.export_backup_zip()
+            manifest = storage.validate_backup_zip(backup_zip)
+            accounts = storage.list_accounts(active_only=False)
+            categories = storage.list_categories()
+            transactions = storage.list_transactions()
+            mileage_trips = storage.list_mileage_trips()
+            all_transactions = ledger_frame(transactions, accounts, categories)
+            all_mileage = mileage_frame(mileage_trips)
+        except StorageError as error:
+            report_storage_error(error)
+        else:
+            prepared_exports = {
+                "backup": backup_zip,
+                "backup_time": str(manifest["backup_time"]),
+                "transactions": all_transactions.to_csv(index=False).encode(
+                    "utf-8"
+                ),
+                "mileage": all_mileage.to_csv(index=False).encode("utf-8"),
+            }
+            st.session_state[prepared_exports_key] = prepared_exports
+            st.success("Fresh downloadable exports are ready.")
+    if isinstance(prepared_exports, Mapping):
+        st.caption(f"Prepared from workbook data at {prepared_exports['backup_time']}.")
+        st.download_button(
+            "Download transactions CSV",
+            prepared_exports["transactions"],
+            f"tabula-rosa-{date.today()}.csv",
+            "text/csv",
             width="stretch",
-        ):
-            try:
-                manifest = storage.validate_backup_zip(backup_zip)
-                cloud_filename, cloud_sha256 = backup_filename_and_hash(
-                    backup_zip,
-                    manifest,
-                )
-                uploaded_backup = backup_drive.upload_backup(
-                    profile_key=selected_profile_key,
-                    folder_id=str(backup_folder["id"]),
-                    filename=cloud_filename,
-                    content=backup_zip,
-                    sha256=cloud_sha256,
-                    backup_time=str(manifest["backup_time"]),
-                    keep=30,
-                )
-            except (GoogleDriveError, RuntimeError) as error:
-                st.error(str(error))
-            else:
-                st.success(
-                    "Verified backup uploaded to Google Drive: "
-                    f"{uploaded_backup.get('name', cloud_filename)}"
-                )
-                st.rerun()
+        )
+        st.download_button(
+            "Download mileage CSV",
+            prepared_exports["mileage"],
+            f"tabula-rosa-mileage-{date.today()}.csv",
+            "text/csv",
+            width="stretch",
+        )
+        st.download_button(
+            "Download complete workbook backup",
+            prepared_exports["backup"],
+            f"tabula-rosa-backup-{date.today()}.zip",
+            "application/zip",
+            width="stretch",
+        )
     with st.expander("Import Tabula Rosa CSV"):
         st.write(
             "Upload a CSV with: Date, Type, Amount, Account, Category, Payee, "

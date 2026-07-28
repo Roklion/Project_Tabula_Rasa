@@ -74,9 +74,17 @@ class DriveSession:
     ) -> None:
         self.responses = list(responses)
         self.requests: list[tuple[str, str, dict[str, Any]]] = []
+        self.token_refreshes = 0
 
     def post(self, _url: str, **_kwargs: Any) -> FakeResponse:
-        return FakeResponse(200, {"access_token": "short-lived-access"})
+        self.token_refreshes += 1
+        return FakeResponse(
+            200,
+            {
+                "access_token": "short-lived-access",
+                "expires_in": 3600,
+            },
+        )
 
     def request(self, method: str, url: str, **kwargs: Any) -> FakeResponse:
         self.requests.append((method, url, kwargs))
@@ -193,15 +201,6 @@ class TestGoogleDriveFiles:
     def test_receipt_upload_is_transaction_scoped_and_sanitizes_name(self) -> None:
         session = DriveSession(
             [
-                FakeResponse(
-                    200,
-                    {
-                        "id": "folder123456",
-                        "name": "Receipts",
-                        "mimeType": "application/vnd.google-apps.folder",
-                        "trashed": False,
-                    },
-                ),
                 FakeResponse(200, {"files": []}),
                 FakeResponse(
                     200,
@@ -248,16 +247,6 @@ class TestGoogleDriveFiles:
                 FakeResponse(
                     200,
                     {
-                        "id": "folder123456",
-                        "name": "Backups",
-                        "mimeType": "application/vnd.google-apps.folder",
-                        "trashed": False,
-                    },
-                ),
-                FakeResponse(200, {"files": [existing]}),
-                FakeResponse(
-                    200,
-                    {
                         "files": [
                             existing,
                             {"id": "backup234567", "name": "older-1.zip"},
@@ -288,8 +277,6 @@ class TestGoogleDriveFiles:
         assert uploaded == existing
         assert [request[0] for request in session.requests] == [
             "GET",
-            "GET",
-            "GET",
             "DELETE",
         ]
         assert not any("/upload/" in request[1] for request in session.requests)
@@ -301,18 +288,8 @@ class TestGoogleDriveFiles:
         }
         session = DriveSession(
             [
-                FakeResponse(
-                    200,
-                    {
-                        "id": "folder123456",
-                        "name": "Backups",
-                        "mimeType": "application/vnd.google-apps.folder",
-                        "trashed": False,
-                    },
-                ),
                 FakeResponse(200, {"files": []}),
                 requests.ConnectionError("response was lost after upload"),
-                FakeResponse(200, {"files": [committed]}),
                 FakeResponse(200, {"files": [committed]}),
             ]
         )
@@ -335,6 +312,35 @@ class TestGoogleDriveFiles:
 
         assert uploaded == committed
         assert [request[0] for request in session.requests].count("POST") == 1
+
+    def test_reuses_access_token_and_short_lived_file_list_cache(self) -> None:
+        now = [1_000.0]
+        session = DriveSession([FakeResponse(200, {"files": []})])
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+            clock=lambda: now[0],
+        )
+
+        assert client.access_token() == "short-lived-access"
+        assert client.access_token() == "short-lived-access"
+        client.list_backups(
+            profile_key="north",
+            folder_id="folder123456",
+        )
+        client.list_backups(
+            profile_key="north",
+            folder_id="folder123456",
+        )
+
+        assert session.token_refreshes == 1
+        assert len(session.requests) == 1
+
+        now[0] += 3_541
+        assert client.access_token() == "short-lived-access"
+        assert session.token_refreshes == 2
 
     def test_week_detection_uses_canonical_utc_filename(self) -> None:
         assert backup_is_in_local_week(

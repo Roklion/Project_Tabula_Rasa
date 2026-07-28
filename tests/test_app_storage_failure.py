@@ -115,8 +115,7 @@ class TestAppStorageFailure:
             app.text_input[0].input(TEST_PASSWORD)
             app.button[0].click().run()
             app.radio[0].set_value("Data & backup").run()
-            assert app.error[0].value == SAFE_MESSAGE
-            assert unavailable_export.call_count == 1
+            assert unavailable_export.call_count == 0
 
             next(
                 button
@@ -124,7 +123,7 @@ class TestAppStorageFailure:
                 if button.label == "Download and verify latest"
             ).click().run()
 
-        assert unavailable_export.call_count == 1
+        assert unavailable_export.call_count == 0
         assert any(
             "Latest cloud backup downloaded and verified" in success.value
             for success in app.success

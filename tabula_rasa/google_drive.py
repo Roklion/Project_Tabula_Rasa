@@ -473,16 +473,25 @@ class GoogleDriveClient:
         *,
         session: requests.Session | None = None,
         sleeper: Callable[[float], None] = time.sleep,
+        clock: Callable[[], float] = time.monotonic,
+        list_cache_ttl_seconds: float = 10.0,
     ) -> None:
         self.config = config
         self.profile_settings = validate_drive_profile_settings(profile_settings)
         self.session = session or requests.Session()
         self.sleeper = sleeper
+        self.clock = clock
+        self.list_cache_ttl_seconds = list_cache_ttl_seconds
         self._access_token = ""
+        self._access_token_expires_at = 0.0
+        self._list_cache: dict[
+            tuple[str, int, str],
+            tuple[float, list[dict[str, Any]]],
+        ] = {}
 
     def access_token(self) -> str:
-        """Return a fresh short-lived access token for Drive or Google Picker."""
-        self._refresh()
+        """Return a valid short-lived access token for Drive or Google Picker."""
+        self._ensure_access_token()
         return self._access_token
 
     def revoke(self) -> None:
@@ -530,6 +539,18 @@ class GoogleDriveClient:
                 "Google Drive authorization was revoked or expired. Reconnect this profile."
             )
         self._access_token = access_token
+        try:
+            expires_in = max(float(token.get("expires_in", 3600)), 60.0)
+        except (TypeError, ValueError):
+            expires_in = 3600.0
+        self._access_token_expires_at = self.clock() + max(expires_in - 60.0, 1.0)
+
+    def _ensure_access_token(self) -> None:
+        if (
+            not self._access_token
+            or self.clock() >= self._access_token_expires_at
+        ):
+            self._refresh()
 
     def _request(
         self,
@@ -540,8 +561,7 @@ class GoogleDriveClient:
         retry_transient: bool = True,
         **kwargs: Any,
     ) -> requests.Response:
-        if not self._access_token:
-            self._refresh()
+        self._ensure_access_token()
         refreshed_after_unauthorized = False
         supplied_headers = dict(kwargs.pop("headers", {}))
         for attempt in range(4):
@@ -588,8 +608,7 @@ class GoogleDriveClient:
 
     def folder(self, folder_id: str) -> dict[str, Any]:
         """Validate and return one authorized Drive folder."""
-        if not DRIVE_ID_PATTERN.fullmatch(str(folder_id)):
-            raise GoogleDriveAccessError("The selected Google Drive folder is invalid.")
+        folder_id = self._valid_folder_id(folder_id)
         response = self._request(
             "GET",
             f"{DRIVE_API_ROOT}/files/{folder_id}",
@@ -605,13 +624,29 @@ class GoogleDriveClient:
             )
         return folder
 
+    @staticmethod
+    def _valid_folder_id(folder_id: str) -> str:
+        folder_id = str(folder_id)
+        if not DRIVE_ID_PATTERN.fullmatch(folder_id):
+            raise GoogleDriveAccessError("The selected Google Drive folder is invalid.")
+        return folder_id
+
+    def _invalidate_list_cache(self) -> None:
+        self._list_cache.clear()
+
     def _list(
         self,
         query: str,
         *,
         page_size: int = 100,
         order_by: str = "",
+        use_cache: bool = False,
     ) -> list[dict[str, Any]]:
+        cache_key = (query, page_size, order_by)
+        if use_cache and self.list_cache_ttl_seconds > 0:
+            cached = self._list_cache.get(cache_key)
+            if cached and self.clock() - cached[0] < self.list_cache_ttl_seconds:
+                return [dict(item) for item in cached[1]]
         params = {
             "q": query,
             "pageSize": min(max(page_size, 1), 1000),
@@ -635,7 +670,10 @@ class GoogleDriveClient:
             raise GoogleDriveAccessError(
                 "Google Drive returned an unreadable file listing."
             )
-        return [dict(item) for item in files if isinstance(item, Mapping)]
+        result = [dict(item) for item in files if isinstance(item, Mapping)]
+        if use_cache and self.list_cache_ttl_seconds > 0:
+            self._list_cache[cache_key] = (self.clock(), result)
+        return [dict(item) for item in result]
 
     def _multipart_create(
         self,
@@ -643,6 +681,7 @@ class GoogleDriveClient:
         content: bytes,
         mime_type: str,
     ) -> dict[str, Any]:
+        self._invalidate_list_cache()
         boundary = f"tabula-rasa-{secrets.token_hex(16)}"
         body = (
             f"--{boundary}\r\n"
@@ -675,6 +714,7 @@ class GoogleDriveClient:
         content: bytes,
         mime_type: str,
     ) -> dict[str, Any]:
+        self._invalidate_list_cache()
         response = self._request(
             "PATCH",
             f"{DRIVE_UPLOAD_ROOT}/files/{file_id}",
@@ -690,6 +730,7 @@ class GoogleDriveClient:
 
     def delete_file(self, file_id: str) -> None:
         """Delete a file created and managed by the app."""
+        self._invalidate_list_cache()
         self._request(
             "DELETE",
             f"{DRIVE_API_ROOT}/files/{file_id}",
@@ -712,7 +753,7 @@ class GoogleDriveClient:
             raise GoogleDriveAccessError(
                 "Receipt files must be non-empty and no larger than 20 MB."
             )
-        self.folder(folder_id)
+        folder_id = self._valid_folder_id(folder_id)
         filename = safe_receipt_filename(transaction_id, original_name)
         query = " and ".join(
             [
@@ -764,6 +805,7 @@ class GoogleDriveClient:
         folder_id: str,
     ) -> list[dict[str, Any]]:
         """List app-managed receipts for one transaction."""
+        folder_id = self._valid_folder_id(folder_id)
         query = " and ".join(
             [
                 f"'{_escape_query_value(folder_id)}' in parents",
@@ -782,7 +824,12 @@ class GoogleDriveClient:
                 ),
             ]
         )
-        return self._list(query, page_size=100, order_by="createdTime desc")
+        return self._list(
+            query,
+            page_size=100,
+            order_by="createdTime desc",
+            use_cache=True,
+        )
 
     def upload_backup(
         self,
@@ -798,7 +845,7 @@ class GoogleDriveClient:
         """Idempotently upload a verified backup and apply retention."""
         if keep < 2:
             raise ValueError("keep must retain at least two backup generations")
-        self.folder(folder_id)
+        folder_id = self._valid_folder_id(folder_id)
         name_query = " and ".join(
             [
                 f"'{_escape_query_value(folder_id)}' in parents",
@@ -814,7 +861,13 @@ class GoogleDriveClient:
                 ),
             ]
         )
-        existing = self._list(name_query, page_size=2)
+        generations = self.list_backups(
+            profile_key=profile_key,
+            folder_id=folder_id,
+            limit=1000,
+            _force_refresh=True,
+        )
+        existing = [item for item in generations if item.get("name") == filename]
         if existing:
             uploaded = existing[0]
         else:
@@ -838,11 +891,7 @@ class GoogleDriveClient:
                 if not committed:
                     raise
                 uploaded = committed[0]
-        generations = self.list_backups(
-            profile_key=profile_key,
-            folder_id=folder_id,
-            limit=1000,
-        )
+            generations.insert(0, uploaded)
         for expired in generations[keep:]:
             self.delete_file(str(expired["id"]))
         return uploaded
@@ -853,8 +902,10 @@ class GoogleDriveClient:
         profile_key: str,
         folder_id: str,
         limit: int = 100,
+        _force_refresh: bool = False,
     ) -> list[dict[str, Any]]:
         """List app-managed cloud backups newest first."""
+        folder_id = self._valid_folder_id(folder_id)
         query = " and ".join(
             [
                 f"'{_escape_query_value(folder_id)}' in parents",
@@ -869,7 +920,12 @@ class GoogleDriveClient:
                 ),
             ]
         )
-        return self._list(query, page_size=limit, order_by="createdTime desc")
+        return self._list(
+            query,
+            page_size=limit,
+            order_by="createdTime desc",
+            use_cache=not _force_refresh,
+        )
 
     def download_file(self, file_id: str) -> bytes:
         """Download an authorized file for validation or recovery."""

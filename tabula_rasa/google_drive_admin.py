@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import json
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,7 @@ from tabula_rasa.google_drive import (
     GoogleDriveClient,
     GoogleDriveConfigurationError,
     GoogleDriveError,
+    GoogleDriveOAuthConfig,
     authorization_url,
     exchange_authorization_code,
     load_oauth_config,
@@ -26,6 +28,17 @@ from tabula_rasa.local_profile_store import (
     load_local_profiles,
     update_local_profile_google_drive,
 )
+
+
+@st.cache_resource
+def _cached_drive_client(
+    config: GoogleDriveOAuthConfig,
+    profile_key: str,
+    settings_json: str,
+) -> GoogleDriveClient:
+    """Reuse a profile's access token while its saved OAuth settings are unchanged."""
+    del profile_key
+    return GoogleDriveClient(config, json.loads(settings_json))
 
 
 def _query_value(value: object) -> str:
@@ -193,7 +206,11 @@ def render_google_drive_admin(
     st.success(f"Connected as {identity}.")
 
     try:
-        client = GoogleDriveClient(config, drive_settings)
+        client = _cached_drive_client(
+            config,
+            profile_key,
+            json.dumps(dict(drive_settings), sort_keys=True),
+        )
         access_token = client.access_token()
     except GoogleDriveError as exc:
         st.error(str(exc))
