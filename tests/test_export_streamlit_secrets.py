@@ -31,6 +31,17 @@ class TestExportStreamlitSecrets:
                     ),
                     "client_email": "north@example.test",
                 },
+                "google_drive": {
+                    "authorized_email": "north-owner@example.test",
+                    "authorized_name": "North Owner",
+                    "refresh_token": "north-refresh-token",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "scopes": ["https://www.googleapis.com/auth/drive.file"],
+                    "backup_folder": {
+                        "id": "northbackupfolder123",
+                        "name": "Backups",
+                    },
+                },
             },
             "south_shop": {
                 "name": "South Shop",
@@ -52,6 +63,13 @@ class TestExportStreamlitSecrets:
                 "business_name": "Legacy Name",
                 "spreadsheet_id": "legacy-sheet",
                 "gcp_service_account": {"private_key": "legacy-secret"},
+                "google_drive_oauth": {
+                    "client_id": "client.apps.googleusercontent.com",
+                    "client_secret": "oauth-secret",
+                    "redirect_uris": ["https://tabula-rasa.streamlit.app/"],
+                    "picker_api_key": "picker-key",
+                    "project_number": "123456789",
+                },
             },
             profiles,
         )
@@ -71,6 +89,15 @@ class TestExportStreamlitSecrets:
             in parsed["business_profiles"]["north-shop"]["gcp_service_account"][
                 "private_key"
             ]
+        )
+        assert (
+            parsed["google_drive_oauth"]["client_secret"] == "oauth-secret"
+        )
+        assert (
+            parsed["business_profiles"]["north-shop"]["google_drive"][
+                "refresh_token"
+            ]
+            == "north-refresh-token"
         )
 
     def test_secure_writer_refuses_to_overwrite(self) -> None:

@@ -17,6 +17,7 @@ from tabula_rasa.local_profile_store import (
     merged_profile_secrets,
     parse_service_account_json,
     save_local_profile,
+    update_local_profile_google_drive,
 )
 
 
@@ -130,3 +131,26 @@ class TestLocalProfileStore:
                 save_local_profile("north", settings(), path=path)
 
             assert "do-not-overwrite" in path.read_text(encoding="utf-8")
+
+    def test_persists_and_disconnects_profile_scoped_drive_authorization(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "local_business_profiles.json"
+            save_local_profile("north", settings(), path=path)
+            drive = {
+                "authorized_email": "north@example.test",
+                "authorized_name": "North Owner",
+                "refresh_token": "durable-refresh-token",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "scopes": ["https://www.googleapis.com/auth/drive.file"],
+                "receipt_folder": {
+                    "id": "receiptfolder123",
+                    "name": "Receipts",
+                },
+            }
+
+            update_local_profile_google_drive("north", drive, path=path)
+            stored = load_local_profiles(path)
+            assert stored["north"]["google_drive"] == drive
+
+            update_local_profile_google_drive("north", None, path=path)
+            assert "google_drive" not in load_local_profiles(path)["north"]

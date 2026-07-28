@@ -24,6 +24,10 @@ from tabula_rasa.business_profiles import (
     BusinessProfileConfigurationError,
     load_business_profiles,
 )
+from tabula_rasa.google_drive import (
+    GoogleDriveConfigurationError,
+    validate_drive_profile_settings,
+)
 
 
 LOCAL_PROFILE_ADMIN_ENV = "TABULA_LOCAL_PROFILE_ADMIN"
@@ -153,6 +157,7 @@ def build_profile_settings(
     spreadsheet: str,
     credential_upload: bytes,
     backup_folder_path: str | None = None,
+    google_drive: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Validate form values and return one profile settings mapping."""
     display_name = name.strip()
@@ -169,6 +174,11 @@ def build_profile_settings(
         settings["backup_folder_path"] = validate_backup_folder_path(
             backup_folder_path
         )
+    if google_drive is not None:
+        try:
+            settings["google_drive"] = validate_drive_profile_settings(google_drive)
+        except GoogleDriveConfigurationError as exc:
+            raise LocalProfileStoreError(str(exc)) from exc
     return settings
 
 
@@ -188,6 +198,11 @@ def _validate_stored_profiles(profiles: object) -> dict[str, dict[str, Any]]:
                 (
                     str(raw_settings["backup_folder_path"])
                     if "backup_folder_path" in raw_settings
+                    else None
+                ),
+                (
+                    raw_settings["google_drive"]
+                    if "google_drive" in raw_settings
                     else None
                 ),
             )
@@ -274,6 +289,44 @@ def save_local_profile(
             raise LocalProfileStoreError(
                 "That profile key already exists in the local profile store."
             )
+        profiles[profile_key] = candidate
+        profiles = _validate_stored_profiles(profiles)
+        content = (
+            json.dumps(
+                {"version": STORE_VERSION, "business_profiles": profiles},
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode("utf-8")
+        _atomic_write(path, content)
+
+
+def update_local_profile_google_drive(
+    key: str,
+    google_drive: Mapping[str, Any] | None,
+    *,
+    path: Path = LOCAL_PROFILE_STORE_PATH,
+) -> None:
+    """Atomically replace or remove one local profile's Drive authorization."""
+    profile_key = validate_profile_key(key)
+    with _STORE_LOCK:
+        profiles = load_local_profiles(path)
+        if profile_key not in profiles:
+            raise LocalProfileStoreError(
+                "Google Drive can only be connected to a local business profile."
+            )
+        candidate = dict(profiles[profile_key])
+        if google_drive is None:
+            candidate.pop("google_drive", None)
+        else:
+            try:
+                candidate["google_drive"] = validate_drive_profile_settings(
+                    google_drive
+                )
+            except GoogleDriveConfigurationError as exc:
+                raise LocalProfileStoreError(str(exc)) from exc
         profiles[profile_key] = candidate
         profiles = _validate_stored_profiles(profiles)
         content = (

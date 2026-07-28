@@ -9,6 +9,7 @@ from typing import Any
 import streamlit as st
 
 from tabula_rasa.business_profiles import load_business_profiles
+from tabula_rasa.google_drive_admin import render_google_drive_admin
 from tabula_rasa.ledger_auth import verify_password
 from tabula_rasa.local_profile_store import (
     LOCAL_PROFILE_STORE_PATH,
@@ -92,6 +93,16 @@ def _profile_rows(
                     profile.secrets.get("backup_folder_path", "")
                 ),
                 "Service account": str(credential.get("client_email", "")),
+                "Drive OAuth": (
+                    str(
+                        profile.secrets.get("google_drive", {}).get(
+                            "authorized_email",
+                            "Connected",
+                        )
+                    )
+                    if profile.secrets.get("google_drive")
+                    else "Not connected"
+                ),
                 "Source": source,
             }
         )
@@ -102,6 +113,7 @@ def render_local_profile_admin(
     base_secrets: Mapping[str, Any],
     effective_secrets: Mapping[str, Any],
     *,
+    current_url: str = "",
     store_path: Path = LOCAL_PROFILE_STORE_PATH,
 ) -> None:
     """Render the reauthenticated local profile-administration page."""
@@ -145,6 +157,14 @@ def render_local_profile_admin(
     else:
         st.info("No business profiles are configured yet.")
 
+    render_google_drive_admin(
+        base_secrets,
+        local_profiles,
+        current_url=current_url,
+        store_path=store_path,
+    )
+
+    st.divider()
     st.subheader("Add or replace a local profile")
     st.write(
         "Share the spreadsheet with the uploaded service account as Editor before "
@@ -225,6 +245,11 @@ def render_local_profile_admin(
             spreadsheet,
             credential_file.getvalue(),
             backup_folder_path,
+            (
+                local_profiles.get(key, {}).get("google_drive")
+                if replace
+                else None
+            ),
         )
         folded_name = settings["name"].casefold()
         if any(

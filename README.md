@@ -5,9 +5,9 @@ A private Google Sheets-backed bookkeeping app for one person or a small group o
 ## Run it
 
 1. Install Python 3.11 or newer.
-2. Follow the profile setup below. Keep the application password hash in
-   `.streamlit/secrets.toml`; all business settings and credentials live in
-   `.streamlit/business_profiles.json`.
+2. Follow the profile setup below. Keep application-level secrets in
+   `.streamlit/secrets.toml`; all business settings and per-profile
+   credentials live in `.streamlit/business_profiles.json`.
 3. In this folder, run:
 
    ```powershell
@@ -114,7 +114,8 @@ that created it.
 Use the authenticated **Business profiles** page described below. It writes
 each business's spreadsheet, Drive locations, and complete service-account
 credential together in the ignored `.streamlit/business_profiles.json`.
-`.streamlit/secrets.toml` should contain only application-level secrets:
+`.streamlit/secrets.toml` should contain only application-level secrets.
+Before Google Drive OAuth is configured it contains:
 
 ```toml
 app_password_hash = "scrypt$..."
@@ -173,6 +174,115 @@ folder, and ensure other operating-system users cannot read it.
 The profile file is read during normal app and backup-script execution. The
 loopback-only launcher controls editing, not reading. Never commit, email, or
 synchronize this plaintext credential file.
+
+## Google Drive OAuth for receipts and cloud backups
+
+Google Sheets continues to use each profile's service account. Google Drive
+uses one separate, app-wide OAuth client plus a human Google authorization for
+each business profile. The refresh token and selected folders are stored under
+the corresponding profile; they are never written to the ledger workbook or
+displayed after authorization.
+
+### 1. Configure the app-wide Google Cloud project
+
+Use a separate Cloud project such as `tabula-rosa-oauth-client`, rather than a
+project dedicated to one business's Sheets service account.
+
+1. Enable the **Google Drive API** and **Google Picker API**.
+2. Open **Google Auth Platform** and configure Branding.
+3. Choose **External** audience when profiles may use personal accounts or
+   accounts outside one Workspace organization.
+4. While the app is in Testing, add each human Drive-owning Google account as a
+   test user. Do not add service-account `client_email` addresses.
+5. Under **Data Access**, add only:
+
+   ```text
+   https://www.googleapis.com/auth/drive.file
+   ```
+
+6. Create a **Web application** OAuth client. Add these JavaScript origins:
+
+   ```text
+   http://localhost:8501
+   http://127.0.0.1:8501
+   https://tabula-rasa.streamlit.app
+   ```
+
+7. Add the matching exact redirect URIs:
+
+   ```text
+   http://localhost:8501/
+   http://127.0.0.1:8501/
+   https://tabula-rasa.streamlit.app/
+   ```
+
+8. Create an API key for Google Picker. Restrict it to the Google Picker API
+   and to the three HTTP referrers above, using `/*` after each origin.
+9. Record the OAuth client ID, client secret, API key, and numeric Cloud project
+   number. The project number is under **IAM & Admin > Settings** and is not the
+   project ID.
+
+Testing-mode Drive grants, including offline refresh tokens, expire after seven
+days. Move the OAuth app to **In production** before relying on unattended
+backups. The narrow `drive.file` scope avoids broad access to the user's Drive;
+Google Picker explicitly authorizes the selected folders.
+
+### 2. Add the app-wide OAuth secrets locally
+
+Add the following to the ignored `.streamlit/secrets.toml`:
+
+```toml
+app_password_hash = "scrypt$..."
+
+[google_drive_oauth]
+client_id = "CLIENT_ID.apps.googleusercontent.com"
+client_secret = "CLIENT_SECRET"
+redirect_uris = [
+  "http://localhost:8501/",
+  "http://127.0.0.1:8501/",
+  "https://tabula-rasa.streamlit.app/",
+]
+picker_api_key = "PICKER_API_KEY"
+project_number = "NUMERIC_CLOUD_PROJECT_NUMBER"
+```
+
+Never commit this file or paste its values into issues, logs, screenshots, or
+the business-profile service-account JSON.
+
+### 3. Connect every business profile
+
+Run the loopback-only profile administration launcher:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\run_local_profile_admin.ps1
+```
+
+Then:
+
+1. Sign in to Tabula Rosa and open **Business profiles**.
+2. Re-enter the application password.
+3. Under **Google Drive OAuth**, choose a local business profile.
+4. Select **Connect Google Drive**.
+5. Sign in with the human Google account that should own that business's Drive
+   files and approve access.
+6. Back in Tabula Rosa, use Google Picker to select the profile's receipt
+   folder and backup folder.
+7. Repeat for every profile. Profiles may authorize different Google accounts
+   while sharing the same OAuth client.
+8. Run `python scripts/export_streamlit_secrets.py` again and replace the
+   hosted Streamlit Secrets document so the hosted app receives the new
+   per-profile refresh tokens and folder IDs.
+
+Because Streamlit Community Cloud cannot safely write back to its Secrets,
+connections, reconnections, folder changes, and disconnections are performed
+locally and then exported. A revoked grant produces a reconnect message without
+affecting the profile's Google Sheets service account.
+
+Once a receipt folder is selected, open a saved transaction under
+**Transactions > View & edit ledger > Receipt** to upload a PDF or image. Files
+are named `[transaction-id]-[original-file-name]` and tagged with private
+app-properties so retries update the same receipt rather than creating an
+unintended duplicate.
 
 ### Export profiles to Streamlit Community Cloud
 
@@ -301,14 +411,25 @@ Recreate or update the task with:
 powershell -ExecutionPolicy Bypass -File scripts\register_weekly_backup_task.ps1 -Profile heathcote -TaskName "Tabula Rosa Backup - Heathcote"
 ```
 
-Register one task with a distinct backup directory and task name for each
-profile. This prevents archives with identical timestamps from different
-businesses being mixed together.
+For local or NAS backups, register one task with a distinct backup directory
+and task name for each profile. This prevents archives with identical
+timestamps from different businesses being mixed together.
 
-An optional future upgrade is to replace the local mount with a cloud-native
-Google Apps Script or Google user OAuth flow that uploads directly through the
-Drive API. The service account remains appropriate for editing the existing
-spreadsheet but cannot own newly created backup files in a personal My Drive.
+After connecting OAuth and choosing a backup folder, upload and verify a cloud
+backup from **Data & backup**. The Drive uploader preserves the current ZIP
+format and manifest, records the archive SHA-256 in private app-properties,
+makes retries idempotent, and retains the newest 30 generations.
+
+For unattended cloud-native backups, register the existing weekly task with
+the Drive flag:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\register_weekly_backup_task.ps1 -Profile heathcote -GoogleDrive -TaskName "Tabula Rosa Cloud Backup - Heathcote"
+```
+
+The task uses the profile's stored refresh token and does not require Google
+Drive Desktop to be running. The local Google Drive Desktop/NAS workflow remains
+available as a fallback; omit `-GoogleDrive` to use it.
 
 ### Restore drill
 
@@ -345,7 +466,9 @@ rereads every restored row and verifies it against the archive.
 
 - Local service-account credentials live only in the ignored
   `.streamlit/business_profiles.json` file. The ignored
-  `.streamlit/secrets.toml` contains the application password hash.
+  `.streamlit/secrets.toml` contains the application password hash and
+  app-wide Google Drive OAuth client/Picker configuration. Per-profile Drive
+  refresh tokens and folder IDs live in the ignored business profiles file.
 - The hosted app uses a separate copy of those TOML values in Streamlit
   Community Cloud's encrypted Secrets settings.
 - Hosted Secrets requires `app_password_hash` plus one or more
@@ -354,9 +477,12 @@ rereads every restored row and verifies it against the archive.
 - The original service-account JSON is not required after both secrets stores
   are configured. If retained for disaster recovery, keep it only in protected
   credential storage outside the repository.
-- To rotate the Google credential, disable the old key in Google Cloud, create
+- To rotate a Sheets credential, disable the old key in Google Cloud, create
   a replacement, update local and hosted secrets, verify access, and then delete
   the old key.
+- To rotate the OAuth client secret, update `.streamlit/secrets.toml`, reconnect
+  affected profiles if Google invalidates their grants, export hosted Secrets
+  again, and only then retire the old secret.
 - To replace a forgotten application password, run
   `python scripts/set_app_password.py`, then copy the new hash to the hosted
   Secrets settings.

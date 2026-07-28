@@ -1,6 +1,7 @@
 param(
     [string]$BackupDirectory,
     [string]$Profile,
+    [switch]$GoogleDrive,
     [string]$TaskName = "Tabula Rosa Weekly Backup"
 )
 
@@ -18,8 +19,14 @@ if (-not (Test-Path -LiteralPath $backupScript -PathType Leaf)) {
 if ($BackupDirectory -and -not (Test-Path -LiteralPath $BackupDirectory -PathType Container)) {
     throw "Backup directory was not found: $BackupDirectory"
 }
+if ($BackupDirectory -and $GoogleDrive) {
+    throw "BackupDirectory cannot be combined with GoogleDrive."
+}
 
 $arguments = '"{0}" --keep 30 --once-per-week' -f $backupScript
+if ($GoogleDrive) {
+    $arguments += ' --google-drive'
+}
 if ($BackupDirectory) {
     $arguments += ' --output-dir "{0}"' -f $BackupDirectory
 }
