@@ -18,6 +18,7 @@ from tabula_rasa.local_profile_store import (
     parse_service_account_json,
     save_local_profile,
     update_local_profile_google_drive,
+    update_local_profile_synology_recovery,
 )
 
 
@@ -154,3 +155,50 @@ class TestLocalProfileStore:
 
             update_local_profile_google_drive("north", None, path=path)
             assert "google_drive" not in load_local_profiles(path)["north"]
+
+    def test_synology_recovery_is_optional_and_profile_scoped(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "local_business_profiles.json"
+            save_local_profile("north", settings(), path=path)
+            drive = {
+                "authorized_email": "north@example.test",
+                "authorized_name": "North Owner",
+                "refresh_token": "durable-refresh-token",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "scopes": ["https://www.googleapis.com/auth/drive.file"],
+                "backup_folder": {
+                    "id": "backupfolder123",
+                    "name": "North Backups",
+                },
+            }
+            update_local_profile_google_drive("north", drive, path=path)
+            recovery = {
+                "destination_path": "/volume1/Backups/TabulaRasa/north",
+                "schedule": "Continuous",
+                "retention_policy": "Retain until manual review.",
+            }
+
+            update_local_profile_synology_recovery("north", recovery, path=path)
+            assert load_local_profiles(path)["north"]["synology_recovery"] == recovery
+
+            update_local_profile_synology_recovery("north", None, path=path)
+            assert "synology_recovery" not in load_local_profiles(path)["north"]
+
+    def test_synology_recovery_requires_a_drive_backup_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "local_business_profiles.json"
+            save_local_profile("north", settings(), path=path)
+
+            with pytest.raises(
+                LocalProfileStoreError,
+                match="Google Drive backup folder",
+            ):
+                update_local_profile_synology_recovery(
+                    "north",
+                    {
+                        "destination_path": "/volume1/Backups/north",
+                        "schedule": "Continuous",
+                        "retention_policy": "Keep all.",
+                    },
+                    path=path,
+                )

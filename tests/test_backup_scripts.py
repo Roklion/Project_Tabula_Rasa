@@ -12,6 +12,10 @@ from scripts.backup_google_sheets import (
     verified_backup_for_week,
     write_versioned_backup,
 )
+from scripts.validate_google_sheets_backup import (
+    validate_backup_file,
+    validation_report,
+)
 from tabula_rasa.storage import GoogleSheetsStorage
 from tests.fakes import FakeWorkbook
 
@@ -74,3 +78,17 @@ class TestBackupScripts:
         with tempfile.TemporaryDirectory() as temporary_directory:
             with pytest.raises(ValueError):
                 write_versioned_backup(storage, Path(temporary_directory), keep=1)
+
+    def test_standalone_validator_reports_manifest_and_rows(self) -> None:
+        storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            backup_path = Path(temporary_directory) / "backup.zip"
+            backup_path.write_bytes(storage.export_backup_zip())
+
+            manifest = validate_backup_file(backup_path)
+            report = validation_report(backup_path, manifest)
+
+        assert "Format version: 3" in report
+        assert "Accounts=0" in report
+        assert "Mileage=0" in report
+        assert "Manifest checksums: verified" in report

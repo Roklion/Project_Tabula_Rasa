@@ -52,6 +52,12 @@ from tabula_rasa.storage import (
     StorageError,
     StorageValidationError,
 )
+from tabula_rasa.synology_recovery import (
+    DESTINATION_DELETIONS,
+    SYNC_DIRECTION,
+    SynologyRecoveryConfigurationError,
+    validate_synology_recovery_settings,
+)
 from tabula_rasa.submission_guard import is_recent_duplicate, mark_completed
 from tabula_rasa.quickbooks_import import (
     REQUIRED_COLUMNS as QUICKBOOKS_REQUIRED_COLUMNS,
@@ -1659,6 +1665,55 @@ elif page == "Data & backup":
                 # Verification is deliberately Drive-only. Do not continue
                 # into the live Sheets reads and fresh backup generation below.
                 st.stop()
+
+    st.subheader("Synology recovery copy")
+    raw_synology_recovery = selected_profile.get("synology_recovery")
+    if raw_synology_recovery is None:
+        st.info(
+            "Optional for this business. Enable Synology recovery from the local "
+            "Business profiles page if this ledger should keep an isolated NAS copy."
+        )
+    else:
+        try:
+            synology_recovery = validate_synology_recovery_settings(
+                raw_synology_recovery
+            )
+        except SynologyRecoveryConfigurationError as error:
+            st.error(str(error))
+            synology_recovery = None
+        if synology_recovery is None:
+            st.caption(
+                "Repair this profile from the loopback-only Business profiles page."
+            )
+        else:
+            if not isinstance(backup_folder, Mapping):
+                st.warning(
+                    "Synology recovery is enabled, but this profile does not have a "
+                    "Google Drive backup folder selected."
+                )
+            source_name = (
+                str(backup_folder.get("name", "Google Drive backup folder"))
+                if isinstance(backup_folder, Mapping)
+                else "Not configured"
+            )
+            st.markdown(
+                "\n".join(
+                    (
+                        f"- **Google Drive source:** {source_name}",
+                        "- **Cloud Sync direction:** " + SYNC_DIRECTION,
+                        "- **Destination deletions:** " + DESTINATION_DELETIONS,
+                        "- **NAS destination:** "
+                        + synology_recovery["destination_path"],
+                        "- **Schedule:** " + synology_recovery["schedule"],
+                        "- **Retention:** " + synology_recovery["retention_policy"],
+                    )
+                )
+            )
+            st.caption(
+                "These are the expected per-business settings. Tabula Rosa does not "
+                "connect to the NAS; confirm transfers, failures, and retries in DSM "
+                "Cloud Sync."
+            )
 
     st.subheader("Live workbook exports")
     prepared_exports_key = (

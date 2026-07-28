@@ -17,6 +17,7 @@ from tabula_rasa.local_profile_store import (
     build_profile_settings,
     load_local_profiles,
     save_local_profile,
+    update_local_profile_synology_recovery,
     validate_profile_key,
 )
 from tabula_rasa.storage import (
@@ -77,6 +78,7 @@ def _profile_rows(
     rows: list[dict[str, str]] = []
     for profile in load_business_profiles(effective_secrets):
         credential = profile.secrets.get("gcp_service_account", {})
+        synology_recovery = profile.secrets.get("synology_recovery")
         source = (
             "Business profiles JSON"
             if profile.key in local_profiles
@@ -103,10 +105,103 @@ def _profile_rows(
                     if profile.secrets.get("google_drive")
                     else "Not connected"
                 ),
+                "Synology recovery": (
+                    str(synology_recovery.get("destination_path", "Configured"))
+                    if isinstance(synology_recovery, Mapping)
+                    else "Not enabled"
+                ),
                 "Source": source,
             }
         )
     return rows
+
+
+def _render_synology_recovery_admin(
+    local_profiles: Mapping[str, Mapping[str, Any]],
+    *,
+    store_path: Path,
+) -> None:
+    st.subheader("Synology recovery copy")
+    st.write(
+        "Optionally record the expected Google Drive-to-NAS Cloud Sync setup for "
+        "each business. Tabula Rosa does not mount or connect to the NAS."
+    )
+    if not local_profiles:
+        st.info("Add a local business profile before configuring Synology recovery.")
+        return
+
+    profile_key = st.selectbox(
+        "Business profile for Synology recovery",
+        list(local_profiles),
+        format_func=lambda key: str(local_profiles[key].get("name", key)),
+    )
+    existing = local_profiles[profile_key].get("synology_recovery")
+    existing = existing if isinstance(existing, Mapping) else {}
+    with st.form("synology_recovery_form"):
+        enabled = st.checkbox(
+            "Maintain an optional Synology recovery copy for this business",
+            value=bool(existing),
+        )
+        destination_path = st.text_input(
+            "NAS destination path",
+            value=str(existing.get("destination_path", "")),
+            placeholder=f"/volume1/Backups/TabulaRasa/{profile_key}",
+            help=(
+                "Informational DSM path only. The app never opens or writes to it."
+            ),
+        )
+        schedule = st.text_input(
+            "Cloud Sync schedule",
+            value=str(existing.get("schedule", "Continuous")),
+            help="For example: Continuous, or Daily at 11:00 PM.",
+        )
+        retention_policy = st.text_area(
+            "NAS retention policy",
+            value=str(
+                existing.get(
+                    "retention_policy",
+                    "Retain all synchronized generations until manual review.",
+                )
+            ),
+            help=(
+                "Destination deletions must remain disabled. Describe when an "
+                "administrator may manually remove old NAS generations."
+            ),
+        )
+        save = st.form_submit_button("Save Synology recovery choice")
+
+    st.caption(
+        "Required DSM settings: Download remote changes only; destination "
+        "deletions disabled. Confirm the actual task and its logs in Cloud Sync."
+    )
+    if not save:
+        return
+
+    settings = (
+        {
+            "destination_path": destination_path,
+            "schedule": schedule,
+            "retention_policy": retention_policy,
+        }
+        if enabled
+        else None
+    )
+    try:
+        update_local_profile_synology_recovery(
+            profile_key,
+            settings,
+            path=store_path,
+        )
+    except LocalProfileStoreError as error:
+        st.error(str(error))
+        return
+
+    st.cache_resource.clear()
+    state = "enabled" if enabled else "disabled"
+    st.session_state["local_profile_admin_notice"] = (
+        f"Synology recovery was {state} for '{profile_key}'."
+    )
+    st.rerun()
 
 
 def render_local_profile_admin(
@@ -161,6 +256,10 @@ def render_local_profile_admin(
         base_secrets,
         local_profiles,
         current_url=current_url,
+        store_path=store_path,
+    )
+    _render_synology_recovery_admin(
+        local_profiles,
         store_path=store_path,
     )
 
@@ -247,6 +346,11 @@ def render_local_profile_admin(
             backup_folder_path,
             (
                 local_profiles.get(key, {}).get("google_drive")
+                if replace
+                else None
+            ),
+            (
+                local_profiles.get(key, {}).get("synology_recovery")
                 if replace
                 else None
             ),

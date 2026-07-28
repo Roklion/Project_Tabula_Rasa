@@ -297,6 +297,12 @@ Then:
    hosted Streamlit Secrets document so the hosted app receives the new
    per-profile refresh tokens and folder IDs.
 
+After a profile has a Google Drive backup folder, its **Synology recovery copy**
+option can be enabled independently from the same local administration page.
+The setting records only the expected NAS destination, Cloud Sync schedule, and
+retention policy. It does not mount or connect to the NAS. Businesses that leave
+the option disabled continue to use Google Drive backup without a NAS copy.
+
 The receipt and backup folders can remain **Restricted** in Google Drive. They
 do not need to be shared with the Sheets service account or with the Google
 accounts used by other business profiles. Access comes from the human account
@@ -473,6 +479,23 @@ powershell -ExecutionPolicy Bypass -File scripts\register_weekly_backup_task.ps1
 The task uses the profile's stored refresh token and does not require Google
 Drive Desktop to be running. The local Google Drive Desktop/NAS workflow remains
 available as a fallback; omit `-GoogleDrive` to use it.
+
+### Optional Synology recovery copy
+
+The DS220j recovery destination is optional per business profile. An opted-in
+profile uses a dedicated Synology Cloud Sync task to download its Google Drive
+backup folder into a distinct NAS directory. The required direction is
+**Download remote changes only**, with destination deletions disabled. Neither
+Google Drive Desktop nor a permanently mounted NAS drive is required.
+
+Follow [`docs/SYNOLOGY_RECOVERY.md`](docs/SYNOLOGY_RECOVERY.md) to enable a
+profile, configure DSM, validate retained archives, test retry visibility, and
+perform the blank-workbook restore drill. A copied NAS archive can be checked
+without restoring it:
+
+```powershell
+python scripts/validate_google_sheets_backup.py C:\Safe-Recovery\tabula-rosa-backup-YYYYMMDDTHHMMSSZ.zip
+```
 
 ### Restore drill
 

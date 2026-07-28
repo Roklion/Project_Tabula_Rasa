@@ -42,6 +42,11 @@ class TestExportStreamlitSecrets:
                         "name": "Backups",
                     },
                 },
+                "synology_recovery": {
+                    "destination_path": "/volume1/Backups/TabulaRasa/north-shop",
+                    "schedule": "Continuous",
+                    "retention_policy": "Retain until manual review.",
+                },
             },
             "south_shop": {
                 "name": "South Shop",
@@ -98,6 +103,12 @@ class TestExportStreamlitSecrets:
                 "refresh_token"
             ]
             == "north-refresh-token"
+        )
+        assert (
+            parsed["business_profiles"]["north-shop"]["synology_recovery"][
+                "destination_path"
+            ]
+            == "/volume1/Backups/TabulaRasa/north-shop"
         )
 
     def test_secure_writer_refuses_to_overwrite(self) -> None:

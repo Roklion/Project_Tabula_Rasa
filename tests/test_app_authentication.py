@@ -15,6 +15,7 @@ from tabula_rasa.local_profile_store import (
     build_profile_settings,
     load_local_profiles,
     save_local_profile,
+    update_local_profile_google_drive,
 )
 from tabula_rasa.storage import GoogleSheetsStorage
 from tests.fakes import FakeWorkbook
@@ -276,5 +277,111 @@ class TestAppAuthentication:
                 assert load_local_profiles(local_store)["north"]["name"] == "North Shop"
                 assert any(
                     "validated and saved locally" in str(item.value)
+                    for item in app.success
+                )
+
+    def test_local_admin_saves_optional_synology_choice_per_profile(self) -> None:
+        st.cache_resource.clear()
+        fake_storage = GoogleSheetsStorage(FakeWorkbook())
+        with tempfile.TemporaryDirectory() as directory:
+            local_store = Path(directory) / "local_business_profiles.json"
+            save_local_profile(
+                "north",
+                profile_settings("North Shop", "north-spreadsheet-id"),
+                path=local_store,
+            )
+            update_local_profile_google_drive(
+                "north",
+                {
+                    "authorized_email": "north@example.test",
+                    "authorized_name": "North Owner",
+                    "refresh_token": "refresh-token",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "scopes": ["https://www.googleapis.com/auth/drive.file"],
+                    "backup_folder": {
+                        "id": "backupfolder123",
+                        "name": "North Backups",
+                    },
+                },
+                path=local_store,
+            )
+            with (
+                patch.dict(
+                    os.environ,
+                    {LOCAL_PROFILE_ADMIN_ENV: "1"},
+                    clear=False,
+                ),
+                patch(
+                    "tabula_rasa.local_profile_store.LOCAL_PROFILE_STORE_PATH",
+                    local_store,
+                ),
+                patch.object(
+                    st,
+                    "get_option",
+                    side_effect=lambda name: (
+                        "127.0.0.1" if name == "server.address" else None
+                    ),
+                ),
+                patch.object(
+                    GoogleSheetsStorage,
+                    "from_secrets",
+                    return_value=fake_storage,
+                ),
+            ):
+                app = AppTest.from_file(
+                    "tabula_rasa/app.py",
+                    default_timeout=30,
+                )
+                app.secrets["app_password_hash"] = hash_password(TEST_PASSWORD)
+
+                app.run()
+                app.text_input[0].input(TEST_PASSWORD)
+                app.button[0].click().run()
+                app.radio[0].set_value("Business profiles").run()
+                next(
+                    field
+                    for field in app.text_input
+                    if field.label == "Application password"
+                ).input(TEST_PASSWORD)
+                next(
+                    button
+                    for button in app.button
+                    if button.label == "Unlock profile administration"
+                ).click().run()
+
+                next(
+                    checkbox
+                    for checkbox in app.checkbox
+                    if checkbox.label
+                    == "Maintain an optional Synology recovery copy for this business"
+                ).check()
+                next(
+                    field
+                    for field in app.text_input
+                    if field.label == "NAS destination path"
+                ).input("/volume1/Backups/TabulaRasa/north")
+                next(
+                    field
+                    for field in app.text_input
+                    if field.label == "Cloud Sync schedule"
+                ).input("Daily at 11:00 PM")
+                next(
+                    field
+                    for field in app.text_area
+                    if field.label == "NAS retention policy"
+                ).input("Retain all generations until manual review.")
+                next(
+                    button
+                    for button in app.button
+                    if button.label == "Save Synology recovery choice"
+                ).click().run()
+
+                recovery = load_local_profiles(local_store)["north"][
+                    "synology_recovery"
+                ]
+                assert recovery["destination_path"].endswith("/north")
+                assert recovery["schedule"] == "Daily at 11:00 PM"
+                assert any(
+                    "Synology recovery was enabled" in str(item.value)
                     for item in app.success
                 )
