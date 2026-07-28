@@ -302,6 +302,13 @@ do not need to be shared with the Sheets service account or with the Google
 accounts used by other business profiles. Access comes from the human account
 authorized for that profile and the folders explicitly selected with Picker.
 
+Receipt and backup uploads currently support regular Google Drive folders owned
+by the Google account authorized for that business profile. Organization-owned
+Google Workspace Shared Drive folders are not a supported mode in this release.
+Treat them as a separate future feature that needs its own Picker behavior,
+permission model, ownership expectations, and end-to-end tests before relying
+on it for business records.
+
 Because Streamlit Community Cloud cannot safely write back to its Secrets,
 connections, reconnections, folder changes, and disconnections are performed
 locally and then exported. A revoked grant produces a reconnect message without

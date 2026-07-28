@@ -208,6 +208,73 @@ class TestGoogleDriveOAuth:
 
 
 class TestGoogleDriveFiles:
+    def test_selected_folder_is_validated_before_it_is_saved(self) -> None:
+        session = DriveSession(
+            [
+                FakeResponse(
+                    200,
+                    {
+                        "id": "receiptfolder123",
+                        "name": "Receipts",
+                        "mimeType": "application/vnd.google-apps.folder",
+                        "trashed": False,
+                        "webViewLink": (
+                            "https://drive.google.com/drive/folders/receiptfolder123"
+                        ),
+                    },
+                )
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        folder = client.folder("receiptfolder123")
+
+        assert folder["id"] == "receiptfolder123"
+        assert folder["name"] == "Receipts"
+        request = session.requests[0]
+        assert request[0] == "GET"
+        assert request[1].endswith("/files/receiptfolder123")
+        assert request[2]["params"]["supportsAllDrives"] == "true"
+
+    @pytest.mark.parametrize(
+        "folder",
+        [
+            {
+                "id": "receiptfolder123",
+                "name": "Not a folder",
+                "mimeType": "application/pdf",
+                "trashed": False,
+            },
+            {
+                "id": "receiptfolder123",
+                "name": "Deleted folder",
+                "mimeType": "application/vnd.google-apps.folder",
+                "trashed": True,
+            },
+        ],
+    )
+    def test_selected_folder_must_be_available_and_be_a_folder(
+        self,
+        folder: dict[str, Any],
+    ) -> None:
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=DriveSession([FakeResponse(200, folder)]),
+            sleeper=lambda _delay: None,
+        )
+
+        with pytest.raises(
+            GoogleDriveAccessError,
+            match="not an available folder",
+        ):
+            client.folder("receiptfolder123")
+
     def test_profile_scoped_backup_queries_use_distinct_authorizations(self) -> None:
         north_session = DriveSession(
             [FakeResponse(200, {"files": []})],
