@@ -9,6 +9,7 @@ import requests
 
 from tabula_rasa.google_drive import (
     DRIVE_SCOPE,
+    GoogleDriveAccessError,
     GoogleDriveAuthorizationError,
     GoogleDriveClient,
     GoogleDriveOAuthConfig,
@@ -71,17 +72,22 @@ class DriveSession:
     def __init__(
         self,
         responses: list[FakeResponse | requests.RequestException],
+        *,
+        access_token: str = "short-lived-access",
     ) -> None:
         self.responses = list(responses)
+        self.access_token = access_token
         self.requests: list[tuple[str, str, dict[str, Any]]] = []
         self.token_refreshes = 0
+        self.refresh_tokens: list[str] = []
 
-    def post(self, _url: str, **_kwargs: Any) -> FakeResponse:
+    def post(self, _url: str, **kwargs: Any) -> FakeResponse:
         self.token_refreshes += 1
+        self.refresh_tokens.append(str(kwargs["data"]["refresh_token"]))
         return FakeResponse(
             200,
             {
-                "access_token": "short-lived-access",
+                "access_token": self.access_token,
                 "expires_in": 3600,
             },
         )
@@ -107,11 +113,15 @@ def oauth_config() -> GoogleDriveOAuthConfig:
     )
 
 
-def drive_settings() -> dict[str, Any]:
+def drive_settings(
+    *,
+    email: str = "north@example.test",
+    refresh_token: str = "durable-refresh",
+) -> dict[str, Any]:
     return {
-        "authorized_email": "north@example.test",
+        "authorized_email": email,
         "authorized_name": "North Owner",
-        "refresh_token": "durable-refresh",
+        "refresh_token": refresh_token,
         "token_uri": "https://oauth2.googleapis.com/token",
         "scopes": [DRIVE_SCOPE],
     }
@@ -198,6 +208,56 @@ class TestGoogleDriveOAuth:
 
 
 class TestGoogleDriveFiles:
+    def test_profile_scoped_backup_queries_use_distinct_authorizations(self) -> None:
+        north_session = DriveSession(
+            [FakeResponse(200, {"files": []})],
+            access_token="north-access",
+        )
+        south_session = DriveSession(
+            [FakeResponse(200, {"files": []})],
+            access_token="south-access",
+        )
+        north_client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(
+                email="north@example.test",
+                refresh_token="north-refresh",
+            ),
+            session=north_session,
+            sleeper=lambda _delay: None,
+        )
+        south_client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(
+                email="south@example.test",
+                refresh_token="south-refresh",
+            ),
+            session=south_session,
+            sleeper=lambda _delay: None,
+        )
+
+        north_client.list_backups(
+            profile_key="north",
+            folder_id="northfolder123",
+        )
+        south_client.list_backups(
+            profile_key="south",
+            folder_id="southfolder123",
+        )
+
+        north_request = north_session.requests[0][2]
+        south_request = south_session.requests[0][2]
+        assert north_session.refresh_tokens == ["north-refresh"]
+        assert south_session.refresh_tokens == ["south-refresh"]
+        assert north_request["headers"]["Authorization"] == "Bearer north-access"
+        assert south_request["headers"]["Authorization"] == "Bearer south-access"
+        assert "'northfolder123' in parents" in north_request["params"]["q"]
+        assert "value='north'" in north_request["params"]["q"]
+        assert "south" not in north_request["params"]["q"]
+        assert "'southfolder123' in parents" in south_request["params"]["q"]
+        assert "value='south'" in south_request["params"]["q"]
+        assert "north" not in south_request["params"]["q"]
+
     def test_receipt_upload_is_transaction_scoped_and_sanitizes_name(self) -> None:
         session = DriveSession(
             [
@@ -312,6 +372,80 @@ class TestGoogleDriveFiles:
 
         assert uploaded == committed
         assert [request[0] for request in session.requests].count("POST") == 1
+
+    def test_revoked_access_reports_profile_reconnect_after_one_refresh(self) -> None:
+        session = DriveSession(
+            [
+                FakeResponse(401),
+                FakeResponse(401),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        with pytest.raises(
+            GoogleDriveAuthorizationError,
+            match="Reconnect this profile",
+        ):
+            client.list_backups(
+                profile_key="north",
+                folder_id="folder123456",
+            )
+
+        assert session.token_refreshes == 2
+        assert len(session.requests) == 2
+
+    def test_quota_response_retries_with_exponential_backoff(self) -> None:
+        delays: list[float] = []
+        session = DriveSession(
+            [
+                FakeResponse(429),
+                FakeResponse(429),
+                FakeResponse(200, {"files": []}),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=delays.append,
+        )
+
+        assert (
+            client.list_backups(
+                profile_key="north",
+                folder_id="folder123456",
+            )
+            == []
+        )
+        assert delays == [1, 2]
+        assert len(session.requests) == 3
+
+    def test_exhausted_quota_retries_return_safe_temporary_error(self) -> None:
+        delays: list[float] = []
+        session = DriveSession([FakeResponse(429) for _attempt in range(4)])
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=delays.append,
+        )
+
+        with pytest.raises(
+            GoogleDriveAccessError,
+            match="temporarily unavailable",
+        ):
+            client.list_backups(
+                profile_key="north",
+                folder_id="folder123456",
+            )
+
+        assert delays == [1, 2, 4]
+        assert len(session.requests) == 4
 
     def test_reuses_access_token_and_short_lived_file_list_cache(self) -> None:
         now = [1_000.0]

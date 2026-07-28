@@ -588,13 +588,13 @@ class GoogleDriveClient:
                 self._refresh()
                 refreshed_after_unauthorized = True
                 continue
-            if (
-                retry_transient
-                and response.status_code in {429, 500, 502, 503, 504}
-                and attempt < 3
-            ):
-                self.sleeper(2**attempt)
-                continue
+            if retry_transient and response.status_code in {429, 500, 502, 503, 504}:
+                if attempt < 3:
+                    self.sleeper(2**attempt)
+                    continue
+                raise GoogleDriveAccessError(
+                    "Google Drive is temporarily unavailable. Retry the request."
+                )
             if response.status_code in {401, 403}:
                 raise GoogleDriveAuthorizationError(
                     "Google Drive access was revoked or is insufficient. Reconnect this profile."
