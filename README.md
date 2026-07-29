@@ -326,7 +326,9 @@ Once a receipt folder is selected, open a saved transaction under
 **Transactions > View & edit ledger > Receipt** to upload a PDF or image. Files
 are named `[transaction-id]-[original-file-name]` and tagged with private
 app-properties so retries update the same receipt rather than creating an
-unintended duplicate.
+unintended duplicate. Each transaction stores the receipt's stable Drive file
+ID and display name. Removing a receipt from a transaction only removes that
+reference; the underlying file remains in Google Drive.
 
 ### Export profiles to Streamlit Community Cloud
 

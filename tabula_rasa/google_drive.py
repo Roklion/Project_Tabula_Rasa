@@ -738,46 +738,6 @@ class GoogleDriveClient:
             params={"supportsAllDrives": "true"},
         )
 
-    def delete_receipt(
-        self,
-        *,
-        profile_key: str,
-        transaction_id: str,
-        folder_id: str,
-        file_id: str,
-    ) -> None:
-        """Delete one receipt after verifying its complete ownership scope."""
-        folder_id = self._valid_folder_id(folder_id)
-        file_id = str(file_id)
-        if not DRIVE_ID_PATTERN.fullmatch(file_id):
-            raise GoogleDriveAccessError("The selected receipt is invalid.")
-        response = self._request(
-            "GET",
-            f"{DRIVE_API_ROOT}/files/{file_id}",
-            params={
-                "fields": "id,name,trashed,parents,appProperties",
-                "supportsAllDrives": "true",
-            },
-        )
-        receipt = dict(_json_response(response))
-        app_properties = receipt.get("appProperties")
-        parents = receipt.get("parents")
-        if (
-            str(receipt.get("id", "")) != file_id
-            or receipt.get("trashed")
-            or not isinstance(parents, list)
-            or folder_id not in parents
-            or not isinstance(app_properties, Mapping)
-            or app_properties.get("tabulaRasaKind") != "receipt"
-            or app_properties.get("tabulaRasaProfile") != profile_key
-            or app_properties.get("tabulaRasaTransaction") != transaction_id
-        ):
-            raise GoogleDriveAccessError(
-                "The selected receipt does not belong to this business profile "
-                "and transaction. No file was deleted."
-            )
-        self.delete_file(file_id)
-
     def upload_receipt(
         self,
         *,

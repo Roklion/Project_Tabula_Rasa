@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+import hashlib
 import io
 import json
 import zipfile
@@ -10,6 +12,8 @@ import pytest
 from google.oauth2.service_account import Credentials
 
 from tabula_rasa.storage.google_sheets import (
+    BACKUP_FORMAT_VERSION,
+    decode_receipt_references,
     GoogleSheetsStorage,
     SHEETS_SCOPE,
     StorageAuthenticationError,
@@ -19,6 +23,7 @@ from tabula_rasa.storage.google_sheets import (
     StorageUnavailableError,
     StorageValidationError,
     StorageWorkbookAccessError,
+    VERSION_3_WORKSHEET_HEADERS,
     WORKSHEET_HEADERS,
 )
 from tabula_rasa.quickbooks_import import (
@@ -104,6 +109,38 @@ class TestGoogleSheetsStorage:
         assert workbook.sheets["Accounts"].rows == [
             ["legacy_id", "legacy_name"]
         ]
+
+    def test_profile_storage_adds_receipt_references_to_existing_transactions(
+        self,
+    ) -> None:
+        workbook = FakeWorkbook(VERSION_3_WORKSHEET_HEADERS)
+        transaction_sheet = workbook.sheets["Transactions"]
+        transaction_sheet.rows.append(
+            ["txn-1", "2026-07-28", "Expense"]
+        )
+        google_client = Mock()
+        google_client.open_by_key.return_value = workbook
+
+        with (
+            patch.object(
+                Credentials,
+                "from_service_account_info",
+                return_value=object(),
+            ),
+            patch.object(gspread, "authorize", return_value=google_client),
+        ):
+            GoogleSheetsStorage.from_secrets(
+                {
+                    "spreadsheet_id": "given-spreadsheet-id",
+                    "gcp_service_account": {"type": "service_account"},
+                }
+            )
+
+        assert transaction_sheet.rows[0] == [
+            *VERSION_3_WORKSHEET_HEADERS["Transactions"],
+            "receipt_references",
+        ]
+        assert transaction_sheet.rows[1][-1] == ""
 
     def test_profile_storage_reports_invalid_credential_safely(self) -> None:
         with (
@@ -337,6 +374,65 @@ class TestGoogleSheetsStorage:
         self.storage.delete_transaction(transaction["id"])
         with pytest.raises(StorageNotFoundError):
             self.storage.edit_transaction(transaction["id"], amount=1)
+
+    def test_transaction_receipt_references_can_be_linked_and_unlinked(
+        self,
+    ) -> None:
+        source = self.storage.create_account("Checking", "Bank")
+        expense = self.storage.create_category("Software", "Expense")
+        transaction = self.storage.create_transaction(
+            txn_date="2026-07-19",
+            kind="Expense",
+            amount="12.5",
+            account_id=source["id"],
+            category_id=expense["id"],
+        )
+        assert decode_receipt_references(
+            transaction["receipt_references"]
+        ) == []
+
+        self.storage.link_transaction_receipt(
+            transaction["id"],
+            file_id="receipt123456",
+            name="statement.pdf",
+        )
+        self.storage.link_transaction_receipt(
+            transaction["id"],
+            file_id="receipt123456",
+            name="renamed-statement.pdf",
+        )
+        self.storage.link_transaction_receipt(
+            transaction["id"],
+            file_id="receipt234567",
+            name="invoice.png",
+        )
+        linked = self.storage.list_transactions()[0]
+        assert decode_receipt_references(
+            linked["receipt_references"]
+        ) == [
+            {"id": "receipt123456", "name": "renamed-statement.pdf"},
+            {"id": "receipt234567", "name": "invoice.png"},
+        ]
+
+        self.storage.unlink_transaction_receipt(
+            transaction["id"],
+            file_id="receipt123456",
+        )
+
+        unlinked = self.storage.list_transactions()[0]
+        assert decode_receipt_references(
+            unlinked["receipt_references"]
+        ) == [{"id": "receipt234567", "name": "invoice.png"}]
+        assert unlinked["id"] == transaction["id"]
+
+    def test_transaction_receipt_reference_validation_is_strict(self) -> None:
+        with pytest.raises(
+            StorageValidationError,
+            match="receipt references are invalid",
+        ):
+            decode_receipt_references(
+                [{"id": "../not-a-drive-id", "name": "receipt.pdf"}]
+            )
 
     def test_invalid_transfer_and_category_reference_are_rejected(self) -> None:
         account = self.storage.create_account("Checking", "Bank")
@@ -866,7 +962,7 @@ class TestGoogleSheetsStorage:
             assert manifest["row_counts"]["Accounts"] == 1
             assert manifest["row_counts"]["Mileage"] == 1
             assert "backup_time" in manifest
-            assert manifest["format_version"] == 3
+            assert manifest["format_version"] == BACKUP_FORMAT_VERSION
             assert "Accounts.csv" in manifest["sha256"]
         validated = self.storage.validate_backup_zip(backup)
         assert validated["workbook_title"] == "Test Ledger"
@@ -934,6 +1030,11 @@ class TestGoogleSheetsStorage:
             category_id=category["id"],
             payee="Customer",
         )
+        self.storage.link_transaction_receipt(
+            transaction["id"],
+            file_id="receipt123456",
+            name="customer-receipt.pdf",
+        )
         mileage = self.storage.create_mileage_trip(
             trip_date="2026-07-19",
             miles=8.4,
@@ -953,7 +1054,13 @@ class TestGoogleSheetsStorage:
             "Mileage": 1,
         }
         assert restored_storage.list_accounts()[0]["id"] == account["id"]
-        assert restored_storage.list_transactions()[0]["id"] == transaction["id"]
+        restored_transaction = restored_storage.list_transactions()[0]
+        assert restored_transaction["id"] == transaction["id"]
+        assert decode_receipt_references(
+            restored_transaction["receipt_references"]
+        ) == [
+            {"id": "receipt123456", "name": "customer-receipt.pdf"}
+        ]
         assert restored_storage.list_mileage_trips()[0]["id"] == mileage["id"]
 
     def test_restore_accepts_pre_mileage_backup(self) -> None:
@@ -991,6 +1098,60 @@ class TestGoogleSheetsStorage:
         )
         with pytest.raises(StorageConflictError):
             nonblank_target.restore_backup_zip(legacy_buffer.getvalue())
+
+    def test_restore_migrates_format_version_3_receipt_references(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Sales", "Income")
+        transaction = self.storage.create_transaction(
+            txn_date="2026-07-19",
+            kind="Income",
+            amount=25,
+            account_id=account["id"],
+            category_id=category["id"],
+        )
+        current_backup = self.storage.export_backup_zip()
+        version_3_buffer = io.BytesIO()
+        with zipfile.ZipFile(io.BytesIO(current_backup)) as source:
+            manifest = json.loads(source.read("manifest.json"))
+            transaction_rows = list(
+                csv.reader(
+                    io.StringIO(
+                        source.read("Transactions.csv").decode("utf-8")
+                    )
+                )
+            )
+            receipt_column = transaction_rows[0].index(
+                "receipt_references"
+            )
+            for row in transaction_rows:
+                del row[receipt_column]
+            transaction_buffer = io.StringIO(newline="")
+            writer = csv.writer(transaction_buffer, lineterminator="\n")
+            writer.writerows(transaction_rows)
+            transaction_csv = transaction_buffer.getvalue().encode("utf-8")
+            manifest["format_version"] = 3
+            manifest["worksheet_headers"]["Transactions"] = (
+                transaction_rows[0]
+            )
+            manifest["sha256"]["Transactions.csv"] = hashlib.sha256(
+                transaction_csv
+            ).hexdigest()
+            with zipfile.ZipFile(version_3_buffer, "w") as version_3:
+                for name in source.namelist():
+                    if name == "Transactions.csv":
+                        content = transaction_csv
+                    elif name == "manifest.json":
+                        content = json.dumps(manifest).encode("utf-8")
+                    else:
+                        content = source.read(name)
+                    version_3.writestr(name, content)
+
+        target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+        target.restore_backup_zip(version_3_buffer.getvalue())
+
+        restored = target.list_transactions()[0]
+        assert restored["id"] == transaction["id"]
+        assert restored["receipt_references"] == ""
 
     def test_restore_refuses_nonblank_target(self) -> None:
         self.storage.create_account("Checking", "Bank")

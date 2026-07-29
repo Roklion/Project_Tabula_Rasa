@@ -11,6 +11,7 @@ import hashlib
 import io
 import json
 import math
+import re
 import threading
 import time
 import zipfile
@@ -61,6 +62,7 @@ WORKSHEET_HEADERS = {
         "payee",
         "description",
         "reference",
+        "receipt_references",
         "created_at",
     ),
     "Mileage": (
@@ -75,9 +77,17 @@ WORKSHEET_HEADERS = {
         "created_at",
     ),
 }
+VERSION_3_WORKSHEET_HEADERS = {
+    title: (
+        tuple(header for header in headers if header != "receipt_references")
+        if title == "Transactions"
+        else headers
+    )
+    for title, headers in WORKSHEET_HEADERS.items()
+}
 LEGACY_BACKUP_HEADERS = {
     title: headers
-    for title, headers in WORKSHEET_HEADERS.items()
+    for title, headers in VERSION_3_WORKSHEET_HEADERS.items()
     if title != "Mileage"
 }
 ACCOUNT_TYPES = {
@@ -98,10 +108,16 @@ FIXED_TYPE_CLASSIFICATIONS = {
 }
 CATEGORY_KINDS = {"Income", "Expense"}
 TRANSACTION_KINDS = {"Income", "Expense", "Transfer"}
-BACKUP_FORMAT_VERSION = 3
-SUPPORTED_BACKUP_FORMAT_VERSIONS = {2, BACKUP_FORMAT_VERSION}
+BACKUP_FORMAT_VERSION = 4
+BACKUP_HEADERS_BY_VERSION = {
+    2: LEGACY_BACKUP_HEADERS,
+    3: VERSION_3_WORKSHEET_HEADERS,
+    BACKUP_FORMAT_VERSION: WORKSHEET_HEADERS,
+}
+SUPPORTED_BACKUP_FORMAT_VERSIONS = set(BACKUP_HEADERS_BY_VERSION)
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 DEFAULT_ACCOUNTS = (("Checking", "Bank"), ("Cash", "Cash"))
+RECEIPT_FILE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{10,}$")
 DEFAULT_CATEGORIES = {
     "Income": ("Sales", "Services", "Interest", "Other income"),
     "Expense": (
@@ -178,6 +194,47 @@ def _clean_text(value: Any, field: str, *, required: bool = False) -> str:
     if required and not text:
         raise StorageValidationError(f"{field} is required")
     return text
+
+
+def decode_receipt_references(value: Any) -> list[dict[str, str]]:
+    """Return validated Drive receipt references from one transaction cell."""
+    if value is None or value == "":
+        return []
+    try:
+        parsed = json.loads(value) if isinstance(value, str) else value
+    except json.JSONDecodeError as exc:
+        raise StorageValidationError(
+            "Transaction receipt references are unreadable"
+        ) from exc
+    if not isinstance(parsed, list) or len(parsed) > 100:
+        raise StorageValidationError("Transaction receipt references are invalid")
+    references: list[dict[str, str]] = []
+    seen_ids: set[str] = set()
+    for item in parsed:
+        if not isinstance(item, Mapping) or set(item) != {"id", "name"}:
+            raise StorageValidationError(
+                "Transaction receipt references are invalid"
+            )
+        file_id = _clean_text(item.get("id"), "Receipt file ID", required=True)
+        name = _clean_text(item.get("name"), "Receipt file name", required=True)
+        if (
+            len(file_id) > 256
+            or not RECEIPT_FILE_ID_PATTERN.fullmatch(file_id)
+            or len(name) > 255
+            or any(ord(character) < 32 for character in file_id + name)
+            or file_id in seen_ids
+        ):
+            raise StorageValidationError(
+                "Transaction receipt references are invalid"
+            )
+        seen_ids.add(file_id)
+        references.append({"id": file_id, "name": name})
+    return references
+
+
+def _encode_receipt_references(value: Any) -> str:
+    references = decode_receipt_references(value)
+    return json.dumps(references, separators=(",", ":"), ensure_ascii=False)
 
 
 def _positive_amount(value: Any) -> str:
@@ -266,11 +323,7 @@ def _parse_backup_zip(
             format_version = manifest.get("format_version")
             if format_version not in SUPPORTED_BACKUP_FORMAT_VERSIONS:
                 raise StorageValidationError("Backup format version is unsupported")
-            backup_headers = (
-                WORKSHEET_HEADERS
-                if format_version == BACKUP_FORMAT_VERSION
-                else LEGACY_BACKUP_HEADERS
-            )
+            backup_headers = BACKUP_HEADERS_BY_VERSION[format_version]
             required_files = {
                 f"{title}.csv" for title in backup_headers
             } | {"manifest.json"}
@@ -325,6 +378,22 @@ def _parse_backup_zip(
             raise StorageValidationError(f"{title} backup IDs are missing or duplicated")
         tables[title] = (headers, records)
 
+    if format_version < BACKUP_FORMAT_VERSION:
+        transaction_headers, transactions = tables["Transactions"]
+        if "receipt_references" not in transaction_headers:
+            migrated_headers = [
+                *transaction_headers,
+                "receipt_references",
+            ]
+            migrated_transactions = [
+                {**transaction, "receipt_references": ""}
+                for transaction in transactions
+            ]
+            tables["Transactions"] = (
+                migrated_headers,
+                migrated_transactions,
+            )
+
     account_ids = {record["id"] for record in tables["Accounts"][1]}
     category_ids = {record["id"] for record in tables["Categories"][1]}
     for transaction in tables["Transactions"][1]:
@@ -336,6 +405,9 @@ def _parse_backup_zip(
         category_id = transaction.get("category_id", "")
         if category_id and category_id not in category_ids:
             raise StorageValidationError("Backup contains an unknown transaction category")
+        decode_receipt_references(
+            transaction.get("receipt_references", "")
+        )
     return manifest, tables
 
 
@@ -438,6 +510,32 @@ class GoogleSheetsStorage:
                     values: list[list[Any]] = [list(headers)]
                 else:
                     values = worksheet.get_all_values()
+                if title == "Transactions" and values:
+                    existing_headers = [
+                        str(value).strip() for value in values[0]
+                    ]
+                    legacy_transaction_headers = set(
+                        VERSION_3_WORKSHEET_HEADERS["Transactions"]
+                    )
+                    if (
+                        "receipt_references" not in existing_headers
+                        and legacy_transaction_headers.issubset(
+                            existing_headers
+                        )
+                        and len(existing_headers)
+                        == len(set(existing_headers))
+                    ):
+                        worksheet.add_cols(1)
+                        migrated_headers = [
+                            *existing_headers,
+                            "receipt_references",
+                        ]
+                        worksheet.update(
+                            [migrated_headers],
+                            range_name="A1",
+                            raw=True,
+                        )
+                        values[0] = migrated_headers
                 if not any(str(value).strip() for row in values for value in row):
                     worksheet.update(
                         [list(headers)], range_name="A1", raw=True
@@ -1021,6 +1119,14 @@ class GoogleSheetsStorage:
             "payee": _clean_text(data.get("payee"), "Payee"),
             "description": _clean_text(data.get("description"), "Description"),
             "reference": _clean_text(data.get("reference"), "Reference"),
+            "receipt_references": (
+                _encode_receipt_references(
+                    data.get("receipt_references", [])
+                )
+                if transaction_id is None
+                or data.get("receipt_references", "") != ""
+                else ""
+            ),
             "created_at": created_at or _utc_now(),
         }
 
@@ -1082,6 +1188,67 @@ class GoogleSheetsStorage:
             transaction_id=transaction_id,
             created_at=current.values["created_at"],
         )
+        self._replace_row("Transactions", current, updated)
+        return updated
+
+    def set_transaction_receipt_references(
+        self,
+        transaction_id: str,
+        references: Any,
+    ) -> dict[str, str]:
+        """Replace the Drive receipt references attached to one transaction."""
+        current = self._find_row("Transactions", transaction_id)
+        updated = dict(current.values)
+        updated["receipt_references"] = _encode_receipt_references(
+            references
+        )
+        self._replace_row("Transactions", current, updated)
+        return updated
+
+    def link_transaction_receipt(
+        self,
+        transaction_id: str,
+        *,
+        file_id: str,
+        name: str,
+    ) -> dict[str, str]:
+        """Attach or refresh one Drive file reference on a transaction."""
+        current = self._find_row("Transactions", transaction_id)
+        references = decode_receipt_references(
+            current.values.get("receipt_references", "")
+        )
+        reference = decode_receipt_references(
+            [{"id": file_id, "name": name}]
+        )[0]
+        references = [
+            item for item in references if item["id"] != reference["id"]
+        ]
+        references.append(reference)
+        updated = dict(current.values)
+        updated["receipt_references"] = _encode_receipt_references(
+            references
+        )
+        self._replace_row("Transactions", current, updated)
+        return updated
+
+    def unlink_transaction_receipt(
+        self,
+        transaction_id: str,
+        *,
+        file_id: str,
+    ) -> dict[str, str]:
+        """Remove one Drive reference without modifying the Drive file."""
+        current = self._find_row("Transactions", transaction_id)
+        references = decode_receipt_references(
+            current.values.get("receipt_references", "")
+        )
+        retained = [
+            item for item in references if item["id"] != str(file_id)
+        ]
+        if retained == references:
+            return dict(current.values)
+        updated = dict(current.values)
+        updated["receipt_references"] = _encode_receipt_references(retained)
         self._replace_row("Transactions", current, updated)
         return updated
 

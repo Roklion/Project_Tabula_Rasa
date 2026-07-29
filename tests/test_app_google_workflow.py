@@ -8,8 +8,8 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SCENARIO = Path(__file__).with_name("_app_google_workflow_scenario.py")
 CSV_REPORTING_SCENARIO = Path(__file__).with_name("_app_csv_reporting_scenario.py")
-RECEIPT_DELETE_SCENARIO = Path(__file__).with_name(
-    "_app_receipt_delete_scenario.py"
+RECEIPT_UNLINK_SCENARIO = Path(__file__).with_name(
+    "_app_receipt_unlink_scenario.py"
 )
 
 
@@ -42,5 +42,5 @@ class TestAppGoogleWorkflow:
     def test_csv_duplicate_validation_and_report_totals(self) -> None:
         self._run_scenario(CSV_REPORTING_SCENARIO)
 
-    def test_receipt_delete_confirmation_failure_and_success(self) -> None:
-        self._run_scenario(RECEIPT_DELETE_SCENARIO)
+    def test_receipt_unlink_confirmation_failure_and_success(self) -> None:
+        self._run_scenario(RECEIPT_UNLINK_SCENARIO)

@@ -48,6 +48,7 @@ from tabula_rasa.local_profile_store import (
     merged_profile_secrets,
 )
 from tabula_rasa.storage import (
+    decode_receipt_references,
     GoogleSheetsStorage,
     StorageError,
     StorageValidationError,
@@ -68,7 +69,7 @@ from tabula_rasa.quickbooks_mileage_import import (
 )
 
 
-STORAGE_IMPLEMENTATION_VERSION = 7
+STORAGE_IMPLEMENTATION_VERSION = 8
 ACCOUNT_TYPES = ["Bank", "Cash", "Credit card", "Short-term debt", "Equity", "Other"]
 ACCOUNT_CLASSIFICATIONS = ["Asset", "Liability", "Equity"]
 FIXED_TYPE_CLASSIFICATIONS = {
@@ -846,11 +847,6 @@ elif page == "Transactions":
                             selected_profile_key,
                             revision,
                         )
-                        receipts = receipt_drive.list_receipts(
-                            profile_key=selected_profile_key,
-                            transaction_id=edit_id,
-                            folder_id=str(receipt_folder["id"]),
-                        )
                     except GoogleDriveError as error:
                         st.error(str(error))
                     else:
@@ -858,10 +854,10 @@ elif page == "Transactions":
                             f"{selected_profile_key}-{edit_id}"
                         )
                         receipt_candidate_key = (
-                            f"receipt-delete-candidate-{receipt_action_scope}"
+                            f"receipt-unlink-candidate-{receipt_action_scope}"
                         )
                         receipt_notice_key = (
-                            f"receipt-delete-notice-{receipt_action_scope}"
+                            f"receipt-unlink-notice-{receipt_action_scope}"
                         )
                         receipt_notice = st.session_state.pop(
                             receipt_notice_key,
@@ -869,21 +865,65 @@ elif page == "Transactions":
                         )
                         if receipt_notice:
                             st.success(str(receipt_notice))
+
+                        raw_receipt_references = selected.get(
+                            "receipt_references",
+                            "",
+                        )
+                        references_ready = True
+                        try:
+                            receipt_references = decode_receipt_references(
+                                raw_receipt_references
+                            )
+                        except StorageError as error:
+                            references_ready = False
+                            receipt_references = []
+                            st.error(str(error))
+                        if references_ready and raw_receipt_references == "":
+                            try:
+                                legacy_receipts = receipt_drive.list_receipts(
+                                    profile_key=selected_profile_key,
+                                    transaction_id=edit_id,
+                                    folder_id=str(receipt_folder["id"]),
+                                )
+                                receipt_references = [
+                                    {
+                                        "id": str(receipt["id"]),
+                                        "name": str(
+                                            receipt.get("name", "Receipt")
+                                        ),
+                                    }
+                                    for receipt in legacy_receipts
+                                    if receipt.get("id")
+                                ]
+                                storage.set_transaction_receipt_references(
+                                    edit_id,
+                                    receipt_references,
+                                )
+                            except (GoogleDriveError, StorageError) as error:
+                                references_ready = False
+                                st.error(
+                                    "Existing receipt references could not be "
+                                    f"initialized. {error}"
+                                )
+
                         receipt_ids = {
-                            str(receipt.get("id", ""))
-                            for receipt in receipts
-                            if receipt.get("id")
+                            reference["id"]
+                            for reference in receipt_references
                         }
                         if (
                             st.session_state.get(receipt_candidate_key)
                             not in receipt_ids
                         ):
                             st.session_state.pop(receipt_candidate_key, None)
-                        if receipts:
-                            for receipt in receipts:
-                                receipt_id = str(receipt.get("id", ""))
-                                name = str(receipt.get("name", "Receipt"))
-                                link = str(receipt.get("webViewLink", ""))
+                        if references_ready and receipt_references:
+                            for reference in receipt_references:
+                                receipt_id = reference["id"]
+                                name = reference["name"]
+                                link = (
+                                    "https://drive.google.com/open?id="
+                                    f"{receipt_id}"
+                                )
                                 receipt_column, delete_column = st.columns(
                                     [4, 1]
                                 )
@@ -894,9 +934,9 @@ elif page == "Transactions":
                                         st.caption(name)
                                 with delete_column:
                                     if receipt_id and st.button(
-                                        "Delete receipt",
+                                        "Remove receipt",
                                         key=(
-                                            "receipt-delete-request-"
+                                            "receipt-unlink-request-"
                                             f"{receipt_action_scope}-{receipt_id}"
                                         ),
                                         width="stretch",
@@ -913,15 +953,14 @@ elif page == "Transactions":
                                     == receipt_id
                                 ):
                                     st.warning(
-                                        f"Delete `{name}` permanently from "
-                                        "Google Drive? The transaction itself "
-                                        "will not be changed."
+                                        f"Remove `{name}` from this transaction? "
+                                        "The file will remain in Google Drive."
                                     )
                                     cancel_column, confirm_column = st.columns(2)
                                     if cancel_column.button(
                                         "Cancel",
                                         key=(
-                                            "receipt-delete-cancel-"
+                                            "receipt-unlink-cancel-"
                                             f"{receipt_action_scope}-{receipt_id}"
                                         ),
                                         width="stretch",
@@ -932,26 +971,23 @@ elif page == "Transactions":
                                         )
                                         st.rerun()
                                     if confirm_column.button(
-                                        "Delete from Google Drive",
+                                        "Remove reference",
                                         type="primary",
                                         key=(
-                                            "receipt-delete-confirm-"
+                                            "receipt-unlink-confirm-"
                                             f"{receipt_action_scope}-{receipt_id}"
                                         ),
                                         width="stretch",
                                     ):
                                         try:
-                                            receipt_drive.delete_receipt(
-                                                profile_key=selected_profile_key,
-                                                transaction_id=edit_id,
-                                                folder_id=str(
-                                                    receipt_folder["id"]
-                                                ),
+                                            storage.unlink_transaction_receipt(
+                                                edit_id,
                                                 file_id=receipt_id,
                                             )
-                                        except GoogleDriveError as error:
+                                        except StorageError as error:
                                             st.error(
-                                                "Receipt was not deleted. "
+                                                "Receipt reference was not "
+                                                "removed. "
                                                 f"{error}"
                                             )
                                         else:
@@ -962,47 +998,88 @@ elif page == "Transactions":
                                             st.session_state[
                                                 receipt_notice_key
                                             ] = (
-                                                "Receipt deleted from Google "
-                                                f"Drive: {name}"
+                                                f"Receipt removed: {name}. "
+                                                "The file remains in Google "
+                                                "Drive."
                                             )
                                             st.rerun()
-                        receipt_upload = st.file_uploader(
-                            "Upload receipt",
-                            type=["pdf", "png", "jpg", "jpeg", "webp", "heic"],
-                            accept_multiple_files=False,
-                            key=f"receipt-upload-{edit_id}",
-                        )
-                        if receipt_upload is not None:
-                            receipt_bytes = receipt_upload.getvalue()
-                            st.caption(
-                                "The file will be stored as "
-                                f"`{edit_id}-{receipt_upload.name}`."
+                        if references_ready:
+                            receipt_upload = st.file_uploader(
+                                "Upload receipt",
+                                type=[
+                                    "pdf",
+                                    "png",
+                                    "jpg",
+                                    "jpeg",
+                                    "webp",
+                                    "heic",
+                                ],
+                                accept_multiple_files=False,
+                                key=f"receipt-upload-{edit_id}",
                             )
-                            if st.button(
-                                "Upload receipt to Google Drive",
-                                type="primary",
-                                key=f"receipt-upload-button-{edit_id}",
-                            ):
-                                try:
-                                    uploaded_receipt = receipt_drive.upload_receipt(
-                                        profile_key=selected_profile_key,
-                                        transaction_id=edit_id,
-                                        folder_id=str(receipt_folder["id"]),
-                                        original_name=receipt_upload.name,
-                                        content=receipt_bytes,
-                                        mime_type=(
-                                            receipt_upload.type
-                                            or "application/octet-stream"
-                                        ),
-                                    )
-                                except GoogleDriveError as error:
-                                    st.error(str(error))
-                                else:
-                                    st.success(
-                                        "Receipt uploaded to Google Drive: "
-                                        f"{uploaded_receipt.get('name', receipt_upload.name)}"
-                                    )
-                                    st.rerun()
+                            if receipt_upload is not None:
+                                receipt_bytes = receipt_upload.getvalue()
+                                st.caption(
+                                    "The file will be stored as "
+                                    f"`{edit_id}-{receipt_upload.name}`."
+                                )
+                                if st.button(
+                                    "Upload receipt to Google Drive",
+                                    type="primary",
+                                    key=f"receipt-upload-button-{edit_id}",
+                                ):
+                                    try:
+                                        uploaded_receipt = (
+                                            receipt_drive.upload_receipt(
+                                                profile_key=(
+                                                    selected_profile_key
+                                                ),
+                                                transaction_id=edit_id,
+                                                folder_id=str(
+                                                    receipt_folder["id"]
+                                                ),
+                                                original_name=(
+                                                    receipt_upload.name
+                                                ),
+                                                content=receipt_bytes,
+                                                mime_type=(
+                                                    receipt_upload.type
+                                                    or "application/octet-stream"
+                                                ),
+                                            )
+                                        )
+                                    except GoogleDriveError as error:
+                                        st.error(str(error))
+                                    else:
+                                        try:
+                                            storage.link_transaction_receipt(
+                                                edit_id,
+                                                file_id=str(
+                                                    uploaded_receipt["id"]
+                                                ),
+                                                name=str(
+                                                    uploaded_receipt.get(
+                                                        "name",
+                                                        receipt_upload.name,
+                                                    )
+                                                ),
+                                            )
+                                        except (
+                                            KeyError,
+                                            StorageError,
+                                        ) as error:
+                                            st.error(
+                                                "The receipt was uploaded to "
+                                                "Google Drive but could not be "
+                                                "linked to this transaction. "
+                                                f"Retry the upload. {error}"
+                                            )
+                                        else:
+                                            st.success(
+                                                "Receipt uploaded and linked: "
+                                                f"{uploaded_receipt.get('name', receipt_upload.name)}"
+                                            )
+                                            st.rerun()
 
 
 elif page == "Mileage":

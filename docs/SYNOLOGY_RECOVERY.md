@@ -48,7 +48,7 @@ of truth for actual transfer status and logs.
 ## Prerequisites
 
 - A Google Drive backup folder selected for the business profile
-- A verified format-version 3 backup in that folder
+- A verified format-version 4 backup in that folder
 - DSM administrator access to the DS220j
 - Synology Cloud Sync installed
 - A protected shared folder with enough capacity for historical generations
@@ -240,7 +240,7 @@ Validate the copied archive:
 Successful validation confirms the supported format, ZIP structure, manifest,
 worksheet headers, SHA-256 checksums, IDs, relationships, and row counts. The
 report must include Accounts, Categories, Transactions, and Mileage for a
-format-version 3 archive.
+format-version 4 archive.
 
 ## Validate history and retry behavior
 

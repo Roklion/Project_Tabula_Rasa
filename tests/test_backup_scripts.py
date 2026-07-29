@@ -17,6 +17,7 @@ from scripts.validate_google_sheets_backup import (
     validation_report,
 )
 from tabula_rasa.storage import GoogleSheetsStorage
+from tabula_rasa.storage.google_sheets import BACKUP_FORMAT_VERSION
 from tests.fakes import FakeWorkbook
 
 
@@ -88,7 +89,7 @@ class TestBackupScripts:
             manifest = validate_backup_file(backup_path)
             report = validation_report(backup_path, manifest)
 
-        assert "Format version: 3" in report
+        assert f"Format version: {BACKUP_FORMAT_VERSION}" in report
         assert "Accounts=0" in report
         assert "Mileage=0" in report
         assert "Manifest checksums: verified" in report
