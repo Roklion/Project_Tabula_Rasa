@@ -209,6 +209,12 @@ recorded NAS retention policy. A safe initial policy is:
 > Retain all synchronized generations until a quarterly manual review. Never
 > remove the only verified generation for a recovery period.
 
+For this policy, a quarterly review is a health and capacity check, not an
+automatic deletion event. During the initial accumulation period, retain every
+generation. If space later requires pruning, validate a newer generation first,
+never delete the newest verified archive, and keep at least one verified archive
+for every recovery period the business still needs.
+
 ## Create and validate the first NAS copy
 
 Create a fresh verified cloud backup for the selected profile:
@@ -288,6 +294,36 @@ Keep a private operational record for each opted-in business containing:
 
 Do not put credentials, tokens, private ledger data, or full service-account
 emails in the GitHub issue.
+
+## Initial DS220j deployment record
+
+Completed on July 28, 2026:
+
+- Synology recovery was enabled for `heathcote-advisory` and
+  `rok-collectibles`.
+- The businesses use different Google Drive owner accounts, so each has a
+  separate Cloud Sync connection.
+- Both connections use **Download remote changes only** with destination
+  deletions disabled.
+- Both tasks run continuously.
+- The protected shared folder is `/volume1/Tabula_Rosa_Backups`.
+- The business destinations are
+  `/volume1/Tabula_Rosa_Backups/heathcote-advisory` and
+  `/volume1/Tabula_Rosa_Backups/rok-collectibles`.
+- Only the intended timestamped versioned ZIP archives were observed in the
+  recovery destinations.
+- Multiple historical generations were retained.
+- A pause-and-resume drill demonstrated that a delayed or interrupted task is
+  visible and safely retryable.
+- A format-version 3 NAS archive was copied to a safe local recovery location
+  and passed the current manifest, checksum, worksheet, relationship, and row
+  count validator.
+- The validated archive was restored into a new blank Google workbook, and the
+  restored headers, relationships, checksums, and row counts were verified.
+
+Validation outputs, workbook IDs, Google account addresses, and private ledger
+contents remain in the private operational record and are intentionally not
+stored in Git or the GitHub issue.
 
 ## Troubleshooting
 

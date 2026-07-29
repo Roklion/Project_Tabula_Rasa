@@ -506,6 +506,11 @@ without restoring it:
 python scripts/validate_google_sheets_backup.py C:\Safe-Recovery\tabula-rosa-backup-YYYYMMDDTHHMMSSZ.zip
 ```
 
+The initial DS220j deployment and restore drill for both configured business
+profiles were completed on July 28, 2026. The runbook contains the sanitized
+deployment record; private validation output and recovery workbook identifiers
+remain outside Git.
+
 ### Restore drill
 
 Current restore supports backup formats 2 and 3. Convert a historical format-1
