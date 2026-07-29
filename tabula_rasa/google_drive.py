@@ -831,6 +831,35 @@ class GoogleDriveClient:
             use_cache=True,
         )
 
+    def list_profile_receipts(
+        self,
+        *,
+        profile_key: str,
+        folder_id: str,
+    ) -> list[dict[str, Any]]:
+        """List every app-managed receipt available to one profile."""
+        folder_id = self._valid_folder_id(folder_id)
+        query = " and ".join(
+            [
+                f"'{_escape_query_value(folder_id)}' in parents",
+                "trashed = false",
+                (
+                    "appProperties has { key='tabulaRasaKind' and "
+                    "value='receipt' }"
+                ),
+                (
+                    "appProperties has { key='tabulaRasaProfile' and "
+                    f"value='{_escape_query_value(profile_key)}' }}"
+                ),
+            ]
+        )
+        return self._list(
+            query,
+            page_size=1000,
+            order_by="createdTime desc",
+            use_cache=True,
+        )
+
     def upload_backup(
         self,
         *,

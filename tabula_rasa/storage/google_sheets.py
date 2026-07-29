@@ -1213,13 +1213,25 @@ class GoogleSheetsStorage:
         name: str,
     ) -> dict[str, str]:
         """Attach or refresh one Drive file reference on a transaction."""
+        reference = decode_receipt_references(
+            [{"id": file_id, "name": name}]
+        )[0]
+        for transaction in self.list_transactions(_force_refresh=True):
+            if transaction["id"] == transaction_id:
+                continue
+            if any(
+                item["id"] == reference["id"]
+                for item in decode_receipt_references(
+                    transaction.get("receipt_references", "")
+                )
+            ):
+                raise StorageConflictError(
+                    "That receipt is already linked to another transaction"
+                )
         current = self._find_row("Transactions", transaction_id)
         references = decode_receipt_references(
             current.values.get("receipt_references", "")
         )
-        reference = decode_receipt_references(
-            [{"id": file_id, "name": name}]
-        )[0]
         references = [
             item for item in references if item["id"] != reference["id"]
         ]

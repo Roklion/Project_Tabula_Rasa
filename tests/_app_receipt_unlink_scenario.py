@@ -70,6 +70,12 @@ def main() -> None:
     unlink_should_fail = {"value": False}
     original_unlink = GoogleSheetsStorage.unlink_transaction_receipt
 
+    def list_profile_receipts(
+        _client: GoogleDriveClient,
+        **_scope: str,
+    ) -> list[dict[str, str]]:
+        return [dict(file) for file in drive_files]
+
     def unlink_receipt(
         storage_client: GoogleSheetsStorage,
         transaction_id: str,
@@ -129,6 +135,11 @@ def main() -> None:
             GoogleSheetsStorage,
             "unlink_transaction_receipt",
             unlink_receipt,
+        ),
+        patch.object(
+            GoogleDriveClient,
+            "list_profile_receipts",
+            list_profile_receipts,
         ),
         patch.object(
             GoogleDriveClient,
@@ -199,6 +210,20 @@ def main() -> None:
             for success in app.success
         )
         assert len(storage.list_transactions()) == 1
+
+        by_label(app.selectbox, "Unreferenced receipt").set_value(
+            "receipt123456"
+        )
+        by_label(app.button, "Link selected receipt").click().run()
+        assert decode_receipt_references(
+            storage.list_transactions()[0]["receipt_references"]
+        ) == [receipt]
+        assert drive_files == [receipt]
+        assert by_label(app.button, "Remove receipt")
+        assert any(
+            "Receipt linked" in str(success.value)
+            for success in app.success
+        )
 
 
 if __name__ == "__main__":

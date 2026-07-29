@@ -364,6 +364,38 @@ class TestGoogleDriveFiles:
             "txn-1-statement.pdf"
         )
 
+    def test_profile_receipt_listing_is_not_transaction_scoped(self) -> None:
+        receipt = {
+            "id": "receipt123456",
+            "name": "txn-1-statement.pdf",
+            "appProperties": {
+                "tabulaRasaKind": "receipt",
+                "tabulaRasaProfile": "north",
+                "tabulaRasaTransaction": "txn-1",
+            },
+        }
+        session = DriveSession(
+            [FakeResponse(200, {"files": [receipt]})]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        receipts = client.list_profile_receipts(
+            profile_key="north",
+            folder_id="folder123456",
+        )
+
+        assert receipts == [receipt]
+        query = session.requests[0][2]["params"]["q"]
+        assert "'folder123456' in parents" in query
+        assert "value='receipt'" in query
+        assert "value='north'" in query
+        assert "tabulaRasaTransaction" not in query
+
     def test_backup_retry_reuses_existing_file_and_applies_retention(self) -> None:
         existing = {
             "id": "backup123456",

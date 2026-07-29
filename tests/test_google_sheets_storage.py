@@ -413,13 +413,33 @@ class TestGoogleSheetsStorage:
             {"id": "receipt123456", "name": "renamed-statement.pdf"},
             {"id": "receipt234567", "name": "invoice.png"},
         ]
+        other_transaction = self.storage.create_transaction(
+            txn_date="2026-07-20",
+            kind="Expense",
+            amount=8,
+            account_id=source["id"],
+            category_id=expense["id"],
+        )
+        with pytest.raises(
+            StorageConflictError,
+            match="already linked to another transaction",
+        ):
+            self.storage.link_transaction_receipt(
+                other_transaction["id"],
+                file_id="receipt123456",
+                name="renamed-statement.pdf",
+            )
 
         self.storage.unlink_transaction_receipt(
             transaction["id"],
             file_id="receipt123456",
         )
 
-        unlinked = self.storage.list_transactions()[0]
+        unlinked = next(
+            item
+            for item in self.storage.list_transactions()
+            if item["id"] == transaction["id"]
+        )
         assert decode_receipt_references(
             unlinked["receipt_references"]
         ) == [{"id": "receipt234567", "name": "invoice.png"}]

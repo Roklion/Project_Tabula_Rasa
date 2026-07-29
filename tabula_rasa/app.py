@@ -1004,6 +1004,150 @@ elif page == "Transactions":
                                             )
                                             st.rerun()
                         if references_ready:
+                            referenced_receipt_ids: set[str] = set()
+                            uninitialized_transaction_ids: set[str] = set()
+                            for transaction in transactions:
+                                if transaction["id"] == edit_id:
+                                    referenced_receipt_ids.update(
+                                        receipt_ids
+                                    )
+                                    continue
+                                raw_references = transaction.get(
+                                    "receipt_references",
+                                    "",
+                                )
+                                if raw_references == "":
+                                    uninitialized_transaction_ids.add(
+                                        transaction["id"]
+                                    )
+                                    continue
+                                try:
+                                    referenced_receipt_ids.update(
+                                        reference["id"]
+                                        for reference in (
+                                            decode_receipt_references(
+                                                raw_references
+                                            )
+                                        )
+                                    )
+                                except StorageError:
+                                    uninitialized_transaction_ids.add(
+                                        transaction["id"]
+                                    )
+                            try:
+                                profile_receipts = (
+                                    receipt_drive.list_profile_receipts(
+                                        profile_key=selected_profile_key,
+                                        folder_id=str(receipt_folder["id"]),
+                                    )
+                                )
+                            except GoogleDriveError as error:
+                                st.error(
+                                    "Unreferenced Google Drive receipts could "
+                                    f"not be listed. {error}"
+                                )
+                            else:
+                                unreferenced_receipts = []
+                                for receipt in profile_receipts:
+                                    receipt_id = str(
+                                        receipt.get("id", "")
+                                    )
+                                    properties = receipt.get(
+                                        "appProperties"
+                                    )
+                                    legacy_transaction_id = (
+                                        str(
+                                            properties.get(
+                                                "tabulaRasaTransaction",
+                                                "",
+                                            )
+                                        )
+                                        if isinstance(properties, Mapping)
+                                        else ""
+                                    )
+                                    if (
+                                        receipt_id
+                                        and receipt_id
+                                        not in referenced_receipt_ids
+                                        and legacy_transaction_id
+                                        not in (
+                                            uninitialized_transaction_ids
+                                        )
+                                    ):
+                                        unreferenced_receipts.append(
+                                            {
+                                                "id": receipt_id,
+                                                "name": str(
+                                                    receipt.get(
+                                                        "name",
+                                                        "Receipt",
+                                                    )
+                                                ),
+                                            }
+                                        )
+                                if unreferenced_receipts:
+                                    unreferenced_by_id = {
+                                        receipt["id"]: receipt
+                                        for receipt in unreferenced_receipts
+                                    }
+                                    existing_receipt_id = st.selectbox(
+                                        "Unreferenced receipt",
+                                        list(unreferenced_by_id),
+                                        format_func=lambda file_id: (
+                                            unreferenced_by_id[file_id][
+                                                "name"
+                                            ]
+                                        ),
+                                        key=(
+                                            "receipt-existing-select-"
+                                            f"{receipt_action_scope}"
+                                        ),
+                                        help=(
+                                            "App-managed files in this "
+                                            "profile's receipt folder that are "
+                                            "not linked to another transaction."
+                                        ),
+                                    )
+                                    if st.button(
+                                        "Link selected receipt",
+                                        key=(
+                                            "receipt-existing-link-"
+                                            f"{receipt_action_scope}"
+                                        ),
+                                    ):
+                                        existing_receipt = (
+                                            unreferenced_by_id[
+                                                existing_receipt_id
+                                            ]
+                                        )
+                                        try:
+                                            storage.link_transaction_receipt(
+                                                edit_id,
+                                                file_id=existing_receipt[
+                                                    "id"
+                                                ],
+                                                name=existing_receipt[
+                                                    "name"
+                                                ],
+                                            )
+                                        except StorageError as error:
+                                            st.error(
+                                                "The receipt could not be "
+                                                f"linked. {error}"
+                                            )
+                                        else:
+                                            st.session_state[
+                                                receipt_notice_key
+                                            ] = (
+                                                "Receipt linked: "
+                                                f"{existing_receipt['name']}"
+                                            )
+                                            st.rerun()
+                                else:
+                                    st.caption(
+                                        "No unreferenced receipts are "
+                                        "available in Google Drive."
+                                    )
                             receipt_upload = st.file_uploader(
                                 "Upload receipt",
                                 type=[
