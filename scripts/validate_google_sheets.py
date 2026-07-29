@@ -20,13 +20,26 @@ from tabula_rasa.storage import GoogleSheetsStorage
 
 
 def validate(
-    secrets_path: Path, write_test: bool = False, profile_key: str | None = None
+    secrets_path: Path,
+    write_test: bool = False,
+    profile_key: str | None = None,
+    spreadsheet_id: str | None = None,
 ) -> None:
+    if spreadsheet_id is not None and write_test:
+        raise ValueError("--spreadsheet-id cannot be combined with --write-test")
+
     all_secrets = load_business_profile_document(secrets_path)
     profiles = load_business_profiles(all_secrets)
     if len(profiles) > 1 and not profile_key:
         raise RuntimeError("Multiple profiles are configured; pass --profile PROFILE_KEY")
     secrets = select_profile_secrets(all_secrets, profile_key)
+    target_spreadsheet_id = (
+        spreadsheet_id.strip()
+        if spreadsheet_id is not None
+        else str(secrets["spreadsheet_id"]).strip()
+    )
+    if not target_spreadsheet_id:
+        raise ValueError("Spreadsheet ID cannot be empty")
 
     credentials = Credentials.from_service_account_info(
         secrets["gcp_service_account"],
@@ -37,11 +50,23 @@ def validate(
         ],
     )
     client = gspread.authorize(credentials)
-    workbook = client.open_by_key(secrets["spreadsheet_id"])
-    GoogleSheetsStorage(workbook)
+    workbook = client.open_by_key(target_spreadsheet_id)
+    storage = GoogleSheetsStorage(workbook)
+    row_counts = {
+        "Accounts": len(storage.list_accounts(active_only=False)),
+        "Categories": len(storage.list_categories()),
+        "Transactions": len(storage.list_transactions()),
+        "Mileage": len(storage.list_mileage_trips()),
+    }
 
     print(f"Workbook access verified: {workbook.title}")
     print("Worksheet headers verified: Accounts, Categories, Transactions, Mileage")
+    print(
+        "Ledger rows readable: "
+        + ", ".join(f"{title}={count}" for title, count in row_counts.items())
+    )
+    if spreadsheet_id is not None:
+        print("Explicit workbook override verified; business profile unchanged")
 
     if write_test:
         title = f"_access_test_{uuid4().hex[:8]}"
@@ -71,8 +96,20 @@ def main() -> None:
         help="Run a reversible CRUD test using a disposable worksheet",
     )
     parser.add_argument("--profile", help="Business profile key to validate")
+    parser.add_argument(
+        "--spreadsheet-id",
+        help=(
+            "Read-only workbook ID override; uses the selected profile's "
+            "service-account credential without changing the profile"
+        ),
+    )
     args = parser.parse_args()
-    validate(args.secrets, write_test=args.write_test, profile_key=args.profile)
+    validate(
+        args.secrets,
+        write_test=args.write_test,
+        profile_key=args.profile,
+        spreadsheet_id=args.spreadsheet_id,
+    )
 
 
 if __name__ == "__main__":

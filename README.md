@@ -369,6 +369,16 @@ After both commands pass, start or redeploy the app, sign in, choose the new
 business in the sidebar, and confirm that its workbook title is shown. Repeat
 the validation for every configured profile.
 
+For a restore drill, validate a recovery workbook without changing the
+configured business profile:
+
+```powershell
+python scripts/validate_google_sheets.py --profile heathcote --spreadsheet-id RECOVERY_WORKBOOK_ID
+```
+
+The override is read-only, reports sanitized row counts for all four ledger
+worksheets, and cannot be combined with `--write-test`.
+
 Common failures:
 
 - **Service-account authentication failed:** the uploaded JSON key may be

@@ -271,6 +271,16 @@ The command validates before writing, refuses the configured live workbook,
 refuses populated or incompatible target worksheets, restores the archive, and
 rereads the target to verify the restored rows.
 
+Confirm the normal Tabula Rosa storage path can read the restored workbook
+without changing the selected business profile:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\validate_google_sheets.py --profile heathcote-advisory --spreadsheet-id NEW_ID
+```
+
+This validation path is read-only and reports only the workbook title and
+sanitized row counts. It cannot be combined with `--write-test`.
+
 Confirm the output reports the expected row counts. Open the recovery workbook
 and spot-check worksheet headers and representative account, category,
 transaction, and mileage relationships. Delete or clearly label the drill
