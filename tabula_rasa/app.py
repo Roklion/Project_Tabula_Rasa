@@ -854,14 +854,118 @@ elif page == "Transactions":
                     except GoogleDriveError as error:
                         st.error(str(error))
                     else:
+                        receipt_action_scope = (
+                            f"{selected_profile_key}-{edit_id}"
+                        )
+                        receipt_candidate_key = (
+                            f"receipt-delete-candidate-{receipt_action_scope}"
+                        )
+                        receipt_notice_key = (
+                            f"receipt-delete-notice-{receipt_action_scope}"
+                        )
+                        receipt_notice = st.session_state.pop(
+                            receipt_notice_key,
+                            None,
+                        )
+                        if receipt_notice:
+                            st.success(str(receipt_notice))
+                        receipt_ids = {
+                            str(receipt.get("id", ""))
+                            for receipt in receipts
+                            if receipt.get("id")
+                        }
+                        if (
+                            st.session_state.get(receipt_candidate_key)
+                            not in receipt_ids
+                        ):
+                            st.session_state.pop(receipt_candidate_key, None)
                         if receipts:
                             for receipt in receipts:
+                                receipt_id = str(receipt.get("id", ""))
                                 name = str(receipt.get("name", "Receipt"))
                                 link = str(receipt.get("webViewLink", ""))
-                                if link:
-                                    st.link_button(name, link)
-                                else:
-                                    st.caption(name)
+                                receipt_column, delete_column = st.columns(
+                                    [4, 1]
+                                )
+                                with receipt_column:
+                                    if link:
+                                        st.link_button(name, link)
+                                    else:
+                                        st.caption(name)
+                                with delete_column:
+                                    if receipt_id and st.button(
+                                        "Delete receipt",
+                                        key=(
+                                            "receipt-delete-request-"
+                                            f"{receipt_action_scope}-{receipt_id}"
+                                        ),
+                                        width="stretch",
+                                    ):
+                                        st.session_state[
+                                            receipt_candidate_key
+                                        ] = receipt_id
+                                        st.rerun()
+                                if (
+                                    receipt_id
+                                    and st.session_state.get(
+                                        receipt_candidate_key
+                                    )
+                                    == receipt_id
+                                ):
+                                    st.warning(
+                                        f"Delete `{name}` permanently from "
+                                        "Google Drive? The transaction itself "
+                                        "will not be changed."
+                                    )
+                                    cancel_column, confirm_column = st.columns(2)
+                                    if cancel_column.button(
+                                        "Cancel",
+                                        key=(
+                                            "receipt-delete-cancel-"
+                                            f"{receipt_action_scope}-{receipt_id}"
+                                        ),
+                                        width="stretch",
+                                    ):
+                                        st.session_state.pop(
+                                            receipt_candidate_key,
+                                            None,
+                                        )
+                                        st.rerun()
+                                    if confirm_column.button(
+                                        "Delete from Google Drive",
+                                        type="primary",
+                                        key=(
+                                            "receipt-delete-confirm-"
+                                            f"{receipt_action_scope}-{receipt_id}"
+                                        ),
+                                        width="stretch",
+                                    ):
+                                        try:
+                                            receipt_drive.delete_receipt(
+                                                profile_key=selected_profile_key,
+                                                transaction_id=edit_id,
+                                                folder_id=str(
+                                                    receipt_folder["id"]
+                                                ),
+                                                file_id=receipt_id,
+                                            )
+                                        except GoogleDriveError as error:
+                                            st.error(
+                                                "Receipt was not deleted. "
+                                                f"{error}"
+                                            )
+                                        else:
+                                            st.session_state.pop(
+                                                receipt_candidate_key,
+                                                None,
+                                            )
+                                            st.session_state[
+                                                receipt_notice_key
+                                            ] = (
+                                                "Receipt deleted from Google "
+                                                f"Drive: {name}"
+                                            )
+                                            st.rerun()
                         receipt_upload = st.file_uploader(
                             "Upload receipt",
                             type=["pdf", "png", "jpg", "jpeg", "webp", "heic"],

@@ -364,6 +364,130 @@ class TestGoogleDriveFiles:
             "txn-1-statement.pdf"
         )
 
+    def test_receipt_delete_verifies_scope_before_deleting(self) -> None:
+        receipt = {
+            "id": "receipt123456",
+            "name": "txn-1-statement.pdf",
+            "trashed": False,
+            "parents": ["folder123456"],
+            "appProperties": {
+                "tabulaRasaKind": "receipt",
+                "tabulaRasaProfile": "north",
+                "tabulaRasaTransaction": "txn-1",
+            },
+        }
+        session = DriveSession(
+            [
+                FakeResponse(200, receipt),
+                FakeResponse(204),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        client.delete_receipt(
+            profile_key="north",
+            transaction_id="txn-1",
+            folder_id="folder123456",
+            file_id="receipt123456",
+        )
+
+        ownership_request, delete_request = session.requests
+        assert ownership_request[0] == "GET"
+        assert ownership_request[1].endswith("/files/receipt123456")
+        assert (
+            ownership_request[2]["params"]["fields"]
+            == "id,name,trashed,parents,appProperties"
+        )
+        assert delete_request[0] == "DELETE"
+        assert delete_request[1].endswith("/files/receipt123456")
+
+    def test_receipt_delete_rejects_a_file_outside_its_scope(self) -> None:
+        session = DriveSession(
+            [
+                FakeResponse(
+                    200,
+                    {
+                        "id": "receipt123456",
+                        "name": "txn-1-statement.pdf",
+                        "trashed": False,
+                        "parents": ["folder123456"],
+                        "appProperties": {
+                            "tabulaRasaKind": "receipt",
+                            "tabulaRasaProfile": "south",
+                            "tabulaRasaTransaction": "txn-1",
+                        },
+                    },
+                )
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        with pytest.raises(
+            GoogleDriveAccessError,
+            match="does not belong to this business profile and transaction",
+        ):
+            client.delete_receipt(
+                profile_key="north",
+                transaction_id="txn-1",
+                folder_id="folder123456",
+                file_id="receipt123456",
+            )
+
+        assert [request[0] for request in session.requests] == ["GET"]
+
+    def test_receipt_delete_failure_keeps_receipt_available(self) -> None:
+        receipt = {
+            "id": "receipt123456",
+            "name": "txn-1-statement.pdf",
+            "trashed": False,
+            "parents": ["folder123456"],
+            "appProperties": {
+                "tabulaRasaKind": "receipt",
+                "tabulaRasaProfile": "north",
+                "tabulaRasaTransaction": "txn-1",
+            },
+        }
+        session = DriveSession(
+            [
+                FakeResponse(200, receipt),
+                FakeResponse(400),
+                FakeResponse(200, {"files": [receipt]}),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        with pytest.raises(
+            GoogleDriveAccessError,
+            match="could not complete the request",
+        ):
+            client.delete_receipt(
+                profile_key="north",
+                transaction_id="txn-1",
+                folder_id="folder123456",
+                file_id="receipt123456",
+            )
+
+        assert client.list_receipts(
+            profile_key="north",
+            transaction_id="txn-1",
+            folder_id="folder123456",
+        ) == [receipt]
+
     def test_backup_retry_reuses_existing_file_and_applies_retention(self) -> None:
         existing = {
             "id": "backup123456",
