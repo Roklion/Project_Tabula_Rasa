@@ -1164,8 +1164,9 @@ elif page == "Transactions":
                             if receipt_upload is not None:
                                 receipt_bytes = receipt_upload.getvalue()
                                 st.caption(
-                                    "The file will be stored as "
-                                    f"`{edit_id}-{receipt_upload.name}`."
+                                    "The original filename will be kept. If "
+                                    "that name already exists, a numeric "
+                                    "suffix will be added."
                                 )
                                 if st.button(
                                     "Upload receipt to Google Drive",

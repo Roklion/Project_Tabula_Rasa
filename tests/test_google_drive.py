@@ -20,6 +20,7 @@ from tabula_rasa.google_drive import (
     load_oauth_config,
     safe_receipt_filename,
     select_redirect_uri,
+    suffixed_receipt_filename,
     validate_drive_profile_settings,
     verify_oauth_state,
 )
@@ -333,7 +334,7 @@ class TestGoogleDriveFiles:
                     200,
                     {
                         "id": "receipt123456",
-                        "name": "txn-1-statement.pdf",
+                        "name": "statement.pdf",
                     },
                 ),
             ]
@@ -360,9 +361,102 @@ class TestGoogleDriveFiles:
         assert b'"tabulaRasaProfile":"north"' in body
         assert b'"tabulaRasaTransaction":"txn-1"' in body
         assert b"..\\" not in body
-        assert safe_receipt_filename("txn-1", "../../statement.pdf") == (
-            "txn-1-statement.pdf"
+        assert safe_receipt_filename("../../statement.pdf") == "statement.pdf"
+        assert suffixed_receipt_filename("statement.pdf", 2) == (
+            "statement (2).pdf"
         )
+        assert suffixed_receipt_filename("receipt", 3) == "receipt (3)"
+
+    def test_receipt_upload_adds_suffix_instead_of_replacing(self) -> None:
+        session = DriveSession(
+            [
+                FakeResponse(
+                    200,
+                    {
+                        "files": [
+                            {
+                                "id": "receipt123456",
+                                "name": "statement.pdf",
+                            }
+                        ]
+                    },
+                ),
+                FakeResponse(200, {"files": []}),
+                FakeResponse(
+                    200,
+                    {
+                        "id": "receipt234567",
+                        "name": "statement (2).pdf",
+                    },
+                ),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        uploaded = client.upload_receipt(
+            profile_key="north",
+            transaction_id="txn-2",
+            folder_id="folder123456",
+            original_name="statement.pdf",
+            content=b"second receipt",
+            mime_type="application/pdf",
+        )
+
+        assert uploaded["name"] == "statement (2).pdf"
+        assert [request[0] for request in session.requests] == [
+            "GET",
+            "GET",
+            "POST",
+        ]
+        assert "name = 'statement.pdf'" in (
+            session.requests[0][2]["params"]["q"]
+        )
+        assert "name = 'statement (2).pdf'" in (
+            session.requests[1][2]["params"]["q"]
+        )
+        assert b'"name":"statement (2).pdf"' in (
+            session.requests[2][2]["data"]
+        )
+
+    def test_receipt_upload_recovers_an_uncertain_create_response(self) -> None:
+        committed = {
+            "id": "receipt123456",
+            "name": "statement.pdf",
+        }
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": []}),
+                requests.ConnectionError("response lost"),
+                FakeResponse(200, {"files": [committed]}),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        uploaded = client.upload_receipt(
+            profile_key="north",
+            transaction_id="txn-1",
+            folder_id="folder123456",
+            original_name="statement.pdf",
+            content=b"receipt",
+            mime_type="application/pdf",
+        )
+
+        assert uploaded == committed
+        recovery_query = session.requests[-1][2]["params"]["q"]
+        assert "name = 'statement.pdf'" in recovery_query
+        assert "value='north'" in recovery_query
+        assert "value='txn-1'" in recovery_query
+        assert "key='tabulaRasaUploadId'" in recovery_query
 
     def test_profile_receipt_listing_is_not_transaction_scoped(self) -> None:
         receipt = {

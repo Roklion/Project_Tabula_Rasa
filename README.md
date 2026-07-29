@@ -324,12 +324,14 @@ affecting the profile's Google Sheets service account.
 
 Once a receipt folder is selected, open a saved transaction under
 **Transactions > View & edit ledger > Receipt** to upload a PDF or image. Files
-are named `[transaction-id]-[original-file-name]` and tagged with private
-app-properties so retries update the same receipt rather than creating an
-unintended duplicate. Each transaction stores the receipt's stable Drive file
-ID and display name. Removing a receipt from a transaction only removes that
-reference; the underlying file remains in Google Drive and becomes available
-to link from another transaction's **Unreferenced receipt** list.
+keep their sanitized original names and are tagged with private app-properties.
+If the same filename already exists, the new file receives a numeric suffix
+such as `receipt (2).pdf` instead of replacing the existing file. A lost upload
+response is checked before reporting failure so that retry recovery does not
+create an unintended duplicate. Each transaction stores the receipt's stable
+Drive file ID and display name. Removing a receipt from a transaction only
+removes that reference; the underlying file remains in Google Drive and becomes
+available to link from another transaction's **Unreferenced receipt** list.
 
 ### Export profiles to Streamlit Community Cloud
 

@@ -441,15 +441,28 @@ def _escape_query_value(value: str) -> str:
     return value.replace("\\", "\\\\").replace("'", "\\'")
 
 
-def safe_receipt_filename(transaction_id: str, original_name: str) -> str:
-    """Return a safe receipt name that remains associated with a transaction."""
+def safe_receipt_filename(original_name: str) -> str:
+    """Return a safe Drive filename without encoding transaction identity."""
     cleaned = SAFE_RECEIPT_NAME_PATTERN.sub("_", PathName(original_name).name).strip(
         " ."
     )
     if not cleaned:
         cleaned = "receipt"
-    cleaned = cleaned[:180]
-    return f"{transaction_id}-{cleaned}"
+    return cleaned[:180]
+
+
+def suffixed_receipt_filename(filename: str, occurrence: int) -> str:
+    """Add a numeric duplicate suffix before a filename extension."""
+    if occurrence <= 1:
+        return filename
+    dot_index = filename.rfind(".")
+    if dot_index > 0:
+        stem = filename[:dot_index]
+        extension = filename[dot_index:]
+    else:
+        stem = filename
+        extension = ""
+    return f"{stem} ({occurrence}){extension}"
 
 
 class PathName:
@@ -708,26 +721,6 @@ class GoogleDriveClient:
         )
         return dict(_json_response(response))
 
-    def _replace_content(
-        self,
-        file_id: str,
-        content: bytes,
-        mime_type: str,
-    ) -> dict[str, Any]:
-        self._invalidate_list_cache()
-        response = self._request(
-            "PATCH",
-            f"{DRIVE_UPLOAD_ROOT}/files/{file_id}",
-            params={
-                "uploadType": "media",
-                "fields": "id,name,size,createdTime,modifiedTime,webViewLink,appProperties",
-                "supportsAllDrives": "true",
-            },
-            headers={"Content-Type": mime_type},
-            data=content,
-        )
-        return dict(_json_response(response))
-
     def delete_file(self, file_id: str) -> None:
         """Delete a file created and managed by the app."""
         self._invalidate_list_cache()
@@ -748,31 +741,58 @@ class GoogleDriveClient:
         content: bytes,
         mime_type: str,
     ) -> dict[str, Any]:
-        """Create or idempotently replace one transaction receipt."""
+        """Create one receipt without replacing a same-named Drive file."""
         if not content or len(content) > MAX_RECEIPT_BYTES:
             raise GoogleDriveAccessError(
                 "Receipt files must be non-empty and no larger than 20 MB."
             )
         folder_id = self._valid_folder_id(folder_id)
-        filename = safe_receipt_filename(transaction_id, original_name)
-        query = " and ".join(
+        base_filename = safe_receipt_filename(original_name)
+        filename = ""
+        for occurrence in range(1, 1001):
+            candidate = suffixed_receipt_filename(
+                base_filename,
+                occurrence,
+            )
+            availability_query = " and ".join(
+                [
+                    f"'{_escape_query_value(folder_id)}' in parents",
+                    "trashed = false",
+                    f"name = '{_escape_query_value(candidate)}'",
+                ]
+            )
+            if not self._list(availability_query, page_size=1):
+                filename = candidate
+                break
+        if not filename:
+            raise GoogleDriveAccessError(
+                "Google Drive contains too many receipts with this filename. "
+                "Rename the local file and retry."
+            )
+        upload_id = secrets.token_hex(16)
+        committed_query = " and ".join(
             [
                 f"'{_escape_query_value(folder_id)}' in parents",
                 "trashed = false",
                 f"name = '{_escape_query_value(filename)}'",
                 (
+                    "appProperties has { key='tabulaRasaKind' and "
+                    "value='receipt' }"
+                ),
+                (
+                    "appProperties has { key='tabulaRasaProfile' and "
+                    f"value='{_escape_query_value(profile_key)}' }}"
+                ),
+                (
                     "appProperties has { key='tabulaRasaTransaction' and "
                     f"value='{_escape_query_value(transaction_id)}' }}"
                 ),
+                (
+                    "appProperties has { key='tabulaRasaUploadId' and "
+                    f"value='{upload_id}' }}"
+                ),
             ]
         )
-        existing = self._list(query, page_size=2)
-        if existing:
-            return self._replace_content(
-                str(existing[0]["id"]),
-                content,
-                mime_type or "application/octet-stream",
-            )
         metadata = {
             "name": filename,
             "parents": [folder_id],
@@ -780,6 +800,7 @@ class GoogleDriveClient:
                 "tabulaRasaKind": "receipt",
                 "tabulaRasaProfile": profile_key,
                 "tabulaRasaTransaction": transaction_id,
+                "tabulaRasaUploadId": upload_id,
             },
         }
         try:
@@ -792,7 +813,7 @@ class GoogleDriveClient:
             # A disconnected response after Google committed the upload is
             # uncertain. Query by the deterministic name and app-properties
             # before reporting failure so a retry cannot create a duplicate.
-            committed = self._list(query, page_size=2)
+            committed = self._list(committed_query, page_size=2)
             if committed:
                 return committed[0]
             raise
