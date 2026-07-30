@@ -12,6 +12,30 @@ pip install -r requirements.txt
 pip install -r requirements-dev.txt
 ```
 
+## Local main-branch push guard
+
+The tracked `.githooks/pre-push` hook blocks pushes that would update the
+remote `main` branch. Push changes to a feature branch and merge them through a
+pull request instead.
+
+Git does not activate tracked hooks automatically. After every new clone, run
+this command from the repository root:
+
+```powershell
+git config --local core.hooksPath .githooks
+```
+
+Confirm the clone is configured:
+
+```powershell
+git config --local --get core.hooksPath
+```
+
+The command should print `.githooks`. The guard applies only to the configured
+local clone, can be bypassed intentionally with `git push --no-verify`, and is
+not a substitute for server-side branch protection. GitHub pull-request merges
+are unaffected.
+
 ## Required completion checks
 
 Run both commands from the repository root before treating a coding change as
