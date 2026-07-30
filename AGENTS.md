@@ -1,15 +1,15 @@
 # Commit identification
 
-For every Git commit containing changes produced directly by Codex in this
-repository, append this commit trailer:
+For every Git commit created directly by Codex in this repository, append this
+commit trailer:
 
 ```
 Made-with: Codex
 ```
 
-Apply the trailer regardless of who runs `git commit` or appears in the Git
-author and committer metadata. Do not add it when all committed changes were
-produced by the user or by other tools without Codex.
+Do not add or require this trailer for commits created by the user or by other
+tools, even when they contain Codex-assisted changes. Codex can enforce the
+trailer only when Codex performs the commit operation.
 
 # Read-only commands
 
