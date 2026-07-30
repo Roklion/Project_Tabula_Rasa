@@ -11,6 +11,12 @@ Do not add or require this trailer for commits created by the user or by other
 tools, even when they contain Codex-assisted changes. Codex can enforce the
 trailer only when Codex performs the commit operation.
 
+When reviewing trailer compliance, inspect only commits that are reachable
+from the pull request's actual head branch. Do not treat temporary or synthetic
+commits created while applying a patch or running a review as pull-request
+commits. If a cited commit is not present in the PR branch history, do not
+request a trailer for it.
+
 # Read-only commands
 
 Read-only commands against Git or local files are pre-authorized and do not
