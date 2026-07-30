@@ -26,6 +26,31 @@ The automated UI tests use an in-memory Google workbook and a test-only
 password hash. They do not read the live ledger, application password, Google
 service-account credential, or OAuth token.
 
+## Pull requests and code review
+
+A change does not need a formal issue, but its pull request must provide enough
+independent context to review the implementation. Complete the repository pull
+request template with:
+
+- **Intent:** the user-visible or operational change;
+- **Expected behavior:** the important success and failure cases;
+- **Must not change:** existing behavior, data boundaries, or interfaces that
+  remain invariant; and
+- **Evidence:** automated tests, manual checks, and known limitations.
+
+For a small change, one sentence per section is enough. The author should
+personally verify at least the intent and the behavior that must not change,
+even when a coding agent drafts the description. This prevents the
+implementation from becoming its own specification.
+
+Repository-specific review guidance lives under `# Code Review Rules` in the
+root `AGENTS.md`. The reviewer first checks the PR description for sufficient
+context. If necessary information is missing, unclear, or inconsistent, the
+reviewer requests a specific description update instead of silently assuming
+the implementation is intended. The reviewer then checks the description
+against the documentation, unchanged callers, existing tests, and surrounding
+code.
+
 ## Live read-only validation
 
 After the automated suite passes, the configured Google deployment can be
