@@ -52,6 +52,14 @@ of describing the task as complete or ready for commit.
 
 # Code Review Rules
 
+## Creating pull requests
+
+- When Codex creates a pull request, use
+  `.github/pull_request_template.md` as the pull-request description and
+  complete every applicable section before opening the pull request.
+- Do not leave template guidance comments or placeholder text as the
+  substantive description.
+
 ## PR description completeness
 
 - Before reviewing the implementation, check whether the pull-request
