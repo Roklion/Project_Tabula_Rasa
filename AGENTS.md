@@ -17,6 +17,13 @@ diffs, logs, tracked files, configuration, and file contents.
 Read-only access to any file within the project directory is pre-authorized and
 does not require asking the user for explicit approval.
 
+Read-only access through the connected GitHub integration or GitHub webpages
+to information about this repository is pre-authorized and does not require
+asking the user for explicit approval. This includes pull requests, issues,
+comments, reviews, checks, commits, branches, and repository metadata. It does
+not authorize posting comments, resolving review threads, merging, changing
+settings, or performing other GitHub write actions.
+
 # Completion checks
 
 Running tests, linters, format checks, and other read-only validation commands
@@ -62,16 +69,31 @@ of describing the task as complete or ready for commit.
 - Report actionable correctness, security, data-integrity, or regression risks.
   Leave formatting and other deterministic mechanical checks to CI.
 
+## Addressing review feedback
+
+- Before applying a suggested fix, verify that each review comment is valid and
+  practical against the stated requirements, canonical documentation, current
+  implementation, callers, and tests.
+- Do not assume that every review comment requires a code change. If feedback
+  is invalid, impractical or disproportionate to implement, or based on a
+  misunderstanding of the implementation, explain the evidence and tradeoffs
+  instead of forcing a change.
+- When feedback is ambiguous, investigate the relevant behavior and request
+  clarification if the intended outcome still cannot be determined safely.
+- When feedback is valid, make the smallest safe change that addresses the
+  underlying issue and add or update validation where appropriate.
+
 ## Business-profile isolation
 
-- Every ledger, credential, Google Drive, backup, cache, and
-  duplicate-submission operation must remain scoped to the selected business
-  profile.
+- Every ledger, Google Drive, backup, cache, duplicate-submission, and
+  profile-specific credential operation must remain scoped to the selected
+  business profile.
 - Flag global or fallback state that could reuse one profile's spreadsheet,
-  service account, OAuth token, folder, cached data, or submission guard for
-  another profile.
-- The application password grants deployment-wide access. Do not imply that it
-  provides per-profile authorization.
+  service-account credential, refresh token, folder, cached data, or submission
+  guard for another profile.
+- The application password and shared OAuth client are intentionally
+  deployment-wide. Do not require per-profile handling for them or imply that
+  the application password provides per-profile authorization.
 
 ## Ledger writes and reliability
 
@@ -86,9 +108,11 @@ of describing the task as complete or ready for commit.
 
 ## Secrets and authorization
 
-- Credentials, refresh tokens, password material, private ledger data,
-  receipts, and backup contents must never be logged, displayed, committed, or
-  included in errors.
+- Credentials, refresh tokens, and password material must never be logged,
+  displayed, committed, or included in errors.
+- Private ledger data, receipts, and backup contents may be displayed only in
+  authorized application views; never log, commit, include them in errors, or
+  expose them elsewhere.
 - Preserve the separation between the Sheets service account and the human
   Google Drive authorization.
 - Preserve narrow OAuth scopes and the local administrator's reauthentication
