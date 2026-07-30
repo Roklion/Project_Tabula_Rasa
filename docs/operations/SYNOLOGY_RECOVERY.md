@@ -9,22 +9,26 @@ The application never mounts, authenticates to, or writes directly to the NAS.
 The per-profile Synology fields are non-secret operational records of the Cloud
 Sync task that an administrator must configure and monitor in DSM.
 
+Use [Backup and recovery](BACKUP_AND_RECOVERY.md) for archive creation,
+validation, scheduling, and blank-workbook restoration. Use
+[Google Drive OAuth and per-business access](../architecture/GOOGLE_DRIVE_OAUTH.md)
+for the Tabula Rosa Drive connection. DSM uses its own independent Google
+authorization.
+
 ## How the pieces fit together
 
-```text
-Live Google Sheets workbook
-        |
-        | Tabula Rosa creates and validates a versioned ZIP
-        v
-Business-specific Google Drive backup folder
-        |
-        | Synology Cloud Sync downloads remote changes only
-        v
-Business-specific DS220j destination folder
-        |
-        | Administrator copies a selected archive for a drill
-        v
-Safe local recovery folder -> new blank Google workbook
+```mermaid
+flowchart LR
+    Sheets["Live Google Sheets workbook"]
+    Drive["Business-specific Google Drive backup folder"]
+    NAS["Business-specific DS220j destination folder"]
+    Local["Safe local recovery folder"]
+    Recovery["New blank Google workbook"]
+
+    Sheets -->|"Create and validate versioned ZIP"| Drive
+    Drive -->|"Cloud Sync downloads remote changes only"| NAS
+    NAS -->|"Copy a selected archive for a drill"| Local
+    Local -->|"Validate and restore"| Recovery
 ```
 
 Google Drive is the primary automated backup destination. The DS220j is an
