@@ -31,7 +31,10 @@ from tabula_rasa.quickbooks_import import (
     suggested_account_classification,
     suggested_account_type,
 )
-from tabula_rasa.receipt_manifest import build_receipt_manifest
+from tabula_rasa.receipt_manifest import (
+    build_receipt_manifest,
+    ReceiptManifestError,
+)
 from tests.fakes import FakeWorkbook
 
 
@@ -1119,6 +1122,14 @@ class TestGoogleSheetsStorage:
 
         with pytest.raises(StorageValidationError, match="unsafe"):
             self.storage.validate_backup_zip(output.getvalue())
+
+    def test_manifest_rejects_a_drive_filename_that_would_be_trimmed(self) -> None:
+        receipt = drive_file_from_reference(
+            {**TEST_RECEIPT_REFERENCE, "name": " customer-receipt.pdf "}
+        )
+
+        with pytest.raises(ReceiptManifestError, match="unsafe"):
+            build_receipt_manifest("test", [], [receipt])
 
     def test_pre_manifest_v4_backup_remains_readable_as_ledger_only(self) -> None:
         backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))

@@ -54,9 +54,11 @@ def validate_receipt_filename(
     required: bool = True,
 ) -> str:
     """Return a path-safe receipt filename accepted by backup and recovery."""
+    supplied_filename = str(value or "")
     filename = _text(value, label, maximum=255, required=required)
     if filename and (
-        filename in {".", ".."}
+        filename != supplied_filename
+        or filename in {".", ".."}
         or "/" in filename
         or "\\" in filename
         or filename != filename.strip(" .")
