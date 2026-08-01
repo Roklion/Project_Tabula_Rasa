@@ -72,9 +72,10 @@ from tabula_rasa.receipt_manifest import (
     build_receipt_manifest,
     receipt_reference_from_drive_file,
 )
+from tabula_rasa.receipt_backfill import backfill_profile_receipts
 
 
-STORAGE_IMPLEMENTATION_VERSION = 8
+STORAGE_IMPLEMENTATION_VERSION = 9
 ACCOUNT_TYPES = ["Bank", "Cash", "Credit card", "Short-term debt", "Equity", "Other"]
 ACCOUNT_CLASSIFICATIONS = ["Asset", "Liability", "Equity"]
 FIXED_TYPE_CLASSIFICATIONS = {
@@ -410,6 +411,7 @@ with st.sidebar:
     if st.button("Log out", width="stretch"):
         logout()
 
+startup_receipt_backfill: Mapping[str, object] | None = None
 if page == "Business profiles":
     notice = st.session_state.pop("local_profile_admin_notice", None)
     if notice:
@@ -436,6 +438,44 @@ else:
         if selected_profile_key not in initialized_profiles:
             storage.ensure_defaults()
             initialized_profiles.add(selected_profile_key)
+
+        selected_profile_secrets = profile_by_key[selected_profile_key].secrets
+        selected_drive_settings = selected_profile_secrets.get("google_drive")
+        selected_receipt_folder = (
+            selected_drive_settings.get("receipt_folder")
+            if isinstance(selected_drive_settings, Mapping)
+            else None
+        )
+        if isinstance(selected_receipt_folder, Mapping):
+            migration_key = (
+                f"{selected_profile_key}:{STORAGE_IMPLEMENTATION_VERSION}:{revision}"
+            )
+            migration_results = st.session_state.setdefault(
+                "receipt_integrity_migration_results",
+                {},
+            )
+            if migration_key not in migration_results:
+                try:
+                    migration_drive = get_drive_client(
+                        selected_profile_key,
+                        revision,
+                    )
+                    migration_report = backfill_profile_receipts(
+                        storage,
+                        migration_drive,
+                        profile_key=selected_profile_key,
+                        folder_id=str(selected_receipt_folder["id"]),
+                    )
+                except (GoogleDriveError, LocalProfileStoreError, StorageError):
+                    migration_results[migration_key] = {"status": "error"}
+                else:
+                    migration_results[migration_key] = {
+                        "status": (
+                            "partial" if migration_report["errors"] else "complete"
+                        ),
+                        **migration_report,
+                    }
+            startup_receipt_backfill = migration_results[migration_key]
     except (LocalProfileStoreError, StorageError) as error:
         if isinstance(error, StorageError):
             report_storage_error(error)
@@ -445,6 +485,32 @@ else:
 
     with st.sidebar:
         st.caption(f"Workbook: {storage.workbook_title}")
+        if startup_receipt_backfill is not None:
+            migration_status = startup_receipt_backfill.get("status")
+            migrated_files = int(
+                startup_receipt_backfill.get("drive_backfilled", 0)
+            )
+            migrated_references = int(
+                startup_receipt_backfill.get("references_updated", 0)
+            )
+            if migration_status == "complete" and (
+                migrated_files or migrated_references
+            ):
+                st.success(
+                    "Receipt integrity migration completed: "
+                    f"{migrated_files} file(s), "
+                    f"{migrated_references} ledger reference(s)."
+                )
+            elif migration_status == "partial":
+                st.warning(
+                    "Receipt integrity migration was only partially completed. "
+                    "Restart the app to retry or run the documented backfill command."
+                )
+            elif migration_status == "error":
+                st.warning(
+                    "Receipt integrity migration could not start. Reconnect Google "
+                    "Drive, restart the app, or run the documented backfill command."
+                )
 
 
 if page == "Dashboard":
@@ -918,12 +984,7 @@ elif page == "Transactions":
                                     folder_id=str(receipt_folder["id"]),
                                 )
                                 receipt_references = [
-                                    {
-                                        "id": str(receipt["id"]),
-                                        "name": str(
-                                            receipt.get("name", "Receipt")
-                                        ),
-                                    }
+                                    receipt_reference_from_drive_file(receipt)
                                     for receipt in legacy_receipts
                                     if receipt.get("id")
                                 ]
@@ -931,7 +992,11 @@ elif page == "Transactions":
                                     edit_id,
                                     receipt_references,
                                 )
-                            except (GoogleDriveError, StorageError) as error:
+                            except (
+                                GoogleDriveError,
+                                ReceiptManifestError,
+                                StorageError,
+                            ) as error:
                                 references_ready = False
                                 st.error(
                                     "Existing receipt references could not be "

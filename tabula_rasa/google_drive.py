@@ -969,10 +969,16 @@ class GoogleDriveClient:
         existing_receipt_id = _clean_text(
             existing_properties.get("tabulaRasaReceiptId"), maximum=32
         )
+        deterministic_legacy_id = hashlib.sha256(
+            (
+                "tabula-rasa-legacy-receipt:"
+                f"{profile_key}:{file_id}"
+            ).encode("utf-8")
+        ).hexdigest()[:32]
         receipt_id = (
             existing_receipt_id
             if RECEIPT_ID_PATTERN.fullmatch(existing_receipt_id)
-            else secrets.token_hex(16)
+            else deterministic_legacy_id
         )
         patch_properties = {
             **existing_properties,

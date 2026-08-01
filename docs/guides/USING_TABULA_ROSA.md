@@ -76,9 +76,13 @@ An unlinked Drive file remains in the receipt folder and becomes available in
 the transaction editor's **Unreferenced receipt** list.
 
 Linking an unreferenced receipt copies its existing integrity metadata without
-renaming or rewriting the Drive file. Legacy files without integrity metadata
-must be backfilled before they can be linked through the picker or included in
-a fully verified backup.
+renaming or rewriting the Drive file. Every app-managed receipt uploaded before
+integrity metadata was introduced is considered legacy when that metadata is
+missing. On the first authenticated use of each selected business profile in
+an app session, Tabula Rosa scans that profile's configured receipt folder and
+backfills those files. The migration is resumable and does not download files
+that already have valid metadata. A warning provides the manual recovery path
+if any file cannot be migrated.
 
 Receipt file contents are not embedded in each ledger backup ZIP. Version-5
 backups contain a checksummed `receipts.json` metadata inventory, including

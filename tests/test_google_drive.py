@@ -552,9 +552,15 @@ class TestGoogleDriveFiles:
         ]
         patch_body = session.requests[-1][2]["data"]
         expected_hash = hashlib.sha256(b"receipt").hexdigest()
+        expected_receipt_id = hashlib.sha256(
+            b"tabula-rasa-legacy-receipt:north:receipt123456"
+        ).hexdigest()[:32]
         assert expected_hash in patch_body
         assert updated["appProperties"]["tabulaRasaSha256"] == expected_hash
-        assert len(updated["appProperties"]["tabulaRasaReceiptId"]) == 32
+        assert (
+            updated["appProperties"]["tabulaRasaReceiptId"]
+            == expected_receipt_id
+        )
 
     def test_receipt_recovery_preserves_name_and_integrity_metadata(self) -> None:
         session = DriveSession(

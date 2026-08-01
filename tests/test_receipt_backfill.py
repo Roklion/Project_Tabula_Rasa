@@ -3,8 +3,12 @@ from __future__ import annotations
 import hashlib
 from unittest.mock import Mock
 
-from scripts.backfill_receipt_checksums import backfill_profile_receipts
-from tabula_rasa.storage import GoogleSheetsStorage, decode_receipt_references
+from tabula_rasa.receipt_backfill import backfill_profile_receipts
+from tabula_rasa.storage import (
+    decode_receipt_references,
+    GoogleSheetsStorage,
+    StorageUnavailableError,
+)
 from tests.fakes import FakeWorkbook
 
 
@@ -109,3 +113,54 @@ def test_backfill_does_not_touch_another_profile_storage() -> None:
         ]
     )[0]
     assert south_reference == {"id": "receipt123456", "name": "south.pdf"}
+
+
+def test_backfill_does_not_download_receipts_with_valid_integrity_metadata() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
+    drive = Mock()
+    drive.list_profile_receipts.return_value = [_backfilled_drive_receipt("north")]
+
+    report = backfill_profile_receipts(
+        storage,
+        drive,
+        profile_key="north",
+        folder_id="northfolder123",
+    )
+
+    assert report == {
+        "examined": 1,
+        "drive_backfilled": 0,
+        "references_updated": 0,
+        "errors": [],
+    }
+    drive.backfill_receipt_checksum.assert_not_called()
+
+
+def test_backfill_reports_reference_failure_and_remains_resumable() -> None:
+    reference = _backfilled_drive_receipt("north")
+    storage = Mock()
+    storage.list_transactions.return_value = [
+        {
+            "id": "transaction-1",
+            "receipt_references": (
+                '[{"id":"receipt123456","name":"statement.pdf"}]'
+            ),
+        }
+    ]
+    storage.link_transaction_receipt.side_effect = StorageUnavailableError(
+        "temporary Sheets failure"
+    )
+    drive = Mock()
+    drive.list_profile_receipts.return_value = [reference]
+
+    report = backfill_profile_receipts(
+        storage,
+        drive,
+        profile_key="north",
+        folder_id="northfolder123",
+    )
+
+    assert report["drive_backfilled"] == 0
+    assert report["references_updated"] == 0
+    assert len(report["errors"]) == 1
+    storage.link_transaction_receipt.assert_called_once()
