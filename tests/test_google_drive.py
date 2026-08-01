@@ -738,13 +738,15 @@ class TestGoogleDriveFiles:
         assert reused is True
         assert [request[0] for request in session.requests] == ["GET", "GET"]
 
-    def test_receipt_recovery_refuses_a_conflicting_filename(self) -> None:
+    def test_receipt_recovery_refuses_a_case_only_filename_collision(
+        self,
+    ) -> None:
         session = DriveSession(
             [
                 FakeResponse(200, {"files": []}),
                 FakeResponse(
                     200,
-                    {"files": [{"id": "different123456", "name": "statement.pdf"}]},
+                    {"files": [{"id": "different123456", "name": "Statement.pdf"}]},
                 ),
             ]
         )
@@ -769,6 +771,8 @@ class TestGoogleDriveFiles:
             )
 
         assert [request[0] for request in session.requests] == ["GET", "GET"]
+        assert "name =" not in session.requests[-1][2]["params"]["q"]
+        assert session.requests[-1][2]["params"]["pageSize"] == 1000
 
     def test_receipt_recovery_refuses_corrupt_existing_identity(self) -> None:
         checksum = hashlib.sha256(b"receipt").hexdigest()

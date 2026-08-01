@@ -1149,14 +1149,22 @@ class GoogleDriveClient:
                 )
             return existing, True
 
-        filename_query = " and ".join(
+        filename_inventory_query = " and ".join(
             [
                 f"'{_escape_query_value(folder_id)}' in parents",
                 "trashed = false",
-                f"name = '{_escape_query_value(stored_filename)}'",
             ]
         )
-        if self._list(filename_query, page_size=1):
+        existing_names = {
+            str(item.get("name", "")).casefold()
+            for item in self._list(
+                filename_inventory_query,
+                page_size=1000,
+                fetch_all=True,
+            )
+            if item.get("name")
+        }
+        if stored_filename.casefold() in existing_names:
             raise GoogleDriveConflictError(
                 "A different Google Drive file already uses the recovery filename."
             )
