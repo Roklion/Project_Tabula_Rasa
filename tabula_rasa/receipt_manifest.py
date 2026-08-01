@@ -10,6 +10,7 @@ from typing import Any
 
 
 RECEIPT_MANIFEST_SCHEMA_VERSION = 1
+MAX_RECEIPT_MANIFEST_BYTES = 20 * 1024 * 1024
 PROFILE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,47}$")
 DRIVE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{10,}$")
 RECEIPT_ID_PATTERN = re.compile(r"^[a-f0-9]{32}$")
@@ -65,7 +66,11 @@ def _byte_size(value: object) -> int:
         size = int(value)
     except (TypeError, ValueError) as exc:
         raise ReceiptManifestError("Receipt byte size is invalid") from exc
-    if size <= 0 or str(value).strip() != str(size):
+    if (
+        size <= 0
+        or size > MAX_RECEIPT_MANIFEST_BYTES
+        or str(value).strip() != str(size)
+    ):
         raise ReceiptManifestError("Receipt byte size is invalid")
     return size
 
@@ -165,7 +170,8 @@ def receipt_reference_from_drive_file(file: Mapping[str, Any]) -> dict[str, Any]
             "id": file.get("id"),
             "name": file.get("name"),
             "receipt_id": properties.get("tabulaRasaReceiptId"),
-            "original_filename": properties.get("tabulaRasaOriginalName")
+            "original_filename": file.get("description")
+            or properties.get("tabulaRasaOriginalName")
             or file.get("name"),
             "mime_type": file.get("mimeType") or "application/octet-stream",
             "byte_size": file.get("size"),

@@ -13,6 +13,7 @@ from tabula_rasa.google_drive import (
     GoogleDriveAccessError,
     GoogleDriveAuthorizationError,
     GoogleDriveClient,
+    GoogleDriveConflictError,
     GoogleDriveOAuthConfig,
     authorization_url,
     backup_is_in_local_week,
@@ -554,6 +555,220 @@ class TestGoogleDriveFiles:
         assert expected_hash in patch_body
         assert updated["appProperties"]["tabulaRasaSha256"] == expected_hash
         assert len(updated["appProperties"]["tabulaRasaReceiptId"]) == 32
+
+    def test_receipt_recovery_preserves_name_and_integrity_metadata(self) -> None:
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, {"files": []}),
+                FakeResponse(
+                    200,
+                    {"id": "restored123456", "name": "statement (2).pdf"},
+                ),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+        checksum = hashlib.sha256(b"receipt").hexdigest()
+
+        restored, reused = client.restore_receipt(
+            profile_key="north",
+            folder_id="folder123456",
+            stored_filename="statement (2).pdf",
+            original_filename="statement.pdf",
+            content=b"receipt",
+            mime_type="application/pdf",
+            receipt_id="a" * 32,
+            sha256=checksum,
+            old_file_id="receipt123456",
+        )
+
+        assert reused is False
+        assert restored["name"] == "statement (2).pdf"
+        assert restored["appProperties"] == {
+            "tabulaRasaKind": "receipt",
+            "tabulaRasaProfile": "north",
+            "tabulaRasaReceiptId": "a" * 32,
+            "tabulaRasaSha256": checksum,
+            "tabulaRasaOriginalFileId": "receipt123456",
+        }
+        assert restored["description"] == "statement.pdf"
+        assert [request[0] for request in session.requests] == ["GET", "GET", "POST"]
+        upload_body = session.requests[-1][2]["data"]
+        assert b'"name":"statement (2).pdf"' in upload_body
+
+    def test_receipt_recovery_reuses_stable_identity_and_checksum(self) -> None:
+        checksum = hashlib.sha256(b"receipt").hexdigest()
+        existing = {
+            "id": "restored123456",
+            "name": "statement.pdf",
+            "mimeType": "application/pdf",
+            "size": "7",
+            "appProperties": {
+                "tabulaRasaKind": "receipt",
+                "tabulaRasaProfile": "north",
+                "tabulaRasaReceiptId": "a" * 32,
+                "tabulaRasaSha256": checksum,
+                "tabulaRasaOriginalName": "statement.pdf",
+                "tabulaRasaOriginalFileId": "receipt123456",
+            },
+        }
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": [existing]}),
+                FakeResponse(200, content=b"receipt"),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        restored, reused = client.restore_receipt(
+            profile_key="north",
+            folder_id="folder123456",
+            stored_filename="statement.pdf",
+            original_filename="statement.pdf",
+            content=b"receipt",
+            mime_type="application/pdf",
+            receipt_id="a" * 32,
+            sha256=checksum,
+            old_file_id="receipt123456",
+        )
+
+        assert restored == existing
+        assert reused is True
+        assert [request[0] for request in session.requests] == ["GET", "GET"]
+
+    def test_receipt_recovery_refuses_a_conflicting_filename(self) -> None:
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": []}),
+                FakeResponse(
+                    200,
+                    {"files": [{"id": "different123456", "name": "statement.pdf"}]},
+                ),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        with pytest.raises(GoogleDriveConflictError, match="recovery filename"):
+            client.restore_receipt(
+                profile_key="north",
+                folder_id="folder123456",
+                stored_filename="statement.pdf",
+                original_filename="statement.pdf",
+                content=b"receipt",
+                mime_type="application/pdf",
+                receipt_id="a" * 32,
+                sha256=hashlib.sha256(b"receipt").hexdigest(),
+                old_file_id="receipt123456",
+            )
+
+        assert [request[0] for request in session.requests] == ["GET", "GET"]
+
+    def test_receipt_recovery_refuses_corrupt_existing_identity(self) -> None:
+        checksum = hashlib.sha256(b"receipt").hexdigest()
+        existing = {
+            "id": "restored123456",
+            "name": "statement.pdf",
+            "mimeType": "application/pdf",
+            "size": "7",
+            "description": "statement.pdf",
+            "appProperties": {
+                "tabulaRasaKind": "receipt",
+                "tabulaRasaProfile": "north",
+                "tabulaRasaReceiptId": "a" * 32,
+                "tabulaRasaSha256": checksum,
+            },
+        }
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": [existing]}),
+                FakeResponse(200, content=b"corrupt"),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        with pytest.raises(GoogleDriveConflictError, match="checksum"):
+            client.restore_receipt(
+                profile_key="north",
+                folder_id="folder123456",
+                stored_filename="statement.pdf",
+                original_filename="statement.pdf",
+                content=b"receipt",
+                mime_type="application/pdf",
+                receipt_id="a" * 32,
+                sha256=checksum,
+                old_file_id="receipt123456",
+            )
+
+        assert [request[0] for request in session.requests] == ["GET", "GET"]
+
+    def test_receipt_recovery_recovers_an_uncertain_create_without_duplication(
+        self,
+    ) -> None:
+        checksum = hashlib.sha256(b"receipt").hexdigest()
+        committed = {
+            "id": "restored123456",
+            "name": "statement.pdf",
+            "mimeType": "application/pdf",
+            "size": "7",
+            "appProperties": {
+                "tabulaRasaKind": "receipt",
+                "tabulaRasaProfile": "north",
+                "tabulaRasaReceiptId": "a" * 32,
+                "tabulaRasaSha256": checksum,
+                "tabulaRasaOriginalName": "statement.pdf",
+            },
+        }
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, {"files": []}),
+                requests.ConnectionError("response lost"),
+                FakeResponse(200, {"files": [committed]}),
+                FakeResponse(200, content=b"receipt"),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        restored, reused = client.restore_receipt(
+            profile_key="north",
+            folder_id="folder123456",
+            stored_filename="statement.pdf",
+            original_filename="statement.pdf",
+            content=b"receipt",
+            mime_type="application/pdf",
+            receipt_id="a" * 32,
+            sha256=checksum,
+            old_file_id="receipt123456",
+        )
+
+        assert restored["id"] == "restored123456"
+        assert reused is False
+        assert [request[0] for request in session.requests].count("POST") == 1
 
     def test_backup_retry_reuses_existing_file_and_applies_retention(self) -> None:
         existing = {
