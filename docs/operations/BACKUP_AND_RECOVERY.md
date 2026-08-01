@@ -150,8 +150,10 @@ Google Drive Desktop does not need to be installed or running for this mode.
 
 The provided Windows task registers Monday, Tuesday, and Wednesday at 10:00 PM
 as retry opportunities for one weekly backup. `--once-per-week` verifies an
-existing archive before accessing Google Sheets, so a successful Monday run
-causes Tuesday and Wednesday to exit without creating duplicates.
+existing current-format archive with its version-5 receipt inventory before
+accessing Google Sheets, so a successful Monday run causes Tuesday and
+Wednesday to exit without creating duplicates. A valid older ledger-only
+archive does not suppress creation of the current recovery format.
 
 ### Cloud-native scheduled backup
 
@@ -391,7 +393,8 @@ folder.
 ### The command says a weekly backup already exists
 
 That is expected with `--once-per-week`. The command found and validated a
-canonical backup in the current local ISO week.
+canonical current-format backup, including its receipt inventory, in the
+current local ISO week.
 
 ### A cloud backup cannot refresh authorization
 

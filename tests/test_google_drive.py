@@ -623,6 +623,17 @@ class TestGoogleDriveFiles:
                     200,
                     {"id": "restored123456", "name": "statement (2).pdf"},
                 ),
+                FakeResponse(
+                    200,
+                    {
+                        "files": [
+                            {
+                                "id": "restored123456",
+                                "name": "statement (2).pdf",
+                            }
+                        ]
+                    },
+                ),
             ]
         )
         client = GoogleDriveClient(
@@ -655,8 +666,17 @@ class TestGoogleDriveFiles:
             "tabulaRasaOriginalFileId": "receipt123456",
         }
         assert restored["description"] == "statement.pdf"
-        assert [request[0] for request in session.requests] == ["GET", "GET", "POST"]
-        upload_body = session.requests[-1][2]["data"]
+        assert [request[0] for request in session.requests] == [
+            "GET",
+            "GET",
+            "POST",
+            "GET",
+        ]
+        upload_body = next(
+            request[2]["data"]
+            for request in session.requests
+            if request[0] == "POST"
+        )
         assert b'"name":"statement (2).pdf"' in upload_body
 
     def test_receipt_recovery_preserves_manifest_safe_unicode_names(self) -> None:
@@ -665,6 +685,10 @@ class TestGoogleDriveFiles:
                 FakeResponse(200, {"files": []}),
                 FakeResponse(200, {"files": []}),
                 FakeResponse(200, {"id": "restored123456", "name": "résumé.pdf"}),
+                FakeResponse(
+                    200,
+                    {"files": [{"id": "restored123456", "name": "résumé.pdf"}]},
+                ),
             ]
         )
         client = GoogleDriveClient(
@@ -690,7 +714,11 @@ class TestGoogleDriveFiles:
         assert reused is False
         assert restored["name"] == "résumé.pdf"
         assert restored["description"] == "résumé original.pdf"
-        upload_body = session.requests[-1][2]["data"]
+        upload_body = next(
+            request[2]["data"]
+            for request in session.requests
+            if request[0] == "POST"
+        )
         assert json.dumps("résumé.pdf").encode() in upload_body
 
     def test_receipt_recovery_reuses_stable_identity_and_checksum(self) -> None:
@@ -865,6 +893,72 @@ class TestGoogleDriveFiles:
         assert restored["id"] == "restored123456"
         assert reused is False
         assert [request[0] for request in session.requests].count("POST") == 1
+
+    def test_receipt_recovery_discards_its_concurrent_later_create(
+        self,
+    ) -> None:
+        checksum = hashlib.sha256(b"receipt").hexdigest()
+        properties = {
+            "tabulaRasaKind": "receipt",
+            "tabulaRasaProfile": "north",
+            "tabulaRasaReceiptId": "a" * 32,
+            "tabulaRasaSha256": checksum,
+            "tabulaRasaOriginalFileId": "receipt123456",
+        }
+        canonical = {
+            "id": "restored123456",
+            "name": "statement.pdf",
+            "mimeType": "application/pdf",
+            "size": "7",
+            "createdTime": "2026-08-01T12:00:00Z",
+            "description": "statement.pdf",
+            "appProperties": properties,
+        }
+        later = {
+            **canonical,
+            "id": "restored234567",
+            "createdTime": "2026-08-01T12:00:01Z",
+        }
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, later),
+                FakeResponse(200, {"files": [later, canonical]}),
+                FakeResponse(200, content=b"receipt"),
+                FakeResponse(204),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        restored, reused = client.restore_receipt(
+            profile_key="north",
+            folder_id="folder123456",
+            stored_filename="statement.pdf",
+            original_filename="statement.pdf",
+            content=b"receipt",
+            mime_type="application/pdf",
+            receipt_id="a" * 32,
+            sha256=checksum,
+            old_file_id="receipt123456",
+        )
+
+        assert restored["id"] == canonical["id"]
+        assert reused is False
+        assert [request[0] for request in session.requests] == [
+            "GET",
+            "GET",
+            "POST",
+            "GET",
+            "GET",
+            "DELETE",
+        ]
+        assert session.requests[5][1].endswith("/files/restored234567")
 
     def test_backup_retry_reuses_existing_file_and_applies_retention(self) -> None:
         existing = {

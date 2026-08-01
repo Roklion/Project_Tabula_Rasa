@@ -1182,13 +1182,27 @@ class GoogleDriveClient:
             "appProperties": properties,
         }
         recovered_after_uncertain_response = False
+        created_file_id = ""
+        redundant_created_file_id = ""
         try:
             uploaded = self._multipart_create(metadata, content, mime_type)
+            created_file_id = str(uploaded.get("id", ""))
         except GoogleDriveAccessError:
-            committed = self._list(identity_query, page_size=2)
-            if len(committed) != 1:
-                raise
-            uploaded = committed[0]
+            recovered_after_uncertain_response = True
+        committed = self._list(identity_query, page_size=1000)
+        if not committed:
+            raise GoogleDriveAccessError(
+                "Google Drive did not confirm the recovered receipt upload."
+            )
+        uploaded = min(
+            committed,
+            key=lambda item: (
+                str(item.get("createdTime", "")),
+                str(item.get("id", "")),
+            ),
+        )
+        if created_file_id and str(uploaded.get("id", "")) != created_file_id:
+            redundant_created_file_id = created_file_id
             recovered_after_uncertain_response = True
         uploaded.setdefault("name", stored_filename)
         uploaded.setdefault("mimeType", mime_type)
@@ -1203,11 +1217,20 @@ class GoogleDriveClient:
             ),
         }
         try:
-            receipt_reference_from_drive_file(uploaded)
+            reference = receipt_reference_from_drive_file(uploaded)
         except ReceiptManifestError as exc:
             raise GoogleDriveAccessError(
                 "Google Drive did not confirm the recovered receipt metadata."
             ) from exc
+        if (
+            reference["name"] != stored_filename
+            or reference["original_filename"] != original_filename
+            or reference["mime_type"] != mime_type
+            or reference["byte_size"] != len(content)
+        ):
+            raise GoogleDriveConflictError(
+                "A concurrent recovered receipt conflicts with the manifest."
+            )
         if recovered_after_uncertain_response:
             committed_content = self.download_file(str(uploaded["id"]))
             if (
@@ -1217,6 +1240,12 @@ class GoogleDriveClient:
                 raise GoogleDriveConflictError(
                     "The recovered Google Drive upload failed checksum verification."
                 )
+        if redundant_created_file_id:
+            # A concurrent recovery created the same stable identity first.
+            # Only discard this invocation's later file after the canonical
+            # object is fully validated, so callers converge without orphaning
+            # a reference returned by another recovery command.
+            self.delete_file(redundant_created_file_id)
         return uploaded, False
 
     def upload_backup(

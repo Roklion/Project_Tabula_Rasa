@@ -83,8 +83,9 @@ def backfill_profile_receipts(
         if current_reference == reference:
             continue
         try:
-            storage.link_transaction_receipt(
+            storage.remap_transaction_receipt(
                 transaction_id,
+                old_file_id=file_id,
                 reference=reference,
             )
         except StorageError as error:

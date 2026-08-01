@@ -136,6 +136,46 @@ def test_backfill_does_not_download_receipts_with_valid_integrity_metadata() -> 
     drive.backfill_receipt_checksum.assert_not_called()
 
 
+def test_backfill_does_not_restore_a_concurrently_unlinked_reference() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
+    account = storage.create_account("Checking", "Bank")
+    transaction = storage.create_transaction(
+        txn_date="2026-07-31",
+        kind="Income",
+        amount=10,
+        account_id=account["id"],
+        category_id=storage.create_category("Sales", "Income")["id"],
+    )
+    storage.link_transaction_receipt(
+        transaction["id"],
+        file_id="receipt123456",
+        name="statement.pdf",
+    )
+    drive = Mock()
+    drive.list_profile_receipts.return_value = [_legacy_drive_receipt("north")]
+
+    def unlink_before_backfill(**_scope: str) -> dict[str, object]:
+        storage.unlink_transaction_receipt(
+            transaction["id"],
+            file_id="receipt123456",
+        )
+        return _backfilled_drive_receipt("north")
+
+    drive.backfill_receipt_checksum.side_effect = unlink_before_backfill
+
+    report = backfill_profile_receipts(
+        storage,
+        drive,
+        profile_key="north",
+        folder_id="northfolder123",
+    )
+
+    current = storage.list_transactions(_force_refresh=True)[0]
+    assert decode_receipt_references(current["receipt_references"]) == []
+    assert report["references_updated"] == 0
+    assert len(report["errors"]) == 1
+
+
 def test_backfill_reports_reference_failure_and_remains_resumable() -> None:
     reference = _backfilled_drive_receipt("north")
     storage = Mock()
@@ -147,7 +187,7 @@ def test_backfill_reports_reference_failure_and_remains_resumable() -> None:
             ),
         }
     ]
-    storage.link_transaction_receipt.side_effect = StorageUnavailableError(
+    storage.remap_transaction_receipt.side_effect = StorageUnavailableError(
         "temporary Sheets failure"
     )
     drive = Mock()
@@ -163,4 +203,8 @@ def test_backfill_reports_reference_failure_and_remains_resumable() -> None:
     assert report["drive_backfilled"] == 0
     assert report["references_updated"] == 0
     assert len(report["errors"]) == 1
-    storage.link_transaction_receipt.assert_called_once()
+    storage.remap_transaction_receipt.assert_called_once()
+    call = storage.remap_transaction_receipt.call_args
+    assert call.args == ("transaction-1",)
+    assert call.kwargs["old_file_id"] == "receipt123456"
+    assert call.kwargs["reference"]["receipt_id"] == "a" * 32

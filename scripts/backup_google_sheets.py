@@ -25,6 +25,7 @@ from tabula_rasa.google_drive import (
 from tabula_rasa.local_profile_store import load_business_profile_document
 from tabula_rasa.receipt_manifest import build_receipt_manifest
 from tabula_rasa.storage import GoogleSheetsStorage
+from tabula_rasa.storage.google_sheets import BACKUP_FORMAT_VERSION
 
 
 BACKUP_NAME = re.compile(r"^tabula-rosa-backup-\d{8}T\d{6}Z\.zip$")
@@ -53,10 +54,11 @@ def verified_backup_for_week(
         if backup_local_date.isocalendar()[:2] != requested_week:
             continue
         try:
-            GoogleSheetsStorage.validate_backup_zip(path.read_bytes())
+            manifest = GoogleSheetsStorage.validate_backup_zip(path.read_bytes())
         except (OSError, RuntimeError):
             continue
-        return path
+        if manifest.get("format_version") == BACKUP_FORMAT_VERSION:
+            return path
     return None
 
 
@@ -178,8 +180,10 @@ def verified_drive_backup_for_week(
     all_secrets: Mapping[str, Any],
     profile_key: str,
     profile_secrets: Mapping[str, Any],
+    *,
+    local_date: datetime | None = None,
 ) -> dict[str, Any] | None:
-    """Return the newest app-managed Drive backup in the current local week."""
+    """Return the newest verified current-format backup in the local week."""
     drive_settings = profile_secrets.get("google_drive")
     if not isinstance(drive_settings, Mapping):
         return None
@@ -192,7 +196,17 @@ def verified_drive_backup_for_week(
         folder_id=str(backup_folder["id"]),
         limit=30,
     ):
-        if backup_is_in_local_week(str(item.get("name", ""))):
+        if not backup_is_in_local_week(
+            str(item.get("name", "")),
+            local_date=local_date,
+        ):
+            continue
+        try:
+            backup = client.download_file(str(item.get("id", "")))
+            manifest = GoogleSheetsStorage.validate_backup_zip(backup)
+        except RuntimeError:
+            continue
+        if manifest.get("format_version") == BACKUP_FORMAT_VERSION:
             return item
     return None
 

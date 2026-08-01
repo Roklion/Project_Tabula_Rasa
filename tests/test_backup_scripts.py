@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import io
+import json
 import tempfile
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -10,6 +14,7 @@ from scripts.backup_google_sheets import (
     PROJECT_ROOT,
     resolve_backup_output_dir,
     verified_backup_for_week,
+    verified_drive_backup_for_week,
     write_versioned_backup,
 )
 from scripts.restore_google_sheets_backup import (
@@ -25,6 +30,28 @@ from tabula_rasa.storage import GoogleSheetsStorage
 from tabula_rasa.storage.google_sheets import BACKUP_FORMAT_VERSION
 from tabula_rasa.receipt_manifest import build_receipt_manifest
 from tests.fakes import FakeWorkbook
+
+
+def _ledger_only_backup(storage: GoogleSheetsStorage) -> bytes:
+    current = storage.export_backup_zip(
+        build_receipt_manifest("test", [], [])
+    )
+    output = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(current)) as source, zipfile.ZipFile(
+        output,
+        "w",
+    ) as destination:
+        manifest = json.loads(source.read("manifest.json"))
+        manifest["format_version"] = 4
+        manifest["sha256"].pop("receipts.json")
+        for name in source.namelist():
+            if name == "receipts.json":
+                continue
+            content = source.read(name)
+            if name == "manifest.json":
+                content = json.dumps(manifest).encode("utf-8")
+            destination.writestr(name, content)
+    return output.getvalue()
 
 
 class TestBackupScripts:
@@ -133,6 +160,76 @@ class TestBackupScripts:
                     build_receipt_manifest("test", [], []),
                     keep=1,
                 )
+
+    def test_weekly_local_backup_requires_current_receipt_format(self) -> None:
+        storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+        current = storage.export_backup_zip(
+            build_receipt_manifest("test", [], [])
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output_dir = Path(temporary_directory)
+            legacy = output_dir / "tabula-rosa-backup-20260728T120000Z.zip"
+            legacy.write_bytes(_ledger_only_backup(storage))
+
+            assert (
+                verified_backup_for_week(
+                    output_dir,
+                    local_date=datetime(2026, 7, 29).date(),
+                )
+                is None
+            )
+
+            current_path = (
+                output_dir / "tabula-rosa-backup-20260729T120000Z.zip"
+            )
+            current_path.write_bytes(current)
+            assert (
+                verified_backup_for_week(
+                    output_dir,
+                    local_date=datetime(2026, 7, 29).date(),
+                )
+                == current_path
+            )
+
+    def test_weekly_drive_backup_downloads_and_requires_current_format(
+        self,
+    ) -> None:
+        storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+        legacy_backup = _ledger_only_backup(storage)
+        current_backup = storage.export_backup_zip(
+            build_receipt_manifest("test", [], [])
+        )
+        legacy = {
+            "id": "backup123456",
+            "name": "tabula-rosa-backup-20260728T120000Z.zip",
+        }
+        current = {
+            "id": "backup234567",
+            "name": "tabula-rosa-backup-20260729T120000Z.zip",
+        }
+        client = Mock()
+        client.list_backups.return_value = [legacy, current]
+        client.download_file.side_effect = [legacy_backup, current_backup]
+
+        with (
+            patch(
+                "scripts.backup_google_sheets.GoogleDriveClient",
+                return_value=client,
+            ),
+            patch("scripts.backup_google_sheets.load_oauth_config"),
+        ):
+            verified = verified_drive_backup_for_week(
+                {},
+                "test",
+                {"google_drive": {"backup_folder": {"id": "folder123456"}}},
+                local_date=datetime(2026, 7, 29, tzinfo=timezone.utc),
+            )
+
+        assert verified == current
+        assert client.download_file.call_args_list == [
+            (("backup123456",),),
+            (("backup234567",),),
+        ]
 
     def test_standalone_validator_reports_manifest_and_rows(self) -> None:
         storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
