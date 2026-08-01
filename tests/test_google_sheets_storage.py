@@ -31,7 +31,52 @@ from tabula_rasa.quickbooks_import import (
     suggested_account_classification,
     suggested_account_type,
 )
+from tabula_rasa.receipt_manifest import build_receipt_manifest
 from tests.fakes import FakeWorkbook
+
+
+TEST_RECEIPT_REFERENCE = {
+    "id": "receipt123456",
+    "name": "customer-receipt.pdf",
+    "receipt_id": "a" * 32,
+    "original_filename": "customer-receipt.pdf",
+    "mime_type": "application/pdf",
+    "byte_size": 7,
+    "sha256": "b" * 64,
+}
+
+
+def drive_file_from_reference(
+    reference: dict[str, object],
+    *,
+    profile_key: str = "test",
+) -> dict[str, object]:
+    return {
+        "id": reference["id"],
+        "name": reference["name"],
+        "mimeType": reference["mime_type"],
+        "size": str(reference["byte_size"]),
+        "appProperties": {
+            "tabulaRasaKind": "receipt",
+            "tabulaRasaProfile": profile_key,
+            "tabulaRasaReceiptId": reference["receipt_id"],
+            "tabulaRasaSha256": reference["sha256"],
+            "tabulaRasaOriginalName": reference["original_filename"],
+        },
+    }
+
+
+def backup_receipt_manifest(storage: GoogleSheetsStorage) -> dict[str, object]:
+    transactions = storage.list_transactions(_force_refresh=True)
+    files = []
+    for transaction in transactions:
+        for reference in decode_receipt_references(
+            transaction.get("receipt_references", "")
+        ):
+            if "receipt_id" not in reference:
+                continue
+            files.append(drive_file_from_reference(reference))
+    return build_receipt_manifest("test", transactions, files)
 
 
 class TestGoogleSheetsStorage:
@@ -969,7 +1014,7 @@ class TestGoogleSheetsStorage:
             destination="Bank",
             business_purpose="Deposit",
         )
-        backup = self.storage.export_backup_zip()
+        backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
         with zipfile.ZipFile(io.BytesIO(backup)) as archive:
             assert set(archive.namelist()) == {
                 "Accounts.csv",
@@ -977,6 +1022,7 @@ class TestGoogleSheetsStorage:
                 "Transactions.csv",
                 "Mileage.csv",
                 "manifest.json",
+                "receipts.json",
             }
             manifest = json.loads(archive.read("manifest.json"))
             assert manifest["row_counts"]["Accounts"] == 1
@@ -984,6 +1030,13 @@ class TestGoogleSheetsStorage:
             assert "backup_time" in manifest
             assert manifest["format_version"] == BACKUP_FORMAT_VERSION
             assert "Accounts.csv" in manifest["sha256"]
+            assert "receipts.json" in manifest["sha256"]
+            receipts = json.loads(archive.read("receipts.json"))
+            assert receipts == {
+                "business_profile_key": "test",
+                "receipts": [],
+                "schema_version": 1,
+            }
         validated = self.storage.validate_backup_zip(backup)
         assert validated["workbook_title"] == "Test Ledger"
 
@@ -993,11 +1046,104 @@ class TestGoogleSheetsStorage:
         headers = self.workbook.sheets["Accounts"].rows[0]
         self.workbook.sheets["Accounts"].rows[1][headers.index("name")] = "External"
 
-        backup = self.storage.export_backup_zip()
+        backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
 
         with zipfile.ZipFile(io.BytesIO(backup)) as archive:
             assert account["id"] in archive.read("Accounts.csv").decode("utf-8")
             assert "External" in archive.read("Accounts.csv").decode("utf-8")
+
+    def test_backup_inventories_referenced_and_unreferenced_receipts(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Sales", "Income")
+        transaction = self.storage.create_transaction(
+            txn_date="2026-07-31",
+            kind="Income",
+            amount=10,
+            account_id=account["id"],
+            category_id=category["id"],
+        )
+        self.storage.link_transaction_receipt(
+            transaction["id"],
+            reference=TEST_RECEIPT_REFERENCE,
+        )
+        unreferenced = {
+            **TEST_RECEIPT_REFERENCE,
+            "id": "receipt234567",
+            "name": "customer-receipt (2).pdf",
+            "receipt_id": "c" * 32,
+            "sha256": "d" * 64,
+        }
+        manifest = build_receipt_manifest(
+            "test",
+            self.storage.list_transactions(_force_refresh=True),
+            [
+                drive_file_from_reference(TEST_RECEIPT_REFERENCE),
+                drive_file_from_reference(unreferenced),
+            ],
+        )
+
+        backup = self.storage.export_backup_zip(manifest)
+
+        with zipfile.ZipFile(io.BytesIO(backup)) as archive:
+            receipts = json.loads(archive.read("receipts.json"))["receipts"]
+        by_id = {entry["receipt_id"]: entry for entry in receipts}
+        assert by_id["a" * 32]["transaction_id"] == transaction["id"]
+        assert by_id["a" * 32]["reference_state"] == "referenced"
+        assert by_id["c" * 32]["transaction_id"] is None
+        assert by_id["c" * 32]["reference_state"] == "unreferenced"
+        assert by_id["c" * 32]["stored_filename"] == "customer-receipt (2).pdf"
+
+    def test_backup_validation_rejects_unsafe_receipt_manifest_entry(self) -> None:
+        receipt = drive_file_from_reference(TEST_RECEIPT_REFERENCE)
+        manifest = build_receipt_manifest("test", [], [receipt])
+        backup = self.storage.export_backup_zip(manifest)
+        output = io.BytesIO()
+        with zipfile.ZipFile(io.BytesIO(backup)) as source, zipfile.ZipFile(
+            output, "w"
+        ) as destination:
+            receipts = json.loads(source.read("receipts.json"))
+            receipts["receipts"][0]["stored_filename"] = "../statement.pdf"
+            receipts_bytes = json.dumps(receipts).encode("utf-8")
+            ledger_manifest = json.loads(source.read("manifest.json"))
+            ledger_manifest["sha256"]["receipts.json"] = hashlib.sha256(
+                receipts_bytes
+            ).hexdigest()
+            for name in source.namelist():
+                if name == "receipts.json":
+                    content = receipts_bytes
+                elif name == "manifest.json":
+                    content = json.dumps(ledger_manifest).encode("utf-8")
+                else:
+                    content = source.read(name)
+                destination.writestr(name, content)
+
+        with pytest.raises(StorageValidationError, match="unsafe"):
+            self.storage.validate_backup_zip(output.getvalue())
+
+    def test_pre_manifest_v4_backup_remains_readable_as_ledger_only(self) -> None:
+        backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
+        output = io.BytesIO()
+        with zipfile.ZipFile(io.BytesIO(backup)) as source, zipfile.ZipFile(
+            output, "w"
+        ) as destination:
+            ledger_manifest = json.loads(source.read("manifest.json"))
+            ledger_manifest["format_version"] = 4
+            ledger_manifest["sha256"].pop("receipts.json")
+            for name in source.namelist():
+                if name == "receipts.json":
+                    continue
+                content = (
+                    json.dumps(ledger_manifest).encode("utf-8")
+                    if name == "manifest.json"
+                    else source.read(name)
+                )
+                destination.writestr(name, content)
+
+        validated = self.storage.validate_backup_zip(output.getvalue())
+
+        assert validated["format_version"] == 4
+        assert validated["receipt_inventory"] is False
+        assert self.storage.receipt_manifest_from_backup(output.getvalue()) is None
 
     def test_backup_uses_one_multi_range_values_request(self) -> None:
         class BatchWorkbook(FakeWorkbook):
@@ -1019,7 +1165,7 @@ class TestGoogleSheetsStorage:
         workbook = BatchWorkbook()
         storage = GoogleSheetsStorage(workbook, sleeper=lambda _: None)
 
-        storage.export_backup_zip()
+        storage.export_backup_zip(backup_receipt_manifest(storage))
 
         assert workbook.batch_requests == [
             [f"'{title}'" for title in WORKSHEET_HEADERS]
@@ -1052,8 +1198,7 @@ class TestGoogleSheetsStorage:
         )
         self.storage.link_transaction_receipt(
             transaction["id"],
-            file_id="receipt123456",
-            name="customer-receipt.pdf",
+            reference=TEST_RECEIPT_REFERENCE,
         )
         mileage = self.storage.create_mileage_trip(
             trip_date="2026-07-19",
@@ -1062,7 +1207,7 @@ class TestGoogleSheetsStorage:
             destination="Customer",
             business_purpose="Sales meeting",
         )
-        backup = self.storage.export_backup_zip()
+        backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
         restored_storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
 
         counts = restored_storage.restore_backup_zip(backup)
@@ -1079,13 +1224,15 @@ class TestGoogleSheetsStorage:
         assert decode_receipt_references(
             restored_transaction["receipt_references"]
         ) == [
-            {"id": "receipt123456", "name": "customer-receipt.pdf"}
+            TEST_RECEIPT_REFERENCE
         ]
         assert restored_storage.list_mileage_trips()[0]["id"] == mileage["id"]
 
     def test_restore_accepts_pre_mileage_backup(self) -> None:
         self.storage.create_account("Checking", "Bank")
-        current_backup = self.storage.export_backup_zip()
+        current_backup = self.storage.export_backup_zip(
+            backup_receipt_manifest(self.storage)
+        )
         legacy_buffer = io.BytesIO()
         with zipfile.ZipFile(io.BytesIO(current_backup)) as source:
             manifest = json.loads(source.read("manifest.json"))
@@ -1093,6 +1240,7 @@ class TestGoogleSheetsStorage:
             manifest["row_counts"].pop("Mileage")
             manifest["worksheet_headers"].pop("Mileage")
             manifest["sha256"].pop("Mileage.csv")
+            manifest["sha256"].pop("receipts.json")
             with zipfile.ZipFile(legacy_buffer, "w") as legacy:
                 for name in (
                     "Accounts.csv",
@@ -1129,7 +1277,9 @@ class TestGoogleSheetsStorage:
             account_id=account["id"],
             category_id=category["id"],
         )
-        current_backup = self.storage.export_backup_zip()
+        current_backup = self.storage.export_backup_zip(
+            backup_receipt_manifest(self.storage)
+        )
         version_3_buffer = io.BytesIO()
         with zipfile.ZipFile(io.BytesIO(current_backup)) as source:
             manifest = json.loads(source.read("manifest.json"))
@@ -1156,8 +1306,11 @@ class TestGoogleSheetsStorage:
             manifest["sha256"]["Transactions.csv"] = hashlib.sha256(
                 transaction_csv
             ).hexdigest()
+            manifest["sha256"].pop("receipts.json")
             with zipfile.ZipFile(version_3_buffer, "w") as version_3:
                 for name in source.namelist():
+                    if name == "receipts.json":
+                        continue
                     if name == "Transactions.csv":
                         content = transaction_csv
                     elif name == "manifest.json":
@@ -1175,7 +1328,7 @@ class TestGoogleSheetsStorage:
 
     def test_restore_refuses_nonblank_target(self) -> None:
         self.storage.create_account("Checking", "Bank")
-        backup = self.storage.export_backup_zip()
+        backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
         target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
         target.create_account("Existing", "Cash")
 
@@ -1184,7 +1337,7 @@ class TestGoogleSheetsStorage:
 
     def test_restore_rejects_tampered_csv(self) -> None:
         self.storage.create_account("Checking", "Bank")
-        backup = self.storage.export_backup_zip()
+        backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
         output = io.BytesIO()
         with zipfile.ZipFile(io.BytesIO(backup)) as source, zipfile.ZipFile(
             output, "w"

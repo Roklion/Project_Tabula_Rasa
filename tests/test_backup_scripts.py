@@ -18,6 +18,7 @@ from scripts.validate_google_sheets_backup import (
 )
 from tabula_rasa.storage import GoogleSheetsStorage
 from tabula_rasa.storage.google_sheets import BACKUP_FORMAT_VERSION
+from tabula_rasa.receipt_manifest import build_receipt_manifest
 from tests.fakes import FakeWorkbook
 
 
@@ -48,7 +49,12 @@ class TestBackupScripts:
             for name in old_names:
                 (output_dir / name).write_bytes(b"old")
 
-            created = write_versioned_backup(storage, output_dir, keep=2)
+            created = write_versioned_backup(
+                storage,
+                output_dir,
+                build_receipt_manifest("test", [], []),
+                keep=2,
+            )
 
             remaining = sorted(path.name for path in output_dir.iterdir())
             assert remaining == [old_names[-1], created.name]
@@ -78,13 +84,20 @@ class TestBackupScripts:
         storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
         with tempfile.TemporaryDirectory() as temporary_directory:
             with pytest.raises(ValueError):
-                write_versioned_backup(storage, Path(temporary_directory), keep=1)
+                write_versioned_backup(
+                    storage,
+                    Path(temporary_directory),
+                    build_receipt_manifest("test", [], []),
+                    keep=1,
+                )
 
     def test_standalone_validator_reports_manifest_and_rows(self) -> None:
         storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
         with tempfile.TemporaryDirectory() as temporary_directory:
             backup_path = Path(temporary_directory) / "backup.zip"
-            backup_path.write_bytes(storage.export_backup_zip())
+            backup_path.write_bytes(
+                storage.export_backup_zip(build_receipt_manifest("test", [], []))
+            )
 
             manifest = validate_backup_file(backup_path)
             report = validation_report(backup_path, manifest)

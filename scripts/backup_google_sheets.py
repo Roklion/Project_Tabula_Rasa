@@ -23,6 +23,7 @@ from tabula_rasa.google_drive import (
     load_oauth_config,
 )
 from tabula_rasa.local_profile_store import load_business_profile_document
+from tabula_rasa.receipt_manifest import build_receipt_manifest
 from tabula_rasa.storage import GoogleSheetsStorage
 
 
@@ -71,14 +72,18 @@ def resolve_backup_output_dir(
 
 
 def write_versioned_backup(
-    storage: GoogleSheetsStorage, output_dir: Path, *, keep: int = 30
+    storage: GoogleSheetsStorage,
+    output_dir: Path,
+    receipt_manifest: Mapping[str, Any],
+    *,
+    keep: int = 30,
 ) -> Path:
     """Write one verified backup and retain the newest requested generations."""
     if keep < 2:
         raise ValueError("keep must retain at least two backup generations")
     output_dir = output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    backup = storage.export_backup_zip()
+    backup = storage.export_backup_zip(receipt_manifest)
     manifest = storage.validate_backup_zip(backup)
     timestamp = str(manifest["backup_time"]).replace("-", "").replace(":", "")
     timestamp = timestamp.replace("+0000", "Z")
@@ -119,10 +124,16 @@ def upload_versioned_backup_to_drive(
         raise GoogleDriveConfigurationError(
             "No Google Drive backup folder is selected for this profile."
         )
-    backup = storage.export_backup_zip()
+    client = GoogleDriveClient(load_oauth_config(all_secrets), drive_settings)
+    receipt_manifest = build_backup_receipt_manifest(
+        profile_key,
+        profile_secrets,
+        storage,
+        client=client,
+    )
+    backup = storage.export_backup_zip(receipt_manifest)
     manifest = storage.validate_backup_zip(backup)
     filename, sha256 = backup_filename_and_hash(backup, manifest)
-    client = GoogleDriveClient(load_oauth_config(all_secrets), drive_settings)
     return client.upload_backup(
         profile_key=profile_key,
         folder_id=str(backup_folder["id"]),
@@ -132,6 +143,35 @@ def upload_versioned_backup_to_drive(
         backup_time=str(manifest["backup_time"]),
         keep=keep,
     )
+
+
+def build_backup_receipt_manifest(
+    profile_key: str,
+    profile_secrets: Mapping[str, Any],
+    storage: GoogleSheetsStorage,
+    *,
+    client: GoogleDriveClient | None = None,
+) -> dict[str, Any]:
+    """Build a fresh inventory for the selected profile's receipt folder."""
+    transactions = storage.list_transactions(_force_refresh=True)
+    drive_settings = profile_secrets.get("google_drive")
+    receipt_folder = (
+        drive_settings.get("receipt_folder")
+        if isinstance(drive_settings, Mapping)
+        else None
+    )
+    receipts: list[dict[str, Any]] = []
+    if isinstance(receipt_folder, Mapping):
+        if client is None:
+            raise GoogleDriveConfigurationError(
+                "A Google Drive client is required to inventory receipts."
+            )
+        receipts = client.list_profile_receipts(
+            profile_key=profile_key,
+            folder_id=str(receipt_folder["id"]),
+            _force_refresh=True,
+        )
+    return build_receipt_manifest(profile_key, transactions, receipts)
 
 
 def verified_drive_backup_for_week(
@@ -237,7 +277,25 @@ def main() -> None:
             print(f"Weekly backup already verified: {existing}")
             return
     storage = GoogleSheetsStorage.from_secrets(secrets)
-    destination = write_versioned_backup(storage, output_dir, keep=args.keep)
+    drive_settings = secrets.get("google_drive")
+    drive_client = (
+        GoogleDriveClient(load_oauth_config(all_secrets), drive_settings)
+        if isinstance(drive_settings, Mapping)
+        and isinstance(drive_settings.get("receipt_folder"), Mapping)
+        else None
+    )
+    receipt_manifest = build_backup_receipt_manifest(
+        selected_profile_key,
+        secrets,
+        storage,
+        client=drive_client,
+    )
+    destination = write_versioned_backup(
+        storage,
+        output_dir,
+        receipt_manifest,
+        keep=args.keep,
+    )
     print(f"Verified backup created: {destination}")
 
 

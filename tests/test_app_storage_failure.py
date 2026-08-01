@@ -8,6 +8,7 @@ from streamlit.testing.v1 import AppTest
 
 from tabula_rasa.ledger_auth import hash_password
 from tabula_rasa.google_drive import GoogleDriveClient
+from tabula_rasa.receipt_manifest import build_receipt_manifest
 from tabula_rasa.storage import GoogleSheetsStorage, StorageUnavailableError
 from tests.fakes import FakeWorkbook
 
@@ -50,7 +51,7 @@ class TestAppStorageFailure:
     def test_cloud_verification_does_not_require_live_sheets_export(self) -> None:
         st.cache_resource.clear()
         storage = GoogleSheetsStorage(FakeWorkbook())
-        backup = storage.export_backup_zip()
+        backup = storage.export_backup_zip(build_receipt_manifest("test", [], []))
         backup_name = "tabula-rosa-backup-20260728T120000Z.zip"
         unavailable_export = Mock(
             side_effect=StorageUnavailableError(SAFE_MESSAGE)

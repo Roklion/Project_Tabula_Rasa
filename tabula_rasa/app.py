@@ -67,6 +67,11 @@ from tabula_rasa.quickbooks_import import (
 from tabula_rasa.quickbooks_mileage_import import (
     missing_required_columns as missing_quickbooks_mileage_columns,
 )
+from tabula_rasa.receipt_manifest import (
+    ReceiptManifestError,
+    build_receipt_manifest,
+    receipt_reference_from_drive_file,
+)
 
 
 STORAGE_IMPLEMENTATION_VERSION = 8
@@ -222,6 +227,32 @@ def get_drive_client(
             "Google Drive is not connected for this business profile."
         )
     return GoogleDriveClient(config, drive_settings)
+
+
+def receipt_manifest_for_backup(
+    storage: GoogleSheetsStorage,
+    *,
+    profile_key: str,
+    profile_secrets: Mapping[str, object],
+    configuration_revision: str,
+) -> dict[str, object]:
+    """Build a fresh profile-scoped receipt inventory for one ledger backup."""
+    transactions = storage.list_transactions(_force_refresh=True)
+    drive_settings = profile_secrets.get("google_drive")
+    receipt_folder = (
+        drive_settings.get("receipt_folder")
+        if isinstance(drive_settings, Mapping)
+        else None
+    )
+    receipts: list[dict[str, object]] = []
+    if isinstance(receipt_folder, Mapping):
+        drive = get_drive_client(profile_key, configuration_revision)
+        receipts = drive.list_profile_receipts(
+            profile_key=profile_key,
+            folder_id=str(receipt_folder["id"]),
+            _force_refresh=True,
+        )
+    return build_receipt_manifest(profile_key, transactions, receipts)
 
 
 def reset_widget_state_if_requested(
@@ -1048,6 +1079,7 @@ elif page == "Transactions":
                                 )
                             else:
                                 unreferenced_receipts = []
+                                receipts_needing_backfill = 0
                                 for receipt in profile_receipts:
                                     receipt_id = str(
                                         receipt.get("id", "")
@@ -1074,17 +1106,19 @@ elif page == "Transactions":
                                             uninitialized_transaction_ids
                                         )
                                     ):
-                                        unreferenced_receipts.append(
-                                            {
-                                                "id": receipt_id,
-                                                "name": str(
-                                                    receipt.get(
-                                                        "name",
-                                                        "Receipt",
-                                                    )
-                                                ),
-                                            }
-                                        )
+                                        try:
+                                            unreferenced_receipts.append(
+                                                receipt_reference_from_drive_file(
+                                                    receipt
+                                                )
+                                            )
+                                        except ReceiptManifestError:
+                                            receipts_needing_backfill += 1
+                                if receipts_needing_backfill:
+                                    st.warning(
+                                        f"{receipts_needing_backfill} legacy receipt(s) "
+                                        "need checksum backfill before they can be linked."
+                                    )
                                 if unreferenced_receipts:
                                     unreferenced_by_id = {
                                         receipt["id"]: receipt
@@ -1123,12 +1157,7 @@ elif page == "Transactions":
                                         try:
                                             storage.link_transaction_receipt(
                                                 edit_id,
-                                                file_id=existing_receipt[
-                                                    "id"
-                                                ],
-                                                name=existing_receipt[
-                                                    "name"
-                                                ],
+                                                reference=existing_receipt,
                                             )
                                         except StorageError as error:
                                             st.error(
@@ -1199,18 +1228,15 @@ elif page == "Transactions":
                                         try:
                                             storage.link_transaction_receipt(
                                                 edit_id,
-                                                file_id=str(
-                                                    uploaded_receipt["id"]
-                                                ),
-                                                name=str(
-                                                    uploaded_receipt.get(
-                                                        "name",
-                                                        receipt_upload.name,
+                                                reference=(
+                                                    receipt_reference_from_drive_file(
+                                                        uploaded_receipt
                                                     )
                                                 ),
                                             )
                                         except (
                                             KeyError,
+                                            ReceiptManifestError,
                                             StorageError,
                                         ) as error:
                                             st.error(
@@ -1929,7 +1955,13 @@ elif page == "Data & backup":
                 width="stretch",
             ):
                 try:
-                    backup_zip = storage.export_backup_zip()
+                    receipt_manifest = receipt_manifest_for_backup(
+                        storage,
+                        profile_key=selected_profile_key,
+                        profile_secrets=selected_profile,
+                        configuration_revision=revision,
+                    )
+                    backup_zip = storage.export_backup_zip(receipt_manifest)
                     manifest = storage.validate_backup_zip(backup_zip)
                     cloud_filename, cloud_sha256 = backup_filename_and_hash(
                         backup_zip,
@@ -1944,7 +1976,12 @@ elif page == "Data & backup":
                         backup_time=str(manifest["backup_time"]),
                         keep=30,
                     )
-                except (StorageError, GoogleDriveError, RuntimeError) as error:
+                except (
+                    StorageError,
+                    GoogleDriveError,
+                    ReceiptManifestError,
+                    RuntimeError,
+                ) as error:
                     if isinstance(error, StorageError):
                         report_storage_error(error)
                     else:
@@ -2055,7 +2092,13 @@ elif page == "Data & backup":
     )
     if st.button(prepare_label, width="stretch"):
         try:
-            backup_zip = storage.export_backup_zip()
+            receipt_manifest = receipt_manifest_for_backup(
+                storage,
+                profile_key=selected_profile_key,
+                profile_secrets=selected_profile,
+                configuration_revision=revision,
+            )
+            backup_zip = storage.export_backup_zip(receipt_manifest)
             manifest = storage.validate_backup_zip(backup_zip)
             accounts = storage.list_accounts(active_only=False)
             categories = storage.list_categories()
@@ -2063,8 +2106,11 @@ elif page == "Data & backup":
             mileage_trips = storage.list_mileage_trips()
             all_transactions = ledger_frame(transactions, accounts, categories)
             all_mileage = mileage_frame(mileage_trips)
-        except StorageError as error:
-            report_storage_error(error)
+        except (StorageError, GoogleDriveError, ReceiptManifestError) as error:
+            if isinstance(error, StorageError):
+                report_storage_error(error)
+            else:
+                st.error(str(error))
         else:
             prepared_exports = {
                 "backup": backup_zip,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import hashlib
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
@@ -360,6 +361,12 @@ class TestGoogleDriveFiles:
         body = create_request[2]["data"]
         assert b'"tabulaRasaProfile":"north"' in body
         assert b'"tabulaRasaTransaction":"txn-1"' in body
+        assert (
+            f'"tabulaRasaSha256":"{hashlib.sha256(b"receipt").hexdigest()}"'.encode()
+            in body
+        )
+        assert b'"tabulaRasaReceiptId":' in body
+        assert uploaded["size"] == "7"
         assert b"..\\" not in body
         assert safe_receipt_filename("../../statement.pdf") == "statement.pdf"
         assert suffixed_receipt_filename("statement.pdf", 2) == (
@@ -451,12 +458,17 @@ class TestGoogleDriveFiles:
             mime_type="application/pdf",
         )
 
-        assert uploaded == committed
+        assert uploaded["id"] == committed["id"]
+        assert uploaded["name"] == committed["name"]
+        assert uploaded["appProperties"]["tabulaRasaSha256"] == hashlib.sha256(
+            b"receipt"
+        ).hexdigest()
         recovery_query = session.requests[-1][2]["params"]["q"]
         assert "name = 'statement.pdf'" in recovery_query
         assert "value='north'" in recovery_query
         assert "value='txn-1'" in recovery_query
-        assert "key='tabulaRasaUploadId'" in recovery_query
+        assert "key='tabulaRasaReceiptId'" in recovery_query
+        assert "key='tabulaRasaSha256'" in recovery_query
 
     def test_profile_receipt_listing_is_not_transaction_scoped(self) -> None:
         receipt = {
@@ -489,6 +501,59 @@ class TestGoogleDriveFiles:
         assert "value='receipt'" in query
         assert "value='north'" in query
         assert "tabulaRasaTransaction" not in query
+
+    def test_legacy_receipt_checksum_backfill_downloads_once_and_patches_metadata(
+        self,
+    ) -> None:
+        legacy = {
+            "id": "receipt123456",
+            "name": "statement.pdf",
+            "mimeType": "application/pdf",
+            "size": "7",
+            "appProperties": {
+                "tabulaRasaKind": "receipt",
+                "tabulaRasaProfile": "north",
+                "tabulaRasaTransaction": "txn-1",
+            },
+        }
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": [legacy]}),
+                FakeResponse(200, content=b"receipt"),
+                FakeResponse(
+                    200,
+                    {
+                        "id": legacy["id"],
+                        "name": legacy["name"],
+                        "mimeType": legacy["mimeType"],
+                        "size": legacy["size"],
+                    },
+                ),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        updated = client.backfill_receipt_checksum(
+            profile_key="north",
+            folder_id="folder123456",
+            file_id="receipt123456",
+        )
+
+        assert [request[0] for request in session.requests] == [
+            "GET",
+            "GET",
+            "PATCH",
+        ]
+        patch_body = session.requests[-1][2]["data"]
+        expected_hash = hashlib.sha256(b"receipt").hexdigest()
+        assert expected_hash in patch_body
+        assert updated["appProperties"]["tabulaRasaSha256"] == expected_hash
+        assert len(updated["appProperties"]["tabulaRasaReceiptId"]) == 32
 
     def test_backup_retry_reuses_existing_file_and_applies_retention(self) -> None:
         existing = {
