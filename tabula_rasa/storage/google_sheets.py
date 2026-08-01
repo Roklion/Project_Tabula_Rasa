@@ -11,11 +11,10 @@ import hashlib
 import io
 import json
 import math
-import re
 import threading
 import time
 import zipfile
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -37,6 +36,12 @@ from tabula_rasa.quickbooks_mileage_import import (
     mileage_fingerprint,
     missing_required_columns as missing_quickbooks_mileage_columns,
     normalize_rows as normalize_quickbooks_mileage_rows,
+)
+from tabula_rasa.receipt_manifest import (
+    ReceiptManifestError,
+    decode_receipt_reference_list,
+    validate_receipt_manifest,
+    validate_receipt_reference,
 )
 
 
@@ -108,16 +113,17 @@ FIXED_TYPE_CLASSIFICATIONS = {
 }
 CATEGORY_KINDS = {"Income", "Expense"}
 TRANSACTION_KINDS = {"Income", "Expense", "Transfer"}
-BACKUP_FORMAT_VERSION = 4
+LEDGER_ONLY_BACKUP_FORMAT_VERSION = 4
+BACKUP_FORMAT_VERSION = 5
 BACKUP_HEADERS_BY_VERSION = {
     2: LEGACY_BACKUP_HEADERS,
     3: VERSION_3_WORKSHEET_HEADERS,
+    LEDGER_ONLY_BACKUP_FORMAT_VERSION: WORKSHEET_HEADERS,
     BACKUP_FORMAT_VERSION: WORKSHEET_HEADERS,
 }
 SUPPORTED_BACKUP_FORMAT_VERSIONS = set(BACKUP_HEADERS_BY_VERSION)
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 DEFAULT_ACCOUNTS = (("Checking", "Bank"), ("Cash", "Cash"))
-RECEIPT_FILE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{10,}$")
 DEFAULT_CATEGORIES = {
     "Income": ("Sales", "Services", "Interest", "Other income"),
     "Expense": (
@@ -196,40 +202,17 @@ def _clean_text(value: Any, field: str, *, required: bool = False) -> str:
     return text
 
 
-def decode_receipt_references(value: Any) -> list[dict[str, str]]:
+def decode_receipt_references(value: Any) -> list[dict[str, Any]]:
     """Return validated Drive receipt references from one transaction cell."""
-    if value is None or value == "":
-        return []
     try:
-        parsed = json.loads(value) if isinstance(value, str) else value
-    except json.JSONDecodeError as exc:
-        raise StorageValidationError(
+        return decode_receipt_reference_list(value)
+    except ReceiptManifestError as exc:
+        message = (
             "Transaction receipt references are unreadable"
-        ) from exc
-    if not isinstance(parsed, list) or len(parsed) > 100:
-        raise StorageValidationError("Transaction receipt references are invalid")
-    references: list[dict[str, str]] = []
-    seen_ids: set[str] = set()
-    for item in parsed:
-        if not isinstance(item, Mapping) or set(item) != {"id", "name"}:
-            raise StorageValidationError(
-                "Transaction receipt references are invalid"
-            )
-        file_id = _clean_text(item.get("id"), "Receipt file ID", required=True)
-        name = _clean_text(item.get("name"), "Receipt file name", required=True)
-        if (
-            len(file_id) > 256
-            or not RECEIPT_FILE_ID_PATTERN.fullmatch(file_id)
-            or len(name) > 255
-            or any(ord(character) < 32 for character in file_id + name)
-            or file_id in seen_ids
-        ):
-            raise StorageValidationError(
-                "Transaction receipt references are invalid"
-            )
-        seen_ids.add(file_id)
-        references.append({"id": file_id, "name": name})
-    return references
+            if "unreadable" in str(exc).casefold()
+            else "Transaction receipt references are invalid"
+        )
+        raise StorageValidationError(message) from exc
 
 
 def _encode_receipt_references(value: Any) -> str:
@@ -304,7 +287,11 @@ def _as_bool(value: Any, field: str = "active") -> bool:
 
 def _parse_backup_zip(
     backup: bytes,
-) -> tuple[dict[str, Any], dict[str, tuple[list[str], list[dict[str, str]]]]]:
+) -> tuple[
+    dict[str, Any],
+    dict[str, tuple[list[str], list[dict[str, str]]]],
+    dict[str, Any] | None,
+]:
     """Validate a ledger backup without extracting files to disk."""
     try:
         with zipfile.ZipFile(io.BytesIO(backup)) as archive:
@@ -320,6 +307,8 @@ def _parse_backup_zip(
                 raise StorageValidationError(
                     "Backup manifest is not valid UTF-8 JSON"
                 ) from exc
+            if not isinstance(manifest, dict):
+                raise StorageValidationError("Backup manifest fields are invalid")
             format_version = manifest.get("format_version")
             if format_version not in SUPPORTED_BACKUP_FORMAT_VERSIONS:
                 raise StorageValidationError("Backup format version is unsupported")
@@ -327,13 +316,20 @@ def _parse_backup_zip(
             required_files = {
                 f"{title}.csv" for title in backup_headers
             } | {"manifest.json"}
+            if format_version == BACKUP_FORMAT_VERSION:
+                required_files.add("receipts.json")
             if set(names) != required_files:
                 raise StorageValidationError(
-                    "Backup must contain exactly the expected CSV files and manifest.json"
+                    "Backup must contain exactly the expected ledger and manifest files"
                 )
             csv_files = {
                 title: archive.read(f"{title}.csv") for title in backup_headers
             }
+            receipt_manifest_bytes = (
+                archive.read("receipts.json")
+                if format_version == BACKUP_FORMAT_VERSION
+                else None
+            )
     except (zipfile.BadZipFile, OSError, RuntimeError) as exc:
         raise StorageValidationError("Backup is not a readable ZIP archive") from exc
 
@@ -342,6 +338,11 @@ def _parse_backup_zip(
     worksheet_headers = manifest.get("worksheet_headers")
     if not all(isinstance(value, dict) for value in (row_counts, file_hashes, worksheet_headers)):
         raise StorageValidationError("Backup manifest is missing validation metadata")
+    expected_hash_names = {f"{title}.csv" for title in backup_headers}
+    if format_version == BACKUP_FORMAT_VERSION:
+        expected_hash_names.add("receipts.json")
+    if set(file_hashes) != expected_hash_names:
+        raise StorageValidationError("Backup manifest checksum entries are invalid")
 
     tables: dict[str, tuple[list[str], list[dict[str, str]]]] = {}
     for title, content in csv_files.items():
@@ -378,7 +379,7 @@ def _parse_backup_zip(
             raise StorageValidationError(f"{title} backup IDs are missing or duplicated")
         tables[title] = (headers, records)
 
-    if format_version < BACKUP_FORMAT_VERSION:
+    if format_version < LEDGER_ONLY_BACKUP_FORMAT_VERSION:
         transaction_headers, transactions = tables["Transactions"]
         if "receipt_references" not in transaction_headers:
             migrated_headers = [
@@ -408,7 +409,68 @@ def _parse_backup_zip(
         decode_receipt_references(
             transaction.get("receipt_references", "")
         )
-    return manifest, tables
+
+    receipt_manifest: dict[str, Any] | None = None
+    if receipt_manifest_bytes is not None:
+        if (
+            hashlib.sha256(receipt_manifest_bytes).hexdigest()
+            != file_hashes.get("receipts.json")
+        ):
+            raise StorageValidationError("Receipt manifest checksum does not match")
+        try:
+            raw_receipt_manifest = json.loads(receipt_manifest_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise StorageValidationError(
+                "Receipt manifest is not valid UTF-8 JSON"
+            ) from exc
+        try:
+            receipt_manifest = validate_receipt_manifest(
+                raw_receipt_manifest,
+                transaction_ids={
+                    transaction["id"] for transaction in tables["Transactions"][1]
+                },
+            )
+        except ReceiptManifestError as exc:
+            raise StorageValidationError(str(exc)) from exc
+        referenced_entries = {
+            (str(entry["transaction_id"]), str(entry["old_drive_file_id"])): entry
+            for entry in receipt_manifest["receipts"]
+            if entry["reference_state"] == "referenced"
+        }
+        expected_references: set[tuple[str, str]] = set()
+        for transaction in tables["Transactions"][1]:
+            for reference in decode_receipt_references(
+                transaction.get("receipt_references", "")
+            ):
+                if "receipt_id" not in reference:
+                    raise StorageValidationError(
+                        "Receipt references need checksum backfill before backup"
+                    )
+                key = (transaction["id"], str(reference["id"]))
+                entry = referenced_entries.get(key)
+                if entry is None or any(
+                    (
+                        reference[reference_field]
+                        != entry[entry_field]
+                    )
+                    for reference_field, entry_field in (
+                        ("name", "stored_filename"),
+                        ("receipt_id", "receipt_id"),
+                        ("original_filename", "original_filename"),
+                        ("mime_type", "mime_type"),
+                        ("byte_size", "byte_size"),
+                        ("sha256", "sha256"),
+                    )
+                ):
+                    raise StorageValidationError(
+                        "Receipt manifest does not match transaction references"
+                    )
+                expected_references.add(key)
+        if expected_references != set(referenced_entries):
+            raise StorageValidationError(
+                "Receipt manifest has an invalid transaction association"
+            )
+    return manifest, tables, receipt_manifest
 
 
 class GoogleSheetsStorage:
@@ -1205,22 +1267,71 @@ class GoogleSheetsStorage:
         self._replace_row("Transactions", current, updated)
         return updated
 
+    def initialize_legacy_transaction_receipts(
+        self,
+        transaction_id: str,
+        *,
+        references: Sequence[Mapping[str, Any]],
+    ) -> dict[str, str]:
+        """Populate one still-blank legacy receipt cell with rich references."""
+        try:
+            normalized = [
+                validate_receipt_reference(reference, allow_legacy=False)
+                for reference in references
+            ]
+        except ReceiptManifestError as exc:
+            raise StorageValidationError(str(exc)) from exc
+        if not normalized:
+            raise StorageValidationError(
+                "Legacy receipt initialization requires at least one receipt"
+            )
+        file_ids = [str(reference["id"]) for reference in normalized]
+        if len(file_ids) != len(set(file_ids)):
+            raise StorageValidationError("Receipt references are duplicated")
+        transactions = self.list_transactions(_force_refresh=True)
+        for transaction in transactions:
+            if transaction["id"] == transaction_id:
+                continue
+            linked_ids = {
+                str(item["id"])
+                for item in decode_receipt_references(
+                    transaction.get("receipt_references", "")
+                )
+            }
+            if linked_ids.intersection(file_ids):
+                raise StorageConflictError(
+                    "That receipt is already linked to another transaction"
+                )
+        current = self._find_row("Transactions", transaction_id)
+        if str(current.values.get("receipt_references", "")) != "":
+            raise StorageConflictError(
+                "The transaction receipt references are already initialized"
+            )
+        updated = dict(current.values)
+        updated["receipt_references"] = _encode_receipt_references(normalized)
+        self._replace_row("Transactions", current, updated)
+        return updated
+
     def link_transaction_receipt(
         self,
         transaction_id: str,
         *,
-        file_id: str,
-        name: str,
+        file_id: str = "",
+        name: str = "",
+        reference: Mapping[str, Any] | None = None,
     ) -> dict[str, str]:
         """Attach or refresh one Drive file reference on a transaction."""
-        reference = decode_receipt_references(
-            [{"id": file_id, "name": name}]
-        )[0]
+        try:
+            normalized_reference = validate_receipt_reference(
+                reference if reference is not None else {"id": file_id, "name": name}
+            )
+        except ReceiptManifestError as exc:
+            raise StorageValidationError(str(exc)) from exc
         for transaction in self.list_transactions(_force_refresh=True):
             if transaction["id"] == transaction_id:
                 continue
             if any(
-                item["id"] == reference["id"]
+                item["id"] == normalized_reference["id"]
                 for item in decode_receipt_references(
                     transaction.get("receipt_references", "")
                 )
@@ -1233,13 +1344,72 @@ class GoogleSheetsStorage:
             current.values.get("receipt_references", "")
         )
         references = [
-            item for item in references if item["id"] != reference["id"]
+            item
+            for item in references
+            if item["id"] != normalized_reference["id"]
         ]
-        references.append(reference)
+        references.append(normalized_reference)
         updated = dict(current.values)
         updated["receipt_references"] = _encode_receipt_references(
             references
         )
+        self._replace_row("Transactions", current, updated)
+        return updated
+
+    def remap_transaction_receipt(
+        self,
+        transaction_id: str,
+        *,
+        old_file_id: str,
+        reference: Mapping[str, Any],
+    ) -> dict[str, str]:
+        """Replace one recovered old Drive ID with a verified new reference."""
+        try:
+            normalized_reference = validate_receipt_reference(
+                reference,
+                allow_legacy=False,
+            )
+        except ReceiptManifestError as exc:
+            raise StorageValidationError(str(exc)) from exc
+        transactions = self.list_transactions(_force_refresh=True)
+        for transaction in transactions:
+            if transaction["id"] == transaction_id:
+                continue
+            if any(
+                item["id"] == normalized_reference["id"]
+                for item in decode_receipt_references(
+                    transaction.get("receipt_references", "")
+                )
+            ):
+                raise StorageConflictError(
+                    "That receipt is already linked to another transaction"
+                )
+        current = self._find_row("Transactions", transaction_id)
+        references = decode_receipt_references(
+            current.values.get("receipt_references", "")
+        )
+        replacement_indexes = [
+            index
+            for index, item in enumerate(references)
+            if item["id"] in {str(old_file_id), normalized_reference["id"]}
+            or (
+                item.get("receipt_id") == normalized_reference["receipt_id"]
+                and item.get("sha256") == normalized_reference["sha256"]
+            )
+        ]
+        if not replacement_indexes:
+            raise StorageNotFoundError(
+                "The transaction no longer contains the receipt being recovered"
+            )
+        first_index = replacement_indexes[0]
+        retained = [
+            item
+            for index, item in enumerate(references)
+            if index not in replacement_indexes
+        ]
+        retained.insert(first_index, normalized_reference)
+        updated = dict(current.values)
+        updated["receipt_references"] = _encode_receipt_references(retained)
         self._replace_row("Transactions", current, updated)
         return updated
 
@@ -1632,7 +1802,7 @@ class GoogleSheetsStorage:
         self._append_many("Transactions", prepared)
         return prepared
 
-    def export_backup_zip(self) -> bytes:
+    def export_backup_zip(self, receipt_manifest: Mapping[str, Any]) -> bytes:
         """Return a fresh, checksummed backup of every ledger worksheet."""
         generated_at = _utc_now()
         row_counts: dict[str, int] = {}
@@ -1652,13 +1822,29 @@ class GoogleSheetsStorage:
                 writer.writerow([row.values.get(header, "") for header in headers])
             csv_files[f"{title}.csv"] = csv_buffer.getvalue().encode("utf-8")
 
+        try:
+            validated_receipts = validate_receipt_manifest(
+                receipt_manifest,
+                transaction_ids={
+                    row.values["id"] for row in snapshot["Transactions"]
+                },
+            )
+        except ReceiptManifestError as exc:
+            raise StorageValidationError(str(exc)) from exc
+        receipts_bytes = (
+            json.dumps(validated_receipts, indent=2, sort_keys=True) + "\n"
+        ).encode("utf-8")
+
         manifest = {
             "backup_time": generated_at,
             "format_version": BACKUP_FORMAT_VERSION,
             "row_counts": row_counts,
             "sha256": {
                 name: hashlib.sha256(content).hexdigest()
-                for name, content in csv_files.items()
+                for name, content in {
+                    **csv_files,
+                    "receipts.json": receipts_bytes,
+                }.items()
             },
             "workbook_title": self.workbook_title,
             "worksheet_headers": worksheet_headers,
@@ -1668,6 +1854,7 @@ class GoogleSheetsStorage:
         ) as archive:
             for name, content in csv_files.items():
                 archive.writestr(name, content)
+            archive.writestr("receipts.json", receipts_bytes)
             archive.writestr(
                 "manifest.json",
                 (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode(
@@ -1679,12 +1866,25 @@ class GoogleSheetsStorage:
     @staticmethod
     def validate_backup_zip(backup: bytes) -> dict[str, Any]:
         """Return a validated manifest or raise a safe validation error."""
-        manifest, _ = _parse_backup_zip(backup)
-        return manifest
+        manifest, _, receipt_manifest = _parse_backup_zip(backup)
+        result = dict(manifest)
+        result["receipt_inventory"] = receipt_manifest is not None
+        if receipt_manifest is not None:
+            result["receipt_count"] = len(receipt_manifest["receipts"])
+            result["business_profile_key"] = receipt_manifest[
+                "business_profile_key"
+            ]
+        return result
+
+    @staticmethod
+    def receipt_manifest_from_backup(backup: bytes) -> dict[str, Any] | None:
+        """Return a validated receipt inventory, or None for ledger-only backups."""
+        _, _, receipt_manifest = _parse_backup_zip(backup)
+        return receipt_manifest
 
     def restore_backup_zip(self, backup: bytes) -> dict[str, int]:
         """Restore a validated backup into a blank initialized workbook."""
-        _, tables = _parse_backup_zip(backup)
+        _, tables, _ = _parse_backup_zip(backup)
         for title in WORKSHEET_HEADERS:
             target_headers = self._headers(title)
             if title in tables and set(target_headers) != set(tables[title][0]):

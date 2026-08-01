@@ -56,15 +56,32 @@ def main() -> None:
         reference="",
         description="Receipt unlink test",
     )
-    receipt = {
+    receipt_reference = {
         "id": "receipt123456",
         "name": f"{transaction['id']}-statement.pdf",
+        "receipt_id": "a" * 32,
+        "original_filename": "statement.pdf",
+        "mime_type": "application/pdf",
+        "byte_size": 7,
+        "sha256": "b" * 64,
     }
     storage.link_transaction_receipt(
         transaction["id"],
-        file_id=receipt["id"],
-        name=receipt["name"],
+        reference=receipt_reference,
     )
+    receipt = {
+        "id": receipt_reference["id"],
+        "name": receipt_reference["name"],
+        "mimeType": receipt_reference["mime_type"],
+        "size": str(receipt_reference["byte_size"]),
+        "appProperties": {
+            "tabulaRasaKind": "receipt",
+            "tabulaRasaProfile": "test",
+            "tabulaRasaReceiptId": receipt_reference["receipt_id"],
+            "tabulaRasaSha256": receipt_reference["sha256"],
+            "tabulaRasaOriginalName": receipt_reference["original_filename"],
+        },
+    }
     drive_files = [dict(receipt)]
     unlink_calls: list[dict[str, str]] = []
     unlink_should_fail = {"value": False}
@@ -181,7 +198,7 @@ def main() -> None:
         assert len(unlink_calls) == 1
         assert decode_receipt_references(
             storage.list_transactions()[0]["receipt_references"]
-        ) == [receipt]
+        ) == [receipt_reference]
         assert any(
             "Receipt reference was not removed" in str(error.value)
             and "Retry removal" in str(error.value)
@@ -217,7 +234,7 @@ def main() -> None:
         by_label(app.button, "Link selected receipt").click().run()
         assert decode_receipt_references(
             storage.list_transactions()[0]["receipt_references"]
-        ) == [receipt]
+        ) == [receipt_reference]
         assert drive_files == [receipt]
         assert by_label(app.button, "Remove receipt")
         assert any(

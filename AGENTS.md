@@ -50,6 +50,16 @@ python -m pytest
 If either command fails, resolve the failure or report it as a blocker instead
 of describing the task as complete or ready for commit.
 
+# Local Git writes
+
+Staging files and creating local Git commits are pre-authorized and do not
+require asking the user for approval. Pushing commits or branches is not
+pre-authorized and still requires the user's explicit approval.
+
+Project-scoped sandbox allow rules for these commands and the completion checks
+live in `.codex/rules/default.rules`. Restart Codex after changing that file so
+the trusted project layer is reloaded.
+
 # Code Review Rules
 
 ## Creating pull requests

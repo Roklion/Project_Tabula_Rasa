@@ -8,6 +8,7 @@ from streamlit.testing.v1 import AppTest
 
 from tabula_rasa.ledger_auth import hash_password
 from tabula_rasa.google_drive import GoogleDriveClient
+from tabula_rasa.receipt_manifest import build_receipt_manifest
 from tabula_rasa.storage import GoogleSheetsStorage, StorageUnavailableError
 from tests.fakes import FakeWorkbook
 
@@ -16,6 +17,53 @@ SAFE_MESSAGE = "Google Sheets is temporarily unavailable; no success was reporte
 
 
 class TestAppStorageFailure:
+    def test_csv_exports_remain_available_without_a_receipt_folder(self) -> None:
+        st.cache_resource.clear()
+        storage = GoogleSheetsStorage(FakeWorkbook())
+        app = AppTest.from_file("tabula_rasa/app.py", default_timeout=30)
+        app.secrets["app_password_hash"] = hash_password(TEST_PASSWORD)
+        app.secrets["business_profiles"] = {
+            "test": {
+                "name": "Test Business",
+                "spreadsheet_id": "test-sheet",
+                "gcp_service_account": {"type": "service_account"},
+            }
+        }
+
+        with (
+            patch.object(
+                GoogleSheetsStorage,
+                "from_secrets",
+                return_value=storage,
+            ),
+            patch(
+                "tabula_rasa.local_profile_store.load_local_profiles",
+                return_value={},
+            ),
+        ):
+            app.run()
+            app.text_input[0].input(TEST_PASSWORD)
+            app.button[0].click().run()
+            app.radio[0].set_value("Data & backup").run()
+            next(
+                button
+                for button in app.button
+                if button.label == "Prepare downloadable exports"
+            ).click().run()
+
+        assert any(
+            success.value == "Fresh CSV exports are ready."
+            for success in app.success
+        )
+        assert any(
+            "requires a selected Google Drive receipt folder" in warning.value
+            for warning in app.warning
+        )
+        download_labels = {button.label for button in app.get("download_button")}
+        assert "Download transactions CSV" in download_labels
+        assert "Download mileage CSV" in download_labels
+        assert "Download complete workbook backup" not in download_labels
+
     def test_availability_error_is_safe_and_blocks_data_pages(self) -> None:
         st.cache_resource.clear()
         unavailable_storage = Mock(spec=GoogleSheetsStorage)
@@ -50,7 +98,7 @@ class TestAppStorageFailure:
     def test_cloud_verification_does_not_require_live_sheets_export(self) -> None:
         st.cache_resource.clear()
         storage = GoogleSheetsStorage(FakeWorkbook())
-        backup = storage.export_backup_zip()
+        backup = storage.export_backup_zip(build_receipt_manifest("test", [], []))
         backup_name = "tabula-rosa-backup-20260728T120000Z.zip"
         unavailable_export = Mock(
             side_effect=StorageUnavailableError(SAFE_MESSAGE)

@@ -62,19 +62,37 @@ Receipt behavior:
 
 - supported files are PDFs and images accepted by the application;
 - files are uploaded to the profile's selected receipt folder;
-- filenames are sanitized while retaining their recognizable original name;
+- filenames are sanitized while retaining their recognizable original name and
+  remaining portable through the documented Windows and Synology recovery path;
 - a conflicting filename receives a numeric suffix such as
   `receipt (2).pdf` instead of replacing the existing file;
 - uncertain upload responses are checked before retrying to avoid duplicates;
-- each transaction stores stable Drive file IDs and display names; and
+- SHA-256 is calculated from the bytes before every upload;
+- Drive stores a stable receipt identity and checksum in private metadata;
+- each transaction stores the stable identity, Drive file ID, original and
+  stored filenames, MIME type, byte size, and SHA-256; and
 - removing a receipt from a transaction removes only its ledger reference.
 
 An unlinked Drive file remains in the receipt folder and becomes available in
 the transaction editor's **Unreferenced receipt** list.
 
-Receipt file contents are not embedded in the ledger backup ZIP. The backup
-contains only receipt references; retain the separate Google Drive receipt
-folder according to the business's recordkeeping needs.
+Linking an unreferenced receipt copies its existing integrity metadata without
+renaming or rewriting the Drive file. Every app-managed receipt uploaded before
+integrity metadata was introduced is considered legacy when that metadata is
+missing. On the first authenticated use of each selected business profile in
+an app session, Tabula Rosa scans that profile's configured receipt folder and
+backfills those files. The migration is resumable and does not download files
+that already have valid metadata. For a transaction whose receipt-reference
+cell was never initialized, the migration also preserves its profile-scoped
+legacy Drive association. An explicitly empty reference list remains unlinked.
+A warning provides the manual recovery path if any file cannot be migrated.
+
+Receipt file contents are not embedded in each ledger backup ZIP. Version-5
+backups contain a checksummed `receipts.json` metadata inventory, including
+intentionally unreferenced app-managed files. Recoverable receipt bytes must be
+retained separately; follow the [Synology recovery
+runbook](../operations/SYNOLOGY_RECOVERY.md) for the independent, versioned
+copy and Drive ID-remapping workflow.
 
 ## Mileage
 
@@ -124,6 +142,10 @@ The **Data & backup** page provides:
 - QuickBooks mileage imports;
 - a complete validated workbook backup ZIP; and
 - Google Drive cloud backup controls when configured.
+
+Transaction and mileage CSV exports remain available when Google Drive is not
+connected. The complete backup ZIP requires the selected profile's receipt
+folder so its receipt inventory cannot be mistaken for an empty folder.
 
 CSV and QuickBooks imports validate all rows before writing and use batch
 appends. Follow [QuickBooks import](QUICKBOOKS_IMPORT.md) for supported formats

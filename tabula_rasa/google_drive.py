@@ -17,6 +17,15 @@ from urllib.parse import urlencode, urlparse
 
 import requests
 
+from tabula_rasa.receipt_manifest import (
+    DRIVE_ID_PATTERN as RECEIPT_DRIVE_ID_PATTERN,
+    RECEIPT_ID_PATTERN,
+    SHA256_PATTERN,
+    ReceiptManifestError,
+    receipt_reference_from_drive_file,
+    validate_receipt_filename,
+)
+
 
 DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file"
 AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -47,6 +56,10 @@ class GoogleDriveAuthorizationError(GoogleDriveError):
 
 class GoogleDriveAccessError(GoogleDriveError):
     """Raised when a Drive API operation cannot be completed."""
+
+
+class GoogleDriveConflictError(GoogleDriveAccessError):
+    """Raised when recovery would overwrite or ambiguously reuse a Drive file."""
 
 
 @dataclass(frozen=True)
@@ -448,7 +461,11 @@ def safe_receipt_filename(original_name: str) -> str:
     )
     if not cleaned:
         cleaned = "receipt"
-    return cleaned[:180]
+    cleaned = cleaned[:180]
+    try:
+        return validate_receipt_filename(cleaned, "Receipt filename")
+    except ReceiptManifestError:
+        return validate_receipt_filename(f"_{cleaned}", "Receipt filename")
 
 
 def suffixed_receipt_filename(filename: str, occurrence: int) -> str:
@@ -498,7 +515,7 @@ class GoogleDriveClient:
         self._access_token = ""
         self._access_token_expires_at = 0.0
         self._list_cache: dict[
-            tuple[str, int, str],
+            tuple[str, int, str, bool],
             tuple[float, list[dict[str, Any]]],
         ] = {}
 
@@ -654,8 +671,9 @@ class GoogleDriveClient:
         page_size: int = 100,
         order_by: str = "",
         use_cache: bool = False,
+        fetch_all: bool = False,
     ) -> list[dict[str, Any]]:
-        cache_key = (query, page_size, order_by)
+        cache_key = (query, page_size, order_by, fetch_all)
         if use_cache and self.list_cache_ttl_seconds > 0:
             cached = self._list_cache.get(cache_key)
             if cached and self.clock() - cached[0] < self.list_cache_ttl_seconds:
@@ -664,8 +682,8 @@ class GoogleDriveClient:
             "q": query,
             "pageSize": min(max(page_size, 1), 1000),
             "fields": (
-                "files(id,name,mimeType,size,createdTime,modifiedTime,"
-                "webViewLink,appProperties,parents)"
+                "nextPageToken,files(id,name,mimeType,size,createdTime,modifiedTime,"
+                "description,webViewLink,appProperties,parents)"
             ),
             "spaces": "drive",
             "supportsAllDrives": "true",
@@ -673,17 +691,42 @@ class GoogleDriveClient:
         }
         if order_by:
             params["orderBy"] = order_by
-        response = self._request(
-            "GET",
-            f"{DRIVE_API_ROOT}/files",
-            params=params,
-        )
-        files = _json_response(response).get("files", [])
-        if not isinstance(files, list):
-            raise GoogleDriveAccessError(
-                "Google Drive returned an unreadable file listing."
+        result: list[dict[str, Any]] = []
+        page_token = ""
+        seen_page_tokens: set[str] = set()
+        while True:
+            page_params = dict(params)
+            if page_token:
+                page_params["pageToken"] = page_token
+            response = self._request(
+                "GET",
+                f"{DRIVE_API_ROOT}/files",
+                params=page_params,
             )
-        result = [dict(item) for item in files if isinstance(item, Mapping)]
+            payload = _json_response(response)
+            files = payload.get("files", [])
+            if not isinstance(files, list):
+                raise GoogleDriveAccessError(
+                    "Google Drive returned an unreadable file listing."
+                )
+            result.extend(
+                dict(item) for item in files if isinstance(item, Mapping)
+            )
+            if not fetch_all:
+                break
+            next_page_token = payload.get("nextPageToken")
+            if next_page_token is None:
+                break
+            if (
+                not isinstance(next_page_token, str)
+                or not next_page_token
+                or next_page_token in seen_page_tokens
+            ):
+                raise GoogleDriveAccessError(
+                    "Google Drive returned an unreadable file listing."
+                )
+            seen_page_tokens.add(next_page_token)
+            page_token = next_page_token
         if use_cache and self.list_cache_ttl_seconds > 0:
             self._list_cache[cache_key] = (self.clock(), result)
         return [dict(item) for item in result]
@@ -713,7 +756,10 @@ class GoogleDriveClient:
             retry_transient=False,
             params={
                 "uploadType": "multipart",
-                "fields": "id,name,size,createdTime,modifiedTime,webViewLink,appProperties",
+                "fields": (
+                    "id,name,mimeType,size,createdTime,modifiedTime,description,"
+                    "webViewLink,appProperties"
+                ),
                 "supportsAllDrives": "true",
             },
             headers={"Content-Type": f"multipart/related; boundary={boundary}"},
@@ -748,20 +794,30 @@ class GoogleDriveClient:
             )
         folder_id = self._valid_folder_id(folder_id)
         base_filename = safe_receipt_filename(original_name)
+        original_filename = safe_receipt_filename(original_name)
+        content_sha256 = hashlib.sha256(content).hexdigest()
+        inventory_query = " and ".join(
+            [
+                f"'{_escape_query_value(folder_id)}' in parents",
+                "trashed = false",
+            ]
+        )
+        existing_names = {
+            str(item.get("name", "")).casefold()
+            for item in self._list(
+                inventory_query,
+                page_size=1000,
+                fetch_all=True,
+            )
+            if item.get("name")
+        }
         filename = ""
         for occurrence in range(1, 1001):
             candidate = suffixed_receipt_filename(
                 base_filename,
                 occurrence,
             )
-            availability_query = " and ".join(
-                [
-                    f"'{_escape_query_value(folder_id)}' in parents",
-                    "trashed = false",
-                    f"name = '{_escape_query_value(candidate)}'",
-                ]
-            )
-            if not self._list(availability_query, page_size=1):
+            if candidate.casefold() not in existing_names:
                 filename = candidate
                 break
         if not filename:
@@ -769,7 +825,7 @@ class GoogleDriveClient:
                 "Google Drive contains too many receipts with this filename. "
                 "Rename the local file and retry."
             )
-        upload_id = secrets.token_hex(16)
+        receipt_id = secrets.token_hex(16)
         committed_query = " and ".join(
             [
                 f"'{_escape_query_value(folder_id)}' in parents",
@@ -788,23 +844,29 @@ class GoogleDriveClient:
                     f"value='{_escape_query_value(transaction_id)}' }}"
                 ),
                 (
-                    "appProperties has { key='tabulaRasaUploadId' and "
-                    f"value='{upload_id}' }}"
+                    "appProperties has { key='tabulaRasaReceiptId' and "
+                    f"value='{receipt_id}' }}"
+                ),
+                (
+                    "appProperties has { key='tabulaRasaSha256' and "
+                    f"value='{content_sha256}' }}"
                 ),
             ]
         )
         metadata = {
             "name": filename,
             "parents": [folder_id],
+            "description": original_filename,
             "appProperties": {
                 "tabulaRasaKind": "receipt",
                 "tabulaRasaProfile": profile_key,
                 "tabulaRasaTransaction": transaction_id,
-                "tabulaRasaUploadId": upload_id,
+                "tabulaRasaReceiptId": receipt_id,
+                "tabulaRasaSha256": content_sha256,
             },
         }
         try:
-            return self._multipart_create(
+            uploaded = self._multipart_create(
                 metadata,
                 content,
                 mime_type or "application/octet-stream",
@@ -815,8 +877,22 @@ class GoogleDriveClient:
             # before reporting failure so a retry cannot create a duplicate.
             committed = self._list(committed_query, page_size=2)
             if committed:
-                return committed[0]
-            raise
+                uploaded = committed[0]
+            else:
+                raise
+        uploaded.setdefault("name", filename)
+        uploaded.setdefault("mimeType", mime_type or "application/octet-stream")
+        uploaded.setdefault("size", str(len(content)))
+        uploaded.setdefault("description", original_filename)
+        uploaded["appProperties"] = {
+            **metadata["appProperties"],
+            **(
+                dict(uploaded.get("appProperties", {}))
+                if isinstance(uploaded.get("appProperties"), Mapping)
+                else {}
+            ),
+        }
+        return uploaded
 
     def list_receipts(
         self,
@@ -850,6 +926,7 @@ class GoogleDriveClient:
             page_size=100,
             order_by="createdTime desc",
             use_cache=True,
+            fetch_all=True,
         )
 
     def list_profile_receipts(
@@ -857,6 +934,7 @@ class GoogleDriveClient:
         *,
         profile_key: str,
         folder_id: str,
+        _force_refresh: bool = False,
     ) -> list[dict[str, Any]]:
         """List every app-managed receipt available to one profile."""
         folder_id = self._valid_folder_id(folder_id)
@@ -878,8 +956,318 @@ class GoogleDriveClient:
             query,
             page_size=1000,
             order_by="createdTime desc",
-            use_cache=True,
+            use_cache=not _force_refresh,
+            fetch_all=True,
         )
+
+    def backfill_receipt_checksum(
+        self,
+        *,
+        profile_key: str,
+        folder_id: str,
+        file_id: str,
+    ) -> dict[str, Any]:
+        """Download one legacy receipt once and persist verified integrity metadata."""
+        receipts = self.list_profile_receipts(
+            profile_key=profile_key,
+            folder_id=folder_id,
+            _force_refresh=True,
+        )
+        matches = [item for item in receipts if str(item.get("id")) == str(file_id)]
+        if len(matches) != 1:
+            raise GoogleDriveAccessError(
+                "The legacy receipt is not in this profile's selected receipt folder."
+            )
+        receipt = matches[0]
+        try:
+            receipt_reference_from_drive_file(receipt)
+        except ReceiptManifestError:
+            pass
+        else:
+            return receipt
+
+        content = self.download_file(str(file_id))
+        if not content or len(content) > MAX_RECEIPT_BYTES:
+            raise GoogleDriveAccessError(
+                "The legacy receipt is empty or exceeds the supported receipt size."
+            )
+        properties = receipt.get("appProperties")
+        existing_properties = (
+            dict(properties) if isinstance(properties, Mapping) else {}
+        )
+        existing_receipt_id = _clean_text(
+            existing_properties.get("tabulaRasaReceiptId"), maximum=32
+        )
+        deterministic_legacy_id = hashlib.sha256(
+            (
+                "tabula-rasa-legacy-receipt:"
+                f"{profile_key}:{file_id}"
+            ).encode("utf-8")
+        ).hexdigest()[:32]
+        receipt_id = (
+            existing_receipt_id
+            if RECEIPT_ID_PATTERN.fullmatch(existing_receipt_id)
+            else deterministic_legacy_id
+        )
+        patch_properties = {
+            **existing_properties,
+            "tabulaRasaKind": "receipt",
+            "tabulaRasaProfile": profile_key,
+            "tabulaRasaReceiptId": receipt_id,
+            "tabulaRasaSha256": hashlib.sha256(content).hexdigest(),
+        }
+        original_filename = safe_receipt_filename(
+            str(
+                receipt.get("description")
+                or existing_properties.get("tabulaRasaOriginalName")
+                or receipt.get("name")
+                or "receipt"
+            )
+        )
+        self._invalidate_list_cache()
+        response = self._request(
+            "PATCH",
+            f"{DRIVE_API_ROOT}/files/{file_id}",
+            params={
+                "fields": (
+                    "id,name,mimeType,size,createdTime,modifiedTime,"
+                    "description,webViewLink,appProperties,parents"
+                ),
+                "supportsAllDrives": "true",
+            },
+            headers={"Content-Type": "application/json; charset=UTF-8"},
+            data=json.dumps(
+                {
+                    "appProperties": patch_properties,
+                    "description": original_filename,
+                }
+            ),
+        )
+        updated = dict(_json_response(response))
+        updated.setdefault("id", str(file_id))
+        updated.setdefault("name", str(receipt.get("name") or "receipt"))
+        updated.setdefault(
+            "mimeType", str(receipt.get("mimeType") or "application/octet-stream")
+        )
+        updated.setdefault("size", str(len(content)))
+        updated.setdefault("description", original_filename)
+        updated["appProperties"] = patch_properties
+        try:
+            receipt_reference_from_drive_file(updated)
+        except ReceiptManifestError as exc:
+            raise GoogleDriveAccessError(
+                "Google Drive did not confirm the receipt integrity backfill."
+            ) from exc
+        return updated
+
+    def restore_receipt(
+        self,
+        *,
+        profile_key: str,
+        folder_id: str,
+        stored_filename: str,
+        original_filename: str,
+        content: bytes,
+        mime_type: str,
+        receipt_id: str,
+        sha256: str,
+        old_file_id: str,
+    ) -> tuple[dict[str, Any], bool]:
+        """Create or reuse one verified recovery file without suffixing its name."""
+        try:
+            stored_filename = validate_receipt_filename(
+                stored_filename,
+                "Receipt stored filename",
+            )
+            original_filename = validate_receipt_filename(
+                original_filename,
+                "Receipt original filename",
+            )
+        except ReceiptManifestError as exc:
+            raise GoogleDriveAccessError(
+                "Receipt recovery metadata or content failed integrity validation."
+            ) from exc
+        if (
+            not content
+            or len(content) > MAX_RECEIPT_BYTES
+            or hashlib.sha256(content).hexdigest() != sha256
+            or not RECEIPT_ID_PATTERN.fullmatch(str(receipt_id))
+            or not SHA256_PATTERN.fullmatch(str(sha256))
+            or not RECEIPT_DRIVE_ID_PATTERN.fullmatch(str(old_file_id))
+        ):
+            raise GoogleDriveAccessError(
+                "Receipt recovery metadata or content failed integrity validation."
+            )
+        folder_id = self._valid_folder_id(folder_id)
+        identity_query = " and ".join(
+            [
+                f"'{_escape_query_value(folder_id)}' in parents",
+                "trashed = false",
+                (
+                    "appProperties has { key='tabulaRasaKind' and "
+                    "value='receipt' }"
+                ),
+                (
+                    "appProperties has { key='tabulaRasaProfile' and "
+                    f"value='{_escape_query_value(profile_key)}' }}"
+                ),
+                (
+                    "appProperties has { key='tabulaRasaReceiptId' and "
+                    f"value='{receipt_id}' }}"
+                ),
+                (
+                    "appProperties has { key='tabulaRasaSha256' and "
+                    f"value='{sha256}' }}"
+                ),
+            ]
+        )
+        existing_identity = self._list(identity_query, page_size=2)
+        if len(existing_identity) > 1:
+            raise GoogleDriveConflictError(
+                "Google Drive contains duplicate files for this receipt identity."
+            )
+        if existing_identity:
+            existing = existing_identity[0]
+            try:
+                reference = receipt_reference_from_drive_file(existing)
+            except ReceiptManifestError as exc:
+                raise GoogleDriveConflictError(
+                    "An existing recovered receipt has inconsistent metadata."
+                ) from exc
+            if (
+                reference["name"] != stored_filename
+                or reference["original_filename"] != original_filename
+                or reference["mime_type"] != mime_type
+                or reference["byte_size"] != len(content)
+            ):
+                raise GoogleDriveConflictError(
+                    "An existing recovered receipt conflicts with the manifest."
+                )
+            existing_content = self.download_file(str(reference["id"]))
+            if (
+                len(existing_content) != len(content)
+                or hashlib.sha256(existing_content).hexdigest() != sha256
+            ):
+                raise GoogleDriveConflictError(
+                    "An existing recovered receipt failed checksum verification."
+                )
+            return existing, True
+
+        filename_inventory_query = " and ".join(
+            [
+                f"'{_escape_query_value(folder_id)}' in parents",
+                "trashed = false",
+            ]
+        )
+        existing_names = {
+            str(item.get("name", "")).casefold()
+            for item in self._list(
+                filename_inventory_query,
+                page_size=1000,
+                fetch_all=True,
+            )
+            if item.get("name")
+        }
+        if stored_filename.casefold() in existing_names:
+            raise GoogleDriveConflictError(
+                "A different Google Drive file already uses the recovery filename."
+            )
+        properties = {
+            "tabulaRasaKind": "receipt",
+            "tabulaRasaProfile": profile_key,
+            "tabulaRasaReceiptId": receipt_id,
+            "tabulaRasaSha256": sha256,
+            "tabulaRasaOriginalFileId": old_file_id,
+        }
+        recovery_attempt_id = secrets.token_hex(16)
+        metadata = {
+            "name": stored_filename,
+            "parents": [folder_id],
+            "description": original_filename,
+            "appProperties": {
+                **properties,
+                "tabulaRasaRecoveryAttempt": recovery_attempt_id,
+            },
+        }
+        recovered_after_uncertain_response = False
+        created_file_id = ""
+        redundant_created_file_id = ""
+        try:
+            uploaded = self._multipart_create(metadata, content, mime_type)
+            created_file_id = str(uploaded.get("id", ""))
+        except GoogleDriveAccessError:
+            recovered_after_uncertain_response = True
+        committed = self._list(identity_query, page_size=1000)
+        if not committed:
+            raise GoogleDriveAccessError(
+                "Google Drive did not confirm the recovered receipt upload."
+            )
+        attempt_matches = [
+            item
+            for item in committed
+            if isinstance(item.get("appProperties"), Mapping)
+            and item["appProperties"].get("tabulaRasaRecoveryAttempt")
+            == recovery_attempt_id
+        ]
+        if len(attempt_matches) > 1:
+            raise GoogleDriveConflictError(
+                "Google Drive contains duplicate files for this recovery attempt."
+            )
+        if not created_file_id and attempt_matches:
+            created_file_id = str(attempt_matches[0].get("id", ""))
+        uploaded = min(
+            committed,
+            key=lambda item: (
+                str(item.get("createdTime", "")),
+                str(item.get("id", "")),
+            ),
+        )
+        if created_file_id and str(uploaded.get("id", "")) != created_file_id:
+            redundant_created_file_id = created_file_id
+            recovered_after_uncertain_response = True
+        uploaded.setdefault("name", stored_filename)
+        uploaded.setdefault("mimeType", mime_type)
+        uploaded.setdefault("size", str(len(content)))
+        uploaded.setdefault("description", original_filename)
+        uploaded["appProperties"] = {
+            **properties,
+            **(
+                dict(uploaded.get("appProperties", {}))
+                if isinstance(uploaded.get("appProperties"), Mapping)
+                else {}
+            ),
+        }
+        try:
+            reference = receipt_reference_from_drive_file(uploaded)
+        except ReceiptManifestError as exc:
+            raise GoogleDriveAccessError(
+                "Google Drive did not confirm the recovered receipt metadata."
+            ) from exc
+        if (
+            reference["name"] != stored_filename
+            or reference["original_filename"] != original_filename
+            or reference["mime_type"] != mime_type
+            or reference["byte_size"] != len(content)
+        ):
+            raise GoogleDriveConflictError(
+                "A concurrent recovered receipt conflicts with the manifest."
+            )
+        if recovered_after_uncertain_response:
+            committed_content = self.download_file(str(uploaded["id"]))
+            if (
+                len(committed_content) != len(content)
+                or hashlib.sha256(committed_content).hexdigest() != sha256
+            ):
+                raise GoogleDriveConflictError(
+                    "The recovered Google Drive upload failed checksum verification."
+                )
+        if redundant_created_file_id:
+            # A concurrent recovery created the same stable identity first.
+            # Only discard this invocation's later file after the canonical
+            # object is fully validated, so callers converge without orphaning
+            # a reference returned by another recovery command.
+            self.delete_file(redundant_created_file_id)
+        return uploaded, False
 
     def upload_backup(
         self,

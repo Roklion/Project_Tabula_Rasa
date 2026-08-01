@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import date
+from datetime import date, datetime, timezone
 import hashlib
 import io
 from pathlib import Path
@@ -67,9 +67,15 @@ from tabula_rasa.quickbooks_import import (
 from tabula_rasa.quickbooks_mileage_import import (
     missing_required_columns as missing_quickbooks_mileage_columns,
 )
+from tabula_rasa.receipt_manifest import (
+    ReceiptManifestError,
+    build_receipt_manifest,
+    receipt_reference_from_drive_file,
+)
+from tabula_rasa.receipt_backfill import backfill_profile_receipts
 
 
-STORAGE_IMPLEMENTATION_VERSION = 8
+STORAGE_IMPLEMENTATION_VERSION = 9
 ACCOUNT_TYPES = ["Bank", "Cash", "Credit card", "Short-term debt", "Equity", "Other"]
 ACCOUNT_CLASSIFICATIONS = ["Asset", "Liability", "Equity"]
 FIXED_TYPE_CLASSIFICATIONS = {
@@ -222,6 +228,35 @@ def get_drive_client(
             "Google Drive is not connected for this business profile."
         )
     return GoogleDriveClient(config, drive_settings)
+
+
+def receipt_manifest_for_backup(
+    storage: GoogleSheetsStorage,
+    *,
+    profile_key: str,
+    profile_secrets: Mapping[str, object],
+    configuration_revision: str,
+) -> dict[str, object]:
+    """Build a fresh profile-scoped receipt inventory for one ledger backup."""
+    drive_settings = profile_secrets.get("google_drive")
+    receipt_folder = (
+        drive_settings.get("receipt_folder")
+        if isinstance(drive_settings, Mapping)
+        else None
+    )
+    if not isinstance(receipt_folder, Mapping):
+        raise GoogleDriveConfigurationError(
+            "A current-format backup requires a selected Google Drive receipt "
+            "folder so its receipt inventory is complete."
+        )
+    transactions = storage.list_transactions(_force_refresh=True)
+    drive = get_drive_client(profile_key, configuration_revision)
+    receipts = drive.list_profile_receipts(
+        profile_key=profile_key,
+        folder_id=str(receipt_folder["id"]),
+        _force_refresh=True,
+    )
+    return build_receipt_manifest(profile_key, transactions, receipts)
 
 
 def reset_widget_state_if_requested(
@@ -379,6 +414,7 @@ with st.sidebar:
     if st.button("Log out", width="stretch"):
         logout()
 
+startup_receipt_backfill: Mapping[str, object] | None = None
 if page == "Business profiles":
     notice = st.session_state.pop("local_profile_admin_notice", None)
     if notice:
@@ -405,6 +441,44 @@ else:
         if selected_profile_key not in initialized_profiles:
             storage.ensure_defaults()
             initialized_profiles.add(selected_profile_key)
+
+        selected_profile_secrets = profile_by_key[selected_profile_key].secrets
+        selected_drive_settings = selected_profile_secrets.get("google_drive")
+        selected_receipt_folder = (
+            selected_drive_settings.get("receipt_folder")
+            if isinstance(selected_drive_settings, Mapping)
+            else None
+        )
+        if isinstance(selected_receipt_folder, Mapping):
+            migration_key = (
+                f"{selected_profile_key}:{STORAGE_IMPLEMENTATION_VERSION}:{revision}"
+            )
+            migration_results = st.session_state.setdefault(
+                "receipt_integrity_migration_results",
+                {},
+            )
+            if migration_key not in migration_results:
+                try:
+                    migration_drive = get_drive_client(
+                        selected_profile_key,
+                        revision,
+                    )
+                    migration_report = backfill_profile_receipts(
+                        storage,
+                        migration_drive,
+                        profile_key=selected_profile_key,
+                        folder_id=str(selected_receipt_folder["id"]),
+                    )
+                except (GoogleDriveError, LocalProfileStoreError, StorageError):
+                    migration_results[migration_key] = {"status": "error"}
+                else:
+                    migration_results[migration_key] = {
+                        "status": (
+                            "partial" if migration_report["errors"] else "complete"
+                        ),
+                        **migration_report,
+                    }
+            startup_receipt_backfill = migration_results[migration_key]
     except (LocalProfileStoreError, StorageError) as error:
         if isinstance(error, StorageError):
             report_storage_error(error)
@@ -414,6 +488,32 @@ else:
 
     with st.sidebar:
         st.caption(f"Workbook: {storage.workbook_title}")
+        if startup_receipt_backfill is not None:
+            migration_status = startup_receipt_backfill.get("status")
+            migrated_files = int(
+                startup_receipt_backfill.get("drive_backfilled", 0)
+            )
+            migrated_references = int(
+                startup_receipt_backfill.get("references_updated", 0)
+            )
+            if migration_status == "complete" and (
+                migrated_files or migrated_references
+            ):
+                st.success(
+                    "Receipt integrity migration completed: "
+                    f"{migrated_files} file(s), "
+                    f"{migrated_references} ledger reference(s)."
+                )
+            elif migration_status == "partial":
+                st.warning(
+                    "Receipt integrity migration was only partially completed. "
+                    "Restart the app to retry or run the documented backfill command."
+                )
+            elif migration_status == "error":
+                st.warning(
+                    "Receipt integrity migration could not start. Reconnect Google "
+                    "Drive, restart the app, or run the documented backfill command."
+                )
 
 
 if page == "Dashboard":
@@ -887,12 +987,7 @@ elif page == "Transactions":
                                     folder_id=str(receipt_folder["id"]),
                                 )
                                 receipt_references = [
-                                    {
-                                        "id": str(receipt["id"]),
-                                        "name": str(
-                                            receipt.get("name", "Receipt")
-                                        ),
-                                    }
+                                    receipt_reference_from_drive_file(receipt)
                                     for receipt in legacy_receipts
                                     if receipt.get("id")
                                 ]
@@ -900,7 +995,11 @@ elif page == "Transactions":
                                     edit_id,
                                     receipt_references,
                                 )
-                            except (GoogleDriveError, StorageError) as error:
+                            except (
+                                GoogleDriveError,
+                                ReceiptManifestError,
+                                StorageError,
+                            ) as error:
                                 references_ready = False
                                 st.error(
                                     "Existing receipt references could not be "
@@ -1048,6 +1147,7 @@ elif page == "Transactions":
                                 )
                             else:
                                 unreferenced_receipts = []
+                                receipts_needing_backfill = 0
                                 for receipt in profile_receipts:
                                     receipt_id = str(
                                         receipt.get("id", "")
@@ -1074,17 +1174,19 @@ elif page == "Transactions":
                                             uninitialized_transaction_ids
                                         )
                                     ):
-                                        unreferenced_receipts.append(
-                                            {
-                                                "id": receipt_id,
-                                                "name": str(
-                                                    receipt.get(
-                                                        "name",
-                                                        "Receipt",
-                                                    )
-                                                ),
-                                            }
-                                        )
+                                        try:
+                                            unreferenced_receipts.append(
+                                                receipt_reference_from_drive_file(
+                                                    receipt
+                                                )
+                                            )
+                                        except ReceiptManifestError:
+                                            receipts_needing_backfill += 1
+                                if receipts_needing_backfill:
+                                    st.warning(
+                                        f"{receipts_needing_backfill} legacy receipt(s) "
+                                        "need checksum backfill before they can be linked."
+                                    )
                                 if unreferenced_receipts:
                                     unreferenced_by_id = {
                                         receipt["id"]: receipt
@@ -1123,12 +1225,7 @@ elif page == "Transactions":
                                         try:
                                             storage.link_transaction_receipt(
                                                 edit_id,
-                                                file_id=existing_receipt[
-                                                    "id"
-                                                ],
-                                                name=existing_receipt[
-                                                    "name"
-                                                ],
+                                                reference=existing_receipt,
                                             )
                                         except StorageError as error:
                                             st.error(
@@ -1199,18 +1296,15 @@ elif page == "Transactions":
                                         try:
                                             storage.link_transaction_receipt(
                                                 edit_id,
-                                                file_id=str(
-                                                    uploaded_receipt["id"]
-                                                ),
-                                                name=str(
-                                                    uploaded_receipt.get(
-                                                        "name",
-                                                        receipt_upload.name,
+                                                reference=(
+                                                    receipt_reference_from_drive_file(
+                                                        uploaded_receipt
                                                     )
                                                 ),
                                             )
                                         except (
                                             KeyError,
+                                            ReceiptManifestError,
                                             StorageError,
                                         ) as error:
                                             st.error(
@@ -1887,6 +1981,11 @@ elif page == "Data & backup":
         if isinstance(drive_settings, Mapping)
         else None
     )
+    recovery_receipt_folder = (
+        drive_settings.get("receipt_folder")
+        if isinstance(drive_settings, Mapping)
+        else None
+    )
     backup_drive = None
     latest_cloud = None
     st.subheader("Google Drive backup")
@@ -1929,7 +2028,13 @@ elif page == "Data & backup":
                 width="stretch",
             ):
                 try:
-                    backup_zip = storage.export_backup_zip()
+                    receipt_manifest = receipt_manifest_for_backup(
+                        storage,
+                        profile_key=selected_profile_key,
+                        profile_secrets=selected_profile,
+                        configuration_revision=revision,
+                    )
+                    backup_zip = storage.export_backup_zip(receipt_manifest)
                     manifest = storage.validate_backup_zip(backup_zip)
                     cloud_filename, cloud_sha256 = backup_filename_and_hash(
                         backup_zip,
@@ -1944,7 +2049,12 @@ elif page == "Data & backup":
                         backup_time=str(manifest["backup_time"]),
                         keep=30,
                     )
-                except (StorageError, GoogleDriveError, RuntimeError) as error:
+                except (
+                    StorageError,
+                    GoogleDriveError,
+                    ReceiptManifestError,
+                    RuntimeError,
+                ) as error:
                     if isinstance(error, StorageError):
                         report_storage_error(error)
                     else:
@@ -2017,15 +2127,31 @@ elif page == "Data & backup":
                     "Synology recovery is enabled, but this profile does not have a "
                     "Google Drive backup folder selected."
                 )
-            source_name = (
+            if not isinstance(recovery_receipt_folder, Mapping):
+                st.warning(
+                    "Synology recovery is enabled, but this profile does not have a "
+                    "Google Drive receipt folder selected."
+                )
+            backup_source_name = (
                 str(backup_folder.get("name", "Google Drive backup folder"))
                 if isinstance(backup_folder, Mapping)
+                else "Not configured"
+            )
+            receipt_source_name = (
+                str(
+                    recovery_receipt_folder.get(
+                        "name",
+                        "Google Drive receipt folder",
+                    )
+                )
+                if isinstance(recovery_receipt_folder, Mapping)
                 else "Not configured"
             )
             st.markdown(
                 "\n".join(
                     (
-                        f"- **Google Drive source:** {source_name}",
+                        f"- **Ledger backup source:** {backup_source_name}",
+                        f"- **Receipt source:** {receipt_source_name}",
                         "- **Cloud Sync direction:** " + SYNC_DIRECTION,
                         "- **Destination deletions:** " + DESTINATION_DELETIONS,
                         "- **NAS destination:** "
@@ -2038,7 +2164,8 @@ elif page == "Data & backup":
             st.caption(
                 "These are the expected per-business settings. Tabula Rosa does not "
                 "connect to the NAS; confirm transfers, failures, and retries in DSM "
-                "Cloud Sync."
+                "Cloud Sync, and protect both synchronized folders with versioned "
+                "retention."
             )
 
     st.subheader("Live workbook exports")
@@ -2055,8 +2182,6 @@ elif page == "Data & backup":
     )
     if st.button(prepare_label, width="stretch"):
         try:
-            backup_zip = storage.export_backup_zip()
-            manifest = storage.validate_backup_zip(backup_zip)
             accounts = storage.list_accounts(active_only=False)
             categories = storage.list_categories()
             transactions = storage.list_transactions()
@@ -2066,18 +2191,44 @@ elif page == "Data & backup":
         except StorageError as error:
             report_storage_error(error)
         else:
-            prepared_exports = {
-                "backup": backup_zip,
-                "backup_time": str(manifest["backup_time"]),
+            prepared_exports: dict[str, object] = {
+                "backup_time": datetime.now(timezone.utc).isoformat(),
                 "transactions": all_transactions.to_csv(index=False).encode(
                     "utf-8"
                 ),
                 "mileage": all_mileage.to_csv(index=False).encode("utf-8"),
             }
+            try:
+                receipt_manifest = receipt_manifest_for_backup(
+                    storage,
+                    profile_key=selected_profile_key,
+                    profile_secrets=selected_profile,
+                    configuration_revision=revision,
+                )
+                backup_zip = storage.export_backup_zip(receipt_manifest)
+                manifest = storage.validate_backup_zip(backup_zip)
+            except (
+                StorageError,
+                GoogleDriveError,
+                ReceiptManifestError,
+            ) as error:
+                prepared_exports["backup_error"] = str(error)
+            else:
+                prepared_exports["backup"] = backup_zip
+                prepared_exports["backup_time"] = str(manifest["backup_time"])
             st.session_state[prepared_exports_key] = prepared_exports
-            st.success("Fresh downloadable exports are ready.")
+            if "backup" in prepared_exports:
+                st.success("Fresh downloadable exports are ready.")
+            else:
+                st.success("Fresh CSV exports are ready.")
     if isinstance(prepared_exports, Mapping):
         st.caption(f"Prepared from workbook data at {prepared_exports['backup_time']}.")
+        backup_error = prepared_exports.get("backup_error")
+        if backup_error:
+            st.warning(
+                "The complete workbook backup is unavailable: "
+                f"{backup_error}"
+            )
         st.download_button(
             "Download transactions CSV",
             prepared_exports["transactions"],
@@ -2092,13 +2243,15 @@ elif page == "Data & backup":
             "text/csv",
             width="stretch",
         )
-        st.download_button(
-            "Download complete workbook backup",
-            prepared_exports["backup"],
-            f"tabula-rosa-backup-{date.today()}.zip",
-            "application/zip",
-            width="stretch",
-        )
+        backup_export = prepared_exports.get("backup")
+        if isinstance(backup_export, bytes):
+            st.download_button(
+                "Download complete workbook backup",
+                backup_export,
+                f"tabula-rosa-backup-{date.today()}.zip",
+                "application/zip",
+                width="stretch",
+            )
     with st.expander("Import Tabula Rosa CSV"):
         st.write(
             "Upload a CSV with: Date, Type, Amount, Account, Category, Payee, "

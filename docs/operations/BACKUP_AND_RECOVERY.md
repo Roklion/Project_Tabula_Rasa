@@ -33,12 +33,13 @@ Synology are optional additional failure boundaries.
 
 ## Archive contents and compatibility
 
-The current backup format is version 4. Each archive contains:
+The current backup format is version 5. Each archive contains:
 
 - `Accounts.csv`;
 - `Categories.csv`;
 - `Transactions.csv`;
-- `Mileage.csv`; and
+- `Mileage.csv`;
+- `receipts.json`; and
 - `manifest.json`.
 
 The manifest records:
@@ -48,19 +49,42 @@ The manifest records:
 - source workbook title;
 - worksheet headers;
 - row counts; and
-- SHA-256 checksums for every CSV.
+- SHA-256 checksums for every CSV and `receipts.json`.
 
-The ZIP contains ledger data and receipt references, not the receipt file
-contents stored in Google Drive. Receipt retention and recovery must therefore
-account for the profile's separate receipt folder.
+`receipts.json` is a profile-scoped metadata inventory. It records referenced
+and intentionally unreferenced app-managed receipts, stable receipt identities,
+the association from each transaction's `receipt_references`, original and
+stored filenames, MIME types, byte sizes, SHA-256 checksums, old Drive file IDs,
+and available Drive timestamps. It does not contain PDF or image bytes, so the
+same large receipt files are not duplicated into every retained ledger archive.
 
-The current validator and restore path accept formats 2, 3, and 4:
+Every manifest entry must have a checksum created during upload or a verified
+legacy backfill. Backup creation fails rather than silently writing a
+checksum-incomplete receipt inventory. Current-format backup creation also
+requires the selected profile's configured Google Drive receipt folder; if the
+folder is disconnected or unavailable, the app and command-line workflow fail
+instead of recording an empty inventory. The authenticated app automatically
+runs an idempotent, profile-scoped migration once per session when a selected
+profile has a configured receipt folder. It scans all app-managed receipts in
+that folder, downloads only files missing valid integrity metadata, and updates
+active ledger references after Drive confirms each file update.
+
+If the app reports a partial or failed migration, restart it to retry or run the
+same profile-scoped migration explicitly before creating another backup:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\backfill_receipt_checksums.py `
+  --profile PROFILE_KEY
+```
+
+The current validator and ledger restore path accept formats 2 through 5:
 
 | Format | Contents |
 | --- | --- |
 | 2 | Accounts, Categories, and Transactions; predates Mileage and receipt references |
 | 3 | Adds Mileage; predates transaction receipt references |
-| 4 | Current format with Mileage and receipt references |
+| 4 | Adds transaction receipt references; archives created before the receipt inventory remain ledger-only recovery sources |
+| 5 | Current format; adds the checksummed `receipts.json` inventory without embedding receipt bytes |
 
 Older compatible formats are migrated in memory during restore. A historical
 format-1 archive must first be converted to format 2.
@@ -129,8 +153,10 @@ Google Drive Desktop does not need to be installed or running for this mode.
 
 The provided Windows task registers Monday, Tuesday, and Wednesday at 10:00 PM
 as retry opportunities for one weekly backup. `--once-per-week` verifies an
-existing archive before accessing Google Sheets, so a successful Monday run
-causes Tuesday and Wednesday to exit without creating duplicates.
+existing current-format archive with its version-5 receipt inventory before
+accessing Google Sheets, so a successful Monday run causes Tuesday and
+Wednesday to exit without creating duplicates. A valid older ledger-only
+archive does not suppress creation of the current recovery format.
 
 ### Cloud-native scheduled backup
 
@@ -179,7 +205,11 @@ Successful validation confirms:
 - SHA-256 checksums;
 - row counts;
 - record IDs; and
-- ledger relationships.
+- ledger relationships;
+- the receipt manifest schema, profile, identities, Windows/Synology-portable
+  filenames, sizes, checksums, duplicates, and transaction associations; and
+- whether an older archive is a ledger-only source without receipt recovery
+  metadata.
 
 Do not modify a failed archive. Preserve it for private investigation, choose a
 different generation, and validate again.
@@ -227,6 +257,45 @@ Open the recovery workbook and spot-check headers and representative
 relationships. Delete it or clearly label it as a drill afterward so it cannot
 be mistaken for the live ledger.
 
+## Recover receipt files and remap Drive IDs
+
+Ledger restoration does not restore receipt bytes. After restoring a version-5
+archive, copy the matching profile receipt directory from the versioned
+Synology recovery set to a safe local path. Then run the dedicated receipt
+operation against the newly restored, non-live workbook:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\recover_synology_receipts.py `
+  "C:\Safe-Recovery\tabula-rosa-backup-YYYYMMDDTHHMMSSZ.zip" `
+  "C:\Safe-Recovery\receipts" `
+  --profile PROFILE_KEY `
+  --target-spreadsheet-id NEW_SPREADSHEET_ID
+```
+
+The command refuses every configured profile's live workbook. Before any Drive
+change it validates the archive, confirms its receipt inventory belongs to the
+selected profile, and checks the presence of every
+referenced transaction in the restored target. For each entry it verifies the
+local byte size and SHA-256, preserves the manifest's stored filename, refuses
+filename conflicts, recreates ownership/integrity/provenance metadata, and
+remaps the old diagnostic Drive ID in the restored transaction reference.
+
+Retries identify files by stable receipt identity plus SHA-256. A matching
+Drive file is downloaded and verified before reuse, so a retry repairs the
+reference without creating another suffixed copy. Unreferenced entries are
+restored but remain unattached. Missing, corrupt, conflicting, and failed files
+are counted and skipped while other valid entries continue. Formats 2, 3, and
+pre-inventory 4 can restore the ledger, but the validator and recovery command
+identify them as ledger-only sources.
+
+The required recovery order is:
+
+1. Restore the archive into a new blank workbook.
+2. Connect or confirm the selected profile's receipt folder.
+3. Recover receipt bytes from the matching Synology version.
+4. Verify referenced receipts open through their remapped Drive IDs.
+5. Verify unreferenced receipts remain available without automatic attachment.
+
 ## Convert a format-1 archive
 
 Convert a historical format-1 archive offline:
@@ -267,9 +336,11 @@ generation.
 
 ## Optional Synology recovery copy
 
-Each business can opt into a dedicated Synology Cloud Sync task that downloads
-its Google Drive backup folder into a separate NAS directory. Tabula Rosa does
-not connect to DSM or prove that synchronization succeeded.
+Each business can opt into separate Synology Cloud Sync download tasks for its
+Google Drive backup and receipt folders. Both destinations require versioned
+retention such as Hyper Backup or snapshots; Cloud Sync alone can reproduce
+accidental changes. Tabula Rosa does not connect to DSM, configure either task,
+or prove that synchronization succeeded.
 
 Follow the complete
 [Synology recovery runbook](SYNOLOGY_RECOVERY.md) to configure folder
@@ -325,7 +396,8 @@ folder.
 ### The command says a weekly backup already exists
 
 That is expected with `--once-per-week`. The command found and validated a
-canonical backup in the current local ISO week.
+canonical current-format backup, including its receipt inventory, in the
+current local ISO week.
 
 ### A cloud backup cannot refresh authorization
 
@@ -351,4 +423,7 @@ failed copy, choose another generation, and validate that copy.
 | Scheduled task registration | [`scripts/register_weekly_backup_task.ps1`](../../scripts/register_weekly_backup_task.ps1) |
 | Standalone archive validation | [`scripts/validate_google_sheets_backup.py`](../../scripts/validate_google_sheets_backup.py) |
 | Restore command | [`scripts/restore_google_sheets_backup.py`](../../scripts/restore_google_sheets_backup.py) |
+| Startup and command-line receipt checksum backfill | [`tabula_rasa/receipt_backfill.py`](../../tabula_rasa/receipt_backfill.py), [`scripts/backfill_receipt_checksums.py`](../../scripts/backfill_receipt_checksums.py) |
+| Receipt inventory validation | [`tabula_rasa/receipt_manifest.py`](../../tabula_rasa/receipt_manifest.py) |
+| Synology receipt recovery and ID remapping | [`scripts/recover_synology_receipts.py`](../../scripts/recover_synology_receipts.py) |
 | Format-1 conversion | [`scripts/convert_backup_v1_to_v2.py`](../../scripts/convert_backup_v1_to_v2.py) |

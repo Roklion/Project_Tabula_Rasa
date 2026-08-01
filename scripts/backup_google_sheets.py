@@ -23,7 +23,9 @@ from tabula_rasa.google_drive import (
     load_oauth_config,
 )
 from tabula_rasa.local_profile_store import load_business_profile_document
+from tabula_rasa.receipt_manifest import build_receipt_manifest
 from tabula_rasa.storage import GoogleSheetsStorage
+from tabula_rasa.storage.google_sheets import BACKUP_FORMAT_VERSION
 
 
 BACKUP_NAME = re.compile(r"^tabula-rosa-backup-\d{8}T\d{6}Z\.zip$")
@@ -52,10 +54,11 @@ def verified_backup_for_week(
         if backup_local_date.isocalendar()[:2] != requested_week:
             continue
         try:
-            GoogleSheetsStorage.validate_backup_zip(path.read_bytes())
+            manifest = GoogleSheetsStorage.validate_backup_zip(path.read_bytes())
         except (OSError, RuntimeError):
             continue
-        return path
+        if manifest.get("format_version") == BACKUP_FORMAT_VERSION:
+            return path
     return None
 
 
@@ -71,14 +74,18 @@ def resolve_backup_output_dir(
 
 
 def write_versioned_backup(
-    storage: GoogleSheetsStorage, output_dir: Path, *, keep: int = 30
+    storage: GoogleSheetsStorage,
+    output_dir: Path,
+    receipt_manifest: Mapping[str, Any],
+    *,
+    keep: int = 30,
 ) -> Path:
     """Write one verified backup and retain the newest requested generations."""
     if keep < 2:
         raise ValueError("keep must retain at least two backup generations")
     output_dir = output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    backup = storage.export_backup_zip()
+    backup = storage.export_backup_zip(receipt_manifest)
     manifest = storage.validate_backup_zip(backup)
     timestamp = str(manifest["backup_time"]).replace("-", "").replace(":", "")
     timestamp = timestamp.replace("+0000", "Z")
@@ -119,10 +126,16 @@ def upload_versioned_backup_to_drive(
         raise GoogleDriveConfigurationError(
             "No Google Drive backup folder is selected for this profile."
         )
-    backup = storage.export_backup_zip()
+    client = GoogleDriveClient(load_oauth_config(all_secrets), drive_settings)
+    receipt_manifest = build_backup_receipt_manifest(
+        profile_key,
+        profile_secrets,
+        storage,
+        client=client,
+    )
+    backup = storage.export_backup_zip(receipt_manifest)
     manifest = storage.validate_backup_zip(backup)
     filename, sha256 = backup_filename_and_hash(backup, manifest)
-    client = GoogleDriveClient(load_oauth_config(all_secrets), drive_settings)
     return client.upload_backup(
         profile_key=profile_key,
         folder_id=str(backup_folder["id"]),
@@ -134,12 +147,46 @@ def upload_versioned_backup_to_drive(
     )
 
 
+def build_backup_receipt_manifest(
+    profile_key: str,
+    profile_secrets: Mapping[str, Any],
+    storage: GoogleSheetsStorage,
+    *,
+    client: GoogleDriveClient | None = None,
+) -> dict[str, Any]:
+    """Build a fresh inventory for the selected profile's receipt folder."""
+    drive_settings = profile_secrets.get("google_drive")
+    receipt_folder = (
+        drive_settings.get("receipt_folder")
+        if isinstance(drive_settings, Mapping)
+        else None
+    )
+    if not isinstance(receipt_folder, Mapping):
+        raise GoogleDriveConfigurationError(
+            "A current-format backup requires a selected Google Drive receipt "
+            "folder so its receipt inventory is complete."
+        )
+    if client is None:
+        raise GoogleDriveConfigurationError(
+            "A Google Drive client is required to inventory receipts."
+        )
+    transactions = storage.list_transactions(_force_refresh=True)
+    receipts = client.list_profile_receipts(
+        profile_key=profile_key,
+        folder_id=str(receipt_folder["id"]),
+        _force_refresh=True,
+    )
+    return build_receipt_manifest(profile_key, transactions, receipts)
+
+
 def verified_drive_backup_for_week(
     all_secrets: Mapping[str, Any],
     profile_key: str,
     profile_secrets: Mapping[str, Any],
+    *,
+    local_date: datetime | None = None,
 ) -> dict[str, Any] | None:
-    """Return the newest app-managed Drive backup in the current local week."""
+    """Return the newest verified current-format backup in the local week."""
     drive_settings = profile_secrets.get("google_drive")
     if not isinstance(drive_settings, Mapping):
         return None
@@ -152,7 +199,17 @@ def verified_drive_backup_for_week(
         folder_id=str(backup_folder["id"]),
         limit=30,
     ):
-        if backup_is_in_local_week(str(item.get("name", ""))):
+        if not backup_is_in_local_week(
+            str(item.get("name", "")),
+            local_date=local_date,
+        ):
+            continue
+        try:
+            backup = client.download_file(str(item.get("id", "")))
+            manifest = GoogleSheetsStorage.validate_backup_zip(backup)
+        except RuntimeError:
+            continue
+        if manifest.get("format_version") == BACKUP_FORMAT_VERSION:
             return item
     return None
 
@@ -237,7 +294,25 @@ def main() -> None:
             print(f"Weekly backup already verified: {existing}")
             return
     storage = GoogleSheetsStorage.from_secrets(secrets)
-    destination = write_versioned_backup(storage, output_dir, keep=args.keep)
+    drive_settings = secrets.get("google_drive")
+    drive_client = (
+        GoogleDriveClient(load_oauth_config(all_secrets), drive_settings)
+        if isinstance(drive_settings, Mapping)
+        and isinstance(drive_settings.get("receipt_folder"), Mapping)
+        else None
+    )
+    receipt_manifest = build_backup_receipt_manifest(
+        selected_profile_key,
+        secrets,
+        storage,
+        client=drive_client,
+    )
+    destination = write_versioned_backup(
+        storage,
+        output_dir,
+        receipt_manifest,
+        keep=args.keep,
+    )
     print(f"Verified backup created: {destination}")
 
 

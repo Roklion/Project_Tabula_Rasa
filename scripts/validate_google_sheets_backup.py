@@ -38,6 +38,11 @@ def validation_report(path: Path, manifest: Mapping[str, Any]) -> str:
         for title in ("Accounts", "Categories", "Transactions", "Mileage")
         if title in row_counts
     )
+    receipt_status = (
+        f"verified ({manifest.get('receipt_count', 0)} entries)"
+        if manifest.get("receipt_inventory")
+        else "not present; ledger-only recovery source"
+    )
     return "\n".join(
         (
             f"Validated backup: {path.resolve()}",
@@ -45,6 +50,7 @@ def validation_report(path: Path, manifest: Mapping[str, Any]) -> str:
             f"Backup time: {manifest.get('backup_time')}",
             f"Workbook: {manifest.get('workbook_title')}",
             f"Rows: {rows}",
+            f"Receipt inventory: {receipt_status}",
             "Manifest checksums: verified",
         )
     )

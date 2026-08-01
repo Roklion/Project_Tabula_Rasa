@@ -16,7 +16,7 @@ The application supports:
 
 ## Quick start
 
-1. Install Python 3.11 or newer.
+1. Install Python 3.12 or newer.
 2. Create the virtual environment and install the application dependencies:
 
    ```powershell
