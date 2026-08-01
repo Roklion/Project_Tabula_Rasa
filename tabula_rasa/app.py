@@ -1913,6 +1913,11 @@ elif page == "Data & backup":
         if isinstance(drive_settings, Mapping)
         else None
     )
+    recovery_receipt_folder = (
+        drive_settings.get("receipt_folder")
+        if isinstance(drive_settings, Mapping)
+        else None
+    )
     backup_drive = None
     latest_cloud = None
     st.subheader("Google Drive backup")
@@ -2054,15 +2059,31 @@ elif page == "Data & backup":
                     "Synology recovery is enabled, but this profile does not have a "
                     "Google Drive backup folder selected."
                 )
-            source_name = (
+            if not isinstance(recovery_receipt_folder, Mapping):
+                st.warning(
+                    "Synology recovery is enabled, but this profile does not have a "
+                    "Google Drive receipt folder selected."
+                )
+            backup_source_name = (
                 str(backup_folder.get("name", "Google Drive backup folder"))
                 if isinstance(backup_folder, Mapping)
+                else "Not configured"
+            )
+            receipt_source_name = (
+                str(
+                    recovery_receipt_folder.get(
+                        "name",
+                        "Google Drive receipt folder",
+                    )
+                )
+                if isinstance(recovery_receipt_folder, Mapping)
                 else "Not configured"
             )
             st.markdown(
                 "\n".join(
                     (
-                        f"- **Google Drive source:** {source_name}",
+                        f"- **Ledger backup source:** {backup_source_name}",
+                        f"- **Receipt source:** {receipt_source_name}",
                         "- **Cloud Sync direction:** " + SYNC_DIRECTION,
                         "- **Destination deletions:** " + DESTINATION_DELETIONS,
                         "- **NAS destination:** "
@@ -2075,7 +2096,8 @@ elif page == "Data & backup":
             st.caption(
                 "These are the expected per-business settings. Tabula Rosa does not "
                 "connect to the NAS; confirm transfers, failures, and retries in DSM "
-                "Cloud Sync."
+                "Cloud Sync, and protect both synchronized folders with versioned "
+                "retention."
             )
 
     st.subheader("Live workbook exports")

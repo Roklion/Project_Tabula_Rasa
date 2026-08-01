@@ -66,15 +66,26 @@ Receipt behavior:
 - a conflicting filename receives a numeric suffix such as
   `receipt (2).pdf` instead of replacing the existing file;
 - uncertain upload responses are checked before retrying to avoid duplicates;
-- each transaction stores stable Drive file IDs and display names; and
+- SHA-256 is calculated from the bytes before every upload;
+- Drive stores a stable receipt identity and checksum in private metadata;
+- each transaction stores the stable identity, Drive file ID, original and
+  stored filenames, MIME type, byte size, and SHA-256; and
 - removing a receipt from a transaction removes only its ledger reference.
 
 An unlinked Drive file remains in the receipt folder and becomes available in
 the transaction editor's **Unreferenced receipt** list.
 
-Receipt file contents are not embedded in the ledger backup ZIP. The backup
-contains only receipt references; retain the separate Google Drive receipt
-folder according to the business's recordkeeping needs.
+Linking an unreferenced receipt copies its existing integrity metadata without
+renaming or rewriting the Drive file. Legacy files without integrity metadata
+must be backfilled before they can be linked through the picker or included in
+a fully verified backup.
+
+Receipt file contents are not embedded in each ledger backup ZIP. Version-5
+backups contain a checksummed `receipts.json` metadata inventory, including
+intentionally unreferenced app-managed files. Recoverable receipt bytes must be
+retained separately; follow the [Synology recovery
+runbook](../operations/SYNOLOGY_RECOVERY.md) for the independent, versioned
+copy and Drive ID-remapping workflow.
 
 ## Mileage
 

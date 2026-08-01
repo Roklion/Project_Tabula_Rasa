@@ -10,6 +10,7 @@ import zipfile
 
 import pytest
 
+from scripts.recover_synology_receipts import validate_recovery_target
 from tabula_rasa.google_drive import GoogleDriveConflictError
 from tabula_rasa.receipt_manifest import build_receipt_manifest
 from tabula_rasa.receipt_recovery import (
@@ -311,3 +312,15 @@ def test_recovery_identifies_pre_manifest_v4_as_ledger_only() -> None:
         )
 
     drive.restore_receipt.assert_not_called()
+
+
+def test_recovery_command_refuses_the_configured_live_workbook() -> None:
+    profile_secrets = {"spreadsheet_id": "live-sheet-123"}
+
+    with pytest.raises(ValueError, match="configured live workbook"):
+        validate_recovery_target(profile_secrets, "live-sheet-123")
+
+    assert (
+        validate_recovery_target(profile_secrets, "restored-sheet-456")
+        == "restored-sheet-456"
+    )

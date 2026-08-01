@@ -8,6 +8,9 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+import gspread
+from google.oauth2.service_account import Credentials
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -17,6 +20,7 @@ from tabula_rasa.google_drive import GoogleDriveClient, load_oauth_config
 from tabula_rasa.local_profile_store import load_business_profile_document
 from tabula_rasa.receipt_recovery import recover_receipts_from_synology
 from tabula_rasa.storage import GoogleSheetsStorage
+from tabula_rasa.storage.google_sheets import SHEETS_SCOPE
 
 
 def _drive_destination(profile_secrets: Mapping[str, Any]) -> tuple[Mapping[str, Any], str]:
@@ -27,6 +31,21 @@ def _drive_destination(profile_secrets: Mapping[str, Any]) -> tuple[Mapping[str,
     if not isinstance(receipt_folder, Mapping):
         raise ValueError("No Google Drive receipt folder is selected for this profile.")
     return drive_settings, str(receipt_folder.get("id") or "")
+
+
+def validate_recovery_target(
+    profile_secrets: Mapping[str, Any],
+    target_spreadsheet_id: str,
+) -> str:
+    """Return a non-live target workbook ID or raise a safe refusal."""
+    target = str(target_spreadsheet_id).strip()
+    if not target:
+        raise ValueError("A recovery target spreadsheet ID is required.")
+    if target == str(profile_secrets.get("spreadsheet_id") or ""):
+        raise ValueError(
+            "Refusing to remap recovered receipts in the configured live workbook."
+        )
+    return target
 
 
 def main() -> None:
@@ -43,6 +62,11 @@ def main() -> None:
         default=PROJECT_ROOT / ".streamlit" / "secrets.toml",
     )
     parser.add_argument("--profile", help="Business profile key to recover")
+    parser.add_argument(
+        "--target-spreadsheet-id",
+        required=True,
+        help="ID of the newly restored non-live ledger workbook",
+    )
     args = parser.parse_args()
 
     all_secrets = load_business_profile_document(args.secrets)
@@ -53,10 +77,22 @@ def main() -> None:
     profile_secrets = select_profile_secrets(all_secrets, profile_key)
     drive_settings, folder_id = _drive_destination(profile_secrets)
     try:
+        target_spreadsheet_id = validate_recovery_target(
+            profile_secrets,
+            args.target_spreadsheet_id,
+        )
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
+    try:
         backup = args.backup.read_bytes()
     except OSError as exc:
         raise SystemExit("The ledger backup could not be read.") from exc
-    storage = GoogleSheetsStorage.from_secrets(profile_secrets)
+    credentials = Credentials.from_service_account_info(
+        dict(profile_secrets["gcp_service_account"]),
+        scopes=[SHEETS_SCOPE],
+    )
+    workbook = gspread.authorize(credentials).open_by_key(target_spreadsheet_id)
+    storage = GoogleSheetsStorage(workbook)
     drive = GoogleDriveClient(load_oauth_config(all_secrets), drive_settings)
     try:
         report = recover_receipts_from_synology(
