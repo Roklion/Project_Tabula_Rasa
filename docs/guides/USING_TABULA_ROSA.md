@@ -82,8 +82,10 @@ integrity metadata was introduced is considered legacy when that metadata is
 missing. On the first authenticated use of each selected business profile in
 an app session, Tabula Rosa scans that profile's configured receipt folder and
 backfills those files. The migration is resumable and does not download files
-that already have valid metadata. A warning provides the manual recovery path
-if any file cannot be migrated.
+that already have valid metadata. For a transaction whose receipt-reference
+cell was never initialized, the migration also preserves its profile-scoped
+legacy Drive association. An explicitly empty reference list remains unlinked.
+A warning provides the manual recovery path if any file cannot be migrated.
 
 Receipt file contents are not embedded in each ledger backup ZIP. Version-5
 backups contain a checksummed `receipts.json` metadata inventory, including

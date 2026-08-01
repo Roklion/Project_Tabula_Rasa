@@ -51,8 +51,10 @@ def backfill_profile_receipts(
         "references_updated": 0,
         "errors": [],
     }
+    pending_initializations: dict[str, list[dict[str, Any]]] = {}
     for receipt in receipts:
         file_id = str(receipt.get("id") or "")
+        receipt_with_metadata = receipt
         try:
             reference = receipt_reference_from_drive_file(receipt)
         except ReceiptManifestError:
@@ -62,6 +64,7 @@ def backfill_profile_receipts(
                     folder_id=folder_id,
                     file_id=file_id,
                 )
+                receipt_with_metadata = updated
                 reference = receipt_reference_from_drive_file(updated)
             except (RuntimeError, ReceiptManifestError) as error:
                 report["errors"].append(
@@ -71,6 +74,21 @@ def backfill_profile_receipts(
             report["drive_backfilled"] += 1
         transaction_id = associations.get(file_id)
         if transaction_id is None:
+            properties = receipt_with_metadata.get("appProperties")
+            legacy_transaction_id = (
+                str(properties.get("tabulaRasaTransaction") or "")
+                if isinstance(properties, dict)
+                else ""
+            )
+            legacy_transaction = transactions_by_id.get(legacy_transaction_id)
+            if (
+                legacy_transaction is not None
+                and str(legacy_transaction.get("receipt_references", "")) == ""
+            ):
+                pending_initializations.setdefault(
+                    legacy_transaction_id,
+                    [],
+                ).append(reference)
             continue
         current_transaction = transactions_by_id[transaction_id]
         current_reference = next(
@@ -94,4 +112,20 @@ def backfill_profile_receipts(
             )
             continue
         report["references_updated"] += 1
+    for transaction_id, references in pending_initializations.items():
+        try:
+            storage.initialize_legacy_transaction_receipts(
+                transaction_id,
+                references=references,
+            )
+        except StorageError as error:
+            report["errors"].extend(
+                {
+                    "file_id": str(reference["id"]),
+                    "error": str(error),
+                }
+                for reference in references
+            )
+            continue
+        report["references_updated"] += len(references)
     return report

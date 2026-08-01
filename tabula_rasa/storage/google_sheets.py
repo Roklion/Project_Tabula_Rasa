@@ -14,7 +14,7 @@ import math
 import threading
 import time
 import zipfile
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -1264,6 +1264,51 @@ class GoogleSheetsStorage:
         updated["receipt_references"] = _encode_receipt_references(
             references
         )
+        self._replace_row("Transactions", current, updated)
+        return updated
+
+    def initialize_legacy_transaction_receipts(
+        self,
+        transaction_id: str,
+        *,
+        references: Sequence[Mapping[str, Any]],
+    ) -> dict[str, str]:
+        """Populate one still-blank legacy receipt cell with rich references."""
+        try:
+            normalized = [
+                validate_receipt_reference(reference, allow_legacy=False)
+                for reference in references
+            ]
+        except ReceiptManifestError as exc:
+            raise StorageValidationError(str(exc)) from exc
+        if not normalized:
+            raise StorageValidationError(
+                "Legacy receipt initialization requires at least one receipt"
+            )
+        file_ids = [str(reference["id"]) for reference in normalized]
+        if len(file_ids) != len(set(file_ids)):
+            raise StorageValidationError("Receipt references are duplicated")
+        transactions = self.list_transactions(_force_refresh=True)
+        for transaction in transactions:
+            if transaction["id"] == transaction_id:
+                continue
+            linked_ids = {
+                str(item["id"])
+                for item in decode_receipt_references(
+                    transaction.get("receipt_references", "")
+                )
+            }
+            if linked_ids.intersection(file_ids):
+                raise StorageConflictError(
+                    "That receipt is already linked to another transaction"
+                )
+        current = self._find_row("Transactions", transaction_id)
+        if str(current.values.get("receipt_references", "")) != "":
+            raise StorageConflictError(
+                "The transaction receipt references are already initialized"
+            )
+        updated = dict(current.values)
+        updated["receipt_references"] = _encode_receipt_references(normalized)
         self._replace_row("Transactions", current, updated)
         return updated
 

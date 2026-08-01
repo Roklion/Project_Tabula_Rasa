@@ -12,22 +12,56 @@ from tabula_rasa.storage import (
 from tests.fakes import FakeWorkbook
 
 
-def _legacy_drive_receipt(profile_key: str) -> dict[str, object]:
-    return {
+def _set_raw_receipt_references(
+    workbook: FakeWorkbook,
+    *,
+    transaction_id: str,
+    value: str,
+) -> None:
+    worksheet = workbook.worksheet("Transactions")
+    headers = worksheet.rows[0]
+    id_index = headers.index("id")
+    references_index = headers.index("receipt_references")
+    row = next(
+        item for item in worksheet.rows[1:] if item[id_index] == transaction_id
+    )
+    row[references_index] = value
+
+
+def _legacy_drive_receipt(
+    profile_key: str,
+    *,
+    transaction_id: str = "",
+) -> dict[str, object]:
+    properties = {
+        "tabulaRasaKind": "receipt",
+        "tabulaRasaProfile": profile_key,
+    }
+    if transaction_id:
+        properties["tabulaRasaTransaction"] = transaction_id
+    receipt: dict[str, object] = {
         "id": "receipt123456",
         "name": "statement.pdf",
         "mimeType": "application/pdf",
         "size": "7",
-        "appProperties": {
-            "tabulaRasaKind": "receipt",
-            "tabulaRasaProfile": profile_key,
-        },
+        "appProperties": properties,
     }
+    return receipt
 
 
-def _backfilled_drive_receipt(profile_key: str) -> dict[str, object]:
-    receipt = _legacy_drive_receipt(profile_key)
+def _backfilled_drive_receipt(
+    profile_key: str,
+    *,
+    transaction_id: str = "",
+) -> dict[str, object]:
+    receipt = _legacy_drive_receipt(
+        profile_key,
+        transaction_id=transaction_id,
+    )
+    properties = receipt["appProperties"]
+    assert isinstance(properties, dict)
     receipt["appProperties"] = {
+        **properties,
         "tabulaRasaKind": "receipt",
         "tabulaRasaProfile": profile_key,
         "tabulaRasaReceiptId": "a" * 32,
@@ -81,6 +115,126 @@ def test_backfill_updates_drive_and_active_transaction_reference() -> None:
     assert reference["sha256"] == hashlib.sha256(b"receipt").hexdigest()
 
 
+def test_backfill_migrates_a_drive_only_transaction_association() -> None:
+    workbook = FakeWorkbook()
+    storage = GoogleSheetsStorage(workbook, sleeper=lambda _delay: None)
+    account = storage.create_account("Checking", "Bank")
+    transaction = storage.create_transaction(
+        txn_date="2026-07-31",
+        kind="Income",
+        amount=10,
+        account_id=account["id"],
+        category_id=storage.create_category("Sales", "Income")["id"],
+    )
+    _set_raw_receipt_references(
+        workbook,
+        transaction_id=transaction["id"],
+        value="",
+    )
+    drive = Mock()
+    drive.list_profile_receipts.return_value = [
+        _legacy_drive_receipt("north", transaction_id=transaction["id"])
+    ]
+    drive.backfill_receipt_checksum.return_value = _backfilled_drive_receipt(
+        "north",
+        transaction_id=transaction["id"],
+    )
+
+    report = backfill_profile_receipts(
+        storage,
+        drive,
+        profile_key="north",
+        folder_id="folder123456",
+    )
+
+    assert report == {
+        "examined": 1,
+        "drive_backfilled": 1,
+        "references_updated": 1,
+        "errors": [],
+    }
+    current = storage.list_transactions(_force_refresh=True)[0]
+    reference = decode_receipt_references(current["receipt_references"])[0]
+    assert reference["id"] == "receipt123456"
+    assert reference["receipt_id"] == "a" * 32
+
+
+def test_backfill_does_not_override_a_concurrent_explicit_unlink() -> None:
+    workbook = FakeWorkbook()
+    storage = GoogleSheetsStorage(workbook, sleeper=lambda _delay: None)
+    account = storage.create_account("Checking", "Bank")
+    transaction = storage.create_transaction(
+        txn_date="2026-07-31",
+        kind="Income",
+        amount=10,
+        account_id=account["id"],
+        category_id=storage.create_category("Sales", "Income")["id"],
+    )
+    _set_raw_receipt_references(
+        workbook,
+        transaction_id=transaction["id"],
+        value="",
+    )
+    drive = Mock()
+    drive.list_profile_receipts.return_value = [
+        _legacy_drive_receipt("north", transaction_id=transaction["id"])
+    ]
+
+    def unlink_before_initialization(**_scope: str) -> dict[str, object]:
+        storage.set_transaction_receipt_references(transaction["id"], [])
+        return _backfilled_drive_receipt(
+            "north",
+            transaction_id=transaction["id"],
+        )
+
+    drive.backfill_receipt_checksum.side_effect = unlink_before_initialization
+
+    report = backfill_profile_receipts(
+        storage,
+        drive,
+        profile_key="north",
+        folder_id="folder123456",
+    )
+
+    current = storage.list_transactions(_force_refresh=True)[0]
+    assert current["receipt_references"] == "[]"
+    assert report["references_updated"] == 0
+    assert len(report["errors"]) == 1
+
+
+def test_backfill_respects_an_explicitly_empty_reference_list() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
+    account = storage.create_account("Checking", "Bank")
+    transaction = storage.create_transaction(
+        txn_date="2026-07-31",
+        kind="Income",
+        amount=10,
+        account_id=account["id"],
+        category_id=storage.create_category("Sales", "Income")["id"],
+    )
+    storage.set_transaction_receipt_references(transaction["id"], [])
+    drive = Mock()
+    drive.list_profile_receipts.return_value = [
+        _legacy_drive_receipt("north", transaction_id=transaction["id"])
+    ]
+    drive.backfill_receipt_checksum.return_value = _backfilled_drive_receipt(
+        "north",
+        transaction_id=transaction["id"],
+    )
+
+    report = backfill_profile_receipts(
+        storage,
+        drive,
+        profile_key="north",
+        folder_id="folder123456",
+    )
+
+    current = storage.list_transactions(_force_refresh=True)[0]
+    assert current["receipt_references"] == "[]"
+    assert report["drive_backfilled"] == 1
+    assert report["references_updated"] == 0
+
+
 def test_backfill_does_not_touch_another_profile_storage() -> None:
     north_storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
     south_storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
@@ -98,7 +252,12 @@ def test_backfill_does_not_touch_another_profile_storage() -> None:
         name="south.pdf",
     )
     north_drive = Mock()
-    north_drive.list_profile_receipts.return_value = []
+    north_drive.list_profile_receipts.return_value = [
+        _backfilled_drive_receipt(
+            "north",
+            transaction_id=south_transaction["id"],
+        )
+    ]
 
     backfill_profile_receipts(
         north_storage,
