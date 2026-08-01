@@ -792,20 +792,28 @@ class GoogleDriveClient:
         base_filename = safe_receipt_filename(original_name)
         original_filename = safe_receipt_filename(original_name)
         content_sha256 = hashlib.sha256(content).hexdigest()
+        inventory_query = " and ".join(
+            [
+                f"'{_escape_query_value(folder_id)}' in parents",
+                "trashed = false",
+            ]
+        )
+        existing_names = {
+            str(item.get("name", "")).casefold()
+            for item in self._list(
+                inventory_query,
+                page_size=1000,
+                fetch_all=True,
+            )
+            if item.get("name")
+        }
         filename = ""
         for occurrence in range(1, 1001):
             candidate = suffixed_receipt_filename(
                 base_filename,
                 occurrence,
             )
-            availability_query = " and ".join(
-                [
-                    f"'{_escape_query_value(folder_id)}' in parents",
-                    "trashed = false",
-                    f"name = '{_escape_query_value(candidate)}'",
-                ]
-            )
-            if not self._list(availability_query, page_size=1):
+            if candidate.casefold() not in existing_names:
                 filename = candidate
                 break
         if not filename:

@@ -376,7 +376,9 @@ class TestGoogleDriveFiles:
         )
         assert suffixed_receipt_filename("receipt", 3) == "receipt (3)"
 
-    def test_receipt_upload_adds_suffix_instead_of_replacing(self) -> None:
+    def test_receipt_upload_adds_suffix_for_case_only_name_collision(
+        self,
+    ) -> None:
         session = DriveSession(
             [
                 FakeResponse(
@@ -385,12 +387,11 @@ class TestGoogleDriveFiles:
                         "files": [
                             {
                                 "id": "receipt123456",
-                                "name": "statement.pdf",
+                                "name": "Statement.pdf",
                             }
                         ]
                     },
                 ),
-                FakeResponse(200, {"files": []}),
                 FakeResponse(
                     200,
                     {
@@ -419,17 +420,12 @@ class TestGoogleDriveFiles:
         assert uploaded["name"] == "statement (2).pdf"
         assert [request[0] for request in session.requests] == [
             "GET",
-            "GET",
             "POST",
         ]
-        assert "name = 'statement.pdf'" in (
-            session.requests[0][2]["params"]["q"]
-        )
-        assert "name = 'statement (2).pdf'" in (
-            session.requests[1][2]["params"]["q"]
-        )
+        assert "name =" not in session.requests[0][2]["params"]["q"]
+        assert session.requests[0][2]["params"]["pageSize"] == 1000
         assert b'"name":"statement (2).pdf"' in (
-            session.requests[2][2]["data"]
+            session.requests[1][2]["data"]
         )
 
     def test_receipt_upload_recovers_an_uncertain_create_response(self) -> None:
