@@ -87,6 +87,21 @@ def validate_receipt_filename(
     return filename
 
 
+def _validate_legacy_receipt_filename(value: object, label: str) -> str:
+    """Preserve the pre-portability path rules for existing ledger rows."""
+    supplied_filename = str(value or "")
+    filename = _text(value, label, maximum=255)
+    if (
+        filename != supplied_filename
+        or filename in {".", ".."}
+        or "/" in filename
+        or "\\" in filename
+        or filename != filename.strip(" .")
+    ):
+        raise ReceiptManifestError(f"{label} is unsafe")
+    return filename
+
+
 def _byte_size(value: object) -> int:
     if isinstance(value, bool) or not isinstance(value, (int, str)):
         raise ReceiptManifestError("Receipt byte size is invalid")
@@ -120,6 +135,7 @@ def validate_receipt_reference(
     value: object,
     *,
     allow_legacy: bool = True,
+    allow_nonportable_legacy_name: bool = False,
 ) -> dict[str, Any]:
     """Return one validated legacy or integrity-rich transaction reference."""
     if not isinstance(value, Mapping):
@@ -129,9 +145,14 @@ def validate_receipt_reference(
         file_id = _text(value.get("id"), "Receipt file ID", maximum=256)
         if not DRIVE_ID_PATTERN.fullmatch(file_id):
             raise ReceiptManifestError("Receipt file ID is invalid")
+        filename_validator = (
+            _validate_legacy_receipt_filename
+            if allow_nonportable_legacy_name
+            else validate_receipt_filename
+        )
         return {
             "id": file_id,
-            "name": validate_receipt_filename(
+            "name": filename_validator(
                 value.get("name"),
                 "Receipt stored filename",
             ),
@@ -180,7 +201,13 @@ def decode_receipt_reference_list(value: object) -> list[dict[str, Any]]:
         ) from exc
     if not isinstance(parsed, list) or len(parsed) > 100:
         raise ReceiptManifestError("Transaction receipt references are invalid")
-    references = [validate_receipt_reference(item) for item in parsed]
+    references = [
+        validate_receipt_reference(
+            item,
+            allow_nonportable_legacy_name=True,
+        )
+        for item in parsed
+    ]
     file_ids = [str(item["id"]) for item in references]
     if len(file_ids) != len(set(file_ids)):
         raise ReceiptManifestError("Transaction receipt references are duplicated")

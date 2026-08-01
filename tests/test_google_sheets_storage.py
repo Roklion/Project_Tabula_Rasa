@@ -502,6 +502,48 @@ class TestGoogleSheetsStorage:
                 [{"id": "../not-a-drive-id", "name": "receipt.pdf"}]
             )
 
+    def test_legacy_nonportable_reference_remains_readable_and_unlinkable(
+        self,
+    ) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Software", "Expense")
+        transaction = self.storage.create_transaction(
+            txn_date="2026-07-19",
+            kind="Expense",
+            amount="12.5",
+            account_id=account["id"],
+            category_id=category["id"],
+        )
+        worksheet = self.workbook.worksheet("Transactions")
+        headers = worksheet.rows[0]
+        id_index = headers.index("id")
+        references_index = headers.index("receipt_references")
+        row = next(
+            item for item in worksheet.rows[1:] if item[id_index] == transaction["id"]
+        )
+        row[references_index] = (
+            '[{"id":"receipt123456","name":"invoice:2026.pdf"}]'
+        )
+
+        current = self.storage.list_transactions(_force_refresh=True)[0]
+        assert decode_receipt_references(current["receipt_references"]) == [
+            {"id": "receipt123456", "name": "invoice:2026.pdf"}
+        ]
+
+        self.storage.unlink_transaction_receipt(
+            transaction["id"],
+            file_id="receipt123456",
+        )
+        current = self.storage.list_transactions(_force_refresh=True)[0]
+        assert decode_receipt_references(current["receipt_references"]) == []
+
+        with pytest.raises(StorageValidationError, match="unsafe"):
+            self.storage.link_transaction_receipt(
+                transaction["id"],
+                file_id="receipt123456",
+                name="invoice:2026.pdf",
+            )
+
     def test_invalid_transfer_and_category_reference_are_rejected(self) -> None:
         account = self.storage.create_account("Checking", "Bank")
         category = self.storage.create_category("Sales", "Income")
