@@ -522,7 +522,7 @@ class GoogleDriveClient:
         self._access_token = ""
         self._access_token_expires_at = 0.0
         self._list_cache: dict[
-            tuple[str, int, str],
+            tuple[str, int, str, bool],
             tuple[float, list[dict[str, Any]]],
         ] = {}
 
@@ -678,8 +678,9 @@ class GoogleDriveClient:
         page_size: int = 100,
         order_by: str = "",
         use_cache: bool = False,
+        fetch_all: bool = False,
     ) -> list[dict[str, Any]]:
-        cache_key = (query, page_size, order_by)
+        cache_key = (query, page_size, order_by, fetch_all)
         if use_cache and self.list_cache_ttl_seconds > 0:
             cached = self._list_cache.get(cache_key)
             if cached and self.clock() - cached[0] < self.list_cache_ttl_seconds:
@@ -688,7 +689,7 @@ class GoogleDriveClient:
             "q": query,
             "pageSize": min(max(page_size, 1), 1000),
             "fields": (
-                "files(id,name,mimeType,size,createdTime,modifiedTime,"
+                "nextPageToken,files(id,name,mimeType,size,createdTime,modifiedTime,"
                 "description,webViewLink,appProperties,parents)"
             ),
             "spaces": "drive",
@@ -697,17 +698,42 @@ class GoogleDriveClient:
         }
         if order_by:
             params["orderBy"] = order_by
-        response = self._request(
-            "GET",
-            f"{DRIVE_API_ROOT}/files",
-            params=params,
-        )
-        files = _json_response(response).get("files", [])
-        if not isinstance(files, list):
-            raise GoogleDriveAccessError(
-                "Google Drive returned an unreadable file listing."
+        result: list[dict[str, Any]] = []
+        page_token = ""
+        seen_page_tokens: set[str] = set()
+        while True:
+            page_params = dict(params)
+            if page_token:
+                page_params["pageToken"] = page_token
+            response = self._request(
+                "GET",
+                f"{DRIVE_API_ROOT}/files",
+                params=page_params,
             )
-        result = [dict(item) for item in files if isinstance(item, Mapping)]
+            payload = _json_response(response)
+            files = payload.get("files", [])
+            if not isinstance(files, list):
+                raise GoogleDriveAccessError(
+                    "Google Drive returned an unreadable file listing."
+                )
+            result.extend(
+                dict(item) for item in files if isinstance(item, Mapping)
+            )
+            if not fetch_all:
+                break
+            next_page_token = payload.get("nextPageToken")
+            if next_page_token is None:
+                break
+            if (
+                not isinstance(next_page_token, str)
+                or not next_page_token
+                or next_page_token in seen_page_tokens
+            ):
+                raise GoogleDriveAccessError(
+                    "Google Drive returned an unreadable file listing."
+                )
+            seen_page_tokens.add(next_page_token)
+            page_token = next_page_token
         if use_cache and self.list_cache_ttl_seconds > 0:
             self._list_cache[cache_key] = (self.clock(), result)
         return [dict(item) for item in result]
@@ -899,6 +925,7 @@ class GoogleDriveClient:
             page_size=100,
             order_by="createdTime desc",
             use_cache=True,
+            fetch_all=True,
         )
 
     def list_profile_receipts(
@@ -929,6 +956,7 @@ class GoogleDriveClient:
             page_size=1000,
             order_by="createdTime desc",
             use_cache=not _force_refresh,
+            fetch_all=True,
         )
 
     def backfill_receipt_checksum(

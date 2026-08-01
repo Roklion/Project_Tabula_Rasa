@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 
 import gspread
@@ -13,10 +14,28 @@ from google.oauth2.service_account import Credentials
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from tabula_rasa.business_profiles import load_business_profiles, select_profile_secrets
+from tabula_rasa.business_profiles import (
+    BusinessProfile,
+    configured_spreadsheet_ids,
+    load_business_profiles,
+    select_profile_secrets,
+)
 from tabula_rasa.local_profile_store import load_business_profile_document
 from tabula_rasa.storage import GoogleSheetsStorage, StorageValidationError
 from tabula_rasa.storage.google_sheets import SHEETS_SCOPE, WORKSHEET_HEADERS
+
+
+def validate_restore_target(
+    profiles: Iterable[BusinessProfile],
+    target_spreadsheet_id: str,
+) -> str:
+    """Return a target ID that is not any configured profile's live workbook."""
+    target = str(target_spreadsheet_id).strip()
+    if not target:
+        raise ValueError("A restore target spreadsheet ID is required.")
+    if target in configured_spreadsheet_ids(profiles):
+        raise ValueError("Refusing to restore into a configured live workbook")
+    return target
 
 
 def initialize_blank_ledger_sheets(workbook: object) -> None:
@@ -69,13 +88,18 @@ def main() -> None:
     if len(profiles) > 1 and not args.profile:
         raise SystemExit("Multiple profiles are configured; pass --profile PROFILE_KEY")
     secrets = select_profile_secrets(all_secrets, args.profile)
-    if args.target_spreadsheet_id == str(secrets["spreadsheet_id"]):
-        raise SystemExit("Refusing to restore into the configured live workbook")
+    try:
+        target_spreadsheet_id = validate_restore_target(
+            profiles,
+            args.target_spreadsheet_id,
+        )
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
 
     credentials = Credentials.from_service_account_info(
         dict(secrets["gcp_service_account"]), scopes=[SHEETS_SCOPE]
     )
-    workbook = gspread.authorize(credentials).open_by_key(args.target_spreadsheet_id)
+    workbook = gspread.authorize(credentials).open_by_key(target_spreadsheet_id)
     if args.initialize:
         initialize_blank_ledger_sheets(workbook)
     storage = GoogleSheetsStorage(workbook)

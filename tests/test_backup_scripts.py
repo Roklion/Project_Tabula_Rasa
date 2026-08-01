@@ -12,10 +12,12 @@ from scripts.backup_google_sheets import (
     verified_backup_for_week,
     write_versioned_backup,
 )
+from scripts.restore_google_sheets_backup import validate_restore_target
 from scripts.validate_google_sheets_backup import (
     validate_backup_file,
     validation_report,
 )
+from tabula_rasa.business_profiles import load_business_profiles
 from tabula_rasa.storage import GoogleSheetsStorage
 from tabula_rasa.storage.google_sheets import BACKUP_FORMAT_VERSION
 from tabula_rasa.receipt_manifest import build_receipt_manifest
@@ -23,6 +25,32 @@ from tests.fakes import FakeWorkbook
 
 
 class TestBackupScripts:
+    def test_restore_refuses_every_profiles_live_workbook(self) -> None:
+        profiles = load_business_profiles(
+            {
+                "business_profiles": {
+                    "north": {
+                        "spreadsheet_id": "north-live-sheet",
+                        "gcp_service_account": {},
+                    },
+                    "south": {
+                        "spreadsheet_id": "south-live-sheet",
+                        "gcp_service_account": {},
+                    },
+                }
+            }
+        )
+
+        with pytest.raises(ValueError, match="configured live workbook"):
+            validate_restore_target(profiles, "north-live-sheet")
+        with pytest.raises(ValueError, match="configured live workbook"):
+            validate_restore_target(profiles, "south-live-sheet")
+
+        assert (
+            validate_restore_target(profiles, "restored-sheet")
+            == "restored-sheet"
+        )
+
     def test_profile_backup_path_is_default_and_cli_override_wins(self) -> None:
         configured = Path(r"G:\My Drive\Backups\north")
         override = Path(r"D:\Emergency Backups")

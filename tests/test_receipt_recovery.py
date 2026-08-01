@@ -11,6 +11,7 @@ import zipfile
 import pytest
 
 from scripts.recover_synology_receipts import validate_recovery_target
+from tabula_rasa.business_profiles import load_business_profiles
 from tabula_rasa.google_drive import GoogleDriveConflictError
 from tabula_rasa.receipt_manifest import build_receipt_manifest
 from tabula_rasa.receipt_recovery import (
@@ -314,13 +315,28 @@ def test_recovery_identifies_pre_manifest_v4_as_ledger_only() -> None:
     drive.restore_receipt.assert_not_called()
 
 
-def test_recovery_command_refuses_the_configured_live_workbook() -> None:
-    profile_secrets = {"spreadsheet_id": "live-sheet-123"}
+def test_recovery_command_refuses_every_profiles_live_workbook() -> None:
+    profiles = load_business_profiles(
+        {
+            "business_profiles": {
+                "north": {
+                    "spreadsheet_id": "north-live-sheet",
+                    "gcp_service_account": {},
+                },
+                "south": {
+                    "spreadsheet_id": "south-live-sheet",
+                    "gcp_service_account": {},
+                },
+            }
+        }
+    )
 
     with pytest.raises(ValueError, match="configured live workbook"):
-        validate_recovery_target(profile_secrets, "live-sheet-123")
+        validate_recovery_target(profiles, "north-live-sheet")
+    with pytest.raises(ValueError, match="configured live workbook"):
+        validate_recovery_target(profiles, "south-live-sheet")
 
     assert (
-        validate_recovery_target(profile_secrets, "restored-sheet-456")
+        validate_recovery_target(profiles, "restored-sheet-456")
         == "restored-sheet-456"
     )

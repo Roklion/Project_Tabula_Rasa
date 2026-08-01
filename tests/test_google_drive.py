@@ -503,6 +503,61 @@ class TestGoogleDriveFiles:
         assert "value='north'" in query
         assert "tabulaRasaTransaction" not in query
 
+    def test_profile_receipt_listing_fetches_every_drive_page(self) -> None:
+        first = {"id": "receipt123456", "name": "first.pdf"}
+        second = {"id": "receipt789012", "name": "second.pdf"}
+        session = DriveSession(
+            [
+                FakeResponse(
+                    200,
+                    {"files": [first], "nextPageToken": "next-receipt-page"},
+                ),
+                FakeResponse(200, {"files": [second]}),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        receipts = client.list_profile_receipts(
+            profile_key="north",
+            folder_id="folder123456",
+        )
+
+        assert receipts == [first, second]
+        assert len(session.requests) == 2
+        assert "pageToken" not in session.requests[0][2]["params"]
+        assert (
+            session.requests[1][2]["params"]["pageToken"]
+            == "next-receipt-page"
+        )
+        assert "nextPageToken" in session.requests[0][2]["params"]["fields"]
+
+    def test_profile_receipt_listing_rejects_a_repeated_page_token(self) -> None:
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": [], "nextPageToken": "repeated"}),
+                FakeResponse(200, {"files": [], "nextPageToken": "repeated"}),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        with pytest.raises(GoogleDriveAccessError, match="unreadable"):
+            client.list_profile_receipts(
+                profile_key="north",
+                folder_id="folder123456",
+            )
+
+        assert len(session.requests) == 2
+
     def test_legacy_receipt_checksum_backfill_downloads_once_and_patches_metadata(
         self,
     ) -> None:

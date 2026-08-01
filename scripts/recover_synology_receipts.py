@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +15,12 @@ from google.oauth2.service_account import Credentials
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from tabula_rasa.business_profiles import load_business_profiles, select_profile_secrets
+from tabula_rasa.business_profiles import (
+    BusinessProfile,
+    configured_spreadsheet_ids,
+    load_business_profiles,
+    select_profile_secrets,
+)
 from tabula_rasa.google_drive import GoogleDriveClient, load_oauth_config
 from tabula_rasa.local_profile_store import load_business_profile_document
 from tabula_rasa.receipt_recovery import recover_receipts_from_synology
@@ -34,16 +39,16 @@ def _drive_destination(profile_secrets: Mapping[str, Any]) -> tuple[Mapping[str,
 
 
 def validate_recovery_target(
-    profile_secrets: Mapping[str, Any],
+    profiles: Iterable[BusinessProfile],
     target_spreadsheet_id: str,
 ) -> str:
-    """Return a non-live target workbook ID or raise a safe refusal."""
+    """Return a target ID that is not any configured profile's live workbook."""
     target = str(target_spreadsheet_id).strip()
     if not target:
         raise ValueError("A recovery target spreadsheet ID is required.")
-    if target == str(profile_secrets.get("spreadsheet_id") or ""):
+    if target in configured_spreadsheet_ids(profiles):
         raise ValueError(
-            "Refusing to remap recovered receipts in the configured live workbook."
+            "Refusing to remap recovered receipts in a configured live workbook."
         )
     return target
 
@@ -78,7 +83,7 @@ def main() -> None:
     drive_settings, folder_id = _drive_destination(profile_secrets)
     try:
         target_spreadsheet_id = validate_recovery_target(
-            profile_secrets,
+            profiles,
             args.target_spreadsheet_id,
         )
     except ValueError as error:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Mapping
 
@@ -74,4 +75,19 @@ def select_profile_secrets(
             return profile.secrets
     raise BusinessProfileConfigurationError(
         f"Unknown business profile: {selected}"
+    )
+
+
+def configured_spreadsheet_ids(
+    profiles: Iterable[BusinessProfile],
+) -> frozenset[str]:
+    """Return every non-empty live workbook ID in configured profiles."""
+    return frozenset(
+        spreadsheet_id
+        for profile in profiles
+        if (
+            spreadsheet_id := str(
+                profile.secrets.get("spreadsheet_id") or ""
+            ).strip()
+        )
     )

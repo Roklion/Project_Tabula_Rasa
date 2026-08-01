@@ -267,12 +267,12 @@ operation against the newly restored, non-live workbook:
   --target-spreadsheet-id NEW_SPREADSHEET_ID
 ```
 
-The command refuses the configured live workbook. Before any Drive change it
-validates the archive, selected profile, and presence of every referenced
-transaction in the restored target. For each entry it verifies the local byte
-size and SHA-256, preserves the manifest's stored filename, refuses filename
-conflicts, recreates ownership/integrity/provenance metadata, and remaps the
-old diagnostic Drive ID in the restored transaction reference.
+The command refuses every configured profile's live workbook. Before any Drive
+change it validates the archive, selected profile, and presence of every
+referenced transaction in the restored target. For each entry it verifies the
+local byte size and SHA-256, preserves the manifest's stored filename, refuses
+filename conflicts, recreates ownership/integrity/provenance metadata, and
+remaps the old diagnostic Drive ID in the restored transaction reference.
 
 Retries identify files by stable receipt identity plus SHA-256. A matching
 Drive file is downloaded and verified before reuse, so a retry repairs the

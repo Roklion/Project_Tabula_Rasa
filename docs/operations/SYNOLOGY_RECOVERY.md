@@ -316,12 +316,13 @@ workbook:
   --target-spreadsheet-id NEW_ID
 ```
 
-The command refuses the configured live workbook. It verifies every local
-receipt's size and SHA-256 before Drive changes, preserves stored filenames,
-reuses only a downloaded checksum-matching stable identity, remaps referenced
-transactions to the confirmed Drive ID, and leaves unreferenced receipts
-unattached. Missing, corrupt, conflicting, and failed entries are reported by
-count and stable receipt identity without blocking other valid entries.
+The command refuses every configured profile's live workbook. Before changing
+an individual receipt, it verifies that local file's size and SHA-256. It
+preserves stored filenames, reuses only a downloaded checksum-matching stable
+identity, remaps referenced transactions to the confirmed Drive ID, and leaves
+unreferenced receipts unattached. Missing, corrupt, conflicting, and failed
+entries are reported by count and stable receipt identity without blocking
+other valid entries.
 
 Confirm the normal Tabula Rosa storage path can read the restored workbook
 without changing the selected business profile:
