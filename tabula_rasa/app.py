@@ -238,21 +238,24 @@ def receipt_manifest_for_backup(
     configuration_revision: str,
 ) -> dict[str, object]:
     """Build a fresh profile-scoped receipt inventory for one ledger backup."""
-    transactions = storage.list_transactions(_force_refresh=True)
     drive_settings = profile_secrets.get("google_drive")
     receipt_folder = (
         drive_settings.get("receipt_folder")
         if isinstance(drive_settings, Mapping)
         else None
     )
-    receipts: list[dict[str, object]] = []
-    if isinstance(receipt_folder, Mapping):
-        drive = get_drive_client(profile_key, configuration_revision)
-        receipts = drive.list_profile_receipts(
-            profile_key=profile_key,
-            folder_id=str(receipt_folder["id"]),
-            _force_refresh=True,
+    if not isinstance(receipt_folder, Mapping):
+        raise GoogleDriveConfigurationError(
+            "A current-format backup requires a selected Google Drive receipt "
+            "folder so its receipt inventory is complete."
         )
+    transactions = storage.list_transactions(_force_refresh=True)
+    drive = get_drive_client(profile_key, configuration_revision)
+    receipts = drive.list_profile_receipts(
+        profile_key=profile_key,
+        folder_id=str(receipt_folder["id"]),
+        _force_refresh=True,
+    )
     return build_receipt_manifest(profile_key, transactions, receipts)
 
 

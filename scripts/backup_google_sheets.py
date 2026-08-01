@@ -155,24 +155,27 @@ def build_backup_receipt_manifest(
     client: GoogleDriveClient | None = None,
 ) -> dict[str, Any]:
     """Build a fresh inventory for the selected profile's receipt folder."""
-    transactions = storage.list_transactions(_force_refresh=True)
     drive_settings = profile_secrets.get("google_drive")
     receipt_folder = (
         drive_settings.get("receipt_folder")
         if isinstance(drive_settings, Mapping)
         else None
     )
-    receipts: list[dict[str, Any]] = []
-    if isinstance(receipt_folder, Mapping):
-        if client is None:
-            raise GoogleDriveConfigurationError(
-                "A Google Drive client is required to inventory receipts."
-            )
-        receipts = client.list_profile_receipts(
-            profile_key=profile_key,
-            folder_id=str(receipt_folder["id"]),
-            _force_refresh=True,
+    if not isinstance(receipt_folder, Mapping):
+        raise GoogleDriveConfigurationError(
+            "A current-format backup requires a selected Google Drive receipt "
+            "folder so its receipt inventory is complete."
         )
+    if client is None:
+        raise GoogleDriveConfigurationError(
+            "A Google Drive client is required to inventory receipts."
+        )
+    transactions = storage.list_transactions(_force_refresh=True)
+    receipts = client.list_profile_receipts(
+        profile_key=profile_key,
+        folder_id=str(receipt_folder["id"]),
+        _force_refresh=True,
+    )
     return build_receipt_manifest(profile_key, transactions, receipts)
 
 

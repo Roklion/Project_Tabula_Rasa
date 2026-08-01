@@ -11,12 +11,14 @@ from unittest.mock import Mock, patch
 import pytest
 
 from scripts.backup_google_sheets import (
+    build_backup_receipt_manifest,
     PROJECT_ROOT,
     resolve_backup_output_dir,
     verified_backup_for_week,
     verified_drive_backup_for_week,
     write_versioned_backup,
 )
+from tabula_rasa.google_drive import GoogleDriveConfigurationError
 from scripts.restore_google_sheets_backup import (
     validate_restore_backup,
     validate_restore_target,
@@ -55,6 +57,42 @@ def _ledger_only_backup(storage: GoogleSheetsStorage) -> bytes:
 
 
 class TestBackupScripts:
+    def test_current_backup_inventories_the_configured_receipt_folder(self) -> None:
+        storage = Mock(spec=GoogleSheetsStorage)
+        storage.list_transactions.return_value = []
+        client = Mock()
+        client.list_profile_receipts.return_value = []
+
+        manifest = build_backup_receipt_manifest(
+            "north",
+            {
+                "google_drive": {
+                    "receipt_folder": {"id": "folder123456"},
+                }
+            },
+            storage,
+            client=client,
+        )
+
+        assert manifest == build_receipt_manifest("north", [], [])
+        storage.list_transactions.assert_called_once_with(_force_refresh=True)
+        client.list_profile_receipts.assert_called_once_with(
+            profile_key="north",
+            folder_id="folder123456",
+            _force_refresh=True,
+        )
+
+    def test_current_backup_requires_a_configured_receipt_folder(self) -> None:
+        storage = Mock(spec=GoogleSheetsStorage)
+
+        with pytest.raises(
+            GoogleDriveConfigurationError,
+            match="requires a selected Google Drive receipt folder",
+        ):
+            build_backup_receipt_manifest("north", {}, storage)
+
+        storage.list_transactions.assert_not_called()
+
     def test_restore_refuses_a_receipt_backup_from_another_profile(self) -> None:
         storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
         backup = storage.export_backup_zip(

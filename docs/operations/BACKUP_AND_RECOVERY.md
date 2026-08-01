@@ -60,7 +60,10 @@ same large receipt files are not duplicated into every retained ledger archive.
 
 Every manifest entry must have a checksum created during upload or a verified
 legacy backfill. Backup creation fails rather than silently writing a
-checksum-incomplete receipt inventory. The authenticated app automatically
+checksum-incomplete receipt inventory. Current-format backup creation also
+requires the selected profile's configured Google Drive receipt folder; if the
+folder is disconnected or unavailable, the app and command-line workflow fail
+instead of recording an empty inventory. The authenticated app automatically
 runs an idempotent, profile-scoped migration once per session when a selected
 profile has a configured receipt folder. It scans all app-managed receipts in
 that folder, downloads only files missing valid integrity metadata, and updates
