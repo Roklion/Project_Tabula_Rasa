@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import date
+from datetime import date, datetime, timezone
 import hashlib
 import io
 from pathlib import Path
@@ -2182,38 +2182,53 @@ elif page == "Data & backup":
     )
     if st.button(prepare_label, width="stretch"):
         try:
-            receipt_manifest = receipt_manifest_for_backup(
-                storage,
-                profile_key=selected_profile_key,
-                profile_secrets=selected_profile,
-                configuration_revision=revision,
-            )
-            backup_zip = storage.export_backup_zip(receipt_manifest)
-            manifest = storage.validate_backup_zip(backup_zip)
             accounts = storage.list_accounts(active_only=False)
             categories = storage.list_categories()
             transactions = storage.list_transactions()
             mileage_trips = storage.list_mileage_trips()
             all_transactions = ledger_frame(transactions, accounts, categories)
             all_mileage = mileage_frame(mileage_trips)
-        except (StorageError, GoogleDriveError, ReceiptManifestError) as error:
-            if isinstance(error, StorageError):
-                report_storage_error(error)
-            else:
-                st.error(str(error))
+        except StorageError as error:
+            report_storage_error(error)
         else:
-            prepared_exports = {
-                "backup": backup_zip,
-                "backup_time": str(manifest["backup_time"]),
+            prepared_exports: dict[str, object] = {
+                "backup_time": datetime.now(timezone.utc).isoformat(),
                 "transactions": all_transactions.to_csv(index=False).encode(
                     "utf-8"
                 ),
                 "mileage": all_mileage.to_csv(index=False).encode("utf-8"),
             }
+            try:
+                receipt_manifest = receipt_manifest_for_backup(
+                    storage,
+                    profile_key=selected_profile_key,
+                    profile_secrets=selected_profile,
+                    configuration_revision=revision,
+                )
+                backup_zip = storage.export_backup_zip(receipt_manifest)
+                manifest = storage.validate_backup_zip(backup_zip)
+            except (
+                StorageError,
+                GoogleDriveError,
+                ReceiptManifestError,
+            ) as error:
+                prepared_exports["backup_error"] = str(error)
+            else:
+                prepared_exports["backup"] = backup_zip
+                prepared_exports["backup_time"] = str(manifest["backup_time"])
             st.session_state[prepared_exports_key] = prepared_exports
-            st.success("Fresh downloadable exports are ready.")
+            if "backup" in prepared_exports:
+                st.success("Fresh downloadable exports are ready.")
+            else:
+                st.success("Fresh CSV exports are ready.")
     if isinstance(prepared_exports, Mapping):
         st.caption(f"Prepared from workbook data at {prepared_exports['backup_time']}.")
+        backup_error = prepared_exports.get("backup_error")
+        if backup_error:
+            st.warning(
+                "The complete workbook backup is unavailable: "
+                f"{backup_error}"
+            )
         st.download_button(
             "Download transactions CSV",
             prepared_exports["transactions"],
@@ -2228,13 +2243,15 @@ elif page == "Data & backup":
             "text/csv",
             width="stretch",
         )
-        st.download_button(
-            "Download complete workbook backup",
-            prepared_exports["backup"],
-            f"tabula-rosa-backup-{date.today()}.zip",
-            "application/zip",
-            width="stretch",
-        )
+        backup_export = prepared_exports.get("backup")
+        if isinstance(backup_export, bytes):
+            st.download_button(
+                "Download complete workbook backup",
+                backup_export,
+                f"tabula-rosa-backup-{date.today()}.zip",
+                "application/zip",
+                width="stretch",
+            )
     with st.expander("Import Tabula Rosa CSV"):
         st.write(
             "Upload a CSV with: Date, Type, Amount, Account, Category, Payee, "

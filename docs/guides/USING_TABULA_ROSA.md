@@ -143,6 +143,10 @@ The **Data & backup** page provides:
 - a complete validated workbook backup ZIP; and
 - Google Drive cloud backup controls when configured.
 
+Transaction and mileage CSV exports remain available when Google Drive is not
+connected. The complete backup ZIP requires the selected profile's receipt
+folder so its receipt inventory cannot be mistaken for an empty folder.
+
 CSV and QuickBooks imports validate all rows before writing and use batch
 appends. Follow [QuickBooks import](QUICKBOOKS_IMPORT.md) for supported formats
 and duplicate rules.
