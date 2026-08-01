@@ -203,8 +203,8 @@ Successful validation confirms:
 - row counts;
 - record IDs; and
 - ledger relationships;
-- the receipt manifest schema, profile, identities, filenames, sizes, checksums,
-  duplicates, and transaction associations; and
+- the receipt manifest schema, profile, identities, Windows/Synology-portable
+  filenames, sizes, checksums, duplicates, and transaction associations; and
 - whether an older archive is a ledger-only source without receipt recovery
   metadata.
 

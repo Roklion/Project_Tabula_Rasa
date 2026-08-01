@@ -372,6 +372,7 @@ class TestGoogleDriveFiles:
         assert uploaded["size"] == "7"
         assert b"..\\" not in body
         assert safe_receipt_filename("../../statement.pdf") == "statement.pdf"
+        assert safe_receipt_filename("CON.pdf") == "_CON.pdf"
         assert suffixed_receipt_filename("statement.pdf", 2) == (
             "statement (2).pdf"
         )

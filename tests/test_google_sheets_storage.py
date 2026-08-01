@@ -1131,6 +1131,21 @@ class TestGoogleSheetsStorage:
         with pytest.raises(ReceiptManifestError, match="unsafe"):
             build_receipt_manifest("test", [], [receipt])
 
+    @pytest.mark.parametrize(
+        "filename",
+        ["invoice:2026.pdf", "CON.pdf", "receipt?.pdf", "lpt1.txt"],
+    )
+    def test_manifest_rejects_windows_incompatible_drive_filename(
+        self,
+        filename: str,
+    ) -> None:
+        receipt = drive_file_from_reference(
+            {**TEST_RECEIPT_REFERENCE, "name": filename}
+        )
+
+        with pytest.raises(ReceiptManifestError, match="unsafe"):
+            build_receipt_manifest("test", [], [receipt])
+
     def test_pre_manifest_v4_backup_remains_readable_as_ledger_only(self) -> None:
         backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
         output = io.BytesIO()

@@ -461,7 +461,11 @@ def safe_receipt_filename(original_name: str) -> str:
     )
     if not cleaned:
         cleaned = "receipt"
-    return cleaned[:180]
+    cleaned = cleaned[:180]
+    try:
+        return validate_receipt_filename(cleaned, "Receipt filename")
+    except ReceiptManifestError:
+        return validate_receipt_filename(f"_{cleaned}", "Receipt filename")
 
 
 def suffixed_receipt_filename(filename: str, occurrence: int) -> str:

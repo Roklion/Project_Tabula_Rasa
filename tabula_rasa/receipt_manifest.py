@@ -15,6 +15,20 @@ PROFILE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,47}$")
 DRIVE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{10,}$")
 RECEIPT_ID_PATTERN = re.compile(r"^[a-f0-9]{32}$")
 SHA256_PATTERN = re.compile(r"^[a-f0-9]{64}$")
+WINDOWS_RESERVED_FILENAME_CHARACTERS = frozenset('<>:"/\\|?*')
+WINDOWS_RESERVED_FILENAME_STEMS = frozenset(
+    {
+        "CON",
+        "PRN",
+        "AUX",
+        "NUL",
+        "CLOCK$",
+        "CONIN$",
+        "CONOUT$",
+        *(f"COM{index}" for index in range(1, 10)),
+        *(f"LPT{index}" for index in range(1, 10)),
+    }
+)
 RICH_REFERENCE_FIELDS = {
     "id",
     "name",
@@ -56,12 +70,18 @@ def validate_receipt_filename(
     """Return a path-safe receipt filename accepted by backup and recovery."""
     supplied_filename = str(value or "")
     filename = _text(value, label, maximum=255, required=required)
+    windows_stem = filename.split(".", 1)[0].upper()
     if filename and (
         filename != supplied_filename
         or filename in {".", ".."}
         or "/" in filename
         or "\\" in filename
         or filename != filename.strip(" .")
+        or any(
+            character in WINDOWS_RESERVED_FILENAME_CHARACTERS
+            for character in filename
+        )
+        or windows_stem in WINDOWS_RESERVED_FILENAME_STEMS
     ):
         raise ReceiptManifestError(f"{label} is unsafe")
     return filename

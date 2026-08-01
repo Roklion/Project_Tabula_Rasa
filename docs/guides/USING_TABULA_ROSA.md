@@ -62,7 +62,8 @@ Receipt behavior:
 
 - supported files are PDFs and images accepted by the application;
 - files are uploaded to the profile's selected receipt folder;
-- filenames are sanitized while retaining their recognizable original name;
+- filenames are sanitized while retaining their recognizable original name and
+  remaining portable through the documented Windows and Synology recovery path;
 - a conflicting filename receives a numeric suffix such as
   `receipt (2).pdf` instead of replacing the existing file;
 - uncertain upload responses are checked before retrying to avoid duplicates;
