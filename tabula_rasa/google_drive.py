@@ -1175,11 +1175,15 @@ class GoogleDriveClient:
             "tabulaRasaSha256": sha256,
             "tabulaRasaOriginalFileId": old_file_id,
         }
+        recovery_attempt_id = secrets.token_hex(16)
         metadata = {
             "name": stored_filename,
             "parents": [folder_id],
             "description": original_filename,
-            "appProperties": properties,
+            "appProperties": {
+                **properties,
+                "tabulaRasaRecoveryAttempt": recovery_attempt_id,
+            },
         }
         recovered_after_uncertain_response = False
         created_file_id = ""
@@ -1194,6 +1198,19 @@ class GoogleDriveClient:
             raise GoogleDriveAccessError(
                 "Google Drive did not confirm the recovered receipt upload."
             )
+        attempt_matches = [
+            item
+            for item in committed
+            if isinstance(item.get("appProperties"), Mapping)
+            and item["appProperties"].get("tabulaRasaRecoveryAttempt")
+            == recovery_attempt_id
+        ]
+        if len(attempt_matches) > 1:
+            raise GoogleDriveConflictError(
+                "Google Drive contains duplicate files for this recovery attempt."
+            )
+        if not created_file_id and attempt_matches:
+            created_file_id = str(attempt_matches[0].get("id", ""))
         uploaded = min(
             committed,
             key=lambda item: (

@@ -4,6 +4,7 @@ from datetime import datetime
 import hashlib
 import json
 from typing import Any
+from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -893,6 +894,86 @@ class TestGoogleDriveFiles:
         assert restored["id"] == "restored123456"
         assert reused is False
         assert [request[0] for request in session.requests].count("POST") == 1
+
+    def test_receipt_recovery_reconciles_a_lost_concurrent_create_response(
+        self,
+    ) -> None:
+        checksum = hashlib.sha256(b"receipt").hexdigest()
+        properties = {
+            "tabulaRasaKind": "receipt",
+            "tabulaRasaProfile": "north",
+            "tabulaRasaReceiptId": "a" * 32,
+            "tabulaRasaSha256": checksum,
+            "tabulaRasaOriginalFileId": "receipt123456",
+        }
+        canonical = {
+            "id": "restored123456",
+            "name": "statement.pdf",
+            "mimeType": "application/pdf",
+            "size": "7",
+            "createdTime": "2026-08-01T12:00:00Z",
+            "description": "statement.pdf",
+            "appProperties": {
+                **properties,
+                "tabulaRasaRecoveryAttempt": "other-attempt",
+            },
+        }
+        uncertain = {
+            **canonical,
+            "id": "restored234567",
+            "createdTime": "2026-08-01T12:00:01Z",
+            "appProperties": {
+                **properties,
+                "tabulaRasaRecoveryAttempt": "1" * 32,
+            },
+        }
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, {"files": []}),
+                requests.ConnectionError("response lost"),
+                FakeResponse(200, {"files": [uncertain, canonical]}),
+                FakeResponse(200, content=b"receipt"),
+                FakeResponse(204),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        with patch(
+            "tabula_rasa.google_drive.secrets.token_hex",
+            side_effect=["1" * 32, "2" * 32],
+        ):
+            restored, reused = client.restore_receipt(
+                profile_key="north",
+                folder_id="folder123456",
+                stored_filename="statement.pdf",
+                original_filename="statement.pdf",
+                content=b"receipt",
+                mime_type="application/pdf",
+                receipt_id="a" * 32,
+                sha256=checksum,
+                old_file_id="receipt123456",
+            )
+
+        assert restored["id"] == canonical["id"]
+        assert reused is False
+        assert [request[0] for request in session.requests] == [
+            "GET",
+            "GET",
+            "POST",
+            "GET",
+            "GET",
+            "DELETE",
+        ]
+        assert b'"tabulaRasaRecoveryAttempt":"11111111111111111111111111111111"' in (
+            session.requests[2][2]["data"]
+        )
+        assert session.requests[5][1].endswith("/files/restored234567")
 
     def test_receipt_recovery_discards_its_concurrent_later_create(
         self,
