@@ -23,6 +23,7 @@ from tabula_rasa.receipt_manifest import (
     SHA256_PATTERN,
     ReceiptManifestError,
     receipt_reference_from_drive_file,
+    validate_receipt_filename,
 )
 
 
@@ -475,18 +476,6 @@ def suffixed_receipt_filename(filename: str, occurrence: int) -> str:
         stem = filename
         extension = ""
     return f"{stem} ({occurrence}){extension}"
-
-
-def _is_safe_receipt_metadata_filename(value: object) -> bool:
-    filename = str(value or "")
-    return bool(
-        filename
-        and len(filename) <= 255
-        and PathName(filename).name == filename
-        and filename == filename.strip(" .")
-        and not any(ord(character) < 32 for character in filename)
-        and SAFE_RECEIPT_NAME_PATTERN.sub("_", filename) == filename
-    )
 
 
 class PathName:
@@ -1073,6 +1062,19 @@ class GoogleDriveClient:
         old_file_id: str,
     ) -> tuple[dict[str, Any], bool]:
         """Create or reuse one verified recovery file without suffixing its name."""
+        try:
+            stored_filename = validate_receipt_filename(
+                stored_filename,
+                "Receipt stored filename",
+            )
+            original_filename = validate_receipt_filename(
+                original_filename,
+                "Receipt original filename",
+            )
+        except ReceiptManifestError as exc:
+            raise GoogleDriveAccessError(
+                "Receipt recovery metadata or content failed integrity validation."
+            ) from exc
         if (
             not content
             or len(content) > MAX_RECEIPT_BYTES
@@ -1080,8 +1082,6 @@ class GoogleDriveClient:
             or not RECEIPT_ID_PATTERN.fullmatch(str(receipt_id))
             or not SHA256_PATTERN.fullmatch(str(sha256))
             or not RECEIPT_DRIVE_ID_PATTERN.fullmatch(str(old_file_id))
-            or not _is_safe_receipt_metadata_filename(stored_filename)
-            or not _is_safe_receipt_metadata_filename(original_filename)
         ):
             raise GoogleDriveAccessError(
                 "Receipt recovery metadata or content failed integrity validation."

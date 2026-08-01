@@ -47,7 +47,13 @@ def _text(
     return text
 
 
-def _filename(value: object, label: str, *, required: bool = True) -> str:
+def validate_receipt_filename(
+    value: object,
+    label: str,
+    *,
+    required: bool = True,
+) -> str:
+    """Return a path-safe receipt filename accepted by backup and recovery."""
     filename = _text(value, label, maximum=255, required=required)
     if filename and (
         filename in {".", ".."}
@@ -103,7 +109,10 @@ def validate_receipt_reference(
             raise ReceiptManifestError("Receipt file ID is invalid")
         return {
             "id": file_id,
-            "name": _filename(value.get("name"), "Receipt stored filename"),
+            "name": validate_receipt_filename(
+                value.get("name"),
+                "Receipt stored filename",
+            ),
         }
     if fields != RICH_REFERENCE_FIELDS:
         raise ReceiptManifestError("Transaction receipt reference is invalid")
@@ -118,9 +127,12 @@ def validate_receipt_reference(
         raise ReceiptManifestError("Receipt SHA-256 is invalid")
     return {
         "id": file_id,
-        "name": _filename(value.get("name"), "Receipt stored filename"),
+        "name": validate_receipt_filename(
+            value.get("name"),
+            "Receipt stored filename",
+        ),
         "receipt_id": receipt_id,
-        "original_filename": _filename(
+        "original_filename": validate_receipt_filename(
             value.get("original_filename"),
             "Receipt original filename",
         ),
@@ -373,11 +385,11 @@ def validate_receipt_manifest(
             "receipt_id": receipt_id,
             "reference_state": state,
             "transaction_id": transaction_id,
-            "stored_filename": _filename(
+            "stored_filename": validate_receipt_filename(
                 raw.get("stored_filename"),
                 "Receipt stored filename",
             ),
-            "original_filename": _filename(
+            "original_filename": validate_receipt_filename(
                 raw.get("original_filename"),
                 "Receipt original filename",
             ),

@@ -300,9 +300,10 @@ Restore the validated local copy:
 .\.venv\Scripts\python.exe scripts\restore_google_sheets_backup.py "C:\Safe-Recovery\tabula-rosa-backup-YYYYMMDDTHHMMSSZ.zip" --profile heathcote-advisory --target-spreadsheet-id NEW_ID --initialize
 ```
 
-The command validates before writing, refuses the configured live workbook,
-refuses populated or incompatible target worksheets, restores the archive, and
-rereads the target to verify the restored rows.
+The command validates before writing, refuses every configured live workbook,
+rejects a receipt inventory from a different selected profile, refuses
+populated or incompatible target worksheets, restores the archive, and rereads
+the target to verify the restored rows.
 
 Copy the matching `receipts` directory from the same protected NAS recovery
 set to the safe local folder. Recover and remap the receipt IDs only in the new

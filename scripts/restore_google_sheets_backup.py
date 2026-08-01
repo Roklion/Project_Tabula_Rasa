@@ -38,6 +38,20 @@ def validate_restore_target(
     return target
 
 
+def validate_restore_backup(
+    backup: bytes,
+    profile_key: str,
+) -> dict[str, object]:
+    """Validate a backup and refuse profile-scoped archives from another profile."""
+    manifest = GoogleSheetsStorage.validate_backup_zip(backup)
+    backup_profile_key = manifest.get("business_profile_key")
+    if backup_profile_key is not None and backup_profile_key != profile_key:
+        raise ValueError(
+            "Refusing to restore a backup created for a different business profile."
+        )
+    return manifest
+
+
 def initialize_blank_ledger_sheets(workbook: object) -> None:
     """Add ledger headers while refusing to alter a populated required sheet."""
     actual = {worksheet.title: worksheet for worksheet in workbook.worksheets()}
@@ -87,13 +101,19 @@ def main() -> None:
     profiles = load_business_profiles(all_secrets)
     if len(profiles) > 1 and not args.profile:
         raise SystemExit("Multiple profiles are configured; pass --profile PROFILE_KEY")
-    secrets = select_profile_secrets(all_secrets, args.profile)
+    profile_key = args.profile or profiles[0].key
+    secrets = select_profile_secrets(all_secrets, profile_key)
     try:
         target_spreadsheet_id = validate_restore_target(
             profiles,
             args.target_spreadsheet_id,
         )
     except ValueError as error:
+        raise SystemExit(str(error)) from error
+    try:
+        backup = args.backup.read_bytes()
+        manifest = validate_restore_backup(backup, profile_key)
+    except (OSError, StorageValidationError, ValueError) as error:
         raise SystemExit(str(error)) from error
 
     credentials = Credentials.from_service_account_info(
@@ -103,8 +123,6 @@ def main() -> None:
     if args.initialize:
         initialize_blank_ledger_sheets(workbook)
     storage = GoogleSheetsStorage(workbook)
-    backup = args.backup.read_bytes()
-    manifest = storage.validate_backup_zip(backup)
     counts = storage.restore_backup_zip(backup)
     print(
         "Restore verified from "

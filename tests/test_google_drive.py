@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import hashlib
+import json
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
@@ -661,6 +662,40 @@ class TestGoogleDriveFiles:
         assert [request[0] for request in session.requests] == ["GET", "GET", "POST"]
         upload_body = session.requests[-1][2]["data"]
         assert b'"name":"statement (2).pdf"' in upload_body
+
+    def test_receipt_recovery_preserves_manifest_safe_unicode_names(self) -> None:
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, {"id": "restored123456", "name": "résumé.pdf"}),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+        checksum = hashlib.sha256(b"receipt").hexdigest()
+
+        restored, reused = client.restore_receipt(
+            profile_key="north",
+            folder_id="folder123456",
+            stored_filename="résumé.pdf",
+            original_filename="résumé original.pdf",
+            content=b"receipt",
+            mime_type="application/pdf",
+            receipt_id="a" * 32,
+            sha256=checksum,
+            old_file_id="receipt123456",
+        )
+
+        assert reused is False
+        assert restored["name"] == "résumé.pdf"
+        assert restored["description"] == "résumé original.pdf"
+        upload_body = session.requests[-1][2]["data"]
+        assert json.dumps("résumé.pdf").encode() in upload_body
 
     def test_receipt_recovery_reuses_stable_identity_and_checksum(self) -> None:
         checksum = hashlib.sha256(b"receipt").hexdigest()

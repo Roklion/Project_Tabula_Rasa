@@ -268,7 +268,8 @@ operation against the newly restored, non-live workbook:
 ```
 
 The command refuses every configured profile's live workbook. Before any Drive
-change it validates the archive, selected profile, and presence of every
+change it validates the archive, confirms its receipt inventory belongs to the
+selected profile, and checks the presence of every
 referenced transaction in the restored target. For each entry it verifies the
 local byte size and SHA-256, preserves the manifest's stored filename, refuses
 filename conflicts, recreates ownership/integrity/provenance metadata, and

@@ -12,7 +12,10 @@ from scripts.backup_google_sheets import (
     verified_backup_for_week,
     write_versioned_backup,
 )
-from scripts.restore_google_sheets_backup import validate_restore_target
+from scripts.restore_google_sheets_backup import (
+    validate_restore_backup,
+    validate_restore_target,
+)
 from scripts.validate_google_sheets_backup import (
     validate_backup_file,
     validation_report,
@@ -25,6 +28,18 @@ from tests.fakes import FakeWorkbook
 
 
 class TestBackupScripts:
+    def test_restore_refuses_a_receipt_backup_from_another_profile(self) -> None:
+        storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+        backup = storage.export_backup_zip(
+            build_receipt_manifest("north", [], [])
+        )
+
+        with pytest.raises(ValueError, match="different business profile"):
+            validate_restore_backup(backup, "south")
+
+        manifest = validate_restore_backup(backup, "north")
+        assert manifest["business_profile_key"] == "north"
+
     def test_restore_refuses_every_profiles_live_workbook(self) -> None:
         profiles = load_business_profiles(
             {
