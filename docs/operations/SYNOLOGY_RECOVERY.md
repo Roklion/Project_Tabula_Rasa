@@ -61,7 +61,7 @@ of truth for actual transfer status and logs.
 ## Prerequisites
 
 - Google Drive backup and receipt folders selected for the business profile
-- A verified format-version 5 backup in the backup folder
+- A verified format-version 6 backup in the backup folder
 - Legacy receipt checksum backfill completed for that profile
 - DSM administrator access to the DS220j
 - Synology Cloud Sync installed
@@ -241,7 +241,7 @@ for every recovery period the business still needs.
 
 ## Create and validate the first NAS copy
 
-Backfill any legacy receipt checksums once before creating the first version-5
+Backfill any legacy receipt checksums once before creating the first version-6
 archive:
 
 ```powershell
@@ -271,7 +271,7 @@ Validate the copied archive:
 
 Successful validation confirms the supported format, ZIP structure, ledger and
 receipt manifests, worksheet headers, SHA-256 checksums, IDs, relationships,
-and row counts. For a format-version 5 archive, the report must include
+and row counts. For a format-version 6 archive, the report must include
 Accounts, Categories, Transactions, Mileage, and a verified receipt inventory.
 Formats 2, 3, and pre-inventory 4 are reported as ledger-only sources.
 
