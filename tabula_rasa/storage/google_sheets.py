@@ -427,10 +427,10 @@ def _parse_backup_zip(
             legacy_headers, legacy_records = tables[title]
             if "parent_id" not in legacy_headers:
                 legacy_headers = [*legacy_headers, "parent_id"]
-            tables[title] = (
-                legacy_headers,
-                [{**record, "parent_id": ""} for record in legacy_records],
-            )
+                legacy_records = [
+                    {**record, "parent_id": ""} for record in legacy_records
+                ]
+            tables[title] = (legacy_headers, legacy_records)
 
     _validate_hierarchy_records(
         tables["Accounts"][1],

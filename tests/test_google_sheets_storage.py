@@ -1721,6 +1721,43 @@ class TestGoogleSheetsStorage:
         assert restored_category["id"] == category["id"]
         assert restored_category["parent_id"] == ""
 
+    def test_format_5_labeled_backup_preserves_present_hierarchy_columns(
+        self,
+    ) -> None:
+        account_parent = self.storage.create_account("Operating", "Bank")
+        account_child = self.storage.create_account(
+            "Petty cash", "Bank", parent_id=account_parent["id"]
+        )
+        category_parent = self.storage.create_category("Travel", "Expense")
+        category_child = self.storage.create_category(
+            "Airfare", "Expense", parent_id=category_parent["id"]
+        )
+        current_backup = self.storage.export_backup_zip(
+            backup_receipt_manifest(self.storage)
+        )
+        mixed_version_backup = rewrite_backup_tables(
+            current_backup,
+            {},
+            format_version=5,
+        )
+        target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+
+        validated = target.validate_backup_zip(mixed_version_backup)
+        target.restore_backup_zip(mixed_version_backup)
+
+        assert validated["format_version"] == 5
+        restored_accounts = {
+            item["id"]: item for item in target.list_accounts(active_only=False)
+        }
+        restored_categories = {
+            item["id"]: item for item in target.list_categories()
+        }
+        assert restored_accounts[account_child["id"]]["parent_id"] == account_parent["id"]
+        assert (
+            restored_categories[category_child["id"]]["parent_id"]
+            == category_parent["id"]
+        )
+
     def test_backup_uses_one_multi_range_values_request(self) -> None:
         class BatchWorkbook(FakeWorkbook):
             def __init__(self) -> None:
