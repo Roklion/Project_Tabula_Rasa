@@ -75,7 +75,7 @@ from tabula_rasa.receipt_manifest import (
 from tabula_rasa.receipt_backfill import backfill_profile_receipts
 
 
-STORAGE_IMPLEMENTATION_VERSION = 9
+STORAGE_IMPLEMENTATION_VERSION = 10
 ACCOUNT_TYPES = ["Bank", "Cash", "Credit card", "Short-term debt", "Equity", "Other"]
 ACCOUNT_CLASSIFICATIONS = ["Asset", "Liability", "Equity"]
 FIXED_TYPE_CLASSIFICATIONS = {

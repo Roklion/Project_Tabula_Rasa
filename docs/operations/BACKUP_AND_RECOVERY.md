@@ -33,7 +33,7 @@ Synology are optional additional failure boundaries.
 
 ## Archive contents and compatibility
 
-The current backup format is version 5. Each archive contains:
+The current backup format is version 6. Each archive contains:
 
 - `Accounts.csv`;
 - `Categories.csv`;
@@ -77,17 +77,22 @@ same profile-scoped migration explicitly before creating another backup:
   --profile PROFILE_KEY
 ```
 
-The current validator and ledger restore path accept formats 2 through 5:
+The current validator and ledger restore path accept formats 2 through 6:
 
 | Format | Contents |
 | --- | --- |
 | 2 | Accounts, Categories, and Transactions; predates Mileage and receipt references |
 | 3 | Adds Mileage; predates transaction receipt references |
 | 4 | Adds transaction receipt references; archives created before the receipt inventory remain ledger-only recovery sources |
-| 5 | Current format; adds the checksummed `receipts.json` inventory without embedding receipt bytes |
+| 5 | Adds the checksummed `receipts.json` inventory without embedding receipt bytes |
+| 6 | Current format; preserves optional account and category `parent_id` hierarchy metadata |
 
 Older compatible formats are migrated in memory during restore. A historical
-format-1 archive must first be converted to format 2.
+format-1 archive must first be converted to format 2. Formats 2 through 5
+that lack account and category `parent_id` columns restore those records at
+Layer 1 with blank parent values. A mixed-rollout archive labeled as format 2
+through 5 that already contains the hierarchy columns preserves and validates
+its parent relationships during restore.
 
 ## Create a backup in the application
 
@@ -153,7 +158,7 @@ Google Drive Desktop does not need to be installed or running for this mode.
 
 The provided Windows task registers Monday, Tuesday, and Wednesday at 10:00 PM
 as retry opportunities for one weekly backup. `--once-per-week` verifies an
-existing current-format archive with its version-5 receipt inventory before
+existing current-format archive with its checksummed receipt inventory before
 accessing Google Sheets, so a successful Monday run causes Tuesday and
 Wednesday to exit without creating duplicates. A valid older ledger-only
 archive does not suppress creation of the current recovery format.
@@ -259,10 +264,11 @@ be mistaken for the live ledger.
 
 ## Recover receipt files and remap Drive IDs
 
-Ledger restoration does not restore receipt bytes. After restoring a version-5
-archive, copy the matching profile receipt directory from the versioned
-Synology recovery set to a safe local path. Then run the dedicated receipt
-operation against the newly restored, non-live workbook:
+Ledger restoration does not restore receipt bytes. After restoring a current
+format-version 6 archive, or a compatible format-version 5 archive, copy the
+matching profile receipt directory from the versioned Synology recovery set to
+a safe local path. Then run the dedicated receipt operation against the newly
+restored, non-live workbook:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\recover_synology_receipts.py `

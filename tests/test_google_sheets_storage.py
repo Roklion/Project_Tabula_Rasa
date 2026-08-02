@@ -5,6 +5,7 @@ import hashlib
 import io
 import json
 import zipfile
+from collections.abc import Callable, Mapping
 from unittest.mock import Mock, patch
 
 import gspread
@@ -24,6 +25,7 @@ from tabula_rasa.storage.google_sheets import (
     StorageValidationError,
     StorageWorkbookAccessError,
     VERSION_3_WORKSHEET_HEADERS,
+    VERSION_5_WORKSHEET_HEADERS,
     WORKSHEET_HEADERS,
 )
 from tabula_rasa.quickbooks_import import (
@@ -46,6 +48,74 @@ TEST_RECEIPT_REFERENCE = {
     "mime_type": "application/pdf",
     "byte_size": 7,
     "sha256": "b" * 64,
+}
+
+HISTORICAL_ACCOUNT_HEADERS = (
+    "id",
+    "name",
+    "type",
+    "classification",
+    "opening_balance",
+    "active",
+    "created_at",
+)
+HISTORICAL_CATEGORY_HEADERS = ("id", "name", "kind")
+HISTORICAL_TRANSACTION_HEADERS = (
+    "id",
+    "txn_date",
+    "kind",
+    "amount",
+    "account_id",
+    "to_account_id",
+    "category_id",
+    "payee",
+    "description",
+    "reference",
+    "created_at",
+)
+HISTORICAL_MILEAGE_HEADERS = (
+    "id",
+    "trip_date",
+    "miles",
+    "vehicle",
+    "start_location",
+    "destination",
+    "business_purpose",
+    "notes",
+    "created_at",
+)
+HISTORICAL_BACKUP_HEADERS = {
+    2: {
+        "Accounts": HISTORICAL_ACCOUNT_HEADERS,
+        "Categories": HISTORICAL_CATEGORY_HEADERS,
+        "Transactions": HISTORICAL_TRANSACTION_HEADERS,
+    },
+    3: {
+        "Accounts": HISTORICAL_ACCOUNT_HEADERS,
+        "Categories": HISTORICAL_CATEGORY_HEADERS,
+        "Transactions": HISTORICAL_TRANSACTION_HEADERS,
+        "Mileage": HISTORICAL_MILEAGE_HEADERS,
+    },
+    4: {
+        "Accounts": HISTORICAL_ACCOUNT_HEADERS,
+        "Categories": HISTORICAL_CATEGORY_HEADERS,
+        "Transactions": (
+            *HISTORICAL_TRANSACTION_HEADERS[:-1],
+            "receipt_references",
+            HISTORICAL_TRANSACTION_HEADERS[-1],
+        ),
+        "Mileage": HISTORICAL_MILEAGE_HEADERS,
+    },
+    5: {
+        "Accounts": HISTORICAL_ACCOUNT_HEADERS,
+        "Categories": HISTORICAL_CATEGORY_HEADERS,
+        "Transactions": (
+            *HISTORICAL_TRANSACTION_HEADERS[:-1],
+            "receipt_references",
+            HISTORICAL_TRANSACTION_HEADERS[-1],
+        ),
+        "Mileage": HISTORICAL_MILEAGE_HEADERS,
+    },
 }
 
 
@@ -80,6 +150,98 @@ def backup_receipt_manifest(storage: GoogleSheetsStorage) -> dict[str, object]:
                 continue
             files.append(drive_file_from_reference(reference))
     return build_receipt_manifest("test", transactions, files)
+
+
+def rewrite_backup_tables(
+    backup: bytes,
+    transforms: Mapping[str, Callable[[list[list[str]]], None]],
+    *,
+    format_version: int | None = None,
+) -> bytes:
+    """Rewrite selected backup CSVs and keep checksums/metadata consistent."""
+    output = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(backup)) as source:
+        contents = {name: source.read(name) for name in source.namelist()}
+    manifest = json.loads(contents["manifest.json"])
+    if format_version is not None:
+        manifest["format_version"] = format_version
+    for title, transform in transforms.items():
+        filename = f"{title}.csv"
+        rows = list(
+            csv.reader(io.StringIO(contents[filename].decode("utf-8")))
+        )
+        transform(rows)
+        csv_buffer = io.StringIO(newline="")
+        csv.writer(csv_buffer, lineterminator="\n").writerows(rows)
+        contents[filename] = csv_buffer.getvalue().encode("utf-8")
+        manifest["worksheet_headers"][title] = rows[0]
+        manifest["row_counts"][title] = len(rows) - 1
+        manifest["sha256"][filename] = hashlib.sha256(
+            contents[filename]
+        ).hexdigest()
+    contents["manifest.json"] = json.dumps(manifest).encode("utf-8")
+    with zipfile.ZipFile(output, "w") as destination:
+        for name, content in contents.items():
+            destination.writestr(name, content)
+    return output.getvalue()
+
+
+def downgrade_backup(backup: bytes, format_version: int) -> bytes:
+    """Rebuild a current backup using one exact historical archive schema."""
+    expected_headers = HISTORICAL_BACKUP_HEADERS[format_version]
+    output = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(backup)) as source:
+        manifest = json.loads(source.read("manifest.json"))
+        csv_files: dict[str, bytes] = {}
+        for title, headers in expected_headers.items():
+            current_rows = list(
+                csv.reader(
+                    io.StringIO(
+                        source.read(f"{title}.csv").decode("utf-8")
+                    )
+                )
+            )
+            indexes = [current_rows[0].index(header) for header in headers]
+            historical_rows = [
+                [row[index] for index in indexes] for row in current_rows
+            ]
+            csv_buffer = io.StringIO(newline="")
+            csv.writer(csv_buffer, lineterminator="\n").writerows(
+                historical_rows
+            )
+            csv_files[f"{title}.csv"] = csv_buffer.getvalue().encode("utf-8")
+
+        include_receipts = format_version >= 5
+        receipts = source.read("receipts.json") if include_receipts else None
+
+    manifest["format_version"] = format_version
+    manifest["row_counts"] = {
+        title: sum(1 for _ in csv.reader(io.StringIO(content.decode("utf-8"))))
+        - 1
+        for title, content in (
+            (filename.removesuffix(".csv"), content)
+            for filename, content in csv_files.items()
+        )
+    }
+    manifest["worksheet_headers"] = {
+        title: list(headers) for title, headers in expected_headers.items()
+    }
+    manifest["sha256"] = {
+        filename: hashlib.sha256(content).hexdigest()
+        for filename, content in csv_files.items()
+    }
+    if receipts is not None:
+        manifest["sha256"]["receipts.json"] = hashlib.sha256(
+            receipts
+        ).hexdigest()
+
+    with zipfile.ZipFile(output, "w") as destination:
+        for filename, content in csv_files.items():
+            destination.writestr(filename, content)
+        if receipts is not None:
+            destination.writestr("receipts.json", receipts)
+        destination.writestr("manifest.json", json.dumps(manifest))
+    return output.getvalue()
 
 
 class TestGoogleSheetsStorage:
@@ -190,6 +352,59 @@ class TestGoogleSheetsStorage:
         ]
         assert transaction_sheet.rows[1][-1] == ""
 
+    def test_profile_storage_migrates_hierarchy_columns_idempotently(
+        self,
+    ) -> None:
+        workbook = FakeWorkbook(VERSION_5_WORKSHEET_HEADERS)
+        workbook.sheets["Accounts"].rows.append(
+            [
+                "account-1",
+                "Legacy checking",
+                "Bank",
+                "Asset",
+                "0.00",
+                "TRUE",
+                "2026-01-01T00:00:00Z",
+            ]
+        )
+        workbook.sheets["Categories"].rows.append(
+            ["category-1", "Legacy travel", "Expense"]
+        )
+        for title in ("Accounts", "Categories"):
+            worksheet = workbook.sheets[title]
+            worksheet.add_cols = Mock(wraps=worksheet.add_cols)
+        google_client = Mock()
+        google_client.open_by_key.return_value = workbook
+
+        with (
+            patch.object(
+                Credentials,
+                "from_service_account_info",
+                return_value=object(),
+            ),
+            patch.object(gspread, "authorize", return_value=google_client),
+        ):
+            storage = GoogleSheetsStorage.from_secrets(
+                {
+                    "spreadsheet_id": "given-spreadsheet-id",
+                    "gcp_service_account": {"type": "service_account"},
+                }
+            )
+            GoogleSheetsStorage.from_secrets(
+                {
+                    "spreadsheet_id": "given-spreadsheet-id",
+                    "gcp_service_account": {"type": "service_account"},
+                }
+            )
+
+        for title in ("Accounts", "Categories"):
+            worksheet = workbook.sheets[title]
+            assert worksheet.rows[0] == list(WORKSHEET_HEADERS[title])
+            assert worksheet.add_cols.call_count == 1
+            assert worksheet.rows[1][-1] == ""
+        assert storage.list_accounts()[0]["parent_id"] == ""
+        assert storage.list_categories()[0]["parent_id"] == ""
+
     def test_profile_storage_reports_invalid_credential_safely(self) -> None:
         with (
             patch.object(
@@ -273,6 +488,7 @@ class TestGoogleSheetsStorage:
             "type",
             "classification",
             "opening_balance",
+            "parent_id",
         )
         workbook = FakeWorkbook(headers)
         storage = GoogleSheetsStorage(workbook)
@@ -299,6 +515,43 @@ class TestGoogleSheetsStorage:
         assert second == {"accounts": 0, "categories": 0}
         assert len(self.storage.list_accounts()) == 2
         assert len(self.storage.list_categories()) == 16
+        assert all(
+            item["parent_id"] == "" for item in self.storage.list_accounts()
+        )
+        assert all(
+            item["parent_id"] == "" for item in self.storage.list_categories()
+        )
+
+    @pytest.mark.parametrize(
+        ("corrupted_title", "item_label"),
+        [("Accounts", "Account"), ("Categories", "Category")],
+    )
+    def test_default_seed_validates_hierarchy_before_writes(
+        self, corrupted_title: str, item_label: str
+    ) -> None:
+        if corrupted_title == "Accounts":
+            existing = self.storage.create_account("Legacy cash", "Cash")
+        else:
+            existing = self.storage.create_category("Legacy sales", "Income")
+        corrupted_sheet = self.workbook.sheets[corrupted_title]
+        parent_index = corrupted_sheet.rows[0].index("parent_id")
+        existing_row = next(
+            row for row in corrupted_sheet.rows[1:] if row[0] == existing["id"]
+        )
+        existing_row[parent_index] = "missing-parent"
+        account_sheet = self.workbook.sheets["Accounts"]
+        category_sheet = self.workbook.sheets["Categories"]
+        account_sheet.append_rows = Mock(wraps=account_sheet.append_rows)
+        category_sheet.append_rows = Mock(wraps=category_sheet.append_rows)
+
+        with pytest.raises(
+            StorageValidationError,
+            match=f"{item_label} parent does not exist",
+        ):
+            self.storage.ensure_defaults()
+
+        assert account_sheet.append_rows.call_count == 0
+        assert category_sheet.append_rows.call_count == 0
 
     def test_equity_account_inference_keeps_name_and_type_separate(self) -> None:
         account_type = suggested_account_type("Owners investment")
@@ -340,6 +593,182 @@ class TestGoogleSheetsStorage:
         assert self.storage.list_accounts() == []
         assert len(self.storage.list_accounts(active_only=False)) == 1
 
+    def test_account_hierarchy_transitions_preserve_ids_and_references(
+        self,
+    ) -> None:
+        first_parent = self.storage.create_account("Operating", "Bank")
+        second_parent = self.storage.create_account("Savings", "Cash")
+        child = self.storage.create_account(
+            "Reserve",
+            "Cash",
+            125,
+        )
+        category = self.storage.create_category("Interest", "Income")
+        transaction = self.storage.create_transaction(
+            txn_date="2026-08-01",
+            kind="Income",
+            amount=25,
+            account_id=child["id"],
+            category_id=category["id"],
+        )
+
+        nested = self.storage.edit_account(
+            child["id"], parent_id=first_parent["id"]
+        )
+        moved = self.storage.edit_account(
+            child["id"], parent_id=second_parent["id"]
+        )
+        promoted = self.storage.edit_account(child["id"], parent_id="")
+
+        assert nested["id"] == child["id"]
+        assert nested["parent_id"] == first_parent["id"]
+        assert moved["id"] == child["id"]
+        assert moved["parent_id"] == second_parent["id"]
+        assert promoted["id"] == child["id"]
+        assert promoted["parent_id"] == ""
+        for field in (
+            "id",
+            "name",
+            "type",
+            "classification",
+            "opening_balance",
+            "active",
+            "created_at",
+        ):
+            assert promoted[field] == child[field]
+        assert self.storage.list_transactions()[0]["id"] == transaction["id"]
+        assert (
+            self.storage.list_transactions()[0]["account_id"] == child["id"]
+        )
+
+    def test_inactive_account_can_parent_an_active_child(self) -> None:
+        parent = self.storage.create_account("Inactive parent", "Bank")
+        self.storage.deactivate_account(parent["id"])
+
+        child = self.storage.create_account(
+            "Active child", "Cash", parent_id=parent["id"]
+        )
+
+        assert child["parent_id"] == parent["id"]
+        assert child["active"] == "TRUE"
+        assert self.storage.list_accounts() == [
+            {
+                **child,
+                "active": True,
+                "opening_balance": 0.0,
+            }
+        ]
+
+    def test_invalid_account_hierarchy_changes_do_not_write(self) -> None:
+        parent = self.storage.create_account("Operating", "Bank")
+        child = self.storage.create_account(
+            "Petty cash", "Cash", parent_id=parent["id"]
+        )
+        other_parent = self.storage.create_account("Receivables", "Other")
+        self.storage.create_account(
+            "Other asset", "Other", parent_id=other_parent["id"]
+        )
+        account_sheet = self.workbook.sheets["Accounts"]
+        account_sheet.append_row = Mock(wraps=account_sheet.append_row)
+        account_sheet.update = Mock(wraps=account_sheet.update)
+
+        with pytest.raises(StorageValidationError, match="does not exist"):
+            self.storage.create_account(
+                "Dangling", "Cash", parent_id="missing-account"
+            )
+        with pytest.raises(StorageValidationError, match="own parent"):
+            self.storage.edit_account(parent["id"], parent_id=parent["id"])
+        with pytest.raises(StorageValidationError, match="only two levels"):
+            self.storage.create_account(
+                "Grandchild", "Cash", parent_id=child["id"]
+            )
+        with pytest.raises(StorageValidationError, match="only two levels"):
+            self.storage.edit_account(
+                parent["id"], parent_id=other_parent["id"]
+            )
+        with pytest.raises(StorageValidationError, match="same classification"):
+            self.storage.create_account(
+                "Card",
+                "Credit card",
+                classification="Liability",
+                parent_id=other_parent["id"],
+            )
+        with pytest.raises(StorageValidationError, match="same classification"):
+            self.storage.edit_account(
+                other_parent["id"], classification="Liability"
+            )
+
+        assert account_sheet.append_row.call_count == 0
+        assert account_sheet.update.call_count == 0
+        assert "Accounts" in self.storage._row_cache
+
+    def test_hierarchy_write_revalidates_fresh_external_state(self) -> None:
+        first = self.storage.create_account("Operating", "Bank")
+        externally_moved = self.storage.create_account("Savings", "Cash")
+        self.storage.list_accounts(active_only=False)
+        account_sheet = self.workbook.sheets["Accounts"]
+        headers = account_sheet.rows[0]
+        parent_index = headers.index("parent_id")
+        moved_row = next(
+            row for row in account_sheet.rows[1:] if row[0] == externally_moved["id"]
+        )
+        moved_row[parent_index] = first["id"]
+        account_sheet.append_row = Mock(wraps=account_sheet.append_row)
+
+        with pytest.raises(StorageValidationError, match="only two levels"):
+            self.storage.create_account(
+                "Grandchild",
+                "Cash",
+                parent_id=externally_moved["id"],
+            )
+
+        assert account_sheet.append_row.call_count == 0
+
+    def test_category_hierarchy_write_revalidates_external_state(self) -> None:
+        first = self.storage.create_category("Travel", "Expense")
+        externally_moved = self.storage.create_category("Flights", "Expense")
+        self.storage.list_categories()
+        category_sheet = self.workbook.sheets["Categories"]
+        headers = category_sheet.rows[0]
+        parent_index = headers.index("parent_id")
+        moved_row = next(
+            row
+            for row in category_sheet.rows[1:]
+            if row[0] == externally_moved["id"]
+        )
+        moved_row[parent_index] = first["id"]
+        category_sheet.append_row = Mock(wraps=category_sheet.append_row)
+
+        with pytest.raises(StorageValidationError, match="only two levels"):
+            self.storage.create_category(
+                "International", "Expense", parent_id=externally_moved["id"]
+            )
+
+        assert category_sheet.append_row.call_count == 0
+
+    def test_failed_hierarchy_edit_does_not_report_success_or_clear_cache(
+        self,
+    ) -> None:
+        first = self.storage.create_account("Operating", "Bank")
+        second = self.storage.create_account("Savings", "Cash")
+        child = self.storage.create_account(
+            "Reserve", "Cash", parent_id=first["id"]
+        )
+        account_sheet = self.workbook.sheets["Accounts"]
+        account_sheet.update = Mock(side_effect=OSError("uncertain response"))
+
+        with pytest.raises(StorageUnavailableError, match="no success"):
+            self.storage.edit_account(child["id"], parent_id=second["id"])
+
+        assert account_sheet.update.call_count == 4
+        assert "Accounts" in self.storage._row_cache
+        cached_child = next(
+            item
+            for item in self.storage.list_accounts(active_only=False)
+            if item["id"] == child["id"]
+        )
+        assert cached_child["parent_id"] == first["id"]
+
     def test_unknown_account_type_is_rejected(self) -> None:
         with pytest.raises(StorageValidationError):
             self.storage.create_account(
@@ -365,6 +794,81 @@ class TestGoogleSheetsStorage:
         assert edited["name"] == "Professional services"
         assert edited["kind"] == "Expense"
         assert self.storage.list_categories() == [edited]
+
+    def test_category_hierarchy_transitions_and_validation(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        travel = self.storage.create_category("Travel", "Expense")
+        operations = self.storage.create_category("Operations", "Expense")
+        flight = self.storage.create_category("Flight", "Expense")
+        transaction = self.storage.create_transaction(
+            txn_date="2026-08-01",
+            kind="Expense",
+            amount=25,
+            account_id=account["id"],
+            category_id=flight["id"],
+        )
+
+        nested = self.storage.edit_category(
+            flight["id"], parent_id=travel["id"]
+        )
+
+        with pytest.raises(StorageValidationError, match="only two levels"):
+            self.storage.edit_category(
+                travel["id"], parent_id=operations["id"]
+            )
+        with pytest.raises(StorageValidationError, match="same kind"):
+            self.storage.edit_category(travel["id"], kind="Income")
+
+        moved = self.storage.edit_category(
+            flight["id"], parent_id=operations["id"]
+        )
+        promoted = self.storage.edit_category(flight["id"], parent_id="")
+
+        assert nested["id"] == flight["id"]
+        assert nested["parent_id"] == travel["id"]
+        assert moved["id"] == flight["id"]
+        assert moved["parent_id"] == operations["id"]
+        assert promoted["parent_id"] == ""
+        for field in ("id", "name", "kind"):
+            assert promoted[field] == flight[field]
+        assert self.storage.list_transactions()[0]["id"] == transaction["id"]
+        assert (
+            self.storage.list_transactions()[0]["category_id"] == flight["id"]
+        )
+        with pytest.raises(StorageValidationError, match="same kind"):
+            self.storage.create_category(
+                "Consulting", "Income", parent_id=travel["id"]
+            )
+
+    def test_hierarchy_parent_ids_are_isolated_between_profile_storages(
+        self,
+    ) -> None:
+        other_storage = GoogleSheetsStorage(
+            FakeWorkbook(), sleeper=lambda _: None
+        )
+        assert other_storage.list_accounts(active_only=False) == []
+        assert other_storage.list_categories() == []
+        account_parent = self.storage.create_account("Operating", "Bank")
+        category_parent = self.storage.create_category("Travel", "Expense")
+
+        assert other_storage.list_accounts(active_only=False) == []
+        assert other_storage.list_categories() == []
+
+        with pytest.raises(StorageValidationError, match="does not exist"):
+            other_storage.create_account(
+                "Other checking", "Bank", parent_id=account_parent["id"]
+            )
+        with pytest.raises(StorageValidationError, match="does not exist"):
+            other_storage.create_category(
+                "Other travel", "Expense", parent_id=category_parent["id"]
+            )
+
+        assert self.storage.create_account(
+            "Savings", "Cash", parent_id=account_parent["id"]
+        )["parent_id"] == account_parent["id"]
+        assert self.storage.create_category(
+            "Flights", "Expense", parent_id=category_parent["id"]
+        )["parent_id"] == category_parent["id"]
 
     def test_edit_category_rejects_duplicate_name_and_kind(self) -> None:
         first = self.storage.create_category("Services", "Income")
@@ -941,6 +1445,58 @@ class TestGoogleSheetsStorage:
         assert [
             (item["name"], item["kind"]) for item in self.storage.list_categories()
         ] == [("Consulting", "Income")]
+        assert all(
+            item["parent_id"] == "" for item in self.storage.list_accounts()
+        )
+        assert all(
+            item["parent_id"] == "" for item in self.storage.list_categories()
+        )
+
+    @pytest.mark.parametrize(
+        ("corrupted_title", "item_label"),
+        [("Accounts", "Account"), ("Categories", "Category")],
+    )
+    def test_quickbooks_auto_create_validates_hierarchy_before_writes(
+        self, corrupted_title: str, item_label: str
+    ) -> None:
+        if corrupted_title == "Accounts":
+            existing = self.storage.create_account("Legacy cash", "Cash")
+        else:
+            existing = self.storage.create_category("Legacy sales", "Income")
+        corrupted_sheet = self.workbook.sheets[corrupted_title]
+        parent_index = corrupted_sheet.rows[0].index("parent_id")
+        existing_row = next(
+            row for row in corrupted_sheet.rows[1:] if row[0] == existing["id"]
+        )
+        existing_row[parent_index] = "missing-parent"
+        account_sheet = self.workbook.sheets["Accounts"]
+        category_sheet = self.workbook.sheets["Categories"]
+        transaction_sheet = self.workbook.sheets["Transactions"]
+        account_sheet.append_rows = Mock(wraps=account_sheet.append_rows)
+        category_sheet.append_rows = Mock(wraps=category_sheet.append_rows)
+        transaction_sheet.append_rows = Mock(wraps=transaction_sheet.append_rows)
+        rows = [
+            {
+                "Date": "07/01/2026",
+                "Transaction Type": "Deposit",
+                "Num": "1",
+                "Name": "Client",
+                "Memo/Description": "Invoice",
+                "Account": "Operating",
+                "Split": "Consulting",
+                "Amount": "100",
+            }
+        ]
+
+        with pytest.raises(
+            StorageValidationError,
+            match=f"{item_label} parent does not exist",
+        ):
+            self.storage.import_quickbooks_transactions(rows, auto_create=True)
+
+        assert account_sheet.append_rows.call_count == 0
+        assert category_sheet.append_rows.call_count == 0
+        assert transaction_sheet.append_rows.call_count == 0
 
     def test_quickbooks_batch_import_reuses_reference_reads(self) -> None:
         self.storage.create_account("Checking", "Bank")
@@ -1097,6 +1653,24 @@ class TestGoogleSheetsStorage:
             assert account["id"] in archive.read("Accounts.csv").decode("utf-8")
             assert "External" in archive.read("Accounts.csv").decode("utf-8")
 
+    def test_backup_rejects_an_externally_corrupted_hierarchy(self) -> None:
+        parent = self.storage.create_account("Operating", "Bank")
+        child = self.storage.create_account(
+            "Savings", "Cash", parent_id=parent["id"]
+        )
+        account_sheet = self.workbook.sheets["Accounts"]
+        headers = account_sheet.rows[0]
+        parent_index = headers.index("parent_id")
+        parent_row = next(
+            row for row in account_sheet.rows[1:] if row[0] == parent["id"]
+        )
+        parent_row[parent_index] = child["id"]
+
+        with pytest.raises(StorageValidationError, match="only two levels"):
+            self.storage.export_backup_zip(
+                backup_receipt_manifest(self.storage)
+            )
+
     def test_backup_inventories_referenced_and_unreferenced_receipts(self) -> None:
         account = self.storage.create_account("Checking", "Bank")
         category = self.storage.create_category("Sales", "Income")
@@ -1189,29 +1763,77 @@ class TestGoogleSheetsStorage:
             build_receipt_manifest("test", [], [receipt])
 
     def test_pre_manifest_v4_backup_remains_readable_as_ledger_only(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
         backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
-        output = io.BytesIO()
-        with zipfile.ZipFile(io.BytesIO(backup)) as source, zipfile.ZipFile(
-            output, "w"
-        ) as destination:
-            ledger_manifest = json.loads(source.read("manifest.json"))
-            ledger_manifest["format_version"] = 4
-            ledger_manifest["sha256"].pop("receipts.json")
-            for name in source.namelist():
-                if name == "receipts.json":
-                    continue
-                content = (
-                    json.dumps(ledger_manifest).encode("utf-8")
-                    if name == "manifest.json"
-                    else source.read(name)
-                )
-                destination.writestr(name, content)
+        version_4_backup = downgrade_backup(backup, 4)
+        target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
 
-        validated = self.storage.validate_backup_zip(output.getvalue())
+        validated = self.storage.validate_backup_zip(version_4_backup)
+        target.restore_backup_zip(version_4_backup)
 
         assert validated["format_version"] == 4
         assert validated["receipt_inventory"] is False
-        assert self.storage.receipt_manifest_from_backup(output.getvalue()) is None
+        assert self.storage.receipt_manifest_from_backup(version_4_backup) is None
+        assert target.list_accounts()[0]["id"] == account["id"]
+        assert target.list_accounts()[0]["parent_id"] == ""
+
+    def test_format_5_backup_restores_with_blank_hierarchy_columns(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Travel", "Expense")
+        current_backup = self.storage.export_backup_zip(
+            backup_receipt_manifest(self.storage)
+        )
+        version_5_backup = downgrade_backup(current_backup, 5)
+        target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+
+        validated = target.validate_backup_zip(version_5_backup)
+        target.restore_backup_zip(version_5_backup)
+
+        assert validated["format_version"] == 5
+        assert validated["receipt_inventory"] is True
+        restored_account = target.list_accounts()[0]
+        restored_category = target.list_categories()[0]
+        assert restored_account["id"] == account["id"]
+        assert restored_account["parent_id"] == ""
+        assert restored_category["id"] == category["id"]
+        assert restored_category["parent_id"] == ""
+
+    def test_format_5_labeled_backup_preserves_present_hierarchy_columns(
+        self,
+    ) -> None:
+        account_parent = self.storage.create_account("Operating", "Bank")
+        account_child = self.storage.create_account(
+            "Petty cash", "Bank", parent_id=account_parent["id"]
+        )
+        category_parent = self.storage.create_category("Travel", "Expense")
+        category_child = self.storage.create_category(
+            "Airfare", "Expense", parent_id=category_parent["id"]
+        )
+        current_backup = self.storage.export_backup_zip(
+            backup_receipt_manifest(self.storage)
+        )
+        mixed_version_backup = rewrite_backup_tables(
+            current_backup,
+            {},
+            format_version=5,
+        )
+        target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+
+        validated = target.validate_backup_zip(mixed_version_backup)
+        target.restore_backup_zip(mixed_version_backup)
+
+        assert validated["format_version"] == 5
+        restored_accounts = {
+            item["id"]: item for item in target.list_accounts(active_only=False)
+        }
+        restored_categories = {
+            item["id"]: item for item in target.list_categories()
+        }
+        assert restored_accounts[account_child["id"]]["parent_id"] == account_parent["id"]
+        assert (
+            restored_categories[category_child["id"]]["parent_id"]
+            == category_parent["id"]
+        )
 
     def test_backup_uses_one_multi_range_values_request(self) -> None:
         class BatchWorkbook(FakeWorkbook):
@@ -1296,30 +1918,105 @@ class TestGoogleSheetsStorage:
         ]
         assert restored_storage.list_mileage_trips()[0]["id"] == mileage["id"]
 
+    def test_backup_round_trips_account_and_category_hierarchies(self) -> None:
+        account_parent = self.storage.create_account("Operating", "Bank")
+        account_child = self.storage.create_account(
+            "Savings", "Cash", parent_id=account_parent["id"]
+        )
+        category_parent = self.storage.create_category("Travel", "Expense")
+        category_child = self.storage.create_category(
+            "Flights", "Expense", parent_id=category_parent["id"]
+        )
+        backup = self.storage.export_backup_zip(
+            backup_receipt_manifest(self.storage)
+        )
+        target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+
+        target.restore_backup_zip(backup)
+
+        accounts = {
+            item["id"]: item
+            for item in target.list_accounts(active_only=False)
+        }
+        categories = {item["id"]: item for item in target.list_categories()}
+        assert accounts[account_child["id"]]["parent_id"] == account_parent["id"]
+        assert (
+            categories[category_child["id"]]["parent_id"]
+            == category_parent["id"]
+        )
+
+    def test_backup_validation_rejects_tampered_hierarchy_graphs(self) -> None:
+        first = self.storage.create_account("First", "Other")
+        second = self.storage.create_account("Second", "Other")
+        third = self.storage.create_account("Third", "Other")
+        liability = self.storage.create_account(
+            "Liability",
+            "Other",
+            classification="Liability",
+        )
+        backup = self.storage.export_backup_zip(
+            backup_receipt_manifest(self.storage)
+        )
+        invalid_parent_sets = [
+            {first["id"]: "missing"},
+            {first["id"]: first["id"]},
+            {first["id"]: second["id"], second["id"]: first["id"]},
+            {
+                first["id"]: second["id"],
+                second["id"]: third["id"],
+                third["id"]: first["id"],
+            },
+            {first["id"]: second["id"], second["id"]: third["id"]},
+            {first["id"]: liability["id"]},
+        ]
+
+        for parent_ids in invalid_parent_sets:
+            def assign_parents(
+                rows: list[list[str]],
+                assignments: dict[str, str] = parent_ids,
+            ) -> None:
+                id_index = rows[0].index("id")
+                parent_index = rows[0].index("parent_id")
+                for row in rows[1:]:
+                    if row[id_index] in assignments:
+                        row[parent_index] = assignments[row[id_index]]
+
+            tampered = rewrite_backup_tables(
+                backup, {"Accounts": assign_parents}
+            )
+            with pytest.raises(StorageValidationError):
+                self.storage.validate_backup_zip(tampered)
+
+    def test_backup_validation_rejects_incompatible_category_parent(self) -> None:
+        expense = self.storage.create_category("Travel", "Expense")
+        income = self.storage.create_category("Sales", "Income")
+        backup = self.storage.export_backup_zip(
+            backup_receipt_manifest(self.storage)
+        )
+
+        def assign_incompatible_parent(rows: list[list[str]]) -> None:
+            id_index = rows[0].index("id")
+            parent_index = rows[0].index("parent_id")
+            for row in rows[1:]:
+                if row[id_index] == expense["id"]:
+                    row[parent_index] = income["id"]
+
+        tampered = rewrite_backup_tables(
+            backup, {"Categories": assign_incompatible_parent}
+        )
+
+        with pytest.raises(StorageValidationError, match="same kind"):
+            self.storage.validate_backup_zip(tampered)
+
     def test_restore_accepts_pre_mileage_backup(self) -> None:
         self.storage.create_account("Checking", "Bank")
         current_backup = self.storage.export_backup_zip(
             backup_receipt_manifest(self.storage)
         )
-        legacy_buffer = io.BytesIO()
-        with zipfile.ZipFile(io.BytesIO(current_backup)) as source:
-            manifest = json.loads(source.read("manifest.json"))
-            manifest["format_version"] = 2
-            manifest["row_counts"].pop("Mileage")
-            manifest["worksheet_headers"].pop("Mileage")
-            manifest["sha256"].pop("Mileage.csv")
-            manifest["sha256"].pop("receipts.json")
-            with zipfile.ZipFile(legacy_buffer, "w") as legacy:
-                for name in (
-                    "Accounts.csv",
-                    "Categories.csv",
-                    "Transactions.csv",
-                ):
-                    legacy.writestr(name, source.read(name))
-                legacy.writestr("manifest.json", json.dumps(manifest))
+        version_2_backup = downgrade_backup(current_backup, 2)
 
         target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
-        counts = target.restore_backup_zip(legacy_buffer.getvalue())
+        counts = target.restore_backup_zip(version_2_backup)
 
         assert counts == {"Accounts": 1, "Categories": 0, "Transactions": 0}
         assert target.list_mileage_trips() == []
@@ -1333,7 +2030,7 @@ class TestGoogleSheetsStorage:
             business_purpose="Deposit",
         )
         with pytest.raises(StorageConflictError):
-            nonblank_target.restore_backup_zip(legacy_buffer.getvalue())
+            nonblank_target.restore_backup_zip(version_2_backup)
 
     def test_restore_migrates_format_version_3_receipt_references(self) -> None:
         account = self.storage.create_account("Checking", "Bank")
@@ -1348,47 +2045,10 @@ class TestGoogleSheetsStorage:
         current_backup = self.storage.export_backup_zip(
             backup_receipt_manifest(self.storage)
         )
-        version_3_buffer = io.BytesIO()
-        with zipfile.ZipFile(io.BytesIO(current_backup)) as source:
-            manifest = json.loads(source.read("manifest.json"))
-            transaction_rows = list(
-                csv.reader(
-                    io.StringIO(
-                        source.read("Transactions.csv").decode("utf-8")
-                    )
-                )
-            )
-            receipt_column = transaction_rows[0].index(
-                "receipt_references"
-            )
-            for row in transaction_rows:
-                del row[receipt_column]
-            transaction_buffer = io.StringIO(newline="")
-            writer = csv.writer(transaction_buffer, lineterminator="\n")
-            writer.writerows(transaction_rows)
-            transaction_csv = transaction_buffer.getvalue().encode("utf-8")
-            manifest["format_version"] = 3
-            manifest["worksheet_headers"]["Transactions"] = (
-                transaction_rows[0]
-            )
-            manifest["sha256"]["Transactions.csv"] = hashlib.sha256(
-                transaction_csv
-            ).hexdigest()
-            manifest["sha256"].pop("receipts.json")
-            with zipfile.ZipFile(version_3_buffer, "w") as version_3:
-                for name in source.namelist():
-                    if name == "receipts.json":
-                        continue
-                    if name == "Transactions.csv":
-                        content = transaction_csv
-                    elif name == "manifest.json":
-                        content = json.dumps(manifest).encode("utf-8")
-                    else:
-                        content = source.read(name)
-                    version_3.writestr(name, content)
+        version_3_backup = downgrade_backup(current_backup, 3)
 
         target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
-        target.restore_backup_zip(version_3_buffer.getvalue())
+        target.restore_backup_zip(version_3_backup)
 
         restored = target.list_transactions()[0]
         assert restored["id"] == transaction["id"]
@@ -1438,9 +2098,14 @@ class TestGoogleSheetsStorage:
 
         self.storage.list_accounts(active_only=False)
         self.storage.list_accounts(active_only=False)
+        self.storage.list_categories()
         assert worksheet.get_all_values.call_count == 1
+        assert "Accounts" in self.storage._row_cache
+        assert "Categories" in self.storage._row_cache
 
         self.storage.create_account("Checking", "Bank")
+        assert "Accounts" not in self.storage._row_cache
+        assert "Categories" in self.storage._row_cache
         self.storage.list_accounts(active_only=False)
         assert worksheet.get_all_values.call_count == 3
 
@@ -1490,6 +2155,50 @@ class TestGoogleSheetsStorage:
         accounts = self.storage.list_accounts(active_only=False)
         assert [account["id"] for account in accounts] == [created["id"]]
         assert worksheet.append_row.call_count == 1
+
+    def test_failed_append_preserves_the_confirmed_account_cache(self) -> None:
+        worksheet = self.workbook.sheets["Accounts"]
+        original_read = worksheet.get_all_values
+        worksheet.get_all_values = Mock(wraps=original_read)
+        self.storage.list_accounts(active_only=False)
+        worksheet.append_row = Mock(
+            side_effect=gspread.GSpreadException("definitive failure")
+        )
+
+        with pytest.raises(StorageUnavailableError, match="no success"):
+            self.storage.create_account("Checking", "Bank")
+
+        assert worksheet.get_all_values.call_count == 2
+        assert "Accounts" in self.storage._row_cache
+        assert self.storage.list_accounts(active_only=False) == []
+        assert worksheet.get_all_values.call_count == 2
+
+    def test_unconfirmed_retryable_append_never_reports_success(self) -> None:
+        worksheet = self.workbook.sheets["Accounts"]
+        worksheet.append_row = Mock(side_effect=OSError("temporary failure"))
+
+        with pytest.raises(StorageUnavailableError, match="no success"):
+            self.storage.create_account("Checking", "Bank")
+
+        assert worksheet.append_row.call_count == 4
+        assert self.storage.list_accounts(active_only=False) == []
+        assert "Accounts" in self.storage._row_cache
+
+    def test_failed_batch_append_preserves_profile_caches(self) -> None:
+        account_sheet = self.workbook.sheets["Accounts"]
+        category_sheet = self.workbook.sheets["Categories"]
+        account_sheet.append_rows = Mock(
+            side_effect=gspread.GSpreadException("definitive failure")
+        )
+
+        with pytest.raises(StorageUnavailableError, match="no success"):
+            self.storage.ensure_defaults()
+
+        assert "Accounts" in self.storage._row_cache
+        assert "Categories" in self.storage._row_cache
+        assert self.storage.list_accounts(active_only=False) == []
+        assert self.storage.list_categories() == []
+        assert category_sheet.rows == [list(WORKSHEET_HEADERS["Categories"])]
 
     def test_lost_delete_response_does_not_delete_following_row(self) -> None:
         account = self.storage.create_account("Checking", "Bank")

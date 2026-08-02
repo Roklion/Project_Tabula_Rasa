@@ -51,7 +51,10 @@ def validate(
     )
     client = gspread.authorize(credentials)
     workbook = client.open_by_key(target_spreadsheet_id)
-    storage = GoogleSheetsStorage(workbook)
+    storage = GoogleSheetsStorage(
+        workbook,
+        _allow_legacy_hierarchy_headers=True,
+    )
     row_counts = {
         "Accounts": len(storage.list_accounts(active_only=False)),
         "Categories": len(storage.list_categories()),

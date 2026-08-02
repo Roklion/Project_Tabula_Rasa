@@ -79,8 +79,8 @@ creates or validates the required worksheets and first-row headers:
 
 | Worksheet | Row 1 headers, from left to right |
 | --- | --- |
-| `Accounts` | `id`, `name`, `type`, `classification`, `opening_balance`, `active`, `created_at` |
-| `Categories` | `id`, `name`, `kind` |
+| `Accounts` | `id`, `name`, `type`, `classification`, `opening_balance`, `active`, `created_at`, `parent_id` |
+| `Categories` | `id`, `name`, `kind`, `parent_id` |
 | `Transactions` | `id`, `txn_date`, `kind`, `amount`, `account_id`, `to_account_id`, `category_id`, `payee`, `description`, `reference`, `receipt_references`, `created_at` |
 | `Mileage` | `id`, `trip_date`, `miles`, `vehicle`, `start_location`, `destination`, `business_purpose`, `notes`, `created_at` |
 
@@ -89,6 +89,12 @@ tabs are preserved. Empty required tabs receive their headers. Populated tabs
 with incompatible headers cause validation to fail rather than being
 overwritten. Initial accounts and categories are seeded while the profile is
 saved.
+
+On normal application startup, an existing workbook with the exact legacy
+format-version 5 Accounts and Categories headers is migrated in place by
+appending a blank `parent_id` column to each worksheet. Existing rows remain
+Layer 1 records. The read-only validation command accepts those legacy headers
+before startup without modifying the workbook.
 
 If the business uses a Google Workspace Shared Drive, confirm its administrator
 permits the external service-account address and grant only the minimum role

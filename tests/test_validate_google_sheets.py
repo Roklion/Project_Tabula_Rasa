@@ -44,6 +44,16 @@ def populated_workbook() -> FakeWorkbook:
     return workbook
 
 
+def legacy_hierarchy_workbook() -> FakeWorkbook:
+    workbook = populated_workbook()
+    for title in ("Accounts", "Categories"):
+        worksheet = workbook.sheets[title]
+        parent_index = worksheet.rows[0].index("parent_id")
+        for row in worksheet.rows:
+            del row[parent_index]
+    return workbook
+
+
 @patch(
     "scripts.validate_google_sheets.load_business_profile_document",
     return_value=PROFILE_DOCUMENT,
@@ -111,3 +121,30 @@ def test_configured_profile_still_uses_configured_workbook(
     output = capsys.readouterr().out
     assert "Ledger rows readable: Accounts=0, Categories=0" in output
     assert "Explicit workbook override" not in output
+
+
+@patch(
+    "scripts.validate_google_sheets.load_business_profile_document",
+    return_value=PROFILE_DOCUMENT,
+)
+@patch("scripts.validate_google_sheets.Credentials.from_service_account_info")
+@patch("scripts.validate_google_sheets.gspread.authorize")
+def test_read_only_validation_accepts_legacy_hierarchy_headers_without_migration(
+    authorize: Mock,
+    _from_service_account_info: Mock,
+    _load_document: Mock,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    workbook = legacy_hierarchy_workbook()
+    original_rows = {
+        title: [list(row) for row in workbook.sheets[title].rows]
+        for title in ("Accounts", "Categories")
+    }
+    authorize.return_value.open_by_key.return_value = workbook
+
+    validate(Path("unused.toml"), profile_key="test-business")
+
+    output = capsys.readouterr().out
+    assert "Ledger rows readable: Accounts=1, Categories=1" in output
+    for title in ("Accounts", "Categories"):
+        assert workbook.sheets[title].rows == original_rows[title]
