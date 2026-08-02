@@ -828,6 +828,16 @@ class GoogleSheetsStorage:
             if (name.casefold(), kind) not in category_keys
         ]
 
+        _validate_hierarchy_records(
+            [*existing_accounts, *new_accounts],
+            compatibility_field="classification",
+            item_label="Account",
+        )
+        _validate_hierarchy_records(
+            [*existing_categories, *new_categories],
+            compatibility_field="kind",
+            item_label="Category",
+        )
         self._append_many("Accounts", new_accounts)
         self._append_many("Categories", new_categories)
         return {"accounts": len(new_accounts), "categories": len(new_categories)}

@@ -522,6 +522,37 @@ class TestGoogleSheetsStorage:
             item["parent_id"] == "" for item in self.storage.list_categories()
         )
 
+    @pytest.mark.parametrize(
+        ("corrupted_title", "item_label"),
+        [("Accounts", "Account"), ("Categories", "Category")],
+    )
+    def test_default_seed_validates_hierarchy_before_writes(
+        self, corrupted_title: str, item_label: str
+    ) -> None:
+        if corrupted_title == "Accounts":
+            existing = self.storage.create_account("Legacy cash", "Cash")
+        else:
+            existing = self.storage.create_category("Legacy sales", "Income")
+        corrupted_sheet = self.workbook.sheets[corrupted_title]
+        parent_index = corrupted_sheet.rows[0].index("parent_id")
+        existing_row = next(
+            row for row in corrupted_sheet.rows[1:] if row[0] == existing["id"]
+        )
+        existing_row[parent_index] = "missing-parent"
+        account_sheet = self.workbook.sheets["Accounts"]
+        category_sheet = self.workbook.sheets["Categories"]
+        account_sheet.append_rows = Mock(wraps=account_sheet.append_rows)
+        category_sheet.append_rows = Mock(wraps=category_sheet.append_rows)
+
+        with pytest.raises(
+            StorageValidationError,
+            match=f"{item_label} parent does not exist",
+        ):
+            self.storage.ensure_defaults()
+
+        assert account_sheet.append_rows.call_count == 0
+        assert category_sheet.append_rows.call_count == 0
+
     def test_equity_account_inference_keeps_name_and_type_separate(self) -> None:
         account_type = suggested_account_type("Owners investment")
 
