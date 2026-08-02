@@ -102,7 +102,7 @@ def main() -> None:
             date(date.today().year, 1, 1)
         )
         by_label(app.number_input, "Amount").set_value(25)
-        by_label(app.selectbox, "Account").set_value("Owner-paid expenses")
+        by_label(app.selectbox, "From Account").set_value("Owner-paid expenses")
         by_label(app.selectbox, "Category").set_value("Testing expense")
         by_label(app.text_input, "Payee / customer").input("Test vendor")
         by_label(app.text_input, "Description / memo").input("Keep this memo")
@@ -115,7 +115,7 @@ def main() -> None:
         assert storage.list_transactions() == []
         assert by_label(app.number_input, "Amount").value == 25
         assert (
-            by_label(app.selectbox, "Account").value
+            by_label(app.selectbox, "From Account").value
             == "Owner-paid expenses"
         )
         assert by_label(app.selectbox, "Category").value == "Testing expense"
@@ -150,14 +150,14 @@ def main() -> None:
 
         by_label(app.segmented_control, "Transaction type").set_value("Income").run()
         by_label(app.number_input, "Amount").set_value(75)
-        by_label(app.selectbox, "Account").set_value("Checking")
+        by_label(app.selectbox, "From Account").set_value("Checking")
         by_label(app.selectbox, "Category").set_value("Sales")
         by_label(app.text_input, "Payee / customer").input("Test customer")
         by_label(app.button, "Save transaction").click().run()
 
         by_label(app.segmented_control, "Transaction type").set_value("Transfer").run()
         by_label(app.number_input, "Amount").set_value(10)
-        by_label(app.selectbox, "From account").set_value("Checking").run()
+        by_label(app.selectbox, "From Account").set_value("Checking").run()
         by_label(app.selectbox, "To account").set_value("Savings")
         by_label(app.button, "Save transaction").click().run()
         assert {item["kind"] for item in storage.list_transactions()} == {

@@ -634,26 +634,49 @@ elif page == "Transactions":
                 st.warning(f"Create a {kind.lower()} category first.")
             else:
                 with st.form("add_transaction", clear_on_submit=False):
-                    c1, c2 = st.columns(2)
-                    transaction_date = c1.date_input(
+                    transaction_date = st.date_input(
                         "Date",
                         date.today(),
                         key="add_transaction_date",
                     )
-                    amount = c2.number_input(
-                        "Amount",
-                        min_value=0.01,
-                        step=1.0,
-                        format="%.2f",
-                        key="add_transaction_amount",
-                    )
+                    category_id = None
+                    if kind == "Transfer":
+                        amount = st.number_input(
+                            "Amount",
+                            min_value=0.01,
+                            step=1.0,
+                            format="%.2f",
+                            key="add_transaction_amount",
+                        )
+                    else:
+                        c1, c2 = st.columns(2)
+                        category_map = {
+                            category["name"]: category["id"]
+                            for category in categories_for_kind
+                        }
+                        category_id = category_map[
+                            c1.selectbox(
+                                "Category",
+                                list(category_map),
+                                key=(
+                                    "add_transaction_category_"
+                                    f"{kind.casefold()}"
+                                ),
+                            )
+                        ]
+                        amount = c2.number_input(
+                            "Amount",
+                            min_value=0.01,
+                            step=1.0,
+                            format="%.2f",
+                            key="add_transaction_amount",
+                        )
                     source = st.selectbox(
-                        "Account" if kind != "Transfer" else "From account",
+                        "From Account",
                         list(account_map),
                         key=f"add_transaction_account_{kind.casefold()}",
                     )
                     to_account = None
-                    category_id = None
                     if kind == "Transfer":
                         choices = [name for name in account_map if name != source]
                         to_account = (
@@ -665,21 +688,6 @@ elif page == "Transactions":
                             if choices
                             else None
                         )
-                    else:
-                        category_map = {
-                            category["name"]: category["id"]
-                            for category in categories_for_kind
-                        }
-                        category_id = category_map[
-                            st.selectbox(
-                                "Category",
-                                list(category_map),
-                                key=(
-                                    "add_transaction_category_"
-                                    f"{kind.casefold()}"
-                                ),
-                            )
-                        ]
                     c1, c2 = st.columns(2)
                     payee = c1.text_input(
                         "Payee / customer",
@@ -1369,17 +1377,17 @@ elif page == "Mileage":
                 date.today(),
                 key="add_mileage_trip_date",
             )
-            miles = c2.number_input(
+            vehicle = c2.text_input(
+                "Vehicle (optional)",
+                help="For example: 2022 Honda Civic or Company van.",
+                key="add_mileage_vehicle",
+            )
+            miles = st.number_input(
                 "Business miles",
                 min_value=0.1,
                 step=0.1,
                 format="%.1f",
                 key="add_mileage_miles",
-            )
-            vehicle = st.text_input(
-                "Vehicle (optional)",
-                help="For example: 2022 Honda Civic or Company van.",
-                key="add_mileage_vehicle",
             )
             c1, c2 = st.columns(2)
             start_location = c1.text_input(
