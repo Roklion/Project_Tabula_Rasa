@@ -956,7 +956,6 @@ class GoogleSheetsStorage:
                 self._invalidate(title)
                 return
             except StorageUnavailableError as error:
-                self._invalidate(title)
                 if not error.retryable:
                     raise
                 try:
@@ -990,7 +989,6 @@ class GoogleSheetsStorage:
                 self._invalidate(title)
                 return
             except StorageUnavailableError as error:
-                self._invalidate(title)
                 if not error.retryable:
                     raise
                 try:
