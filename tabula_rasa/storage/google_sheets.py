@@ -25,6 +25,10 @@ import gspread
 from google.auth.exceptions import GoogleAuthError
 from google.oauth2.service_account import Credentials
 
+from tabula_rasa.hierarchy import (
+    HierarchyValidationError,
+    validate_two_level_hierarchy,
+)
 from tabula_rasa.quickbooks_import import (
     fingerprint,
     missing_references,
@@ -45,7 +49,7 @@ from tabula_rasa.receipt_manifest import (
 )
 
 
-WORKSHEET_HEADERS = {
+VERSION_5_WORKSHEET_HEADERS = {
     "Accounts": (
         "id",
         "name",
@@ -82,13 +86,18 @@ WORKSHEET_HEADERS = {
         "created_at",
     ),
 }
+WORKSHEET_HEADERS = {
+    **VERSION_5_WORKSHEET_HEADERS,
+    "Accounts": (*VERSION_5_WORKSHEET_HEADERS["Accounts"], "parent_id"),
+    "Categories": (*VERSION_5_WORKSHEET_HEADERS["Categories"], "parent_id"),
+}
 VERSION_3_WORKSHEET_HEADERS = {
     title: (
         tuple(header for header in headers if header != "receipt_references")
         if title == "Transactions"
         else headers
     )
-    for title, headers in WORKSHEET_HEADERS.items()
+    for title, headers in VERSION_5_WORKSHEET_HEADERS.items()
 }
 LEGACY_BACKUP_HEADERS = {
     title: headers
@@ -114,11 +123,13 @@ FIXED_TYPE_CLASSIFICATIONS = {
 CATEGORY_KINDS = {"Income", "Expense"}
 TRANSACTION_KINDS = {"Income", "Expense", "Transfer"}
 LEDGER_ONLY_BACKUP_FORMAT_VERSION = 4
-BACKUP_FORMAT_VERSION = 5
+RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION = 5
+BACKUP_FORMAT_VERSION = 6
 BACKUP_HEADERS_BY_VERSION = {
     2: LEGACY_BACKUP_HEADERS,
     3: VERSION_3_WORKSHEET_HEADERS,
-    LEDGER_ONLY_BACKUP_FORMAT_VERSION: WORKSHEET_HEADERS,
+    LEDGER_ONLY_BACKUP_FORMAT_VERSION: VERSION_5_WORKSHEET_HEADERS,
+    RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION: VERSION_5_WORKSHEET_HEADERS,
     BACKUP_FORMAT_VERSION: WORKSHEET_HEADERS,
 }
 SUPPORTED_BACKUP_FORMAT_VERSIONS = set(BACKUP_HEADERS_BY_VERSION)
@@ -200,6 +211,22 @@ def _clean_text(value: Any, field: str, *, required: bool = False) -> str:
     if required and not text:
         raise StorageValidationError(f"{field} is required")
     return text
+
+
+def _validate_hierarchy_records(
+    records: Iterable[Mapping[str, Any]],
+    *,
+    compatibility_field: str,
+    item_label: str,
+) -> None:
+    try:
+        validate_two_level_hierarchy(
+            records,
+            compatibility_field=compatibility_field,
+            item_label=item_label,
+        )
+    except HierarchyValidationError as exc:
+        raise StorageValidationError(str(exc)) from exc
 
 
 def decode_receipt_references(value: Any) -> list[dict[str, Any]]:
@@ -316,7 +343,7 @@ def _parse_backup_zip(
             required_files = {
                 f"{title}.csv" for title in backup_headers
             } | {"manifest.json"}
-            if format_version == BACKUP_FORMAT_VERSION:
+            if format_version >= RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION:
                 required_files.add("receipts.json")
             if set(names) != required_files:
                 raise StorageValidationError(
@@ -327,7 +354,7 @@ def _parse_backup_zip(
             }
             receipt_manifest_bytes = (
                 archive.read("receipts.json")
-                if format_version == BACKUP_FORMAT_VERSION
+                if format_version >= RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION
                 else None
             )
     except (zipfile.BadZipFile, OSError, RuntimeError) as exc:
@@ -339,7 +366,7 @@ def _parse_backup_zip(
     if not all(isinstance(value, dict) for value in (row_counts, file_hashes, worksheet_headers)):
         raise StorageValidationError("Backup manifest is missing validation metadata")
     expected_hash_names = {f"{title}.csv" for title in backup_headers}
-    if format_version == BACKUP_FORMAT_VERSION:
+    if format_version >= RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION:
         expected_hash_names.add("receipts.json")
     if set(file_hashes) != expected_hash_names:
         raise StorageValidationError("Backup manifest checksum entries are invalid")
@@ -394,6 +421,27 @@ def _parse_backup_zip(
                 migrated_headers,
                 migrated_transactions,
             )
+
+    if format_version < BACKUP_FORMAT_VERSION:
+        for title in ("Accounts", "Categories"):
+            legacy_headers, legacy_records = tables[title]
+            if "parent_id" not in legacy_headers:
+                legacy_headers = [*legacy_headers, "parent_id"]
+            tables[title] = (
+                legacy_headers,
+                [{**record, "parent_id": ""} for record in legacy_records],
+            )
+
+    _validate_hierarchy_records(
+        tables["Accounts"][1],
+        compatibility_field="classification",
+        item_label="Account",
+    )
+    _validate_hierarchy_records(
+        tables["Categories"][1],
+        compatibility_field="kind",
+        item_label="Category",
+    )
 
     account_ids = {record["id"] for record in tables["Accounts"][1]}
     category_ids = {record["id"] for record in tables["Categories"][1]}
@@ -572,6 +620,26 @@ class GoogleSheetsStorage:
                     values: list[list[Any]] = [list(headers)]
                 else:
                     values = worksheet.get_all_values()
+                if title in {"Accounts", "Categories"} and values:
+                    existing_headers = [
+                        str(value).strip() for value in values[0]
+                    ]
+                    legacy_headers = set(
+                        VERSION_5_WORKSHEET_HEADERS[title]
+                    )
+                    if (
+                        "parent_id" not in existing_headers
+                        and legacy_headers.issubset(existing_headers)
+                        and len(existing_headers) == len(set(existing_headers))
+                    ):
+                        worksheet.add_cols(1)
+                        migrated_headers = [*existing_headers, "parent_id"]
+                        worksheet.update(
+                            [migrated_headers],
+                            range_name="A1",
+                            raw=True,
+                        )
+                        values[0] = migrated_headers
                 if title == "Transactions" and values:
                     existing_headers = [
                         str(value).strip() for value in values[0]
@@ -733,6 +801,7 @@ class GoogleSheetsStorage:
                 "opening_balance": "0.00",
                 "active": "TRUE",
                 "created_at": timestamp,
+                "parent_id": "",
             }
             for name, account_type in DEFAULT_ACCOUNTS
             if name.casefold() not in account_names
@@ -744,7 +813,7 @@ class GoogleSheetsStorage:
             for category in existing_categories
         }
         new_categories = [
-            {"id": str(uuid4()), "name": name, "kind": kind}
+            {"id": str(uuid4()), "name": name, "kind": kind, "parent_id": ""}
             for kind, names in DEFAULT_CATEGORIES.items()
             for name in names
             if (name.casefold(), kind) not in category_keys
@@ -987,6 +1056,7 @@ class GoogleSheetsStorage:
         opening_balance: Any = 0,
         *,
         classification: str | None = None,
+        parent_id: str | None = None,
     ) -> dict[str, Any]:
         name = _clean_text(name, "Account name", required=True)
         account_type = _clean_text(account_type, "Account type", required=True)
@@ -1000,11 +1070,12 @@ class GoogleSheetsStorage:
             required=True,
         ).title()
         _validate_account_classification(account_type, classification)
+        existing_accounts = self.list_accounts(
+            active_only=False, _force_refresh=True
+        )
         if any(
             account["name"].casefold() == name.casefold()
-            for account in self.list_accounts(
-                active_only=False, _force_refresh=True
-            )
+            for account in existing_accounts
         ):
             raise StorageConflictError("Account names must be unique")
         record = {
@@ -1015,13 +1086,20 @@ class GoogleSheetsStorage:
             "opening_balance": _balance_amount(opening_balance),
             "active": "TRUE",
             "created_at": _utc_now(),
+            "parent_id": _clean_text(parent_id, "Account parent"),
         }
+        _validate_hierarchy_records(
+            [*existing_accounts, record],
+            compatibility_field="classification",
+            item_label="Account",
+        )
         self._append("Accounts", record)
         return dict(record)
 
     def edit_account(self, account_id: str, **changes: Any) -> dict[str, Any]:
         current = self._find_row("Accounts", account_id)
         updated = dict(current.values)
+        existing_accounts = self.list_accounts(active_only=False)
         name = _clean_text(changes.get("name", updated["name"]), "Account name", required=True)
         account_type = _clean_text(
             changes.get("type", updated["type"]), "Account type", required=True
@@ -1037,7 +1115,7 @@ class GoogleSheetsStorage:
         if any(
             account["id"] != account_id
             and account["name"].casefold() == name.casefold()
-            for account in self.list_accounts(active_only=False)
+            for account in existing_accounts
         ):
             raise StorageConflictError("Account names must be unique")
         updated.update(
@@ -1051,7 +1129,19 @@ class GoogleSheetsStorage:
                 "active": "TRUE"
                 if _as_bool(changes.get("active", updated["active"]))
                 else "FALSE",
+                "parent_id": _clean_text(
+                    changes.get("parent_id", updated.get("parent_id", "")),
+                    "Account parent",
+                ),
             }
+        )
+        _validate_hierarchy_records(
+            [
+                updated if account["id"] == account_id else account
+                for account in existing_accounts
+            ],
+            compatibility_field="classification",
+            item_label="Account",
         )
         self._replace_row("Accounts", current, updated)
         return updated
@@ -1072,24 +1162,42 @@ class GoogleSheetsStorage:
             categories = [item for item in categories if item["kind"] == kind]
         return sorted(categories, key=lambda item: (item["kind"], item["name"].casefold()))
 
-    def create_category(self, name: str, kind: str) -> dict[str, str]:
+    def create_category(
+        self,
+        name: str,
+        kind: str,
+        *,
+        parent_id: str | None = None,
+    ) -> dict[str, str]:
         name = _clean_text(name, "Category name", required=True)
         kind = _clean_text(kind, "Category kind", required=True).title()
         if kind not in CATEGORY_KINDS:
             raise StorageValidationError("Category kind must be Income or Expense")
+        existing_categories = self.list_categories(_force_refresh=True)
         if any(
             category["name"].casefold() == name.casefold()
             and category["kind"] == kind
-            for category in self.list_categories(_force_refresh=True)
+            for category in existing_categories
         ):
             raise StorageConflictError("That category already exists")
-        record = {"id": str(uuid4()), "name": name, "kind": kind}
+        record = {
+            "id": str(uuid4()),
+            "name": name,
+            "kind": kind,
+            "parent_id": _clean_text(parent_id, "Category parent"),
+        }
+        _validate_hierarchy_records(
+            [*existing_categories, record],
+            compatibility_field="kind",
+            item_label="Category",
+        )
         self._append("Categories", record)
         return record
 
     def edit_category(self, category_id: str, **changes: Any) -> dict[str, str]:
         current = self._find_row("Categories", category_id)
         updated = dict(current.values)
+        existing_categories = self.list_categories()
         name = _clean_text(
             changes.get("name", updated["name"]), "Category name", required=True
         )
@@ -1102,10 +1210,27 @@ class GoogleSheetsStorage:
             category["id"] != category_id
             and category["name"].casefold() == name.casefold()
             and category["kind"] == kind
-            for category in self.list_categories()
+            for category in existing_categories
         ):
             raise StorageConflictError("That category already exists")
-        updated.update({"name": name, "kind": kind})
+        updated.update(
+            {
+                "name": name,
+                "kind": kind,
+                "parent_id": _clean_text(
+                    changes.get("parent_id", updated.get("parent_id", "")),
+                    "Category parent",
+                ),
+            }
+        )
+        _validate_hierarchy_records(
+            [
+                updated if category["id"] == category_id else category
+                for category in existing_categories
+            ],
+            compatibility_field="kind",
+            item_label="Category",
+        )
         self._replace_row("Categories", current, updated)
         return updated
 
@@ -1774,11 +1899,17 @@ class GoogleSheetsStorage:
                     "opening_balance": "0.00",
                     "active": "TRUE",
                     "created_at": now,
+                    "parent_id": "",
                 }
                 for name in preview["new_accounts"]
             ]
             category_records = [
-                {"id": str(uuid4()), "name": name, "kind": kind}
+                {
+                    "id": str(uuid4()),
+                    "name": name,
+                    "kind": kind,
+                    "parent_id": "",
+                }
                 for name, kind in preview["new_categories"]
             ]
             self._append_many("Accounts", account_records)
@@ -1810,6 +1941,16 @@ class GoogleSheetsStorage:
         csv_files: dict[str, bytes] = {}
         archive_buffer = io.BytesIO()
         snapshot = self._snapshot(WORKSHEET_HEADERS, force_refresh=True)
+        _validate_hierarchy_records(
+            [row.values for row in snapshot["Accounts"]],
+            compatibility_field="classification",
+            item_label="Account",
+        )
+        _validate_hierarchy_records(
+            [row.values for row in snapshot["Categories"]],
+            compatibility_field="kind",
+            item_label="Category",
+        )
         for title in WORKSHEET_HEADERS:
             headers = self._headers(title)
             rows = snapshot[title]

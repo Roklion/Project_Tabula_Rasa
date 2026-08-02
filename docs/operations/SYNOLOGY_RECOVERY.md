@@ -28,7 +28,7 @@ flowchart LR
     Local["Safe local recovery folder"]
     Recovery["New blank Google workbook"]
 
-    Sheets -->|"Create v5 ZIP with receipts.json"| DriveBackups
+    Sheets -->|"Create v6 ZIP with receipts.json"| DriveBackups
     DriveReceipts -->|"Cloud Sync downloads only"| NASReceipts
     DriveBackups -->|"Cloud Sync downloads only"| NASBackups
     NASBackups --> Versions

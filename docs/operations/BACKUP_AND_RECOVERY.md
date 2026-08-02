@@ -33,7 +33,7 @@ Synology are optional additional failure boundaries.
 
 ## Archive contents and compatibility
 
-The current backup format is version 5. Each archive contains:
+The current backup format is version 6. Each archive contains:
 
 - `Accounts.csv`;
 - `Categories.csv`;
@@ -77,17 +77,19 @@ same profile-scoped migration explicitly before creating another backup:
   --profile PROFILE_KEY
 ```
 
-The current validator and ledger restore path accept formats 2 through 5:
+The current validator and ledger restore path accept formats 2 through 6:
 
 | Format | Contents |
 | --- | --- |
 | 2 | Accounts, Categories, and Transactions; predates Mileage and receipt references |
 | 3 | Adds Mileage; predates transaction receipt references |
 | 4 | Adds transaction receipt references; archives created before the receipt inventory remain ledger-only recovery sources |
-| 5 | Current format; adds the checksummed `receipts.json` inventory without embedding receipt bytes |
+| 5 | Adds the checksummed `receipts.json` inventory without embedding receipt bytes |
+| 6 | Current format; preserves optional account and category `parent_id` hierarchy metadata |
 
 Older compatible formats are migrated in memory during restore. A historical
-format-1 archive must first be converted to format 2.
+format-1 archive must first be converted to format 2. Formats 2 through 5
+restore accounts and categories at Layer 1 with blank `parent_id` values.
 
 ## Create a backup in the application
 
