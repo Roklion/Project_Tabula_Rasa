@@ -89,7 +89,10 @@ The current validator and ledger restore path accept formats 2 through 6:
 
 Older compatible formats are migrated in memory during restore. A historical
 format-1 archive must first be converted to format 2. Formats 2 through 5
-restore accounts and categories at Layer 1 with blank `parent_id` values.
+that lack account and category `parent_id` columns restore those records at
+Layer 1 with blank parent values. A mixed-rollout archive labeled as format 2
+through 5 that already contains the hierarchy columns preserves and validates
+its parent relationships during restore.
 
 ## Create a backup in the application
 
