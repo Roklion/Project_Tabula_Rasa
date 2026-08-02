@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -93,7 +94,13 @@ def main() -> None:
         assert by_label(app.selectbox, "Type").value == "Expense"
 
         app.radio[0].set_value("Transactions").run()
+        initial_ledger_key = app.dataframe[0].key
+        assert initial_ledger_key == "transaction_ledger_1"
         by_label(app.segmented_control, "Transaction type").set_value("Expense").run()
+        assert app.dataframe[0].key == initial_ledger_key
+        by_label(app.date_input, "Date").set_value(
+            date(date.today().year, 1, 1)
+        )
         by_label(app.number_input, "Amount").set_value(25)
         by_label(app.selectbox, "Account").set_value("Owner-paid expenses")
         by_label(app.selectbox, "Category").set_value("Testing expense")
@@ -170,6 +177,8 @@ def main() -> None:
         ).run()
         assert set(app.dataframe[0].value["Type"]) == {"Expense", "Transfer"}
         by_label(app.multiselect, "Accounts").set_value([]).run()
+        ledger_dates = app.dataframe[0].value["Date"].tolist()
+        assert ledger_dates == sorted(ledger_dates, reverse=True)
 
         transaction = next(
             item for item in storage.list_transactions() if item["kind"] == "Expense"
@@ -199,6 +208,11 @@ def main() -> None:
         ).check()
         by_label(app.button, "Permanently delete").click().run()
         assert len(storage.list_transactions()) == 2
+
+        app.radio[0].set_value("Accounts").run()
+        app.radio[0].set_value("Transactions").run()
+        assert app.dataframe[0].key == "transaction_ledger_2"
+        assert app.dataframe[0].key != initial_ledger_key
 
         app.radio[0].set_value("Mileage").run()
         by_label(app.number_input, "Business miles").set_value(18.6)

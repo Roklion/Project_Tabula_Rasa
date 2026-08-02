@@ -49,6 +49,11 @@ income-and-expense reporting.
 Transfers move value between two accounts. They change account balances but do
 not affect income or expenses.
 
+The transaction ledger opens with the latest transaction dates first. Any
+interactive table sort remains in place while moving between **Add transaction**
+and **View & edit ledger**, and resets to latest-first after navigating away and
+back to **Transactions**.
+
 The application validates required references, fresh account/category state,
 and duplicate submissions before writing. A success message appears only after
 Google Sheets confirms the operation.

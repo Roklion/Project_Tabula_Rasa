@@ -410,6 +410,12 @@ with st.sidebar:
     if st.session_state.get("navigation_page") not in pages:
         st.session_state["navigation_page"] = pages[0]
     page = st.radio("Navigate", pages, key="navigation_page")
+    previous_page = st.session_state.get("previous_navigation_page")
+    if page == "Transactions" and previous_page != page:
+        st.session_state["transaction_ledger_generation"] = (
+            int(st.session_state.get("transaction_ledger_generation", 0)) + 1
+        )
+    st.session_state["previous_navigation_page"] = page
     st.divider()
     if st.button("Log out", width="stretch"):
         logout()
@@ -718,6 +724,10 @@ elif page == "Transactions":
                             )
 
     with tab_ledger:
+        transaction_ledger_key = (
+            "transaction_ledger_"
+            f"{st.session_state.get('transaction_ledger_generation', 0)}"
+        )
         c1, c2, c3 = st.columns(3)
         start = c1.date_input(
             "From", date(date.today().year, 1, 1), key="ledger_start"
@@ -752,10 +762,18 @@ elif page == "Transactions":
             report_storage_error(error)
             st.stop()
         transaction_frame = ledger_frame(transactions, accounts, categories)
+        transaction_frame = transaction_frame.sort_values(
+            "Date",
+            ascending=False,
+            kind="stable",
+            ignore_index=True,
+        )
         transaction_ids = transaction_frame["ID"].tolist()
 
         def select_ledger_transaction() -> None:
-            selected_rows = st.session_state["transaction_ledger"].selection.rows
+            selected_rows = st.session_state[
+                transaction_ledger_key
+            ].selection.rows
             if selected_rows:
                 st.session_state["edit_transaction_id"] = transaction_ids[
                     selected_rows[0]
@@ -765,7 +783,7 @@ elif page == "Transactions":
             transaction_frame,
             hide_index=True,
             width="stretch",
-            key="transaction_ledger",
+            key=transaction_ledger_key,
             on_select=select_ledger_transaction,
             selection_mode="single-row",
             column_config={"Amount": st.column_config.NumberColumn(format="$%.2f")},
