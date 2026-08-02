@@ -155,7 +155,7 @@ Google Drive Desktop does not need to be installed or running for this mode.
 
 The provided Windows task registers Monday, Tuesday, and Wednesday at 10:00 PM
 as retry opportunities for one weekly backup. `--once-per-week` verifies an
-existing current-format archive with its version-5 receipt inventory before
+existing current-format archive with its checksummed receipt inventory before
 accessing Google Sheets, so a successful Monday run causes Tuesday and
 Wednesday to exit without creating duplicates. A valid older ledger-only
 archive does not suppress creation of the current recovery format.
@@ -261,10 +261,11 @@ be mistaken for the live ledger.
 
 ## Recover receipt files and remap Drive IDs
 
-Ledger restoration does not restore receipt bytes. After restoring a version-5
-archive, copy the matching profile receipt directory from the versioned
-Synology recovery set to a safe local path. Then run the dedicated receipt
-operation against the newly restored, non-live workbook:
+Ledger restoration does not restore receipt bytes. After restoring a current
+format-version 6 archive, or a compatible format-version 5 archive, copy the
+matching profile receipt directory from the versioned Synology recovery set to
+a safe local path. Then run the dedicated receipt operation against the newly
+restored, non-live workbook:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\recover_synology_receipts.py `

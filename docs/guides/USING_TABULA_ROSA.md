@@ -92,10 +92,10 @@ cell was never initialized, the migration also preserves its profile-scoped
 legacy Drive association. An explicitly empty reference list remains unlinked.
 A warning provides the manual recovery path if any file cannot be migrated.
 
-Receipt file contents are not embedded in each ledger backup ZIP. Version-5
-backups contain a checksummed `receipts.json` metadata inventory, including
-intentionally unreferenced app-managed files. Recoverable receipt bytes must be
-retained separately; follow the [Synology recovery
+Receipt file contents are not embedded in each ledger backup ZIP. Format-version
+5 and later backups contain a checksummed `receipts.json` metadata inventory,
+including intentionally unreferenced app-managed files. Recoverable receipt
+bytes must be retained separately; follow the [Synology recovery
 runbook](../operations/SYNOLOGY_RECOVERY.md) for the independent, versioned
 copy and Drive ID-remapping workflow.
 
