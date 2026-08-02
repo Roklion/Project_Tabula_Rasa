@@ -1919,6 +1919,16 @@ class GoogleSheetsStorage:
                 }
                 for name, kind in preview["new_categories"]
             ]
+            _validate_hierarchy_records(
+                [*self.list_accounts(active_only=False), *account_records],
+                compatibility_field="classification",
+                item_label="Account",
+            )
+            _validate_hierarchy_records(
+                [*self.list_categories(), *category_records],
+                compatibility_field="kind",
+                item_label="Category",
+            )
             self._append_many("Accounts", account_records)
             self._append_many("Categories", category_records)
             preview = self.preview_quickbooks_transactions(
