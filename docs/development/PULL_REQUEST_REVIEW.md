@@ -72,10 +72,10 @@ After every material push, post the exact standalone top-level comment
 assume that a push automatically re-triggers Codex.
 
 Gemini reviewer functionality is also disabled while a pull request is a
-draft. Marking the pull request ready begins Gemini's initial review process.
-If the hosted integration does not automatically react to that transition, post
-`/gemini review` as a standalone top-level comment after the pull request is
-ready.
+draft. Marking the pull request ready automatically begins Gemini's initial
+complementary review; no comment is required. If the hosted integration does
+not start that review within one monitoring interval, post `/gemini review` as
+a standalone top-level comment.
 
 After every material push, explicitly post the appropriate Gemini command to
 request review of the new current head. Do not assume that a push automatically
@@ -150,6 +150,7 @@ data or application credentials.
 
 | Scenario | Expected evidence |
 | --- | --- |
+| Draft and ready transition | Neither reviewer acts on the draft; both automatically start after it becomes ready without initial trigger comments |
 | Normal mode beside Codex | `/gemini review` produces complementary, current-head findings |
 | Fallback without Codex | `/gemini review everything` is labeled full fallback and covers broad responsibilities |
 | Command isolation | Surrounding untrusted text does not promote normal mode |
