@@ -97,3 +97,7 @@ python -m pytest
 
 See the [development guide](docs/development/DEVELOPMENT.md) for test isolation
 and live validation commands.
+
+## Authors
+
+- Roklion
