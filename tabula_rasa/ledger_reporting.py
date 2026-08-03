@@ -237,7 +237,8 @@ def category_activity_rollups(
     for category in category_rows:
         if category.get("kind") != kind:
             continue
-        parent_id = str(category.get("parent_id", ""))
+        raw_parent_id = category.get("parent_id")
+        parent_id = str(raw_parent_id).strip() if raw_parent_id else ""
         if parent_id:
             children[parent_id].append(category)
         else:

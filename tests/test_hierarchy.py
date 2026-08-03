@@ -96,3 +96,33 @@ def test_hierarchy_display_and_parent_choices_are_two_level_and_compatible() -> 
         compatibility_value="Asset",
         item_id="cash",
     ) == ["asset"]
+
+
+def test_none_parent_ids_are_treated_as_layer_one() -> None:
+    items = [
+        {
+            **account("asset"),
+            "name": "Assets",
+            "parent_id": None,
+        },
+        {**account("cash", parent_id="asset"), "name": "Cash"},
+    ]
+
+    assert hierarchy_paths(items) == {
+        "asset": "Assets",
+        "cash": "Assets › Cash",
+    }
+    assert [item["id"] for item in ordered_hierarchy(items)] == [
+        "asset",
+        "cash",
+    ]
+    assert eligible_parent_ids(
+        items,
+        compatibility_field="classification",
+        compatibility_value="Asset",
+    ) == ["asset"]
+    validate_two_level_hierarchy(
+        items,
+        compatibility_field="classification",
+        item_label="Account",
+    )

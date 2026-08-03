@@ -10,6 +10,11 @@ class HierarchyValidationError(ValueError):
     """Raised when a complete account or category hierarchy is invalid."""
 
 
+def _parent_id(item: Mapping[str, Any]) -> str:
+    value = item.get("parent_id")
+    return str(value).strip() if value else ""
+
+
 def hierarchy_paths(items: Iterable[Mapping[str, Any]]) -> dict[str, str]:
     """Return stable display paths while keeping stored names unchanged."""
     records = [dict(item) for item in items]
@@ -17,7 +22,7 @@ def hierarchy_paths(items: Iterable[Mapping[str, Any]]) -> dict[str, str]:
     paths: dict[str, str] = {}
     for item_id, item in by_id.items():
         name = str(item.get("name", ""))
-        parent = by_id.get(str(item.get("parent_id", "")))
+        parent = by_id.get(_parent_id(item))
         paths[item_id] = (
             f'{parent.get("name", "")} › {name}' if parent is not None else name
         )
@@ -32,7 +37,7 @@ def ordered_hierarchy(
     children: dict[str, list[dict[str, Any]]] = {}
     roots: list[dict[str, Any]] = []
     for item in records:
-        parent_id = str(item.get("parent_id", ""))
+        parent_id = _parent_id(item)
         if parent_id:
             children.setdefault(parent_id, []).append(item)
         else:
@@ -60,7 +65,7 @@ def eligible_parent_ids(
     return [
         str(item["id"])
         for item in ordered_hierarchy(items)
-        if not str(item.get("parent_id", ""))
+        if not _parent_id(item)
         and str(item.get("id", "")) != item_id
         and item.get(compatibility_field) == compatibility_value
     ]
@@ -82,7 +87,7 @@ def validate_two_level_hierarchy(
 
     by_id = dict(zip(ids, records))
     for item_id, item in by_id.items():
-        parent_id = str(item.get("parent_id", "")).strip()
+        parent_id = _parent_id(item)
         if not parent_id:
             continue
         if parent_id == item_id:
@@ -94,7 +99,7 @@ def validate_two_level_hierarchy(
             raise HierarchyValidationError(
                 f"{item_label} parent does not exist"
             )
-        if str(parent.get("parent_id", "")).strip():
+        if _parent_id(parent):
             raise HierarchyValidationError(
                 f"{item_label} hierarchy may contain only two levels"
             )

@@ -360,3 +360,25 @@ class TestLedgerReporting:
         assert expenses_by_category(transactions, categories) == [
             {"category": "Office", "total": 20.0}
         ]
+
+    def test_category_rollup_treats_none_parent_as_layer_one(self) -> None:
+        categories = [
+            {
+                "id": "travel",
+                "name": "Travel",
+                "kind": "Expense",
+                "parent_id": None,
+            }
+        ]
+        transactions = [
+            {
+                "txn_date": "2026-07-01",
+                "kind": "Expense",
+                "amount": "20",
+                "category_id": "travel",
+            }
+        ]
+
+        assert expenses_by_category(transactions, categories) == [
+            {"category": "Travel", "total": 20.0}
+        ]
