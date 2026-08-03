@@ -150,6 +150,29 @@ def test_empty_id_sentinel_is_not_used_as_a_parent() -> None:
     }
 
 
+def test_missing_ids_are_not_offered_as_parents() -> None:
+    items = [
+        {
+            "name": None,
+            "parent_id": "",
+            "classification": "Asset",
+        },
+        {
+            "id": "asset",
+            "name": None,
+            "parent_id": "",
+            "classification": "Asset",
+        },
+    ]
+
+    assert hierarchy_paths(items) == {"": "", "asset": ""}
+    assert eligible_parent_ids(
+        items,
+        compatibility_field="classification",
+        compatibility_value="Asset",
+    ) == ["asset"]
+
+
 def test_ordered_hierarchy_keeps_orphaned_items_visible() -> None:
     items = [
         {**account("root"), "name": "Root"},

@@ -21,11 +21,13 @@ def hierarchy_paths(items: Iterable[Mapping[str, Any]]) -> dict[str, str]:
     by_id = {str(item.get("id", "")): item for item in records}
     paths: dict[str, str] = {}
     for item_id, item in by_id.items():
-        name = str(item.get("name", ""))
+        name = str(item.get("name") or "")
         parent_id = _parent_id(item)
         parent = by_id.get(parent_id) if parent_id else None
         paths[item_id] = (
-            f'{parent.get("name", "")} › {name}' if parent is not None else name
+            f'{parent.get("name") or ""} › {name}'
+            if parent is not None
+            else name
         )
     return paths
 
@@ -76,13 +78,17 @@ def eligible_parent_ids(
     item_id: str = "",
 ) -> list[str]:
     """Return eligible Layer 1 parents for a create or edit form."""
-    return [
-        str(item["id"])
-        for item in ordered_hierarchy(items)
-        if not _parent_id(item)
-        and str(item.get("id", "")) != item_id
-        and item.get(compatibility_field) == compatibility_value
-    ]
+    parent_ids = []
+    for item in ordered_hierarchy(items):
+        candidate_id = str(item.get("id") or "")
+        if (
+            candidate_id
+            and not _parent_id(item)
+            and candidate_id != item_id
+            and item.get(compatibility_field) == compatibility_value
+        ):
+            parent_ids.append(candidate_id)
+    return parent_ids
 
 
 def validate_two_level_hierarchy(

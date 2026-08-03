@@ -257,6 +257,7 @@ def category_activity_rollups(
             roots.append(category)
 
     rows: list[dict[str, Any]] = []
+    visited: set[str] = set()
     for root in sorted(roots, key=lambda item: str(item["name"]).casefold()):
         child_rows = sorted(
             children.get(str(root["id"]), []),
@@ -279,6 +280,7 @@ def category_activity_rollups(
                 "rollup_total": float(rollup_total),
             }
         )
+        visited.add(str(root["id"]))
         rows.extend(
             {
                 "id": child["id"],
@@ -291,6 +293,27 @@ def category_activity_rollups(
             for child in child_rows
             if totals[str(child["id"])] != 0
         )
+        visited.update(str(child["id"]) for child in child_rows)
+
+    for category in sorted(
+        category_rows,
+        key=lambda item: str(item.get("name") or "").casefold(),
+    ):
+        category_id = str(category.get("id") or "")
+        if category.get("kind") != kind or category_id in visited:
+            continue
+        direct_total = totals[category_id]
+        if direct_total != 0:
+            rows.append(
+                {
+                    "id": category.get("id", ""),
+                    "category": category.get("name") or "",
+                    "parent_id": "",
+                    "layer": 1,
+                    "direct_total": float(direct_total),
+                    "rollup_total": float(direct_total),
+                }
+            )
 
     if totals[""] != 0:
         uncategorized_total = float(totals[""])

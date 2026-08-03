@@ -453,3 +453,38 @@ class TestLedgerReporting:
             {"category": "Travel", "total": 20.0},
             {"category": "Other expense", "total": 5.0},
         ]
+
+    def test_category_rollup_keeps_cyclic_activity_visible(self) -> None:
+        categories = [
+            {
+                "id": "alpha",
+                "name": "Alpha",
+                "kind": "Expense",
+                "parent_id": "beta",
+            },
+            {
+                "id": "beta",
+                "name": "Beta",
+                "kind": "Expense",
+                "parent_id": "alpha",
+            },
+        ]
+        transactions = [
+            {
+                "txn_date": "2026-07-01",
+                "kind": "Expense",
+                "amount": "10",
+                "category_id": "alpha",
+            },
+            {
+                "txn_date": "2026-07-02",
+                "kind": "Expense",
+                "amount": "5",
+                "category_id": "beta",
+            },
+        ]
+
+        assert expenses_by_category(transactions, categories) == [
+            {"category": "Alpha", "total": 10.0},
+            {"category": "Beta", "total": 5.0},
+        ]
