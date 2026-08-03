@@ -4,6 +4,7 @@ Tabula Rosa is a private, Google Sheets-backed bookkeeping application for one
 person or a small group of businesses. Each business profile has an isolated
 ledger workbook and Google credential set while sharing one Streamlit
 deployment.
+Authored by Roklion.
 
 The application supports:
 
