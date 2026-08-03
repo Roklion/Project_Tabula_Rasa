@@ -108,7 +108,10 @@ def balance_sheet(
             parent_id = row["parent_id"]
             parent = by_id.get(parent_id) if parent_id else None
             if parent is not None:
-                parent["rollup_balance"] += row["direct_balance"]
+                parent["rollup_balance"] = float(
+                    _decimal(parent["rollup_balance"])
+                    + _decimal(row["direct_balance"])
+                )
 
     current_earnings = sum(
         (

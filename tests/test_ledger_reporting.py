@@ -252,6 +252,31 @@ class TestLedgerReporting:
         assert before_rows["second"]["rollup_balance"] == 10.0
         assert after_rows["second"]["rollup_balance"] == 15.0
 
+    def test_account_rollups_accumulate_decimal_values_exactly(self) -> None:
+        accounts = [
+            {
+                "id": "parent",
+                "name": "Parent",
+                "type": "Bank",
+                "classification": "Asset",
+                "opening_balance": "0.10",
+                "parent_id": "",
+            },
+            {
+                "id": "child",
+                "name": "Child",
+                "type": "Cash",
+                "classification": "Asset",
+                "opening_balance": "0.20",
+                "parent_id": "parent",
+            },
+        ]
+
+        report = balance_sheet(accounts, [])
+        parent = next(row for row in report["assets"] if row["id"] == "parent")
+
+        assert parent["rollup_balance"] == 0.3
+
     def test_category_rollups_keep_direct_child_and_uncategorized_detail(self) -> None:
         categories = [
             {"id": "travel", "name": "Travel", "kind": "Expense", "parent_id": ""},

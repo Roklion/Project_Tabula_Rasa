@@ -880,7 +880,11 @@ elif page == "Transactions":
                         edited_category_id = st.selectbox(
                             "Edit category",
                             category_ids,
-                            index=category_ids.index(selected["category_id"]),
+                            index=(
+                                category_ids.index(selected["category_id"])
+                                if selected["category_id"] in category_ids
+                                else 0
+                            ),
                             format_func=category_paths.get,
                         )
                     c1, c2 = st.columns(2)
@@ -2143,12 +2147,15 @@ elif page == "Reports":
         current_earnings: float | None = None,
     ) -> pd.DataFrame:
         ordered_rows = ordered_hierarchy(rows)
+        all_ids = {row["id"] for row in ordered_rows}
         child_parent_ids = {
-            row["parent_id"] for row in ordered_rows if row["parent_id"]
+            row["parent_id"]
+            for row in ordered_rows
+            if row["parent_id"] and row["parent_id"] in all_ids
         }
         display_rows = []
         for row in ordered_rows:
-            is_child = bool(row["parent_id"])
+            is_child = bool(row["parent_id"]) and row["parent_id"] in all_ids
             has_children = row["id"] in child_parent_ids
             display_rows.append(
                 {
