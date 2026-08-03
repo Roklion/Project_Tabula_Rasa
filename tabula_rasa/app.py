@@ -623,7 +623,7 @@ elif page == "Transactions":
     account_map = {
         account_paths[account_id]: account_id
         for account in active_accounts
-        if (account_id := str(account.get("id") or ""))
+        if (account_id := str(account.get("id") or "").strip())
     }
     with tab_add:
         transaction_form_keys = (
@@ -677,7 +677,11 @@ elif page == "Transactions":
                         category_map = {
                             category_paths[category_id]: category_id
                             for category in categories_for_kind
-                            if (category_id := str(category.get("id") or ""))
+                            if (
+                                category_id := str(
+                                    category.get("id") or ""
+                                ).strip()
+                            )
                         }
                         category_id = category_map[
                             c1.selectbox(
@@ -772,7 +776,7 @@ elif page == "Transactions":
         ledger_account_map = {
             account_paths[account_id]: account_id
             for account in accounts
-            if (account_id := str(account.get("id") or ""))
+            if (account_id := str(account.get("id") or "").strip())
         }
         selected_account_names = st.multiselect(
             "Accounts",
@@ -1662,7 +1666,7 @@ elif page == "Accounts":
     account_by_id = {
         account_id: account
         for account in accounts
-        if (account_id := str(account.get("id") or ""))
+        if (account_id := str(account.get("id") or "").strip())
     }
     balance_by_id = balances.set_index("ID")["Balance"].to_dict()
     account_rows = []
@@ -1893,7 +1897,7 @@ elif page == "Categories":
     category_by_id = {
         category_id: category
         for category in categories
-        if (category_id := str(category.get("id") or ""))
+        if (category_id := str(category.get("id") or "").strip())
     }
     category_rows = []
     for category in ordered_hierarchy(categories):

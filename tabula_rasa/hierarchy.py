@@ -80,12 +80,13 @@ def eligible_parent_ids(
 ) -> list[str]:
     """Return eligible Layer 1 parents for a create or edit form."""
     parent_ids = []
+    normalized_item_id = item_id.strip()
     for item in ordered_hierarchy(items):
-        candidate_id = str(item.get("id") or "")
+        candidate_id = _item_id(item)
         if (
             candidate_id
             and not _parent_id(item)
-            and candidate_id != item_id
+            and candidate_id != normalized_item_id
             and item.get(compatibility_field) == compatibility_value
         ):
             parent_ids.append(candidate_id)

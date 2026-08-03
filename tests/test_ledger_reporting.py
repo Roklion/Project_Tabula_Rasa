@@ -205,6 +205,31 @@ class TestLedgerReporting:
         assert report["total_equity"] == 25.0
         assert report["difference"] == 0.0
 
+    def test_account_rollup_normalizes_whitespace_padded_parent_id(self) -> None:
+        accounts = [
+            {
+                "id": " assets ",
+                "name": "Assets",
+                "type": "Bank",
+                "classification": "Asset",
+                "opening_balance": "10",
+                "parent_id": "",
+            },
+            {
+                "id": "cash",
+                "name": "Cash",
+                "type": "Cash",
+                "classification": "Asset",
+                "opening_balance": "5",
+                "parent_id": "assets",
+            },
+        ]
+
+        report = balance_sheet(accounts, [])
+
+        assert report["assets"][0]["id"] == "assets"
+        assert report["assets"][0]["rollup_balance"] == 15.0
+
     def test_account_rollups_honor_dates_empty_parents_and_current_parent(self) -> None:
         accounts = [
             {
@@ -416,7 +441,7 @@ class TestLedgerReporting:
     def test_category_rollup_treats_none_name_as_empty_text(self) -> None:
         categories = [
             {
-                "id": "travel",
+                "id": " travel ",
                 "name": None,
                 "kind": "Expense",
                 "parent_id": "",

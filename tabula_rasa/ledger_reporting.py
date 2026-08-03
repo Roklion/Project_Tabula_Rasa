@@ -91,7 +91,7 @@ def balance_sheet(
         )
         sections[classification].append(
             {
-                "id": account["id"],
+                "id": str(account.get("id") or "").strip(),
                 "name": account["name"],
                 "type": account["type"],
                 "parent_id": str(account.get("parent_id") or "").strip(),
@@ -225,7 +225,12 @@ def category_activity_rollups(
     end: date | str | None = None,
 ) -> list[dict[str, Any]]:
     """Return Layer 1 rollups and Layer 2 direct activity without duplication."""
-    category_rows = [dict(category) for category in categories]
+    category_rows = []
+    for category in categories:
+        row = dict(category)
+        row["id"] = str(row.get("id") or "").strip()
+        row["parent_id"] = str(row.get("parent_id") or "").strip()
+        category_rows.append(row)
     by_id = {
         category_id: category
         for category in category_rows

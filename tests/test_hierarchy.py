@@ -151,6 +151,17 @@ def test_hierarchy_path_omits_separator_for_unnamed_parent() -> None:
     assert hierarchy_paths(items) == {"asset": "", "cash": "Cash"}
 
 
+def test_parent_choices_exclude_self_with_whitespace_padded_id() -> None:
+    items = [{**account(" asset "), "name": "Assets"}]
+
+    assert eligible_parent_ids(
+        items,
+        compatibility_field="classification",
+        compatibility_value="Asset",
+        item_id="asset",
+    ) == []
+
+
 def test_empty_id_sentinel_is_not_used_as_a_parent() -> None:
     items = [
         {
