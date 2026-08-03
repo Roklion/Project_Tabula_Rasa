@@ -226,7 +226,11 @@ def category_activity_rollups(
 ) -> list[dict[str, Any]]:
     """Return Layer 1 rollups and Layer 2 direct activity without duplication."""
     category_rows = [dict(category) for category in categories]
-    by_id = {str(category["id"]): category for category in category_rows}
+    by_id = {
+        category_id: category
+        for category in category_rows
+        if (category_id := str(category.get("id") or ""))
+    }
     totals: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
     for transaction in transactions:
         if transaction["kind"] != kind or not _in_period(transaction, start, end):
@@ -242,12 +246,13 @@ def category_activity_rollups(
     children: dict[str, list[dict[str, Any]]] = defaultdict(list)
     roots: list[dict[str, Any]] = []
     valid_parent_ids = {
-        str(category["id"])
+        str(category.get("id") or "")
         for category in category_rows
-        if category.get("kind") == kind
+        if category.get("kind") == kind and category.get("id")
     }
     for category in category_rows:
-        if category.get("kind") != kind:
+        category_id = str(category.get("id") or "")
+        if category.get("kind") != kind or not category_id:
             continue
         raw_parent_id = category.get("parent_id")
         parent_id = str(raw_parent_id).strip() if raw_parent_id else ""
@@ -262,20 +267,21 @@ def category_activity_rollups(
         roots,
         key=lambda item: str(item.get("name") or "").casefold(),
     ):
+        root_id = str(root.get("id") or "")
         child_rows = sorted(
-            children.get(str(root["id"]), []),
+            children.get(root_id, []),
             key=lambda item: str(item.get("name") or "").casefold(),
         )
-        direct_total = totals[str(root["id"])]
+        direct_total = totals[root_id]
         rollup_total = direct_total + sum(
-            (totals[str(child["id"])] for child in child_rows),
+            (totals[str(child.get("id") or "")] for child in child_rows),
             start=Decimal("0"),
         )
         if rollup_total == 0:
             continue
         rows.append(
             {
-                "id": root["id"],
+                "id": root_id,
                 "category": root.get("name") or "",
                 "parent_id": "",
                 "layer": 1,
@@ -283,27 +289,31 @@ def category_activity_rollups(
                 "rollup_total": float(rollup_total),
             }
         )
-        visited.add(str(root["id"]))
+        visited.add(root_id)
         rows.extend(
             {
-                "id": child["id"],
+                "id": str(child.get("id") or ""),
                 "category": child.get("name") or "",
-                "parent_id": root["id"],
+                "parent_id": root_id,
                 "layer": 2,
-                "direct_total": float(totals[str(child["id"])]),
-                "rollup_total": float(totals[str(child["id"])]),
+                "direct_total": float(totals[str(child.get("id") or "")]),
+                "rollup_total": float(totals[str(child.get("id") or "")]),
             }
             for child in child_rows
-            if totals[str(child["id"])] != 0
+            if totals[str(child.get("id") or "")] != 0
         )
-        visited.update(str(child["id"]) for child in child_rows)
+        visited.update(str(child.get("id") or "") for child in child_rows)
 
     for category in sorted(
         category_rows,
         key=lambda item: str(item.get("name") or "").casefold(),
     ):
         category_id = str(category.get("id") or "")
-        if category.get("kind") != kind or category_id in visited:
+        if (
+            category.get("kind") != kind
+            or not category_id
+            or category_id in visited
+        ):
             continue
         direct_total = totals[category_id]
         if direct_total != 0:

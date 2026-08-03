@@ -620,7 +620,9 @@ elif page == "Transactions":
     account_paths = hierarchy_paths(accounts)
     category_paths = hierarchy_paths(categories)
     account_map = {
-        account_paths[account["id"]]: account["id"] for account in active_accounts
+        account_paths[account_id]: account_id
+        for account in active_accounts
+        if (account_id := str(account.get("id") or ""))
     }
     with tab_add:
         transaction_form_keys = (
@@ -672,8 +674,9 @@ elif page == "Transactions":
                     else:
                         c1, c2 = st.columns(2)
                         category_map = {
-                            category_paths[category["id"]]: category["id"]
+                            category_paths[category_id]: category_id
                             for category in categories_for_kind
+                            if (category_id := str(category.get("id") or ""))
                         }
                         category_id = category_map[
                             c1.selectbox(
@@ -766,7 +769,9 @@ elif page == "Transactions":
             "Type", ["All", "Income", "Expense", "Transfer"]
         )
         ledger_account_map = {
-            account_paths[account["id"]]: account["id"] for account in accounts
+            account_paths[account_id]: account_id
+            for account in accounts
+            if (account_id := str(account.get("id") or ""))
         }
         selected_account_names = st.multiselect(
             "Accounts",
@@ -1653,7 +1658,11 @@ elif page == "Accounts":
         report_storage_error(error)
         st.stop()
     account_paths = hierarchy_paths(accounts)
-    account_by_id = {account["id"]: account for account in accounts}
+    account_by_id = {
+        account_id: account
+        for account in accounts
+        if (account_id := str(account.get("id") or ""))
+    }
     balance_by_id = balances.set_index("ID")["Balance"].to_dict()
     account_rows = []
     for account in ordered_hierarchy(accounts):
@@ -1877,7 +1886,11 @@ elif page == "Categories":
         report_storage_error(error)
         st.stop()
     category_paths = hierarchy_paths(categories)
-    category_by_id = {category["id"]: category for category in categories}
+    category_by_id = {
+        category_id: category
+        for category in categories
+        if (category_id := str(category.get("id") or ""))
+    }
     category_frame = pd.DataFrame(
         [
             {

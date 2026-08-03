@@ -153,6 +153,7 @@ def test_empty_id_sentinel_is_not_used_as_a_parent() -> None:
 def test_missing_ids_are_not_offered_as_parents() -> None:
     items = [
         {
+            "id": None,
             "name": None,
             "parent_id": "",
             "classification": "Asset",

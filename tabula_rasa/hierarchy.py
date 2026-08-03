@@ -10,6 +10,10 @@ class HierarchyValidationError(ValueError):
     """Raised when a complete account or category hierarchy is invalid."""
 
 
+def _item_id(item: Mapping[str, Any]) -> str:
+    return str(item.get("id") or "")
+
+
 def _parent_id(item: Mapping[str, Any]) -> str:
     value = item.get("parent_id")
     return str(value).strip() if value else ""
@@ -18,7 +22,7 @@ def _parent_id(item: Mapping[str, Any]) -> str:
 def hierarchy_paths(items: Iterable[Mapping[str, Any]]) -> dict[str, str]:
     """Return stable display paths while keeping stored names unchanged."""
     records = [dict(item) for item in items]
-    by_id = {str(item.get("id", "")): item for item in records}
+    by_id = {_item_id(item): item for item in records}
     paths: dict[str, str] = {}
     for item_id, item in by_id.items():
         name = str(item.get("name") or "")
@@ -37,7 +41,7 @@ def ordered_hierarchy(
 ) -> list[dict[str, Any]]:
     """Order Layer 1 items with their Layer 2 children."""
     records = [dict(item) for item in items]
-    item_ids = {str(item.get("id", "")) for item in records}
+    item_ids = {_item_id(item) for item in records}
     children: dict[str, list[dict[str, Any]]] = {}
     roots: list[dict[str, Any]] = []
     for item in records:
@@ -50,19 +54,19 @@ def ordered_hierarchy(
     visited: set[str] = set()
     for root in sorted(roots, key=lambda item: str(item.get("name") or "").casefold()):
         ordered.append(root)
-        visited.add(str(root.get("id", "")))
+        visited.add(_item_id(root))
         for child in sorted(
-            children.get(str(root.get("id", "")), []),
+            children.get(_item_id(root), []),
             key=lambda item: str(item.get("name") or "").casefold(),
         ):
             ordered.append(child)
-            visited.add(str(child.get("id", "")))
+            visited.add(_item_id(child))
     ordered.extend(
         sorted(
             (
                 item
                 for item in records
-                if str(item.get("id", "")) not in visited
+                if _item_id(item) not in visited
             ),
             key=lambda item: str(item.get("name") or "").casefold(),
         )
@@ -99,7 +103,7 @@ def validate_two_level_hierarchy(
 ) -> None:
     """Validate stable parent IDs, compatibility, and the two-level limit."""
     records = [dict(item) for item in items]
-    ids = [str(item.get("id", "")).strip() for item in records]
+    ids = [_item_id(item).strip() for item in records]
     if any(not item_id for item_id in ids) or len(ids) != len(set(ids)):
         raise HierarchyValidationError(
             f"{item_label} IDs must be present and unique"

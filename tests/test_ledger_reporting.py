@@ -435,6 +435,28 @@ class TestLedgerReporting:
             {"category": "", "total": 20.0}
         ]
 
+    def test_category_rollup_treats_none_id_as_uncategorized(self) -> None:
+        categories = [
+            {
+                "id": None,
+                "name": "Invalid category",
+                "kind": "Expense",
+                "parent_id": "",
+            }
+        ]
+        transactions = [
+            {
+                "txn_date": "2026-07-01",
+                "kind": "Expense",
+                "amount": "20",
+                "category_id": None,
+            }
+        ]
+
+        assert expenses_by_category(transactions, categories) == [
+            {"category": "Uncategorized", "total": 20.0}
+        ]
+
     def test_category_rollup_keeps_orphaned_activity_visible(self) -> None:
         categories = [
             {
