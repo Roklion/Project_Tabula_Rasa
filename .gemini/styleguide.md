@@ -89,4 +89,6 @@ remediates accepted findings when Codex is unavailable.
 For each actionable finding, provide severity, a concise title, current-head
 file and line references, evidence, impact, and the smallest safe remediation
 direction. End with a short section listing uncertainties or coverage
-limitations, if any. Do not claim approval or merge readiness.
+limitations, if any. When there are no additional actionable findings, say
+`No additional feedback.` in the review output. Do not use a thumbs-up reaction
+as Gemini's no-finding signal. Do not claim approval or merge readiness.

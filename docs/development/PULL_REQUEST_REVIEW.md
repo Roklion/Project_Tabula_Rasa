@@ -104,6 +104,11 @@ command requests a new review of the then-current head. Full fallback output
 must label itself, disclose coverage limitations, and remains advisory without
 code, approval, merge, secret, or deployment access.
 
+When Gemini finds no additional actionable issue, its review should explicitly
+say `No additional feedback.` Gemini does not use a thumbs-up reaction as its
+successful no-finding signal. Monitoring and round accounting must recognize
+that explicit current-head response without treating it as approval.
+
 ## Finding disposition
 
 Evaluate every finding against requirements, code, tests, documentation,
@@ -153,6 +158,7 @@ data or application credentials.
 | Remediation | Accepted finding receives a focused fix and validation |
 | Updated-head re-review | Later review identifies the new head and does not present stale findings as current |
 | Permission boundary | Gemini posts advisory findings without credentials, code writes, approval, or merge authority |
+| No-finding response | Gemini says `No additional feedback.` rather than posting a thumbs-up reaction |
 
 Repository configuration can prove the static instruction and permission
 boundaries, but only an actual controlled pull request can validate the hosted

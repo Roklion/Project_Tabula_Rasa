@@ -39,6 +39,8 @@ def test_gemini_commands_have_distinct_exact_scopes() -> None:
     )
     assert "Do not modify code, push changes, approve, merge" in styleguide
     assert "state its commit SHA" in styleguide
+    assert "`No additional feedback.`" in styleguide
+    assert "Do not use a thumbs-up reaction" in styleguide
 
 
 def test_canonical_review_guide_covers_roles_and_dispositions() -> None:
@@ -68,4 +70,5 @@ def test_canonical_review_guide_covers_roles_and_dispositions() -> None:
         "Do not assume that a push automatically re-triggers Gemini."
         in normalized_guide
     )
+    assert "Gemini does not use a thumbs-up reaction" in normalized_guide
     assert "only an actual controlled pull request can validate" in guide
