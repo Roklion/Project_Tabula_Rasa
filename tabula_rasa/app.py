@@ -78,6 +78,7 @@ from tabula_rasa.receipt_manifest import (
     receipt_reference_from_drive_file,
 )
 from tabula_rasa.receipt_backfill import (
+    ReceiptPreparationError,
     prepare_backup_receipt_manifest,
 )
 
@@ -2445,7 +2446,7 @@ elif page == "Data & backup":
                 StorageError,
                 GoogleDriveError,
                 ReceiptManifestError,
-                RuntimeError,
+                ReceiptPreparationError,
             ) as error:
                 prepared_exports["backup_error"] = str(error)
             else:
