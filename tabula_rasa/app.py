@@ -1890,31 +1890,21 @@ elif page == "Categories":
         for category in categories
         if (category_id := str(category.get("id") or ""))
     }
-    category_frame = pd.DataFrame(
-        [
+    category_rows = []
+    for category in ordered_hierarchy(categories):
+        parent_id = str(category.get("parent_id") or "").strip()
+        parent = category_by_id.get(parent_id) if parent_id else None
+        category_rows.append(
             {
                 "Category": (
-                    f'↳ {category["name"]}'
-                    if str(category.get("parent_id") or "").strip()
-                    else category["name"]
+                    f'↳ {category["name"]}' if parent else category["name"]
                 ),
-                "Layer": (
-                    "Layer 2"
-                    if str(category.get("parent_id") or "").strip()
-                    else "Layer 1"
-                ),
-                "Parent": (
-                    category_by_id.get(
-                        str(category.get("parent_id") or "").strip(), {}
-                    ).get("name", "")
-                    if str(category.get("parent_id") or "").strip()
-                    else ""
-                ),
+                "Layer": "Layer 2" if parent else "Layer 1",
+                "Parent": parent.get("name") or "" if parent else "",
                 "Type": category["kind"],
             }
-            for category in ordered_hierarchy(categories)
-        ]
-    )
+        )
+    category_frame = pd.DataFrame(category_rows)
     st.dataframe(category_frame, hide_index=True, width="stretch")
     reset_widget_state_if_requested(
         "reset_add_category_form",

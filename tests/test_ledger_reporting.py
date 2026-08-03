@@ -539,3 +539,56 @@ class TestLedgerReporting:
             {"category": "Alpha", "total": 10.0},
             {"category": "Beta", "total": 5.0},
         ]
+
+    def test_category_rollup_keeps_zero_net_active_family_visible(self) -> None:
+        categories = [
+            {
+                "id": "travel",
+                "name": "Travel",
+                "kind": "Expense",
+                "parent_id": "",
+            },
+            {
+                "id": "refunds",
+                "name": "Refunds",
+                "kind": "Expense",
+                "parent_id": "travel",
+            },
+        ]
+        transactions = [
+            {
+                "txn_date": "2026-07-01",
+                "kind": "Expense",
+                "amount": "10",
+                "category_id": "travel",
+            },
+            {
+                "txn_date": "2026-07-02",
+                "kind": "Expense",
+                "amount": "-10",
+                "category_id": "refunds",
+            },
+        ]
+
+        assert category_activity_rollups(
+            transactions,
+            categories,
+            kind="Expense",
+        ) == [
+            {
+                "id": "travel",
+                "category": "Travel",
+                "parent_id": "",
+                "layer": 1,
+                "direct_total": 10.0,
+                "rollup_total": 0.0,
+            },
+            {
+                "id": "refunds",
+                "category": "Refunds",
+                "parent_id": "travel",
+                "layer": 2,
+                "direct_total": -10.0,
+                "rollup_total": -10.0,
+            },
+        ]

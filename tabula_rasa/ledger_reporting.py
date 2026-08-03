@@ -274,12 +274,12 @@ def category_activity_rollups(
             key=lambda item: str(item.get("name") or "").casefold(),
         )
         direct_total = totals[root_id]
-        rollup_total = direct_total + sum(
-            (totals[str(child.get("id") or "")] for child in child_rows),
-            start=Decimal("0"),
-        )
-        if rollup_total == 0:
+        child_totals = [
+            totals[str(child.get("id") or "")] for child in child_rows
+        ]
+        if direct_total == 0 and all(total == 0 for total in child_totals):
             continue
+        rollup_total = direct_total + sum(child_totals, start=Decimal("0"))
         rows.append(
             {
                 "id": root_id,
