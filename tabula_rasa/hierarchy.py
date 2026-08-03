@@ -11,7 +11,7 @@ class HierarchyValidationError(ValueError):
 
 
 def _item_id(item: Mapping[str, Any]) -> str:
-    return str(item.get("id") or "")
+    return str(item.get("id") or "").strip()
 
 
 def _parent_id(item: Mapping[str, Any]) -> str:
@@ -28,11 +28,8 @@ def hierarchy_paths(items: Iterable[Mapping[str, Any]]) -> dict[str, str]:
         name = str(item.get("name") or "")
         parent_id = _parent_id(item)
         parent = by_id.get(parent_id) if parent_id else None
-        paths[item_id] = (
-            f'{parent.get("name") or ""} › {name}'
-            if parent is not None
-            else name
-        )
+        parent_name = parent.get("name") or "" if parent is not None else ""
+        paths[item_id] = f"{parent_name} › {name}" if parent_name else name
     return paths
 
 

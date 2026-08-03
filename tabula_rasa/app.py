@@ -1675,7 +1675,7 @@ elif page == "Accounts":
                     f'↳ {account["name"]}' if parent else account["name"]
                 ),
                 "Layer": "Layer 2" if parent else "Layer 1",
-                "Parent": parent["name"] if parent else "",
+                "Parent": parent.get("name") or "" if parent else "",
                 "Classification": account["classification"],
                 "Type": account["type"],
                 "Active": account["active"],
@@ -2157,16 +2157,21 @@ elif page == "Reports":
         current_earnings: float | None = None,
     ) -> pd.DataFrame:
         ordered_rows = ordered_hierarchy(rows)
-        all_ids = {row["id"] for row in ordered_rows}
+        all_ids = {
+            str(row.get("id") or "").strip() for row in ordered_rows
+        }
         child_parent_ids = {
-            row["parent_id"]
+            parent_id
             for row in ordered_rows
-            if row["parent_id"] and row["parent_id"] in all_ids
+            if (parent_id := str(row.get("parent_id") or "").strip())
+            and parent_id in all_ids
         }
         display_rows = []
         for row in ordered_rows:
-            is_child = bool(row["parent_id"]) and row["parent_id"] in all_ids
-            has_children = row["id"] in child_parent_ids
+            row_id = str(row.get("id") or "").strip()
+            parent_id = str(row.get("parent_id") or "").strip()
+            is_child = bool(parent_id) and parent_id in all_ids
+            has_children = row_id in child_parent_ids
             display_rows.append(
                 {
                     "Account": (

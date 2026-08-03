@@ -131,11 +131,24 @@ def test_none_parent_ids_are_treated_as_layer_one() -> None:
 
 def test_child_detection_normalizes_parent_whitespace() -> None:
     items = [
-        {**account("asset"), "name": "Assets"},
+        {**account(" asset "), "name": "Assets"},
         {**account("cash", parent_id=" asset "), "name": "Cash"},
     ]
 
     assert has_hierarchy_children(items, "asset") is True
+    assert hierarchy_paths(items) == {
+        "asset": "Assets",
+        "cash": "Assets › Cash",
+    }
+
+
+def test_hierarchy_path_omits_separator_for_unnamed_parent() -> None:
+    items = [
+        {**account("asset"), "name": None},
+        {**account("cash", parent_id="asset"), "name": "Cash"},
+    ]
+
+    assert hierarchy_paths(items) == {"asset": "", "cash": "Cash"}
 
 
 def test_empty_id_sentinel_is_not_used_as_a_parent() -> None:
