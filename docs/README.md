@@ -36,6 +36,8 @@ points here for durable setup, architecture, and recovery guidance.
   mileage import formats, validation, and duplicate handling.
 - [Development](development/DEVELOPMENT.md) covers dependencies, required
   checks, test isolation, and read-only live validation.
+- [Pull-request review](development/PULL_REQUEST_REVIEW.md) defines reviewer
+  roles, Gemini command modes, finding disposition, and validation.
 
 ## Documentation map
 
@@ -54,7 +56,8 @@ docs/
 |   |-- QUICKBOOKS_IMPORT.md
 |   `-- USING_TABULA_ROSA.md
 `-- development/
-    `-- DEVELOPMENT.md
+    |-- DEVELOPMENT.md
+    `-- PULL_REQUEST_REVIEW.md
 ```
 
 ## Maintenance rules

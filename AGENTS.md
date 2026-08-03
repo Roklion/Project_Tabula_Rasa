@@ -86,15 +86,44 @@ the trusted project layer is reloaded.
 
 - Treat the PR description as a hypothesis to verify, not proof that the
   implementation is correct.
+- Review the current pull-request head revision and identify that revision in
+  review output. Do not present findings against superseded code as current.
 - Infer intended behavior from the PR description, relevant canonical
   documentation, unchanged callers, existing tests, and surrounding code. If
   these sources disagree, report the discrepancy.
 - Review new and modified tests independently. Look for counterexamples where
   incorrect behavior would still pass the tests.
-- Inspect affected callers, storage paths, failure paths, and state transitions
-  beyond the changed lines.
+- Inspect affected callers, storage paths, failure paths, retries, cache
+  invalidation, and state transitions beyond the changed lines.
 - Report actionable correctness, security, data-integrity, or regression risks.
   Leave formatting and other deterministic mechanical checks to CI.
+- Use precise file and line references where practical, include enough evidence
+  to reason about each finding, and distinguish actionable defects from
+  uncertainty or optional suggestions.
+- Remain advisory. Codex does not approve or merge pull requests and does not
+  replace human review or merge authorization.
+
+## Codex reviewer role
+
+- Act as the primary repository and remediation reviewer. Perform the broad
+  end-to-end review against the PR description, canonical documentation,
+  unchanged callers, existing tests, and surrounding code.
+- Emphasize correctness, regressions, state transitions, integration behavior,
+  maintainability, and repository-specific domain risks.
+- Verify both success and relevant failure coverage, including two-profile
+  isolation whenever profile-sensitive behavior changes.
+- Validate every Codex or Gemini finding before changing code. Consolidate
+  equivalent findings into one coherent remediation and validation path.
+- When acting as the coding agent, implement the smallest safe fix for accepted
+  findings, run the required checks, and request re-review when the fix can
+  affect earlier findings.
+- Explain with evidence when a finding is invalid, already addressed, outside
+  scope, disproportionate, or dependent on a product decision. Track unresolved
+  actionable findings through later review rounds.
+- When Codex helped author a change, perform a separate reviewer-context pass
+  rather than relying on the implementation conversation.
+- Follow the complete multi-reviewer process in
+  `docs/development/PULL_REQUEST_REVIEW.md`.
 
 ## Addressing review feedback
 
@@ -109,6 +138,12 @@ the trusted project layer is reloaded.
   clarification if the intended outcome still cannot be determined safely.
 - When feedback is valid, make the smallest safe change that addresses the
   underlying issue and add or update validation where appropriate.
+- Merge duplicate findings while preserving distinct evidence. Escalate
+  conflicting findings when repository evidence cannot establish one safe
+  answer.
+- Record deferred valid findings in a linked follow-up issue with their risk and
+  rationale. Do not mark review complete while a validated blocking finding is
+  unresolved.
 
 ## Business-profile isolation
 

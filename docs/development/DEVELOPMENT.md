@@ -73,7 +73,9 @@ context. If necessary information is missing, unclear, or inconsistent, the
 reviewer requests a specific description update instead of silently assuming
 the implementation is intended. The reviewer then checks the description
 against the documentation, unchanged callers, existing tests, and surrounding
-code.
+code. The [pull-request review guide](PULL_REQUEST_REVIEW.md) defines the shared
+baseline, separate Codex, Gemini, and maintainer roles, Gemini review commands,
+finding disposition, and controlled validation procedure.
 
 ## Live read-only validation
 
