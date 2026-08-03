@@ -39,6 +39,11 @@ from tabula_rasa.ledger_reporting import (
     monthly_performance,
     profit_and_loss,
 )
+from tabula_rasa.hierarchy import (
+    eligible_parent_ids,
+    hierarchy_paths,
+    ordered_hierarchy,
+)
 from tabula_rasa.local_profile_admin import render_local_profile_admin
 from tabula_rasa.local_profile_store import (
     LOCAL_PROFILE_STORE_PATH,
@@ -119,9 +124,19 @@ def ledger_frame(
     transactions: list[dict],
     accounts: list[dict],
     categories: list[dict],
+    *,
+    display_paths: bool = True,
 ) -> pd.DataFrame:
-    account_names = {account["id"]: account["name"] for account in accounts}
-    category_names = {category["id"]: category["name"] for category in categories}
+    account_names = (
+        hierarchy_paths(accounts)
+        if display_paths
+        else {account["id"]: account["name"] for account in accounts}
+    )
+    category_names = (
+        hierarchy_paths(categories)
+        if display_paths
+        else {category["id"]: category["name"] for category in categories}
+    )
     rows = [
         {
             "ID": transaction["id"],
@@ -156,11 +171,12 @@ def ledger_frame(
 
 def balances_frame(accounts: list[dict], transactions: list[dict]) -> pd.DataFrame:
     rows = account_balances(accounts, transactions)
+    account_paths = hierarchy_paths(accounts)
     return pd.DataFrame(
         [
             {
                 "ID": account["id"],
-                "Account": account["name"],
+                "Account": account_paths.get(account["id"], account["name"]),
                 "Type": account["type"],
                 "Classification": account["classification"],
                 "Active": account["active"],
@@ -600,7 +616,11 @@ elif page == "Transactions":
         report_storage_error(error)
         st.stop()
 
-    account_map = {account["name"]: account["id"] for account in active_accounts}
+    account_paths = hierarchy_paths(accounts)
+    category_paths = hierarchy_paths(categories)
+    account_map = {
+        account_paths[account["id"]]: account["id"] for account in active_accounts
+    }
     with tab_add:
         transaction_form_keys = (
             "add_transaction_date",
@@ -651,7 +671,7 @@ elif page == "Transactions":
                     else:
                         c1, c2 = st.columns(2)
                         category_map = {
-                            category["name"]: category["id"]
+                            category_paths[category["id"]]: category["id"]
                             for category in categories_for_kind
                         }
                         category_id = category_map[
@@ -745,7 +765,7 @@ elif page == "Transactions":
             "Type", ["All", "Income", "Expense", "Transfer"]
         )
         ledger_account_map = {
-            account["name"]: account["id"] for account in accounts
+            account_paths[account["id"]]: account["id"] for account in accounts
         }
         selected_account_names = st.multiselect(
             "Accounts",
@@ -829,9 +849,6 @@ elif page == "Transactions":
                         for account_id in current_account_ids
                         if account_id and account_id not in active_account_ids
                     ]
-                    account_names_by_id = {
-                        account["id"]: account["name"] for account in accounts
-                    }
                     edited_account_id = st.selectbox(
                         (
                             "Edit from account"
@@ -840,7 +857,7 @@ elif page == "Transactions":
                         ),
                         editable_account_ids,
                         index=editable_account_ids.index(selected["account_id"]),
-                        format_func=account_names_by_id.get,
+                        format_func=account_paths.get,
                     )
                     edited_to_account_id = ""
                     edited_category_id = ""
@@ -851,7 +868,7 @@ elif page == "Transactions":
                             index=editable_account_ids.index(
                                 selected["to_account_id"]
                             ),
-                            format_func=account_names_by_id.get,
+                            format_func=account_paths.get,
                         )
                     else:
                         category_ids = [
@@ -859,15 +876,11 @@ elif page == "Transactions":
                             for category in categories
                             if category["kind"] == selected["kind"]
                         ]
-                        category_names_by_id = {
-                            category["id"]: category["name"]
-                            for category in categories
-                        }
                         edited_category_id = st.selectbox(
                             "Edit category",
                             category_ids,
                             index=category_ids.index(selected["category_id"]),
-                            format_func=category_names_by_id.get,
+                            format_func=category_paths.get,
                         )
                     c1, c2 = st.columns(2)
                     edited_date = c1.date_input(
@@ -1634,8 +1647,27 @@ elif page == "Accounts":
     except StorageError as error:
         report_storage_error(error)
         st.stop()
+    account_paths = hierarchy_paths(accounts)
+    account_by_id = {account["id"]: account for account in accounts}
+    balance_by_id = balances.set_index("ID")["Balance"].to_dict()
+    account_rows = []
+    for account in ordered_hierarchy(accounts):
+        parent = account_by_id.get(account.get("parent_id", ""))
+        account_rows.append(
+            {
+                "Account": (
+                    f'↳ {account["name"]}' if parent else account["name"]
+                ),
+                "Layer": "Layer 2" if parent else "Layer 1",
+                "Parent": parent["name"] if parent else "",
+                "Classification": account["classification"],
+                "Type": account["type"],
+                "Active": account["active"],
+                "Balance": balance_by_id.get(account["id"], 0.0),
+            }
+        )
     st.dataframe(
-        balances[["Account", "Classification", "Type", "Active", "Balance"]],
+        pd.DataFrame(account_rows),
         hide_index=True,
         width="stretch",
         column_config={"Balance": st.column_config.NumberColumn(format="$%.2f")},
@@ -1643,20 +1675,23 @@ elif page == "Accounts":
     reset_widget_state_if_requested(
         "reset_add_account_form",
         keys=(
-            "new_account_name",
-            "new_account_type",
-            "new_account_opening",
+            f"new_account_name_{selected_profile_key}",
+            f"new_account_type_{selected_profile_key}",
+            f"new_account_opening_{selected_profile_key}",
+            f"new_account_parent_{selected_profile_key}",
         ),
-        prefixes=("new_account_classification_",),
+        prefixes=(f"new_account_classification_{selected_profile_key}_",),
     )
     with st.expander("Add account", expanded=True):
         with st.container(border=True):
-            c1, c2, c3, c4 = st.columns(4)
-            name = c1.text_input("Account name", key="new_account_name")
+            c1, c2, c3, c4, c5 = st.columns(5)
+            name = c1.text_input(
+                "Account name", key=f"new_account_name_{selected_profile_key}"
+            )
             account_type = c2.selectbox(
                 "Type",
                 ACCOUNT_TYPES,
-                key="new_account_type",
+                key=f"new_account_type_{selected_profile_key}",
             )
             classification_options = [
                 FIXED_TYPE_CLASSIFICATIONS[account_type]
@@ -1664,16 +1699,32 @@ elif page == "Accounts":
             classification = c3.selectbox(
                 "Balance-sheet classification",
                 classification_options,
-                key=f"new_account_classification_{account_type}",
+                key=(
+                    f"new_account_classification_{selected_profile_key}_"
+                    f"{account_type}"
+                ),
             )
             opening = c4.number_input(
                 "Opening balance",
                 value=0.0,
                 format="%.2f",
-                key="new_account_opening",
+                key=f"new_account_opening_{selected_profile_key}",
                 help=(
                     "Use positive balances for assets and negative balances for "
                     "liabilities and equity."
+                ),
+            )
+            parent_options = [""] + eligible_parent_ids(
+                accounts,
+                compatibility_field="classification",
+                compatibility_value=classification,
+            )
+            parent_id = c5.selectbox(
+                "Parent account (optional)",
+                parent_options,
+                key=f"new_account_parent_{selected_profile_key}",
+                format_func=lambda value: (
+                    "None (Layer 1)" if not value else account_paths[value]
                 ),
             )
             if st.button("Add account", type="primary"):
@@ -1682,6 +1733,7 @@ elif page == "Accounts":
                     "account_type": account_type,
                     "classification": classification,
                     "opening_balance": opening,
+                    "parent_id": parent_id,
                 }
                 confirmed_write(
                     "create_account",
@@ -1691,6 +1743,7 @@ elif page == "Accounts":
                         account_type,
                         opening,
                         classification=classification,
+                        parent_id=parent_id,
                     ),
                     "Account added.",
                     on_success=lambda: schedule_widget_reset(
@@ -1700,11 +1753,10 @@ elif page == "Accounts":
 
     if accounts:
         with st.expander("Edit or deactivate account"):
-            account_by_id = {account["id"]: account for account in accounts}
             account_id = st.selectbox(
                 "Account to manage",
                 list(account_by_id),
-                format_func=lambda value: account_by_id[value]["name"],
+                format_func=account_paths.get,
             )
             selected = account_by_id[account_id]
             with st.container(border=True):
@@ -1746,6 +1798,38 @@ elif page == "Accounts":
                     value=selected["active"],
                     key=f"edit_account_active_{account_id}",
                 )
+                has_children = any(
+                    account.get("parent_id") == account_id for account in accounts
+                )
+                edited_parent_options = [""] + eligible_parent_ids(
+                    accounts,
+                    compatibility_field="classification",
+                    compatibility_value=edited_classification,
+                    item_id=account_id,
+                )
+                current_parent_id = selected.get("parent_id", "")
+                edited_parent_id = st.selectbox(
+                    "Edit parent account",
+                    edited_parent_options,
+                    index=(
+                        edited_parent_options.index(current_parent_id)
+                        if current_parent_id in edited_parent_options
+                        else 0
+                    ),
+                    key=(
+                        f"edit_account_parent_{selected_profile_key}_{account_id}_"
+                        f"{edited_classification}"
+                    ),
+                    format_func=lambda value: (
+                        "None (Layer 1)" if not value else account_paths[value]
+                    ),
+                    disabled=has_children,
+                )
+                if has_children:
+                    st.info(
+                        "This Layer 1 account has children. Promote or reparent "
+                        "those children before moving this account under a parent."
+                    )
                 if st.button(
                     "Save account changes",
                     type="primary",
@@ -1758,6 +1842,7 @@ elif page == "Accounts":
                         "classification": edited_classification,
                         "opening_balance": edited_opening,
                         "active": edited_active,
+                        "parent_id": edited_parent_id,
                     }
                     confirmed_write(
                         "edit_account",
@@ -1769,6 +1854,7 @@ elif page == "Accounts":
                             classification=edited_classification,
                             opening_balance=edited_opening,
                             active=edited_active,
+                            parent_id=edited_parent_id,
                         ),
                         "Account updated.",
                     )
@@ -1784,31 +1870,63 @@ elif page == "Categories":
     except StorageError as error:
         report_storage_error(error)
         st.stop()
+    category_paths = hierarchy_paths(categories)
+    category_by_id = {category["id"]: category for category in categories}
     category_frame = pd.DataFrame(
         [
-            {"ID": category["id"], "Category": category["name"], "Type": category["kind"]}
-            for category in categories
+            {
+                "Category": (
+                    f'↳ {category["name"]}'
+                    if category.get("parent_id")
+                    else category["name"]
+                ),
+                "Layer": "Layer 2" if category.get("parent_id") else "Layer 1",
+                "Parent": category_by_id.get(
+                    category.get("parent_id", ""), {}
+                ).get("name", ""),
+                "Type": category["kind"],
+            }
+            for category in ordered_hierarchy(categories)
         ]
     )
     st.dataframe(category_frame, hide_index=True, width="stretch")
     reset_widget_state_if_requested(
         "reset_add_category_form",
-        keys=("new_category_name", "new_category_kind"),
+        keys=(
+            f"new_category_name_{selected_profile_key}",
+            f"new_category_kind_{selected_profile_key}",
+            f"new_category_parent_{selected_profile_key}",
+        ),
     )
     with st.form("add_category", clear_on_submit=False):
-        c1, c2 = st.columns(2)
-        name = c1.text_input("Category name", key="new_category_name")
+        c1, c2, c3 = st.columns(3)
+        name = c1.text_input(
+            "Category name", key=f"new_category_name_{selected_profile_key}"
+        )
         kind = c2.selectbox(
             "Type",
             ["Expense", "Income"],
-            key="new_category_kind",
+            key=f"new_category_kind_{selected_profile_key}",
+        )
+        parent_options = [""] + eligible_parent_ids(
+            categories,
+            compatibility_field="kind",
+            compatibility_value=kind,
+        )
+        parent_id = c3.selectbox(
+            "Parent category (optional)",
+            parent_options,
+            key=f"new_category_parent_{selected_profile_key}",
+            format_func=lambda value: (
+                "None (Layer 1)" if not value else category_paths[value]
+            ),
         )
         if st.form_submit_button("Add category", type="primary"):
-            payload = {"name": name, "kind": kind}
+            payload = {"name": name, "kind": kind, "parent_id": parent_id}
             confirmed_write(
                 "create_category",
                 payload,
-                lambda: storage.create_category(name, kind),
+                lambda: storage.create_category(name, kind, parent_id=parent_id),
                 "Category added.",
                 on_success=lambda: schedule_widget_reset(
                     "reset_add_category_form"
@@ -1816,12 +1934,11 @@ elif page == "Categories":
             )
     if categories:
         with st.expander("Edit category"):
-            category_by_id = {category["id"]: category for category in categories}
             category_id = st.selectbox(
                 "Category to edit",
                 list(category_by_id),
                 format_func=lambda value: (
-                    f'{category_by_id[value]["name"]} '
+                    f'{category_paths[value]} '
                     f'({category_by_id[value]["kind"]})'
                 ),
             )
@@ -1835,17 +1952,54 @@ elif page == "Categories":
                     ["Expense", "Income"],
                     index=["Expense", "Income"].index(selected["kind"]),
                 )
+                has_children = any(
+                    category.get("parent_id") == category_id
+                    for category in categories
+                )
+                edited_parent_options = [""] + eligible_parent_ids(
+                    categories,
+                    compatibility_field="kind",
+                    compatibility_value=edited_kind,
+                    item_id=category_id,
+                )
+                current_parent_id = selected.get("parent_id", "")
+                edited_parent_id = st.selectbox(
+                    "Edit parent category",
+                    edited_parent_options,
+                    index=(
+                        edited_parent_options.index(current_parent_id)
+                        if current_parent_id in edited_parent_options
+                        else 0
+                    ),
+                    key=(
+                        f"edit_category_parent_{selected_profile_key}_{category_id}_"
+                        f"{edited_kind}"
+                    ),
+                    format_func=lambda value: (
+                        "None (Layer 1)" if not value else category_paths[value]
+                    ),
+                    disabled=has_children,
+                )
+                if has_children:
+                    st.info(
+                        "This Layer 1 category has children. Promote or reparent "
+                        "those children before moving this category under a parent."
+                    )
                 if st.form_submit_button("Save category changes", type="primary"):
                     payload = {
                         "id": category_id,
                         "name": edited_name,
                         "kind": edited_kind,
+                        "parent_id": edited_parent_id,
                     }
                     confirmed_write(
                         "edit_category",
                         payload,
                         lambda: storage.edit_category(
-                            category_id, name=edited_name, kind=edited_kind
+                            category_id,
+                            name=edited_name,
+                            kind=edited_kind,
+                            parent_id=edited_parent_id,
                         ),
                         "Category updated.",
                     )
@@ -1873,6 +2027,8 @@ elif page == "Reports":
     except StorageError as error:
         report_storage_error(error)
         st.stop()
+    account_paths = hierarchy_paths(accounts)
+    category_paths = hierarchy_paths(categories)
     summary = profit_and_loss(transactions, start=start, end=end)
     a, b, c = st.columns(3)
     a.metric("Income", money(summary["income"]))
@@ -1882,7 +2038,15 @@ elif page == "Reports":
         monthly_performance(transactions, start=start, end=end)
     ).rename(columns={"month": "Month", "income": "Income", "expenses": "Expenses"})
     by_category = pd.DataFrame(
-        expenses_by_category(transactions, categories, start=start, end=end)
+        expenses_by_category(
+            transactions,
+            [
+                {**category, "name": category_paths[category["id"]]}
+                for category in categories
+            ],
+            start=start,
+            end=end,
+        )
     ).rename(columns={"category": "Category", "total": "Total"})
     left, right = st.columns(2)
     with left:
@@ -1934,7 +2098,7 @@ elif page == "Reports":
     ) -> pd.DataFrame:
         display_rows = [
             {
-                "Account": row["name"],
+                "Account": account_paths.get(row["id"], row["name"]),
                 "Type": row["type"],
                 "Balance": row["balance"],
             }
@@ -2212,7 +2376,12 @@ elif page == "Data & backup":
             categories = storage.list_categories()
             transactions = storage.list_transactions()
             mileage_trips = storage.list_mileage_trips()
-            all_transactions = ledger_frame(transactions, accounts, categories)
+            all_transactions = ledger_frame(
+                transactions,
+                accounts,
+                categories,
+                display_paths=False,
+            )
             all_mileage = mileage_frame(mileage_trips)
         except StorageError as error:
             report_storage_error(error)

@@ -1306,6 +1306,41 @@ class TestGoogleSheetsStorage:
         assert duplicate_preview["summary"]["ready"] == 0
         assert duplicate_preview["summary"]["duplicates"] == 4
 
+    def test_quickbooks_matches_existing_layer_two_references(self) -> None:
+        account_parent = self.storage.create_account("Operating", "Bank")
+        account_child = self.storage.create_account(
+            "Checking",
+            "Cash",
+            parent_id=account_parent["id"],
+        )
+        category_parent = self.storage.create_category("Revenue", "Income")
+        category_child = self.storage.create_category(
+            "Consulting",
+            "Income",
+            parent_id=category_parent["id"],
+        )
+        rows = [
+            {
+                "Date": "07/01/2026",
+                "Transaction Type": "Deposit",
+                "Num": "1",
+                "Name": "Client",
+                "Memo/Description": "Invoice",
+                "Account": "Checking",
+                "Split": "Consulting",
+                "Amount": "125.00",
+            }
+        ]
+
+        preview = self.storage.preview_quickbooks_transactions(rows)
+        imported = self.storage.import_quickbooks_transactions(rows)
+
+        assert preview["errors"] == []
+        assert preview["new_accounts"] == []
+        assert preview["new_categories"] == []
+        assert imported[0]["account_id"] == account_child["id"]
+        assert imported[0]["category_id"] == category_child["id"]
+
     def test_quickbooks_account_splits_become_sign_aware_transfers(self) -> None:
         checking = self.storage.create_account("Checking", "Bank")
         investment = self.storage.create_account("Owners investment", "Equity")

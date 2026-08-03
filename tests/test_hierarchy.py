@@ -3,7 +3,10 @@ from __future__ import annotations
 import pytest
 
 from tabula_rasa.hierarchy import (
+    eligible_parent_ids,
+    hierarchy_paths,
     HierarchyValidationError,
+    ordered_hierarchy,
     validate_two_level_hierarchy,
 )
 
@@ -65,3 +68,31 @@ def test_valid_two_level_graph_accepts_multiple_children() -> None:
         compatibility_field="classification",
         item_label="Account",
     )
+
+
+def test_hierarchy_display_and_parent_choices_are_two_level_and_compatible() -> None:
+    items = [
+        {**account("asset"), "name": "Assets"},
+        {**account("cash", parent_id="asset"), "name": "Cash"},
+        {
+            **account("liability", classification="Liability"),
+            "name": "Liabilities",
+        },
+    ]
+
+    assert hierarchy_paths(items) == {
+        "asset": "Assets",
+        "cash": "Assets › Cash",
+        "liability": "Liabilities",
+    }
+    assert [item["id"] for item in ordered_hierarchy(items)] == [
+        "asset",
+        "cash",
+        "liability",
+    ]
+    assert eligible_parent_ids(
+        items,
+        compatibility_field="classification",
+        compatibility_value="Asset",
+        item_id="cash",
+    ) == ["asset"]
