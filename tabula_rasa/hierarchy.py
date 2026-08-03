@@ -95,6 +95,13 @@ def eligible_parent_ids(
     return parent_ids
 
 
+def has_hierarchy_children(
+    items: Iterable[Mapping[str, Any]], item_id: str
+) -> bool:
+    """Return whether any item references the normalized parent ID."""
+    return any(_parent_id(item) == item_id for item in items)
+
+
 def validate_two_level_hierarchy(
     items: Iterable[Mapping[str, Any]],
     *,

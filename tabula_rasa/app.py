@@ -42,6 +42,7 @@ from tabula_rasa.ledger_reporting import (
 )
 from tabula_rasa.hierarchy import (
     eligible_parent_ids,
+    has_hierarchy_children,
     hierarchy_paths,
     ordered_hierarchy,
 )
@@ -1813,9 +1814,7 @@ elif page == "Accounts":
                     value=selected["active"],
                     key=f"edit_account_active_{account_id}",
                 )
-                has_children = any(
-                    account.get("parent_id") == account_id for account in accounts
-                )
+                has_children = has_hierarchy_children(accounts, account_id)
                 edited_parent_options = [""] + eligible_parent_ids(
                     accounts,
                     compatibility_field="classification",
@@ -1979,10 +1978,7 @@ elif page == "Categories":
                     ["Expense", "Income"],
                     index=["Expense", "Income"].index(selected["kind"]),
                 )
-                has_children = any(
-                    category.get("parent_id") == category_id
-                    for category in categories
-                )
+                has_children = has_hierarchy_children(categories, category_id)
                 edited_parent_options = [""] + eligible_parent_ids(
                     categories,
                     compatibility_field="kind",

@@ -4,6 +4,7 @@ import pytest
 
 from tabula_rasa.hierarchy import (
     eligible_parent_ids,
+    has_hierarchy_children,
     hierarchy_paths,
     HierarchyValidationError,
     ordered_hierarchy,
@@ -126,6 +127,15 @@ def test_none_parent_ids_are_treated_as_layer_one() -> None:
         compatibility_field="classification",
         item_label="Account",
     )
+
+
+def test_child_detection_normalizes_parent_whitespace() -> None:
+    items = [
+        {**account("asset"), "name": "Assets"},
+        {**account("cash", parent_id=" asset "), "name": "Cash"},
+    ]
+
+    assert has_hierarchy_children(items, "asset") is True
 
 
 def test_empty_id_sentinel_is_not_used_as_a_parent() -> None:

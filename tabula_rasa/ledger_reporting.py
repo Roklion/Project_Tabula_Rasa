@@ -230,6 +230,7 @@ def category_activity_rollups(
         category_id: category
         for category in category_rows
         if (category_id := str(category.get("id") or ""))
+        and category.get("kind") == kind
     }
     totals: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
     for transaction in transactions:

@@ -491,11 +491,18 @@ class TestLedgerReporting:
                 "amount": "5",
                 "category_id": "wrong-kind-child",
             },
+            {
+                "txn_date": "2026-07-03",
+                "kind": "Expense",
+                "amount": "3",
+                "category_id": "income-parent",
+            },
         ]
 
         assert expenses_by_category(transactions, categories) == [
             {"category": "Travel", "total": 20.0},
             {"category": "Other expense", "total": 5.0},
+            {"category": "Uncategorized", "total": 3.0},
         ]
 
     def test_category_rollup_keeps_cyclic_activity_visible(self) -> None:
