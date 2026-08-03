@@ -43,6 +43,7 @@ def test_gemini_commands_have_distinct_exact_scopes() -> None:
 
 def test_canonical_review_guide_covers_roles_and_dispositions() -> None:
     guide = read_repository_file("docs/development/PULL_REQUEST_REVIEW.md")
+    normalized_guide = " ".join(guide.split())
 
     for heading in (
         "### Codex: primary repository and remediation reviewer",
@@ -56,4 +57,15 @@ def test_canonical_review_guide_covers_roles_and_dispositions() -> None:
     assert "Deferred valid finding" in guide
     assert "Linked issue containing risk and rationale" in guide
     assert "Reviewers do not review drafts." in guide
+    assert "automatically begins Codex's initial primary review" in guide
+    assert "no comment is required" in guide
+    assert "`@codex review` to request a fresh Codex review" in guide
+    assert (
+        "Do not assume that a push automatically re-triggers Codex."
+        in normalized_guide
+    )
+    assert (
+        "Do not assume that a push automatically re-triggers Gemini."
+        in normalized_guide
+    )
     assert "only an actual controlled pull request can validate" in guide

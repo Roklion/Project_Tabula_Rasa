@@ -105,6 +105,10 @@ the trusted project layer is reloaded.
 
 ## Codex reviewer role
 
+- Begin the initial review automatically when the pull request becomes Ready
+  for Review; no trigger comment is required for that initial review. Treat the
+  exact top-level comment `@codex review` after later pushes as a request to
+  review the new current head.
 - Act as the primary repository and remediation reviewer. Perform the broad
   end-to-end review against the PR description, canonical documentation,
   unchanged callers, existing tests, and surrounding code.

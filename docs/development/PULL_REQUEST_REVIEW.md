@@ -63,7 +63,25 @@ assumptions, and retains final approval and merge authority. Agreement between
 models does not override the maintainer, and model disagreement does not make a
 finding invalid.
 
-## Gemini commands
+## Reviewer triggers
+
+Neither reviewer reviews a draft pull request. Marking the pull request ready
+automatically begins Codex's initial primary review; no comment is required.
+After every material push, post the exact standalone top-level comment
+`@codex review` to request a fresh Codex review of the new current head. Do not
+assume that a push automatically re-triggers Codex.
+
+Gemini reviewer functionality is also disabled while a pull request is a
+draft. Marking the pull request ready begins Gemini's initial review process.
+If the hosted integration does not automatically react to that transition, post
+`/gemini review` as a standalone top-level comment after the pull request is
+ready.
+
+After every material push, explicitly post the appropriate Gemini command to
+request review of the new current head. Do not assume that a push automatically
+re-triggers Gemini.
+
+### Gemini commands
 
 Post commands as standalone pull-request comments:
 
@@ -86,11 +104,6 @@ command requests a new review of the then-current head. Full fallback output
 must label itself, disclose coverage limitations, and remains advisory without
 code, approval, merge, secret, or deployment access.
 
-Gemini reviewer functionality is disabled while a pull request is a draft.
-Mark the pull request ready for review to begin the initial review process. If
-the hosted integration does not automatically react to that transition, post
-`/gemini review` as a standalone comment after the pull request is ready.
-
 ## Finding disposition
 
 Evaluate every finding against requirements, code, tests, documentation,
@@ -111,14 +124,14 @@ not complete review while a validated blocking finding remains unresolved.
 
 1. The author completes `.github/pull_request_template.md`, validation, and
    marks the pull request ready for review. Reviewers do not review drafts.
-2. Codex performs the primary review while Gemini performs its initial review;
-   `/gemini review` requests or repeats an
-   independent complementary review of the same current head.
+2. Codex automatically performs its primary review while Gemini automatically
+   performs its initial complementary review of the same current head.
 3. If Codex is unavailable, `/gemini review everything` requests full fallback
    coverage. The maintainer or another coding agent coordinates remediation.
 4. Accepted findings receive focused fixes and regression coverage.
 5. Run `ruff check .` and `python -m pytest`.
-6. Request re-review of the updated head when fixes can affect findings.
+6. After pushing an updated head, post `@codex review` and the appropriate
+   Gemini command to request current-head re-reviews.
 7. The human maintainer makes the final merge decision.
 
 The reviewers may run in parallel; neither review must bias the other's
