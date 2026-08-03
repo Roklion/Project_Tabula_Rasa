@@ -62,7 +62,6 @@ of truth for actual transfer status and logs.
 
 - Google Drive backup and receipt folders selected for the business profile
 - A verified format-version 6 backup in the backup folder
-- Legacy receipt checksum backfill completed for that profile
 - DSM administrator access to the DS220j
 - Synology Cloud Sync installed
 - A protected shared folder with enough capacity for ledger and receipt history
@@ -240,13 +239,6 @@ never delete the newest verified archive, and keep at least one verified archive
 for every recovery period the business still needs.
 
 ## Create and validate the first NAS copy
-
-Backfill any legacy receipt checksums once before creating the first version-6
-archive:
-
-```powershell
-.\.venv\Scripts\python.exe scripts\backfill_receipt_checksums.py --profile heathcote-advisory
-```
 
 Create a fresh verified cloud backup for the selected profile:
 
