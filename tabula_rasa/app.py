@@ -75,10 +75,12 @@ from tabula_rasa.quickbooks_mileage_import import (
 )
 from tabula_rasa.receipt_manifest import (
     ReceiptManifestError,
-    build_receipt_manifest,
     receipt_reference_from_drive_file,
 )
-from tabula_rasa.receipt_backfill import backfill_profile_receipts
+from tabula_rasa.receipt_backfill import (
+    backfill_profile_receipts,
+    prepare_backup_receipt_manifest,
+)
 
 
 STORAGE_IMPLEMENTATION_VERSION = 10
@@ -266,14 +268,13 @@ def receipt_manifest_for_backup(
             "A current-format backup requires a selected Google Drive receipt "
             "folder so its receipt inventory is complete."
         )
-    transactions = storage.list_transactions(_force_refresh=True)
     drive = get_drive_client(profile_key, configuration_revision)
-    receipts = drive.list_profile_receipts(
+    return prepare_backup_receipt_manifest(
+        storage,
+        drive,
         profile_key=profile_key,
         folder_id=str(receipt_folder["id"]),
-        _force_refresh=True,
     )
-    return build_receipt_manifest(profile_key, transactions, receipts)
 
 
 def reset_widget_state_if_requested(
@@ -2509,6 +2510,7 @@ elif page == "Data & backup":
                 StorageError,
                 GoogleDriveError,
                 ReceiptManifestError,
+                RuntimeError,
             ) as error:
                 prepared_exports["backup_error"] = str(error)
             else:

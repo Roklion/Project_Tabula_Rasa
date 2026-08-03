@@ -7,6 +7,7 @@ from typing import Any
 from tabula_rasa.google_drive import GoogleDriveClient
 from tabula_rasa.receipt_manifest import (
     ReceiptManifestError,
+    build_receipt_manifest,
     receipt_reference_from_drive_file,
 )
 from tabula_rasa.storage import (
@@ -14,6 +15,10 @@ from tabula_rasa.storage import (
     GoogleSheetsStorage,
     StorageError,
 )
+
+
+class ReceiptPreparationError(RuntimeError):
+    """Raised when receipt preparation cannot safely precede a backup."""
 
 
 def backfill_profile_receipts(
@@ -129,3 +134,38 @@ def backfill_profile_receipts(
             continue
         report["references_updated"] += len(references)
     return report
+
+
+def prepare_backup_receipt_manifest(
+    storage: GoogleSheetsStorage,
+    drive: GoogleDriveClient,
+    *,
+    profile_key: str,
+    folder_id: str,
+) -> dict[str, Any]:
+    """Prepare receipts and return a newly read, validated backup inventory.
+
+    Confirmed Drive and Sheets migrations are deliberately retained on a
+    partial failure: they are idempotent and make the next backup attempt
+    smaller. The backup itself is not created until every receipt is ready.
+    """
+    report = backfill_profile_receipts(
+        storage,
+        drive,
+        profile_key=profile_key,
+        folder_id=folder_id,
+    )
+    if report["errors"]:
+        raise ReceiptPreparationError(
+            "Receipt preparation is incomplete; no backup was created. "
+            "Retry the backup after resolving the reported receipt errors."
+        )
+    # Writes above can change both sources. Re-read them before constructing
+    # the manifest so it represents the confirmed current state.
+    transactions = storage.list_transactions(_force_refresh=True)
+    receipts = drive.list_profile_receipts(
+        profile_key=profile_key,
+        folder_id=folder_id,
+        _force_refresh=True,
+    )
+    return build_receipt_manifest(profile_key, transactions, receipts)

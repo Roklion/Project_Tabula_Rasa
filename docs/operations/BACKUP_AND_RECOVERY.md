@@ -69,6 +69,15 @@ profile has a configured receipt folder. It scans all app-managed receipts in
 that folder, downloads only files missing valid integrity metadata, and updates
 active ledger references after Drive confirms each file update.
 
+Immediately before every newly created backup, both the app and command-line
+workflows run the same profile-scoped receipt preparation. It refreshes the
+selected folder and transactions, backfills missing integrity metadata,
+initializes only empty-string legacy receipt associations, and reconciles
+active references with current Drive metadata. An explicit `[]` reference
+remains intentionally unlinked. Sheets and Drive are read again before
+`receipts.json` is generated; if preparation is incomplete, no backup is
+created. Confirmed migration writes remain in place so a retry resumes safely.
+
 If the app reports a partial or failed migration, restart it to retry or run the
 same profile-scoped migration explicitly before creating another backup:
 

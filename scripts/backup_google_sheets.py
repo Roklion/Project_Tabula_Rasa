@@ -23,7 +23,7 @@ from tabula_rasa.google_drive import (
     load_oauth_config,
 )
 from tabula_rasa.local_profile_store import load_business_profile_document
-from tabula_rasa.receipt_manifest import build_receipt_manifest
+from tabula_rasa.receipt_backfill import prepare_backup_receipt_manifest
 from tabula_rasa.storage import GoogleSheetsStorage
 from tabula_rasa.storage.google_sheets import BACKUP_FORMAT_VERSION
 
@@ -170,13 +170,12 @@ def build_backup_receipt_manifest(
         raise GoogleDriveConfigurationError(
             "A Google Drive client is required to inventory receipts."
         )
-    transactions = storage.list_transactions(_force_refresh=True)
-    receipts = client.list_profile_receipts(
+    return prepare_backup_receipt_manifest(
+        storage,
+        client,
         profile_key=profile_key,
         folder_id=str(receipt_folder["id"]),
-        _force_refresh=True,
     )
-    return build_receipt_manifest(profile_key, transactions, receipts)
 
 
 def verified_drive_backup_for_week(

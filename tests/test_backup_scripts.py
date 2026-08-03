@@ -75,8 +75,10 @@ class TestBackupScripts:
         )
 
         assert manifest == build_receipt_manifest("north", [], [])
-        storage.list_transactions.assert_called_once_with(_force_refresh=True)
-        client.list_profile_receipts.assert_called_once_with(
+        assert storage.list_transactions.call_count == 2
+        storage.list_transactions.assert_called_with(_force_refresh=True)
+        assert client.list_profile_receipts.call_count == 2
+        client.list_profile_receipts.assert_called_with(
             profile_key="north",
             folder_id="folder123456",
             _force_refresh=True,
