@@ -1657,7 +1657,7 @@ elif page == "Accounts":
     balance_by_id = balances.set_index("ID")["Balance"].to_dict()
     account_rows = []
     for account in ordered_hierarchy(accounts):
-        parent_id = account.get("parent_id")
+        parent_id = str(account.get("parent_id") or "").strip()
         parent = account_by_id.get(parent_id) if parent_id else None
         account_rows.append(
             {
@@ -1813,7 +1813,7 @@ elif page == "Accounts":
                     compatibility_value=edited_classification,
                     item_id=account_id,
                 )
-                current_parent_id = selected.get("parent_id", "")
+                current_parent_id = str(selected.get("parent_id") or "").strip()
                 edited_parent_id = st.selectbox(
                     "Edit parent account",
                     edited_parent_options,
@@ -1883,13 +1883,19 @@ elif page == "Categories":
             {
                 "Category": (
                     f'↳ {category["name"]}'
-                    if category.get("parent_id")
+                    if str(category.get("parent_id") or "").strip()
                     else category["name"]
                 ),
-                "Layer": "Layer 2" if category.get("parent_id") else "Layer 1",
+                "Layer": (
+                    "Layer 2"
+                    if str(category.get("parent_id") or "").strip()
+                    else "Layer 1"
+                ),
                 "Parent": (
-                    category_by_id.get(category["parent_id"], {}).get("name", "")
-                    if category.get("parent_id")
+                    category_by_id.get(
+                        str(category.get("parent_id") or "").strip(), {}
+                    ).get("name", "")
+                    if str(category.get("parent_id") or "").strip()
                     else ""
                 ),
                 "Type": category["kind"],
@@ -1970,7 +1976,7 @@ elif page == "Categories":
                     compatibility_value=edited_kind,
                     item_id=category_id,
                 )
-                current_parent_id = selected.get("parent_id", "")
+                current_parent_id = str(selected.get("parent_id") or "").strip()
                 edited_parent_id = st.selectbox(
                     "Edit parent category",
                     edited_parent_options,

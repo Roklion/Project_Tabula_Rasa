@@ -94,7 +94,7 @@ def balance_sheet(
                 "id": account["id"],
                 "name": account["name"],
                 "type": account["type"],
-                "parent_id": account.get("parent_id", ""),
+                "parent_id": str(account.get("parent_id") or "").strip(),
                 "balance": float(presented_balance),
                 "direct_balance": float(presented_balance),
                 "rollup_balance": float(presented_balance),
@@ -258,10 +258,13 @@ def category_activity_rollups(
 
     rows: list[dict[str, Any]] = []
     visited: set[str] = set()
-    for root in sorted(roots, key=lambda item: str(item["name"]).casefold()):
+    for root in sorted(
+        roots,
+        key=lambda item: str(item.get("name") or "").casefold(),
+    ):
         child_rows = sorted(
             children.get(str(root["id"]), []),
-            key=lambda item: str(item["name"]).casefold(),
+            key=lambda item: str(item.get("name") or "").casefold(),
         )
         direct_total = totals[str(root["id"])]
         rollup_total = direct_total + sum(
@@ -273,7 +276,7 @@ def category_activity_rollups(
         rows.append(
             {
                 "id": root["id"],
-                "category": root["name"],
+                "category": root.get("name") or "",
                 "parent_id": "",
                 "layer": 1,
                 "direct_total": float(direct_total),
@@ -284,7 +287,7 @@ def category_activity_rollups(
         rows.extend(
             {
                 "id": child["id"],
-                "category": child["name"],
+                "category": child.get("name") or "",
                 "parent_id": root["id"],
                 "layer": 2,
                 "direct_total": float(totals[str(child["id"])]),

@@ -48,12 +48,12 @@ def ordered_hierarchy(
             roots.append(item)
     ordered: list[dict[str, Any]] = []
     visited: set[str] = set()
-    for root in sorted(roots, key=lambda item: str(item.get("name", "")).casefold()):
+    for root in sorted(roots, key=lambda item: str(item.get("name") or "").casefold()):
         ordered.append(root)
         visited.add(str(root.get("id", "")))
         for child in sorted(
             children.get(str(root.get("id", "")), []),
-            key=lambda item: str(item.get("name", "")).casefold(),
+            key=lambda item: str(item.get("name") or "").casefold(),
         ):
             ordered.append(child)
             visited.add(str(child.get("id", "")))
@@ -64,7 +64,7 @@ def ordered_hierarchy(
                 for item in records
                 if str(item.get("id", "")) not in visited
             ),
-            key=lambda item: str(item.get("name", "")).casefold(),
+            key=lambda item: str(item.get("name") or "").casefold(),
         )
     )
     return ordered

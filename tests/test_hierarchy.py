@@ -192,3 +192,15 @@ def test_ordered_hierarchy_keeps_cyclic_items_visible() -> None:
     ]
 
     assert [item["id"] for item in ordered_hierarchy(items)] == ["a", "b"]
+
+
+def test_ordered_hierarchy_sorts_none_names_as_empty_strings() -> None:
+    items = [
+        {**account("named"), "name": "Alpha"},
+        {**account("unnamed"), "name": None},
+    ]
+
+    assert [item["id"] for item in ordered_hierarchy(items)] == [
+        "unnamed",
+        "named",
+    ]

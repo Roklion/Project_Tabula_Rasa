@@ -140,7 +140,7 @@ class TestLedgerReporting:
                 "classification": "Asset",
                 "opening_balance": "30.00",
                 "active": True,
-                "parent_id": "assets",
+                "parent_id": " assets ",
             },
             {
                 "id": "cash",
@@ -411,6 +411,28 @@ class TestLedgerReporting:
 
         assert expenses_by_category(transactions, categories) == [
             {"category": "Travel", "total": 20.0}
+        ]
+
+    def test_category_rollup_treats_none_name_as_empty_text(self) -> None:
+        categories = [
+            {
+                "id": "travel",
+                "name": None,
+                "kind": "Expense",
+                "parent_id": "",
+            }
+        ]
+        transactions = [
+            {
+                "txn_date": "2026-07-01",
+                "kind": "Expense",
+                "amount": "20",
+                "category_id": "travel",
+            }
+        ]
+
+        assert expenses_by_category(transactions, categories) == [
+            {"category": "", "total": 20.0}
         ]
 
     def test_category_rollup_keeps_orphaned_activity_visible(self) -> None:
