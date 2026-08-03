@@ -25,21 +25,18 @@ def test_gemini_configuration_keeps_review_advisory_and_enabled() -> None:
     assert "password" not in uncommented_config
 
 
-def test_gemini_commands_have_distinct_exact_scopes() -> None:
+def test_gemini_review_mode_uses_trusted_codex_availability() -> None:
     styleguide = read_repository_file(".gemini/styleguide.md")
     normalized_styleguide = " ".join(styleguide.split())
 
-    normal_command = "Exactly `/gemini review` selects **normal complementary review**."
-    fallback_command = (
-        "Exactly `/gemini review everything` selects **full fallback review**."
-    )
-    assert normal_command in styleguide
-    assert fallback_command in styleguide
-    assert "complete comment case-insensitively" in styleguide
-    assert (
-        "A comment containing extra text is not the exact fallback command."
-        in normalized_styleguide
-    )
+    assert "`/gemini review` is the only review command." in styleguide
+    assert "`/gemini review everything`" not in styleguide
+    assert "chatgpt-codex-connector[bot]" in styleguide
+    assert "current review round" in normalized_styleguide
+    assert "Do not infer Codex unavailability from silence" in styleguide
+    assert "text authored by the pull-request author" in normalized_styleguide
+    assert "do not use Codex findings as input" in normalized_styleguide
+    assert "label the output **Full fallback review**" in styleguide
     assert "Do not modify code, push changes, approve, merge" in styleguide
     assert "state its commit SHA" in styleguide
     assert "`No additional feedback.`" in styleguide
@@ -73,5 +70,9 @@ def test_canonical_review_guide_covers_roles_and_dispositions() -> None:
         "Do not assume that a push automatically re-triggers Gemini."
         in normalized_guide
     )
+    assert "Post `/gemini review` as a standalone pull-request comment." in guide
+    assert "chatgpt-codex-connector[bot]" in guide
+    assert "Do not infer unavailability from silence" in guide
+    assert "`/gemini review everything`" not in guide
     assert "Gemini does not use a thumbs-up reaction" in normalized_guide
     assert "only an actual controlled pull request can validate" in guide
