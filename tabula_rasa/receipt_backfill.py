@@ -1,4 +1,4 @@
-"""Idempotent integrity-metadata migration for legacy receipt files."""
+"""Fresh, profile-scoped receipt preparation for backup creation."""
 
 from __future__ import annotations
 
@@ -21,14 +21,14 @@ class ReceiptPreparationError(RuntimeError):
     """Raised when receipt preparation cannot safely precede a backup."""
 
 
-def backfill_profile_receipts(
+def prepare_profile_receipts(
     storage: GoogleSheetsStorage,
     drive: GoogleDriveClient,
     *,
     profile_key: str,
     folder_id: str,
 ) -> dict[str, Any]:
-    """Backfill legacy Drive metadata and refresh active Sheets references.
+    """Refresh receipt metadata and active Sheets references before backup.
 
     Receipts that already contain valid integrity metadata are never downloaded.
     Failures are reported per file so a later startup or command-line run can
@@ -149,7 +149,7 @@ def prepare_backup_receipt_manifest(
     partial failure: they are idempotent and make the next backup attempt
     smaller. The backup itself is not created until every receipt is ready.
     """
-    report = backfill_profile_receipts(
+    report = prepare_profile_receipts(
         storage,
         drive,
         profile_key=profile_key,

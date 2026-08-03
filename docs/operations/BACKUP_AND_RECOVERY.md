@@ -58,8 +58,8 @@ stored filenames, MIME types, byte sizes, SHA-256 checksums, old Drive file IDs,
 and available Drive timestamps. It does not contain PDF or image bytes, so the
 same large receipt files are not duplicated into every retained ledger archive.
 
-Every manifest entry must have a checksum created during upload or a verified
-legacy backfill. Backup creation fails rather than silently writing a
+Every manifest entry must have a checksum created during upload or verified
+during backup-time preparation. Backup creation fails rather than silently writing a
 checksum-incomplete receipt inventory. Current-format backup creation also
 requires the selected profile's configured Google Drive receipt folder; if the
 folder is disconnected or unavailable, the app and command-line workflow fail
@@ -72,7 +72,7 @@ initializes only empty-string legacy receipt associations, and reconciles
 active references with current Drive metadata. An explicit `[]` reference
 remains intentionally unlinked. Sheets and Drive are read again before
 `receipts.json` is generated; if preparation is incomplete, no backup is
-created. Confirmed migration writes remain in place so a retry resumes safely.
+created. Confirmed preparation writes remain in place so a retry resumes safely.
 
 If preparation fails, resolve the reported Drive or Sheets problem and retry
 the backup. It will repeat only incomplete work.

@@ -1173,8 +1173,8 @@ elif page == "Transactions":
                                             receipts_needing_backfill += 1
                                 if receipts_needing_backfill:
                                     st.warning(
-                                        f"{receipts_needing_backfill} legacy receipt(s) "
-                                        "need checksum backfill before they can be linked."
+                                        f"{receipts_needing_backfill} receipt(s) "
+                                        "need integrity metadata before they can be linked."
                                     )
                                 if unreferenced_receipts:
                                     unreferenced_by_id = {

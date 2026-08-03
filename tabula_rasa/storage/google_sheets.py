@@ -492,7 +492,7 @@ def _parse_backup_zip(
             ):
                 if "receipt_id" not in reference:
                     raise StorageValidationError(
-                        "Receipt references need checksum backfill before backup"
+                        "Receipt references need integrity metadata before backup"
                     )
                 key = (transaction["id"], str(reference["id"]))
                 entry = referenced_entries.get(key)

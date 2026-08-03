@@ -349,7 +349,7 @@ Keep a private operational record for each opted-in business containing:
 - Cloud Sync pause/failure and successful retry log
 - Recovery archive copy location
 - Restore command output and recovery workbook ID
-- Receipt backfill and manifest-validation result
+- Receipt preparation and manifest-validation result
 - Receipt recovery counts and confirmation of remapped and unreferenced cases
 - Drill date and administrator
 
@@ -389,7 +389,7 @@ stored in Git or the GitHub issue.
 This July 28 record predates the version-5 receipt inventory and covers only
 ledger archives. It is not evidence that receipt bytes are synchronized or
 versioned. Each opted-in profile still needs the separate `receipts` Cloud Sync
-task, protected versioned retention, a checksum backfill, and a complete
+task, protected versioned retention, receipt preparation during backup, and a complete
 ledger-plus-receipt recovery drill described above.
 
 ## Troubleshooting
