@@ -235,12 +235,17 @@ def category_activity_rollups(
 
     children: dict[str, list[dict[str, Any]]] = defaultdict(list)
     roots: list[dict[str, Any]] = []
+    valid_parent_ids = {
+        str(category["id"])
+        for category in category_rows
+        if category.get("kind") == kind
+    }
     for category in category_rows:
         if category.get("kind") != kind:
             continue
         raw_parent_id = category.get("parent_id")
         parent_id = str(raw_parent_id).strip() if raw_parent_id else ""
-        if parent_id:
+        if parent_id and parent_id in valid_parent_ids:
             children[parent_id].append(category)
         else:
             roots.append(category)

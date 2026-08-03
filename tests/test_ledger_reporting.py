@@ -382,3 +382,44 @@ class TestLedgerReporting:
         assert expenses_by_category(transactions, categories) == [
             {"category": "Travel", "total": 20.0}
         ]
+
+    def test_category_rollup_keeps_orphaned_activity_visible(self) -> None:
+        categories = [
+            {
+                "id": "travel",
+                "name": "Travel",
+                "kind": "Expense",
+                "parent_id": "missing",
+            },
+            {
+                "id": "income-parent",
+                "name": "Revenue",
+                "kind": "Income",
+                "parent_id": "",
+            },
+            {
+                "id": "wrong-kind-child",
+                "name": "Other expense",
+                "kind": "Expense",
+                "parent_id": "income-parent",
+            },
+        ]
+        transactions = [
+            {
+                "txn_date": "2026-07-01",
+                "kind": "Expense",
+                "amount": "20",
+                "category_id": "travel",
+            },
+            {
+                "txn_date": "2026-07-02",
+                "kind": "Expense",
+                "amount": "5",
+                "category_id": "wrong-kind-child",
+            },
+        ]
+
+        assert expenses_by_category(transactions, categories) == [
+            {"category": "Travel", "total": 20.0},
+            {"category": "Other expense", "total": 5.0},
+        ]

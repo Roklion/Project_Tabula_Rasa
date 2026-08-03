@@ -148,3 +148,15 @@ def test_empty_id_sentinel_is_not_used_as_a_parent() -> None:
         "": "Uncategorized",
         "travel": "Travel",
     }
+
+
+def test_ordered_hierarchy_keeps_orphaned_items_visible() -> None:
+    items = [
+        {**account("root"), "name": "Root"},
+        {**account("orphan", parent_id="missing"), "name": "Orphan"},
+    ]
+
+    assert [item["id"] for item in ordered_hierarchy(items)] == [
+        "orphan",
+        "root",
+    ]

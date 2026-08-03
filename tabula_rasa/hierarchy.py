@@ -35,11 +35,12 @@ def ordered_hierarchy(
 ) -> list[dict[str, Any]]:
     """Order Layer 1 items with their Layer 2 children."""
     records = [dict(item) for item in items]
+    item_ids = {str(item.get("id", "")) for item in records}
     children: dict[str, list[dict[str, Any]]] = {}
     roots: list[dict[str, Any]] = []
     for item in records:
         parent_id = _parent_id(item)
-        if parent_id:
+        if parent_id and parent_id in item_ids:
             children.setdefault(parent_id, []).append(item)
         else:
             roots.append(item)
