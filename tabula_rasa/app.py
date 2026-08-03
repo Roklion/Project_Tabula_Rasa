@@ -36,7 +36,6 @@ from tabula_rasa.ledger_reporting import (
     account_balances,
     balance_sheet,
     category_activity_rollups,
-    expenses_by_category,
     monthly_performance,
     profit_and_loss,
 )
@@ -2053,7 +2052,6 @@ elif page == "Reports":
     except StorageError as error:
         report_storage_error(error)
         st.stop()
-    account_paths = hierarchy_paths(accounts)
     category_paths = hierarchy_paths(categories)
     summary = profit_and_loss(transactions, start=start, end=end)
     a, b, c = st.columns(3)
@@ -2063,14 +2061,29 @@ elif page == "Reports":
     monthly = pd.DataFrame(
         monthly_performance(transactions, start=start, end=end)
     ).rename(columns={"month": "Month", "income": "Income", "expenses": "Expenses"})
+    category_detail_rows = category_activity_rollups(
+        transactions,
+        categories,
+        kind="Expense",
+        start=start,
+        end=end,
+    )
     by_category = pd.DataFrame(
-        expenses_by_category(
-            transactions,
-            categories,
-            start=start,
-            end=end,
-        )
-    ).rename(columns={"category": "Category", "total": "Total"})
+        [
+            {"Category": row["category"], "Total": row["rollup_total"]}
+            for row in sorted(
+                (
+                    row
+                    for row in category_detail_rows
+                    if row["layer"] == 1
+                ),
+                key=lambda row: (
+                    -row["rollup_total"],
+                    row["category"].casefold(),
+                ),
+            )
+        ]
+    )
     left, right = st.columns(2)
     with left:
         st.subheader("Monthly performance")
@@ -2102,13 +2115,6 @@ elif page == "Reports":
             )
         else:
             st.info("No expenses in this period.")
-    category_detail_rows = category_activity_rollups(
-        transactions,
-        categories,
-        kind="Expense",
-        start=start,
-        end=end,
-    )
     if category_detail_rows:
         st.caption(
             "Layer 1 totals include direct activity and all Layer 2 children."
