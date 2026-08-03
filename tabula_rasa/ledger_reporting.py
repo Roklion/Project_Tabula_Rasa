@@ -105,7 +105,8 @@ def balance_sheet(
     for rows in sections.values():
         by_id = {row["id"]: row for row in rows}
         for row in rows:
-            parent = by_id.get(row["parent_id"])
+            parent_id = row["parent_id"]
+            parent = by_id.get(parent_id) if parent_id else None
             if parent is not None:
                 parent["rollup_balance"] += row["direct_balance"]
 

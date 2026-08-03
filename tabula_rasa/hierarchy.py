@@ -22,7 +22,8 @@ def hierarchy_paths(items: Iterable[Mapping[str, Any]]) -> dict[str, str]:
     paths: dict[str, str] = {}
     for item_id, item in by_id.items():
         name = str(item.get("name", ""))
-        parent = by_id.get(_parent_id(item))
+        parent_id = _parent_id(item)
+        parent = by_id.get(parent_id) if parent_id else None
         paths[item_id] = (
             f'{parent.get("name", "")} › {name}' if parent is not None else name
         )

@@ -126,3 +126,25 @@ def test_none_parent_ids_are_treated_as_layer_one() -> None:
         compatibility_field="classification",
         item_label="Account",
     )
+
+
+def test_empty_id_sentinel_is_not_used_as_a_parent() -> None:
+    items = [
+        {
+            "id": "",
+            "name": "Uncategorized",
+            "parent_id": "",
+            "kind": "Expense",
+        },
+        {
+            "id": "travel",
+            "name": "Travel",
+            "parent_id": "",
+            "kind": "Expense",
+        },
+    ]
+
+    assert hierarchy_paths(items) == {
+        "": "Uncategorized",
+        "travel": "Travel",
+    }

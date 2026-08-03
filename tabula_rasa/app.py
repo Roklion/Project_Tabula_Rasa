@@ -1653,7 +1653,8 @@ elif page == "Accounts":
     balance_by_id = balances.set_index("ID")["Balance"].to_dict()
     account_rows = []
     for account in ordered_hierarchy(accounts):
-        parent = account_by_id.get(account.get("parent_id", ""))
+        parent_id = account.get("parent_id")
+        parent = account_by_id.get(parent_id) if parent_id else None
         account_rows.append(
             {
                 "Account": (
@@ -1882,9 +1883,11 @@ elif page == "Categories":
                     else category["name"]
                 ),
                 "Layer": "Layer 2" if category.get("parent_id") else "Layer 1",
-                "Parent": category_by_id.get(
-                    category.get("parent_id", ""), {}
-                ).get("name", ""),
+                "Parent": (
+                    category_by_id.get(category["parent_id"], {}).get("name", "")
+                    if category.get("parent_id")
+                    else ""
+                ),
                 "Type": category["kind"],
             }
             for category in ordered_hierarchy(categories)
@@ -1899,7 +1902,7 @@ elif page == "Categories":
             f"new_category_parent_{selected_profile_key}",
         ),
     )
-    with st.form("add_category", clear_on_submit=False):
+    with st.container(border=True):
         c1, c2, c3 = st.columns(3)
         name = c1.text_input(
             "Category name", key=f"new_category_name_{selected_profile_key}"
@@ -1922,7 +1925,7 @@ elif page == "Categories":
                 "None (Layer 1)" if not value else category_paths[value]
             ),
         )
-        if st.form_submit_button("Add category", type="primary"):
+        if st.button("Add category", type="primary"):
             payload = {"name": name, "kind": kind, "parent_id": parent_id}
             confirmed_write(
                 "create_category",
@@ -1944,7 +1947,7 @@ elif page == "Categories":
                 ),
             )
             selected = category_by_id[category_id]
-            with st.form("edit_category"):
+            with st.container(border=True):
                 edited_name = st.text_input(
                     "Edit category name", value=selected["name"]
                 )
@@ -1986,7 +1989,11 @@ elif page == "Categories":
                         "This Layer 1 category has children. Promote or reparent "
                         "those children before moving this category under a parent."
                     )
-                if st.form_submit_button("Save category changes", type="primary"):
+                if st.button(
+                    "Save category changes",
+                    type="primary",
+                    key=f"save_category_{category_id}",
+                ):
                     payload = {
                         "id": category_id,
                         "name": edited_name,

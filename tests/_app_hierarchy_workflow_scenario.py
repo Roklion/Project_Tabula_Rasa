@@ -137,6 +137,21 @@ def main() -> None:
         travel = add_category(app, alpha, "Travel")
         flights = add_category(app, alpha, "Flights", parent_id=travel["id"])
         assert "Travel" in app.dataframe[0].value["Parent"].tolist()
+        by_label(app.selectbox, "Type").set_value("Income").run()
+        add_parent_options = by_label(
+            app.selectbox, "Parent category (optional)"
+        ).options
+        assert "Sales" in add_parent_options
+        assert "Travel" not in add_parent_options
+        by_label(app.selectbox, "Type").set_value("Expense").run()
+        by_label(app.selectbox, "Category to edit").set_value(flights["id"]).run()
+        by_label(app.selectbox, "Edit category type").set_value("Income").run()
+        edit_parent_options = by_label(
+            app.selectbox, "Edit parent category"
+        ).options
+        assert "Sales" in edit_parent_options
+        assert "Travel" not in edit_parent_options
+        by_label(app.selectbox, "Edit category type").set_value("Expense").run()
 
         app.radio[0].set_value("Transactions").run()
         by_label(app.segmented_control, "Transaction type").set_value(
