@@ -100,4 +100,4 @@ and live validation commands.
 
 ## Authors
 
-- Roklion
+- Roklion [yaodongy1018@gmail.com]
