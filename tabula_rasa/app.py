@@ -35,6 +35,7 @@ from tabula_rasa.google_drive_admin import process_google_drive_oauth_callback
 from tabula_rasa.ledger_reporting import (
     account_balances,
     balance_sheet,
+    category_activity_rollups,
     expenses_by_category,
     monthly_performance,
     profit_and_loss,
@@ -2040,10 +2041,7 @@ elif page == "Reports":
     by_category = pd.DataFrame(
         expenses_by_category(
             transactions,
-            [
-                {**category, "name": category_paths[category["id"]]}
-                for category in categories
-            ],
+            categories,
             start=start,
             end=end,
         )
@@ -2079,6 +2077,47 @@ elif page == "Reports":
             )
         else:
             st.info("No expenses in this period.")
+    category_detail_rows = category_activity_rollups(
+        transactions,
+        categories,
+        kind="Expense",
+        start=start,
+        end=end,
+    )
+    if category_detail_rows:
+        st.caption(
+            "Layer 1 totals include direct activity and all Layer 2 children."
+        )
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "Category": (
+                            row["category"]
+                            if row["layer"] == 1
+                            else f'↳ {row["category"]}'
+                        ),
+                        "Layer": f'Layer {row["layer"]}',
+                        "Parent": (
+                            category_paths.get(row["parent_id"], "")
+                            if row["parent_id"]
+                            else ""
+                        ),
+                        "Direct activity": row["direct_total"],
+                        "Layer 1 total": (
+                            row["rollup_total"] if row["layer"] == 1 else None
+                        ),
+                    }
+                    for row in category_detail_rows
+                ]
+            ),
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "Direct activity": st.column_config.NumberColumn(format="$%.2f"),
+                "Layer 1 total": st.column_config.NumberColumn(format="$%.2f"),
+            },
+        )
 
     st.divider()
     st.subheader("Balance sheet")
@@ -2096,14 +2135,39 @@ elif page == "Reports":
         *,
         current_earnings: float | None = None,
     ) -> pd.DataFrame:
-        display_rows = [
-            {
-                "Account": account_paths.get(row["id"], row["name"]),
-                "Type": row["type"],
-                "Balance": row["balance"],
-            }
-            for row in rows
-        ]
+        ordered_rows = ordered_hierarchy(rows)
+        child_parent_ids = {
+            row["parent_id"] for row in ordered_rows if row["parent_id"]
+        }
+        display_rows = []
+        for row in ordered_rows:
+            is_child = bool(row["parent_id"])
+            has_children = row["id"] in child_parent_ids
+            display_rows.append(
+                {
+                    "Account": (
+                        f'↳ {row["name"]}' if is_child else row["name"]
+                    ),
+                    "Type": (
+                        row["type"]
+                        if is_child or not has_children
+                        else "Layer 1 total"
+                    ),
+                    "Balance": (
+                        row["direct_balance"]
+                        if is_child or not has_children
+                        else row["rollup_balance"]
+                    ),
+                }
+            )
+            if has_children and row["direct_balance"]:
+                display_rows.append(
+                    {
+                        "Account": "↳ Direct activity",
+                        "Type": row["type"],
+                        "Balance": row["direct_balance"],
+                    }
+                )
         if current_earnings is not None:
             display_rows.append(
                 {

@@ -87,6 +87,11 @@ The current validator and ledger restore path accept formats 2 through 6:
 | 5 | Adds the checksummed `receipts.json` inventory without embedding receipt bytes |
 | 6 | Current format; preserves optional account and category `parent_id` hierarchy metadata |
 
+Hierarchy affects reporting presentation, not transaction foreign keys or the
+backup source of truth. Format-version 6 stores the stable IDs and `parent_id`
+links needed to reconstruct Layer 1 totals and Layer 2 detail after restoration.
+Supported older archives without hierarchy columns restore all items at Layer 1.
+
 Older compatible formats are migrated in memory during restore. A historical
 format-1 archive must first be converted to format 2. Formats 2 through 5
 that lack account and category `parent_id` columns restore those records at

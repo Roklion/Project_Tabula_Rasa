@@ -94,10 +94,20 @@ def balance_sheet(
                 "id": account["id"],
                 "name": account["name"],
                 "type": account["type"],
+                "parent_id": account.get("parent_id", ""),
                 "balance": float(presented_balance),
+                "direct_balance": float(presented_balance),
+                "rollup_balance": float(presented_balance),
             }
         )
         totals[classification] += presented_balance
+
+    for rows in sections.values():
+        by_id = {row["id"]: row for row in rows}
+        for row in rows:
+            parent = by_id.get(row["parent_id"])
+            if parent is not None:
+                parent["rollup_balance"] += row["direct_balance"]
 
     current_earnings = sum(
         (
@@ -180,20 +190,105 @@ def expenses_by_category(
     start: date | str | None = None,
     end: date | str | None = None,
 ) -> list[dict[str, Any]]:
-    category_names = {
-        category["id"]: category["name"] for category in categories
-    }
-    totals: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
-    for transaction in transactions:
-        if transaction["kind"] != "Expense" or not _in_period(
-            transaction, start, end
-        ):
-            continue
-        name = category_names.get(transaction.get("category_id"), "Uncategorized")
-        totals[str(name)] += _decimal(transaction["amount"])
     return [
-        {"category": category, "total": float(total)}
-        for category, total in sorted(
-            totals.items(), key=lambda item: (-item[1], item[0].casefold())
+        {"category": row["category"], "total": row["rollup_total"]}
+        for row in sorted(
+            (
+                row
+                for row in category_activity_rollups(
+                    transactions,
+                    categories,
+                    kind="Expense",
+                    start=start,
+                    end=end,
+                )
+                if row["layer"] == 1
+            ),
+            key=lambda row: (
+                -row["rollup_total"],
+                row["category"].casefold(),
+            ),
         )
     ]
+
+
+def category_activity_rollups(
+    transactions: Iterable[Mapping[str, Any]],
+    categories: Iterable[Mapping[str, Any]],
+    *,
+    kind: str,
+    start: date | str | None = None,
+    end: date | str | None = None,
+) -> list[dict[str, Any]]:
+    """Return Layer 1 rollups and Layer 2 direct activity without duplication."""
+    category_rows = [dict(category) for category in categories]
+    by_id = {str(category["id"]): category for category in category_rows}
+    totals: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    for transaction in transactions:
+        if transaction["kind"] != kind or not _in_period(transaction, start, end):
+            continue
+        category_id = str(transaction.get("category_id", ""))
+        totals[category_id if category_id in by_id else ""] += _decimal(
+            transaction["amount"]
+        )
+
+    children: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    roots: list[dict[str, Any]] = []
+    for category in category_rows:
+        if category.get("kind") != kind:
+            continue
+        parent_id = str(category.get("parent_id", ""))
+        if parent_id:
+            children[parent_id].append(category)
+        else:
+            roots.append(category)
+
+    rows: list[dict[str, Any]] = []
+    for root in sorted(roots, key=lambda item: str(item["name"]).casefold()):
+        child_rows = sorted(
+            children.get(str(root["id"]), []),
+            key=lambda item: str(item["name"]).casefold(),
+        )
+        direct_total = totals[str(root["id"])]
+        rollup_total = direct_total + sum(
+            (totals[str(child["id"])] for child in child_rows),
+            start=Decimal("0"),
+        )
+        if rollup_total == 0:
+            continue
+        rows.append(
+            {
+                "id": root["id"],
+                "category": root["name"],
+                "parent_id": "",
+                "layer": 1,
+                "direct_total": float(direct_total),
+                "rollup_total": float(rollup_total),
+            }
+        )
+        rows.extend(
+            {
+                "id": child["id"],
+                "category": child["name"],
+                "parent_id": root["id"],
+                "layer": 2,
+                "direct_total": float(totals[str(child["id"])]),
+                "rollup_total": float(totals[str(child["id"])]),
+            }
+            for child in child_rows
+            if totals[str(child["id"])] != 0
+        )
+
+    if totals[""] != 0:
+        uncategorized_total = float(totals[""])
+        rows.append(
+            {
+                "id": "",
+                "category": "Uncategorized",
+                "parent_id": "",
+                "layer": 1,
+                "direct_total": uncategorized_total,
+                "rollup_total": uncategorized_total,
+            }
+        )
+    return rows

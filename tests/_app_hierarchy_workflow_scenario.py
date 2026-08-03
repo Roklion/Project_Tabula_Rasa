@@ -178,6 +178,14 @@ def main() -> None:
             if account["name"] == "Payables"
         )
 
+        by_label(app.segmented_control, "Transaction type").set_value(
+            "Income"
+        ).run()
+        by_label(app.number_input, "Amount").set_value(20)
+        by_label(app.selectbox, "From Account").set_value("Operations")
+        by_label(app.selectbox, "Category").set_value("Sales")
+        by_label(app.button, "Save transaction").click().run()
+
         app.radio[0].set_value("Categories").run()
         by_label(app.selectbox, "Category to edit").set_value(flights["id"]).run()
         by_label(app.selectbox, "Edit parent category").set_value("")
@@ -195,6 +203,36 @@ def main() -> None:
             for category in alpha.list_categories()
             if category["id"] == flights["id"]
         )["parent_id"] == travel["id"]
+
+        app.radio[0].set_value("Reports").run()
+        category_report = next(
+            frame.value
+            for frame in app.dataframe
+            if "Direct activity" in frame.value.columns
+        )
+        travel_row = category_report.loc[
+            category_report["Category"] == "Travel"
+        ].iloc[0]
+        flights_row = category_report.loc[
+            category_report["Category"] == "↳ Flights"
+        ].iloc[0]
+        assert travel_row["Direct activity"] == 0.0
+        assert travel_row["Layer 1 total"] == 12.0
+        assert flights_row["Direct activity"] == 12.0
+        asset_report = next(
+            frame.value
+            for frame in app.dataframe
+            if "Type" in frame.value.columns
+            and "Layer 1 total" in frame.value["Type"].tolist()
+        )
+        operations_row = asset_report.loc[
+            asset_report["Account"] == "Operations"
+        ].iloc[0]
+        direct_row = asset_report.loc[
+            asset_report["Account"] == "↳ Direct activity"
+        ].iloc[0]
+        assert operations_row["Balance"] == 5.0
+        assert direct_row["Balance"] == 20.0
 
         app.radio[0].set_value("Accounts").run()
         by_label(app.text_input, "Account name").input("Alpha draft")

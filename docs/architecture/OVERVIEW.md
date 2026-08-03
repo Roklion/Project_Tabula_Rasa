@@ -148,6 +148,16 @@ recovery record.
 
 - Transfers change account balances but do not affect income or expenses.
 - Mileage is maintained separately from financial transactions.
+- Accounts and categories support exactly two levels. Parent and child accounts
+  share a balance-sheet classification; parent and child categories share an
+  Income or Expense kind.
+- Transactions may reference either layer by stable ID. Reparenting changes
+  presentation grouping without rewriting transaction foreign keys.
+- Account family totals combine a Layer 1 direct balance with its Layer 2 direct
+  balances. Balance-sheet grand totals use every direct account balance once and
+  never sum family totals together with their children.
+- Category summaries group Layer 1 direct activity and Layer 2 direct activity
+  once, while retaining both components for detail views.
 - Account subtype and balance-sheet classification are stored separately.
 - Bank and Cash accounts are assets.
 - Credit card and Short-term debt accounts are liabilities.
