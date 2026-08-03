@@ -883,7 +883,7 @@ elif page == "Transactions":
                             index=(
                                 category_ids.index(selected["category_id"])
                                 if selected["category_id"] in category_ids
-                                else 0
+                                else (0 if category_ids else None)
                             ),
                             format_func=category_paths.get,
                         )

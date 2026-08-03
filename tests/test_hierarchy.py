@@ -160,3 +160,12 @@ def test_ordered_hierarchy_keeps_orphaned_items_visible() -> None:
         "orphan",
         "root",
     ]
+
+
+def test_ordered_hierarchy_keeps_cyclic_items_visible() -> None:
+    items = [
+        {**account("a", parent_id="b"), "name": "Alpha"},
+        {**account("b", parent_id="a"), "name": "Beta"},
+    ]
+
+    assert [item["id"] for item in ordered_hierarchy(items)] == ["a", "b"]
