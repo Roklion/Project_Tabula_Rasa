@@ -33,6 +33,20 @@ presents them as conventional positive balances.
 Account names are referenced by imports, so rename or create accounts
 deliberately before importing historical data.
 
+Accounts may be arranged in two layers. A Layer 2 account selects a Layer 1
+parent with the same balance-sheet classification. Both layers remain valid
+transaction and transfer choices, and selectors show children as paths such as
+`Operating accounts › Petty cash`. Reparenting or promoting an account keeps its
+stable ID and all existing transaction references. A Layer 1 account that still
+has children cannot itself be moved under another parent. Deactivating a parent
+does not deactivate its children or remove its name from historical paths.
+
+The balance sheet shows each Layer 1 account as a family total: the parent's
+direct balance plus every Layer 2 child balance. When a parent has its own
+opening balance or transactions, a separate **Direct activity** row explains
+that component before the child detail. Grand totals still count every direct
+account balance exactly once; displayed family totals are never added again.
+
 ## Categories
 
 Categories are classified as Income or Expense. Transactions use categories for
@@ -40,6 +54,17 @@ income and expense reporting; transfers do not use categories.
 
 QuickBooks imports can optionally propose missing categories, but all proposed
 additions should be reviewed before the batch write.
+
+Categories also support two layers. A Layer 2 category must use a Layer 1 parent
+of the same Income or Expense kind. Transaction selectors and ledger views show
+the full path, while promotion and reparenting preserve the category ID stored
+on existing transactions.
+
+The primary category chart groups activity into Layer 1 totals. The detail table
+separates each parent's direct activity from its Layer 2 children so grouped
+amounts remain explainable without double-counting. Transactions may post
+directly to either layer; transfers remain category-free and mileage remains a
+separate workflow.
 
 ## Transactions and transfers
 
@@ -151,6 +176,10 @@ The **Data & backup** page provides:
 Transaction and mileage CSV exports remain available when Google Drive is not
 connected. The complete backup ZIP requires the selected profile's receipt
 folder so its receipt inventory cannot be mistaken for an empty folder.
+
+Transaction CSV exports keep the existing machine-facing account and category
+name columns unchanged. Hierarchy paths are presentation labels in the app and
+do not replace those raw export values.
 
 CSV and QuickBooks imports validate all rows before writing and use batch
 appends. Follow [QuickBooks import](QUICKBOOKS_IMPORT.md) for supported formats

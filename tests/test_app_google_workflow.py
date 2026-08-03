@@ -11,6 +11,9 @@ CSV_REPORTING_SCENARIO = Path(__file__).with_name("_app_csv_reporting_scenario.p
 RECEIPT_UNLINK_SCENARIO = Path(__file__).with_name(
     "_app_receipt_unlink_scenario.py"
 )
+HIERARCHY_SCENARIO = Path(__file__).with_name(
+    "_app_hierarchy_workflow_scenario.py"
+)
 
 
 class TestAppGoogleWorkflow:
@@ -44,3 +47,6 @@ class TestAppGoogleWorkflow:
 
     def test_receipt_unlink_confirmation_failure_and_success(self) -> None:
         self._run_scenario(RECEIPT_UNLINK_SCENARIO)
+
+    def test_hierarchy_workflows_and_profile_isolation(self) -> None:
+        self._run_scenario(HIERARCHY_SCENARIO)

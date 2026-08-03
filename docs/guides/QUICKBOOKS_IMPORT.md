@@ -110,6 +110,9 @@ Imported categories infer their kind from transaction amount:
 - negative amounts create Expense categories.
 
 Existing account and category names are matched case-insensitively.
+Matching uses the stored item name rather than its displayed hierarchy path, so
+existing Layer 2 accounts and categories are valid matches. Automatically
+created accounts and categories are always created at Layer 1.
 
 ## Import QuickBooks mileage
 
