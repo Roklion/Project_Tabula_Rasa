@@ -74,8 +74,8 @@ assume that a push automatically re-triggers Codex.
 Gemini reviewer functionality is also disabled while a pull request is a
 draft. Marking the pull request ready automatically begins Gemini's initial
 complementary review; no comment is required. If the hosted integration does
-not start that review within one monitoring interval, post `/gemini review` as
-a standalone top-level comment.
+not start that review within ten minutes, post `/gemini review` as a standalone
+top-level comment.
 
 After every material push, explicitly post the appropriate Gemini command to
 request review of the new current head. Do not assume that a push automatically
