@@ -231,7 +231,10 @@ def category_activity_rollups(
     for transaction in transactions:
         if transaction["kind"] != kind or not _in_period(transaction, start, end):
             continue
-        category_id = str(transaction.get("category_id", ""))
+        raw_category_id = transaction.get("category_id")
+        category_id = (
+            str(raw_category_id).strip() if raw_category_id is not None else ""
+        )
         totals[category_id if category_id in by_id else ""] += _decimal(
             transaction["amount"]
         )

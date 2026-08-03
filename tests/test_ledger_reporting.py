@@ -298,7 +298,12 @@ class TestLedgerReporting:
             {"txn_date": "2026-07-01", "kind": "Expense", "amount": "10", "category_id": "travel"},
             {"txn_date": "2026-07-02", "kind": "Expense", "amount": "20", "category_id": "flights"},
             {"txn_date": "2026-07-03", "kind": "Expense", "amount": "30", "category_id": "hotels"},
-            {"txn_date": "2026-07-04", "kind": "Expense", "amount": "4", "category_id": ""},
+            {
+                "txn_date": "2026-07-04",
+                "kind": "Expense",
+                "amount": "4",
+                "category_id": None,
+            },
             {"txn_date": "2026-07-05", "kind": "Transfer", "amount": "99", "category_id": "travel"},
             {"txn_date": "2026-07-06", "kind": "Income", "amount": "40", "category_id": "sales"},
         ]
