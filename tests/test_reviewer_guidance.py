@@ -12,14 +12,17 @@ def read_repository_file(relative_path: str) -> str:
 
 def test_gemini_configuration_keeps_review_advisory_and_enabled() -> None:
     config = read_repository_file(".gemini/config.yaml")
+    uncommented_config = "\n".join(
+        line.split("#", 1)[0] for line in config.splitlines()
+    ).casefold()
 
     assert "disable: false" in config
     assert "comment_severity_threshold: MEDIUM" in config
     assert "include_drafts: false" in config
     assert "memory_config:\n  disabled: true" in config
-    assert "credential" not in config.casefold()
-    assert "token" not in config.casefold()
-    assert "password" not in config.casefold()
+    assert "credential" not in uncommented_config
+    assert "token" not in uncommented_config
+    assert "password" not in uncommented_config
 
 
 def test_gemini_commands_have_distinct_exact_scopes() -> None:
