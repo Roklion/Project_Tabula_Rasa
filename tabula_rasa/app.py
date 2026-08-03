@@ -1694,9 +1694,11 @@ elif page == "Accounts":
             f"new_account_name_{selected_profile_key}",
             f"new_account_type_{selected_profile_key}",
             f"new_account_opening_{selected_profile_key}",
-            f"new_account_parent_{selected_profile_key}",
         ),
-        prefixes=(f"new_account_classification_{selected_profile_key}_",),
+        prefixes=(
+            f"new_account_classification_{selected_profile_key}_",
+            f"new_account_parent_{selected_profile_key}_",
+        ),
     )
     with st.expander("Add account", expanded=True):
         with st.container(border=True):
@@ -1738,7 +1740,10 @@ elif page == "Accounts":
             parent_id = c5.selectbox(
                 "Parent account (optional)",
                 parent_options,
-                key=f"new_account_parent_{selected_profile_key}",
+                key=(
+                    f"new_account_parent_{selected_profile_key}_"
+                    f"{classification}"
+                ),
                 format_func=lambda value: (
                     "None (Layer 1)" if not value else account_paths[value]
                 ),
@@ -1911,8 +1916,8 @@ elif page == "Categories":
         keys=(
             f"new_category_name_{selected_profile_key}",
             f"new_category_kind_{selected_profile_key}",
-            f"new_category_parent_{selected_profile_key}",
         ),
+        prefixes=(f"new_category_parent_{selected_profile_key}_",),
     )
     with st.container(border=True):
         c1, c2, c3 = st.columns(3)
@@ -1932,7 +1937,7 @@ elif page == "Categories":
         parent_id = c3.selectbox(
             "Parent category (optional)",
             parent_options,
-            key=f"new_category_parent_{selected_profile_key}",
+            key=f"new_category_parent_{selected_profile_key}_{kind}",
             format_func=lambda value: (
                 "None (Layer 1)" if not value else category_paths[value]
             ),

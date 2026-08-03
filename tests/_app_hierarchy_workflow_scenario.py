@@ -114,6 +114,12 @@ def main() -> None:
         assert "Payables" not in parent_options
         assert "Layer 2" in app.dataframe[0].value["Layer"].tolist()
         assert "Operations" in app.dataframe[0].value["Parent"].tolist()
+        by_label(app.selectbox, "Parent account (optional)").set_value(
+            operations["id"]
+        )
+        by_label(app.selectbox, "Type").set_value("Credit card").run()
+        assert by_label(app.selectbox, "Parent account (optional)").value == ""
+        by_label(app.selectbox, "Type").set_value("Bank").run()
 
         by_label(app.selectbox, "Account to manage").set_value(
             petty_cash["id"]
@@ -137,7 +143,11 @@ def main() -> None:
         travel = add_category(app, alpha, "Travel")
         flights = add_category(app, alpha, "Flights", parent_id=travel["id"])
         assert "Travel" in app.dataframe[0].value["Parent"].tolist()
+        by_label(app.selectbox, "Parent category (optional)").set_value(
+            travel["id"]
+        )
         by_label(app.selectbox, "Type").set_value("Income").run()
+        assert by_label(app.selectbox, "Parent category (optional)").value == ""
         add_parent_options = by_label(
             app.selectbox, "Parent category (optional)"
         ).options
