@@ -17,6 +17,68 @@ SAFE_MESSAGE = "Google Sheets is temporarily unavailable; no success was reporte
 
 
 class TestAppStorageFailure:
+    def test_downloadable_backup_prepares_receipts_before_export(self) -> None:
+        st.cache_resource.clear()
+        storage = GoogleSheetsStorage(FakeWorkbook())
+        app = AppTest.from_file("tabula_rasa/app.py", default_timeout=30)
+        app.secrets["app_password_hash"] = hash_password(TEST_PASSWORD)
+        app.secrets["google_drive_oauth"] = {
+            "client_id": "client.apps.googleusercontent.com",
+            "client_secret": "client-secret",
+            "redirect_uris": ["https://tabula-rasa.streamlit.app/"],
+            "picker_api_key": "picker-key",
+            "project_number": "123456789",
+        }
+        app.secrets["business_profiles"] = {
+            "test": {
+                "name": "Test Business",
+                "spreadsheet_id": "test-sheet",
+                "gcp_service_account": {"type": "service_account"},
+                "google_drive": {
+                    "refresh_token": "refresh-token",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "scopes": ["https://www.googleapis.com/auth/drive.file"],
+                    "receipt_folder": {
+                        "id": "receiptsfolder123",
+                        "name": "Receipts",
+                    },
+                },
+            }
+        }
+
+        with (
+            patch.object(
+                GoogleSheetsStorage,
+                "from_secrets",
+                return_value=storage,
+            ),
+            patch.object(
+                GoogleDriveClient,
+                "list_profile_receipts",
+                return_value=[],
+            ) as list_receipts,
+        ):
+            app.run()
+            app.text_input[0].input(TEST_PASSWORD)
+            app.button[0].click().run()
+            app.radio[0].set_value("Data & backup").run()
+            next(
+                button
+                for button in app.button
+                if button.label == "Prepare downloadable exports"
+            ).click().run()
+
+        assert list_receipts.call_count == 2
+        list_receipts.assert_called_with(
+            profile_key="test",
+            folder_id="receiptsfolder123",
+            _force_refresh=True,
+        )
+        assert any(
+            success.value == "Fresh downloadable exports are ready."
+            for success in app.success
+        )
+
     def test_csv_exports_remain_available_without_a_receipt_folder(self) -> None:
         st.cache_resource.clear()
         storage = GoogleSheetsStorage(FakeWorkbook())
