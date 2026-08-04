@@ -255,7 +255,8 @@ def main() -> None:
         payables_account_row = account_table.loc[
             account_table["Account"] == "Payables"
         ].iloc[0]
-        assert operations_account_row["Transaction count"] == 1
+        assert operations_account_row["Balance"] == 5.0
+        assert operations_account_row["Transaction count"] == 3
         assert petty_cash_account_row["Transaction count"] == 2
         assert payables_account_row["Transaction count"] == 1
 

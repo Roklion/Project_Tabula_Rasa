@@ -8,6 +8,7 @@ from tabula_rasa.ledger_reporting import (
     expenses_by_category,
     monthly_performance,
     profit_and_loss,
+    rollup_account_values,
 )
 
 
@@ -57,6 +58,16 @@ class TestLedgerReporting:
             for account in account_balances(self.accounts, self.transactions)
         }
         assert balances == {"checking": 100.0, "savings": 40.0}
+
+    def test_rollup_account_values_include_parent_and_child_values(self) -> None:
+        accounts = [
+            {"id": "parent", "parent_id": ""},
+            {"id": "child", "parent_id": "parent"},
+        ]
+
+        assert rollup_account_values(
+            accounts, {"parent": 2, "child": 3}
+        ) == {"parent": 5, "child": 3}
 
     def test_profit_and_loss_excludes_transfers_and_honors_dates(self) -> None:
         assert profit_and_loss(self.transactions) == {

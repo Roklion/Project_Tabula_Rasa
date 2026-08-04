@@ -47,6 +47,10 @@ opening balance or transactions, a separate **Direct activity** row explains
 that component before the child detail. Grand totals still count every direct
 account balance exactly once; displayed family totals are never added again.
 
+The Accounts table shows the same family balance on a Layer 1 parent row and
+counts the parent's transactions together with transactions posted to its
+children. Layer 2 rows continue to show their own direct balance and count.
+
 ## Categories
 
 Categories are classified as Income or Expense. Transactions use categories for

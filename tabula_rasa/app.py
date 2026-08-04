@@ -38,6 +38,7 @@ from tabula_rasa.ledger_reporting import (
     category_activity_rollups,
     monthly_performance,
     profit_and_loss,
+    rollup_account_values,
 )
 from tabula_rasa.hierarchy import (
     eligible_parent_ids,
@@ -1654,7 +1655,8 @@ elif page == "Accounts":
     account_option_ids = [
         account["id"] for account in ordered_hierarchy(accounts)
     ]
-    balance_by_id = balances.set_index("ID")["Balance"].to_dict()
+    direct_balance_by_id = balances.set_index("ID")["Balance"].to_dict()
+    balance_by_id = rollup_account_values(accounts, direct_balance_by_id)
     transaction_count_by_account: dict[str, int] = {}
     for transaction in transactions:
         involved_account_ids = {
@@ -1665,6 +1667,9 @@ elif page == "Accounts":
             transaction_count_by_account[account_id] = (
                 transaction_count_by_account.get(account_id, 0) + 1
             )
+    transaction_count_by_account = rollup_account_values(
+        accounts, transaction_count_by_account
+    )
     account_rows = []
     account_ids = []
     for account in ordered_hierarchy(accounts):
