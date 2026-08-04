@@ -579,7 +579,7 @@ elif page == "Transactions":
     category_paths = hierarchy_paths(categories)
     account_map = {
         account_paths[account_id]: account_id
-        for account in active_accounts
+        for account in ordered_hierarchy(active_accounts)
         if (account_id := str(account.get("id") or "").strip())
     }
     with tab_add:
@@ -732,7 +732,7 @@ elif page == "Transactions":
         )
         ledger_account_map = {
             account_paths[account_id]: account_id
-            for account in accounts
+            for account in ordered_hierarchy(accounts)
             if (account_id := str(account.get("id") or "").strip())
         }
         selected_account_names = st.multiselect(
@@ -833,15 +833,15 @@ elif page == "Transactions":
                     transaction for transaction in transactions if transaction["id"] == edit_id
                 )
                 with st.form("edit_transaction"):
-                    active_account_ids = [account["id"] for account in active_accounts]
                     current_account_ids = [
                         selected["account_id"],
                         selected.get("to_account_id", ""),
                     ]
-                    editable_account_ids = active_account_ids + [
-                        account_id
-                        for account_id in current_account_ids
-                        if account_id and account_id not in active_account_ids
+                    editable_account_ids = [
+                        account["id"]
+                        for account in ordered_hierarchy(accounts)
+                        if account["active"]
+                        or account["id"] in current_account_ids
                     ]
                     edited_account_id = st.selectbox(
                         (
@@ -1651,6 +1651,9 @@ elif page == "Accounts":
         for account in accounts
         if (account_id := str(account.get("id") or "").strip())
     }
+    account_option_ids = [
+        account["id"] for account in ordered_hierarchy(accounts)
+    ]
     balance_by_id = balances.set_index("ID")["Balance"].to_dict()
     transaction_count_by_account: dict[str, int] = {}
     for transaction in transactions:
@@ -1797,7 +1800,7 @@ elif page == "Accounts":
         ):
             account_id = st.selectbox(
                 "Account to manage",
-                list(account_by_id),
+                account_option_ids,
                 format_func=account_paths.get,
                 key="edit_account_id",
             )

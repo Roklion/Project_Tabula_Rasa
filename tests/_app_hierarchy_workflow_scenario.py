@@ -186,6 +186,12 @@ def main() -> None:
         assert "Operations › Petty cash" in by_label(
             app.selectbox, "From Account"
         ).options
+        from_account_options = by_label(
+            app.selectbox, "From Account"
+        ).options
+        assert from_account_options.index("Operations") < from_account_options.index(
+            "Operations › Petty cash"
+        ) < from_account_options.index("Payables")
         assert "Travel › Flights" in by_label(
             app.selectbox, "Category"
         ).options
