@@ -26,6 +26,27 @@ as input before completing an independent review.
 Review the current pull-request head revision and state its commit SHA in the
 review. Do not present findings from an older revision as current.
 
+Start every submitted GitHub review body with this metadata block. Do not put
+this information only in an inline finding, because the review summary is the
+durable record used to account for review coverage:
+
+```markdown
+## Review metadata
+
+- **Mode:** `Normal complementary review` or `Full fallback review`
+- **Reviewed head:** `<full 40-character commit SHA>`
+- **Coverage:** the repository surfaces and risk areas actually reviewed
+- **Fallback basis:** the trusted Codex unavailability result, or why fallback
+  eligibility was not verified
+- **Limitations:** inaccessible context, unavailable files, or `None`
+```
+
+For a full fallback review, use the exact mode value `Full fallback review` and
+identify the trusted Codex availability result that established fallback
+eligibility. A review that omits this block has unverified scope; its reviewed
+commit can still be recorded, but it cannot be counted as full fallback
+coverage.
+
 ## Shared baseline
 
 In either mode:
