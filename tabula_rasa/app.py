@@ -318,7 +318,9 @@ def confirmed_write(
     st.session_state["workbook_data_revision"] = (
         int(st.session_state.get("workbook_data_revision", 0)) + 1
     )
-    st.success(success_message(result) if callable(success_message) else success_message)
+    st.session_state["write_success_notice"] = (
+        success_message(result) if callable(success_message) else success_message
+    )
     st.rerun()
 
 
@@ -474,6 +476,12 @@ else:
 
     with st.sidebar:
         st.caption(f"Workbook: {storage.workbook_title}")
+
+if page != "Business profiles":
+    notice = st.session_state.pop("write_success_notice", None)
+    notice_placeholder = st.empty()
+    if notice:
+        notice_placeholder.success(str(notice))
 
 
 if page == "Dashboard":

@@ -24,6 +24,10 @@ def by_label(elements: object, label: str):
     return next(element for element in elements if element.label == label)
 
 
+def success_values(app: AppTest) -> list[str]:
+    return [str(element.value) for element in app.success]
+
+
 def main() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook())
     app = AppTest.from_file("tabula_rasa/app.py", default_timeout=30)
@@ -50,6 +54,7 @@ def main() -> None:
         assert by_label(app.text_input, "Account name").value == ""
         assert by_label(app.selectbox, "Type").value == "Bank"
         assert by_label(app.number_input, "Opening balance").value == 0.0
+        assert "Account added." in success_values(app)
 
         savings = next(
             account
@@ -70,6 +75,7 @@ def main() -> None:
         )
         assert savings["type"] == "Short-term debt"
         assert savings["classification"] == "Liability"
+        assert "Account updated." in success_values(app)
 
         by_label(app.text_input, "Account name").input("Owner-paid expenses")
         by_label(app.selectbox, "Type").set_value("Equity").run()
@@ -92,6 +98,7 @@ def main() -> None:
         assert len(app.exception) == 0
         assert by_label(app.text_input, "Category name").value == ""
         assert by_label(app.selectbox, "Type").value == "Expense"
+        assert "Category added." in success_values(app)
 
         app.radio[0].set_value("Transactions").run()
         initial_ledger_key = app.dataframe[0].key
@@ -130,6 +137,7 @@ def main() -> None:
         assert by_label(app.number_input, "Amount").value == 0.01
         assert by_label(app.text_input, "Payee / customer").value == ""
         assert by_label(app.text_input, "Description / memo").value == ""
+        assert "Transaction saved." in success_values(app)
         owner_expense = next(
             item
             for item in storage.list_transactions()
@@ -201,6 +209,7 @@ def main() -> None:
         )
         assert edited_transaction["amount"] == "30.00"
         assert edited_transaction["account_id"] == checking["id"]
+        assert "Transaction updated." in success_values(app)
 
         by_label(
             app.checkbox,
