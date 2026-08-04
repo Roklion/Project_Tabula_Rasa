@@ -1,9 +1,18 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
-from tabula_rasa.google_drive import GoogleDriveAccessError
-from tabula_rasa.google_drive_admin import _revalidated_storage_settings
+import pytest
+
+from tabula_rasa.google_drive import (
+    GoogleDriveAccessError,
+    GoogleDriveConfigurationError,
+)
+from tabula_rasa.google_drive_admin import (
+    _provision_storage_children,
+    _revalidated_storage_settings,
+)
 
 
 class FolderClient:
@@ -98,3 +107,43 @@ def test_reconnect_keeps_legacy_independent_folders() -> None:
         "receipt_folder": {"id": "receiptchild123", "name": "Receipts"},
         "backup_folder": {"id": "backupchild123", "name": "Backups"},
     }
+
+
+def test_reconnect_drops_managed_child_with_missing_parents_safely() -> None:
+    root_id = "rootfolder123"
+    child = managed_folder(
+        "receiptchild123",
+        "Receipts",
+        kind="receipts",
+        root_id=root_id,
+    )
+    child["parents"] = None
+    client = FolderClient(
+        {
+            root_id: managed_folder(root_id, "North Storage", kind="storage-root"),
+            "receiptchild123": child,
+        }
+    )
+
+    preserved = _revalidated_storage_settings(
+        client,
+        "north",
+        {
+            "storage_root": {"id": root_id, "name": "North Storage"},
+            "receipt_folder": {"id": "receiptchild123", "name": "Receipts"},
+        },
+    )
+
+    assert preserved == {
+        "storage_root": {"id": root_id, "name": "North Storage"}
+    }
+
+
+def test_provisioning_rejects_a_storage_root_without_an_id() -> None:
+    with pytest.raises(GoogleDriveConfigurationError, match="folder ID"):
+        _provision_storage_children(
+            "north",
+            {"storage_root": {}},
+            client=FolderClient({}),
+            store_path=Path("unused.json"),
+        )

@@ -226,10 +226,12 @@ def _render_local_profile_edits(
                     "Business name",
                     value=business_name,
                     max_chars=100,
+                    key=f"local_profile_edit_name_{profile_key}",
                 )
                 spreadsheet = st.text_input(
                     "Google Sheets URL or spreadsheet ID",
                     value=str(existing.get("spreadsheet_id", "")),
+                    key=f"local_profile_edit_spreadsheet_{profile_key}",
                 )
                 backup_folder_path = st.text_input(
                     "Optional local backup folder path",
@@ -238,15 +240,21 @@ def _render_local_profile_edits(
                         "Leave blank for the profile-scoped repository fallback. "
                         "This setting is independent from Google Drive backups."
                     ),
+                    key=f"local_profile_edit_backup_path_{profile_key}",
                 )
                 credential_file = st.file_uploader(
                     "Replacement Google service-account JSON (rotation only)",
                     type=["json"],
                     accept_multiple_files=False,
+                    key=f"local_profile_edit_credential_{profile_key}",
                 )
-                save_settings = st.form_submit_button("Validate and save settings")
+                save_settings = st.form_submit_button(
+                    "Validate and save settings",
+                    key=f"local_profile_edit_save_{profile_key}",
+                )
                 rotate_credential = st.form_submit_button(
-                    "Validate and rotate credential"
+                    "Validate and rotate credential",
+                    key=f"local_profile_edit_rotate_{profile_key}",
                 )
 
             if not (save_settings or rotate_credential):

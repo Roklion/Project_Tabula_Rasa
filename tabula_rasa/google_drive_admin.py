@@ -77,7 +77,7 @@ def _revalidated_storage_settings(
                 confirmed = client.folder(str(child.get("id", "")))
             except GoogleDriveError:
                 continue
-            parents = confirmed.get("parents", [])
+            parents = confirmed.get("parents") or []
             properties = confirmed.get("appProperties")
             if (
                 root_id in parents
@@ -266,10 +266,12 @@ def _provision_storage_children(
         raise GoogleDriveConfigurationError(
             "Select or create a storage root before provisioning its folders."
         )
-    children = client.provision_storage_children(
-        profile_key,
-        str(storage_root["id"]),
-    )
+    storage_root_id = str(storage_root.get("id", ""))
+    if not storage_root_id:
+        raise GoogleDriveConfigurationError(
+            "The configured storage root is missing its Google Drive folder ID."
+        )
+    children = client.provision_storage_children(profile_key, storage_root_id)
     updated = dict(drive_settings)
     updated["receipt_folder"] = children["receipts"]
     updated["backup_folder"] = children["ledger-backups"]

@@ -280,6 +280,68 @@ class TestAppAuthentication:
                     for item in app.success
                 )
 
+    def test_local_admin_edit_forms_are_unique_per_profile(self) -> None:
+        st.cache_resource.clear()
+        fake_storage = GoogleSheetsStorage(FakeWorkbook())
+        with tempfile.TemporaryDirectory() as directory:
+            local_store = Path(directory) / "local_business_profiles.json"
+            north = profile_settings("North Shop", "north-spreadsheet-id")
+            south = profile_settings("South Shop", "south-spreadsheet-id")
+            save_local_profile("north", north, path=local_store)
+            save_local_profile("south", south, path=local_store)
+            with (
+                patch.dict(
+                    os.environ,
+                    {LOCAL_PROFILE_ADMIN_ENV: "1"},
+                    clear=False,
+                ),
+                patch(
+                    "tabula_rasa.local_profile_store.LOCAL_PROFILE_STORE_PATH",
+                    local_store,
+                ),
+                patch.object(
+                    st,
+                    "get_option",
+                    side_effect=lambda name: (
+                        "127.0.0.1" if name == "server.address" else None
+                    ),
+                ),
+                patch.object(
+                    GoogleSheetsStorage,
+                    "from_secrets",
+                    return_value=fake_storage,
+                ),
+            ):
+                app = AppTest.from_file(
+                    "tabula_rasa/app.py",
+                    default_timeout=30,
+                )
+                app.secrets["app_password_hash"] = hash_password(TEST_PASSWORD)
+                app.secrets["business_profiles"] = {
+                    "north": north,
+                    "south": south,
+                }
+
+                app.run()
+                app.text_input[0].input(TEST_PASSWORD)
+                app.button[0].click().run()
+                app.radio[0].set_value("Business profiles").run()
+                next(
+                    field
+                    for field in app.text_input
+                    if field.label == "Application password"
+                ).input(TEST_PASSWORD)
+                next(
+                    button
+                    for button in app.button
+                    if button.label == "Unlock profile administration"
+                ).click().run()
+
+                assert len(app.exception) == 0
+                assert sum(
+                    field.label == "Business name" for field in app.text_input
+                ) >= 3
+
     def test_local_admin_saves_optional_synology_choice_per_profile(self) -> None:
         st.cache_resource.clear()
         fake_storage = GoogleSheetsStorage(FakeWorkbook())

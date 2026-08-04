@@ -506,6 +506,39 @@ class TestGoogleDriveFiles:
         with pytest.raises(GoogleDriveAccessError, match="outside"):
             client.provision_storage_children("north", root_id)
 
+    def test_managed_child_with_missing_parents_is_rejected_safely(self) -> None:
+        root_id = "rootfolder123"
+        child = self._managed_folder(
+            "receiptchild123",
+            "Receipts",
+            storage_kind="receipts",
+            root_id=root_id,
+        )
+        child["parents"] = None
+        session = DriveSession(
+            [
+                FakeResponse(
+                    200,
+                    {
+                        "id": root_id,
+                        "name": "North Storage",
+                        "mimeType": "application/vnd.google-apps.folder",
+                        "trashed": False,
+                    },
+                ),
+                FakeResponse(200, {"files": [child]}),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        with pytest.raises(GoogleDriveAccessError, match="outside"):
+            client.provision_storage_children("north", root_id)
+
     def test_selected_folder_is_validated_before_it_is_saved(self) -> None:
         session = DriveSession(
             [
