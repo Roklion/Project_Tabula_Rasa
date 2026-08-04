@@ -77,6 +77,27 @@ def test_reconnect_preserves_only_valid_managed_root_and_children() -> None:
     }
 
 
+@pytest.mark.parametrize(
+    ("root_kind", "root_profile"),
+    [("receipts", "north"), ("storage-root", "south")],
+)
+def test_reconnect_drops_root_with_mismatched_identity(
+    root_kind: str, root_profile: str
+) -> None:
+    root_id = "rootfolder123"
+    client = FolderClient(
+        {root_id: managed_folder(root_id, "Other Storage", kind=root_kind, profile_key=root_profile)}
+    )
+
+    preserved = _revalidated_storage_settings(
+        client,
+        "north",
+        {"storage_root": {"id": root_id, "name": "North Storage"}},
+    )
+
+    assert preserved == {}
+
+
 def test_reconnect_keeps_legacy_independent_folders() -> None:
     client = FolderClient(
         {

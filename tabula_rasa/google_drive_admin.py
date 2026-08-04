@@ -68,6 +68,13 @@ def _revalidated_storage_settings(
             root = client.folder(root_id)
         except GoogleDriveError:
             return preserved
+        root_properties = root.get("appProperties")
+        if (
+            not isinstance(root_properties, Mapping)
+            or root_properties.get("tabulaRasaKind") != "storage-root"
+            or root_properties.get("tabulaRasaProfile") != profile_key
+        ):
+            return preserved
         root_id = str(root["id"])
         preserved["storage_root"] = {
             "id": root_id,
