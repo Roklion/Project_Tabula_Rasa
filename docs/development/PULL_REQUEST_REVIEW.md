@@ -89,6 +89,23 @@ for that head. Do not post a second Gemini request to select fallback mode; the
 single request uses the already-observed Codex availability result to select
 normal or full fallback scope.
 
+Track manual review requests by head SHA, including `codex_requested_sha`,
+`codex_response_sha`, `gemini_requested_sha`, and the Gemini trigger comment
+ID. Reset those per-head request markers when the pull-request head changes. A
+top-level trigger comment does not contain a commit SHA, so associate it with
+the head observed when it is posted and persist that association. A submitted
+Gemini review's `commit.oid` is definitive evidence of the reviewed SHA, while
+an older PR-wide `/gemini review` comment is not evidence that Gemini was
+requested for a newer head.
+
+When reconstructing state, Gemini requests that predate the current-head
+`@codex review` comment or its authenticated Codex response belong to an older
+round and must not block the current-head request. If Codex has responded for
+the current head and no Gemini request is associated with that SHA, posting one
+`/gemini review` is safe and required. Do not stop the review cycle or request
+maintainer input merely because older Gemini trigger comments exist elsewhere
+on the pull request.
+
 ### Gemini mode selection
 
 Post `/gemini review` as a standalone pull-request comment. Gemini selects its

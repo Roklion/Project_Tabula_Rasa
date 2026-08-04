@@ -71,6 +71,12 @@ def test_canonical_review_guide_covers_roles_and_dispositions() -> None:
         in normalized_guide
     )
     assert "post exactly one standalone `/gemini review`" in normalized_guide
+    assert "`gemini_requested_sha`" in guide
+    assert (
+        "an older PR-wide `/gemini review` comment is not evidence"
+        in normalized_guide
+    )
+    assert "posting one `/gemini review` is safe and required" in normalized_guide
     assert "Post `/gemini review` as a standalone pull-request comment." in guide
     assert "chatgpt-codex-connector[bot]" in guide
     assert "Do not infer unavailability from silence" in guide
