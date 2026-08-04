@@ -827,6 +827,7 @@ class GoogleDriveClient:
                     )
                 if attempt == 1:
                     raise
+                self.sleeper(1.0)
                 continue
             created_id = str(created.get("id", ""))
             if not created_id:

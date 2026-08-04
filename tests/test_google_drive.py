@@ -349,6 +349,34 @@ class TestGoogleDriveFiles:
         assert created["id"] == "rootfolder123"
         assert [request[0] for request in session.requests].count("POST") == 1
 
+    def test_uncertain_root_creation_delays_before_a_retry(self) -> None:
+        root = self._managed_folder(
+            "rootfolder123",
+            "North Storage",
+            storage_kind="storage-root",
+        )
+        delays: list[float] = []
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": []}),
+                requests.ConnectionError("root response was lost"),
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, root),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=delays.append,
+        )
+
+        created = client.create_storage_root("north", "North Storage")
+
+        assert created["id"] == "rootfolder123"
+        assert delays == [1.0]
+        assert [request[0] for request in session.requests].count("POST") == 2
+
     def test_reuses_existing_children_without_creating_duplicates(self) -> None:
         root_id = "rootfolder123"
         receipt = self._managed_folder(

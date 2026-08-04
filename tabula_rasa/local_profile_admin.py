@@ -73,6 +73,42 @@ def _profile_setup_error_message(
     )
 
 
+def _validate_profile_edit_action(
+    save_settings: bool,
+    rotate_credential: bool,
+    credential_file: Any,
+) -> None:
+    if save_settings and credential_file is not None:
+        raise LocalProfileStoreError(
+            "To replace the credential, use the 'Validate and rotate credential' button."
+        )
+    if rotate_credential and credential_file is None:
+        raise LocalProfileStoreError(
+            "Upload a replacement Google service-account JSON for rotation."
+        )
+
+
+def _initialize_candidate_storage(
+    settings: Mapping[str, Any],
+) -> GoogleSheetsStorage:
+    candidate_storage = GoogleSheetsStorage.from_secrets(settings)
+    try:
+        candidate_storage.ensure_defaults()
+    except (
+        StorageAuthenticationError,
+        StorageWorkbookAccessError,
+        StorageInitializationError,
+        StorageValidationError,
+    ):
+        raise
+    except StorageError as error:
+        raise StorageInitializationError(
+            "The workbook opened, but default accounts and categories "
+            "could not be initialized"
+        ) from error
+    return candidate_storage
+
+
 def _profile_rows(
     effective_secrets: Mapping[str, Any],
     local_profiles: Mapping[str, Any],
@@ -261,10 +297,11 @@ def _render_local_profile_edits(
                 continue
             settings: Mapping[str, Any] = existing
             try:
-                if rotate_credential and credential_file is None:
-                    raise LocalProfileStoreError(
-                        "Upload a replacement Google service-account JSON for rotation."
-                    )
+                _validate_profile_edit_action(
+                    save_settings,
+                    rotate_credential,
+                    credential_file,
+                )
                 settings = build_profile_edit_settings(
                     existing,
                     name,
@@ -283,16 +320,7 @@ def _render_local_profile_edits(
                     raise LocalProfileStoreError(
                         "Business display names must be unique."
                     )
-                candidate_storage = GoogleSheetsStorage.from_secrets(settings)
-                try:
-                    candidate_storage.ensure_defaults()
-                except StorageAuthenticationError:
-                    raise
-                except StorageError as error:
-                    raise StorageInitializationError(
-                        "The workbook opened, but default accounts and categories "
-                        "could not be initialized"
-                    ) from error
+                _initialize_candidate_storage(settings)
                 update_local_profile(
                     profile_key,
                     name=name,
@@ -468,16 +496,7 @@ def render_local_profile_admin(
             raise LocalProfileStoreError(
                 "Business display names must be unique."
             )
-        candidate_storage = GoogleSheetsStorage.from_secrets(settings)
-        try:
-            candidate_storage.ensure_defaults()
-        except StorageAuthenticationError:
-            raise
-        except StorageError as error:
-            raise StorageInitializationError(
-                "The workbook opened, but default accounts and categories "
-                "could not be initialized"
-            ) from error
+        _initialize_candidate_storage(settings)
         save_local_profile(
             key,
             settings,

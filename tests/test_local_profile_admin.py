@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+from unittest.mock import Mock, patch
+
 import pytest
 
-from tabula_rasa.local_profile_admin import _profile_setup_error_message
+from tabula_rasa.local_profile_admin import (
+    _initialize_candidate_storage,
+    _profile_setup_error_message,
+    _validate_profile_edit_action,
+)
+from tabula_rasa.local_profile_store import LocalProfileStoreError
 from tabula_rasa.storage import (
     StorageAuthenticationError,
     StorageInitializationError,
+    StorageError,
     StorageValidationError,
     StorageWorkbookAccessError,
 )
@@ -53,3 +61,30 @@ def test_profile_setup_error_identifies_stage_without_exposing_secrets(
     assert SETTINGS["spreadsheet_id"] not in message
     assert "credential-content-must-not-leak" not in message
     assert message.endswith("No profile was saved.")
+
+
+def test_profile_edit_rejects_a_credential_upload_on_settings_save() -> None:
+    with pytest.raises(LocalProfileStoreError, match="rotate credential"):
+        _validate_profile_edit_action(True, False, object())
+
+    with pytest.raises(LocalProfileStoreError, match="Upload a replacement"):
+        _validate_profile_edit_action(False, True, None)
+
+
+@pytest.mark.parametrize(
+    "error",
+    (StorageWorkbookAccessError("access"), StorageValidationError("invalid")),
+)
+def test_candidate_storage_preserves_specific_storage_errors(
+    error: StorageError,
+) -> None:
+    candidate = Mock()
+    candidate.ensure_defaults.side_effect = error
+    with patch(
+        "tabula_rasa.local_profile_admin.GoogleSheetsStorage.from_secrets",
+        return_value=candidate,
+    ):
+        with pytest.raises(type(error)) as raised:
+            _initialize_candidate_storage(SETTINGS)
+
+    assert raised.value is error
