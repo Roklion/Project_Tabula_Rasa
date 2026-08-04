@@ -77,6 +77,12 @@ def test_canonical_review_guide_covers_roles_and_dispositions() -> None:
         in normalized_guide
     )
     assert "posting one `/gemini review` is safe and required" in normalized_guide
+    assert "### Earlier-commit comments" in guide
+    assert (
+        "Do not ignore a comment merely because GitHub marks its line outdated"
+        in normalized_guide
+    )
+    assert "Preserve the original commit and current-head context" in normalized_guide
     assert "Post `/gemini review` as a standalone pull-request comment." in guide
     assert "chatgpt-codex-connector[bot]" in guide
     assert "Do not infer unavailability from silence" in guide

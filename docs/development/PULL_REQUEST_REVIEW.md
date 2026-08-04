@@ -168,6 +168,17 @@ callers, and failure behavior rather than reviewer identity or model agreement.
 Do not make speculative or disproportionate changes to satisfy a reviewer. Do
 not complete review while a validated blocking finding remains unresolved.
 
+### Earlier-commit comments
+
+Review comments attached to an earlier commit remain part of the review record
+until they are explicitly dispositioned. Do not ignore a comment merely because
+GitHub marks its line outdated. Re-check the underlying behavior against the
+current head, callers, tests, and requirements. If the concern still applies,
+remediate or track it as unresolved using current-head evidence. If a later
+change already addresses it or the concern no longer applies, reply with that
+evidence and resolve the thread. Preserve the original commit and current-head
+context when recording the disposition.
+
 ## Review sequence
 
 1. The author completes `.github/pull_request_template.md`, validation, and
