@@ -130,7 +130,7 @@ def _profile_rows(
                     profile.secrets.get("spreadsheet_id", "")
                 ),
                 "Local backup folder": str(
-                    profile.secrets.get("backup_folder_path", "Not configured")
+                    profile.secrets.get("backup_folder_path") or "Not configured"
                 ),
                 "Service account": str(credential.get("client_email", "")),
                 "Drive OAuth": (
@@ -266,12 +266,12 @@ def _render_local_profile_edits(
                 )
                 spreadsheet = st.text_input(
                     "Google Sheets URL or spreadsheet ID",
-                    value=str(existing.get("spreadsheet_id", "")),
+                    value=str(existing.get("spreadsheet_id") or ""),
                     key=f"local_profile_edit_spreadsheet_{profile_key}",
                 )
                 backup_folder_path = st.text_input(
                     "Optional local backup folder path",
-                    value=str(existing.get("backup_folder_path", "")),
+                    value=str(existing.get("backup_folder_path") or ""),
                     help=(
                         "Leave blank for the profile-scoped repository fallback. "
                         "This setting is independent from Google Drive backups."

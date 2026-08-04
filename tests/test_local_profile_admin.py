@@ -6,6 +6,7 @@ import pytest
 
 from tabula_rasa.local_profile_admin import (
     _initialize_candidate_storage,
+    _profile_rows,
     _profile_setup_error_message,
     _validate_profile_edit_action,
 )
@@ -69,6 +70,23 @@ def test_profile_edit_rejects_a_credential_upload_on_settings_save() -> None:
 
     with pytest.raises(LocalProfileStoreError, match="Upload a replacement"):
         _validate_profile_edit_action(False, True, None)
+
+
+def test_profile_rows_use_a_safe_fallback_for_null_backup_paths() -> None:
+    rows = _profile_rows(
+        {
+            "business_profiles": {
+                "north": {
+                    **SETTINGS,
+                    "name": "North Shop",
+                    "backup_folder_path": None,
+                }
+            }
+        },
+        {"north": {}},
+    )
+
+    assert rows[0]["Local backup folder"] == "Not configured"
 
 
 @pytest.mark.parametrize(

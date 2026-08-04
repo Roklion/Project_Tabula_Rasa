@@ -10,6 +10,7 @@ from tabula_rasa.google_drive import (
     GoogleDriveConfigurationError,
 )
 from tabula_rasa.google_drive_admin import (
+    _folder_display_name,
     _provision_storage_children,
     _revalidated_storage_settings,
 )
@@ -147,3 +148,15 @@ def test_provisioning_rejects_a_storage_root_without_an_id() -> None:
             client=FolderClient({}),
             store_path=Path("unused.json"),
         )
+
+
+@pytest.mark.parametrize(
+    ("folder", "fallback", "expected"),
+    (({"name": None}, "", ""), ({"name": None}, "Provisioned", "Provisioned")),
+)
+def test_folder_display_name_handles_null_names(
+    folder: dict[str, Any],
+    fallback: str,
+    expected: str,
+) -> None:
+    assert _folder_display_name(folder, fallback) == expected

@@ -47,6 +47,13 @@ def _query_value(value: object) -> str:
     return str(value or "")
 
 
+def _folder_display_name(
+    folder: Mapping[str, Any],
+    fallback: str = "",
+) -> str:
+    return str(folder.get("name") or fallback)
+
+
 def _revalidated_storage_settings(
     client: GoogleDriveClient,
     profile_key: str,
@@ -424,7 +431,7 @@ def render_google_drive_admin(
             with left:
                 st.markdown("**Receipt folder**")
                 if isinstance(receipt_folder, Mapping):
-                    st.caption(str(receipt_folder.get("name", "")))
+                    st.caption(_folder_display_name(receipt_folder))
                 selected_receipt = folder_picker(
                     access_token=access_token,
                     api_key=config.picker_api_key,
@@ -446,7 +453,7 @@ def render_google_drive_admin(
             with right:
                 st.markdown("**Backup folder**")
                 if isinstance(backup_folder, Mapping):
-                    st.caption(str(backup_folder.get("name", "")))
+                    st.caption(_folder_display_name(backup_folder))
                 selected_backup = folder_picker(
                     access_token=access_token,
                     api_key=config.picker_api_key,
@@ -468,7 +475,7 @@ def render_google_drive_admin(
         else:
             st.markdown("**Profile storage root**")
             if isinstance(storage_root, Mapping):
-                st.caption(str(storage_root.get("name", "")))
+                st.caption(_folder_display_name(storage_root))
             selected_root = folder_picker(
                 access_token=access_token,
                 api_key=config.picker_api_key,
@@ -504,12 +511,12 @@ def render_google_drive_admin(
             if isinstance(storage_root, Mapping):
                 if isinstance(receipt_folder, Mapping):
                     st.caption(
-                        f"Receipts: {receipt_folder.get('name', 'Provisioned')}"
+                        f"Receipts: {_folder_display_name(receipt_folder, 'Provisioned')}"
                     )
                 if isinstance(backup_folder, Mapping):
                     st.caption(
                         "Ledger backups: "
-                        f"{backup_folder.get('name', 'Provisioned')}"
+                        f"{_folder_display_name(backup_folder, 'Provisioned')}"
                     )
                 if st.button(
                     "Provision storage folders",
