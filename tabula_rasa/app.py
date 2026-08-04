@@ -2027,7 +2027,7 @@ elif page == "Categories":
         with st.expander("Edit category", expanded=bool(selected_rows)):
             category_id = st.selectbox(
                 "Category to edit",
-                list(category_by_id),
+                category_ids,
                 format_func=lambda value: (
                     f'{category_paths[value]} '
                     f'({category_by_id[value]["kind"]})'

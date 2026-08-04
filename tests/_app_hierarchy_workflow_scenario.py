@@ -159,6 +159,16 @@ def main() -> None:
         app.session_state["edit_category_id"] = flights["id"]
         app.run()
         assert by_label(app.selectbox, "Category to edit").value == flights["id"]
+        category_options = by_label(app.selectbox, "Category to edit").options
+        travel_option = next(
+            option for option in category_options if option.startswith("Travel ")
+        )
+        flights_option = next(
+            option for option in category_options if "Flights" in option
+        )
+        assert category_options.index(travel_option) < category_options.index(
+            flights_option
+        )
         unused = add_category(app, alpha, "Unused")
         by_label(app.selectbox, "Category to edit").set_value(unused["id"]).run()
         by_label(
