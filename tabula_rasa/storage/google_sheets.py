@@ -492,7 +492,7 @@ def _parse_backup_zip(
             ):
                 if "receipt_id" not in reference:
                     raise StorageValidationError(
-                        "Receipt references need checksum backfill before backup"
+                        "Receipt references need integrity metadata before backup"
                     )
                 key = (transaction["id"], str(reference["id"]))
                 entry = referenced_entries.get(key)
@@ -794,9 +794,23 @@ class GoogleSheetsStorage:
             self._headers(title)
 
     def ensure_defaults(self) -> dict[str, int]:
-        """Seed only missing default accounts/categories using batch writes."""
+        """Seed default accounts/categories once for a blank workbook."""
         self._snapshot(["Accounts", "Categories"], force_refresh=True)
         existing_accounts = self.list_accounts(active_only=False)
+        existing_categories = self.list_categories()
+        if existing_accounts or existing_categories:
+            _validate_hierarchy_records(
+                existing_accounts,
+                compatibility_field="classification",
+                item_label="Account",
+            )
+            _validate_hierarchy_records(
+                existing_categories,
+                compatibility_field="kind",
+                item_label="Category",
+            )
+            return {"accounts": 0, "categories": 0}
+
         account_names = {account["name"].casefold() for account in existing_accounts}
         timestamp = _utc_now()
         new_accounts = [
@@ -816,7 +830,6 @@ class GoogleSheetsStorage:
             if name.casefold() not in account_names
         ]
 
-        existing_categories = self.list_categories()
         category_keys = {
             (category["name"].casefold(), category["kind"])
             for category in existing_categories
@@ -1250,6 +1263,47 @@ class GoogleSheetsStorage:
         )
         self._replace_row("Categories", current, updated)
         return updated
+
+    def delete_category(self, category_id: str) -> None:
+        category_id = _clean_text(category_id, "ID", required=True)
+        current = self._find_row("Categories", category_id)
+        existing_categories = self.list_categories(_force_refresh=True)
+        if any(
+            str(category.get("parent_id") or "").strip() == category_id
+            for category in existing_categories
+        ):
+            raise StorageConflictError(
+                "That category has child categories and cannot be deleted"
+            )
+        transactions = self.list_transactions(_force_refresh=True)
+        if any(
+            str(transaction.get("category_id") or "").strip() == category_id
+            for transaction in transactions
+        ):
+            raise StorageConflictError(
+                "That category has transactions and cannot be deleted"
+            )
+        for attempt in range(self._retry_attempts):
+            current = self._find_row("Categories", category_id)
+            worksheet = self._worksheet("Categories")
+            try:
+                self._api(
+                    lambda: worksheet.delete_rows(current.row_number),
+                    retry_safe=False,
+                )
+                self._invalidate("Categories")
+                return
+            except StorageUnavailableError as error:
+                self._invalidate("Categories")
+                if not error.retryable:
+                    raise
+                try:
+                    self._find_row("Categories", category_id)
+                except StorageNotFoundError:
+                    return
+                if attempt + 1 >= self._retry_attempts:
+                    raise
+                self._sleeper(self._retry_base_delay_seconds * (2**attempt))
 
     def _account_lookup(self, *, force_refresh: bool = False) -> dict[str, dict[str, Any]]:
         return {

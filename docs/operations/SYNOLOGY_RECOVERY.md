@@ -62,7 +62,6 @@ of truth for actual transfer status and logs.
 
 - Google Drive backup and receipt folders selected for the business profile
 - A verified format-version 6 backup in the backup folder
-- Legacy receipt checksum backfill completed for that profile
 - DSM administrator access to the DS220j
 - Synology Cloud Sync installed
 - A protected shared folder with enough capacity for ledger and receipt history
@@ -241,13 +240,6 @@ for every recovery period the business still needs.
 
 ## Create and validate the first NAS copy
 
-Backfill any legacy receipt checksums once before creating the first version-6
-archive:
-
-```powershell
-.\.venv\Scripts\python.exe scripts\backfill_receipt_checksums.py --profile heathcote-advisory
-```
-
 Create a fresh verified cloud backup for the selected profile:
 
 ```powershell
@@ -357,7 +349,7 @@ Keep a private operational record for each opted-in business containing:
 - Cloud Sync pause/failure and successful retry log
 - Recovery archive copy location
 - Restore command output and recovery workbook ID
-- Receipt backfill and manifest-validation result
+- Receipt preparation and manifest-validation result
 - Receipt recovery counts and confirmation of remapped and unreferenced cases
 - Drill date and administrator
 
@@ -397,7 +389,7 @@ stored in Git or the GitHub issue.
 This July 28 record predates the version-5 receipt inventory and covers only
 ledger archives. It is not evidence that receipt bytes are synchronized or
 versioned. Each opted-in profile still needs the separate `receipts` Cloud Sync
-task, protected versioned retention, a checksum backfill, and a complete
+task, protected versioned retention, receipt preparation during backup, and a complete
 ledger-plus-receipt recovery drill described above.
 
 ## Troubleshooting

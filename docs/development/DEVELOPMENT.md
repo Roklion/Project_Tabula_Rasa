@@ -118,8 +118,8 @@ It does not modify ledger rows.
 - `tests/test_local_profile_*.py` covers loopback-only administration and
   credential persistence.
 - `tests/test_backup_scripts.py` covers the backup command-line workflows.
-- `tests/test_receipt_backfill.py` covers the idempotent startup/command-line
-  legacy integrity migration and profile isolation.
+- `tests/test_receipt_backfill.py` covers backup-time receipt preparation,
+  idempotency, and profile isolation.
 - `tests/test_receipt_recovery.py` covers Synology byte verification, Drive
   conflicts, retry/idempotency, and reference remapping.
 - `tests/test_quickbooks_*.py` covers supported import formats.

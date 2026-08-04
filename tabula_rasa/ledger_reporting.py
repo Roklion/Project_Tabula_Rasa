@@ -61,6 +61,31 @@ def account_balances(
     ]
 
 
+def rollup_account_values(
+    accounts: Iterable[Mapping[str, Any]], values: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Add each Layer 2 value to its Layer 1 parent's value."""
+    records = [dict(account) for account in accounts]
+    normalized_values = {
+        str(key or "").strip(): value
+        for key, value in values.items()
+        if str(key or "").strip()
+    }
+    rollups = {
+        str(account.get("id") or "").strip(): normalized_values.get(
+            str(account.get("id") or "").strip(), 0
+        )
+        for account in records
+        if str(account.get("id") or "").strip()
+    }
+    for account in records:
+        account_id = str(account.get("id") or "").strip()
+        parent_id = str(account.get("parent_id") or "").strip()
+        if account_id and parent_id in rollups and account_id != parent_id:
+            rollups[parent_id] += normalized_values.get(account_id, 0)
+    return rollups
+
+
 def balance_sheet(
     accounts: Iterable[Mapping[str, Any]],
     transactions: Iterable[Mapping[str, Any]],
@@ -103,15 +128,12 @@ def balance_sheet(
         totals[classification] += presented_balance
 
     for rows in sections.values():
-        by_id = {row["id"]: row for row in rows}
+        rollup_balances = rollup_account_values(
+            rows,
+            {row["id"]: _decimal(row["direct_balance"]) for row in rows},
+        )
         for row in rows:
-            parent_id = row["parent_id"]
-            parent = by_id.get(parent_id) if parent_id else None
-            if parent is not None:
-                parent["rollup_balance"] = float(
-                    _decimal(parent["rollup_balance"])
-                    + _decimal(row["direct_balance"])
-                )
+            row["rollup_balance"] = float(rollup_balances[row["id"]])
 
     current_earnings = sum(
         (

@@ -522,6 +522,48 @@ class TestGoogleSheetsStorage:
             item["parent_id"] == "" for item in self.storage.list_categories()
         )
 
+    def test_default_seed_does_not_recreate_renamed_defaults(self) -> None:
+        self.storage.ensure_defaults()
+        checking = next(
+            account
+            for account in self.storage.list_accounts(active_only=False)
+            if account["name"] == "Checking"
+        )
+        sales = next(
+            category
+            for category in self.storage.list_categories()
+            if category["name"] == "Sales"
+        )
+        checking_created_at = checking["created_at"]
+
+        self.storage.edit_account(
+            checking["id"],
+            name="Owner's Equity",
+            type="Equity",
+            classification="Equity",
+        )
+        self.storage.edit_category(
+            sales["id"], name="Renamed sales", kind="Income"
+        )
+
+        assert self.storage.ensure_defaults() == {
+            "accounts": 0,
+            "categories": 0,
+        }
+        accounts = self.storage.list_accounts(active_only=False)
+        categories = self.storage.list_categories()
+        assert [account for account in accounts if account["name"] == "Checking"] == []
+        assert [
+            account for account in accounts if account["id"] == checking["id"]
+        ][0]["name"] == "Owner's Equity"
+        assert [
+            account for account in accounts if account["id"] == checking["id"]
+        ][0]["created_at"] == checking_created_at
+        assert [category for category in categories if category["name"] == "Sales"] == []
+        assert [
+            category for category in categories if category["id"] == sales["id"]
+        ][0]["name"] == "Renamed sales"
+
     @pytest.mark.parametrize(
         ("corrupted_title", "item_label"),
         [("Accounts", "Account"), ("Categories", "Category")],
@@ -794,6 +836,37 @@ class TestGoogleSheetsStorage:
         assert edited["name"] == "Professional services"
         assert edited["kind"] == "Expense"
         assert self.storage.list_categories() == [edited]
+
+    def test_delete_category_requires_no_transactions_or_children(self) -> None:
+        unused = self.storage.create_category("Unused", "Expense")
+        self.storage.delete_category(unused["id"])
+        assert self.storage.list_categories() == []
+
+        parent = self.storage.create_category("Parent", "Expense")
+        child = self.storage.create_category(
+            "Child", "Expense", parent_id=parent["id"]
+        )
+        with pytest.raises(StorageConflictError, match="child categories"):
+            self.storage.delete_category(parent["id"])
+
+        account = self.storage.create_account("Checking", "Bank")
+        referenced = self.storage.create_category("Referenced", "Expense")
+        self.storage.create_transaction(
+            txn_date="2026-08-01",
+            kind="Expense",
+            amount=25,
+            account_id=account["id"],
+            category_id=referenced["id"],
+        )
+        with pytest.raises(StorageConflictError, match="transactions"):
+            self.storage.delete_category(referenced["id"])
+        with pytest.raises(StorageConflictError, match="transactions"):
+            self.storage.delete_category(f"  {referenced['id']}  ")
+        assert {item["id"] for item in self.storage.list_categories()} == {
+            parent["id"],
+            child["id"],
+            referenced["id"],
+        }
 
     def test_category_hierarchy_transitions_and_validation(self) -> None:
         account = self.storage.create_account("Checking", "Bank")

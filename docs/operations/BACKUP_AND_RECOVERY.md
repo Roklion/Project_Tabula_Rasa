@@ -58,24 +58,24 @@ stored filenames, MIME types, byte sizes, SHA-256 checksums, old Drive file IDs,
 and available Drive timestamps. It does not contain PDF or image bytes, so the
 same large receipt files are not duplicated into every retained ledger archive.
 
-Every manifest entry must have a checksum created during upload or a verified
-legacy backfill. Backup creation fails rather than silently writing a
+Every manifest entry must have a checksum created during upload or verified
+during backup-time preparation. Backup creation fails rather than silently writing a
 checksum-incomplete receipt inventory. Current-format backup creation also
 requires the selected profile's configured Google Drive receipt folder; if the
 folder is disconnected or unavailable, the app and command-line workflow fail
-instead of recording an empty inventory. The authenticated app automatically
-runs an idempotent, profile-scoped migration once per session when a selected
-profile has a configured receipt folder. It scans all app-managed receipts in
-that folder, downloads only files missing valid integrity metadata, and updates
-active ledger references after Drive confirms each file update.
+instead of recording an empty inventory.
 
-If the app reports a partial or failed migration, restart it to retry or run the
-same profile-scoped migration explicitly before creating another backup:
+Immediately before every newly created backup, both the app and command-line
+workflows run the same profile-scoped receipt preparation. It refreshes the
+selected folder and transactions, backfills missing integrity metadata,
+initializes only empty-string legacy receipt associations, and reconciles
+active references with current Drive metadata. An explicit `[]` reference
+remains intentionally unlinked. Sheets and Drive are read again before
+`receipts.json` is generated; if preparation is incomplete, no backup is
+created. Confirmed preparation writes remain in place so a retry resumes safely.
 
-```powershell
-.\.venv\Scripts\python.exe scripts\backfill_receipt_checksums.py `
-  --profile PROFILE_KEY
-```
+If preparation fails, resolve the reported Drive or Sheets problem and retry
+the backup. It will repeat only incomplete work.
 
 The current validator and ledger restore path accept formats 2 through 6:
 
@@ -434,7 +434,7 @@ failed copy, choose another generation, and validate that copy.
 | Scheduled task registration | [`scripts/register_weekly_backup_task.ps1`](../../scripts/register_weekly_backup_task.ps1) |
 | Standalone archive validation | [`scripts/validate_google_sheets_backup.py`](../../scripts/validate_google_sheets_backup.py) |
 | Restore command | [`scripts/restore_google_sheets_backup.py`](../../scripts/restore_google_sheets_backup.py) |
-| Startup and command-line receipt checksum backfill | [`tabula_rasa/receipt_backfill.py`](../../tabula_rasa/receipt_backfill.py), [`scripts/backfill_receipt_checksums.py`](../../scripts/backfill_receipt_checksums.py) |
+| Backup-time receipt preparation | [`tabula_rasa/receipt_backfill.py`](../../tabula_rasa/receipt_backfill.py) |
 | Receipt inventory validation | [`tabula_rasa/receipt_manifest.py`](../../tabula_rasa/receipt_manifest.py) |
 | Synology receipt recovery and ID remapping | [`scripts/recover_synology_receipts.py`](../../scripts/recover_synology_receipts.py) |
 | Format-1 conversion | [`scripts/convert_backup_v1_to_v2.py`](../../scripts/convert_backup_v1_to_v2.py) |

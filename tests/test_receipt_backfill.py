@@ -3,7 +3,13 @@ from __future__ import annotations
 import hashlib
 from unittest.mock import Mock
 
-from tabula_rasa.receipt_backfill import backfill_profile_receipts
+import pytest
+
+from tabula_rasa.receipt_backfill import (
+    ReceiptPreparationError,
+    prepare_backup_receipt_manifest,
+    prepare_profile_receipts,
+)
 from tabula_rasa.storage import (
     decode_receipt_references,
     GoogleSheetsStorage,
@@ -71,7 +77,7 @@ def _backfilled_drive_receipt(
     return receipt
 
 
-def test_backfill_updates_drive_and_active_transaction_reference() -> None:
+def test_preparation_updates_drive_and_active_transaction_reference() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
     account = storage.create_account("Checking", "Bank")
     transaction = storage.create_transaction(
@@ -90,7 +96,7 @@ def test_backfill_updates_drive_and_active_transaction_reference() -> None:
     drive.list_profile_receipts.return_value = [_legacy_drive_receipt("north")]
     drive.backfill_receipt_checksum.return_value = _backfilled_drive_receipt("north")
 
-    report = backfill_profile_receipts(
+    report = prepare_profile_receipts(
         storage,
         drive,
         profile_key="north",
@@ -115,7 +121,7 @@ def test_backfill_updates_drive_and_active_transaction_reference() -> None:
     assert reference["sha256"] == hashlib.sha256(b"receipt").hexdigest()
 
 
-def test_backfill_migrates_a_drive_only_transaction_association() -> None:
+def test_preparation_migrates_a_drive_only_transaction_association() -> None:
     workbook = FakeWorkbook()
     storage = GoogleSheetsStorage(workbook, sleeper=lambda _delay: None)
     account = storage.create_account("Checking", "Bank")
@@ -140,7 +146,7 @@ def test_backfill_migrates_a_drive_only_transaction_association() -> None:
         transaction_id=transaction["id"],
     )
 
-    report = backfill_profile_receipts(
+    report = prepare_profile_receipts(
         storage,
         drive,
         profile_key="north",
@@ -159,7 +165,7 @@ def test_backfill_migrates_a_drive_only_transaction_association() -> None:
     assert reference["receipt_id"] == "a" * 32
 
 
-def test_backfill_does_not_override_a_concurrent_explicit_unlink() -> None:
+def test_preparation_does_not_override_a_concurrent_explicit_unlink() -> None:
     workbook = FakeWorkbook()
     storage = GoogleSheetsStorage(workbook, sleeper=lambda _delay: None)
     account = storage.create_account("Checking", "Bank")
@@ -189,7 +195,7 @@ def test_backfill_does_not_override_a_concurrent_explicit_unlink() -> None:
 
     drive.backfill_receipt_checksum.side_effect = unlink_before_initialization
 
-    report = backfill_profile_receipts(
+    report = prepare_profile_receipts(
         storage,
         drive,
         profile_key="north",
@@ -202,7 +208,7 @@ def test_backfill_does_not_override_a_concurrent_explicit_unlink() -> None:
     assert len(report["errors"]) == 1
 
 
-def test_backfill_respects_an_explicitly_empty_reference_list() -> None:
+def test_preparation_respects_an_explicitly_empty_reference_list() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
     account = storage.create_account("Checking", "Bank")
     transaction = storage.create_transaction(
@@ -222,7 +228,7 @@ def test_backfill_respects_an_explicitly_empty_reference_list() -> None:
         transaction_id=transaction["id"],
     )
 
-    report = backfill_profile_receipts(
+    report = prepare_profile_receipts(
         storage,
         drive,
         profile_key="north",
@@ -235,7 +241,7 @@ def test_backfill_respects_an_explicitly_empty_reference_list() -> None:
     assert report["references_updated"] == 0
 
 
-def test_backfill_does_not_touch_another_profile_storage() -> None:
+def test_preparation_does_not_touch_another_profile_storage() -> None:
     north_storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
     south_storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
     south_account = south_storage.create_account("Checking", "Bank")
@@ -259,7 +265,7 @@ def test_backfill_does_not_touch_another_profile_storage() -> None:
         )
     ]
 
-    backfill_profile_receipts(
+    prepare_profile_receipts(
         north_storage,
         north_drive,
         profile_key="north",
@@ -274,12 +280,12 @@ def test_backfill_does_not_touch_another_profile_storage() -> None:
     assert south_reference == {"id": "receipt123456", "name": "south.pdf"}
 
 
-def test_backfill_does_not_download_receipts_with_valid_integrity_metadata() -> None:
+def test_preparation_does_not_download_receipts_with_valid_integrity_metadata() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
     drive = Mock()
     drive.list_profile_receipts.return_value = [_backfilled_drive_receipt("north")]
 
-    report = backfill_profile_receipts(
+    report = prepare_profile_receipts(
         storage,
         drive,
         profile_key="north",
@@ -295,7 +301,7 @@ def test_backfill_does_not_download_receipts_with_valid_integrity_metadata() -> 
     drive.backfill_receipt_checksum.assert_not_called()
 
 
-def test_backfill_does_not_restore_a_concurrently_unlinked_reference() -> None:
+def test_preparation_does_not_restore_a_concurrently_unlinked_reference() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
     account = storage.create_account("Checking", "Bank")
     transaction = storage.create_transaction(
@@ -322,7 +328,7 @@ def test_backfill_does_not_restore_a_concurrently_unlinked_reference() -> None:
 
     drive.backfill_receipt_checksum.side_effect = unlink_before_backfill
 
-    report = backfill_profile_receipts(
+    report = prepare_profile_receipts(
         storage,
         drive,
         profile_key="north",
@@ -335,7 +341,7 @@ def test_backfill_does_not_restore_a_concurrently_unlinked_reference() -> None:
     assert len(report["errors"]) == 1
 
 
-def test_backfill_reports_reference_failure_and_remains_resumable() -> None:
+def test_preparation_reports_reference_failure_and_remains_resumable() -> None:
     reference = _backfilled_drive_receipt("north")
     storage = Mock()
     storage.list_transactions.return_value = [
@@ -352,7 +358,7 @@ def test_backfill_reports_reference_failure_and_remains_resumable() -> None:
     drive = Mock()
     drive.list_profile_receipts.return_value = [reference]
 
-    report = backfill_profile_receipts(
+    report = prepare_profile_receipts(
         storage,
         drive,
         profile_key="north",
@@ -367,3 +373,73 @@ def test_backfill_reports_reference_failure_and_remains_resumable() -> None:
     assert call.args == ("transaction-1",)
     assert call.kwargs["old_file_id"] == "receipt123456"
     assert call.kwargs["reference"]["receipt_id"] == "a" * 32
+
+
+def test_preparation_reconciles_filename_and_returns_fresh_manifest() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
+    account = storage.create_account("Checking", "Bank")
+    transaction = storage.create_transaction(
+        txn_date="2026-07-31",
+        kind="Income",
+        amount=10,
+        account_id=account["id"],
+        category_id=storage.create_category("Sales", "Income")["id"],
+    )
+    storage.set_transaction_receipt_references(
+        transaction["id"],
+        [
+            {
+                "id": "receipt123456",
+                "name": "old-name.pdf",
+                "receipt_id": "a" * 32,
+                "sha256": hashlib.sha256(b"receipt").hexdigest(),
+                "original_filename": "statement.pdf",
+                "mime_type": "application/pdf",
+                "byte_size": 7,
+            }
+        ],
+    )
+    receipt = _backfilled_drive_receipt("north")
+    receipt["name"] = "renamed-in-drive.pdf"
+    drive = Mock()
+    drive.list_profile_receipts.return_value = [receipt]
+
+    manifest = prepare_backup_receipt_manifest(
+        storage,
+        drive,
+        profile_key="north",
+        folder_id="northfolder123",
+    )
+
+    current = storage.list_transactions(_force_refresh=True)[0]
+    assert decode_receipt_references(current["receipt_references"])[0]["name"] == (
+        "renamed-in-drive.pdf"
+    )
+    assert manifest["receipts"][0]["stored_filename"] == "renamed-in-drive.pdf"
+    drive.backfill_receipt_checksum.assert_not_called()
+    assert drive.list_profile_receipts.call_count == 2
+
+
+def test_preparation_aborts_backup_manifest_after_partial_failure() -> None:
+    storage = Mock()
+    storage.list_transactions.return_value = [
+        {
+            "id": "transaction-1",
+            "receipt_references": '[{"id":"receipt123456","name":"old.pdf"}]',
+        }
+    ]
+    storage.remap_transaction_receipt.side_effect = StorageUnavailableError(
+        "temporary Sheets failure"
+    )
+    drive = Mock()
+    drive.list_profile_receipts.return_value = [_backfilled_drive_receipt("north")]
+
+    with pytest.raises(ReceiptPreparationError, match="no backup was created"):
+        prepare_backup_receipt_manifest(
+            storage,
+            drive,
+            profile_key="north",
+            folder_id="northfolder123",
+        )
+
+    assert drive.list_profile_receipts.call_count == 1

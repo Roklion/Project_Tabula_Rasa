@@ -304,7 +304,7 @@ def build_receipt_manifest(
         for stored_reference in references:
             if "receipt_id" not in stored_reference:
                 raise ReceiptManifestError(
-                    "Receipt references need checksum backfill before backup"
+                    "Receipt references need integrity metadata before backup"
                 )
             file_id = str(stored_reference["id"])
             if file_id in referenced_ids:

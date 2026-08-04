@@ -38,6 +38,7 @@ from tabula_rasa.ledger_reporting import (
     category_activity_rollups,
     monthly_performance,
     profit_and_loss,
+    rollup_account_values,
 )
 from tabula_rasa.hierarchy import (
     eligible_parent_ids,
@@ -75,10 +76,12 @@ from tabula_rasa.quickbooks_mileage_import import (
 )
 from tabula_rasa.receipt_manifest import (
     ReceiptManifestError,
-    build_receipt_manifest,
     receipt_reference_from_drive_file,
 )
-from tabula_rasa.receipt_backfill import backfill_profile_receipts
+from tabula_rasa.receipt_backfill import (
+    ReceiptPreparationError,
+    prepare_backup_receipt_manifest,
+)
 
 
 STORAGE_IMPLEMENTATION_VERSION = 10
@@ -95,6 +98,18 @@ FIXED_TYPE_CLASSIFICATIONS = {
 
 def money(value: float) -> str:
     return f"${value:,.2f}"
+
+
+def transaction_has_receipts(transaction: Mapping[str, object]) -> bool:
+    references = transaction.get("receipt_references", "")
+    if not references or (
+        isinstance(references, str) and references.strip() in {"", "[]"}
+    ):
+        return False
+    try:
+        return bool(decode_receipt_references(references))
+    except StorageError:
+        return False
 
 
 def alert_list(title: str, messages: list[str]) -> str:
@@ -266,14 +281,13 @@ def receipt_manifest_for_backup(
             "A current-format backup requires a selected Google Drive receipt "
             "folder so its receipt inventory is complete."
         )
-    transactions = storage.list_transactions(_force_refresh=True)
     drive = get_drive_client(profile_key, configuration_revision)
-    receipts = drive.list_profile_receipts(
+    return prepare_backup_receipt_manifest(
+        storage,
+        drive,
         profile_key=profile_key,
         folder_id=str(receipt_folder["id"]),
-        _force_refresh=True,
     )
-    return build_receipt_manifest(profile_key, transactions, receipts)
 
 
 def reset_widget_state_if_requested(
@@ -317,7 +331,9 @@ def confirmed_write(
     st.session_state["workbook_data_revision"] = (
         int(st.session_state.get("workbook_data_revision", 0)) + 1
     )
-    st.success(success_message(result) if callable(success_message) else success_message)
+    st.session_state["write_success_notice"] = (
+        success_message(result) if callable(success_message) else success_message
+    )
     st.rerun()
 
 
@@ -428,16 +444,21 @@ with st.sidebar:
         st.session_state["navigation_page"] = pages[0]
     page = st.radio("Navigate", pages, key="navigation_page")
     previous_page = st.session_state.get("previous_navigation_page")
-    if page == "Transactions" and previous_page != page:
-        st.session_state["transaction_ledger_generation"] = (
-            int(st.session_state.get("transaction_ledger_generation", 0)) + 1
-        )
+    if previous_page != page:
+        table_generation_by_page = {
+            "Transactions": "transaction_ledger_generation",
+            "Accounts": "account_table_generation",
+            "Categories": "category_table_generation",
+        }
+        if table_generation := table_generation_by_page.get(page):
+            st.session_state[table_generation] = (
+                int(st.session_state.get(table_generation, 0)) + 1
+            )
     st.session_state["previous_navigation_page"] = page
     st.divider()
     if st.button("Log out", width="stretch"):
         logout()
 
-startup_receipt_backfill: Mapping[str, object] | None = None
 if page == "Business profiles":
     notice = st.session_state.pop("local_profile_admin_notice", None)
     if notice:
@@ -465,43 +486,6 @@ else:
             storage.ensure_defaults()
             initialized_profiles.add(selected_profile_key)
 
-        selected_profile_secrets = profile_by_key[selected_profile_key].secrets
-        selected_drive_settings = selected_profile_secrets.get("google_drive")
-        selected_receipt_folder = (
-            selected_drive_settings.get("receipt_folder")
-            if isinstance(selected_drive_settings, Mapping)
-            else None
-        )
-        if isinstance(selected_receipt_folder, Mapping):
-            migration_key = (
-                f"{selected_profile_key}:{STORAGE_IMPLEMENTATION_VERSION}:{revision}"
-            )
-            migration_results = st.session_state.setdefault(
-                "receipt_integrity_migration_results",
-                {},
-            )
-            if migration_key not in migration_results:
-                try:
-                    migration_drive = get_drive_client(
-                        selected_profile_key,
-                        revision,
-                    )
-                    migration_report = backfill_profile_receipts(
-                        storage,
-                        migration_drive,
-                        profile_key=selected_profile_key,
-                        folder_id=str(selected_receipt_folder["id"]),
-                    )
-                except (GoogleDriveError, LocalProfileStoreError, StorageError):
-                    migration_results[migration_key] = {"status": "error"}
-                else:
-                    migration_results[migration_key] = {
-                        "status": (
-                            "partial" if migration_report["errors"] else "complete"
-                        ),
-                        **migration_report,
-                    }
-            startup_receipt_backfill = migration_results[migration_key]
     except (LocalProfileStoreError, StorageError) as error:
         if isinstance(error, StorageError):
             report_storage_error(error)
@@ -511,32 +495,12 @@ else:
 
     with st.sidebar:
         st.caption(f"Workbook: {storage.workbook_title}")
-        if startup_receipt_backfill is not None:
-            migration_status = startup_receipt_backfill.get("status")
-            migrated_files = int(
-                startup_receipt_backfill.get("drive_backfilled", 0)
-            )
-            migrated_references = int(
-                startup_receipt_backfill.get("references_updated", 0)
-            )
-            if migration_status == "complete" and (
-                migrated_files or migrated_references
-            ):
-                st.success(
-                    "Receipt integrity migration completed: "
-                    f"{migrated_files} file(s), "
-                    f"{migrated_references} ledger reference(s)."
-                )
-            elif migration_status == "partial":
-                st.warning(
-                    "Receipt integrity migration was only partially completed. "
-                    "Restart the app to retry or run the documented backfill command."
-                )
-            elif migration_status == "error":
-                st.warning(
-                    "Receipt integrity migration could not start. Reconnect Google "
-                    "Drive, restart the app, or run the documented backfill command."
-                )
+
+if page != "Business profiles":
+    notice = st.session_state.pop("write_success_notice", None)
+    notice_placeholder = st.empty()
+    if notice:
+        notice_placeholder.success(str(notice))
 
 
 if page == "Dashboard":
@@ -621,7 +585,7 @@ elif page == "Transactions":
     category_paths = hierarchy_paths(categories)
     account_map = {
         account_paths[account_id]: account_id
-        for account in active_accounts
+        for account in ordered_hierarchy(active_accounts)
         if (account_id := str(account.get("id") or "").strip())
     }
     with tab_add:
@@ -774,7 +738,7 @@ elif page == "Transactions":
         )
         ledger_account_map = {
             account_paths[account_id]: account_id
-            for account in accounts
+            for account in ordered_hierarchy(accounts)
             if (account_id := str(account.get("id") or "").strip())
         }
         selected_account_names = st.multiselect(
@@ -790,6 +754,7 @@ elif page == "Transactions":
             ledger_account_map[name] for name in selected_account_names
         ]
         try:
+            all_transactions = storage.list_transactions()
             transactions = storage.list_transactions(
                 start=start,
                 end=end,
@@ -800,12 +765,31 @@ elif page == "Transactions":
             report_storage_error(error)
             st.stop()
         transaction_frame = ledger_frame(transactions, accounts, categories)
+        transaction_frame["Receipt"] = [
+            "\U0001f4ce" if transaction_has_receipts(transaction) else ""
+            for transaction in transactions
+        ]
         transaction_frame = transaction_frame.sort_values(
             "Date",
             ascending=False,
             kind="stable",
             ignore_index=True,
         )
+        transaction_frame = transaction_frame[
+            [
+                "Date",
+                "Type",
+                "Account",
+                "To account",
+                "Category",
+                "Payee",
+                "Description",
+                "Amount",
+                "Receipt",
+                "Reference",
+                "ID",
+            ]
+        ]
         transaction_ids = transaction_frame["ID"].tolist()
 
         def select_ledger_transaction() -> None:
@@ -824,7 +808,13 @@ elif page == "Transactions":
             key=transaction_ledger_key,
             on_select=select_ledger_transaction,
             selection_mode="single-row",
-            column_config={"Amount": st.column_config.NumberColumn(format="$%.2f")},
+            column_config={
+                "Amount": st.column_config.NumberColumn(format="$%.2f"),
+                "Receipt": st.column_config.TextColumn(
+                    width="small",
+                    help="This transaction has linked receipts.",
+                ),
+            },
         )
         if not transaction_frame.empty:
             selected_rows = ledger_event.selection.rows
@@ -849,15 +839,15 @@ elif page == "Transactions":
                     transaction for transaction in transactions if transaction["id"] == edit_id
                 )
                 with st.form("edit_transaction"):
-                    active_account_ids = [account["id"] for account in active_accounts]
                     current_account_ids = [
                         selected["account_id"],
                         selected.get("to_account_id", ""),
                     ]
-                    editable_account_ids = active_account_ids + [
-                        account_id
-                        for account_id in current_account_ids
-                        if account_id and account_id not in active_account_ids
+                    editable_account_ids = [
+                        account["id"]
+                        for account in ordered_hierarchy(accounts)
+                        if account["active"]
+                        or account["id"] in current_account_ids
                     ]
                     edited_account_id = st.selectbox(
                         (
@@ -1158,7 +1148,7 @@ elif page == "Transactions":
                         if references_ready:
                             referenced_receipt_ids: set[str] = set()
                             uninitialized_transaction_ids: set[str] = set()
-                            for transaction in transactions:
+                            for transaction in all_transactions:
                                 if transaction["id"] == edit_id:
                                     referenced_receipt_ids.update(
                                         receipt_ids
@@ -1237,8 +1227,8 @@ elif page == "Transactions":
                                             receipts_needing_backfill += 1
                                 if receipts_needing_backfill:
                                     st.warning(
-                                        f"{receipts_needing_backfill} legacy receipt(s) "
-                                        "need checksum backfill before they can be linked."
+                                        f"{receipts_needing_backfill} receipt(s) "
+                                        "need integrity metadata before they can be linked."
                                     )
                                 if unreferenced_receipts:
                                     unreferenced_by_id = {
@@ -1667,9 +1657,28 @@ elif page == "Accounts":
         for account in accounts
         if (account_id := str(account.get("id") or "").strip())
     }
-    balance_by_id = balances.set_index("ID")["Balance"].to_dict()
+    account_option_ids = [
+        account["id"] for account in ordered_hierarchy(accounts)
+    ]
+    direct_balance_by_id = balances.set_index("ID")["Balance"].to_dict()
+    balance_by_id = rollup_account_values(accounts, direct_balance_by_id)
+    transaction_count_by_account: dict[str, int] = {}
+    for transaction in transactions:
+        involved_account_ids = {
+            str(transaction.get("account_id") or "").strip(),
+            str(transaction.get("to_account_id") or "").strip(),
+        }
+        for account_id in involved_account_ids - {""}:
+            transaction_count_by_account[account_id] = (
+                transaction_count_by_account.get(account_id, 0) + 1
+            )
+    transaction_count_by_account = rollup_account_values(
+        accounts, transaction_count_by_account
+    )
     account_rows = []
+    account_ids = []
     for account in ordered_hierarchy(accounts):
+        account_ids.append(account["id"])
         parent_id = str(account.get("parent_id") or "").strip()
         parent = account_by_id.get(parent_id) if parent_id else None
         account_rows.append(
@@ -1683,12 +1692,28 @@ elif page == "Accounts":
                 "Type": account["type"],
                 "Active": account["active"],
                 "Balance": balance_by_id.get(account["id"], 0.0),
+                "Transaction count": transaction_count_by_account.get(
+                    account["id"], 0
+                ),
             }
         )
-    st.dataframe(
+    account_table_key = (
+        "account_table_"
+        f"{st.session_state.get('account_table_generation', 0)}"
+    )
+
+    def select_account() -> None:
+        selected_rows = st.session_state[account_table_key].selection.rows
+        if selected_rows:
+            st.session_state["edit_account_id"] = account_ids[selected_rows[0]]
+
+    account_event = st.dataframe(
         pd.DataFrame(account_rows),
         hide_index=True,
         width="stretch",
+        key=account_table_key,
+        on_select=select_account,
+        selection_mode="single-row",
         column_config={"Balance": st.column_config.NumberColumn(format="$%.2f")},
     )
     reset_widget_state_if_requested(
@@ -1776,11 +1801,18 @@ elif page == "Accounts":
                 )
 
     if accounts:
-        with st.expander("Edit or deactivate account"):
+        selected_rows = account_event.selection.rows
+        if st.session_state.get("edit_account_id") not in account_by_id:
+            st.session_state["edit_account_id"] = account_ids[0]
+        st.caption("Select an account row (or double-click it) to edit it.")
+        with st.expander(
+            "Edit or deactivate account", expanded=bool(selected_rows)
+        ):
             account_id = st.selectbox(
                 "Account to manage",
-                list(account_by_id),
+                account_option_ids,
                 format_func=account_paths.get,
+                key="edit_account_id",
             )
             selected = account_by_id[account_id]
             with st.container(border=True):
@@ -1888,18 +1920,29 @@ elif page == "Accounts":
 elif page == "Categories":
     st.title("Categories")
     try:
+        storage.prefetch_worksheets("Categories", "Transactions")
         categories = storage.list_categories()
+        transactions = storage.list_transactions()
     except StorageError as error:
         report_storage_error(error)
         st.stop()
     category_paths = hierarchy_paths(categories)
+    transaction_count_by_category: dict[str, int] = {}
+    for transaction in transactions:
+        category_id = str(transaction.get("category_id") or "").strip()
+        if category_id:
+            transaction_count_by_category[category_id] = (
+                transaction_count_by_category.get(category_id, 0) + 1
+            )
     category_by_id = {
         category_id: category
         for category in categories
         if (category_id := str(category.get("id") or "").strip())
     }
     category_rows = []
+    category_ids = []
     for category in ordered_hierarchy(categories):
+        category_ids.append(category["id"])
         parent_id = str(category.get("parent_id") or "").strip()
         parent = category_by_id.get(parent_id) if parent_id else None
         category_rows.append(
@@ -1910,10 +1953,30 @@ elif page == "Categories":
                 "Layer": "Layer 2" if parent else "Layer 1",
                 "Parent": parent.get("name") or "" if parent else "",
                 "Type": category["kind"],
+                "Transaction count": transaction_count_by_category.get(
+                    category["id"], 0
+                ),
             }
         )
     category_frame = pd.DataFrame(category_rows)
-    st.dataframe(category_frame, hide_index=True, width="stretch")
+    category_table_key = (
+        "category_table_"
+        f"{st.session_state.get('category_table_generation', 0)}"
+    )
+
+    def select_category() -> None:
+        selected_rows = st.session_state[category_table_key].selection.rows
+        if selected_rows:
+            st.session_state["edit_category_id"] = category_ids[selected_rows[0]]
+
+    category_event = st.dataframe(
+        category_frame,
+        hide_index=True,
+        width="stretch",
+        key=category_table_key,
+        on_select=select_category,
+        selection_mode="single-row",
+    )
     reset_widget_state_if_requested(
         "reset_add_category_form",
         keys=(
@@ -1957,24 +2020,32 @@ elif page == "Categories":
                 ),
             )
     if categories:
-        with st.expander("Edit category"):
+        selected_rows = category_event.selection.rows
+        if st.session_state.get("edit_category_id") not in category_by_id:
+            st.session_state["edit_category_id"] = category_ids[0]
+        st.caption("Select a category row (or double-click it) to edit it.")
+        with st.expander("Edit category", expanded=bool(selected_rows)):
             category_id = st.selectbox(
                 "Category to edit",
-                list(category_by_id),
+                category_ids,
                 format_func=lambda value: (
                     f'{category_paths[value]} '
                     f'({category_by_id[value]["kind"]})'
                 ),
+                key="edit_category_id",
             )
             selected = category_by_id[category_id]
             with st.container(border=True):
                 edited_name = st.text_input(
-                    "Edit category name", value=selected["name"]
+                    "Edit category name",
+                    value=selected["name"],
+                    key=f"edit_category_name_{category_id}",
                 )
                 edited_kind = st.selectbox(
                     "Edit category type",
                     ["Expense", "Income"],
                     index=["Expense", "Income"].index(selected["kind"]),
+                    key=f"edit_category_kind_{category_id}",
                 )
                 has_children = has_hierarchy_children(categories, category_id)
                 edited_parent_options = [""] + eligible_parent_ids(
@@ -2028,8 +2099,28 @@ elif page == "Categories":
                         ),
                         "Category updated.",
                     )
+                confirm_delete = st.checkbox(
+                    "I understand this category will be permanently deleted",
+                    key=f"confirm_delete_category_{category_id}",
+                )
+                if st.button(
+                    "Permanently delete category",
+                    icon=":material/delete_forever:",
+                    key=f"delete_category_{category_id}",
+                ):
+                    if not confirm_delete:
+                        st.error(
+                            "Confirm that you understand deletion is permanent."
+                        )
+                    else:
+                        confirmed_write(
+                            "delete_category",
+                            {"id": category_id},
+                            lambda: storage.delete_category(category_id),
+                            "Category deleted.",
+                        )
     st.caption(
-        "Categories are not deleted so existing transaction references remain valid."
+        "Categories with transactions or child categories cannot be deleted."
     )
 
 
@@ -2509,6 +2600,7 @@ elif page == "Data & backup":
                 StorageError,
                 GoogleDriveError,
                 ReceiptManifestError,
+                ReceiptPreparationError,
             ) as error:
                 prepared_exports["backup_error"] = str(error)
             else:

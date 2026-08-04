@@ -114,6 +114,14 @@ def main() -> None:
         assert "Payables" not in parent_options
         assert "Layer 2" in app.dataframe[0].value["Layer"].tolist()
         assert "Operations" in app.dataframe[0].value["Parent"].tolist()
+        assert app.dataframe[0].key == "account_table_1"
+        assert any(
+            "Select an account row" in str(caption.value)
+            for caption in app.caption
+        )
+        app.session_state["edit_account_id"] = petty_cash["id"]
+        app.run()
+        assert by_label(app.selectbox, "Account to manage").value == petty_cash["id"]
         by_label(app.selectbox, "Parent account (optional)").set_value(
             operations["id"]
         )
@@ -143,6 +151,35 @@ def main() -> None:
         travel = add_category(app, alpha, "Travel")
         flights = add_category(app, alpha, "Flights", parent_id=travel["id"])
         assert "Travel" in app.dataframe[0].value["Parent"].tolist()
+        assert app.dataframe[0].key == "category_table_1"
+        assert any(
+            "Select a category row" in str(caption.value)
+            for caption in app.caption
+        )
+        app.session_state["edit_category_id"] = flights["id"]
+        app.run()
+        assert by_label(app.selectbox, "Category to edit").value == flights["id"]
+        category_options = by_label(app.selectbox, "Category to edit").options
+        travel_option = next(
+            option for option in category_options if option.startswith("Travel ")
+        )
+        flights_option = next(
+            option for option in category_options if "Flights" in option
+        )
+        assert category_options.index(travel_option) < category_options.index(
+            flights_option
+        )
+        unused = add_category(app, alpha, "Unused")
+        by_label(app.selectbox, "Category to edit").set_value(unused["id"]).run()
+        by_label(
+            app.checkbox,
+            "I understand this category will be permanently deleted",
+        ).check()
+        by_label(app.button, "Permanently delete category").click().run()
+        assert not any(
+            category["id"] == unused["id"]
+            for category in alpha.list_categories()
+        )
         by_label(app.selectbox, "Parent category (optional)").set_value(
             travel["id"]
         )
@@ -170,6 +207,12 @@ def main() -> None:
         assert "Operations › Petty cash" in by_label(
             app.selectbox, "From Account"
         ).options
+        from_account_options = by_label(
+            app.selectbox, "From Account"
+        ).options
+        assert from_account_options.index("Operations") < from_account_options.index(
+            "Operations › Petty cash"
+        ) < from_account_options.index("Payables")
         assert "Travel › Flights" in by_label(
             app.selectbox, "Category"
         ).options
@@ -211,7 +254,46 @@ def main() -> None:
         by_label(app.selectbox, "Category").set_value("Sales")
         by_label(app.button, "Save transaction").click().run()
 
+        app.radio[0].set_value("Accounts").run()
+        account_table = app.dataframe[0].value
+        operations_account_row = account_table.loc[
+            account_table["Account"] == "Operations"
+        ].iloc[0]
+        petty_cash_account_row = account_table.loc[
+            account_table["Account"].str.endswith("Petty cash")
+        ].iloc[0]
+        payables_account_row = account_table.loc[
+            account_table["Account"] == "Payables"
+        ].iloc[0]
+        assert operations_account_row["Balance"] == 5.0
+        assert operations_account_row["Transaction count"] == 3
+        assert petty_cash_account_row["Transaction count"] == 2
+        assert payables_account_row["Transaction count"] == 1
+
         app.radio[0].set_value("Categories").run()
+        category_table = app.dataframe[0].value
+        travel_category_row = category_table.loc[
+            category_table["Category"] == "Travel"
+        ].iloc[0]
+        flights_category_row = category_table.loc[
+            category_table["Category"].str.endswith("Flights")
+        ].iloc[0]
+        sales_category_row = category_table.loc[
+            category_table["Category"] == "Sales"
+        ].iloc[0]
+        assert travel_category_row["Transaction count"] == 0
+        assert flights_category_row["Transaction count"] == 1
+        assert sales_category_row["Transaction count"] == 1
+        by_label(app.selectbox, "Category to edit").set_value(flights["id"]).run()
+        by_label(
+            app.checkbox,
+            "I understand this category will be permanently deleted",
+        ).check()
+        by_label(app.button, "Permanently delete category").click().run()
+        assert any(
+            "transactions" in str(error.value).casefold()
+            for error in app.error
+        )
         by_label(app.selectbox, "Category to edit").set_value(flights["id"]).run()
         by_label(app.selectbox, "Edit parent category").set_value("")
         by_label(app.button, "Save category changes").click().run()
