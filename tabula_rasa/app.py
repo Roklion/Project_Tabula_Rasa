@@ -741,6 +741,7 @@ elif page == "Transactions":
             ledger_account_map[name] for name in selected_account_names
         ]
         try:
+            all_transactions = storage.list_transactions()
             transactions = storage.list_transactions(
                 start=start,
                 end=end,
@@ -1109,7 +1110,7 @@ elif page == "Transactions":
                         if references_ready:
                             referenced_receipt_ids: set[str] = set()
                             uninitialized_transaction_ids: set[str] = set()
-                            for transaction in transactions:
+                            for transaction in all_transactions:
                                 if transaction["id"] == edit_id:
                                     referenced_receipt_ids.update(
                                         receipt_ids

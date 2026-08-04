@@ -32,6 +32,14 @@ def by_label(elements: object, label: str):
     return next(element for element in elements if element.label == label)
 
 
+def stored_transaction(storage: GoogleSheetsStorage, transaction_id: str) -> dict:
+    return next(
+        item
+        for item in storage.list_transactions()
+        if item["id"] == transaction_id
+    )
+
+
 def main() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook())
     storage.ensure_defaults()
@@ -40,6 +48,7 @@ def main() -> None:
         for account in storage.list_accounts(active_only=False)
         if account["name"] == "Checking"
     )
+    savings = storage.create_account("Savings", "Bank")
     office = next(
         category
         for category in storage.list_categories()
@@ -69,6 +78,30 @@ def main() -> None:
         transaction["id"],
         reference=receipt_reference,
     )
+    outside_transaction = storage.create_transaction(
+        txn_date=date.today(),
+        kind="Expense",
+        amount=15,
+        account_id=savings["id"],
+        to_account_id="",
+        category_id=office["id"],
+        payee="Other receipt vendor",
+        reference="",
+        description="Receipt filter isolation test",
+    )
+    outside_receipt_reference = {
+        "id": "receipt654321",
+        "name": f"{outside_transaction['id']}-other.pdf",
+        "receipt_id": "c" * 32,
+        "original_filename": "other.pdf",
+        "mime_type": "application/pdf",
+        "byte_size": 9,
+        "sha256": "d" * 64,
+    }
+    storage.link_transaction_receipt(
+        outside_transaction["id"],
+        reference=outside_receipt_reference,
+    )
     receipt = {
         "id": receipt_reference["id"],
         "name": receipt_reference["name"],
@@ -82,7 +115,22 @@ def main() -> None:
             "tabulaRasaOriginalName": receipt_reference["original_filename"],
         },
     }
-    drive_files = [dict(receipt)]
+    outside_receipt = {
+        "id": outside_receipt_reference["id"],
+        "name": outside_receipt_reference["name"],
+        "mimeType": outside_receipt_reference["mime_type"],
+        "size": str(outside_receipt_reference["byte_size"]),
+        "appProperties": {
+            "tabulaRasaKind": "receipt",
+            "tabulaRasaProfile": "test",
+            "tabulaRasaReceiptId": outside_receipt_reference["receipt_id"],
+            "tabulaRasaSha256": outside_receipt_reference["sha256"],
+            "tabulaRasaOriginalName": outside_receipt_reference[
+                "original_filename"
+            ],
+        },
+    }
+    drive_files = [dict(receipt), dict(outside_receipt)]
     unlink_calls: list[dict[str, str]] = []
     unlink_should_fail = {"value": False}
     original_unlink = GoogleSheetsStorage.unlink_transaction_receipt
@@ -168,9 +216,17 @@ def main() -> None:
         app.text_input[0].input(TEST_PASSWORD)
         app.button[0].click().run()
         app.radio[0].set_value("Transactions").run()
+        by_label(app.multiselect, "Accounts").set_value(["Checking"]).run()
         by_label(app.selectbox, "Transaction to edit").set_value(
             transaction["id"]
         ).run()
+
+        assert not [
+            selectbox
+            for selectbox in app.selectbox
+            if selectbox.label == "Unreferenced receipt"
+            and outside_receipt_reference["id"] in selectbox.options
+        ]
 
         assert any(
             button.label == "Remove receipt" for button in app.button
@@ -189,15 +245,15 @@ def main() -> None:
         by_label(app.button, "Cancel").click().run()
         assert unlink_calls == []
         assert by_label(app.button, "Remove receipt")
-        assert drive_files == [receipt]
-        assert len(storage.list_transactions()) == 1
+        assert drive_files == [receipt, outside_receipt]
+        assert len(storage.list_transactions()) == 2
 
         by_label(app.button, "Remove receipt").click().run()
         unlink_should_fail["value"] = True
         by_label(app.button, "Remove reference").click().run()
         assert len(unlink_calls) == 1
         assert decode_receipt_references(
-            storage.list_transactions()[0]["receipt_references"]
+            stored_transaction(storage, transaction["id"])["receipt_references"]
         ) == [receipt_reference]
         assert any(
             "Receipt reference was not removed" in str(error.value)
@@ -205,8 +261,8 @@ def main() -> None:
             for error in app.error
         )
         assert by_label(app.button, "Remove receipt")
-        assert drive_files == [receipt]
-        assert len(storage.list_transactions()) == 1
+        assert drive_files == [receipt, outside_receipt]
+        assert len(storage.list_transactions()) == 2
 
         unlink_should_fail["value"] = False
         by_label(app.button, "Remove reference").click().run()
@@ -216,9 +272,9 @@ def main() -> None:
             "file_id": "receipt123456",
         }
         assert decode_receipt_references(
-            storage.list_transactions()[0]["receipt_references"]
+            stored_transaction(storage, transaction["id"])["receipt_references"]
         ) == []
-        assert drive_files == [receipt]
+        assert drive_files == [receipt, outside_receipt]
         assert not [
             button for button in app.button if button.label == "Remove receipt"
         ]
@@ -226,16 +282,16 @@ def main() -> None:
             "file remains in Google Drive" in str(success.value)
             for success in app.success
         )
-        assert len(storage.list_transactions()) == 1
+        assert len(storage.list_transactions()) == 2
 
         by_label(app.selectbox, "Unreferenced receipt").set_value(
             "receipt123456"
         )
         by_label(app.button, "Link selected receipt").click().run()
         assert decode_receipt_references(
-            storage.list_transactions()[0]["receipt_references"]
+            stored_transaction(storage, transaction["id"])["receipt_references"]
         ) == [receipt_reference]
-        assert drive_files == [receipt]
+        assert drive_files == [receipt, outside_receipt]
         assert by_label(app.button, "Remove receipt")
         assert any(
             "Receipt linked" in str(success.value)
