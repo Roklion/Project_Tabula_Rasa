@@ -191,15 +191,28 @@ context when recording the disposition.
    availability result. The maintainer or another coding agent coordinates
    remediation.
 4. Accepted findings receive focused fixes and regression coverage.
-5. Run `ruff check .` and `python -m pytest`.
-6. After pushing an updated head, post `@codex review`, wait for its
-   current-head response, and then post exactly one `/gemini review`.
+5. During remediation, run focused tests and linting for impacted functions or
+   modules. Run `ruff check .` and `python -m pytest` before final readiness,
+   after broad or shared infrastructure changes, or when focused validation is
+   insufficient.
+6. Before requesting either reviewer for a head, finish dispositioning all
+   outstanding feedback from current and earlier commits. Each actionable
+   comment must be fixed, disputed with evidence, deferred to a linked issue,
+   or otherwise explicitly replied to and resolved. Do not post either review
+   trigger while feedback remains unaddressed. After that gate, post
+   `@codex review`, wait for its current-head response, and then post exactly
+   one `/gemini review`.
 7. The human maintainer makes the final merge decision.
 
 The initial ready transition may start hosted reviews automatically. For
 manual current-head re-reviews, the Codex response gate sequences the trigger
 comments without sharing Codex findings with Gemini; Gemini remains
 independent and may inspect only the trusted availability signal.
+
+During iterative review remediation, focused tests and linting for the impacted
+functions or modules are sufficient. Run the full `ruff check .` and
+`python -m pytest` validation before final readiness, after broad or shared
+infrastructure changes, or whenever focused validation cannot cover the risk.
 
 ## Controlled validation pull request
 

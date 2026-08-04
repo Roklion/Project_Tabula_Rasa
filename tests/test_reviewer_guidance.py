@@ -83,6 +83,10 @@ def test_canonical_review_guide_covers_roles_and_dispositions() -> None:
         in normalized_guide
     )
     assert "Preserve the original commit and current-head context" in normalized_guide
+    assert "Before requesting either reviewer for a head" in normalized_guide
+    assert "Do not post either review trigger while feedback remains unaddressed" in normalized_guide
+    assert "focused tests and linting for impacted functions or modules" in normalized_guide
+    assert "before final readiness" in normalized_guide
     assert "Post `/gemini review` as a standalone pull-request comment." in guide
     assert "chatgpt-codex-connector[bot]" in guide
     assert "Do not infer unavailability from silence" in guide
