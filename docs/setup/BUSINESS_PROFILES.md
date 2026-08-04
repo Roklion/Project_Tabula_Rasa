@@ -140,7 +140,9 @@ The launcher sets the flag only for its process and binds Streamlit to the
 loopback interface. If it reports that `.venv` is not runnable, recreate the
 ignored virtual environment using the root README's installation commands.
 
-## 6. Add or replace the profile
+## 6. Add or edit the profile
+
+To add a profile:
 
 1. Sign in to Tabula Rosa normally.
 2. Open **Business profiles** and re-enter the application password.
@@ -150,12 +152,24 @@ ignored virtual environment using the root README's installation commands.
    copies. Leave it blank when backups should use the profile-scoped repository
    fallback or Google Drive API backups.
 6. Upload the complete service-account JSON.
-7. Confirm replacement only when intentionally replacing an existing profile.
-8. Select **Validate and save**.
+7. Select **Validate and save**.
 
 Validation authenticates with the uploaded credential, opens the workbook,
 checks or initializes its required worksheets, and seeds defaults before
 storing the profile.
+
+To edit a locally managed profile, use its **Edit local profile settings**
+section. The profile key is immutable. Business name, spreadsheet, and optional
+local backup settings can be changed without uploading the stored credential.
+The existing Google Drive grant, selected folders, Synology recovery metadata,
+and other profile-scoped settings are preserved unless their dedicated controls
+change them. Validation checks the resulting credential and spreadsheet before
+the edited profile is written.
+
+Use **Validate and rotate credential** only for an intentional Sheets
+service-account key change. That action requires a new JSON upload; a failed
+validation leaves the complete prior profile in place. Stored private keys are
+never returned to the browser or displayed in the profile table.
 
 The private key is never displayed or written to Google Sheets. It exists
 briefly in browser/server memory and is then stored in the local ignored profile
@@ -288,7 +302,7 @@ this restriction by default.
 To rotate a Sheets service-account credential:
 
 1. create the replacement key;
-2. replace the profile through the local administrator;
+2. open the profile's edit controls and choose **Validate and rotate credential**;
 3. validate read and reversible write access;
 4. export and replace hosted Secrets;
 5. confirm the hosted application; and
