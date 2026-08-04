@@ -402,7 +402,8 @@ To rebuild a deployment after loss:
 1. restore protected application and profile configuration;
 2. validate each service account and workbook;
 3. reconnect any unavailable Drive grant;
-4. confirm receipt and backup folder selections;
+4. confirm the profile storage root and provisioned receipt/backup children, or
+   confirm the legacy independent folder selections;
 5. export hosted Secrets; and
 6. validate a current backup before resuming normal operation.
 

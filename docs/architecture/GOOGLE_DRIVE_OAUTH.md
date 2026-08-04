@@ -406,7 +406,7 @@ Sheets service account.
   referrer.
 - OAuth callbacks accept only a valid, recent signed state and configured
   redirect URI.
-- Refresh tokens, authorized account details, and folder IDs remain isolated
+- Refresh tokens, authorized account details, and root/child folder IDs remain isolated
   under their business profile.
 - The selected business profile determines the refresh token and folder used
   for every Drive operation.
