@@ -67,9 +67,10 @@ def test_canonical_review_guide_covers_roles_and_dispositions() -> None:
         in normalized_guide
     )
     assert (
-        "Do not assume that a push automatically re-triggers Gemini."
+        "Do not post `/gemini review` while Codex is still silent"
         in normalized_guide
     )
+    assert "post exactly one standalone `/gemini review`" in normalized_guide
     assert "Post `/gemini review` as a standalone pull-request comment." in guide
     assert "chatgpt-codex-connector[bot]" in guide
     assert "Do not infer unavailability from silence" in guide

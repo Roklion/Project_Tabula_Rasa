@@ -74,12 +74,20 @@ assume that a push automatically re-triggers Codex.
 Gemini reviewer functionality is also disabled while a pull request is a
 draft. Marking the pull request ready automatically begins Gemini's initial
 complementary review; no comment is required. If the hosted integration does
-not start that review within ten minutes, post `/gemini review` as a standalone
-top-level comment.
+not start that review within ten minutes, wait for the current-head Codex
+response before posting `/gemini review` as a standalone top-level comment.
+Post it only once for that head, and only if an automatic Gemini review has not
+already started.
 
-After every material push, explicitly post `/gemini review` to request review of
-the new current head. Do not assume that a push automatically re-triggers
-Gemini.
+After every material push, wait for an authenticated Codex response for the
+new current head before requesting Gemini. A Codex review result, a looking or
+eyes acknowledgement, or an explicit current-round unavailability response is
+enough to establish that Codex has responded. Do not post `/gemini review`
+while Codex is still silent, including when a monitoring interval has elapsed.
+After the response is observed, post exactly one standalone `/gemini review`
+for that head. Do not post a second Gemini request to select fallback mode; the
+single request uses the already-observed Codex availability result to select
+normal or full fallback scope.
 
 ### Gemini mode selection
 
@@ -149,18 +157,21 @@ not complete review while a validated blocking finding remains unresolved.
    marks the pull request ready for review. Reviewers do not review drafts.
 2. Codex automatically performs its primary review while Gemini automatically
    performs its initial complementary review of the same current head.
-3. If Codex reports current-round unavailability, `/gemini review` requests a
-   new Gemini review that selects full fallback coverage from that trusted
+3. After the current-head Codex response is observed, post exactly one
+   `/gemini review`. If that response reports current-round unavailability,
+   the same single request selects full fallback coverage from the trusted
    availability result. The maintainer or another coding agent coordinates
    remediation.
 4. Accepted findings receive focused fixes and regression coverage.
 5. Run `ruff check .` and `python -m pytest`.
-6. After pushing an updated head, post `@codex review` and `/gemini review` to
-   request current-head re-reviews.
+6. After pushing an updated head, post `@codex review`, wait for its
+   current-head response, and then post exactly one `/gemini review`.
 7. The human maintainer makes the final merge decision.
 
-The reviewers may run in parallel; neither review must bias the other's
-independent analysis.
+The initial ready transition may start hosted reviews automatically. For
+manual current-head re-reviews, the Codex response gate sequences the trigger
+comments without sharing Codex findings with Gemini; Gemini remains
+independent and may inspect only the trusted availability signal.
 
 ## Controlled validation pull request
 
