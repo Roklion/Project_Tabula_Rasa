@@ -211,6 +211,13 @@ class TestGoogleDriveOAuth:
         with pytest.raises(Exception, match="drive.file"):
             validate_drive_profile_settings(invalid)
 
+    def test_profile_settings_require_a_root_for_storage_children(self) -> None:
+        invalid = drive_settings()
+        invalid["receipt_folder"] = {"id": "receiptfolder123", "name": "Receipts"}
+
+        with pytest.raises(Exception, match="storage root"):
+            validate_drive_profile_settings(invalid)
+
 
 class TestGoogleDriveFiles:
     @staticmethod

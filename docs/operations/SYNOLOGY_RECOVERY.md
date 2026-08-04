@@ -4,8 +4,7 @@ Each business profile can independently opt in to an isolated recovery copy on
 the Synology DS220j. Tabula Rosa uploads verified, timestamped ZIP archives to
 that profile's Google Drive `Ledger Backups` child and stores live receipt bytes
 in its `Receipts` child. These children are provisioned under one profile storage
-root. Synology Cloud Sync downloads both folders to the NAS. Legacy profiles may
-continue using their independently selected folder pair.
+root. Synology Cloud Sync downloads both folders to the NAS.
 
 The application never mounts, authenticates to, or writes directly to the NAS.
 The per-profile Synology fields are non-secret operational records of the Cloud

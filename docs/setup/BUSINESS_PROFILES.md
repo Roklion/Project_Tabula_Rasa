@@ -161,11 +161,10 @@ storing the profile.
 To edit a locally managed profile, use its **Edit local profile settings**
 section. The profile key is immutable. Business name, spreadsheet, and optional
 local backup settings can be changed without uploading the stored credential.
-The existing Google Drive grant, storage root and child folders (or legacy
-independent folders), Synology recovery metadata, and other profile-scoped
-settings are preserved unless their dedicated controls change them. Validation
-checks the resulting credential and spreadsheet before the edited profile is
-written.
+The existing Google Drive grant, storage root and child folders, Synology
+recovery metadata, and other profile-scoped settings are preserved unless their
+dedicated controls change them. Validation checks the resulting credential and
+spreadsheet before the edited profile is written.
 
 Use **Validate and rotate credential** only for an intentional Sheets
 service-account key change. That action requires a new JSON upload; a failed
@@ -197,12 +196,8 @@ After connecting Drive, new profiles use one **storage root**. Select an
 existing root with the single picker or create an app-managed root, then choose
 **Provision storage folders**. Tabula Rosa creates or reuses exactly one
 `Receipts` child and one `Ledger Backups` child under that root and stores their
-IDs. Existing profiles with independently selected receipt and backup folders
-continue using those legacy selections until an administrator explicitly
-migrates them. Select an existing parent and choose **Migrate to selected
-storage root**, or choose **Create and migrate storage root**. Tabula Rosa
-creates and verifies the managed children before replacing the saved legacy
-destinations; existing Drive files are not moved, merged, or deleted.
+IDs. Every configured profile uses this root-and-child layout. Existing Drive
+files are not moved, merged, or deleted when a destination is changed.
 
 ## 8. Export profiles to Streamlit Community Cloud
 

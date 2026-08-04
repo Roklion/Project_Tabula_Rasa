@@ -361,8 +361,7 @@ or prove that synchronization succeeded.
 For root-managed profiles, both Drive destinations are app-managed children under
 the profile's selected storage root: `Receipts` contains receipt files and
 `Ledger Backups` contains verified archives. The stored child IDs remain the
-runtime source of truth; folder names are descriptive only. Legacy profiles with
-independent folder selections continue to use those exact folders.
+runtime source of truth; folder names are descriptive only.
 
 Follow the complete
 [Synology recovery runbook](SYNOLOGY_RECOVERY.md) to configure folder
@@ -402,8 +401,7 @@ To rebuild a deployment after loss:
 1. restore protected application and profile configuration;
 2. validate each service account and workbook;
 3. reconnect any unavailable Drive grant;
-4. confirm the profile storage root and provisioned receipt/backup children, or
-   confirm the legacy independent folder selections;
+4. confirm the profile storage root and provisioned receipt/backup children;
 5. export hosted Secrets; and
 6. validate a current backup before resuming normal operation.
 

@@ -360,6 +360,10 @@ class TestAppAuthentication:
                     "refresh_token": "refresh-token",
                     "token_uri": "https://oauth2.googleapis.com/token",
                     "scopes": ["https://www.googleapis.com/auth/drive.file"],
+                    "storage_root": {
+                        "id": "rootfolder123",
+                        "name": "North Storage",
+                    },
                     "backup_folder": {
                         "id": "backupfolder123",
                         "name": "North Backups",

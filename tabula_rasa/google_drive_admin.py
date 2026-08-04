@@ -108,18 +108,6 @@ def _revalidated_storage_settings(
                 }
         return preserved
 
-    for field in ("receipt_folder", "backup_folder"):
-        folder = previous.get(field)
-        if not isinstance(folder, Mapping):
-            continue
-        try:
-            confirmed = client.folder(str(folder.get("id", "")))
-        except GoogleDriveError:
-            continue
-        preserved[field] = {
-            "id": str(confirmed["id"]),
-            "name": str(confirmed["name"]),
-        }
     return preserved
 
 
@@ -179,35 +167,6 @@ def process_google_drive_oauth_callback(
         st.session_state["navigation_page"] = "Business profiles"
     finally:
         st.query_params.clear()
-    st.cache_resource.clear()
-    st.rerun()
-    return True
-
-
-def _save_selected_folder(
-    profile_key: str,
-    drive_settings: Mapping[str, Any],
-    field: str,
-    selected: Mapping[str, Any],
-    *,
-    client: GoogleDriveClient,
-    store_path: Path,
-) -> bool:
-    selected_id = str(selected.get("id", ""))
-    existing = drive_settings.get(field)
-    if isinstance(existing, Mapping) and existing.get("id") == selected_id:
-        return False
-    folder = client.folder(selected_id)
-    updated = dict(drive_settings)
-    updated[field] = {
-        "id": str(folder["id"]),
-        "name": str(folder["name"]),
-    }
-    update_local_profile_google_drive(profile_key, updated, path=store_path)
-    label = "receipt" if field == "receipt_folder" else "backup"
-    st.session_state["google_drive_admin_notice"] = (
-        f"Google Drive {label} folder saved for profile '{profile_key}'."
-    )
     st.cache_resource.clear()
     st.rerun()
     return True
@@ -294,43 +253,6 @@ def _provision_storage_children(
     st.session_state["google_drive_admin_notice"] = (
         f"Google Drive receipt and ledger-backup folders are ready for "
         f"'{profile_key}'."
-    )
-    st.cache_resource.clear()
-    st.rerun()
-    return True
-
-
-def _migrate_legacy_storage(
-    profile_key: str,
-    profile_name: str,
-    drive_settings: Mapping[str, Any],
-    selected_root: Mapping[str, Any] | None,
-    *,
-    client: GoogleDriveClient,
-    store_path: Path,
-) -> bool:
-    """Replace legacy destinations only after a root and both children are ready."""
-    if selected_root is None:
-        root = client.create_storage_root(profile_key, f"{profile_name} Storage")
-    else:
-        root = client.folder(str(selected_root.get("id", "")))
-    root_id = str(root.get("id", ""))
-    if not root_id:
-        raise GoogleDriveConfigurationError(
-            "The selected Google Drive storage root is missing its folder ID."
-        )
-    children = client.provision_storage_children(profile_key, root_id)
-    updated = dict(drive_settings)
-    updated["storage_root"] = {
-        "id": root_id,
-        "name": str(root.get("name", "")),
-    }
-    updated["receipt_folder"] = children["receipts"]
-    updated["backup_folder"] = children["ledger-backups"]
-    update_local_profile_google_drive(profile_key, updated, path=store_path)
-    st.session_state["google_drive_admin_notice"] = (
-        f"Google Drive storage was migrated for profile '{profile_key}'. "
-        "Existing legacy files were not moved or deleted."
     )
     st.cache_resource.clear()
     st.rerun()
@@ -462,173 +384,65 @@ def render_google_drive_admin(
         storage_root = drive_settings.get("storage_root")
         receipt_folder = drive_settings.get("receipt_folder")
         backup_folder = drive_settings.get("backup_folder")
-        legacy_folders = (
-            not isinstance(storage_root, Mapping)
-            and (isinstance(receipt_folder, Mapping) or isinstance(backup_folder, Mapping))
+        st.markdown("**Profile storage root**")
+        if isinstance(storage_root, Mapping):
+            st.caption(_folder_display_name(storage_root))
+        selected_root = folder_picker(
+            access_token=access_token,
+            api_key=config.picker_api_key,
+            project_number=config.project_number,
+            key=f"storage-root-{profile_key}",
         )
-        if legacy_folders:
-            st.info(
-                "This profile uses legacy independent folder selections. They "
-                "remain supported and are not moved or merged automatically."
-            )
-            left, right = st.columns(2)
-            with left:
-                st.markdown("**Receipt folder**")
-                if isinstance(receipt_folder, Mapping):
-                    st.caption(_folder_display_name(receipt_folder))
-                selected_receipt = folder_picker(
-                    access_token=access_token,
-                    api_key=config.picker_api_key,
-                    project_number=config.project_number,
-                    key=f"receipt-folder-{profile_key}",
+        if selected_root is not None:
+            try:
+                _save_storage_root(
+                    profile_key,
+                    drive_settings,
+                    selected_root,
+                    client=client,
+                    store_path=store_path,
                 )
-                if selected_receipt is not None:
-                    try:
-                        _save_selected_folder(
-                            profile_key,
-                            drive_settings,
-                            "receipt_folder",
-                            selected_receipt,
-                            client=client,
-                            store_path=store_path,
-                        )
-                    except (GoogleDriveError, LocalProfileStoreError) as exc:
-                        st.error(str(exc))
-            with right:
-                st.markdown("**Backup folder**")
-                if isinstance(backup_folder, Mapping):
-                    st.caption(_folder_display_name(backup_folder))
-                selected_backup = folder_picker(
-                    access_token=access_token,
-                    api_key=config.picker_api_key,
-                    project_number=config.project_number,
-                    key=f"backup-folder-{profile_key}",
-                )
-                if selected_backup is not None:
-                    try:
-                        _save_selected_folder(
-                            profile_key,
-                            drive_settings,
-                            "backup_folder",
-                            selected_backup,
-                            client=client,
-                            store_path=store_path,
-                        )
-                    except (GoogleDriveError, LocalProfileStoreError) as exc:
-                        st.error(str(exc))
-            st.markdown("**Migrate to a profile storage root**")
-            st.caption(
-                "Choose an existing root, or create one below. Migration creates "
-                "managed receipt and ledger-backup folders before replacing the "
-                "saved legacy destinations."
-            )
-            migration_key = f"legacy-storage-root-{profile_key}"
-            pending_root_key = f"{migration_key}-pending"
-            selected_root = folder_picker(
-                access_token=access_token,
-                api_key=config.picker_api_key,
-                project_number=config.project_number,
-                key=migration_key,
-            )
-            if selected_root is not None:
-                st.session_state[pending_root_key] = dict(selected_root)
-            pending_root = st.session_state.get(pending_root_key)
-            if isinstance(pending_root, Mapping):
-                st.caption(
-                    "Selected storage root: "
-                    f"{_folder_display_name(pending_root, 'Unnamed folder')}"
-                )
-                if st.button(
-                    "Migrate to selected storage root",
-                    type="primary",
-                    key=f"migrate-storage-root-{profile_key}",
-                ):
-                    try:
-                        _migrate_legacy_storage(
-                            profile_key,
-                            str(profile.get("name", profile_key)),
-                            drive_settings,
-                            pending_root,
-                            client=client,
-                            store_path=store_path,
-                        )
-                    except (GoogleDriveError, LocalProfileStoreError) as exc:
-                        st.error(str(exc))
+            except (GoogleDriveError, LocalProfileStoreError) as exc:
+                st.error(str(exc))
+        if not isinstance(storage_root, Mapping):
             if st.button(
-                "Create and migrate storage root",
-                key=f"create-and-migrate-storage-root-{profile_key}",
+                "Create storage root",
+                key=f"create-storage-root-{profile_key}",
             ):
                 try:
-                    _migrate_legacy_storage(
+                    _create_storage_root(
                         profile_key,
                         str(profile.get("name", profile_key)),
                         drive_settings,
-                        None,
                         client=client,
                         store_path=store_path,
                     )
                 except (GoogleDriveError, LocalProfileStoreError) as exc:
                     st.error(str(exc))
-        else:
-            st.markdown("**Profile storage root**")
-            if isinstance(storage_root, Mapping):
-                st.caption(_folder_display_name(storage_root))
-            selected_root = folder_picker(
-                access_token=access_token,
-                api_key=config.picker_api_key,
-                project_number=config.project_number,
-                key=f"storage-root-{profile_key}",
-            )
-            if selected_root is not None:
+        if isinstance(storage_root, Mapping):
+            if isinstance(receipt_folder, Mapping):
+                st.caption(
+                    f"Receipts: {_folder_display_name(receipt_folder, 'Provisioned')}"
+                )
+            if isinstance(backup_folder, Mapping):
+                st.caption(
+                    "Ledger backups: "
+                    f"{_folder_display_name(backup_folder, 'Provisioned')}"
+                )
+            if st.button(
+                "Provision storage folders",
+                type="primary",
+                key=f"provision-storage-folders-{profile_key}",
+            ):
                 try:
-                    _save_storage_root(
+                    _provision_storage_children(
                         profile_key,
                         drive_settings,
-                        selected_root,
                         client=client,
                         store_path=store_path,
                     )
                 except (GoogleDriveError, LocalProfileStoreError) as exc:
                     st.error(str(exc))
-            if not isinstance(storage_root, Mapping):
-                if st.button(
-                    "Create storage root",
-                    key=f"create-storage-root-{profile_key}",
-                ):
-                    try:
-                        _create_storage_root(
-                            profile_key,
-                            str(profile.get("name", profile_key)),
-                            drive_settings,
-                            client=client,
-                            store_path=store_path,
-                        )
-                    except (GoogleDriveError, LocalProfileStoreError) as exc:
-                        st.error(str(exc))
-            if isinstance(storage_root, Mapping):
-                if isinstance(receipt_folder, Mapping):
-                    st.caption(
-                        f"Receipts: {_folder_display_name(receipt_folder, 'Provisioned')}"
-                    )
-                if isinstance(backup_folder, Mapping):
-                    st.caption(
-                        "Ledger backups: "
-                        f"{_folder_display_name(backup_folder, 'Provisioned')}"
-                    )
-                if st.button(
-                    "Provision storage folders",
-                    type="primary",
-                    key=f"provision-storage-folders-{profile_key}",
-                ):
-                    try:
-                        _provision_storage_children(
-                            profile_key,
-                            drive_settings,
-                            client=client,
-                            store_path=store_path,
-                        )
-                    except (GoogleDriveError, LocalProfileStoreError) as exc:
-                        st.error(str(exc))
 
     st.divider()
     reconnect_url = authorization_url(
