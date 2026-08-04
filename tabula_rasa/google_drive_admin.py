@@ -77,7 +77,9 @@ def _revalidated_storage_settings(
                 confirmed = client.folder(str(child.get("id", "")))
             except GoogleDriveError:
                 continue
-            parents = confirmed.get("parents") or []
+            parents = confirmed.get("parents")
+            if not isinstance(parents, list):
+                parents = []
             properties = confirmed.get("appProperties")
             if (
                 root_id in parents

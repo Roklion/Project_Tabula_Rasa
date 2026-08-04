@@ -727,7 +727,9 @@ class GoogleDriveClient:
             raise GoogleDriveAccessError(
                 "The managed Google Drive folder is not available."
             )
-        parents = folder.get("parents") or []
+        parents = folder.get("parents")
+        if not isinstance(parents, list):
+            parents = []
         if root_id is not None and root_id not in parents:
             raise GoogleDriveAccessError(
                 "The managed Google Drive folder is outside its profile storage root."
