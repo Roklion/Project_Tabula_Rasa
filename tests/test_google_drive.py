@@ -539,6 +539,38 @@ class TestGoogleDriveFiles:
         with pytest.raises(GoogleDriveAccessError, match="outside"):
             client.provision_storage_children("north", root_id)
 
+    def test_managed_folder_with_missing_name_is_rejected(self) -> None:
+        session = DriveSession(
+            [
+                FakeResponse(
+                    200,
+                    {
+                        "files": [
+                            {
+                                "id": "rootfolder123",
+                                "name": None,
+                                "mimeType": "application/vnd.google-apps.folder",
+                                "trashed": False,
+                                "appProperties": {
+                                    "tabulaRasaKind": "storage-root",
+                                    "tabulaRasaProfile": "north",
+                                },
+                            }
+                        ]
+                    },
+                )
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        with pytest.raises(GoogleDriveAccessError, match="not available"):
+            client.create_storage_root("north", "North Storage")
+
     def test_selected_folder_is_validated_before_it_is_saved(self) -> None:
         session = DriveSession(
             [

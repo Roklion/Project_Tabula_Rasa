@@ -722,7 +722,7 @@ class GoogleDriveClient:
         if (
             folder.get("mimeType") != FOLDER_MIME_TYPE
             or folder.get("trashed")
-            or not str(folder.get("name", "")).strip()
+            or not str(folder.get("name") or "").strip()
         ):
             raise GoogleDriveAccessError(
                 "The managed Google Drive folder is not available."
@@ -839,7 +839,6 @@ class GoogleDriveClient:
                 storage_kind=storage_kind,
                 root_id=root_id,
             )
-        raise GoogleDriveAccessError("Google Drive could not provision storage folders.")
 
     def create_storage_root(self, profile_key: str, name: str) -> dict[str, str]:
         """Create or reuse one app-managed storage root for a profile."""
