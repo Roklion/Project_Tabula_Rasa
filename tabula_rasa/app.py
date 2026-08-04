@@ -431,10 +431,16 @@ with st.sidebar:
         st.session_state["navigation_page"] = pages[0]
     page = st.radio("Navigate", pages, key="navigation_page")
     previous_page = st.session_state.get("previous_navigation_page")
-    if page == "Transactions" and previous_page != page:
-        st.session_state["transaction_ledger_generation"] = (
-            int(st.session_state.get("transaction_ledger_generation", 0)) + 1
-        )
+    if previous_page != page:
+        table_generation_by_page = {
+            "Transactions": "transaction_ledger_generation",
+            "Accounts": "account_table_generation",
+            "Categories": "category_table_generation",
+        }
+        if table_generation := table_generation_by_page.get(page):
+            st.session_state[table_generation] = (
+                int(st.session_state.get(table_generation, 0)) + 1
+            )
     st.session_state["previous_navigation_page"] = page
     st.divider()
     if st.button("Log out", width="stretch"):
@@ -1614,7 +1620,9 @@ elif page == "Accounts":
     }
     balance_by_id = balances.set_index("ID")["Balance"].to_dict()
     account_rows = []
+    account_ids = []
     for account in ordered_hierarchy(accounts):
+        account_ids.append(account["id"])
         parent_id = str(account.get("parent_id") or "").strip()
         parent = account_by_id.get(parent_id) if parent_id else None
         account_rows.append(
@@ -1630,10 +1638,23 @@ elif page == "Accounts":
                 "Balance": balance_by_id.get(account["id"], 0.0),
             }
         )
-    st.dataframe(
+    account_table_key = (
+        "account_table_"
+        f"{st.session_state.get('account_table_generation', 0)}"
+    )
+
+    def select_account() -> None:
+        selected_rows = st.session_state[account_table_key].selection.rows
+        if selected_rows:
+            st.session_state["edit_account_id"] = account_ids[selected_rows[0]]
+
+    account_event = st.dataframe(
         pd.DataFrame(account_rows),
         hide_index=True,
         width="stretch",
+        key=account_table_key,
+        on_select=select_account,
+        selection_mode="single-row",
         column_config={"Balance": st.column_config.NumberColumn(format="$%.2f")},
     )
     reset_widget_state_if_requested(
@@ -1721,11 +1742,18 @@ elif page == "Accounts":
                 )
 
     if accounts:
-        with st.expander("Edit or deactivate account"):
+        selected_rows = account_event.selection.rows
+        if st.session_state.get("edit_account_id") not in account_by_id:
+            st.session_state["edit_account_id"] = account_ids[0]
+        st.caption("Select an account row (or double-click it) to edit it.")
+        with st.expander(
+            "Edit or deactivate account", expanded=bool(selected_rows)
+        ):
             account_id = st.selectbox(
                 "Account to manage",
                 list(account_by_id),
                 format_func=account_paths.get,
+                key="edit_account_id",
             )
             selected = account_by_id[account_id]
             with st.container(border=True):
@@ -1853,7 +1881,9 @@ elif page == "Categories":
         if (category_id := str(category.get("id") or "").strip())
     }
     category_rows = []
+    category_ids = []
     for category in ordered_hierarchy(categories):
+        category_ids.append(category["id"])
         parent_id = str(category.get("parent_id") or "").strip()
         parent = category_by_id.get(parent_id) if parent_id else None
         category_rows.append(
@@ -1870,7 +1900,24 @@ elif page == "Categories":
             }
         )
     category_frame = pd.DataFrame(category_rows)
-    st.dataframe(category_frame, hide_index=True, width="stretch")
+    category_table_key = (
+        "category_table_"
+        f"{st.session_state.get('category_table_generation', 0)}"
+    )
+
+    def select_category() -> None:
+        selected_rows = st.session_state[category_table_key].selection.rows
+        if selected_rows:
+            st.session_state["edit_category_id"] = category_ids[selected_rows[0]]
+
+    category_event = st.dataframe(
+        category_frame,
+        hide_index=True,
+        width="stretch",
+        key=category_table_key,
+        on_select=select_category,
+        selection_mode="single-row",
+    )
     reset_widget_state_if_requested(
         "reset_add_category_form",
         keys=(
@@ -1914,7 +1961,11 @@ elif page == "Categories":
                 ),
             )
     if categories:
-        with st.expander("Edit category"):
+        selected_rows = category_event.selection.rows
+        if st.session_state.get("edit_category_id") not in category_by_id:
+            st.session_state["edit_category_id"] = category_ids[0]
+        st.caption("Select a category row (or double-click it) to edit it.")
+        with st.expander("Edit category", expanded=bool(selected_rows)):
             category_id = st.selectbox(
                 "Category to edit",
                 list(category_by_id),
@@ -1922,16 +1973,20 @@ elif page == "Categories":
                     f'{category_paths[value]} '
                     f'({category_by_id[value]["kind"]})'
                 ),
+                key="edit_category_id",
             )
             selected = category_by_id[category_id]
             with st.container(border=True):
                 edited_name = st.text_input(
-                    "Edit category name", value=selected["name"]
+                    "Edit category name",
+                    value=selected["name"],
+                    key=f"edit_category_name_{category_id}",
                 )
                 edited_kind = st.selectbox(
                     "Edit category type",
                     ["Expense", "Income"],
                     index=["Expense", "Income"].index(selected["kind"]),
+                    key=f"edit_category_kind_{category_id}",
                 )
                 has_children = has_hierarchy_children(categories, category_id)
                 edited_parent_options = [""] + eligible_parent_ids(
