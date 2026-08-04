@@ -221,6 +221,13 @@ def main() -> None:
             transaction["id"]
         ).run()
 
+        transaction_table = app.dataframe[0].value
+        assert list(transaction_table.columns)[-2:] == ["Reference", "ID"]
+        selected_transaction_row = transaction_table.loc[
+            transaction_table["ID"] == transaction["id"]
+        ].iloc[0]
+        assert selected_transaction_row["Receipt"] == "\U0001f4ce"
+
         assert not [
             selectbox
             for selectbox in app.selectbox

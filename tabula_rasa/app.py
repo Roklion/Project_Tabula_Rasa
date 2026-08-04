@@ -99,6 +99,13 @@ def money(value: float) -> str:
     return f"${value:,.2f}"
 
 
+def transaction_has_receipts(transaction: Mapping[str, object]) -> bool:
+    try:
+        return bool(decode_receipt_references(transaction.get("receipt_references", "")))
+    except StorageError:
+        return False
+
+
 def alert_list(title: str, messages: list[str]) -> str:
     """Format multiple alert messages as a readable Markdown list."""
     return f"**{title}**\n\n- " + "\n- ".join(messages)
@@ -752,12 +759,31 @@ elif page == "Transactions":
             report_storage_error(error)
             st.stop()
         transaction_frame = ledger_frame(transactions, accounts, categories)
+        transaction_frame["Receipt"] = [
+            "\U0001f4ce" if transaction_has_receipts(transaction) else ""
+            for transaction in transactions
+        ]
         transaction_frame = transaction_frame.sort_values(
             "Date",
             ascending=False,
             kind="stable",
             ignore_index=True,
         )
+        transaction_frame = transaction_frame[
+            [
+                "Date",
+                "Type",
+                "Account",
+                "To account",
+                "Category",
+                "Payee",
+                "Description",
+                "Amount",
+                "Receipt",
+                "Reference",
+                "ID",
+            ]
+        ]
         transaction_ids = transaction_frame["ID"].tolist()
 
         def select_ledger_transaction() -> None:
@@ -776,7 +802,13 @@ elif page == "Transactions":
             key=transaction_ledger_key,
             on_select=select_ledger_transaction,
             selection_mode="single-row",
-            column_config={"Amount": st.column_config.NumberColumn(format="$%.2f")},
+            column_config={
+                "Amount": st.column_config.NumberColumn(format="$%.2f"),
+                "Receipt": st.column_config.TextColumn(
+                    width="small",
+                    help="This transaction has linked receipts.",
+                ),
+            },
         )
         if not transaction_frame.empty:
             selected_rows = ledger_event.selection.rows
