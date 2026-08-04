@@ -1267,7 +1267,7 @@ class GoogleSheetsStorage:
     def delete_category(self, category_id: str) -> None:
         category_id = _clean_text(category_id, "ID", required=True)
         current = self._find_row("Categories", category_id)
-        existing_categories = self.list_categories()
+        existing_categories = self.list_categories(_force_refresh=True)
         if any(
             str(category.get("parent_id") or "").strip() == category_id
             for category in existing_categories
