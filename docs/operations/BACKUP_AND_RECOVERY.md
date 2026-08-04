@@ -125,7 +125,12 @@ python scripts\backup_google_sheets.py --profile PROFILE_KEY --output-dir backup
 When `--output-dir` is omitted, the command uses:
 
 1. the profile's configured `backup_folder_path`; or
-2. the ignored repository `backups/` directory.
+2. the ignored repository `backups/PROFILE_KEY/` directory.
+
+The local folder setting is optional. A blank setting does not require Google
+Drive Desktop or a mounted path; the profile-scoped fallback keeps implicit
+archives for different businesses separate. Use `--output-dir` for an explicit
+single-profile destination.
 
 The command:
 

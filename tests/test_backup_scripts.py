@@ -138,14 +138,25 @@ class TestBackupScripts:
         override = Path(r"D:\Emergency Backups")
 
         assert (
-            resolve_backup_output_dir({"backup_folder_path": str(configured)}, None)
+            resolve_backup_output_dir(
+                {"backup_folder_path": str(configured)}, None, "north"
+            )
             == configured
         )
         assert (
-            resolve_backup_output_dir({"backup_folder_path": str(configured)}, override)
+            resolve_backup_output_dir(
+                {"backup_folder_path": str(configured)}, override, "north"
+            )
             == override
         )
-        assert resolve_backup_output_dir({}, None) == PROJECT_ROOT / "backups"
+        assert resolve_backup_output_dir({}, None, "north") == PROJECT_ROOT / "backups" / "north"
+
+    def test_profile_fallbacks_are_isolated_and_require_a_profile_key(self) -> None:
+        assert resolve_backup_output_dir({}, None, "north") != resolve_backup_output_dir(
+            {}, None, "south"
+        )
+        with pytest.raises(ValueError, match="profile key"):
+            resolve_backup_output_dir({}, None)
 
     def test_versioned_backup_retains_newest_generations(self) -> None:
         storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)

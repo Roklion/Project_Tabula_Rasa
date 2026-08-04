@@ -146,10 +146,11 @@ ignored virtual environment using the root README's installation commands.
 2. Open **Business profiles** and re-enter the application password.
 3. Enter the business name and a safe profile key.
 4. Enter the Google spreadsheet URL or ID.
-5. Enter an absolute local backup directory when local scheduled backups are
-   needed.
+5. Optionally enter an absolute local backup directory for local scheduled
+   copies. Leave it blank when backups should use the profile-scoped repository
+   fallback or Google Drive API backups.
 6. Upload the complete service-account JSON.
-7. Confirm replacement only when intentionally replacing an existing key.
+7. Confirm replacement only when intentionally replacing an existing profile.
 8. Select **Validate and save**.
 
 Validation authenticates with the uploaded credential, opens the workbook,

@@ -91,8 +91,8 @@ def _profile_rows(
                 "Spreadsheet": _masked_spreadsheet_id(
                     profile.secrets.get("spreadsheet_id", "")
                 ),
-                "Backup folder": str(
-                    profile.secrets.get("backup_folder_path", "")
+                "Local backup folder": str(
+                    profile.secrets.get("backup_folder_path", "Not configured")
                 ),
                 "Service account": str(credential.get("client_email", "")),
                 "Drive OAuth": (
@@ -299,13 +299,14 @@ def render_local_profile_admin(
             key="local_profile_spreadsheet",
         )
         backup_folder_path = st.text_input(
-            "Google Drive Desktop backup folder path",
+            "Optional local backup folder path",
             help=(
                 "Backups are ZIP files written by the local backup process, not "
-                "uploaded through the Drive API. Enter the absolute folder path "
-                "provided by Google Drive Desktop, for example "
+                "uploaded through the Google Drive API. Leave this blank for a "
+                "profile-scoped repository fallback, or enter the absolute folder "
+                "path provided by Google Drive Desktop, for example "
                 r"G:\My Drive\Tabula Rosa Backups\business. Google Drive Desktop "
-                "must be installed, signed in, and running when backups execute."
+                "is only required when this optional local copy uses a mounted path."
             ),
             key="local_profile_backup_path",
         )

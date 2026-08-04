@@ -175,7 +175,7 @@ def build_profile_settings(
         "spreadsheet_id": parse_spreadsheet_id(spreadsheet),
         "gcp_service_account": parse_service_account_json(credential_upload),
     }
-    if backup_folder_path is not None:
+    if backup_folder_path is not None and backup_folder_path.strip():
         settings["backup_folder_path"] = validate_backup_folder_path(
             backup_folder_path
         )

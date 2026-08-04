@@ -79,6 +79,16 @@ class TestLocalProfileStore:
 
         assert secret not in str(raised.value)
 
+    def test_blank_backup_path_is_not_stored(self) -> None:
+        configured = build_profile_settings(
+            "Cloud Shop",
+            "abcdefghij1234567890",
+            json.dumps(credential()).encode("utf-8"),
+            "   ",
+        )
+
+        assert "backup_folder_path" not in configured
+
     def test_atomically_saves_and_loads_profile(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "local_business_profiles.json"

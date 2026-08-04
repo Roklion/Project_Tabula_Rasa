@@ -215,7 +215,7 @@ class TestAppAuthentication:
                 next(
                     field
                     for field in app.text_input
-                    if field.label == "Google Drive Desktop backup folder path"
+                    if field.label == "Optional local backup folder path"
                 ).input(r"G:\My Drive\Tabula Rosa Backups\north")
                 next(
                     button
