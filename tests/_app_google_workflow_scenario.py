@@ -76,6 +76,21 @@ def main() -> None:
         assert savings["type"] == "Short-term debt"
         assert savings["classification"] == "Liability"
         assert "Account updated." in success_values(app)
+        by_label(app.text_input, "Edit account name").set_value(
+            "Primary savings"
+        ).run()
+        by_label(app.button, "Save account changes").click().run()
+        renamed_savings = [
+            account
+            for account in storage.list_accounts(active_only=False)
+            if account["id"] == savings["id"]
+        ]
+        assert len(renamed_savings) == 1
+        assert renamed_savings[0]["name"] == "Primary savings"
+        assert not any(
+            account["name"] == "Savings"
+            for account in storage.list_accounts(active_only=False)
+        )
 
         by_label(app.text_input, "Account name").input("Owner-paid expenses")
         by_label(app.selectbox, "Type").set_value("Equity").run()
@@ -99,6 +114,29 @@ def main() -> None:
         assert by_label(app.text_input, "Category name").value == ""
         assert by_label(app.selectbox, "Type").value == "Expense"
         assert "Category added." in success_values(app)
+        testing_expense = next(
+            category
+            for category in storage.list_categories()
+            if category["name"] == "Testing expense"
+        )
+        by_label(app.selectbox, "Category to edit").set_value(
+            testing_expense["id"]
+        ).run()
+        by_label(app.text_input, "Edit category name").set_value(
+            "Testing expense renamed"
+        ).run()
+        by_label(app.button, "Save category changes").click().run()
+        renamed_categories = [
+            category
+            for category in storage.list_categories()
+            if category["id"] == testing_expense["id"]
+        ]
+        assert len(renamed_categories) == 1
+        assert renamed_categories[0]["name"] == "Testing expense renamed"
+        assert not any(
+            category["name"] == "Testing expense"
+            for category in storage.list_categories()
+        )
 
         app.radio[0].set_value("Transactions").run()
         initial_ledger_key = app.dataframe[0].key
@@ -110,7 +148,9 @@ def main() -> None:
         )
         by_label(app.number_input, "Amount").set_value(25)
         by_label(app.selectbox, "From Account").set_value("Owner-paid expenses")
-        by_label(app.selectbox, "Category").set_value("Testing expense")
+        by_label(app.selectbox, "Category").set_value(
+            "Testing expense renamed"
+        )
         by_label(app.text_input, "Payee / customer").input("Test vendor")
         by_label(app.text_input, "Description / memo").input("Keep this memo")
         with patch.object(
@@ -125,7 +165,10 @@ def main() -> None:
             by_label(app.selectbox, "From Account").value
             == "Owner-paid expenses"
         )
-        assert by_label(app.selectbox, "Category").value == "Testing expense"
+        assert (
+            by_label(app.selectbox, "Category").value
+            == "Testing expense renamed"
+        )
         assert by_label(app.text_input, "Payee / customer").value == "Test vendor"
         assert (
             by_label(app.text_input, "Description / memo").value
@@ -166,7 +209,7 @@ def main() -> None:
         by_label(app.segmented_control, "Transaction type").set_value("Transfer").run()
         by_label(app.number_input, "Amount").set_value(10)
         by_label(app.selectbox, "From Account").set_value("Checking").run()
-        by_label(app.selectbox, "To account").set_value("Savings")
+        by_label(app.selectbox, "To account").set_value("Primary savings")
         by_label(app.button, "Save transaction").click().run()
         assert {item["kind"] for item in storage.list_transactions()} == {
             "Expense",
@@ -178,10 +221,10 @@ def main() -> None:
             for item in storage.list_transactions(account_ids=[savings["id"]])
         ] == ["Transfer"]
         account_filter = by_label(app.multiselect, "Accounts")
-        account_filter.set_value(["Savings"]).run()
+        account_filter.set_value(["Primary savings"]).run()
         assert app.dataframe[0].value["Type"].tolist() == ["Transfer"]
         by_label(app.multiselect, "Accounts").set_value(
-            ["Savings", "Owner-paid expenses"]
+            ["Primary savings", "Owner-paid expenses"]
         ).run()
         assert set(app.dataframe[0].value["Type"]) == {"Expense", "Transfer"}
         by_label(app.multiselect, "Accounts").set_value([]).run()

@@ -66,6 +66,14 @@ amounts remain explainable without double-counting. Transactions may post
 directly to either layer; transfers remain category-free and mileage remains a
 separate workflow.
 
+Categories can be renamed without changing their IDs. A category with no
+transactions or child categories can be permanently deleted. Categories that
+are still referenced by transactions, or that still have child categories, must
+be retained or edited instead.
+
+The initial default accounts and categories are seeded only in a blank
+workbook, so renaming or deleting a default does not recreate it later.
+
 ## Transactions and transfers
 
 Income and expense transactions affect both the selected source account and

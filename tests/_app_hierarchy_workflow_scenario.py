@@ -159,6 +159,17 @@ def main() -> None:
         app.session_state["edit_category_id"] = flights["id"]
         app.run()
         assert by_label(app.selectbox, "Category to edit").value == flights["id"]
+        unused = add_category(app, alpha, "Unused")
+        by_label(app.selectbox, "Category to edit").set_value(unused["id"]).run()
+        by_label(
+            app.checkbox,
+            "I understand this category will be permanently deleted",
+        ).check()
+        by_label(app.button, "Permanently delete category").click().run()
+        assert not any(
+            category["id"] == unused["id"]
+            for category in alpha.list_categories()
+        )
         by_label(app.selectbox, "Parent category (optional)").set_value(
             travel["id"]
         )
@@ -262,6 +273,16 @@ def main() -> None:
         assert travel_category_row["Transaction count"] == 0
         assert flights_category_row["Transaction count"] == 1
         assert sales_category_row["Transaction count"] == 1
+        by_label(app.selectbox, "Category to edit").set_value(flights["id"]).run()
+        by_label(
+            app.checkbox,
+            "I understand this category will be permanently deleted",
+        ).check()
+        by_label(app.button, "Permanently delete category").click().run()
+        assert any(
+            "transactions" in str(error.value).casefold()
+            for error in app.error
+        )
         by_label(app.selectbox, "Category to edit").set_value(flights["id"]).run()
         by_label(app.selectbox, "Edit parent category").set_value("")
         by_label(app.button, "Save category changes").click().run()

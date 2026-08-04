@@ -2089,8 +2089,28 @@ elif page == "Categories":
                         ),
                         "Category updated.",
                     )
+                confirm_delete = st.checkbox(
+                    "I understand this category will be permanently deleted",
+                    key=f"confirm_delete_category_{category_id}",
+                )
+                if st.button(
+                    "Permanently delete category",
+                    icon=":material/delete_forever:",
+                    key=f"delete_category_{category_id}",
+                ):
+                    if not confirm_delete:
+                        st.error(
+                            "Confirm that you understand deletion is permanent."
+                        )
+                    else:
+                        confirmed_write(
+                            "delete_category",
+                            {"id": category_id},
+                            lambda: storage.delete_category(category_id),
+                            "Category deleted.",
+                        )
     st.caption(
-        "Categories are not deleted so existing transaction references remain valid."
+        "Categories with transactions or child categories cannot be deleted."
     )
 
 
