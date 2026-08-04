@@ -227,6 +227,21 @@ def main() -> None:
         by_label(app.selectbox, "Category").set_value("Sales")
         by_label(app.button, "Save transaction").click().run()
 
+        app.radio[0].set_value("Accounts").run()
+        account_table = app.dataframe[0].value
+        operations_account_row = account_table.loc[
+            account_table["Account"] == "Operations"
+        ].iloc[0]
+        petty_cash_account_row = account_table.loc[
+            account_table["Account"].str.endswith("Petty cash")
+        ].iloc[0]
+        payables_account_row = account_table.loc[
+            account_table["Account"] == "Payables"
+        ].iloc[0]
+        assert operations_account_row["Transaction count"] == 1
+        assert petty_cash_account_row["Transaction count"] == 2
+        assert payables_account_row["Transaction count"] == 1
+
         app.radio[0].set_value("Categories").run()
         category_table = app.dataframe[0].value
         travel_category_row = category_table.loc[

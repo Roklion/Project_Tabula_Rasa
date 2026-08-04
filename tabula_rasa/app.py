@@ -1619,6 +1619,16 @@ elif page == "Accounts":
         if (account_id := str(account.get("id") or "").strip())
     }
     balance_by_id = balances.set_index("ID")["Balance"].to_dict()
+    transaction_count_by_account: dict[str, int] = {}
+    for transaction in transactions:
+        involved_account_ids = {
+            str(transaction.get("account_id") or "").strip(),
+            str(transaction.get("to_account_id") or "").strip(),
+        }
+        for account_id in involved_account_ids - {""}:
+            transaction_count_by_account[account_id] = (
+                transaction_count_by_account.get(account_id, 0) + 1
+            )
     account_rows = []
     account_ids = []
     for account in ordered_hierarchy(accounts):
@@ -1636,6 +1646,9 @@ elif page == "Accounts":
                 "Type": account["type"],
                 "Active": account["active"],
                 "Balance": balance_by_id.get(account["id"], 0.0),
+                "Transaction count": transaction_count_by_account.get(
+                    account["id"], 0
+                ),
             }
         )
     account_table_key = (
