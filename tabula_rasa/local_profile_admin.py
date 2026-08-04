@@ -372,7 +372,7 @@ def render_local_profile_admin(
     )
 
     st.divider()
-    st.subheader("Add or replace a local profile")
+    st.subheader("Add a local profile")
     st.write(
         "Share the spreadsheet with the uploaded service account as Editor before "
         "saving. Validation opens the workbook, creates missing ledger worksheets "
@@ -384,7 +384,6 @@ def render_local_profile_admin(
         "local_profile_spreadsheet",
         "local_profile_backup_path",
         "local_profile_credential",
-        "local_profile_replace",
     )
     if st.session_state.pop("reset_local_profile_form", False):
         for form_key in profile_form_keys:
@@ -424,13 +423,6 @@ def render_local_profile_admin(
             accept_multiple_files=False,
             key="local_profile_credential",
         )
-        replace = st.checkbox(
-            "Replace an existing profile with this key",
-            help=(
-                "This replaces the profile with this key in business_profiles.json."
-            ),
-            key="local_profile_replace",
-        )
         submitted = st.form_submit_button("Validate and save", type="primary")
 
     if not submitted:
@@ -444,11 +436,10 @@ def render_local_profile_admin(
     try:
         key = validate_profile_key(profile_key)
         if key in {profile.key for profile in load_business_profiles(effective_secrets)}:
-            if not replace:
-                raise LocalProfileStoreError(
-                    "That profile key already exists. Select the replacement "
-                    "confirmation to update it locally."
-                )
+            raise LocalProfileStoreError(
+                "That profile key already exists. Use its edit or credential "
+                "rotation controls instead."
+            )
         if credential_file is None:
             raise LocalProfileStoreError(
                 "Upload the Google service-account JSON file."
@@ -458,16 +449,8 @@ def render_local_profile_admin(
             spreadsheet,
             credential_file.getvalue(),
             backup_folder_path,
-            (
-                local_profiles.get(key, {}).get("google_drive")
-                if replace
-                else None
-            ),
-            (
-                local_profiles.get(key, {}).get("synology_recovery")
-                if replace
-                else None
-            ),
+            None,
+            None,
         )
         folded_name = settings["name"].casefold()
         if any(
@@ -490,7 +473,6 @@ def render_local_profile_admin(
         save_local_profile(
             key,
             settings,
-            replace=replace,
             path=store_path,
         )
     except LocalProfileStoreError as error:

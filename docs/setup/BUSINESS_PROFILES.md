@@ -266,8 +266,8 @@ cannot be combined with `--write-test`.
 ### Service-account authentication failed
 
 The uploaded key may be malformed, disabled, revoked, or deleted. Create a
-replacement key, replace the profile locally, validate it, and export hosted
-Secrets again.
+replacement key, use the profile edit controls to rotate it, validate it, and
+export hosted Secrets again.
 
 ### Workbook access failed
 

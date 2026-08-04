@@ -90,6 +90,28 @@ class TestLocalProfileStore:
 
         assert "backup_folder_path" not in configured
 
+    def test_blank_stored_backup_path_migrates_without_manual_editing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "local_business_profiles.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "business_profiles": {
+                            "north": {
+                                **settings(),
+                                "backup_folder_path": "",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            stored = load_local_profiles(path)
+
+        assert "backup_folder_path" not in stored["north"]
+
     def test_atomically_saves_and_loads_profile(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "local_business_profiles.json"
