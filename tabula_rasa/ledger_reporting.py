@@ -76,7 +76,7 @@ def rollup_account_values(
     for account in records:
         account_id = str(account.get("id") or "").strip()
         parent_id = str(account.get("parent_id") or "").strip()
-        if account_id and parent_id in rollups:
+        if account_id and parent_id in rollups and account_id != parent_id:
             rollups[parent_id] += values.get(account_id, 0)
     return rollups
 

@@ -69,6 +69,11 @@ class TestLedgerReporting:
             accounts, {"parent": 2, "child": 3}
         ) == {"parent": 5, "child": 3}
 
+    def test_rollup_account_values_ignores_self_parent_links(self) -> None:
+        accounts = [{"id": "parent", "parent_id": "parent"}]
+
+        assert rollup_account_values(accounts, {"parent": 2}) == {"parent": 2}
+
     def test_profit_and_loss_excludes_transfers_and_honors_dates(self) -> None:
         assert profit_and_loss(self.transactions) == {
             "income": 50.0,

@@ -860,6 +860,8 @@ class TestGoogleSheetsStorage:
         )
         with pytest.raises(StorageConflictError, match="transactions"):
             self.storage.delete_category(referenced["id"])
+        with pytest.raises(StorageConflictError, match="transactions"):
+            self.storage.delete_category(f"  {referenced['id']}  ")
         assert {item["id"] for item in self.storage.list_categories()} == {
             parent["id"],
             child["id"],
