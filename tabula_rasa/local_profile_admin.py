@@ -14,9 +14,11 @@ from tabula_rasa.ledger_auth import verify_password
 from tabula_rasa.local_profile_store import (
     LOCAL_PROFILE_STORE_PATH,
     LocalProfileStoreError,
+    build_profile_edit_settings,
     build_profile_settings,
     load_local_profiles,
     save_local_profile,
+    update_local_profile,
     update_local_profile_synology_recovery,
     validate_profile_key,
 )
@@ -71,6 +73,42 @@ def _profile_setup_error_message(
     )
 
 
+def _validate_profile_edit_action(
+    save_settings: bool,
+    rotate_credential: bool,
+    credential_file: Any,
+) -> None:
+    if save_settings and credential_file is not None:
+        raise LocalProfileStoreError(
+            "To replace the credential, use the 'Validate and rotate credential' button."
+        )
+    if rotate_credential and credential_file is None:
+        raise LocalProfileStoreError(
+            "Upload a replacement Google service-account JSON for rotation."
+        )
+
+
+def _initialize_candidate_storage(
+    settings: Mapping[str, Any],
+) -> GoogleSheetsStorage:
+    candidate_storage = GoogleSheetsStorage.from_secrets(settings)
+    try:
+        candidate_storage.ensure_defaults()
+    except (
+        StorageAuthenticationError,
+        StorageWorkbookAccessError,
+        StorageInitializationError,
+        StorageValidationError,
+    ):
+        raise
+    except StorageError as error:
+        raise StorageInitializationError(
+            "The workbook opened, but default accounts and categories "
+            "could not be initialized"
+        ) from error
+    return candidate_storage
+
+
 def _profile_rows(
     effective_secrets: Mapping[str, Any],
     local_profiles: Mapping[str, Any],
@@ -91,8 +129,8 @@ def _profile_rows(
                 "Spreadsheet": _masked_spreadsheet_id(
                     profile.secrets.get("spreadsheet_id", "")
                 ),
-                "Backup folder": str(
-                    profile.secrets.get("backup_folder_path", "")
+                "Local backup folder": str(
+                    profile.secrets.get("backup_folder_path") or "Not configured"
                 ),
                 "Service account": str(credential.get("client_email", "")),
                 "Drive OAuth": (
@@ -204,6 +242,112 @@ def _render_synology_recovery_admin(
     st.rerun()
 
 
+def _render_local_profile_edits(
+    effective_secrets: Mapping[str, Any],
+    local_profiles: Mapping[str, Mapping[str, Any]],
+    *,
+    store_path: Path,
+) -> None:
+    st.subheader("Edit local profile settings")
+    st.write(
+        "Change ordinary profile settings without re-uploading the stored Sheets "
+        "credential. Profile keys are immutable. Use the separate rotation button "
+        "only when replacing that credential."
+    )
+    for profile_key, existing in local_profiles.items():
+        business_name = str(existing.get("name", profile_key))
+        with st.expander(f"{business_name} ({profile_key})"):
+            with st.form(f"local_profile_edit_{profile_key}"):
+                name = st.text_input(
+                    "Business name",
+                    value=business_name,
+                    max_chars=100,
+                    key=f"local_profile_edit_name_{profile_key}",
+                )
+                spreadsheet = st.text_input(
+                    "Google Sheets URL or spreadsheet ID",
+                    value=str(existing.get("spreadsheet_id") or ""),
+                    key=f"local_profile_edit_spreadsheet_{profile_key}",
+                )
+                backup_folder_path = st.text_input(
+                    "Optional local backup folder path",
+                    value=str(existing.get("backup_folder_path") or ""),
+                    help=(
+                        "Leave blank for the profile-scoped repository fallback. "
+                        "This setting is independent from Google Drive backups."
+                    ),
+                    key=f"local_profile_edit_backup_path_{profile_key}",
+                )
+                credential_file = st.file_uploader(
+                    "Replacement Google service-account JSON (rotation only)",
+                    type=["json"],
+                    accept_multiple_files=False,
+                    key=f"local_profile_edit_credential_{profile_key}",
+                )
+                save_settings = st.form_submit_button(
+                    "Validate and save settings",
+                    key=f"local_profile_edit_save_{profile_key}",
+                )
+                rotate_credential = st.form_submit_button(
+                    "Validate and rotate credential",
+                    key=f"local_profile_edit_rotate_{profile_key}",
+                )
+
+            if not (save_settings or rotate_credential):
+                continue
+            settings: Mapping[str, Any] = existing
+            try:
+                _validate_profile_edit_action(
+                    save_settings,
+                    rotate_credential,
+                    credential_file,
+                )
+                settings = build_profile_edit_settings(
+                    existing,
+                    name,
+                    spreadsheet,
+                    backup_folder_path,
+                    credential_file.getvalue()
+                    if rotate_credential and credential_file is not None
+                    else None,
+                )
+                folded_name = settings["name"].casefold()
+                if any(
+                    profile.key != profile_key
+                    and profile.name.casefold() == folded_name
+                    for profile in load_business_profiles(effective_secrets)
+                ):
+                    raise LocalProfileStoreError(
+                        "Business display names must be unique."
+                    )
+                _initialize_candidate_storage(settings)
+                update_local_profile(
+                    profile_key,
+                    name=name,
+                    spreadsheet=spreadsheet,
+                    backup_folder_path=backup_folder_path,
+                    credential_upload=(
+                        credential_file.getvalue()
+                        if rotate_credential and credential_file is not None
+                        else None
+                    ),
+                    path=store_path,
+                )
+            except LocalProfileStoreError as error:
+                st.error(str(error))
+                continue
+            except StorageError as error:
+                st.error(_profile_setup_error_message(error, settings))
+                continue
+
+            st.cache_resource.clear()
+            action = "rotated and saved" if rotate_credential else "saved"
+            st.session_state["local_profile_admin_notice"] = (
+                f"Business profile '{profile_key}' was validated and {action}."
+            )
+            st.rerun()
+
+
 def render_local_profile_admin(
     base_secrets: Mapping[str, Any],
     effective_secrets: Mapping[str, Any],
@@ -264,7 +408,7 @@ def render_local_profile_admin(
     )
 
     st.divider()
-    st.subheader("Add or replace a local profile")
+    st.subheader("Add a local profile")
     st.write(
         "Share the spreadsheet with the uploaded service account as Editor before "
         "saving. Validation opens the workbook, creates missing ledger worksheets "
@@ -276,7 +420,6 @@ def render_local_profile_admin(
         "local_profile_spreadsheet",
         "local_profile_backup_path",
         "local_profile_credential",
-        "local_profile_replace",
     )
     if st.session_state.pop("reset_local_profile_form", False):
         for form_key in profile_form_keys:
@@ -299,13 +442,14 @@ def render_local_profile_admin(
             key="local_profile_spreadsheet",
         )
         backup_folder_path = st.text_input(
-            "Google Drive Desktop backup folder path",
+            "Optional local backup folder path",
             help=(
                 "Backups are ZIP files written by the local backup process, not "
-                "uploaded through the Drive API. Enter the absolute folder path "
-                "provided by Google Drive Desktop, for example "
+                "uploaded through the Google Drive API. Leave this blank for a "
+                "profile-scoped repository fallback, or enter the absolute folder "
+                "path provided by Google Drive Desktop, for example "
                 r"G:\My Drive\Tabula Rosa Backups\business. Google Drive Desktop "
-                "must be installed, signed in, and running when backups execute."
+                "is only required when this optional local copy uses a mounted path."
             ),
             key="local_profile_backup_path",
         )
@@ -315,26 +459,23 @@ def render_local_profile_admin(
             accept_multiple_files=False,
             key="local_profile_credential",
         )
-        replace = st.checkbox(
-            "Replace an existing profile with this key",
-            help=(
-                "This replaces the profile with this key in business_profiles.json."
-            ),
-            key="local_profile_replace",
-        )
         submitted = st.form_submit_button("Validate and save", type="primary")
 
     if not submitted:
+        _render_local_profile_edits(
+            effective_secrets,
+            local_profiles,
+            store_path=store_path,
+        )
         return
 
     try:
         key = validate_profile_key(profile_key)
         if key in {profile.key for profile in load_business_profiles(effective_secrets)}:
-            if not replace:
-                raise LocalProfileStoreError(
-                    "That profile key already exists. Select the replacement "
-                    "confirmation to update it locally."
-                )
+            raise LocalProfileStoreError(
+                "That profile key already exists. Use its edit or credential "
+                "rotation controls instead."
+            )
         if credential_file is None:
             raise LocalProfileStoreError(
                 "Upload the Google service-account JSON file."
@@ -344,16 +485,8 @@ def render_local_profile_admin(
             spreadsheet,
             credential_file.getvalue(),
             backup_folder_path,
-            (
-                local_profiles.get(key, {}).get("google_drive")
-                if replace
-                else None
-            ),
-            (
-                local_profiles.get(key, {}).get("synology_recovery")
-                if replace
-                else None
-            ),
+            None,
+            None,
         )
         folded_name = settings["name"].casefold()
         if any(
@@ -363,20 +496,10 @@ def render_local_profile_admin(
             raise LocalProfileStoreError(
                 "Business display names must be unique."
             )
-        candidate_storage = GoogleSheetsStorage.from_secrets(settings)
-        try:
-            candidate_storage.ensure_defaults()
-        except StorageAuthenticationError:
-            raise
-        except StorageError as error:
-            raise StorageInitializationError(
-                "The workbook opened, but default accounts and categories "
-                "could not be initialized"
-            ) from error
+        _initialize_candidate_storage(settings)
         save_local_profile(
             key,
             settings,
-            replace=replace,
             path=store_path,
         )
     except LocalProfileStoreError as error:

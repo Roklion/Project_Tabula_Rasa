@@ -175,7 +175,7 @@ def build_profile_settings(
         "spreadsheet_id": parse_spreadsheet_id(spreadsheet),
         "gcp_service_account": parse_service_account_json(credential_upload),
     }
-    if backup_folder_path is not None:
+    if backup_folder_path is not None and backup_folder_path.strip():
         settings["backup_folder_path"] = validate_backup_folder_path(
             backup_folder_path
         )
@@ -198,6 +198,7 @@ def _validate_stored_profiles(profiles: object) -> dict[str, dict[str, Any]]:
     if not isinstance(profiles, dict):
         raise LocalProfileStoreError("Local profile store has an invalid format.")
     normalized: dict[str, dict[str, Any]] = {}
+    storage_roots: dict[str, str] = {}
     for raw_key, raw_settings in profiles.items():
         key = validate_profile_key(str(raw_key))
         if not isinstance(raw_settings, dict):
@@ -227,6 +228,24 @@ def _validate_stored_profiles(profiles: object) -> dict[str, dict[str, Any]]:
             raise LocalProfileStoreError(
                 f"Local profile '{key}' is incomplete or malformed."
             ) from exc
+        drive_settings = settings.get("google_drive")
+        storage_root = (
+            drive_settings.get("storage_root")
+            if isinstance(drive_settings, Mapping)
+            else None
+        )
+        root_id = (
+            str(storage_root.get("id", ""))
+            if isinstance(storage_root, Mapping)
+            else ""
+        )
+        if root_id and root_id in storage_roots:
+            raise LocalProfileStoreError(
+                "A Google Drive storage root can belong to only one business "
+                "profile."
+            )
+        if root_id:
+            storage_roots[root_id] = key
         normalized[key] = settings
     try:
         load_business_profiles({"business_profiles": normalized})
@@ -307,17 +326,92 @@ def save_local_profile(
                 "That profile key already exists in the local profile store."
             )
         profiles[profile_key] = candidate
-        profiles = _validate_stored_profiles(profiles)
-        content = (
-            json.dumps(
-                {"version": STORE_VERSION, "business_profiles": profiles},
-                indent=2,
-                ensure_ascii=False,
-                sort_keys=True,
+        _write_local_profiles(path, profiles)
+
+
+def _write_local_profiles(
+    path: Path,
+    profiles: Mapping[str, Mapping[str, Any]],
+) -> None:
+    validated = _validate_stored_profiles(dict(profiles))
+    content = (
+        json.dumps(
+            {"version": STORE_VERSION, "business_profiles": validated},
+            indent=2,
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        + "\n"
+    ).encode("utf-8")
+    _atomic_write(path, content)
+
+
+def build_profile_edit_settings(
+    existing: Mapping[str, Any],
+    name: str,
+    spreadsheet: str,
+    backup_folder_path: str | None,
+    credential_upload: bytes | None = None,
+) -> dict[str, Any]:
+    """Build validated settings while preserving omitted profile-scoped values."""
+    if credential_upload is None:
+        credential = existing.get("gcp_service_account")
+        if not isinstance(credential, Mapping):
+            raise LocalProfileStoreError(
+                "The existing profile does not contain a valid service-account key."
             )
-            + "\n"
-        ).encode("utf-8")
-        _atomic_write(path, content)
+        try:
+            credential_upload = json.dumps(dict(credential)).encode("utf-8")
+        except (TypeError, ValueError) as exc:
+            raise LocalProfileStoreError(
+                "The existing profile credential could not be validated safely."
+            ) from exc
+    return build_profile_settings(
+        name,
+        spreadsheet,
+        credential_upload,
+        backup_folder_path,
+        existing.get("google_drive"),
+        existing.get("synology_recovery"),
+    )
+
+
+def update_local_profile(
+    key: str,
+    *,
+    name: str,
+    spreadsheet: str,
+    backup_folder_path: str | None,
+    credential_upload: bytes | None = None,
+    path: Path = LOCAL_PROFILE_STORE_PATH,
+) -> None:
+    """Atomically edit profile settings without changing the immutable key."""
+    profile_key = validate_profile_key(key)
+    with _STORE_LOCK:
+        profiles = load_local_profiles(path)
+        existing = profiles.get(profile_key)
+        if existing is None:
+            raise LocalProfileStoreError(
+                "Only a stored local business profile can be edited."
+            )
+        candidate = build_profile_edit_settings(
+            existing,
+            name,
+            spreadsheet,
+            backup_folder_path,
+            credential_upload,
+        )
+        folded_name = candidate["name"].casefold()
+        if any(
+            other_key != profile_key
+            and str(other_settings.get("name", "")).casefold() == folded_name
+            for other_key, other_settings in profiles.items()
+        ):
+            raise LocalProfileStoreError(
+                "Business display names must be unique."
+            )
+        profiles[profile_key] = candidate
+        _write_local_profiles(path, profiles)
 
 
 def update_local_profile_google_drive(
@@ -345,17 +439,7 @@ def update_local_profile_google_drive(
             except GoogleDriveConfigurationError as exc:
                 raise LocalProfileStoreError(str(exc)) from exc
         profiles[profile_key] = candidate
-        profiles = _validate_stored_profiles(profiles)
-        content = (
-            json.dumps(
-                {"version": STORE_VERSION, "business_profiles": profiles},
-                indent=2,
-                ensure_ascii=False,
-                sort_keys=True,
-            )
-            + "\n"
-        ).encode("utf-8")
-        _atomic_write(path, content)
+        _write_local_profiles(path, profiles)
 
 
 def update_local_profile_synology_recovery(
@@ -393,17 +477,7 @@ def update_local_profile_synology_recovery(
             except SynologyRecoveryConfigurationError as exc:
                 raise LocalProfileStoreError(str(exc)) from exc
         profiles[profile_key] = candidate
-        profiles = _validate_stored_profiles(profiles)
-        content = (
-            json.dumps(
-                {"version": STORE_VERSION, "business_profiles": profiles},
-                indent=2,
-                ensure_ascii=False,
-                sort_keys=True,
-            )
-            + "\n"
-        ).encode("utf-8")
-        _atomic_write(path, content)
+        _write_local_profiles(path, profiles)
 
 
 def merged_profile_secrets(

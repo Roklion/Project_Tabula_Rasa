@@ -22,7 +22,10 @@ from tabula_rasa.google_drive import (
     backup_is_in_local_week,
     load_oauth_config,
 )
-from tabula_rasa.local_profile_store import load_business_profile_document
+from tabula_rasa.local_profile_store import (
+    load_business_profile_document,
+    validate_profile_key,
+)
 from tabula_rasa.receipt_backfill import prepare_backup_receipt_manifest
 from tabula_rasa.storage import GoogleSheetsStorage
 from tabula_rasa.storage.google_sheets import BACKUP_FORMAT_VERSION
@@ -65,12 +68,19 @@ def verified_backup_for_week(
 def resolve_backup_output_dir(
     profile_secrets: Mapping[str, Any],
     override: Path | None,
+    profile_key: str | None = None,
 ) -> Path:
-    """Resolve an explicit override, profile path, or local default."""
+    """Resolve an explicit override, profile path, or profile-scoped default."""
     if override is not None:
         return override
     configured = str(profile_secrets.get("backup_folder_path", "")).strip()
-    return Path(configured) if configured else PROJECT_ROOT / "backups"
+    if configured:
+        return Path(configured)
+    if profile_key is None:
+        raise ValueError(
+            "A profile key is required when no local backup folder is configured."
+        )
+    return PROJECT_ROOT / "backups" / validate_profile_key(profile_key)
 
 
 def write_versioned_backup(
@@ -228,7 +238,7 @@ def main() -> None:
         type=Path,
         help=(
             "Override the profile's backup_folder_path; defaults to the profile "
-            "setting or the project backups directory"
+            "setting or backups/PROFILE_KEY"
         ),
     )
     parser.add_argument(
@@ -286,7 +296,11 @@ def main() -> None:
         print(f"Verified Google Drive backup created: {uploaded.get('name', 'backup')}")
         return
 
-    output_dir = resolve_backup_output_dir(secrets, args.output_dir)
+    output_dir = resolve_backup_output_dir(
+        secrets,
+        args.output_dir,
+        selected_profile_key,
+    )
     if args.once_per_week:
         existing = verified_backup_for_week(output_dir)
         if existing is not None:

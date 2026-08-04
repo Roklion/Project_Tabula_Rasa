@@ -20,12 +20,12 @@ flowchart LR
 
     subgraph Config["Configuration boundary"]
         AppSecrets["App-wide secrets<br/>password hash and OAuth client"]
-        ProfileSecrets["Per-profile secrets<br/>spreadsheet, service account,<br/>refresh token, folder IDs"]
+        ProfileSecrets["Per-profile secrets<br/>spreadsheet, service account,<br/>refresh token, root and child IDs"]
     end
 
     subgraph Google["Google services"]
         Sheets["Business Google Sheet"]
-        Drive["Business receipt and backup folders"]
+        Drive["Business storage root<br/>Receipts and Ledger Backups children"]
     end
 
     NAS["Optional Synology recovery folder"]
@@ -53,7 +53,7 @@ objects every subsequent operation uses.
 | --- | --- | --- | --- |
 | Application sign-in | Application password hash | App-wide secrets | Entire deployment |
 | Ledger reads and writes | Profile service account | Profile Google Sheet | One shared spreadsheet |
-| Receipts and cloud backups | Shared OAuth client plus profile refresh token | Profile Google Drive folders | Files selected or created through the app |
+| Receipts and cloud backups | Shared OAuth client plus profile refresh token | Profile storage root and receipt/backup children | Files selected or created through the app |
 | Local configuration | Operating-system file permissions | `.streamlit/secrets.toml` and `.streamlit/business_profiles.json` | Local deployment |
 | Hosted configuration | Streamlit Secrets | Streamlit Community Cloud | Hosted deployment |
 | NAS recovery | DSM account and separate Google authorization in Cloud Sync | Profile-specific Synology folder | One configured Drive folder |
@@ -62,7 +62,7 @@ The Sheets service account and human Google Drive authorization are deliberately
 separate:
 
 - the service account edits the ledger workbook;
-- the human Google account owns and selects receipt and backup folders; and
+- the human Google account owns or authorizes the storage root and its receipt/backup children; and
 - neither credential automatically grants the permissions of the other.
 
 See [Google Drive OAuth and per-business access](GOOGLE_DRIVE_OAUTH.md) for the

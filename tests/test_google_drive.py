@@ -213,6 +213,392 @@ class TestGoogleDriveOAuth:
 
 
 class TestGoogleDriveFiles:
+    @staticmethod
+    def _managed_folder(
+        folder_id: str,
+        name: str,
+        *,
+        profile_key: str = "north",
+        storage_kind: str,
+        root_id: str | None = None,
+    ) -> dict[str, Any]:
+        properties = {
+            "tabulaRasaKind": storage_kind,
+            "tabulaRasaProfile": profile_key,
+        }
+        folder: dict[str, Any] = {
+            "id": folder_id,
+            "name": name,
+            "mimeType": "application/vnd.google-apps.folder",
+            "trashed": False,
+            "appProperties": properties,
+        }
+        if root_id is not None:
+            properties["tabulaRasaStorageRoot"] = root_id
+            folder["parents"] = [root_id]
+        return folder
+
+    def test_provisions_exactly_one_child_of_each_kind(self) -> None:
+        root_id = "rootfolder123"
+        session = DriveSession(
+            [
+                FakeResponse(
+                    200,
+                    {
+                        "id": root_id,
+                        "name": "North Storage",
+                        "mimeType": "application/vnd.google-apps.folder",
+                        "trashed": False,
+                    },
+                ),
+                FakeResponse(200, {"files": []}),
+                FakeResponse(
+                    200,
+                    self._managed_folder(
+                        "receiptchild123",
+                        "Receipts",
+                        storage_kind="receipts",
+                        root_id=root_id,
+                    ),
+                ),
+                FakeResponse(200, {"files": []}),
+                FakeResponse(
+                    200,
+                    self._managed_folder(
+                        "backupchild123",
+                        "Ledger Backups",
+                        storage_kind="ledger-backups",
+                        root_id=root_id,
+                    ),
+                ),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        children = client.provision_storage_children("north", root_id)
+
+        assert children == {
+            "receipts": {"id": "receiptchild123", "name": "Receipts"},
+            "ledger-backups": {
+                "id": "backupchild123",
+                "name": "Ledger Backups",
+            },
+        }
+        create_requests = [
+            request for request in session.requests if request[0] == "POST"
+        ]
+        assert len(create_requests) == 2
+        receipt_metadata = json.loads(create_requests[0][2]["data"])
+        assert receipt_metadata["parents"] == [root_id]
+        assert receipt_metadata["appProperties"]["tabulaRasaProfile"] == "north"
+        assert receipt_metadata["appProperties"]["tabulaRasaKind"] == "receipts"
+
+    def test_creates_an_app_managed_storage_root(self) -> None:
+        root = self._managed_folder(
+            "rootfolder123",
+            "North Storage",
+            storage_kind="storage-root",
+        )
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, root),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        created = client.create_storage_root("north", "North Storage")
+
+        assert created == {"id": "rootfolder123", "name": "North Storage"}
+        metadata = json.loads(session.requests[1][2]["data"])
+        assert metadata["mimeType"] == "application/vnd.google-apps.folder"
+        assert metadata["appProperties"]["tabulaRasaKind"] == "storage-root"
+
+    def test_uncertain_root_creation_reuses_the_confirmed_root(self) -> None:
+        root = self._managed_folder(
+            "rootfolder123",
+            "North Storage",
+            storage_kind="storage-root",
+        )
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": []}),
+                requests.ConnectionError("root response was lost"),
+                FakeResponse(200, {"files": [root]}),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        created = client.create_storage_root("north", "North Storage")
+
+        assert created["id"] == "rootfolder123"
+        assert [request[0] for request in session.requests].count("POST") == 1
+
+    def test_uncertain_root_creation_delays_before_a_retry(self) -> None:
+        root = self._managed_folder(
+            "rootfolder123",
+            "North Storage",
+            storage_kind="storage-root",
+        )
+        delays: list[float] = []
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": []}),
+                requests.ConnectionError("root response was lost"),
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, root),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=delays.append,
+        )
+
+        created = client.create_storage_root("north", "North Storage")
+
+        assert created["id"] == "rootfolder123"
+        assert delays == [1.0]
+        assert [request[0] for request in session.requests].count("POST") == 2
+
+    def test_reuses_existing_children_without_creating_duplicates(self) -> None:
+        root_id = "rootfolder123"
+        receipt = self._managed_folder(
+            "receiptchild123",
+            "Receipts",
+            storage_kind="receipts",
+            root_id=root_id,
+        )
+        backup = self._managed_folder(
+            "backupchild123",
+            "Ledger Backups",
+            storage_kind="ledger-backups",
+            root_id=root_id,
+        )
+        session = DriveSession(
+            [
+                FakeResponse(
+                    200,
+                    {
+                        "id": root_id,
+                        "name": "North Storage",
+                        "mimeType": "application/vnd.google-apps.folder",
+                        "trashed": False,
+                    },
+                ),
+                FakeResponse(200, {"files": [receipt]}),
+                FakeResponse(200, {"files": [backup]}),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        children = client.provision_storage_children("north", root_id)
+
+        assert children["receipts"]["id"] == "receiptchild123"
+        assert children["ledger-backups"]["id"] == "backupchild123"
+        assert not any(request[0] == "POST" for request in session.requests)
+        assert len(session.requests) == 3
+        assert all(request[1].endswith("/files") for request in session.requests[1:])
+
+    def test_uncertain_child_creation_reconciles_before_retrying(self) -> None:
+        root_id = "rootfolder123"
+        receipt = self._managed_folder(
+            "receiptchild123",
+            "Receipts",
+            storage_kind="receipts",
+            root_id=root_id,
+        )
+        backup = self._managed_folder(
+            "backupchild123",
+            "Ledger Backups",
+            storage_kind="ledger-backups",
+            root_id=root_id,
+        )
+        session = DriveSession(
+            [
+                FakeResponse(
+                    200,
+                    {
+                        "id": root_id,
+                        "name": "North Storage",
+                        "mimeType": "application/vnd.google-apps.folder",
+                        "trashed": False,
+                    },
+                ),
+                FakeResponse(200, {"files": []}),
+                requests.ConnectionError("response was lost after create"),
+                FakeResponse(200, {"files": [receipt]}),
+                FakeResponse(200, {"files": [backup]}),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        children = client.provision_storage_children("north", root_id)
+
+        assert children["receipts"]["id"] == "receiptchild123"
+        assert [request[0] for request in session.requests].count("POST") == 1
+
+    def test_partial_provisioning_is_reusable_on_a_later_attempt(self) -> None:
+        root_id = "rootfolder123"
+        receipt = self._managed_folder(
+            "receiptchild123",
+            "Receipts",
+            storage_kind="receipts",
+            root_id=root_id,
+        )
+        backup = self._managed_folder(
+            "backupchild123",
+            "Ledger Backups",
+            storage_kind="ledger-backups",
+            root_id=root_id,
+        )
+        session = DriveSession(
+            [
+                FakeResponse(200, {"id": root_id, "name": "North Storage", "mimeType": "application/vnd.google-apps.folder", "trashed": False}),
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, receipt),
+                FakeResponse(200, {"files": []}),
+                requests.ConnectionError("backup response was lost"),
+                FakeResponse(200, {"files": []}),
+                requests.ConnectionError("backup response was lost again"),
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, {"id": "rootfolder123", "name": "North Storage", "mimeType": "application/vnd.google-apps.folder", "trashed": False}),
+                FakeResponse(200, {"files": [receipt]}),
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, backup),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        with pytest.raises(GoogleDriveAccessError):
+            client.provision_storage_children("north", root_id)
+        children = client.provision_storage_children("north", root_id)
+
+        assert children["receipts"]["id"] == "receiptchild123"
+        assert children["ledger-backups"]["id"] == "backupchild123"
+
+    def test_managed_child_must_remain_under_its_profile_root(self) -> None:
+        root_id = "rootfolder123"
+        wrong_root = "otherroot123"
+        child = self._managed_folder(
+            "receiptchild123",
+            "Receipts",
+            storage_kind="receipts",
+            root_id=wrong_root,
+        )
+        session = DriveSession(
+            [
+                FakeResponse(200, {"id": root_id, "name": "North Storage", "mimeType": "application/vnd.google-apps.folder", "trashed": False}),
+                FakeResponse(200, {"files": [child]}),
+                FakeResponse(200, child),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        with pytest.raises(GoogleDriveAccessError, match="outside"):
+            client.provision_storage_children("north", root_id)
+
+    def test_managed_child_with_missing_parents_is_rejected_safely(self) -> None:
+        root_id = "rootfolder123"
+        child = self._managed_folder(
+            "receiptchild123",
+            "Receipts",
+            storage_kind="receipts",
+            root_id=root_id,
+        )
+        child["parents"] = None
+        session = DriveSession(
+            [
+                FakeResponse(
+                    200,
+                    {
+                        "id": root_id,
+                        "name": "North Storage",
+                        "mimeType": "application/vnd.google-apps.folder",
+                        "trashed": False,
+                    },
+                ),
+                FakeResponse(200, {"files": [child]}),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        with pytest.raises(GoogleDriveAccessError, match="outside"):
+            client.provision_storage_children("north", root_id)
+
+    def test_managed_folder_with_missing_name_is_rejected(self) -> None:
+        session = DriveSession(
+            [
+                FakeResponse(
+                    200,
+                    {
+                        "files": [
+                            {
+                                "id": "rootfolder123",
+                                "name": None,
+                                "mimeType": "application/vnd.google-apps.folder",
+                                "trashed": False,
+                                "appProperties": {
+                                    "tabulaRasaKind": "storage-root",
+                                    "tabulaRasaProfile": "north",
+                                },
+                            }
+                        ]
+                    },
+                )
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        with pytest.raises(GoogleDriveAccessError, match="not available"):
+            client.create_storage_root("north", "North Storage")
+
     def test_selected_folder_is_validated_before_it_is_saved(self) -> None:
         session = DriveSession(
             [

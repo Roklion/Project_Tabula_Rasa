@@ -17,6 +17,7 @@ from tabula_rasa.local_profile_store import (
     merged_profile_secrets,
     parse_service_account_json,
     save_local_profile,
+    update_local_profile,
     update_local_profile_google_drive,
     update_local_profile_synology_recovery,
 )
@@ -79,6 +80,38 @@ class TestLocalProfileStore:
 
         assert secret not in str(raised.value)
 
+    def test_blank_backup_path_is_not_stored(self) -> None:
+        configured = build_profile_settings(
+            "Cloud Shop",
+            "abcdefghij1234567890",
+            json.dumps(credential()).encode("utf-8"),
+            "   ",
+        )
+
+        assert "backup_folder_path" not in configured
+
+    def test_blank_stored_backup_path_migrates_without_manual_editing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "local_business_profiles.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "business_profiles": {
+                            "north": {
+                                **settings(),
+                                "backup_folder_path": "",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            stored = load_local_profiles(path)
+
+        assert "backup_folder_path" not in stored["north"]
+
     def test_atomically_saves_and_loads_profile(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "local_business_profiles.json"
@@ -110,6 +143,101 @@ class TestLocalProfileStore:
                 path=path,
             )
             assert load_local_profiles(path)["north"]["name"] == "Replacement"
+
+    def test_ordinary_edit_preserves_credentials_and_profile_scoped_metadata(self) -> None:
+        drive = {
+            "authorized_email": "north@example.test",
+            "authorized_name": "North Owner",
+            "refresh_token": "durable-refresh-token",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "scopes": ["https://www.googleapis.com/auth/drive.file"],
+            "receipt_folder": {"id": "receiptfolder123", "name": "Receipts"},
+            "backup_folder": {"id": "backupfolder123", "name": "Backups"},
+        }
+        recovery = {
+            "destination_path": "/volume1/Backups/TabulaRasa/north",
+            "schedule": "Continuous",
+            "retention_policy": "Retain until manual review.",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "local_business_profiles.json"
+            save_local_profile("north", settings(), path=path)
+            update_local_profile_google_drive("north", drive, path=path)
+            update_local_profile_synology_recovery("north", recovery, path=path)
+            before = load_local_profiles(path)["north"]
+
+            update_local_profile(
+                "north",
+                name="North Shop Renamed",
+                spreadsheet="newspreadsheet123456789",
+                backup_folder_path="",
+                path=path,
+            )
+            after = load_local_profiles(path)["north"]
+
+        assert after["name"] == "North Shop Renamed"
+        assert after["spreadsheet_id"] == "newspreadsheet123456789"
+        assert "backup_folder_path" not in after
+        assert after["gcp_service_account"] == before["gcp_service_account"]
+        assert after["google_drive"] == before["google_drive"]
+        assert after["synology_recovery"] == before["synology_recovery"]
+
+    def test_failed_edit_leaves_the_complete_profile_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "local_business_profiles.json"
+            save_local_profile("north", settings(), path=path)
+            before = load_local_profiles(path)["north"]
+
+            with pytest.raises(LocalProfileStoreError):
+                update_local_profile(
+                    "north",
+                    name="North Changed",
+                    spreadsheet="bad",
+                    backup_folder_path="",
+                    path=path,
+                )
+
+            assert load_local_profiles(path)["north"] == before
+
+    def test_credential_rotation_requires_explicit_upload_and_replaces_only_key(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "local_business_profiles.json"
+            save_local_profile("north", settings(), path=path)
+            replacement = credential("replacement-key")
+
+            update_local_profile(
+                "north",
+                name="North Shop",
+                spreadsheet="abcdefghij1234567890",
+                backup_folder_path=r"G:\My Drive\Tabula Rosa Backups\north",
+                credential_upload=json.dumps(replacement).encode("utf-8"),
+                path=path,
+            )
+
+            stored = load_local_profiles(path)["north"]
+
+        assert stored["gcp_service_account"] == replacement
+
+    def test_edit_isolated_to_the_selected_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "local_business_profiles.json"
+            save_local_profile("north", settings(), path=path)
+            save_local_profile("south", settings("South Shop"), path=path)
+
+            update_local_profile(
+                "north",
+                name="North Shop Updated",
+                spreadsheet="northspreadsheet123456789",
+                backup_folder_path="",
+                path=path,
+            )
+            stored = load_local_profiles(path)
+
+        assert stored["north"]["name"] == "North Shop Updated"
+        assert stored["south"]["name"] == "South Shop"
+        assert stored["south"]["backup_folder_path"] == settings("South Shop")[
+            "backup_folder_path"
+        ]
 
     def test_json_profiles_are_merged_with_app_secrets(self) -> None:
         base = {"app_password_hash": "hash"}
@@ -155,6 +283,39 @@ class TestLocalProfileStore:
 
             update_local_profile_google_drive("north", None, path=path)
             assert "google_drive" not in load_local_profiles(path)["north"]
+
+    def test_storage_root_is_validated_and_cannot_be_shared(self) -> None:
+        north_drive = {
+            "authorized_email": "north@example.test",
+            "authorized_name": "North Owner",
+            "refresh_token": "north-refresh-token",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "scopes": ["https://www.googleapis.com/auth/drive.file"],
+            "storage_root": {"id": "rootfolder123", "name": "North Storage"},
+        }
+        south_drive = {
+            "authorized_email": "south@example.test",
+            "authorized_name": "South Owner",
+            "refresh_token": "south-refresh-token",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "scopes": ["https://www.googleapis.com/auth/drive.file"],
+            "storage_root": {"id": "rootfolder123", "name": "North Storage"},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "local_business_profiles.json"
+            save_local_profile("north", settings(), path=path)
+            save_local_profile("south", settings("South Shop"), path=path)
+            update_local_profile_google_drive("north", north_drive, path=path)
+
+            with pytest.raises(LocalProfileStoreError, match="only one"):
+                update_local_profile_google_drive("south", south_drive, path=path)
+
+            stored = load_local_profiles(path)
+
+        assert stored["north"]["google_drive"]["storage_root"]["id"] == (
+            "rootfolder123"
+        )
+        assert "google_drive" not in stored["south"]
 
     def test_synology_recovery_is_optional_and_profile_scoped(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

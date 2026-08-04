@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import sys
 import tempfile
 import zipfile
 from datetime import datetime, timezone
@@ -138,14 +139,111 @@ class TestBackupScripts:
         override = Path(r"D:\Emergency Backups")
 
         assert (
-            resolve_backup_output_dir({"backup_folder_path": str(configured)}, None)
+            resolve_backup_output_dir(
+                {"backup_folder_path": str(configured)}, None, "north"
+            )
             == configured
         )
         assert (
-            resolve_backup_output_dir({"backup_folder_path": str(configured)}, override)
+            resolve_backup_output_dir(
+                {"backup_folder_path": str(configured)}, override, "north"
+            )
             == override
         )
-        assert resolve_backup_output_dir({}, None) == PROJECT_ROOT / "backups"
+        assert resolve_backup_output_dir({}, None, "north") == PROJECT_ROOT / "backups" / "north"
+
+    def test_profile_fallbacks_are_isolated_and_require_a_profile_key(self) -> None:
+        assert resolve_backup_output_dir({}, None, "north") != resolve_backup_output_dir(
+            {}, None, "south"
+        )
+        with pytest.raises(ValueError, match="profile key"):
+            resolve_backup_output_dir({}, None)
+
+    def test_weekly_checks_are_isolated_between_implicit_profile_destinations(
+        self,
+    ) -> None:
+        storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+        manifest = build_receipt_manifest("test", [], [])
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            north_dir = resolve_backup_output_dir({}, None, "north")
+            south_dir = resolve_backup_output_dir({}, None, "south")
+            north_dir = root / north_dir.relative_to(PROJECT_ROOT)
+            south_dir = root / south_dir.relative_to(PROJECT_ROOT)
+            north_backup = write_versioned_backup(
+                storage,
+                north_dir,
+                manifest,
+                keep=2,
+            )
+            south_backup = write_versioned_backup(
+                storage,
+                south_dir,
+                manifest,
+                keep=2,
+            )
+
+            timestamp = north_backup.name.removeprefix(
+                "tabula-rosa-backup-"
+            ).removesuffix(".zip")
+            local_date = datetime.strptime(timestamp, "%Y%m%dT%H%M%SZ").date()
+            assert verified_backup_for_week(north_dir, local_date=local_date)
+            assert verified_backup_for_week(south_dir, local_date=local_date) == south_backup
+
+    def test_cloud_mode_does_not_require_a_local_backup_destination(self) -> None:
+        profile = type("Profile", (), {"key": "north"})()
+        secrets = {
+            "business_profiles": {
+                "north": {
+                    "spreadsheet_id": "northspreadsheet123456789",
+                    "gcp_service_account": {},
+                    "google_drive": {
+                        "authorized_email": "north@example.test",
+                        "authorized_name": "North Owner",
+                        "refresh_token": "refresh-token",
+                        "token_uri": "https://oauth2.googleapis.com/token",
+                        "scopes": ["https://www.googleapis.com/auth/drive.file"],
+                        "receipt_folder": {
+                            "id": "receiptfolder123",
+                            "name": "Receipts",
+                        },
+                        "backup_folder": {
+                            "id": "backupfolder123",
+                            "name": "Backups",
+                        },
+                    },
+                }
+            }
+        }
+        with (
+            patch(
+                "scripts.backup_google_sheets.load_business_profile_document",
+                return_value=secrets,
+            ),
+            patch(
+                "scripts.backup_google_sheets.load_business_profiles",
+                return_value=[profile],
+            ),
+            patch(
+                "scripts.backup_google_sheets.select_profile_secrets",
+                return_value=secrets["business_profiles"]["north"],
+            ),
+            patch("scripts.backup_google_sheets.GoogleSheetsStorage.from_secrets"),
+            patch(
+                "scripts.backup_google_sheets.upload_versioned_backup_to_drive",
+                return_value={"name": "backup.zip"},
+            ) as upload,
+            patch.object(
+                sys,
+                "argv",
+                ["backup_google_sheets.py", "--profile", "north", "--google-drive"],
+            ),
+        ):
+            from scripts.backup_google_sheets import main
+
+            main()
+
+        upload.assert_called_once()
 
     def test_versioned_backup_retains_newest_generations(self) -> None:
         storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)

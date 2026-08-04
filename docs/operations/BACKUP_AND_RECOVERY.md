@@ -125,7 +125,12 @@ python scripts\backup_google_sheets.py --profile PROFILE_KEY --output-dir backup
 When `--output-dir` is omitted, the command uses:
 
 1. the profile's configured `backup_folder_path`; or
-2. the ignored repository `backups/` directory.
+2. the ignored repository `backups/PROFILE_KEY/` directory.
+
+The local folder setting is optional. A blank setting does not require Google
+Drive Desktop or a mounted path; the profile-scoped fallback keeps implicit
+archives for different businesses separate. Use `--output-dir` for an explicit
+single-profile destination.
 
 The command:
 
@@ -353,6 +358,12 @@ retention such as Hyper Backup or snapshots; Cloud Sync alone can reproduce
 accidental changes. Tabula Rosa does not connect to DSM, configure either task,
 or prove that synchronization succeeded.
 
+For root-managed profiles, both Drive destinations are app-managed children under
+the profile's selected storage root: `Receipts` contains receipt files and
+`Ledger Backups` contains verified archives. The stored child IDs remain the
+runtime source of truth; folder names are descriptive only. Legacy profiles with
+independent folder selections continue to use those exact folders.
+
 Follow the complete
 [Synology recovery runbook](SYNOLOGY_RECOVERY.md) to configure folder
 permissions, one-way Cloud Sync, retention, validation, retry observation, and
@@ -391,7 +402,8 @@ To rebuild a deployment after loss:
 1. restore protected application and profile configuration;
 2. validate each service account and workbook;
 3. reconnect any unavailable Drive grant;
-4. confirm receipt and backup folder selections;
+4. confirm the profile storage root and provisioned receipt/backup children, or
+   confirm the legacy independent folder selections;
 5. export hosted Secrets; and
 6. validate a current backup before resuming normal operation.
 
