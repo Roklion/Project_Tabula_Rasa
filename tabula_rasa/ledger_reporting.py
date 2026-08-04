@@ -66,8 +66,13 @@ def rollup_account_values(
 ) -> dict[str, Any]:
     """Add each Layer 2 value to its Layer 1 parent's value."""
     records = [dict(account) for account in accounts]
+    normalized_values = {
+        str(key or "").strip(): value
+        for key, value in values.items()
+        if str(key or "").strip()
+    }
     rollups = {
-        str(account.get("id") or "").strip(): values.get(
+        str(account.get("id") or "").strip(): normalized_values.get(
             str(account.get("id") or "").strip(), 0
         )
         for account in records
@@ -77,7 +82,7 @@ def rollup_account_values(
         account_id = str(account.get("id") or "").strip()
         parent_id = str(account.get("parent_id") or "").strip()
         if account_id and parent_id in rollups and account_id != parent_id:
-            rollups[parent_id] += values.get(account_id, 0)
+            rollups[parent_id] += normalized_values.get(account_id, 0)
     return rollups
 
 
