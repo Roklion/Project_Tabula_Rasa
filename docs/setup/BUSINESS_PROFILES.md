@@ -198,8 +198,11 @@ existing root with the single picker or create an app-managed root, then choose
 **Provision storage folders**. Tabula Rosa creates or reuses exactly one
 `Receipts` child and one `Ledger Backups` child under that root and stores their
 IDs. Existing profiles with independently selected receipt and backup folders
-continue using those legacy selections until an administrator explicitly chooses
-a storage root.
+continue using those legacy selections until an administrator explicitly
+migrates them. Select an existing parent and choose **Migrate to selected
+storage root**, or choose **Create and migrate storage root**. Tabula Rosa
+creates and verifies the managed children before replacing the saved legacy
+destinations; existing Drive files are not moved, merged, or deleted.
 
 ## 8. Export profiles to Streamlit Community Cloud
 

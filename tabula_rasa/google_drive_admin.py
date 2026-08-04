@@ -300,6 +300,43 @@ def _provision_storage_children(
     return True
 
 
+def _migrate_legacy_storage(
+    profile_key: str,
+    profile_name: str,
+    drive_settings: Mapping[str, Any],
+    selected_root: Mapping[str, Any] | None,
+    *,
+    client: GoogleDriveClient,
+    store_path: Path,
+) -> bool:
+    """Replace legacy destinations only after a root and both children are ready."""
+    if selected_root is None:
+        root = client.create_storage_root(profile_key, f"{profile_name} Storage")
+    else:
+        root = client.folder(str(selected_root.get("id", "")))
+    root_id = str(root.get("id", ""))
+    if not root_id:
+        raise GoogleDriveConfigurationError(
+            "The selected Google Drive storage root is missing its folder ID."
+        )
+    children = client.provision_storage_children(profile_key, root_id)
+    updated = dict(drive_settings)
+    updated["storage_root"] = {
+        "id": root_id,
+        "name": str(root.get("name", "")),
+    }
+    updated["receipt_folder"] = children["receipts"]
+    updated["backup_folder"] = children["ledger-backups"]
+    update_local_profile_google_drive(profile_key, updated, path=store_path)
+    st.session_state["google_drive_admin_notice"] = (
+        f"Google Drive storage was migrated for profile '{profile_key}'. "
+        "Existing legacy files were not moved or deleted."
+    )
+    st.cache_resource.clear()
+    st.rerun()
+    return True
+
+
 def render_google_drive_admin(
     app_secrets: Mapping[str, Any],
     local_profiles: Mapping[str, Mapping[str, Any]],
@@ -479,6 +516,59 @@ def render_google_drive_admin(
                         )
                     except (GoogleDriveError, LocalProfileStoreError) as exc:
                         st.error(str(exc))
+            st.markdown("**Migrate to a profile storage root**")
+            st.caption(
+                "Choose an existing root, or create one below. Migration creates "
+                "managed receipt and ledger-backup folders before replacing the "
+                "saved legacy destinations."
+            )
+            migration_key = f"legacy-storage-root-{profile_key}"
+            pending_root_key = f"{migration_key}-pending"
+            selected_root = folder_picker(
+                access_token=access_token,
+                api_key=config.picker_api_key,
+                project_number=config.project_number,
+                key=migration_key,
+            )
+            if selected_root is not None:
+                st.session_state[pending_root_key] = dict(selected_root)
+            pending_root = st.session_state.get(pending_root_key)
+            if isinstance(pending_root, Mapping):
+                st.caption(
+                    "Selected storage root: "
+                    f"{_folder_display_name(pending_root, 'Unnamed folder')}"
+                )
+                if st.button(
+                    "Migrate to selected storage root",
+                    type="primary",
+                    key=f"migrate-storage-root-{profile_key}",
+                ):
+                    try:
+                        _migrate_legacy_storage(
+                            profile_key,
+                            str(profile.get("name", profile_key)),
+                            drive_settings,
+                            pending_root,
+                            client=client,
+                            store_path=store_path,
+                        )
+                    except (GoogleDriveError, LocalProfileStoreError) as exc:
+                        st.error(str(exc))
+            if st.button(
+                "Create and migrate storage root",
+                key=f"create-and-migrate-storage-root-{profile_key}",
+            ):
+                try:
+                    _migrate_legacy_storage(
+                        profile_key,
+                        str(profile.get("name", profile_key)),
+                        drive_settings,
+                        None,
+                        client=client,
+                        store_path=store_path,
+                    )
+                except (GoogleDriveError, LocalProfileStoreError) as exc:
+                    st.error(str(exc))
         else:
             st.markdown("**Profile storage root**")
             if isinstance(storage_root, Mapping):

@@ -306,9 +306,13 @@ Then:
 5. Sign in with the human Google account that should own that business's Drive
    files and approve access.
 6. Back in Tabula Rosa, use the single Google Picker selection to choose a
-   storage root, or create an app-managed root.
+   storage root, or create an app-managed root. For a profile with legacy
+   independent folders, choose **Migrate to selected storage root** after
+   selecting an existing parent, or choose **Create and migrate storage root**.
 7. Choose **Provision storage folders**. Tabula Rosa creates or reuses the
-   `Receipts` and `Ledger Backups` children under that root.
+   `Receipts` and `Ledger Backups` children under that root. Legacy selections
+   remain saved until those managed children are ready; existing Drive files are
+   not moved, merged, or deleted.
 8. Repeat for every profile.
 9. Export and replace hosted Streamlit Secrets after all intended changes:
 
@@ -380,9 +384,10 @@ identity metadata; otherwise choose or provision new destinations.
 ### A folder changes
 
 Use the local Business profiles page to choose a new storage root or, for a
-legacy profile, a new independent folder, then provision if needed and export
-hosted Secrets again. Changing the stored destination does not move existing
-Drive files.
+legacy profile, select a root and use the migration action. The migration
+provisions the managed children before changing saved destinations. Export
+hosted Secrets again after the change. Changing the stored destination does not
+move existing Drive files.
 
 ### The OAuth client secret is rotated
 
