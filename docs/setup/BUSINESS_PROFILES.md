@@ -192,6 +192,14 @@ The Drive-owning human Google account may differ from both:
 The service account does not receive access to receipt or backup folders unless
 someone separately shares them, which is not required.
 
+After connecting Drive, new profiles use one **storage root**. Select an
+existing root with the single picker or create an app-managed root, then choose
+**Provision storage folders**. Tabula Rosa creates or reuses exactly one
+`Receipts` child and one `Ledger Backups` child under that root and stores their
+IDs. Existing profiles with independently selected receipt and backup folders
+continue using those legacy selections until an administrator explicitly chooses
+a storage root.
+
 ## 8. Export profiles to Streamlit Community Cloud
 
 Local development uses split files, while the hosted app expects one combined

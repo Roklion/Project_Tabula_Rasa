@@ -198,6 +198,7 @@ def _validate_stored_profiles(profiles: object) -> dict[str, dict[str, Any]]:
     if not isinstance(profiles, dict):
         raise LocalProfileStoreError("Local profile store has an invalid format.")
     normalized: dict[str, dict[str, Any]] = {}
+    storage_roots: dict[str, str] = {}
     for raw_key, raw_settings in profiles.items():
         key = validate_profile_key(str(raw_key))
         if not isinstance(raw_settings, dict):
@@ -227,6 +228,24 @@ def _validate_stored_profiles(profiles: object) -> dict[str, dict[str, Any]]:
             raise LocalProfileStoreError(
                 f"Local profile '{key}' is incomplete or malformed."
             ) from exc
+        drive_settings = settings.get("google_drive")
+        storage_root = (
+            drive_settings.get("storage_root")
+            if isinstance(drive_settings, Mapping)
+            else None
+        )
+        root_id = (
+            str(storage_root.get("id", ""))
+            if isinstance(storage_root, Mapping)
+            else ""
+        )
+        if root_id and root_id in storage_roots:
+            raise LocalProfileStoreError(
+                "A Google Drive storage root can belong to only one business "
+                "profile."
+            )
+        if root_id:
+            storage_roots[root_id] = key
         normalized[key] = settings
     try:
         load_business_profiles({"business_profiles": normalized})
@@ -419,6 +438,33 @@ def update_local_profile_google_drive(
                 )
             except GoogleDriveConfigurationError as exc:
                 raise LocalProfileStoreError(str(exc)) from exc
+        storage_root = (
+            candidate.get("google_drive", {}).get("storage_root")
+            if isinstance(candidate.get("google_drive"), Mapping)
+            else None
+        )
+        root_id = (
+            str(storage_root.get("id", ""))
+            if isinstance(storage_root, Mapping)
+            else ""
+        )
+        if root_id:
+            for other_key, other_settings in profiles.items():
+                if other_key == profile_key:
+                    continue
+                other_drive = other_settings.get("google_drive")
+                other_root = (
+                    other_drive.get("storage_root")
+                    if isinstance(other_drive, Mapping)
+                    else None
+                )
+                if isinstance(other_root, Mapping) and str(
+                    other_root.get("id", "")
+                ) == root_id:
+                    raise LocalProfileStoreError(
+                        "A Google Drive storage root can belong to only one "
+                        "business profile."
+                    )
         profiles[profile_key] = candidate
         _write_local_profiles(path, profiles)
 

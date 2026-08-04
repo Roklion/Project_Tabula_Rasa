@@ -2,7 +2,7 @@
 
 This guide explains how one Tabula Rosa OAuth application accesses separate
 Google Drives for multiple business profiles. It is also the setup and
-operations guide for Google Picker, receipt folders, cloud backup folders,
+operations guide for Google Picker, per-profile storage roots, receipt folders, cloud backup folders,
 token lifecycle, and production publishing.
 
 Google Sheets authentication is separate. Each profile's Sheets service account
@@ -20,7 +20,8 @@ human-owned Google Drive files.
 | Access token | What may this request do right now? | Short-lived and derived per profile |
 | Picker API key | Which browser application is using Google Picker? | Shared and browser-visible |
 | Cloud project number | Which Drive application is Picker associated with? | Shared and not secret |
-| Folder ID | Where should this profile store receipts or backups? | Selected and stored per profile |
+| Storage root ID | Which profile-owned Drive folder contains app-managed children? | Selected or created and stored per profile |
+| Child folder IDs | Where should this profile store receipts and backups? | Provisioned under the root and stored per profile |
 
 The OAuth client identifies Tabula Rosa; it does not identify a business and
 does not grant Drive access by itself. Each business's Google account grants the
@@ -39,12 +40,12 @@ flowchart LR
 
     subgraph ProfileA["Business profile A"]
         GrantA["Refresh token A"]
-        FoldersA["Receipt and backup folder IDs A"]
+        FoldersA["Storage root and child folder IDs A"]
     end
 
     subgraph ProfileB["Business profile B"]
         GrantB["Refresh token B"]
-        FoldersB["Receipt and backup folder IDs B"]
+        FoldersB["Storage root and child folder IDs B"]
     end
 
     AccountA["Google account and Drive A"]
@@ -73,12 +74,15 @@ Every business profile stores its own:
 - authorized Google account name and email;
 - refresh token;
 - granted scopes;
+- optional storage root ID and name; and
 - receipt folder ID and name; and
 - backup folder ID and name.
 
 Businesses may authorize different Google accounts while sharing the same OAuth
-client. They may also authorize the same Google account but choose different
-folders. No business needs its own OAuth client, API key, or OAuth Cloud project.
+client. New root-managed profiles provision descriptive `Receipts` and `Ledger
+Backups` children under the selected root using Drive app-properties identity,
+not folder names. Existing independently selected folders remain supported. No
+business needs its own OAuth client, API key, or OAuth Cloud project.
 
 ## Authentication, authorization, and application access
 
@@ -117,7 +121,7 @@ sequenceDiagram
     Google-->>App: Access token and refresh token
     App->>Google: Confirm the authorized Drive account
     App->>Store: Save the grant under the selected profile
-    App-->>Admin: Request receipt and backup folder selection
+    App-->>Admin: Request storage-root selection or creation
 ```
 
 The signed OAuth state binds the callback to one existing business profile and
@@ -205,7 +209,7 @@ and folders the user selects through the application or that the application
 creates. It does not provide general access to every file in the account's
 Drive.
 
-The receipt and backup folders can remain **Restricted**. They do not need to be
+The storage root and its receipt and backup children can remain **Restricted**. They do not need to be
 shared with:
 
 - the profile's Sheets service account;
@@ -301,10 +305,12 @@ Then:
 4. Select **Connect Google Drive**.
 5. Sign in with the human Google account that should own that business's Drive
    files and approve access.
-6. Back in Tabula Rosa, use Google Picker to choose the profile's receipt
-   folder and backup folder.
-7. Repeat for every profile.
-8. Export and replace hosted Streamlit Secrets after all intended changes:
+6. Back in Tabula Rosa, use the single Google Picker selection to choose a
+   storage root, or create an app-managed root.
+7. Choose **Provision storage folders**. Tabula Rosa creates or reuses the
+   `Receipts` and `Ledger Backups` children under that root.
+8. Repeat for every profile.
+9. Export and replace hosted Streamlit Secrets after all intended changes:
 
    ```powershell
    python scripts\export_streamlit_secrets.py
@@ -351,7 +357,7 @@ the intended public application name and logo.
 | Access token | Short-lived | Temporarily supplied to Picker | Memory only |
 | Picker API key | Until rotated or deleted | Yes; restrict by referrer and API | App-wide secrets/configuration |
 | Project number | Stable project identifier | Yes | App-wide configuration |
-| Folder IDs | Until folders are removed or access changes | Returned by Picker | Per-profile configuration |
+| Storage root and child IDs | Until folders are removed or access changes | Root returned by Picker; children confirmed or created by the app | Per-profile configuration |
 
 The local profile store is plaintext and relies on operating-system file
 permissions. Keep it outside shared or automatically synchronized directories.
@@ -366,14 +372,17 @@ profile. Its Sheets service-account access remains unaffected.
 
 ### A business changes Google accounts
 
-Disconnect the existing profile grant, reconnect using the intended account,
-select folders that account owns, and export hosted Secrets again.
+Disconnect the existing profile grant, reconnect using the intended account, and
+export hosted Secrets again. Root and child selections are preserved only when
+the newly authorized account can confirm their availability, parent, and managed
+identity metadata; otherwise choose or provision new destinations.
 
 ### A folder changes
 
-Use the local Business profiles page to choose the new folder, then export
-hosted Secrets again. Changing the stored folder does not move existing Drive
-files.
+Use the local Business profiles page to choose a new storage root or, for a
+legacy profile, a new independent folder, then provision if needed and export
+hosted Secrets again. Changing the stored destination does not move existing
+Drive files.
 
 ### The OAuth client secret is rotated
 

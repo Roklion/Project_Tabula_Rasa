@@ -284,6 +284,39 @@ class TestLocalProfileStore:
             update_local_profile_google_drive("north", None, path=path)
             assert "google_drive" not in load_local_profiles(path)["north"]
 
+    def test_storage_root_is_validated_and_cannot_be_shared(self) -> None:
+        north_drive = {
+            "authorized_email": "north@example.test",
+            "authorized_name": "North Owner",
+            "refresh_token": "north-refresh-token",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "scopes": ["https://www.googleapis.com/auth/drive.file"],
+            "storage_root": {"id": "rootfolder123", "name": "North Storage"},
+        }
+        south_drive = {
+            "authorized_email": "south@example.test",
+            "authorized_name": "South Owner",
+            "refresh_token": "south-refresh-token",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "scopes": ["https://www.googleapis.com/auth/drive.file"],
+            "storage_root": {"id": "rootfolder123", "name": "North Storage"},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "local_business_profiles.json"
+            save_local_profile("north", settings(), path=path)
+            save_local_profile("south", settings("South Shop"), path=path)
+            update_local_profile_google_drive("north", north_drive, path=path)
+
+            with pytest.raises(LocalProfileStoreError, match="only one"):
+                update_local_profile_google_drive("south", south_drive, path=path)
+
+            stored = load_local_profiles(path)
+
+        assert stored["north"]["google_drive"]["storage_root"]["id"] == (
+            "rootfolder123"
+        )
+        assert "google_drive" not in stored["south"]
+
     def test_synology_recovery_is_optional_and_profile_scoped(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "local_business_profiles.json"

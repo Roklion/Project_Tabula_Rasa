@@ -358,6 +358,12 @@ retention such as Hyper Backup or snapshots; Cloud Sync alone can reproduce
 accidental changes. Tabula Rosa does not connect to DSM, configure either task,
 or prove that synchronization succeeded.
 
+For root-managed profiles, both Drive destinations are app-managed children under
+the profile's selected storage root: `Receipts` contains receipt files and
+`Ledger Backups` contains verified archives. The stored child IDs remain the
+runtime source of truth; folder names are descriptive only. Legacy profiles with
+independent folder selections continue to use those exact folders.
+
 Follow the complete
 [Synology recovery runbook](SYNOLOGY_RECOVERY.md) to configure folder
 permissions, one-way Cloud Sync, retention, validation, retry observation, and
