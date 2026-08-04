@@ -101,8 +101,13 @@ def money(value: float) -> str:
 
 
 def transaction_has_receipts(transaction: Mapping[str, object]) -> bool:
+    references = transaction.get("receipt_references", "")
+    if not references or (
+        isinstance(references, str) and references.strip() in {"", "[]"}
+    ):
+        return False
     try:
-        return bool(decode_receipt_references(transaction.get("receipt_references", "")))
+        return bool(decode_receipt_references(references))
     except StorageError:
         return False
 

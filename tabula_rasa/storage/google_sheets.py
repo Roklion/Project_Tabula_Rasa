@@ -796,10 +796,8 @@ class GoogleSheetsStorage:
     def ensure_defaults(self) -> dict[str, int]:
         """Seed default accounts/categories once for a blank workbook."""
         self._snapshot(["Accounts", "Categories"], force_refresh=True)
-        existing_accounts = self.list_accounts(
-            active_only=False, _force_refresh=True
-        )
-        existing_categories = self.list_categories(_force_refresh=True)
+        existing_accounts = self.list_accounts(active_only=False)
+        existing_categories = self.list_categories()
         if existing_accounts or existing_categories:
             _validate_hierarchy_records(
                 existing_accounts,
@@ -1131,9 +1129,7 @@ class GoogleSheetsStorage:
     def edit_account(self, account_id: str, **changes: Any) -> dict[str, Any]:
         current = self._find_row("Accounts", account_id)
         updated = dict(current.values)
-        existing_accounts = self.list_accounts(
-            active_only=False, _force_refresh=True
-        )
+        existing_accounts = self.list_accounts(active_only=False)
         name = _clean_text(changes.get("name", updated["name"]), "Account name", required=True)
         account_type = _clean_text(
             changes.get("type", updated["type"]), "Account type", required=True
@@ -1231,7 +1227,7 @@ class GoogleSheetsStorage:
     def edit_category(self, category_id: str, **changes: Any) -> dict[str, str]:
         current = self._find_row("Categories", category_id)
         updated = dict(current.values)
-        existing_categories = self.list_categories(_force_refresh=True)
+        existing_categories = self.list_categories()
         name = _clean_text(
             changes.get("name", updated["name"]), "Category name", required=True
         )
@@ -1270,7 +1266,7 @@ class GoogleSheetsStorage:
 
     def delete_category(self, category_id: str) -> None:
         current = self._find_row("Categories", category_id)
-        existing_categories = self.list_categories(_force_refresh=True)
+        existing_categories = self.list_categories()
         if any(
             str(category.get("parent_id") or "").strip() == category_id
             for category in existing_categories
