@@ -212,6 +212,19 @@ def main() -> None:
         by_label(app.button, "Save transaction").click().run()
 
         app.radio[0].set_value("Categories").run()
+        category_table = app.dataframe[0].value
+        travel_category_row = category_table.loc[
+            category_table["Category"] == "Travel"
+        ].iloc[0]
+        flights_category_row = category_table.loc[
+            category_table["Category"].str.endswith("Flights")
+        ].iloc[0]
+        sales_category_row = category_table.loc[
+            category_table["Category"] == "Sales"
+        ].iloc[0]
+        assert travel_category_row["Transaction count"] == 0
+        assert flights_category_row["Transaction count"] == 1
+        assert sales_category_row["Transaction count"] == 1
         by_label(app.selectbox, "Category to edit").set_value(flights["id"]).run()
         by_label(app.selectbox, "Edit parent category").set_value("")
         by_label(app.button, "Save category changes").click().run()

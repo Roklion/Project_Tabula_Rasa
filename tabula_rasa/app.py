@@ -1825,11 +1825,20 @@ elif page == "Accounts":
 elif page == "Categories":
     st.title("Categories")
     try:
+        storage.prefetch_worksheets("Categories", "Transactions")
         categories = storage.list_categories()
+        transactions = storage.list_transactions()
     except StorageError as error:
         report_storage_error(error)
         st.stop()
     category_paths = hierarchy_paths(categories)
+    transaction_count_by_category: dict[str, int] = {}
+    for transaction in transactions:
+        category_id = str(transaction.get("category_id") or "").strip()
+        if category_id:
+            transaction_count_by_category[category_id] = (
+                transaction_count_by_category.get(category_id, 0) + 1
+            )
     category_by_id = {
         category_id: category
         for category in categories
@@ -1847,6 +1856,9 @@ elif page == "Categories":
                 "Layer": "Layer 2" if parent else "Layer 1",
                 "Parent": parent.get("name") or "" if parent else "",
                 "Type": category["kind"],
+                "Transaction count": transaction_count_by_category.get(
+                    category["id"], 0
+                ),
             }
         )
     category_frame = pd.DataFrame(category_rows)
