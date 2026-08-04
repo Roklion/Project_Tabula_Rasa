@@ -785,7 +785,7 @@ class GoogleDriveClient:
             )
         if matches:
             return self._validate_managed_folder(
-                self.folder(str(matches[0]["id"])),
+                matches[0],
                 profile_key=profile_key,
                 storage_kind=storage_kind,
                 root_id=root_id,
@@ -818,7 +818,7 @@ class GoogleDriveClient:
                     )
                 if reconciled:
                     return self._validate_managed_folder(
-                        self.folder(str(reconciled[0]["id"])),
+                        reconciled[0],
                         profile_key=profile_key,
                         storage_kind=storage_kind,
                         root_id=root_id,
@@ -832,7 +832,7 @@ class GoogleDriveClient:
                     "Google Drive did not return the managed folder identity."
                 )
             return self._validate_managed_folder(
-                self.folder(created_id),
+                created,
                 profile_key=profile_key,
                 storage_kind=storage_kind,
                 root_id=root_id,
@@ -896,7 +896,7 @@ class GoogleDriveClient:
             "q": query,
             "pageSize": min(max(page_size, 1), 1000),
             "fields": (
-                "nextPageToken,files(id,name,mimeType,size,createdTime,modifiedTime,"
+                "nextPageToken,files(id,name,mimeType,trashed,size,createdTime,modifiedTime,"
                 "description,webViewLink,appProperties,parents)"
             ),
             "spaces": "drive",

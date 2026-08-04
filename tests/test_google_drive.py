@@ -252,7 +252,6 @@ class TestGoogleDriveFiles:
                     },
                 ),
                 FakeResponse(200, {"files": []}),
-                FakeResponse(200, {"id": "receiptchild123"}),
                 FakeResponse(
                     200,
                     self._managed_folder(
@@ -263,7 +262,6 @@ class TestGoogleDriveFiles:
                     ),
                 ),
                 FakeResponse(200, {"files": []}),
-                FakeResponse(200, {"id": "backupchild123"}),
                 FakeResponse(
                     200,
                     self._managed_folder(
@@ -309,7 +307,6 @@ class TestGoogleDriveFiles:
         session = DriveSession(
             [
                 FakeResponse(200, {"files": []}),
-                FakeResponse(200, {"id": "rootfolder123"}),
                 FakeResponse(200, root),
             ]
         )
@@ -338,7 +335,6 @@ class TestGoogleDriveFiles:
                 FakeResponse(200, {"files": []}),
                 requests.ConnectionError("root response was lost"),
                 FakeResponse(200, {"files": [root]}),
-                FakeResponse(200, root),
             ]
         )
         client = GoogleDriveClient(
@@ -379,9 +375,7 @@ class TestGoogleDriveFiles:
                     },
                 ),
                 FakeResponse(200, {"files": [receipt]}),
-                FakeResponse(200, receipt),
                 FakeResponse(200, {"files": [backup]}),
-                FakeResponse(200, backup),
             ]
         )
         client = GoogleDriveClient(
@@ -396,6 +390,8 @@ class TestGoogleDriveFiles:
         assert children["receipts"]["id"] == "receiptchild123"
         assert children["ledger-backups"]["id"] == "backupchild123"
         assert not any(request[0] == "POST" for request in session.requests)
+        assert len(session.requests) == 3
+        assert all(request[1].endswith("/files") for request in session.requests[1:])
 
     def test_uncertain_child_creation_reconciles_before_retrying(self) -> None:
         root_id = "rootfolder123"
@@ -425,9 +421,7 @@ class TestGoogleDriveFiles:
                 FakeResponse(200, {"files": []}),
                 requests.ConnectionError("response was lost after create"),
                 FakeResponse(200, {"files": [receipt]}),
-                FakeResponse(200, receipt),
                 FakeResponse(200, {"files": [backup]}),
-                FakeResponse(200, backup),
             ]
         )
         client = GoogleDriveClient(
@@ -460,7 +454,6 @@ class TestGoogleDriveFiles:
             [
                 FakeResponse(200, {"id": root_id, "name": "North Storage", "mimeType": "application/vnd.google-apps.folder", "trashed": False}),
                 FakeResponse(200, {"files": []}),
-                FakeResponse(200, {"id": "receiptchild123"}),
                 FakeResponse(200, receipt),
                 FakeResponse(200, {"files": []}),
                 requests.ConnectionError("backup response was lost"),
@@ -469,9 +462,7 @@ class TestGoogleDriveFiles:
                 FakeResponse(200, {"files": []}),
                 FakeResponse(200, {"id": "rootfolder123", "name": "North Storage", "mimeType": "application/vnd.google-apps.folder", "trashed": False}),
                 FakeResponse(200, {"files": [receipt]}),
-                FakeResponse(200, receipt),
                 FakeResponse(200, {"files": []}),
-                FakeResponse(200, {"id": "backupchild123"}),
                 FakeResponse(200, backup),
             ]
         )
