@@ -125,7 +125,8 @@ def process_google_drive_oauth_callback(
         config = load_oauth_config(app_secrets)
         payload = verify_oauth_state(config, state)
         profile_key = str(payload["profile"])
-        if profile_key not in load_local_profiles(store_path):
+        local_profiles = load_local_profiles(store_path)
+        if profile_key not in local_profiles:
             raise LocalProfileStoreError(
                 "The Google authorization profile is not available locally."
             )
@@ -138,9 +139,7 @@ def process_google_drive_oauth_callback(
             code,
             str(payload["redirect_uri"]),
         )
-        previous_drive = load_local_profiles(store_path)[profile_key].get(
-            "google_drive"
-        )
+        previous_drive = local_profiles[profile_key].get("google_drive")
         if isinstance(previous_drive, Mapping):
             client = GoogleDriveClient(config, drive_settings)
             drive_settings.update(
