@@ -105,6 +105,23 @@ command requests a new review of the then-current head. Full fallback output
 must label itself, disclose coverage limitations, and remains advisory without
 code, approval, merge, secret, or deployment access.
 
+### Review scope evidence
+
+The submitted GitHub review body, not an inline comment alone, must begin with
+the metadata required by `.gemini/styleguide.md`: review mode, full reviewed
+head SHA, reviewed surfaces and risk areas, fallback basis, and limitations.
+For a full fallback review, the mode value must be exactly `Full fallback
+review` and the fallback basis must identify the trusted current-round Codex
+unavailability result.
+
+Use that metadata to determine scope. GitHub review `commit_id` metadata proves
+only which revision Gemini reviewed; it does not prove normal versus fallback
+breadth. Timing after `/gemini review`, a generic `Code Review` heading, the
+number of findings, an eyes reaction, or a no-finding result likewise cannot
+establish fallback scope. If the required metadata is absent, record Gemini's
+reviewed SHA as applicable and mark its mode and breadth as unverified rather
+than counting it as full fallback coverage.
+
 When Gemini finds no additional actionable issue, its review should explicitly
 say `No additional feedback.` Gemini does not use a thumbs-up reaction as its
 successful no-finding signal. Monitoring and round accounting must recognize
