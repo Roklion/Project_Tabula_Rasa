@@ -181,6 +181,10 @@ def main() -> None:
                 "refresh_token": "durable-refresh-token",
                 "token_uri": "https://oauth2.googleapis.com/token",
                 "scopes": [DRIVE_SCOPE],
+                "storage_root": {
+                    "id": "rootfolder123456",
+                    "name": "Test Storage",
+                },
                 "receipt_folder": {
                     "id": "folder123456",
                     "name": "Receipts",

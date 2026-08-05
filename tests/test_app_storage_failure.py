@@ -38,6 +38,10 @@ class TestAppStorageFailure:
                     "refresh_token": "refresh-token",
                     "token_uri": "https://oauth2.googleapis.com/token",
                     "scopes": ["https://www.googleapis.com/auth/drive.file"],
+                    "storage_root": {
+                        "id": "rootfolder123456",
+                        "name": "Test Storage",
+                    },
                     "receipt_folder": {
                         "id": "receiptsfolder123",
                         "name": "Receipts",
@@ -196,6 +200,10 @@ class TestAppStorageFailure:
                     "refresh_token": "refresh-token",
                     "token_uri": "https://oauth2.googleapis.com/token",
                     "scopes": ["https://www.googleapis.com/auth/drive.file"],
+                    "storage_root": {
+                        "id": "rootfolder123456",
+                        "name": "Test Storage",
+                    },
                     "backup_folder": {
                         "id": "backupfolder123",
                         "name": "Backups",

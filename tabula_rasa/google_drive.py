@@ -406,6 +406,13 @@ def validate_drive_profile_settings(value: object) -> dict[str, Any]:
         raise GoogleDriveConfigurationError(
             "Google Drive profile settings contain unsupported fields."
         )
+    if (
+        raw.get("storage_root") is None
+        and any(raw.get(field) is not None for field in ("receipt_folder", "backup_folder"))
+    ):
+        raise GoogleDriveConfigurationError(
+            "Google Drive receipt and backup folders require a storage root."
+        )
     refresh_token = _clean_text(raw.get("refresh_token"))
     token_uri = _clean_text(raw.get("token_uri"))
     scopes = raw.get("scopes")
