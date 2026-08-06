@@ -213,7 +213,7 @@ the trusted project layer is reloaded.
 ## Product and interface design
 
 `design.md` is the authoritative interface and interaction specification for
-Tabula Rosa.
+Tabula Rasa.
 
 Before modifying Streamlit UI, navigation, forms, tables, dashboards, visual
 styling, or user-facing workflows:

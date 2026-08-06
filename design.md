@@ -29,7 +29,7 @@ The current functional baseline was reconciled on 2026-08-06 against the applica
 
 Project Tabula Rasa is a private, Google Sheets-backed bookkeeping and financial-operations application built in Python and deployed through Streamlit.
 
-The primary users are the owner and, potentially, the owner's spouse. The repository and project are referred to as Project Tabula Rasa; the current application display label is `Tabula Rosa` and should not be renamed as part of a styling task. The application is not designed as a public consumer-finance product or a commercial multi-tenant accounting platform.
+The primary users are the owner and, potentially, the owner's spouse. The repository, project, and application display label are Project Tabula Rasa. The application is not designed as a public consumer-finance product or a commercial multi-tenant accounting platform.
 
 ### 2.1 Current core use cases
 
@@ -46,7 +46,7 @@ The current application supports:
 - Creating and downloading a complete validated workbook backup
 - Uploading and verifying Google Drive cloud backups
 - Displaying the configured optional Synology recovery-copy expectations
-- Importing Tabula Rosa transaction CSV files
+- Importing Tabula Rasa transaction CSV files
 - Previewing and importing supported QuickBooks transaction exports
 - Previewing and importing supported QuickBooks mileage exports
 - Adding and editing local business profiles
@@ -1574,7 +1574,7 @@ Current uses include:
 - Add account
 - Edit account
 - Edit category
-- Import Tabula Rosa CSV
+- Import Tabula Rasa CSV
 - Profile-specific administration sections
 
 Expanders may preserve dense pages without hiding required next steps.
@@ -1761,7 +1761,7 @@ A styling change must not imply that unlinking or deleting a transaction deletes
 
 The Data & backup page contains three distinct import workflows. They must remain distinguishable.
 
-### 26.1 Import Tabula Rosa CSV
+### 26.1 Import Tabula Rasa CSV
 
 Supported current behavior:
 
@@ -2325,7 +2325,7 @@ Preserve:
 - NAS destination
 - Schedule
 - Retention policy
-- Explicit statement that Tabula Rosa does not connect to DSM or prove sync success
+- Explicit statement that Tabula Rasa does not connect to DSM or prove sync success
 
 #### Live workbook exports
 
@@ -2709,7 +2709,7 @@ Data & backup:
 - Download mileage CSV
 - Download complete backup when available
 - Verify complete-backup failure leaves CSV exports available
-- Import Tabula Rosa CSV
+- Import Tabula Rasa CSV
 - Preview/import QuickBooks transactions
 - Exercise optional auto-create
 - Preview/import QuickBooks mileage
