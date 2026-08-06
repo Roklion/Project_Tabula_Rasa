@@ -32,6 +32,7 @@ from tabula_rasa.storage.google_sheets import BACKUP_FORMAT_VERSION
 
 
 BACKUP_NAME = re.compile(r"^tabula-rosa-backup-\d{8}T\d{6}Z\.zip$")
+_PROFILE_CONFIG = object()
 
 
 def verified_backup_for_week(
@@ -234,11 +235,14 @@ def main() -> None:
         help="Streamlit secrets file containing the spreadsheet credentials",
     )
     parser.add_argument(
-        "--output-dir",
+        "--local-dir",
         type=Path,
+        nargs="?",
+        const=_PROFILE_CONFIG,
+        metavar="PATH",
         help=(
-            "Override the profile's backup_folder_path; defaults to the profile "
-            "setting or backups/PROFILE_KEY"
+            "Write a local backup instead of using Google Drive; optionally "
+            "override the profile's backup_folder_path"
         ),
     )
     parser.add_argument(
@@ -267,12 +271,12 @@ def main() -> None:
     profiles = load_business_profiles(all_secrets)
     if len(profiles) > 1 and not args.profile:
         raise SystemExit("Multiple profiles are configured; pass --profile PROFILE_KEY")
-    if args.google_drive and args.output_dir is not None:
-        raise SystemExit("--output-dir cannot be combined with --google-drive")
+    if args.google_drive and args.local_dir is not None:
+        raise SystemExit("--local-dir cannot be combined with --google-drive")
     selected_profile_key = args.profile or profiles[0].key
     secrets = select_profile_secrets(all_secrets, args.profile)
 
-    if args.google_drive:
+    if args.local_dir is None or args.google_drive:
         if args.once_per_week:
             existing_drive = verified_drive_backup_for_week(
                 all_secrets,
@@ -298,7 +302,7 @@ def main() -> None:
 
     output_dir = resolve_backup_output_dir(
         secrets,
-        args.output_dir,
+        None if args.local_dir is _PROFILE_CONFIG else args.local_dir,
         selected_profile_key,
     )
     if args.once_per_week:

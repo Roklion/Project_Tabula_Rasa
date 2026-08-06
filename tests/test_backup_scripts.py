@@ -190,7 +190,7 @@ class TestBackupScripts:
             assert verified_backup_for_week(north_dir, local_date=local_date)
             assert verified_backup_for_week(south_dir, local_date=local_date) == south_backup
 
-    def test_cloud_mode_does_not_require_a_local_backup_destination(self) -> None:
+    def test_drive_mode_is_default_and_does_not_require_local_destination(self) -> None:
         profile = type("Profile", (), {"key": "north"})()
         secrets = {
             "business_profiles": {
@@ -236,7 +236,7 @@ class TestBackupScripts:
             patch.object(
                 sys,
                 "argv",
-                ["backup_google_sheets.py", "--profile", "north", "--google-drive"],
+                ["backup_google_sheets.py", "--profile", "north"],
             ),
         ):
             from scripts.backup_google_sheets import main
@@ -244,6 +244,63 @@ class TestBackupScripts:
             main()
 
         upload.assert_called_once()
+
+    def test_local_dir_without_path_uses_profile_configuration(self) -> None:
+        profile = type("Profile", (), {"key": "north"})()
+        secrets = {
+            "business_profiles": {
+                "north": {
+                    "spreadsheet_id": "northspreadsheet123456789",
+                    "gcp_service_account": {},
+                    "backup_folder_path": r"G:\\Backups\\North",
+                }
+            }
+        }
+        configured_path = Path(r"G:\\Backups\\North")
+        storage = Mock()
+        with (
+            patch(
+                "scripts.backup_google_sheets.load_business_profile_document",
+                return_value=secrets,
+            ),
+            patch(
+                "scripts.backup_google_sheets.load_business_profiles",
+                return_value=[profile],
+            ),
+            patch(
+                "scripts.backup_google_sheets.select_profile_secrets",
+                return_value=secrets["business_profiles"]["north"],
+            ),
+            patch(
+                "scripts.backup_google_sheets.GoogleSheetsStorage.from_secrets",
+                return_value=storage,
+            ),
+            patch(
+                "scripts.backup_google_sheets.build_backup_receipt_manifest",
+                return_value={},
+            ),
+            patch(
+                "scripts.backup_google_sheets.resolve_backup_output_dir",
+                return_value=configured_path,
+            ) as resolve,
+            patch(
+                "scripts.backup_google_sheets.write_versioned_backup",
+                return_value=configured_path / "backup.zip",
+            ) as write_backup,
+            patch.object(
+                sys,
+                "argv",
+                ["backup_google_sheets.py", "--profile", "north", "--local-dir"],
+            ),
+        ):
+            from scripts.backup_google_sheets import main
+
+            main()
+
+        resolve.assert_called_once_with(
+            secrets["business_profiles"]["north"], None, "north"
+        )
+        write_backup.assert_called_once()
 
     def test_versioned_backup_retains_newest_generations(self) -> None:
         storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
