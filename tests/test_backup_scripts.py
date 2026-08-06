@@ -252,11 +252,11 @@ class TestBackupScripts:
                 "north": {
                     "spreadsheet_id": "northspreadsheet123456789",
                     "gcp_service_account": {},
-                    "backup_folder_path": r"G:\\Backups\\North",
+                    "backup_folder_path": r"G:\Backups\North",
                 }
             }
         }
-        configured_path = Path(r"G:\\Backups\\North")
+        configured_path = Path(r"G:\Backups\North")
         storage = Mock()
         with (
             patch(
