@@ -119,18 +119,19 @@ the file to the browser.
 Create and validate a timestamped archive:
 
 ```powershell
-python scripts\backup_google_sheets.py --profile PROFILE_KEY --output-dir backups\PROFILE_KEY --keep 30
+python scripts\backup_google_sheets.py --profile PROFILE_KEY --local-dir backups\PROFILE_KEY --keep 30
 ```
 
-When `--output-dir` is omitted, the command uses:
+Local backup mode is selected only when `--local-dir` is present. When it has
+no path argument, the command uses:
 
 1. the profile's configured `backup_folder_path`; or
 2. the ignored repository `backups/PROFILE_KEY/` directory.
 
 The local folder setting is optional. A blank setting does not require Google
 Drive Desktop or a mounted path; the profile-scoped fallback keeps implicit
-archives for different businesses separate. Use `--output-dir` for an explicit
-single-profile destination.
+archives for different businesses separate. Use `--local-dir PATH` for an
+explicit single-profile destination.
 
 The command:
 
@@ -151,8 +152,11 @@ backup folder. Follow
 Create a verified cloud backup:
 
 ```powershell
-python scripts\backup_google_sheets.py --profile PROFILE_KEY --google-drive --keep 30
+python scripts\backup_google_sheets.py --profile PROFILE_KEY --keep 30
 ```
+
+Google Drive is the default backup destination. `--google-drive` remains
+available as an explicit equivalent. Use `--local-dir` to select local output.
 
 The uploader:
 

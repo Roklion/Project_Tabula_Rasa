@@ -28,7 +28,7 @@ if ($GoogleDrive) {
     $arguments += ' --google-drive'
 }
 if ($BackupDirectory) {
-    $arguments += ' --output-dir "{0}"' -f $BackupDirectory
+    $arguments += ' --local-dir "{0}"' -f $BackupDirectory
 }
 if ($Profile) {
     $arguments += ' --profile "{0}"' -f $Profile
