@@ -151,6 +151,8 @@ The following remain out of scope unless separately approved:
 - Cash-flow or reconciliation reports
 - Per-profile user authorization
 
+---
+
 ## 3. Product Character
 
 The interface should feel:
@@ -457,6 +459,7 @@ Do not use green as the default Save button color.
 Do not use red for ordinary navigation or cancellation.
 
 Do not rely on color alone. Pair semantic color with text, an icon, a sign, or an explicit message.
+
 ---
 
 ## 8. Positive and Negative Values
@@ -520,6 +523,7 @@ A negative balance is not automatically an error.
 Use red only when the negative value is adverse in context, such as a negative asset balance or a reported imbalance requiring investigation.
 
 Do not color normal liability or equity ledger balances red merely because their stored signs are negative. Reports present liabilities and equity using conventional positive statement values.
+
 ---
 
 ## 9. Typography
@@ -1093,7 +1097,7 @@ The ledger has two explicit modes.
 #### Bulk mode — proposed
 
 - Uses multi-row selection.
-- The edit expander is disabled or visually deemphasized while bulk mode is active.
+- The edit expander is disabled or visually de-emphasized while bulk mode is active.
 - A bulk-action bar appears only after one or more rows are selected.
 - The selection count is always visible.
 - Switching between Edit and Bulk modes clears incompatible row selections but preserves filters, search, and interactive sort.
@@ -1751,6 +1755,8 @@ Receipt files are not embedded in each ledger backup ZIP.
 
 A styling change must not imply that unlinking or deleting a transaction deletes the Drive file unless a separate feature explicitly implements and confirms that behavior.
 
+---
+
 ## 26. Import Workflows
 
 The Data & backup page contains three distinct import workflows. They must remain distinguishable.
@@ -2033,7 +2039,7 @@ Each page contract defines the current required function and any approved target
 #### Acceptance criteria
 
 - No ledger page is visible before authentication.
-- Selected business and workbook context are discoverable.
+- Selected business and workbook context is discoverable.
 - Logout remains available from every normal page.
 - Business profiles appears only under current local-administration safety conditions.
 
