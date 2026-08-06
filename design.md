@@ -46,7 +46,7 @@ The current application supports:
 - Creating and downloading a complete validated workbook backup
 - Uploading and verifying Google Drive cloud backups
 - Displaying the configured optional Synology recovery-copy expectations
-- Importing Tabula Rasa transaction CSV files
+- Importing Tabula Rosa transaction CSV files
 - Previewing and importing supported QuickBooks transaction exports
 - Previewing and importing supported QuickBooks mileage exports
 - Adding and editing local business profiles
@@ -1761,7 +1761,7 @@ A styling change must not imply that unlinking or deleting a transaction deletes
 
 The Data & backup page contains three distinct import workflows. They must remain distinguishable.
 
-### 26.1 Import Tabula Rasa CSV
+### 26.1 Import Tabula Rosa CSV
 
 Supported current behavior:
 
@@ -2325,7 +2325,7 @@ Preserve:
 - NAS destination
 - Schedule
 - Retention policy
-- Explicit statement that Tabula Rasa does not connect to DSM or prove sync success
+- Explicit statement that Tabula Rosa does not connect to DSM or prove sync success
 
 #### Live workbook exports
 
@@ -2709,7 +2709,7 @@ Data & backup:
 - Download mileage CSV
 - Download complete backup when available
 - Verify complete-backup failure leaves CSV exports available
-- Import Tabula Rasa CSV
+- Import Tabula Rosa CSV
 - Preview/import QuickBooks transactions
 - Exercise optional auto-create
 - Preview/import QuickBooks mileage
