@@ -209,3 +209,25 @@ the trusted project layer is reloaded.
 - Profile-sensitive changes need an isolation test using at least two profiles.
 - Update the canonical guide when externally visible behavior, configuration,
   recovery procedures, or security boundaries change.
+
+## Product and interface design
+
+`design.md` is the authoritative interface and interaction specification for
+Tabula Rasa.
+
+Before modifying Streamlit UI, navigation, forms, tables, dashboards, visual
+styling, or user-facing workflows:
+
+1. Read the relevant sections of `design.md`.
+2. Inspect the current implementation and canonical user documentation.
+3. Preserve every existing function unless the task explicitly changes it.
+4. Treat sections marked **Current behavior** as required behavior.
+5. Treat sections marked **Proposed behavior** as approved direction, but
+   implement them only when the current task explicitly includes them.
+6. If the implementation, documentation, and design specification disagree,
+   identify the conflict before choosing a behavior.
+7. Update `design.md` and the applicable user documentation when an implemented
+   feature changes the authoritative current behavior.
+
+Do not reproduce the entire design system inside individual page modules.
+Implement reusable tokens, helpers, and components where practical.
