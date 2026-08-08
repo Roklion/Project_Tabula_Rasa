@@ -224,7 +224,150 @@ def verified_drive_backup_for_week(
     return None
 
 
-def main() -> None:
+def _profile_destination_is_configured(
+    profile_secrets: Mapping[str, Any], *, local: bool
+) -> bool:
+    """Return whether an all-profile run can attempt this destination.
+
+    A profile without a Drive backup folder (cloud mode), or without a Drive
+    receipt folder (local mode), cannot produce the current backup format. It
+    is reported as skipped so one disconnected profile does not hide backups
+    for the remaining configured profiles.
+    """
+    drive_settings = profile_secrets.get("google_drive")
+    if not isinstance(drive_settings, Mapping):
+        return False
+    required_folder = "receipt_folder" if local else "backup_folder"
+    folder = drive_settings.get(required_folder)
+    return isinstance(folder, Mapping) and bool(str(folder.get("id", "")).strip())
+
+
+def _sanitized_profile_result(
+    profile_key: str, status: str, detail: str | None = None
+) -> dict[str, str]:
+    """Build a result that contains no exception text or private data."""
+    result = {"profile": profile_key, "status": status}
+    if detail:
+        result["detail"] = detail
+    return result
+
+
+def backup_all_profiles(
+    all_secrets: Mapping[str, Any],
+    profiles: list[Any],
+    *,
+    local: bool = False,
+    keep: int = 30,
+    once_per_week: bool = False,
+) -> list[dict[str, str]]:
+    """Back up every eligible profile, continuing after individual failures.
+
+    The profile mapping is passed directly to each storage and Drive helper;
+    no selected-profile fallback is used. This keeps credentials, tokens,
+    folders, receipt inventories, and local destinations isolated.
+    """
+    results: list[dict[str, str]] = []
+    for profile in profiles:
+        profile_key = str(profile.key)
+        profile_secrets = profile.secrets
+        if not _profile_destination_is_configured(profile_secrets, local=local):
+            destination = "local receipt folder" if local else "Google Drive backup folder"
+            result = _sanitized_profile_result(
+                profile_key,
+                "skip",
+                f"{destination} is not configured",
+            )
+            results.append(result)
+            print(f"Profile {profile_key}: skipped ({result['detail']})")
+            continue
+
+        try:
+            if local:
+                output_dir = resolve_backup_output_dir(
+                    profile_secrets,
+                    None,
+                    profile_key,
+                )
+                if once_per_week and verified_backup_for_week(output_dir) is not None:
+                    result = _sanitized_profile_result(
+                        profile_key,
+                        "skip",
+                        "weekly backup already verified",
+                    )
+                    results.append(result)
+                    print(f"Profile {profile_key}: skipped (weekly backup already verified)")
+                    continue
+                storage = GoogleSheetsStorage.from_secrets(profile_secrets)
+                drive_settings = profile_secrets.get("google_drive")
+                drive_client = GoogleDriveClient(
+                    load_oauth_config(all_secrets), drive_settings
+                )
+                receipt_manifest = build_backup_receipt_manifest(
+                    profile_key,
+                    profile_secrets,
+                    storage,
+                    client=drive_client,
+                )
+                destination = write_versioned_backup(
+                    storage,
+                    output_dir,
+                    receipt_manifest,
+                    keep=keep,
+                )
+                result = _sanitized_profile_result(
+                    profile_key,
+                    "success",
+                    f"local archive {destination.name} created",
+                )
+            else:
+                if once_per_week and verified_drive_backup_for_week(
+                    all_secrets,
+                    profile_key,
+                    profile_secrets,
+                ) is not None:
+                    result = _sanitized_profile_result(
+                        profile_key,
+                        "skip",
+                        "weekly backup already verified",
+                    )
+                    results.append(result)
+                    print(f"Profile {profile_key}: skipped (weekly backup already verified)")
+                    continue
+                storage = GoogleSheetsStorage.from_secrets(profile_secrets)
+                uploaded = upload_versioned_backup_to_drive(
+                    all_secrets,
+                    profile_key,
+                    profile_secrets,
+                    storage,
+                    keep=keep,
+                )
+                result = _sanitized_profile_result(
+                    profile_key,
+                    "success",
+                    f"Google Drive backup {uploaded.get('name', 'created')} created",
+                )
+            results.append(result)
+            print(f"Profile {profile_key}: success ({result['detail']})")
+        except Exception as exc:  # noqa: BLE001 - continue independent profiles
+            result = _sanitized_profile_result(
+                profile_key,
+                "failure",
+                f"{type(exc).__name__}"
+            )
+            results.append(result)
+            print(f"Profile {profile_key}: failure ({result['detail']})")
+
+    failures = sum(result["status"] == "failure" for result in results)
+    successes = sum(result["status"] == "success" for result in results)
+    skips = sum(result["status"] == "skip" for result in results)
+    print(
+        "All-profile backup summary: "
+        f"success={successes} skipped={skips} failed={failures}"
+    )
+    return results
+
+
+def main() -> int:
     parser = argparse.ArgumentParser(
         description="Back up the live ledger to a versioned ZIP archive"
     )
@@ -265,10 +408,32 @@ def main() -> None:
         ),
     )
     parser.add_argument("--profile", help="Business profile key to back up")
+    parser.add_argument(
+        "--all-profiles",
+        action="store_true",
+        help="Back up every eligible configured profile independently",
+    )
     args = parser.parse_args()
 
     all_secrets = load_business_profile_document(args.secrets)
     profiles = load_business_profiles(all_secrets)
+    if args.all_profiles and args.profile:
+        raise SystemExit("--all-profiles cannot be combined with --profile")
+    if args.all_profiles and args.google_drive and args.local_dir is not None:
+        raise SystemExit("--local-dir cannot be combined with --google-drive")
+    if args.all_profiles and args.local_dir not in (None, _PROFILE_CONFIG):
+        raise SystemExit(
+            "An explicit --local-dir PATH is only available for single-profile backups"
+        )
+    if args.all_profiles:
+        results = backup_all_profiles(
+            all_secrets,
+            profiles,
+            local=args.local_dir is _PROFILE_CONFIG,
+            keep=args.keep,
+            once_per_week=args.once_per_week,
+        )
+        return int(any(result["status"] == "failure" for result in results))
     if len(profiles) > 1 and not args.profile:
         raise SystemExit("Multiple profiles are configured; pass --profile PROFILE_KEY")
     if args.google_drive and args.local_dir is not None:
@@ -288,7 +453,7 @@ def main() -> None:
                     "Weekly Google Drive backup already verified: "
                     f"{existing_drive.get('name', 'backup')}"
                 )
-                return
+                return 0
         storage = GoogleSheetsStorage.from_secrets(secrets)
         uploaded = upload_versioned_backup_to_drive(
             all_secrets,
@@ -298,7 +463,7 @@ def main() -> None:
             keep=args.keep,
         )
         print(f"Verified Google Drive backup created: {uploaded.get('name', 'backup')}")
-        return
+        return 0
 
     output_dir = resolve_backup_output_dir(
         secrets,
@@ -309,7 +474,7 @@ def main() -> None:
         existing = verified_backup_for_week(output_dir)
         if existing is not None:
             print(f"Weekly backup already verified: {existing}")
-            return
+            return 0
     storage = GoogleSheetsStorage.from_secrets(secrets)
     drive_settings = secrets.get("google_drive")
     drive_client = (
@@ -331,7 +496,8 @@ def main() -> None:
         keep=args.keep,
     )
     print(f"Verified backup created: {destination}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
