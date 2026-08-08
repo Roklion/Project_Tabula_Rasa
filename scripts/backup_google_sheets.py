@@ -239,7 +239,10 @@ def _profile_destination_is_configured(
         return False
     required_folder = "receipt_folder" if local else "backup_folder"
     folder = drive_settings.get(required_folder)
-    return isinstance(folder, Mapping) and bool(str(folder.get("id", "")).strip())
+    if not isinstance(folder, Mapping):
+        return False
+    folder_id = folder.get("id")
+    return isinstance(folder_id, str) and bool(folder_id.strip())
 
 
 def _sanitized_profile_result(

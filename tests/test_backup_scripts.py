@@ -127,6 +127,34 @@ class TestBackupScripts:
 
         assert [result["status"] for result in results] == ["success", "skip"]
 
+    def test_all_profiles_skips_null_folder_id(self) -> None:
+        profile = type(
+            "Profile",
+            (),
+            {
+                "key": "north",
+                "secrets": {
+                    "spreadsheet_id": "northspreadsheet123456789",
+                    "gcp_service_account": {},
+                    "google_drive": {"backup_folder": {"id": None}},
+                },
+            },
+        )()
+
+        with patch(
+            "scripts.backup_google_sheets.upload_versioned_backup_to_drive"
+        ) as upload:
+            results = backup_all_profiles({}, [profile])
+
+        assert results == [
+            {
+                "profile": "north",
+                "status": "skip",
+                "detail": "Google Drive backup folder is not configured",
+            }
+        ]
+        upload.assert_not_called()
+
     def test_all_profiles_weekly_suppression_is_independent(self) -> None:
         north = {
             "spreadsheet_id": "northspreadsheet123456789",
