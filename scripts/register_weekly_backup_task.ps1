@@ -36,7 +36,7 @@ if ($Local -and $GoogleDrive) {
 if ($BackupDirectory -and $Local) {
     throw "BackupDirectory cannot be combined with Local."
 }
-if (-not $Profile -and -not $AllProfiles) {
+if (-not $Profile -and -not $AllProfiles -and -not $BackupDirectory) {
     $AllProfiles = $true
 }
 

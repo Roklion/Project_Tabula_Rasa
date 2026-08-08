@@ -36,9 +36,12 @@ _PROFILE_CONFIG = object()
 
 
 def verified_backup_for_week(
-    output_dir: Path, *, local_date: date | None = None
+    output_dir: Path,
+    *,
+    local_date: date | None = None,
+    profile_key: str | None = None,
 ) -> Path | None:
-    """Find a valid backup whose UTC filename falls in the requested local week."""
+    """Find a valid profile backup in the requested local week."""
     output_dir = output_dir.resolve()
     if not output_dir.is_dir():
         return None
@@ -61,7 +64,13 @@ def verified_backup_for_week(
             manifest = GoogleSheetsStorage.validate_backup_zip(path.read_bytes())
         except (OSError, RuntimeError):
             continue
-        if manifest.get("format_version") == BACKUP_FORMAT_VERSION:
+        if (
+            manifest.get("format_version") == BACKUP_FORMAT_VERSION
+            and (
+                profile_key is None
+                or manifest.get("business_profile_key") == profile_key
+            )
+        ):
             return path
     return None
 
@@ -291,7 +300,14 @@ def backup_all_profiles(
                     None,
                     profile_key,
                 )
-                if once_per_week and verified_backup_for_week(output_dir) is not None:
+                if (
+                    once_per_week
+                    and verified_backup_for_week(
+                        output_dir,
+                        profile_key=profile_key,
+                    )
+                    is not None
+                ):
                     result = _sanitized_profile_result(
                         profile_key,
                         "skip",
@@ -474,7 +490,10 @@ def main() -> int:
         selected_profile_key,
     )
     if args.once_per_week:
-        existing = verified_backup_for_week(output_dir)
+        existing = verified_backup_for_week(
+            output_dir,
+            profile_key=selected_profile_key,
+        )
         if existing is not None:
             print(f"Weekly backup already verified: {existing}")
             return 0

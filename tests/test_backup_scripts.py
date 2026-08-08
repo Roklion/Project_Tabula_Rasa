@@ -253,6 +253,7 @@ class TestBackupScripts:
         assert "$AllProfiles = $true" in script
         assert "$arguments += ' --all-profiles'" in script
         assert "-MultipleInstances IgnoreNew" in script
+        assert "-not $BackupDirectory" in script
 
     def test_current_backup_inventories_the_configured_receipt_folder(self) -> None:
         storage = Mock(spec=GoogleSheetsStorage)
@@ -385,6 +386,38 @@ class TestBackupScripts:
             local_date = datetime.strptime(timestamp, "%Y%m%dT%H%M%SZ").date()
             assert verified_backup_for_week(north_dir, local_date=local_date)
             assert verified_backup_for_week(south_dir, local_date=local_date) == south_backup
+
+    def test_weekly_check_rejects_another_profile_in_a_shared_destination(self) -> None:
+        storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output_dir = Path(temporary_directory)
+            north_backup = write_versioned_backup(
+                storage,
+                output_dir,
+                build_receipt_manifest("north", [], []),
+                keep=2,
+            )
+            timestamp = north_backup.name.removeprefix(
+                "tabula-rosa-backup-"
+            ).removesuffix(".zip")
+            local_date = datetime.strptime(timestamp, "%Y%m%dT%H%M%SZ").date()
+
+            assert (
+                verified_backup_for_week(
+                    output_dir,
+                    local_date=local_date,
+                    profile_key="south",
+                )
+                is None
+            )
+            assert (
+                verified_backup_for_week(
+                    output_dir,
+                    local_date=local_date,
+                    profile_key="north",
+                )
+                == north_backup
+            )
 
     def test_drive_mode_is_default_and_does_not_require_local_destination(self) -> None:
         profile = type("Profile", (), {"key": "north"})()
