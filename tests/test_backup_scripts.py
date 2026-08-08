@@ -419,6 +419,39 @@ class TestBackupScripts:
                 == north_backup
             )
 
+    def test_retention_preserves_another_profile_in_a_shared_destination(self) -> None:
+        storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+        north_backup = storage.export_backup_zip(
+            build_receipt_manifest("north", [], [])
+        )
+        south_backup = storage.export_backup_zip(
+            build_receipt_manifest("south", [], [])
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output_dir = Path(temporary_directory)
+            (output_dir / "tabula-rosa-backup-20200101T120000Z.zip").write_bytes(
+                north_backup
+            )
+            (output_dir / "tabula-rosa-backup-20200102T120000Z.zip").write_bytes(
+                south_backup
+            )
+
+            created = write_versioned_backup(
+                storage,
+                output_dir,
+                build_receipt_manifest("north", [], []),
+                keep=2,
+                profile_key="north",
+            )
+
+            assert created.exists()
+            assert (
+                output_dir / "tabula-rosa-backup-20200101T120000Z.zip"
+            ).exists()
+            assert (
+                output_dir / "tabula-rosa-backup-20200102T120000Z.zip"
+            ).exists()
+
     def test_drive_mode_is_default_and_does_not_require_local_destination(self) -> None:
         profile = type("Profile", (), {"key": "north"})()
         secrets = {

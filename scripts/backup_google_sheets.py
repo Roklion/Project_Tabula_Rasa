@@ -99,6 +99,7 @@ def write_versioned_backup(
     receipt_manifest: Mapping[str, Any],
     *,
     keep: int = 30,
+    profile_key: str | None = None,
 ) -> Path:
     """Write one verified backup and retain the newest requested generations."""
     if keep < 2:
@@ -113,15 +114,21 @@ def write_versioned_backup(
     with destination.open("xb") as backup_file:
         backup_file.write(backup)
 
-    generations = sorted(
-        (
-            path
-            for path in output_dir.iterdir()
-            if path.is_file() and BACKUP_NAME.fullmatch(path.name)
-        ),
-        key=lambda path: path.name,
-        reverse=True,
-    )
+    generations: list[Path] = []
+    for path in output_dir.iterdir():
+        if not path.is_file() or not BACKUP_NAME.fullmatch(path.name):
+            continue
+        if profile_key is not None:
+            try:
+                existing_manifest = GoogleSheetsStorage.validate_backup_zip(
+                    path.read_bytes()
+                )
+            except (OSError, RuntimeError):
+                continue
+            if existing_manifest.get("business_profile_key") != profile_key:
+                continue
+        generations.append(path)
+    generations.sort(key=lambda path: path.name, reverse=True)
     for expired in generations[keep:]:
         expired.unlink()
     return destination
@@ -332,6 +339,7 @@ def backup_all_profiles(
                     output_dir,
                     receipt_manifest,
                     keep=keep,
+                    profile_key=profile_key,
                 )
                 result = _sanitized_profile_result(
                     profile_key,
@@ -516,6 +524,7 @@ def main() -> int:
         output_dir,
         receipt_manifest,
         keep=args.keep,
+        profile_key=selected_profile_key,
     )
     print(f"Verified backup created: {destination}")
     return 0
