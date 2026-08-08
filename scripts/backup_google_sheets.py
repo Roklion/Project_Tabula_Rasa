@@ -334,7 +334,7 @@ def backup_all_profiles(
                     print(f"Profile {profile_key}: skipped (weekly backup already verified)")
                     continue
                 storage = GoogleSheetsStorage.from_secrets(profile_secrets)
-                uploaded = upload_versioned_backup_to_drive(
+                upload_versioned_backup_to_drive(
                     all_secrets,
                     profile_key,
                     profile_secrets,
@@ -344,7 +344,7 @@ def backup_all_profiles(
                 result = _sanitized_profile_result(
                     profile_key,
                     "success",
-                    f"Google Drive backup {uploaded.get('name', 'created')} created",
+                    "Google Drive backup created",
                 )
             results.append(result)
             print(f"Profile {profile_key}: success ({result['detail']})")
