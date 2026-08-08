@@ -253,6 +253,8 @@ class TestBackupScripts:
         assert "$AllProfiles = $true" in script
         assert "$arguments += ' --all-profiles'" in script
         assert "-MultipleInstances IgnoreNew" in script
+        assert "New-TimeSpan -Days 3" in script
+        assert "New-TimeSpan -Minutes 15" in script
         assert "-not $BackupDirectory" in script
 
     def test_current_backup_inventories_the_configured_receipt_folder(self) -> None:

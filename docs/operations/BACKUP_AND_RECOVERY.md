@@ -238,6 +238,10 @@ so overlapping instances remain disabled. Hosted deployments should use the
 separate scheduler integration tracked by issue #17; this Windows task is for
 the local interactive deployment only.
 
+All-profile tasks use a three-day execution limit so the aggregate run is not
+cut off by the 15-minute limit reserved for single-profile repair tasks. The
+limit still bounds a hung aggregate run before the next weekly retry window.
+
 The task runs interactively. A local Google Drive Desktop or NAS-mounted path
 is available only when the signed-in Windows session and mount are active. If
 all three weekly opportunities fail, that week is skipped; starting the mount

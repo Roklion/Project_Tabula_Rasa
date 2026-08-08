@@ -65,10 +65,17 @@ $trigger = New-ScheduledTaskTrigger `
     -WeeksInterval 1 `
     -DaysOfWeek Monday, Tuesday, Wednesday `
     -At 10:00PM
+$executionTimeLimit = if ($AllProfiles) {
+    # Allow the aggregate run to use Task Scheduler's documented three-day
+    # default so a fixed per-profile limit cannot starve later profiles.
+    New-TimeSpan -Days 3
+} else {
+    New-TimeSpan -Minutes 15
+}
 $settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries `
     -DontStopIfGoingOnBatteries `
-    -ExecutionTimeLimit (New-TimeSpan -Minutes 15) `
+    -ExecutionTimeLimit $executionTimeLimit `
     -MultipleInstances IgnoreNew
 $principal = New-ScheduledTaskPrincipal `
     -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) `
