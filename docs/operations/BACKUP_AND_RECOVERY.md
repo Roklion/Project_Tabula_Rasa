@@ -171,13 +171,46 @@ Google Drive Desktop does not need to be installed or running for this mode.
 ## Schedule weekly backups
 
 The provided Windows task registers Monday, Tuesday, and Wednesday at 10:00 PM
-as retry opportunities for one weekly backup. `--once-per-week` verifies an
-existing current-format archive with its checksummed receipt inventory before
-accessing Google Sheets, so a successful Monday run causes Tuesday and
-Wednesday to exit without creating duplicates. A valid older ledger-only
-archive does not suppress creation of the current recovery format.
+as retry opportunities for one weekly backup. By default the registration
+script creates one stable task that invokes `--all-profiles`; each configured
+profile is evaluated independently and a failure or weekly duplicate for one
+profile does not prevent later profiles from being attempted. `--once-per-week`
+verifies an existing current-format archive with its checksummed receipt
+inventory before accessing Google Sheets, so a successful Monday run causes
+Tuesday and Wednesday to exit without creating duplicates for that profile. A
+valid older ledger-only archive does not suppress creation of the current
+recovery format.
+
+The all-profile command uses each profile's own spreadsheet credential, Drive
+authorization and folders, and (for local mode) its configured or derived
+`backups/PROFILE_KEY/` destination. It prints only profile keys and sanitized
+status summaries. The process exits nonzero if any eligible profile fails;
+profiles without the required destination are reported as skipped. Use the
+single-profile form for an explicit local destination or repair operation.
+
+### All-profile cloud backup
+
+```powershell
+python scripts\backup_google_sheets.py --all-profiles --google-drive --keep 30
+```
+
+### All-profile local backup using profile-scoped destinations
+
+```powershell
+python scripts\backup_google_sheets.py --all-profiles --local-dir --keep 30
+```
 
 ### Cloud-native scheduled backup
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\register_weekly_backup_task.ps1 `
+  -AllProfiles `
+  -GoogleDrive `
+  -TaskName "Tabula Rosa Weekly Backup"
+```
+
+Omitting `-AllProfiles` and `-Profile` has the same all-profile behavior. A
+single-profile task remains available when needed for repair or recovery:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\register_weekly_backup_task.ps1 `
@@ -190,14 +223,17 @@ powershell -ExecutionPolicy Bypass -File scripts\register_weekly_backup_task.ps1
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\register_weekly_backup_task.ps1 `
-  -Profile PROFILE_KEY `
-  -BackupDirectory "C:\Protected\Tabula-Rosa\PROFILE_KEY" `
-  -TaskName "Tabula Rosa Local Backup - PROFILE_KEY"
+  -AllProfiles `
+  -Local `
+  -TaskName "Tabula Rosa Weekly Local Backup"
 ```
 
-Register a distinct task and destination for every profile. This prevents
-archives with identical or nearby timestamps from different businesses from
-being mixed together.
+For an explicit local destination, select one profile and pass
+`-BackupDirectory`; the script rejects that override in all-profile mode so
+archives cannot be mixed together. The task uses `-MultipleInstances IgnoreNew`
+so overlapping instances remain disabled. Hosted deployments should use the
+separate scheduler integration tracked by issue #17; this Windows task is for
+the local interactive deployment only.
 
 The task runs interactively. A local Google Drive Desktop or NAS-mounted path
 is available only when the signed-in Windows session and mount are active. If
