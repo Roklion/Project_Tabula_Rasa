@@ -79,13 +79,22 @@ def resolve_backup_output_dir(
     profile_secrets: Mapping[str, Any],
     override: Path | None,
     profile_key: str | None = None,
+    *,
+    profile_scoped: bool = False,
 ) -> Path:
     """Resolve an explicit override, profile path, or profile-scoped default."""
     if override is not None:
         return override
     configured = str(profile_secrets.get("backup_folder_path", "")).strip()
     if configured:
-        return Path(configured)
+        configured_path = Path(configured)
+        if profile_scoped:
+            if profile_key is None:
+                raise ValueError(
+                    "A profile key is required for a profile-scoped local destination."
+                )
+            return configured_path / validate_profile_key(profile_key)
+        return configured_path
     if profile_key is None:
         raise ValueError(
             "A profile key is required when no local backup folder is configured."
@@ -306,6 +315,7 @@ def backup_all_profiles(
                     profile_secrets,
                     None,
                     profile_key,
+                    profile_scoped=True,
                 )
                 if (
                     once_per_week

@@ -222,8 +222,8 @@ class TestBackupScripts:
 
         assert [result["status"] for result in results] == ["success", "success"]
         assert resolve.call_args_list == [
-            ((north, None, "north"),),
-            ((south, None, "south"),),
+            ((north, None, "north"), {"profile_scoped": True}),
+            ((south, None, "south"), {"profile_scoped": True}),
         ]
         assert from_secrets.call_args_list == [((north,),), ((south,),)]
 
@@ -348,6 +348,12 @@ class TestBackupScripts:
             == override
         )
         assert resolve_backup_output_dir({}, None, "north") == PROJECT_ROOT / "backups" / "north"
+        assert resolve_backup_output_dir(
+            {"backup_folder_path": str(configured)},
+            None,
+            "north",
+            profile_scoped=True,
+        ) == configured / "north"
 
     def test_profile_fallbacks_are_isolated_and_require_a_profile_key(self) -> None:
         assert resolve_backup_output_dir({}, None, "north") != resolve_backup_output_dir(

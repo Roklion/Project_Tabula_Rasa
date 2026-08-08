@@ -182,11 +182,14 @@ valid older ledger-only archive does not suppress creation of the current
 recovery format.
 
 The all-profile command uses each profile's own spreadsheet credential, Drive
-authorization and folders, and (for local mode) its configured or derived
-`backups/PROFILE_KEY/` destination. It prints only profile keys and sanitized
-status summaries. The process exits nonzero if any eligible profile fails;
-profiles without the required destination are reported as skipped. Use the
-single-profile form for an explicit local destination or repair operation.
+authorization and folders, and (for local mode) a profile-scoped destination.
+The derived fallback is `backups/PROFILE_KEY/`; a configured path is treated as
+a root and receives a `PROFILE_KEY/` child for all-profile runs. Single-profile
+commands continue to use their configured path exactly. The command prints
+only profile keys and sanitized status summaries. The process exits nonzero if
+any eligible profile fails; profiles without the required destination are
+reported as skipped. Use the single-profile form for an explicit local
+destination or repair operation.
 
 ### All-profile cloud backup
 
