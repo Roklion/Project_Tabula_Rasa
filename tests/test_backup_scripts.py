@@ -159,6 +159,73 @@ class TestBackupScripts:
         assert verified.call_count == 2
         upload.assert_called_once()
 
+    def test_all_profile_local_mode_uses_profile_scoped_destinations(self) -> None:
+        north = {
+            "spreadsheet_id": "northspreadsheet123456789",
+            "gcp_service_account": {},
+            "google_drive": {"receipt_folder": {"id": "north-receipts"}},
+        }
+        south = {
+            "spreadsheet_id": "southspreadsheet123456789",
+            "gcp_service_account": {},
+            "google_drive": {"receipt_folder": {"id": "south-receipts"}},
+        }
+        profiles = [
+            type("Profile", (), {"key": "north", "secrets": north})(),
+            type("Profile", (), {"key": "south", "secrets": south})(),
+        ]
+        north_dir = Path("north-backups")
+        south_dir = Path("south-backups")
+        with (
+            patch(
+                "scripts.backup_google_sheets.resolve_backup_output_dir",
+                side_effect=[north_dir, south_dir],
+            ) as resolve,
+            patch("scripts.backup_google_sheets.GoogleSheetsStorage.from_secrets") as from_secrets,
+            patch("scripts.backup_google_sheets.GoogleDriveClient"),
+            patch("scripts.backup_google_sheets.load_oauth_config", return_value={}),
+            patch("scripts.backup_google_sheets.build_backup_receipt_manifest", return_value={}),
+            patch(
+                "scripts.backup_google_sheets.write_versioned_backup",
+                side_effect=[north_dir / "north.zip", south_dir / "south.zip"],
+            ),
+        ):
+            results = backup_all_profiles({}, profiles, local=True)
+
+        assert [result["status"] for result in results] == ["success", "success"]
+        assert resolve.call_args_list == [
+            ((north, None, "north"),),
+            ((south, None, "south"),),
+        ]
+        assert from_secrets.call_args_list == [((north,),), ((south,),)]
+
+    def test_all_profile_cli_returns_nonzero_for_any_failure(self) -> None:
+        profile = type("Profile", (), {"key": "north", "secrets": {}})()
+        with (
+            patch(
+                "scripts.backup_google_sheets.load_business_profile_document",
+                return_value={},
+            ),
+            patch(
+                "scripts.backup_google_sheets.load_business_profiles",
+                return_value=[profile],
+            ),
+            patch(
+                "scripts.backup_google_sheets.backup_all_profiles",
+                return_value=[{"profile": "north", "status": "failure"}],
+            ),
+            patch.object(sys, "argv", ["backup_google_sheets.py", "--all-profiles"]),
+        ):
+            from scripts.backup_google_sheets import main
+
+            assert main() == 1
+
+    def test_windows_registration_defaults_to_one_all_profile_task(self) -> None:
+        script = Path("scripts/register_weekly_backup_task.ps1").read_text()
+        assert "$AllProfiles = $true" in script
+        assert "$arguments += ' --all-profiles'" in script
+        assert "-MultipleInstances IgnoreNew" in script
+
     def test_current_backup_inventories_the_configured_receipt_folder(self) -> None:
         storage = Mock(spec=GoogleSheetsStorage)
         storage.list_transactions.return_value = []
