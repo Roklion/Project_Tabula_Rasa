@@ -368,6 +368,10 @@ class TestAppAuthentication:
                         "id": "backupfolder123",
                         "name": "North Backups",
                     },
+                    "receipt_folder": {
+                        "id": "receiptfolder123",
+                        "name": "North Receipts",
+                    },
                 },
                 path=local_store,
             )
@@ -445,6 +449,7 @@ class TestAppAuthentication:
                 recovery = load_local_profiles(local_store)["north"][
                     "synology_recovery"
                 ]
+                assert recovery["layout"] == "profile-root"
                 assert recovery["destination_path"].endswith("/north")
                 assert recovery["schedule"] == "Daily at 11:00 PM"
                 assert any(

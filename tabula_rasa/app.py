@@ -62,8 +62,10 @@ from tabula_rasa.storage import (
 )
 from tabula_rasa.synology_recovery import (
     DESTINATION_DELETIONS,
+    PROFILE_ROOT_LAYOUT,
     SYNC_DIRECTION,
     SynologyRecoveryConfigurationError,
+    synology_recovery_layout,
     validate_synology_recovery_settings,
 )
 from tabula_rasa.submission_guard import is_recent_duplicate, mark_completed
@@ -2360,6 +2362,11 @@ elif page == "Data & backup":
     st.caption("Your live records are stored in the private Google Sheets workbook.")
     selected_profile = profile_by_key[selected_profile_key].secrets
     drive_settings = selected_profile.get("google_drive")
+    storage_root = (
+        drive_settings.get("storage_root")
+        if isinstance(drive_settings, Mapping)
+        else None
+    )
     backup_folder = (
         drive_settings.get("backup_folder")
         if isinstance(drive_settings, Mapping)
@@ -2506,6 +2513,7 @@ elif page == "Data & backup":
                 "Repair this profile from the loopback-only Business profiles page."
             )
         else:
+            recovery_layout = synology_recovery_layout(synology_recovery)
             if not isinstance(backup_folder, Mapping):
                 st.warning(
                     "Synology recovery is enabled, but this profile does not have a "
@@ -2515,6 +2523,14 @@ elif page == "Data & backup":
                 st.warning(
                     "Synology recovery is enabled, but this profile does not have a "
                     "Google Drive receipt folder selected."
+                )
+            if (
+                recovery_layout == PROFILE_ROOT_LAYOUT
+                and not isinstance(storage_root, Mapping)
+            ):
+                st.warning(
+                    "One-task Synology recovery is enabled, but this profile does "
+                    "not have a Google Drive storage root selected."
                 )
             backup_source_name = (
                 str(backup_folder.get("name", "Google Drive backup folder"))
@@ -2531,11 +2547,27 @@ elif page == "Data & backup":
                 if isinstance(recovery_receipt_folder, Mapping)
                 else "Not configured"
             )
+            if recovery_layout == PROFILE_ROOT_LAYOUT:
+                root_source_name = (
+                    str(storage_root.get("name", "Google Drive storage root"))
+                    if isinstance(storage_root, Mapping)
+                    else "Not configured"
+                )
+                source_lines = (
+                    "- **Cloud Sync layout:** One profile-root task",
+                    f"- **Remote source:** {root_source_name}",
+                    "- **Expected NAS children:** Receipts and Ledger Backups",
+                )
+            else:
+                source_lines = (
+                    "- **Cloud Sync layout:** Two folder tasks (legacy)",
+                    f"- **Ledger backup source:** {backup_source_name}",
+                    f"- **Receipt source:** {receipt_source_name}",
+                )
             st.markdown(
                 "\n".join(
                     (
-                        f"- **Ledger backup source:** {backup_source_name}",
-                        f"- **Receipt source:** {receipt_source_name}",
+                        *source_lines,
                         "- **Cloud Sync direction:** " + SYNC_DIRECTION,
                         "- **Destination deletions:** " + DESTINATION_DELETIONS,
                         "- **NAS destination:** "
@@ -2548,7 +2580,7 @@ elif page == "Data & backup":
             st.caption(
                 "These are the expected per-business settings. Tabula Rosa does not "
                 "connect to the NAS; confirm transfers, failures, and retries in DSM "
-                "Cloud Sync, and protect both synchronized folders with versioned "
+                "Cloud Sync, and protect both synchronized children with versioned "
                 "retention."
             )
 

@@ -30,6 +30,13 @@ from tabula_rasa.storage import (
     StorageValidationError,
     StorageWorkbookAccessError,
 )
+from tabula_rasa.synology_recovery import (
+    LEGACY_TWO_TASK_LAYOUT,
+    PROFILE_ROOT_LAYOUT,
+    SynologyRecoveryConfigurationError,
+    resolve_synology_recovery_defaults,
+    synology_recovery_layout,
+)
 
 
 def _masked_spreadsheet_id(spreadsheet_id: object) -> str:
@@ -157,6 +164,7 @@ def _profile_rows(
 def _render_synology_recovery_admin(
     local_profiles: Mapping[str, Mapping[str, Any]],
     *,
+    app_defaults: object = None,
     store_path: Path,
 ) -> None:
     st.subheader("Synology recovery copy")
@@ -175,14 +183,48 @@ def _render_synology_recovery_admin(
     )
     existing = local_profiles[profile_key].get("synology_recovery")
     existing = existing if isinstance(existing, Mapping) else {}
+    try:
+        defaults = resolve_synology_recovery_defaults(app_defaults, profile_key)
+    except SynologyRecoveryConfigurationError as error:
+        st.error(str(error))
+        defaults = {
+            "layout": PROFILE_ROOT_LAYOUT,
+            "destination_path": "",
+            "schedule": "",
+            "retention_policy": "",
+        }
+    selected_layout = (
+        synology_recovery_layout(existing) if existing else PROFILE_ROOT_LAYOUT
+    )
     with st.form("synology_recovery_form"):
         enabled = st.checkbox(
             "Maintain an optional Synology recovery copy for this business",
             value=bool(existing),
         )
+        layout = st.radio(
+            "Cloud Sync layout",
+            (PROFILE_ROOT_LAYOUT, LEGACY_TWO_TASK_LAYOUT),
+            index=(
+                0 if selected_layout == PROFILE_ROOT_LAYOUT else 1
+            ),
+            format_func=lambda value: (
+                "One task: profile storage root (recommended)"
+                if value == PROFILE_ROOT_LAYOUT
+                else "Two tasks: receipt and ledger folders (legacy)"
+            ),
+            help=(
+                "Existing legacy records stay on two tasks until this choice is "
+                "intentionally changed and saved."
+            ),
+        )
         destination_path = st.text_input(
             "NAS destination path",
-            value=str(existing.get("destination_path", "")),
+            value=str(
+                existing.get(
+                    "destination_path",
+                    defaults["destination_path"],
+                )
+            ),
             placeholder=f"/volume1/Backups/TabulaRasa/{profile_key}",
             help=(
                 "Informational DSM path only. The app never opens or writes to it."
@@ -190,7 +232,7 @@ def _render_synology_recovery_admin(
         )
         schedule = st.text_input(
             "Cloud Sync schedule",
-            value=str(existing.get("schedule", "Continuous")),
+            value=str(existing.get("schedule", defaults["schedule"])),
             help="For example: Continuous, or Daily at 11:00 PM.",
         )
         retention_policy = st.text_area(
@@ -198,7 +240,7 @@ def _render_synology_recovery_admin(
             value=str(
                 existing.get(
                     "retention_policy",
-                    "Retain all synchronized generations until manual review.",
+                    defaults["retention_policy"],
                 )
             ),
             help=(
@@ -210,13 +252,15 @@ def _render_synology_recovery_admin(
 
     st.caption(
         "Required DSM settings: Download remote changes only; destination "
-        "deletions disabled. Confirm the actual task and its logs in Cloud Sync."
+        "deletions disabled. One-task mode uses the profile storage root as its "
+        "remote source. Confirm the actual task and its logs in Cloud Sync."
     )
     if not save:
         return
 
     settings = (
         {
+            **({"layout": PROFILE_ROOT_LAYOUT} if layout == PROFILE_ROOT_LAYOUT else {}),
             "destination_path": destination_path,
             "schedule": schedule,
             "retention_policy": retention_policy,
@@ -404,6 +448,7 @@ def render_local_profile_admin(
     )
     _render_synology_recovery_admin(
         local_profiles,
+        app_defaults=base_secrets.get("synology_recovery_defaults"),
         store_path=store_path,
     )
 
