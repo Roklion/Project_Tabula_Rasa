@@ -206,7 +206,8 @@ while the Streamlit app or the Windows development computer is turned off.
 Create one recursive task for each newly opted-in business. Its remote source
 is the profile storage root provisioned by Tabula Rosa, and its local
 destination is the matching profile-specific NAS root. Do not point multiple
-profiles at one NAS destination.
+profiles at one NAS destination or use nested destinations that overlap another
+profile's recovery tree.
 
 Cloud Sync connections represent Google accounts; tasks represent source and
 destination folder pairs. If multiple businesses use the same Drive-owning
