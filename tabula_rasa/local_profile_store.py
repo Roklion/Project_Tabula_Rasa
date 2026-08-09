@@ -29,7 +29,9 @@ from tabula_rasa.google_drive import (
     validate_drive_profile_settings,
 )
 from tabula_rasa.synology_recovery import (
+    PROFILE_ROOT_LAYOUT,
     SynologyRecoveryConfigurationError,
+    synology_recovery_layout,
     validate_synology_recovery_settings,
 )
 
@@ -199,6 +201,7 @@ def _validate_stored_profiles(profiles: object) -> dict[str, dict[str, Any]]:
         raise LocalProfileStoreError("Local profile store has an invalid format.")
     normalized: dict[str, dict[str, Any]] = {}
     storage_roots: dict[str, str] = {}
+    nas_destinations: dict[str, str] = {}
     for raw_key, raw_settings in profiles.items():
         key = validate_profile_key(str(raw_key))
         if not isinstance(raw_settings, dict):
@@ -246,6 +249,15 @@ def _validate_stored_profiles(profiles: object) -> dict[str, dict[str, Any]]:
             )
         if root_id:
             storage_roots[root_id] = key
+        recovery_settings = settings.get("synology_recovery")
+        if isinstance(recovery_settings, Mapping):
+            destination = str(recovery_settings["destination_path"]).casefold()
+            if destination in nas_destinations:
+                raise LocalProfileStoreError(
+                    "A Synology NAS destination can belong to only one business "
+                    "profile."
+                )
+            nas_destinations[destination] = key
         normalized[key] = settings
     try:
         load_business_profiles({"business_profiles": normalized})
@@ -471,11 +483,18 @@ def update_local_profile_synology_recovery(
                     "enabling its Synology recovery copy."
                 )
             try:
-                candidate["synology_recovery"] = (
-                    validate_synology_recovery_settings(synology_recovery)
-                )
+                recovery = validate_synology_recovery_settings(synology_recovery)
             except SynologyRecoveryConfigurationError as exc:
                 raise LocalProfileStoreError(str(exc)) from exc
+            if synology_recovery_layout(recovery) == PROFILE_ROOT_LAYOUT and (
+                not isinstance(drive.get("storage_root"), Mapping)
+                or not isinstance(drive.get("receipt_folder"), Mapping)
+            ):
+                raise LocalProfileStoreError(
+                    "Provision the profile storage root and both Google Drive "
+                    "children before enabling one-task Synology recovery."
+                )
+            candidate["synology_recovery"] = recovery
         profiles[profile_key] = candidate
         _write_local_profiles(path, profiles)
 

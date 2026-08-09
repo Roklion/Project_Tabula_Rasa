@@ -366,3 +366,89 @@ class TestLocalProfileStore:
                     },
                     path=path,
                 )
+
+    def test_profile_root_synology_requires_complete_root_layout(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "local_business_profiles.json"
+            save_local_profile("north", settings(), path=path)
+            update_local_profile_google_drive(
+                "north",
+                {
+                    "authorized_email": "north@example.test",
+                    "authorized_name": "North Owner",
+                    "refresh_token": "durable-refresh-token",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "scopes": ["https://www.googleapis.com/auth/drive.file"],
+                    "storage_root": {
+                        "id": "rootfolder123",
+                        "name": "North Storage",
+                    },
+                    "backup_folder": {
+                        "id": "backupfolder123",
+                        "name": "North Backups",
+                    },
+                },
+                path=path,
+            )
+
+            with pytest.raises(LocalProfileStoreError, match="storage root"):
+                update_local_profile_synology_recovery(
+                    "north",
+                    {
+                        "layout": "profile-root",
+                        "destination_path": "/volume1/Backups/north",
+                        "schedule": "Continuous",
+                        "retention_policy": "Keep all.",
+                    },
+                    path=path,
+                )
+
+    def test_synology_destinations_cannot_be_shared_between_profiles(self) -> None:
+        drive = {
+            "authorized_email": "owner@example.test",
+            "authorized_name": "Owner",
+            "refresh_token": "durable-refresh-token",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "scopes": ["https://www.googleapis.com/auth/drive.file"],
+            "storage_root": {"id": "northroot123", "name": "Storage"},
+            "backup_folder": {"id": "backupfolder123", "name": "Backups"},
+        }
+        recovery = {
+            "destination_path": "/volume1/Backups/shared",
+            "schedule": "Continuous",
+            "retention_policy": "Keep all.",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "local_business_profiles.json"
+            save_local_profile("north", settings(), path=path)
+            save_local_profile("south", settings("South Shop"), path=path)
+            update_local_profile_google_drive("north", drive, path=path)
+            update_local_profile_synology_recovery("north", recovery, path=path)
+            update_local_profile_google_drive(
+                "south",
+                {
+                    **drive,
+                    "authorized_email": "south@example.test",
+                    "refresh_token": "south-refresh-token",
+                    "storage_root": {
+                        "id": "southroot123",
+                        "name": "Storage",
+                    },
+                    "backup_folder": {
+                        "id": "southbackupfolder123",
+                        "name": "Backups",
+                    },
+                },
+                path=path,
+            )
+
+            with pytest.raises(LocalProfileStoreError, match="only one"):
+                update_local_profile_synology_recovery(
+                    "south",
+                    recovery,
+                    path=path,
+                )
+
+            stored = load_local_profiles(path)
+
+        assert "synology_recovery" not in stored["south"]
