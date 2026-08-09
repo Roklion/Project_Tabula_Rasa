@@ -2327,6 +2327,12 @@ Preserve:
 - Retention policy
 - Explicit statement that Tabula Rasa does not connect to DSM or prove sync success
 
+Synology/NAS values are local operational metadata. When the selected runtime
+does not contain a local record, including the hosted projection, show that the
+settings are intentionally unavailable and direct the administrator to the
+loopback-only profile page and DSM. Do not infer or report NAS status from an
+absent hosted field.
+
 #### Live workbook exports
 
 Preserve the Prepare or Refresh downloadable exports workflow.
@@ -2434,7 +2440,7 @@ Preserve Synology configuration:
 
 **Current behavior:** New opt-ins default to one recursive Cloud Sync task whose
 remote source is the selected profile storage root. Its NAS destination is
-derived from the app-wide NAS base path plus the immutable profile key, so a
+derived from the local app-wide NAS base path plus the immutable profile key, so a
 global default never sends two profiles to the same destination. App-wide
 schedule and retention defaults prefill the form and remain editable before
 save. A saved per-profile value is the operational record; the app does not
@@ -2446,6 +2452,10 @@ it unless the administrator intentionally selects the one-task layout and saves.
 The Data & backup summary must identify the configured layout and show either
 the profile storage root or the two child folders as the remote source.
 
+All app-wide and per-profile Synology fields remain outside the hosted profile
+projection. Changing only these fields must not change generated hosted Secrets
+or require hosted redeployment.
+
 Also preserve clear links or references to the maintained backup, restore, and receipt-recovery documentation without implying that Account settings performs restore or DSM monitoring.
 
 #### Security & deployment information
@@ -2455,8 +2465,16 @@ Explain clearly:
 - The application password currently grants access to every configured business profile.
 - Profile keys are configuration identifiers, not user accounts.
 - Local profile configuration is stored in the ignored plaintext profile file and depends on operating-system protections.
-- Hosted configuration changes require the documented Streamlit Secrets export and replacement process.
+- Hosted-runtime configuration changes require the documented Streamlit Secrets export and replacement process.
+- Local backup paths and Synology operational settings do not require a hosted export.
 - Private keys are never displayed after upload.
+
+The hosted exporter uses an explicit profile allowlist: display name,
+spreadsheet ID, Sheets service-account credential, and validated Google Drive
+authorization with its storage root and receipt/backup children. It excludes
+local backup paths, Synology metadata, and unknown future local-operation
+fields. Existing hosted documents with older extra fields remain readable, but
+new exports omit them.
 
 #### Acceptance criteria
 
@@ -2466,7 +2484,8 @@ Explain clearly:
 - Hosted/Secrets-sourced profiles remain visibly read-only in local administration where applicable.
 - Profile keys remain immutable.
 - Drive and Synology settings are preserved unless their dedicated controls change them.
-- Successful local changes remain followed by the documented hosted-Secrets export step outside this UI.
+- Successful changes to hosted-runtime fields remain followed by the documented hosted-Secrets export step outside this UI.
+- Local-only backup and Synology changes leave the hosted projection unchanged.
 - The page does not imply per-profile user permissions, DSM monitoring, or in-app restore.
 
 ## 32. Component Contracts

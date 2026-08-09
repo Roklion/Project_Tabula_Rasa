@@ -169,9 +169,9 @@ copy**. For each business:
 5. Review or override the Cloud Sync schedule and NAS retention policy.
 6. Save the choice, then configure DSM to match the saved record.
 
-Set app-wide defaults in local `.streamlit/secrets.toml` and in hosted
-Streamlit Secrets. The base path is never used directly as a profile
-destination; the app always appends the profile key.
+Set app-wide defaults only in local `.streamlit/secrets.toml`. The base path is
+never used directly as a profile destination; the app always appends the
+profile key.
 
 ```toml
 [synology_recovery_defaults]
@@ -184,14 +184,15 @@ Leaving the option cleared keeps that business on Google Drive backup only.
 Disabling it later removes only the application's operational metadata. It does
 not delete a DSM task or any NAS archive.
 
-The hosted app can display the same per-profile status after running
-`scripts/export_streamlit_secrets.py` and updating Streamlit Secrets. The
-Synology fields contain no NAS username, password, hostname, token, or network
-share credential.
+Synology metadata is deliberately excluded from hosted Streamlit Secrets. A
+NAS destination, layout, schedule, retention policy, or app-wide default change
+therefore does not require export or hosted redeployment. Review those settings
+in the local profile administrator and actual task status in DSM. The hosted app
+states that no local record is available rather than presenting stale NAS
+expectations.
 
-Updating hosted Secrets changes only what the hosted app displays. Cloud Sync
-continues to operate directly between Google Drive and DSM even while the
-Streamlit app or the Windows development computer is turned off.
+Cloud Sync continues to operate directly between Google Drive and DSM even
+while the Streamlit app or the Windows development computer is turned off.
 
 ## Configure one Cloud Sync task per newly opted-in business
 

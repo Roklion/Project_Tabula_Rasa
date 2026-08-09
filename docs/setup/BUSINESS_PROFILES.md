@@ -229,7 +229,9 @@ python scripts\export_streamlit_secrets.py
 
 The command:
 
-- validates the app secrets and every local profile;
+- validates every included profile and its hosted Drive settings;
+- projects an explicit hosted-runtime allowlist instead of copying whole local
+  profiles;
 - creates a randomly named ignored TOML file under `.streamlit/`;
 - never prints credential values;
 - never overwrites an existing output; and
@@ -241,12 +243,29 @@ generated local file.
 
 Repeat the export after any:
 
-- profile addition or replacement;
+- profile addition, removal, or display-name change;
+- spreadsheet ID change;
 - Sheets credential rotation;
 - Google Drive connection or reconnection;
 - receipt or backup folder change;
-- Google Drive disconnection; or
-- Synology recovery metadata change.
+- storage-root change; or
+- Google Drive disconnection.
+
+Do not repeat the export when only local operational metadata changes:
+
+- Windows or local backup directory;
+- Synology destination or layout;
+- Cloud Sync schedule;
+- NAS retention/versioning policy; or
+- app-wide `synology_recovery_defaults`.
+
+The hosted profile projection contains only `name`, `spreadsheet_id`,
+`gcp_service_account`, and validated `google_drive` authorization plus its
+storage root and receipt/backup children. New local-only profile fields are
+excluded unless a hosted runtime path is intentionally added to the allowlist.
+Existing hosted Secrets containing older extra fields remain readable; the next
+required export removes those local-only copies without an all-at-once schema
+migration.
 
 Streamlit Community Cloud cannot safely write those changes back to its Secrets.
 
