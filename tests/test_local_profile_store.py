@@ -452,7 +452,17 @@ class TestLocalProfileStore:
         )
         assert stored["north"]["synology_recovery"]["layout"] == "profile-root"
 
-    def test_synology_destinations_cannot_be_shared_between_profiles(self) -> None:
+    @pytest.mark.parametrize(
+        "south_destination",
+        (
+            "/volume1/Backups/shared",
+            "/volume1/Backups/shared/south",
+        ),
+    )
+    def test_synology_destinations_cannot_overlap_between_profiles(
+        self,
+        south_destination: str,
+    ) -> None:
         drive = {
             "authorized_email": "owner@example.test",
             "authorized_name": "Owner",
@@ -491,10 +501,10 @@ class TestLocalProfileStore:
                 path=path,
             )
 
-            with pytest.raises(LocalProfileStoreError, match="only one"):
+            with pytest.raises(LocalProfileStoreError, match="overlap"):
                 update_local_profile_synology_recovery(
                     "south",
-                    recovery,
+                    {**recovery, "destination_path": south_destination},
                     path=path,
                 )
 

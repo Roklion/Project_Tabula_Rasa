@@ -77,6 +77,17 @@ def ensure_google_drive_disconnect_allowed(
         )
 
 
+def _nas_destinations_overlap(left: str, right: str) -> bool:
+    """Return whether two canonical DSM paths share a directory tree."""
+    if left == "/" or right == "/":
+        return True
+    return (
+        left == right
+        or left.startswith(f"{right}/")
+        or right.startswith(f"{left}/")
+    )
+
+
 def local_profile_admin_enabled(environment: Mapping[str, str] | None = None) -> bool:
     """Return whether the fail-closed local profile administrator is enabled."""
     values = os.environ if environment is None else environment
@@ -266,10 +277,13 @@ def _validate_stored_profiles(profiles: object) -> dict[str, dict[str, Any]]:
         recovery_settings = settings.get("synology_recovery")
         if isinstance(recovery_settings, Mapping):
             destination = str(recovery_settings["destination_path"]).casefold()
-            if destination in nas_destinations:
+            if any(
+                _nas_destinations_overlap(destination, existing_destination)
+                for existing_destination in nas_destinations
+            ):
                 raise LocalProfileStoreError(
-                    "A Synology NAS destination can belong to only one business "
-                    "profile."
+                    "Synology NAS destinations cannot overlap between business "
+                    "profiles."
                 )
             nas_destinations[destination] = key
         normalized[key] = settings
