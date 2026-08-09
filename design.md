@@ -2426,10 +2426,25 @@ Preserve profile-scoped controls for:
 Preserve Synology configuration:
 
 - Enable/disable choice
+- Cloud Sync layout choice
 - NAS destination path
 - Cloud Sync schedule
 - Retention policy
 - Required download-only and destination-deletions-disabled guidance
+
+**Current behavior:** New opt-ins default to one recursive Cloud Sync task whose
+remote source is the selected profile storage root. Its NAS destination is
+derived from the app-wide NAS base path plus the immutable profile key, so a
+global default never sends two profiles to the same destination. App-wide
+schedule and retention defaults prefill the form and remain editable before
+save. A saved per-profile value is the operational record; the app does not
+configure or observe DSM.
+
+Existing three-field Synology records remain the supported two-task legacy
+layout. The layout control must continue to show that state and must not convert
+it unless the administrator intentionally selects the one-task layout and saves.
+The Data & backup summary must identify the configured layout and show either
+the profile storage root or the two child folders as the remote source.
 
 Also preserve clear links or references to the maintained backup, restore, and receipt-recovery documentation without implying that Account settings performs restore or DSM monitoring.
 

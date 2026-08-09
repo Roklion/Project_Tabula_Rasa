@@ -75,6 +75,11 @@ class TestExportStreamlitSecrets:
                     "picker_api_key": "picker-key",
                     "project_number": "123456789",
                 },
+                "synology_recovery_defaults": {
+                    "base_path": "/volume1/Tabula_Rosa_Backups",
+                    "schedule": "Continuous",
+                    "retention_policy": "Quarterly manual review.",
+                },
             },
             profiles,
         )
@@ -109,6 +114,9 @@ class TestExportStreamlitSecrets:
                 "destination_path"
             ]
             == "/volume1/Backups/TabulaRasa/north-shop"
+        )
+        assert parsed["synology_recovery_defaults"]["base_path"] == (
+            "/volume1/Tabula_Rosa_Backups"
         )
 
     def test_secure_writer_refuses_to_overwrite(self) -> None:

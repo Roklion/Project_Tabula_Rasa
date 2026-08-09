@@ -399,11 +399,14 @@ generation.
 
 ## Optional Synology recovery copy
 
-Each business can opt into separate Synology Cloud Sync download tasks for its
-Google Drive backup and receipt folders. Both destinations require versioned
+Each newly opted-in business uses one recursive Synology Cloud Sync download
+task for its Google Drive storage root. The profile-specific NAS destination
+contains separate receipt and ledger-backup children and requires versioned
 retention such as Hyper Backup or snapshots; Cloud Sync alone can reproduce
-accidental changes. Tabula Rosa does not connect to DSM, configure either task,
-or prove that synchronization succeeded.
+accidental changes. Tabula Rosa records the expected setup but does not connect
+to DSM, configure the task, or prove that synchronization succeeded. Existing
+two-task profiles remain supported until an operator intentionally follows the
+safe migration procedure in the runbook.
 
 For root-managed profiles, both Drive destinations are app-managed children under
 the profile's selected storage root: `Receipts` contains receipt files and

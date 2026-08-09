@@ -199,7 +199,26 @@ existing root with the single picker or create an app-managed root, then choose
 IDs. Every configured profile uses this root-and-child layout. Existing Drive
 files are not moved, merged, or deleted when a destination is changed.
 
-## 8. Export profiles to Streamlit Community Cloud
+## 8. Configure optional Synology defaults
+
+New Synology opt-ins use one recursive Cloud Sync task for the profile storage
+root. Put reviewable app-wide defaults in `.streamlit/secrets.toml`:
+
+```toml
+[synology_recovery_defaults]
+base_path = "/volume1/Tabula_Rosa_Backups"
+schedule = "Continuous"
+retention_policy = "Retain all synchronized generations until quarterly manual review."
+```
+
+The form always appends the selected profile key to `base_path`; it never uses
+the shared base as a profile destination. Schedule, retention, and destination
+remain editable before save. Existing three-field profile records display as
+the supported two-task legacy layout and are not migrated automatically. Follow
+the [Synology recovery runbook](../operations/SYNOLOGY_RECOVERY.md) before
+changing that layout.
+
+## 9. Export profiles to Streamlit Community Cloud
 
 Local development uses split files, while the hosted app expects one combined
 Streamlit Secrets document. Generate it with:
@@ -231,7 +250,7 @@ Repeat the export after any:
 
 Streamlit Community Cloud cannot safely write those changes back to its Secrets.
 
-## 9. Validate each profile
+## 10. Validate each profile
 
 Verify service-account authentication, workbook access, and worksheet headers
 without displaying ledger rows:

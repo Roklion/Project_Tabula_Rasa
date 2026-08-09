@@ -4,7 +4,10 @@ Each business profile can independently opt in to an isolated recovery copy on
 the Synology DS220j. Tabula Rosa uploads verified, timestamped ZIP archives to
 that profile's Google Drive `Ledger Backups` child and stores live receipt bytes
 in its `Receipts` child. These children are provisioned under one profile storage
-root. Synology Cloud Sync downloads both folders to the NAS.
+root. For new opt-ins, one recursive Synology Cloud Sync task downloads that
+profile root to its isolated NAS destination. Existing installations with one
+task per child folder remain supported until an operator intentionally migrates
+them.
 
 The application never mounts, authenticates to, or writes directly to the NAS.
 The per-profile Synology fields are non-secret operational records of the Cloud
@@ -21,19 +24,19 @@ authorization.
 ```mermaid
 flowchart LR
     Sheets["Live Google Sheets workbook"]
-    DriveBackups["Profile Google Drive backup folder"]
-    DriveReceipts["Profile Google Drive receipt folder"]
-    NASBackups["DS220j ledger-backups folder"]
-    NASReceipts["DS220j receipts folder"]
+    DriveRoot["Profile Google Drive storage root"]
+    DriveBackups["Ledger Backups child"]
+    DriveReceipts["Receipts child"]
+    NASRoot["Isolated DS220j profile root"]
     Versions["Hyper Backup, snapshots, or equivalent versions"]
     Local["Safe local recovery folder"]
     Recovery["New blank Google workbook"]
 
     Sheets -->|"Create v6 ZIP with receipts.json"| DriveBackups
-    DriveReceipts -->|"Cloud Sync downloads only"| NASReceipts
-    DriveBackups -->|"Cloud Sync downloads only"| NASBackups
-    NASBackups --> Versions
-    NASReceipts --> Versions
+    DriveRoot --> DriveBackups
+    DriveRoot --> DriveReceipts
+    DriveRoot -->|"One recursive Cloud Sync download task"| NASRoot
+    NASRoot --> Versions
     Versions -->|"Copy one matching recovery set"| Local
     Local -->|"Validate and restore"| Recovery
 ```
@@ -52,6 +55,7 @@ The in-app option is a configuration record, not a Cloud Sync controller.
 Enabling it:
 
 - marks that business as expecting a Synology recovery copy;
+- records whether it uses the one-task profile-root or legacy two-task layout;
 - records the expected NAS destination, schedule, and retention policy; and
 - displays those expectations on **Data & backup**.
 
@@ -61,7 +65,7 @@ of truth for actual transfer status and logs.
 
 ## Prerequisites
 
-- Google Drive backup and receipt folders selected for the business profile
+- A selected Google Drive storage root with provisioned backup and receipt children
 - A verified format-version 6 backup in the backup folder
 - DSM administrator access to the DS220j
 - Synology Cloud Sync installed
@@ -120,17 +124,19 @@ Use the effective **Preview** column to confirm the final permission for every
 listed account before completing the wizard. Protect DSM administrator accounts
 with strong unique passwords and MFA.
 
-### Create one subfolder per business
+### Create one isolated root per business
 
 After the shared folder is created, open File Station and add a distinct
 subfolder for each business that opts in:
 
 ```text
-/volume1/Tabula_Rosa_Backups/heathcote-advisory/ledger-backups
-/volume1/Tabula_Rosa_Backups/heathcote-advisory/receipts
-/volume1/Tabula_Rosa_Backups/rok-collectibles/ledger-backups
-/volume1/Tabula_Rosa_Backups/rok-collectibles/receipts
+/volume1/Tabula_Rosa_Backups/heathcote-advisory
+/volume1/Tabula_Rosa_Backups/rok-collectibles
 ```
+
+The recursive task creates or maintains separate `Ledger Backups` and
+`Receipts` children below each profile root. Do not point a task at the shared
+`Tabula_Rosa_Backups` parent.
 
 The exact `/volume1/...` path may differ if the shared folder lives on another
 volume. Record the path DSM actually uses instead of copying the example
@@ -155,11 +161,24 @@ copy**. For each business:
 
 1. Choose the business profile.
 2. Select **Maintain an optional Synology recovery copy for this business**.
-3. Record its absolute DSM destination, for example
+3. Leave **One task: profile storage root (recommended)** selected for a new
+   opt-in. Existing configurations display **Two tasks: receipt and ledger
+   folders (legacy)** until intentionally changed.
+4. Review its derived absolute DSM destination, for example
    `/volume1/Tabula_Rosa_Backups/heathcote-advisory`.
-4. Record the actual Cloud Sync schedule.
-5. Record the NAS retention policy.
-6. Save the choice.
+5. Review or override the Cloud Sync schedule and NAS retention policy.
+6. Save the choice, then configure DSM to match the saved record.
+
+Set app-wide defaults in local `.streamlit/secrets.toml` and in hosted
+Streamlit Secrets. The base path is never used directly as a profile
+destination; the app always appends the profile key.
+
+```toml
+[synology_recovery_defaults]
+base_path = "/volume1/Tabula_Rosa_Backups"
+schedule = "Continuous"
+retention_policy = "Retain all synchronized generations until quarterly manual review."
+```
 
 Leaving the option cleared keeps that business on Google Drive backup only.
 Disabling it later removes only the application's operational metadata. It does
@@ -174,11 +193,12 @@ Updating hosted Secrets changes only what the hosted app displays. Cloud Sync
 continues to operate directly between Google Drive and DSM even while the
 Streamlit app or the Windows development computer is turned off.
 
-## Configure two Cloud Sync tasks per opted-in business
+## Configure one Cloud Sync task per newly opted-in business
 
-Create separate backup and receipt destination folders and tasks for every
-business. Do not point multiple profiles or both data types at the same NAS
-directory.
+Create one recursive task for each newly opted-in business. Its remote source
+is the profile storage root provisioned by Tabula Rosa, and its local
+destination is the matching profile-specific NAS root. Do not point multiple
+profiles at one NAS destination.
 
 Cloud Sync connections represent Google accounts; tasks represent source and
 destination folder pairs. If multiple businesses use the same Drive-owning
@@ -190,8 +210,8 @@ the Google password into Tabula Rosa; DSM completes its own OAuth authorization.
 | Setting | Required value |
 | --- | --- |
 | Cloud provider | Google Drive |
-| Remote path | One task for the profile backup folder and one for its receipt folder |
-| Local path | The matching `ledger-backups` or `receipts` subfolder |
+| Remote path | The profile storage root containing `Ledger Backups` and `Receipts` |
+| Local path | The profile-specific NAS root recorded in the app |
 | Sync direction | **Download remote changes only** |
 | Destination deletions | **Don't remove files in the destination folder when they are removed in the source folder** |
 | Schedule | The value recorded in the business profile |
@@ -204,7 +224,7 @@ consistency check**, it can be enabled to make Cloud Sync compare supported file
 hashes as well as basic metadata. The application validator remains required
 because it also verifies the archive's internal manifest and ledger structure.
 
-The dedicated backup remote folder should contain only names in this form:
+The `Ledger Backups` child should contain only names in this form:
 
 ```text
 tabula-rosa-backup-YYYYMMDDTHHMMSSZ.zip
@@ -212,16 +232,17 @@ tabula-rosa-backup-YYYYMMDDTHHMMSSZ.zip
 
 The manifest is stored inside the ZIP. Never place service-account JSON,
 Streamlit Secrets exports, OAuth tokens, temporary exports, receipt files, or
-source accounting CSV files in the backup folder. The separate receipt task
-copies the app-managed PDFs and images whose metadata is inventoried by
-`receipts.json`.
+source accounting CSV files in the backup folder. The recursive profile-root
+task also copies the app-managed PDFs and images in the `Receipts` child whose
+metadata is inventoried by `receipts.json`.
 
 Cloud Sync file filters are exclusion rules rather than a reliable ZIP
 allowlist. A dedicated source folder is therefore the primary safety control.
 As defense in depth, exclude `*.json`, `*.toml`, `*.csv`, and `*.tmp` if those
 filter choices are available. Before completing setup, inspect both the Drive
-source and NAS destination and confirm that only the intended timestamped ZIPs
-are present.
+source and NAS destination and confirm that the root contains only the expected
+receipt and ledger-backup children and that only intended timestamped ZIPs are
+present in the backup child.
 
 Google Drive retains the newest 30 app-managed ledger generations. With
 destination deletions disabled, older NAS copies and unlinked receipts remain
@@ -239,6 +260,32 @@ generation. If space later requires pruning, validate a newer generation first,
 never delete the newest verified archive, and keep at least one verified archive
 for every recovery period the business still needs.
 
+## Safely migrate an existing two-task profile
+
+Migration is optional. The existing two-task layout remains operational and
+continues to display as legacy until its app setting is intentionally changed.
+For each profile, migrate without deleting the only verified recovery copy:
+
+1. Leave both legacy tasks running and create a fresh verified cloud backup.
+2. Wait for both tasks to become current. Copy one ledger archive and its
+   matching receipt set to a separate protected location, validate the archive,
+   and retain that copy through the migration.
+3. Create a new empty profile-specific NAS destination. Do not reuse, rename,
+   or clear either legacy destination.
+4. Create the new download-only recursive task from the profile Drive storage
+   root to the new destination, with destination deletions disabled.
+5. Wait for the task to become current. Confirm both child folders arrived,
+   validate a copied ledger archive, and complete the receipt-plus-ledger
+   restore drill below from the new destination.
+6. In **Business profiles**, select the one-task layout, review the destination,
+   schedule, and retention fields, and save.
+7. Pause rather than delete the legacy tasks. Keep their verified files and the
+   separate protected migration copy until the new task has completed another
+   scheduled generation and the administrator accepts the evidence.
+8. Only then remove obsolete DSM tasks or copies according to the recorded
+   retention policy. Never remove the sole verified generation for a required
+   recovery period.
+
 ## Create and validate the first NAS copy
 
 Create a fresh verified cloud backup for the selected profile:
@@ -247,7 +294,7 @@ Create a fresh verified cloud backup for the selected profile:
 .\.venv\Scripts\python.exe scripts\backup_google_sheets.py --profile heathcote-advisory --google-drive --keep 30
 ```
 
-Wait for both Cloud Sync tasks to report up to date. Confirm that the archive
+Wait for the profile-root Cloud Sync task to report up to date. Confirm that the archive
 arrived under `ledger-backups`, the app-managed receipt files arrived under
 `receipts`, and no unrelated file crossed between the two destinations. Create
 or confirm a versioned retention point that protects both subfolders.
@@ -339,8 +386,8 @@ mistaken for the live ledger.
 
 Keep a private operational record for each opted-in business containing:
 
-- Google Drive source folder name
-- Google Drive receipt folder name
+- Google Drive storage-root name and both expected child names
+- One-task or legacy two-task layout
 - NAS destination path
 - Cloud Sync direction, deletion protection, and schedule
 - NAS retention policy
@@ -357,7 +404,7 @@ Keep a private operational record for each opted-in business containing:
 Do not put credentials, tokens, private ledger data, or full service-account
 emails in the GitHub issue.
 
-## Initial DS220j deployment record
+## Initial DS220j legacy two-task deployment record
 
 Completed on July 28, 2026:
 
@@ -389,9 +436,11 @@ stored in Git or the GitHub issue.
 
 This July 28 record predates the version-5 receipt inventory and covers only
 ledger archives. It is not evidence that receipt bytes are synchronized or
-versioned. Each opted-in profile still needs the separate `receipts` Cloud Sync
-task, protected versioned retention, receipt preparation during backup, and a complete
-ledger-plus-receipt recovery drill described above.
+versioned. The verified installation is the supported legacy baseline: its
+receipt and ledger children remain on separate tasks until each profile is
+intentionally migrated using the safe procedure above. Both legacy and one-task
+layouts still require protected versioned retention, receipt preparation during
+backup, and the complete ledger-plus-receipt recovery drill described above.
 
 ## Troubleshooting
 
