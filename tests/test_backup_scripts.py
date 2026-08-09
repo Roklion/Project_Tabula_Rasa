@@ -12,6 +12,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from scripts.backup_google_sheets import (
+    backup_all_profiles,
     build_backup_receipt_manifest,
     PROJECT_ROOT,
     resolve_backup_output_dir,
@@ -58,6 +59,250 @@ def _ledger_only_backup(storage: GoogleSheetsStorage) -> bytes:
 
 
 class TestBackupScripts:
+    def test_all_profiles_continues_after_failure_and_keeps_settings_isolated(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        north_secrets = {
+            "spreadsheet_id": "northspreadsheet123456789",
+            "gcp_service_account": {"client_email": "north-secret@example.test"},
+            "google_drive": {
+                "backup_folder": {"id": "north-backup"},
+                "receipt_folder": {"id": "north-receipts"},
+            },
+        }
+        south_secrets = {
+            "spreadsheet_id": "southspreadsheet123456789",
+            "gcp_service_account": {"client_email": "south-secret@example.test"},
+            "google_drive": {
+                "backup_folder": {"id": "south-backup"},
+                "receipt_folder": {"id": "south-receipts"},
+            },
+        }
+        profiles = [
+            type("Profile", (), {"key": "north", "secrets": north_secrets})(),
+            type("Profile", (), {"key": "south", "secrets": south_secrets})(),
+        ]
+        storage_for: list[object] = []
+
+        def make_storage(secrets: object) -> object:
+            storage_for.append(secrets)
+            return object()
+
+        with (
+            patch(
+                "scripts.backup_google_sheets.GoogleSheetsStorage.from_secrets",
+                side_effect=make_storage,
+            ),
+            patch(
+                "scripts.backup_google_sheets.upload_versioned_backup_to_drive",
+                side_effect=[RuntimeError("north-secret@example.test"), {"name": "south-backup.zip"}],
+            ),
+        ):
+            results = backup_all_profiles({}, profiles)
+
+        assert [result["status"] for result in results] == ["failure", "success"]
+        assert storage_for == [north_secrets, south_secrets]
+        output = capsys.readouterr().out
+        assert "north-secret@example.test" not in output
+        assert "Profile north: failure" in output
+        assert "Profile south: success" in output
+        assert "failed=1" in output
+
+    def test_all_profiles_skips_unconfigured_profile_and_returns_success(self) -> None:
+        configured = {
+            "spreadsheet_id": "northspreadsheet123456789",
+            "gcp_service_account": {},
+            "google_drive": {
+                "backup_folder": {"id": "north-backup"},
+                "receipt_folder": {"id": "north-receipts"},
+            },
+        }
+        unconfigured = {
+            "spreadsheet_id": "southspreadsheet123456789",
+            "gcp_service_account": {},
+        }
+        profiles = [
+            type("Profile", (), {"key": "north", "secrets": configured})(),
+            type("Profile", (), {"key": "south", "secrets": unconfigured})(),
+        ]
+        with (
+            patch("scripts.backup_google_sheets.GoogleSheetsStorage.from_secrets"),
+            patch(
+                "scripts.backup_google_sheets.upload_versioned_backup_to_drive",
+                return_value={"name": "north-backup.zip"},
+            ),
+        ):
+            results = backup_all_profiles({}, profiles)
+
+        assert [result["status"] for result in results] == ["success", "skip"]
+
+    def test_all_profiles_skips_null_folder_id(self) -> None:
+        profile = type(
+            "Profile",
+            (),
+            {
+                "key": "north",
+                "secrets": {
+                    "spreadsheet_id": "northspreadsheet123456789",
+                    "gcp_service_account": {},
+                    "google_drive": {
+                        "backup_folder": {"id": None},
+                        "receipt_folder": {"id": "north-receipts"},
+                    },
+                },
+            },
+        )()
+
+        with patch(
+            "scripts.backup_google_sheets.upload_versioned_backup_to_drive"
+        ) as upload:
+            results = backup_all_profiles({}, [profile])
+
+        assert results == [
+            {
+                "profile": "north",
+                "status": "skip",
+                "detail": "required Google Drive folders are not configured",
+            }
+        ]
+        upload.assert_not_called()
+
+    def test_all_profiles_skips_cloud_profile_without_receipt_folder(self) -> None:
+        profile = type(
+            "Profile",
+            (),
+            {
+                "key": "north",
+                "secrets": {
+                    "spreadsheet_id": "northspreadsheet123456789",
+                    "gcp_service_account": {},
+                    "google_drive": {"backup_folder": {"id": "north-backup"}},
+                },
+            },
+        )()
+
+        with patch(
+            "scripts.backup_google_sheets.upload_versioned_backup_to_drive"
+        ) as upload:
+            results = backup_all_profiles({}, [profile])
+
+        assert results == [
+            {
+                "profile": "north",
+                "status": "skip",
+                "detail": "required Google Drive folders are not configured",
+            }
+        ]
+        upload.assert_not_called()
+
+    def test_all_profiles_weekly_suppression_is_independent(self) -> None:
+        north = {
+            "spreadsheet_id": "northspreadsheet123456789",
+            "gcp_service_account": {},
+            "google_drive": {
+                "backup_folder": {"id": "north-backup"},
+                "receipt_folder": {"id": "north-receipts"},
+            },
+        }
+        south = {
+            "spreadsheet_id": "southspreadsheet123456789",
+            "gcp_service_account": {},
+            "google_drive": {
+                "backup_folder": {"id": "south-backup"},
+                "receipt_folder": {"id": "south-receipts"},
+            },
+        }
+        profiles = [
+            type("Profile", (), {"key": "north", "secrets": north})(),
+            type("Profile", (), {"key": "south", "secrets": south})(),
+        ]
+        with (
+            patch(
+                "scripts.backup_google_sheets.verified_drive_backup_for_week",
+                side_effect=[{"name": "north-existing.zip"}, None],
+            ) as verified,
+            patch("scripts.backup_google_sheets.GoogleSheetsStorage.from_secrets"),
+            patch(
+                "scripts.backup_google_sheets.upload_versioned_backup_to_drive",
+                return_value={"name": "south-new.zip"},
+            ) as upload,
+        ):
+            results = backup_all_profiles({}, profiles, once_per_week=True)
+
+        assert [result["status"] for result in results] == ["skip", "success"]
+        assert verified.call_count == 2
+        upload.assert_called_once()
+
+    def test_all_profile_local_mode_uses_profile_scoped_destinations(self) -> None:
+        north = {
+            "spreadsheet_id": "northspreadsheet123456789",
+            "gcp_service_account": {},
+            "google_drive": {"receipt_folder": {"id": "north-receipts"}},
+        }
+        south = {
+            "spreadsheet_id": "southspreadsheet123456789",
+            "gcp_service_account": {},
+            "google_drive": {"receipt_folder": {"id": "south-receipts"}},
+        }
+        profiles = [
+            type("Profile", (), {"key": "north", "secrets": north})(),
+            type("Profile", (), {"key": "south", "secrets": south})(),
+        ]
+        north_dir = Path("north-backups")
+        south_dir = Path("south-backups")
+        with (
+            patch(
+                "scripts.backup_google_sheets.resolve_backup_output_dir",
+                side_effect=[north_dir, south_dir],
+            ) as resolve,
+            patch("scripts.backup_google_sheets.GoogleSheetsStorage.from_secrets") as from_secrets,
+            patch("scripts.backup_google_sheets.GoogleDriveClient"),
+            patch("scripts.backup_google_sheets.load_oauth_config", return_value={}),
+            patch("scripts.backup_google_sheets.build_backup_receipt_manifest", return_value={}),
+            patch(
+                "scripts.backup_google_sheets.write_versioned_backup",
+                side_effect=[north_dir / "north.zip", south_dir / "south.zip"],
+            ),
+        ):
+            results = backup_all_profiles({}, profiles, local=True)
+
+        assert [result["status"] for result in results] == ["success", "success"]
+        assert resolve.call_args_list == [
+            ((north, None, "north"), {"profile_scoped": True}),
+            ((south, None, "south"), {"profile_scoped": True}),
+        ]
+        assert from_secrets.call_args_list == [((north,),), ((south,),)]
+
+    def test_all_profile_cli_returns_nonzero_for_any_failure(self) -> None:
+        profile = type("Profile", (), {"key": "north", "secrets": {}})()
+        with (
+            patch(
+                "scripts.backup_google_sheets.load_business_profile_document",
+                return_value={},
+            ),
+            patch(
+                "scripts.backup_google_sheets.load_business_profiles",
+                return_value=[profile],
+            ),
+            patch(
+                "scripts.backup_google_sheets.backup_all_profiles",
+                return_value=[{"profile": "north", "status": "failure"}],
+            ),
+            patch.object(sys, "argv", ["backup_google_sheets.py", "--all-profiles"]),
+        ):
+            from scripts.backup_google_sheets import main
+
+            assert main() == 1
+
+    def test_windows_registration_defaults_to_one_all_profile_task(self) -> None:
+        script = Path("scripts/register_weekly_backup_task.ps1").read_text()
+        assert "$AllProfiles = $true" in script
+        assert "$arguments += ' --all-profiles'" in script
+        assert "-MultipleInstances IgnoreNew" in script
+        assert "New-TimeSpan -Days 3" in script
+        assert "New-TimeSpan -Minutes 15" in script
+        assert "-not $BackupDirectory" in script
+
     def test_current_backup_inventories_the_configured_receipt_folder(self) -> None:
         storage = Mock(spec=GoogleSheetsStorage)
         storage.list_transactions.return_value = []
@@ -151,6 +396,12 @@ class TestBackupScripts:
             == override
         )
         assert resolve_backup_output_dir({}, None, "north") == PROJECT_ROOT / "backups" / "north"
+        assert resolve_backup_output_dir(
+            {"backup_folder_path": str(configured)},
+            None,
+            "north",
+            profile_scoped=True,
+        ) == configured / "north"
 
     def test_profile_fallbacks_are_isolated_and_require_a_profile_key(self) -> None:
         assert resolve_backup_output_dir({}, None, "north") != resolve_backup_output_dir(
@@ -189,6 +440,71 @@ class TestBackupScripts:
             local_date = datetime.strptime(timestamp, "%Y%m%dT%H%M%SZ").date()
             assert verified_backup_for_week(north_dir, local_date=local_date)
             assert verified_backup_for_week(south_dir, local_date=local_date) == south_backup
+
+    def test_weekly_check_rejects_another_profile_in_a_shared_destination(self) -> None:
+        storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output_dir = Path(temporary_directory)
+            north_backup = write_versioned_backup(
+                storage,
+                output_dir,
+                build_receipt_manifest("north", [], []),
+                keep=2,
+            )
+            timestamp = north_backup.name.removeprefix(
+                "tabula-rosa-backup-"
+            ).removesuffix(".zip")
+            local_date = datetime.strptime(timestamp, "%Y%m%dT%H%M%SZ").date()
+
+            assert (
+                verified_backup_for_week(
+                    output_dir,
+                    local_date=local_date,
+                    profile_key="south",
+                )
+                is None
+            )
+            assert (
+                verified_backup_for_week(
+                    output_dir,
+                    local_date=local_date,
+                    profile_key="north",
+                )
+                == north_backup
+            )
+
+    def test_retention_preserves_another_profile_in_a_shared_destination(self) -> None:
+        storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+        north_backup = storage.export_backup_zip(
+            build_receipt_manifest("north", [], [])
+        )
+        south_backup = storage.export_backup_zip(
+            build_receipt_manifest("south", [], [])
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output_dir = Path(temporary_directory)
+            (output_dir / "tabula-rosa-backup-20200101T120000Z.zip").write_bytes(
+                north_backup
+            )
+            (output_dir / "tabula-rosa-backup-20200102T120000Z.zip").write_bytes(
+                south_backup
+            )
+
+            created = write_versioned_backup(
+                storage,
+                output_dir,
+                build_receipt_manifest("north", [], []),
+                keep=2,
+                profile_key="north",
+            )
+
+            assert created.exists()
+            assert (
+                output_dir / "tabula-rosa-backup-20200101T120000Z.zip"
+            ).exists()
+            assert (
+                output_dir / "tabula-rosa-backup-20200102T120000Z.zip"
+            ).exists()
 
     def test_drive_mode_is_default_and_does_not_require_local_destination(self) -> None:
         profile = type("Profile", (), {"key": "north"})()

@@ -1,6 +1,8 @@
 param(
     [string]$BackupDirectory,
     [string]$Profile,
+    [switch]$AllProfiles,
+    [switch]$Local,
     [switch]$GoogleDrive,
     [string]$TaskName = "Tabula Rosa Weekly Backup"
 )
@@ -22,10 +24,31 @@ if ($BackupDirectory -and -not (Test-Path -LiteralPath $BackupDirectory -PathTyp
 if ($BackupDirectory -and $GoogleDrive) {
     throw "BackupDirectory cannot be combined with GoogleDrive."
 }
+if ($BackupDirectory -and $AllProfiles) {
+    throw "BackupDirectory is only available for a single profile."
+}
+if ($Profile -and $AllProfiles) {
+    throw "Profile cannot be combined with AllProfiles."
+}
+if ($Local -and $GoogleDrive) {
+    throw "Local cannot be combined with GoogleDrive."
+}
+if ($BackupDirectory -and $Local) {
+    throw "BackupDirectory cannot be combined with Local."
+}
+if (-not $Profile -and -not $AllProfiles -and -not $BackupDirectory) {
+    $AllProfiles = $true
+}
 
 $arguments = '"{0}" --keep 30 --once-per-week' -f $backupScript
-if ($GoogleDrive) {
+if ($AllProfiles) {
+    $arguments += ' --all-profiles'
+}
+if ($GoogleDrive -or $AllProfiles -and -not $Local) {
     $arguments += ' --google-drive'
+}
+if ($Local) {
+    $arguments += ' --local-dir'
 }
 if ($BackupDirectory) {
     $arguments += ' --local-dir "{0}"' -f $BackupDirectory
@@ -42,10 +65,17 @@ $trigger = New-ScheduledTaskTrigger `
     -WeeksInterval 1 `
     -DaysOfWeek Monday, Tuesday, Wednesday `
     -At 10:00PM
+$executionTimeLimit = if ($AllProfiles) {
+    # Allow the aggregate run to use Task Scheduler's documented three-day
+    # default so a fixed per-profile limit cannot starve later profiles.
+    New-TimeSpan -Days 3
+} else {
+    New-TimeSpan -Minutes 15
+}
 $settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries `
     -DontStopIfGoingOnBatteries `
-    -ExecutionTimeLimit (New-TimeSpan -Minutes 15) `
+    -ExecutionTimeLimit $executionTimeLimit `
     -MultipleInstances IgnoreNew
 $principal = New-ScheduledTaskPrincipal `
     -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) `
