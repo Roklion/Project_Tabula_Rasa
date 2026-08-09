@@ -40,6 +40,18 @@ def test_normalizes_equivalent_dsm_paths() -> None:
     assert settings["destination_path"] == "/volume1/Backups/north"
 
 
+def test_collapses_double_leading_dsm_slashes() -> None:
+    settings = validate_synology_recovery_settings(
+        {
+            "destination_path": "//volume1/Backups/north",
+            "schedule": "Continuous",
+            "retention_policy": "Keep all.",
+        }
+    )
+
+    assert settings["destination_path"] == "/volume1/Backups/north"
+
+
 def test_resolves_profile_root_defaults_and_overrides() -> None:
     defaults = resolve_synology_recovery_defaults(
         {

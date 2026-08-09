@@ -25,6 +25,7 @@ from tabula_rasa.google_drive_picker import folder_picker
 from tabula_rasa.local_profile_store import (
     LOCAL_PROFILE_STORE_PATH,
     LocalProfileStoreError,
+    ensure_google_drive_disconnect_allowed,
     load_local_profiles,
     update_local_profile_google_drive,
 )
@@ -462,6 +463,7 @@ def render_google_drive_admin(
         key=f"disconnect-google-drive-button-{profile_key}",
     ):
         try:
+            ensure_google_drive_disconnect_allowed(profile)
             client.revoke()
             update_local_profile_google_drive(profile_key, None, path=store_path)
         except (GoogleDriveError, LocalProfileStoreError) as exc:

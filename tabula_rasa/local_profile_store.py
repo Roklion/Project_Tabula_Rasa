@@ -63,6 +63,20 @@ class LocalProfileStoreError(ValueError):
     """Raised when local profile configuration is missing or malformed."""
 
 
+def ensure_google_drive_disconnect_allowed(
+    profile_settings: Mapping[str, Any],
+) -> None:
+    """Reject Drive disconnect while profile-root recovery depends on it."""
+    recovery = profile_settings.get("synology_recovery")
+    if isinstance(recovery, Mapping) and (
+        synology_recovery_layout(recovery) == PROFILE_ROOT_LAYOUT
+    ):
+        raise LocalProfileStoreError(
+            "Disable profile-root Synology recovery before changing "
+            "this profile's Google Drive storage root."
+        )
+
+
 def local_profile_admin_enabled(environment: Mapping[str, str] | None = None) -> bool:
     """Return whether the fail-closed local profile administrator is enabled."""
     values = os.environ if environment is None else environment
@@ -442,14 +456,7 @@ def update_local_profile_google_drive(
             )
         candidate = dict(profiles[profile_key])
         if google_drive is None:
-            recovery = candidate.get("synology_recovery")
-            if isinstance(recovery, Mapping) and (
-                synology_recovery_layout(recovery) == PROFILE_ROOT_LAYOUT
-            ):
-                raise LocalProfileStoreError(
-                    "Disable profile-root Synology recovery before changing "
-                    "this profile's Google Drive storage root."
-                )
+            ensure_google_drive_disconnect_allowed(candidate)
             candidate.pop("google_drive", None)
         else:
             try:
