@@ -28,6 +28,18 @@ def test_normalizes_synology_recovery_settings() -> None:
     assert synology_recovery_layout(settings) == LEGACY_TWO_TASK_LAYOUT
 
 
+def test_normalizes_equivalent_dsm_paths() -> None:
+    settings = validate_synology_recovery_settings(
+        {
+            "destination_path": "/volume1/Backups/team/../north//",
+            "schedule": "Continuous",
+            "retention_policy": "Keep all.",
+        }
+    )
+
+    assert settings["destination_path"] == "/volume1/Backups/north"
+
+
 def test_resolves_profile_root_defaults_and_overrides() -> None:
     defaults = resolve_synology_recovery_defaults(
         {

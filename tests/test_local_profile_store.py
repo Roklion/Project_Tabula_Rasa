@@ -403,6 +403,55 @@ class TestLocalProfileStore:
                     path=path,
                 )
 
+    def test_profile_root_synology_blocks_drive_root_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "local_business_profiles.json"
+            save_local_profile("north", settings(), path=path)
+            drive = {
+                "authorized_email": "north@example.test",
+                "authorized_name": "North Owner",
+                "refresh_token": "durable-refresh-token",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "scopes": ["https://www.googleapis.com/auth/drive.file"],
+                "storage_root": {"id": "rootfolder123", "name": "North Storage"},
+                "receipt_folder": {"id": "receiptfolder123", "name": "Receipts"},
+                "backup_folder": {"id": "backupfolder123", "name": "Backups"},
+            }
+            update_local_profile_google_drive("north", drive, path=path)
+            update_local_profile_synology_recovery(
+                "north",
+                {
+                    "layout": "profile-root",
+                    "destination_path": "/volume1/Backups/north",
+                    "schedule": "Continuous",
+                    "retention_policy": "Keep all.",
+                },
+                path=path,
+            )
+
+            with pytest.raises(LocalProfileStoreError, match="Disable profile-root"):
+                update_local_profile_google_drive(
+                    "north",
+                    {
+                        **drive,
+                        "storage_root": {
+                            "id": "differentroot123",
+                            "name": "Different Storage",
+                        },
+                    },
+                    path=path,
+                )
+
+            with pytest.raises(LocalProfileStoreError, match="Disable profile-root"):
+                update_local_profile_google_drive("north", None, path=path)
+
+            stored = load_local_profiles(path)
+
+        assert stored["north"]["google_drive"]["storage_root"]["id"] == (
+            "rootfolder123"
+        )
+        assert stored["north"]["synology_recovery"]["layout"] == "profile-root"
+
     def test_synology_destinations_cannot_be_shared_between_profiles(self) -> None:
         drive = {
             "authorized_email": "owner@example.test",

@@ -442,14 +442,47 @@ def update_local_profile_google_drive(
             )
         candidate = dict(profiles[profile_key])
         if google_drive is None:
+            recovery = candidate.get("synology_recovery")
+            if isinstance(recovery, Mapping) and (
+                synology_recovery_layout(recovery) == PROFILE_ROOT_LAYOUT
+            ):
+                raise LocalProfileStoreError(
+                    "Disable profile-root Synology recovery before changing "
+                    "this profile's Google Drive storage root."
+                )
             candidate.pop("google_drive", None)
         else:
             try:
-                candidate["google_drive"] = validate_drive_profile_settings(
-                    google_drive
-                )
+                validated_drive = validate_drive_profile_settings(google_drive)
             except GoogleDriveConfigurationError as exc:
                 raise LocalProfileStoreError(str(exc)) from exc
+            recovery = candidate.get("synology_recovery")
+            if isinstance(recovery, Mapping) and (
+                synology_recovery_layout(recovery) == PROFILE_ROOT_LAYOUT
+            ):
+                existing_drive = candidate.get("google_drive")
+                existing_root = (
+                    existing_drive.get("storage_root")
+                    if isinstance(existing_drive, Mapping)
+                    else None
+                )
+                proposed_root = validated_drive.get("storage_root")
+                existing_root_id = (
+                    str(existing_root.get("id", ""))
+                    if isinstance(existing_root, Mapping)
+                    else ""
+                )
+                proposed_root_id = (
+                    str(proposed_root.get("id", ""))
+                    if isinstance(proposed_root, Mapping)
+                    else ""
+                )
+                if existing_root_id != proposed_root_id:
+                    raise LocalProfileStoreError(
+                        "Disable profile-root Synology recovery before changing "
+                        "this profile's Google Drive storage root."
+                    )
+            candidate["google_drive"] = validated_drive
         profiles[profile_key] = candidate
         _write_local_profiles(path, profiles)
 

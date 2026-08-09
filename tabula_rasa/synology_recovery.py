@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import posixpath
 from collections.abc import Mapping
 from typing import Any
 
@@ -51,7 +52,7 @@ def _absolute_dsm_path(value: str, label: str) -> str:
             f"{label} must be an absolute DSM path, such as "
             "/volume1/Tabula_Rosa_Backups."
         )
-    return value.rstrip("/") or "/"
+    return posixpath.normpath(value)
 
 
 def validate_synology_recovery_settings(value: object) -> dict[str, str]:
