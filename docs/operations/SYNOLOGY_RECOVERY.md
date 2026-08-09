@@ -165,7 +165,9 @@ copy**. For each business:
    opt-in. Existing configurations display **Two tasks: receipt and ledger
    folders (legacy)** until intentionally changed.
 4. Review its derived absolute DSM destination, for example
-   `/volume1/Tabula_Rosa_Backups/heathcote-advisory`.
+   `/volume1/Tabula_Rosa_Backups/heathcote-advisory`. Destinations must include
+   both a Synology volume and shared folder; filesystem and volume roots are
+   rejected.
 5. Review or override the Cloud Sync schedule and NAS retention policy.
 6. Save the choice, then configure DSM to match the saved record.
 

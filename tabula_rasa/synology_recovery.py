@@ -53,6 +53,11 @@ def _absolute_dsm_path(value: str, label: str) -> str:
             "/volume1/Tabula_Rosa_Backups."
         )
     normalized = posixpath.normpath(value)
+    if len(normalized.strip("/").split("/")) < 2:
+        raise SynologyRecoveryConfigurationError(
+            f"{label} must include a Synology volume and shared folder, such as "
+            "/volume1/Tabula_Rosa_Backups."
+        )
     return "/" + normalized.lstrip("/")
 
 

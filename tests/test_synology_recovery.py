@@ -90,6 +90,16 @@ def test_default_destinations_are_isolated_by_profile_key() -> None:
             "retention_policy": "Keep all",
         },
         {
+            "destination_path": "/",
+            "schedule": "Continuous",
+            "retention_policy": "Keep all",
+        },
+        {
+            "destination_path": "/volume1",
+            "schedule": "Continuous",
+            "retention_policy": "Keep all",
+        },
+        {
             "destination_path": "/volume1/Backups/north",
             "schedule": "",
             "retention_policy": "Keep all",
