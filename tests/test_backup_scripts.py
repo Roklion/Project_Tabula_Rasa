@@ -65,12 +65,18 @@ class TestBackupScripts:
         north_secrets = {
             "spreadsheet_id": "northspreadsheet123456789",
             "gcp_service_account": {"client_email": "north-secret@example.test"},
-            "google_drive": {"backup_folder": {"id": "north-backup"}},
+            "google_drive": {
+                "backup_folder": {"id": "north-backup"},
+                "receipt_folder": {"id": "north-receipts"},
+            },
         }
         south_secrets = {
             "spreadsheet_id": "southspreadsheet123456789",
             "gcp_service_account": {"client_email": "south-secret@example.test"},
-            "google_drive": {"backup_folder": {"id": "south-backup"}},
+            "google_drive": {
+                "backup_folder": {"id": "south-backup"},
+                "receipt_folder": {"id": "south-receipts"},
+            },
         }
         profiles = [
             type("Profile", (), {"key": "north", "secrets": north_secrets})(),
@@ -106,7 +112,10 @@ class TestBackupScripts:
         configured = {
             "spreadsheet_id": "northspreadsheet123456789",
             "gcp_service_account": {},
-            "google_drive": {"backup_folder": {"id": "north-backup"}},
+            "google_drive": {
+                "backup_folder": {"id": "north-backup"},
+                "receipt_folder": {"id": "north-receipts"},
+            },
         }
         unconfigured = {
             "spreadsheet_id": "southspreadsheet123456789",
@@ -136,7 +145,10 @@ class TestBackupScripts:
                 "secrets": {
                     "spreadsheet_id": "northspreadsheet123456789",
                     "gcp_service_account": {},
-                    "google_drive": {"backup_folder": {"id": None}},
+                    "google_drive": {
+                        "backup_folder": {"id": None},
+                        "receipt_folder": {"id": "north-receipts"},
+                    },
                 },
             },
         )()
@@ -150,7 +162,35 @@ class TestBackupScripts:
             {
                 "profile": "north",
                 "status": "skip",
-                "detail": "Google Drive backup folder is not configured",
+                "detail": "required Google Drive folders are not configured",
+            }
+        ]
+        upload.assert_not_called()
+
+    def test_all_profiles_skips_cloud_profile_without_receipt_folder(self) -> None:
+        profile = type(
+            "Profile",
+            (),
+            {
+                "key": "north",
+                "secrets": {
+                    "spreadsheet_id": "northspreadsheet123456789",
+                    "gcp_service_account": {},
+                    "google_drive": {"backup_folder": {"id": "north-backup"}},
+                },
+            },
+        )()
+
+        with patch(
+            "scripts.backup_google_sheets.upload_versioned_backup_to_drive"
+        ) as upload:
+            results = backup_all_profiles({}, [profile])
+
+        assert results == [
+            {
+                "profile": "north",
+                "status": "skip",
+                "detail": "required Google Drive folders are not configured",
             }
         ]
         upload.assert_not_called()
@@ -159,12 +199,18 @@ class TestBackupScripts:
         north = {
             "spreadsheet_id": "northspreadsheet123456789",
             "gcp_service_account": {},
-            "google_drive": {"backup_folder": {"id": "north-backup"}},
+            "google_drive": {
+                "backup_folder": {"id": "north-backup"},
+                "receipt_folder": {"id": "north-receipts"},
+            },
         }
         south = {
             "spreadsheet_id": "southspreadsheet123456789",
             "gcp_service_account": {},
-            "google_drive": {"backup_folder": {"id": "south-backup"}},
+            "google_drive": {
+                "backup_folder": {"id": "south-backup"},
+                "receipt_folder": {"id": "south-receipts"},
+            },
         }
         profiles = [
             type("Profile", (), {"key": "north", "secrets": north})(),

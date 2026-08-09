@@ -254,20 +254,27 @@ def _profile_destination_is_configured(
 ) -> bool:
     """Return whether an all-profile run can attempt this destination.
 
-    A profile without a Drive backup folder (cloud mode), or without a Drive
-    receipt folder (local mode), cannot produce the current backup format. It
-    is reported as skipped so one disconnected profile does not hide backups
-    for the remaining configured profiles.
+    A profile without a Drive receipt folder cannot produce the current backup
+    format in either mode. Cloud mode additionally requires a Drive backup
+    folder. Unconfigured profiles are reported as skipped so one disconnected
+    profile does not hide backups for the remaining configured profiles.
     """
     drive_settings = profile_secrets.get("google_drive")
     if not isinstance(drive_settings, Mapping):
         return False
-    required_folder = "receipt_folder" if local else "backup_folder"
-    folder = drive_settings.get(required_folder)
-    if not isinstance(folder, Mapping):
+    receipt_folder = drive_settings.get("receipt_folder")
+    receipt_id = (
+        receipt_folder.get("id") if isinstance(receipt_folder, Mapping) else None
+    )
+    if not isinstance(receipt_id, str) or not receipt_id.strip():
         return False
-    folder_id = folder.get("id")
-    return isinstance(folder_id, str) and bool(folder_id.strip())
+    if local:
+        return True
+    backup_folder = drive_settings.get("backup_folder")
+    backup_id = (
+        backup_folder.get("id") if isinstance(backup_folder, Mapping) else None
+    )
+    return isinstance(backup_id, str) and bool(backup_id.strip())
 
 
 def _sanitized_profile_result(
@@ -299,11 +306,16 @@ def backup_all_profiles(
         profile_key = str(profile.key)
         profile_secrets = profile.secrets
         if not _profile_destination_is_configured(profile_secrets, local=local):
-            destination = "local receipt folder" if local else "Google Drive backup folder"
+            destination = (
+                "local receipt folder"
+                if local
+                else "required Google Drive folders"
+            )
+            verb = "is" if local else "are"
             result = _sanitized_profile_result(
                 profile_key,
                 "skip",
-                f"{destination} is not configured",
+                f"{destination} {verb} not configured",
             )
             results.append(result)
             print(f"Profile {profile_key}: skipped ({result['detail']})")
