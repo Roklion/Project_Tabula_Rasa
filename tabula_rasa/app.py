@@ -2497,8 +2497,9 @@ elif page == "Data & backup":
     raw_synology_recovery = selected_profile.get("synology_recovery")
     if raw_synology_recovery is None:
         st.info(
-            "Optional for this business. Enable Synology recovery from the local "
-            "Business profiles page if this ledger should keep an isolated NAS copy."
+            "No local Synology recovery record is available in this runtime. NAS "
+            "settings are intentionally excluded from hosted Secrets; configure "
+            "or review them from the loopback-only Business profiles page and DSM."
         )
     else:
         try:
