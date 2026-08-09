@@ -197,7 +197,11 @@ existing root with the single picker or create an app-managed root, then choose
 **Provision storage folders**. Tabula Rosa creates or reuses exactly one
 `Receipts` child and one `Ledger Backups` child under that root and stores their
 IDs. Every configured profile uses this root-and-child layout. Existing Drive
-files are not moved, merged, or deleted when a destination is changed.
+files are not moved, merged, or deleted when a destination is changed. If
+profile-root Synology recovery is enabled, disable and save that recovery
+record before changing or disconnecting the storage root; re-provision the new
+root's children and re-enable recovery only after the new DSM source and
+destination have been reviewed.
 
 ## 8. Configure optional Synology defaults
 

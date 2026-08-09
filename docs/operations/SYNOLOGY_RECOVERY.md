@@ -184,6 +184,13 @@ Leaving the option cleared keeps that business on Google Drive backup only.
 Disabling it later removes only the application's operational metadata. It does
 not delete a DSM task or any NAS archive.
 
+When one-task profile-root recovery is enabled, the local administrator blocks
+changing or disconnecting that profile's Google Drive storage root until the
+recovery record is disabled and saved. This prevents DSM from continuing to
+copy the old root after the app switches to a new remote source. After the new
+root and its `Receipts` and `Ledger Backups` children are provisioned, configure
+and save the recovery record again, then update the DSM task to the new source.
+
 Synology metadata is deliberately excluded from hosted Streamlit Secrets. A
 NAS destination, layout, schedule, retention policy, or app-wide default change
 therefore does not require export or hosted redeployment. Review those settings
