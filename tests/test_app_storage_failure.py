@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
 from unittest.mock import Mock, patch
 
+import pytest
 import streamlit as st
 from streamlit.testing.v1 import AppTest
 
@@ -14,6 +16,14 @@ from tests.fakes import FakeWorkbook
 
 TEST_PASSWORD = "test-password-123"
 SAFE_MESSAGE = "Google Sheets is temporarily unavailable; no success was reported"
+
+
+@pytest.fixture(autouse=True)
+def isolate_local_profiles(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "tabula_rasa.local_profile_store.LOCAL_PROFILE_STORE_PATH",
+        tmp_path / "business_profiles.json",
+    )
 
 
 class TestAppStorageFailure:
