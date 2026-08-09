@@ -295,10 +295,11 @@ Create a fresh verified cloud backup for the selected profile:
 .\.venv\Scripts\python.exe scripts\backup_google_sheets.py --profile heathcote-advisory --google-drive --keep 30
 ```
 
-Wait for the profile-root Cloud Sync task to report up to date. Confirm that the archive
-arrived under `ledger-backups`, the app-managed receipt files arrived under
-`receipts`, and no unrelated file crossed between the two destinations. Create
-or confirm a versioned retention point that protects both subfolders.
+Wait for the profile-root Cloud Sync task to report up to date. Confirm that the
+archive arrived in the `Ledger Backups` child, the app-managed receipt files
+arrived in `Receipts`, and the copied profile root contains no unrelated
+content. Create or confirm a versioned retention point that protects both
+children.
 
 Copy the archive from the NAS to a safe local recovery folder. SMB mapping is
 optional; DSM File Station, a temporary UNC path, or a mapped drive can be used.

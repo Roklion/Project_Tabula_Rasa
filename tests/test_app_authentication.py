@@ -125,7 +125,6 @@ class TestAppAuthentication:
                     default_timeout=30,
                 )
                 app.secrets["app_password_hash"] = hash_password(TEST_PASSWORD)
-
                 app.run()
                 app.text_input[0].input(TEST_PASSWORD)
                 app.button[0].click().run()
@@ -403,6 +402,11 @@ class TestAppAuthentication:
                     default_timeout=30,
                 )
                 app.secrets["app_password_hash"] = hash_password(TEST_PASSWORD)
+                app.secrets["synology_recovery_defaults"] = {
+                    "base_path": "/volume2/Recovery",
+                    "schedule": "Nightly",
+                    "retention_policy": "Keep quarterly versions.",
+                }
 
                 app.run()
                 app.text_input[0].input(TEST_PASSWORD)
@@ -425,6 +429,21 @@ class TestAppAuthentication:
                     if checkbox.label
                     == "Maintain an optional Synology recovery copy for this business"
                 ).check()
+                assert next(
+                    field
+                    for field in app.text_input
+                    if field.label == "NAS destination path"
+                ).value == "/volume2/Recovery/north"
+                assert next(
+                    field
+                    for field in app.text_input
+                    if field.label == "Cloud Sync schedule"
+                ).value == "Nightly"
+                assert next(
+                    field
+                    for field in app.text_area
+                    if field.label == "NAS retention policy"
+                ).value == "Keep quarterly versions."
                 next(
                     field
                     for field in app.text_input
