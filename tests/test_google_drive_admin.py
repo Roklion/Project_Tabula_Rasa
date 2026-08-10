@@ -173,13 +173,23 @@ def test_storage_root_isolation_skips_inaccessible_other_account_root() -> None:
     class DifferentAccountClient(FolderClient):
         def folder(self, folder_id: str) -> dict[str, Any]:
             if folder_id == "southroot123":
-                raise GoogleDriveAuthorizationError("folder belongs to another account")
+                raise GoogleDriveAccessError("folder not found")
             return super().folder(folder_id)
 
     client = DifferentAccountClient({"northroot123": selected_root})
     profiles = {
-        "north": {"google_drive": {"storage_root": {"id": "northroot123"}}},
-        "south": {"google_drive": {"storage_root": {"id": "southroot123"}}},
+        "north": {
+            "google_drive": {
+                "authorized_email": "north@example.com",
+                "storage_root": {"id": "northroot123"},
+            }
+        },
+        "south": {
+            "google_drive": {
+                "authorized_email": "south@example.com",
+                "storage_root": {"id": "southroot123"},
+            }
+        },
     }
 
     _ensure_storage_root_is_profile_isolated(

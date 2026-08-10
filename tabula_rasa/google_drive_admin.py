@@ -99,6 +99,17 @@ def _ensure_storage_root_is_profile_isolated(
     selected_id = str(selected_root.get("id", ""))
     selected_ancestry = _folder_ancestry(client, selected_root)
     ancestry_cache = {selected_id: selected_ancestry}
+    selected_profile = local_profiles.get(profile_key)
+    selected_drive = (
+        selected_profile.get("google_drive")
+        if isinstance(selected_profile, Mapping)
+        else None
+    )
+    selected_email = (
+        str(selected_drive.get("authorized_email", "")).strip().casefold()
+        if isinstance(selected_drive, Mapping)
+        else ""
+    )
     for other_key, profile in local_profiles.items():
         if other_key == profile_key:
             continue
@@ -114,6 +125,11 @@ def _ensure_storage_root_is_profile_isolated(
                 "Google Drive storage roots cannot be nested between business "
                 "profiles."
             )
+        other_email = str(drive.get("authorized_email", "")).strip().casefold()
+        if selected_email and other_email and selected_email != other_email:
+            # Different authorized accounts cannot expose one another's roots;
+            # avoid turning Drive's cross-account 404 into a connection error.
+            continue
         other_ancestry = ancestry_cache.get(other_id)
         if other_ancestry is None:
             try:
