@@ -263,7 +263,16 @@ def test_storage_root_isolation_rejects_unverified_same_account_ancestry() -> No
 
     with pytest.raises(GoogleDriveConfigurationError, match="could not be verified"):
         _ensure_storage_root_is_profile_isolated(
-            ParentRestrictedClient({"northroot123": selected_root}),
+            ParentRestrictedClient(
+                {
+                    "northroot123": selected_root,
+                    "southroot123": managed_folder(
+                        "southroot123",
+                        "South Storage",
+                        kind="storage-root",
+                    ),
+                }
+            ),
             "north",
             selected_root,
             profiles,
@@ -306,6 +315,43 @@ def test_storage_root_isolation_does_not_skip_transient_other_root_failure() -> 
             selected_root,
             profiles,
         )
+
+
+def test_reconnect_uses_new_authorized_identity_for_root_isolation() -> None:
+    selected_root = managed_folder(
+        "northroot123",
+        "North Storage",
+        kind="storage-root",
+    )
+
+    class DifferentAccountClient(FolderClient):
+        def folder(self, folder_id: str) -> dict[str, Any]:
+            if folder_id == "southroot123":
+                raise GoogleDriveAccessError("folder not found")
+            return super().folder(folder_id)
+
+    profiles = {
+        "north": {
+            "google_drive": {
+                "authorized_email": "old@example.com",
+                "storage_root": {"id": "northroot123"},
+            }
+        },
+        "south": {
+            "google_drive": {
+                "authorized_email": "old@example.com",
+                "storage_root": {"id": "southroot123"},
+            }
+        },
+    }
+
+    _ensure_storage_root_is_profile_isolated(
+        DifferentAccountClient({"northroot123": selected_root}),
+        "north",
+        selected_root,
+        profiles,
+        selected_drive_settings={"authorized_email": "new@example.com"},
+    )
 
 
 def test_create_storage_root_checks_drive_root_isolation(

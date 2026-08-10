@@ -20,7 +20,10 @@ from tabula_rasa.storage import (
     StorageValidationError,
     StorageWorkbookAccessError,
 )
-from tabula_rasa.google_drive import GoogleDriveConfigurationError
+from tabula_rasa.google_drive import (
+    GoogleDriveAccessError,
+    GoogleDriveConfigurationError,
+)
 
 
 SETTINGS = {
@@ -159,6 +162,55 @@ def test_profile_root_enablement_revalidates_drive_root(
     }
 
     with pytest.raises(GoogleDriveConfigurationError, match="cannot be nested"):
+        local_profile_admin._validate_profile_root_storage_root(
+            {},
+            "north",
+            profiles,
+        )
+
+
+def test_profile_root_enablement_requires_current_storage_children(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = {
+        "id": "northroot123",
+        "name": "North Storage",
+        "mimeType": "application/vnd.google-apps.folder",
+        "trashed": False,
+        "appProperties": {
+            "tabulaRasaKind": "storage-root",
+            "tabulaRasaProfile": "north",
+        },
+    }
+
+    class Client:
+        def folder(self, folder_id: str) -> dict[str, Any]:
+            if folder_id == "northroot123":
+                return root
+            raise GoogleDriveAccessError("child unavailable")
+
+    monkeypatch.setattr(local_profile_admin, "load_oauth_config", lambda _secrets: object())
+    monkeypatch.setattr(
+        local_profile_admin,
+        "GoogleDriveClient",
+        lambda _config, _settings: Client(),
+    )
+
+    profiles = {
+        "north": {
+            "google_drive": {
+                "authorized_email": "north@example.com",
+                "storage_root": {"id": "northroot123", "name": "North Storage"},
+                "receipt_folder": {"id": "receiptchild123", "name": "Receipts"},
+                "backup_folder": {
+                    "id": "backupchild123",
+                    "name": "Ledger Backups",
+                },
+            }
+        }
+    }
+
+    with pytest.raises(GoogleDriveConfigurationError, match="both child folders"):
         local_profile_admin._validate_profile_root_storage_root(
             {},
             "north",

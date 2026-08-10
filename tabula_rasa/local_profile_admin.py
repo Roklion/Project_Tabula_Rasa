@@ -11,11 +11,13 @@ import streamlit as st
 from tabula_rasa.business_profiles import load_business_profiles
 from tabula_rasa.google_drive import (
     GoogleDriveClient,
+    GoogleDriveConfigurationError,
     GoogleDriveError,
     load_oauth_config,
 )
 from tabula_rasa.google_drive_admin import (
     _ensure_storage_root_is_profile_isolated,
+    _revalidated_storage_settings,
     render_google_drive_admin,
 )
 from tabula_rasa.ledger_auth import verify_password
@@ -187,6 +189,15 @@ def _validate_profile_root_storage_root(
         root,
         local_profiles,
     )
+    confirmed = _revalidated_storage_settings(client, profile_key, drive)
+    if any(
+        not isinstance(confirmed.get(field), Mapping)
+        for field in ("storage_root", "receipt_folder", "backup_folder")
+    ):
+        raise GoogleDriveConfigurationError(
+            "Reconfirm the profile storage root and both child folders before "
+            "enabling one-task Synology recovery."
+        )
 
 
 def _render_synology_recovery_admin(

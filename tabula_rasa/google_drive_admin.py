@@ -103,6 +103,8 @@ def _ensure_storage_root_is_profile_isolated(
     profile_key: str,
     selected_root: Mapping[str, Any],
     local_profiles: Mapping[str, Mapping[str, Any]],
+    *,
+    selected_drive_settings: Mapping[str, Any] | None = None,
 ) -> None:
     """Reject Drive storage roots nested under another profile's root."""
     selected_id = str(selected_root.get("id", ""))
@@ -114,11 +116,13 @@ def _ensure_storage_root_is_profile_isolated(
         selected_ancestry_incomplete = True
     ancestry_cache = {selected_id: selected_ancestry}
     selected_profile = local_profiles.get(profile_key)
-    selected_drive = (
-        selected_profile.get("google_drive")
-        if isinstance(selected_profile, Mapping)
-        else None
-    )
+    selected_drive = selected_drive_settings
+    if not isinstance(selected_drive, Mapping):
+        selected_drive = (
+            selected_profile.get("google_drive")
+            if isinstance(selected_profile, Mapping)
+            else None
+        )
     selected_email = (
         str(selected_drive.get("authorized_email", "")).strip().casefold()
         if isinstance(selected_drive, Mapping)
@@ -138,11 +142,6 @@ def _ensure_storage_root_is_profile_isolated(
             raise GoogleDriveConfigurationError(
                 "Google Drive storage roots cannot be nested between business "
                 "profiles."
-            )
-        if selected_ancestry_incomplete:
-            raise GoogleDriveConfigurationError(
-                "Google Drive storage-root ancestry could not be verified while "
-                "another profile root is configured."
             )
         other_email = str(drive.get("authorized_email", "")).strip().casefold()
         other_ancestry = ancestry_cache.get(other_id)
@@ -178,6 +177,11 @@ def _ensure_storage_root_is_profile_isolated(
                     raise
                 continue
             ancestry_cache[other_id] = other_ancestry
+        if selected_ancestry_incomplete:
+            raise GoogleDriveConfigurationError(
+                "Google Drive storage-root ancestry could not be verified while "
+                "another profile root is accessible."
+            )
         if other_id in selected_ancestry or selected_id in other_ancestry:
             raise GoogleDriveConfigurationError(
                 "Google Drive storage roots cannot be nested between business "
@@ -293,6 +297,7 @@ def process_google_drive_oauth_callback(
                     profile_key,
                     storage_root,
                     local_profiles,
+                    selected_drive_settings=drive_settings,
                 )
         update_local_profile_google_drive(
             profile_key,
