@@ -161,6 +161,26 @@ def test_storage_roots_cannot_be_nested_between_profiles(selected_key: str) -> N
         )
 
 
+def test_storage_root_isolation_skips_inaccessible_other_account_root() -> None:
+    selected_root = managed_folder(
+        "northroot123",
+        "North Storage",
+        kind="storage-root",
+    )
+    client = FolderClient({"northroot123": selected_root})
+    profiles = {
+        "north": {"google_drive": {"storage_root": {"id": "northroot123"}}},
+        "south": {"google_drive": {"storage_root": {"id": "southroot123"}}},
+    }
+
+    _ensure_storage_root_is_profile_isolated(
+        client,
+        "north",
+        selected_root,
+        profiles,
+    )
+
+
 def test_provisioning_rejects_a_storage_root_without_an_id() -> None:
     with pytest.raises(GoogleDriveConfigurationError, match="folder ID"):
         _provision_storage_children(

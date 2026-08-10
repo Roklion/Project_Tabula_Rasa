@@ -103,7 +103,14 @@ def _ensure_storage_root_is_profile_isolated(
             continue
         other_ancestry = ancestry_cache.get(other_id)
         if other_ancestry is None:
-            other_ancestry = _folder_ancestry(client, client.folder(other_id))
+            try:
+                other_ancestry = _folder_ancestry(client, client.folder(other_id))
+            except GoogleDriveError:
+                # A profile may be authorized with a different Google account.
+                # That account's root is not necessarily readable with this
+                # token, so skip cross-account ancestry rather than blocking a
+                # valid isolated profile connection.
+                continue
             ancestry_cache[other_id] = other_ancestry
         if other_id in selected_ancestry or selected_id in other_ancestry:
             raise GoogleDriveConfigurationError(
@@ -211,6 +218,10 @@ def process_google_drive_oauth_callback(
             )
             storage_root = drive_settings.get("storage_root")
             if isinstance(storage_root, Mapping):
+                # Re-fetch the root after revalidation so ancestry includes
+                # parent metadata; persisted settings intentionally retain
+                # only the validated ID and display name.
+                storage_root = client.folder(str(storage_root.get("id", "")))
                 _ensure_storage_root_is_profile_isolated(
                     client,
                     profile_key,
