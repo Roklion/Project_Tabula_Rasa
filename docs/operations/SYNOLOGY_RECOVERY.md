@@ -36,17 +36,19 @@ flowchart LR
     DriveRoot --> DriveBackups
     DriveRoot --> DriveReceipts
     DriveRoot -->|"One recursive Cloud Sync download task"| NASRoot
-    NASRoot --> Versions
+    NASRoot -->|"Optional additional protection"| Versions
     Versions -->|"Copy one matching recovery set"| Local
     Local -->|"Validate and restore"| Recovery
 ```
 
 Google Drive is the primary automated backup destination. The DS220j is an
 additional recovery destination with a separate failure boundary. Cloud Sync
-alone is not versioned protection: it must feed Hyper Backup, Snapshot
-Replication where supported, or another retention mechanism so accidental
-changes are recoverable even if synchronization reproduces them. The NAS does
-not read the live workbook, and Tabula Rosa does not send requests to the NAS.
+with destination deletions disabled is accepted as the independent second-layer
+copy. Hyper Backup, Snapshot Replication where supported, or another versioned
+retention mechanism is optional additional protection if the operator wants a
+separate recovery point when synchronization reproduces accidental changes.
+The NAS does not read the live workbook, and Tabula Rosa does not send requests
+to the NAS.
 This means neither Google Drive Desktop nor a permanently mapped NAS drive is
 part of normal backup operation. Temporary File Station or SMB access is needed
 only when an administrator copies an archive out for validation or restoration.
@@ -70,8 +72,8 @@ of truth for actual transfer status and logs.
 - DSM administrator access to the DS220j
 - Synology Cloud Sync installed
 - A protected shared folder with enough capacity for ledger and receipt history
-- Hyper Backup, snapshots, or another versioned retention mechanism protecting
-  the synchronized destination
+- Optional: Hyper Backup, snapshots, or another versioned retention mechanism
+  protecting the synchronized destination
 - A local recovery location that is outside the repository
 - A blank Google workbook for the restore drill
 
@@ -257,10 +259,10 @@ present in the backup child.
 
 Google Drive retains the newest 30 app-managed ledger generations. With
 destination deletions disabled, older NAS copies and unlinked receipts remain
-until an administrator applies the recorded NAS retention policy. Protect both
-synchronized subfolders with versioned retention; destination-deletion
-protection and the Recycle Bin are useful layers but are not substitutes for
-versions. A safe initial policy is:
+until an administrator applies the recorded NAS retention policy. This
+destination-deletion protection is the accepted independent second-layer copy.
+An operator may add versioned retention to create another recovery point. A
+safe initial policy is:
 
 > Retain all synchronized generations until a quarterly manual review. Never
 > remove the only verified generation for a recovery period.
@@ -308,8 +310,8 @@ Create a fresh verified cloud backup for the selected profile:
 Wait for the profile-root Cloud Sync task to report up to date. Confirm that the
 archive arrived in the `Ledger Backups` child, the app-managed receipt files
 arrived in `Receipts`, and the copied profile root contains no unrelated
-content. Create or confirm a versioned retention point that protects both
-children.
+content. If versioned retention is enabled, create or confirm a retention point
+that protects both children.
 
 Copy the archive from the NAS to a safe local recovery folder. SMB mapping is
 optional; DSM File Station, a temporary UNC path, or a mapped drive can be used.
@@ -451,8 +453,9 @@ ledger archives. It is not evidence that receipt bytes are synchronized or
 versioned. The verified installation is the supported legacy baseline: its
 receipt and ledger children remain on separate tasks until each profile is
 intentionally migrated using the safe procedure above. Both legacy and one-task
-layouts still require protected versioned retention, receipt preparation during
-backup, and the complete ledger-plus-receipt recovery drill described above.
+layouts use destination-deletion protection as the independent second-layer
+copy. Optional versioned retention, receipt preparation during backup, and the
+complete ledger-plus-receipt recovery drill provide additional safeguards.
 
 ## Troubleshooting
 

@@ -393,18 +393,20 @@ generations and avoid treating one recent archive as sufficient recovery
 coverage.
 
 The optional Synology workflow disables destination deletions, so older NAS
-generations remain after Google Drive retention removes them. Apply the
-documented manual NAS retention policy only after validating another
-generation.
+generations remain after Google Drive retention removes them. This is accepted
+as the independent second-layer copy. Optional versioned retention such as
+Hyper Backup or snapshots can add another recovery point; apply the documented
+manual NAS retention policy only after validating another generation.
 
 ## Optional Synology recovery copy
 
 Each newly opted-in business uses one recursive Synology Cloud Sync download
 task for its Google Drive storage root. The profile-specific NAS destination
-contains separate receipt and ledger-backup children and requires versioned
-retention such as Hyper Backup or snapshots; Cloud Sync alone can reproduce
-accidental changes. Tabula Rosa records the expected setup but does not connect
-to DSM, configure the task, or prove that synchronization succeeded. Existing
+contains separate receipt and ledger-backup children, with destination deletions
+disabled as the independent second-layer copy. Optional versioned retention
+such as Hyper Backup or snapshots can add protection against accidental
+changes. Tabula Rosa records the expected setup but does not connect to DSM,
+configure the task, or prove that synchronization succeeded. Existing
 two-task profiles remain supported until an operator intentionally follows the
 safe migration procedure in the runbook.
 

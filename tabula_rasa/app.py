@@ -2581,8 +2581,9 @@ elif page == "Data & backup":
             st.caption(
                 "These are the expected per-business settings. Tabula Rosa does not "
                 "connect to the NAS; confirm transfers, failures, and retries in DSM "
-                "Cloud Sync, and protect both synchronized children with versioned "
-                "retention."
+                "Cloud Sync with destination deletions disabled is the independent "
+                "second-layer copy. Optional versioned retention can protect both "
+                "synchronized children with another recovery point."
             )
 
     st.subheader("Live workbook exports")
