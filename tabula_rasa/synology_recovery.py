@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import posixpath
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -24,6 +25,7 @@ LEGACY_REQUIRED_FIELDS = {
 }
 PROFILE_ROOT_REQUIRED_FIELDS = {*LEGACY_REQUIRED_FIELDS, "layout"}
 DEFAULT_FIELDS = {"base_path", "schedule", "retention_policy"}
+DSM_VOLUME_PATTERN = re.compile(r"volume(?:\d+|usb\d+|sata\d+)", re.IGNORECASE)
 
 
 class SynologyRecoveryConfigurationError(ValueError):
@@ -53,7 +55,8 @@ def _absolute_dsm_path(value: str, label: str) -> str:
             "/volume1/Tabula_Rosa_Backups."
         )
     normalized = posixpath.normpath(value)
-    if len(normalized.strip("/").split("/")) < 2:
+    segments = normalized.strip("/").split("/")
+    if len(segments) < 2 or not DSM_VOLUME_PATTERN.fullmatch(segments[0]):
         raise SynologyRecoveryConfigurationError(
             f"{label} must include a Synology volume and shared folder, such as "
             "/volume1/Tabula_Rosa_Backups."
