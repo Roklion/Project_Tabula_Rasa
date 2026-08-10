@@ -31,6 +31,14 @@ from tabula_rasa.local_profile_store import (
 )
 
 
+class _IncompleteDriveAncestry(GoogleDriveError):
+    """Carry known IDs when a narrow Drive grant hides an ancestor."""
+
+    def __init__(self, ancestry: set[str]) -> None:
+        super().__init__("Google Drive folder ancestry could not be fully read.")
+        self.ancestry = ancestry
+
+
 @st.cache_resource
 def _cached_drive_client(
     config: GoogleDriveOAuthConfig,
@@ -84,8 +92,8 @@ def _folder_ancestry(
                 ancestry.add(normalized_parent_id)
                 try:
                     pending.append(client.folder(normalized_parent_id))
-                except GoogleDriveAuthorizationError:
-                    continue
+                except GoogleDriveAuthorizationError as exc:
+                    raise _IncompleteDriveAncestry(ancestry) from exc
     return ancestry
 
 
@@ -97,7 +105,12 @@ def _ensure_storage_root_is_profile_isolated(
 ) -> None:
     """Reject Drive storage roots nested under another profile's root."""
     selected_id = str(selected_root.get("id", ""))
-    selected_ancestry = _folder_ancestry(client, selected_root)
+    selected_ancestry_incomplete = False
+    try:
+        selected_ancestry = _folder_ancestry(client, selected_root)
+    except _IncompleteDriveAncestry as exc:
+        selected_ancestry = exc.ancestry
+        selected_ancestry_incomplete = True
     ancestry_cache = {selected_id: selected_ancestry}
     selected_profile = local_profiles.get(profile_key)
     selected_drive = (
@@ -130,16 +143,14 @@ def _ensure_storage_root_is_profile_isolated(
             # Different authorized accounts cannot expose one another's roots;
             # avoid turning Drive's cross-account 404 into a connection error.
             continue
+        if selected_ancestry_incomplete:
+            raise GoogleDriveConfigurationError(
+                "Google Drive storage-root ancestry could not be verified while "
+                "another profile root is configured."
+            )
         other_ancestry = ancestry_cache.get(other_id)
         if other_ancestry is None:
-            try:
-                other_ancestry = _folder_ancestry(client, client.folder(other_id))
-            except GoogleDriveAuthorizationError:
-                # A profile may be authorized with a different Google account.
-                # That account's root is not necessarily readable with this
-                # token, so skip cross-account ancestry rather than blocking a
-                # valid isolated profile connection.
-                continue
+            other_ancestry = _folder_ancestry(client, client.folder(other_id))
             ancestry_cache[other_id] = other_ancestry
         if other_id in selected_ancestry or selected_id in other_ancestry:
             raise GoogleDriveConfigurationError(

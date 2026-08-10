@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
 
+import tabula_rasa.local_profile_admin as local_profile_admin
 from tabula_rasa.local_profile_admin import (
     _initialize_candidate_storage,
     _profile_rows,
@@ -18,6 +20,7 @@ from tabula_rasa.storage import (
     StorageValidationError,
     StorageWorkbookAccessError,
 )
+from tabula_rasa.google_drive import GoogleDriveConfigurationError
 
 
 SETTINGS = {
@@ -106,3 +109,58 @@ def test_candidate_storage_preserves_specific_storage_errors(
             _initialize_candidate_storage(SETTINGS)
 
     assert raised.value is error
+
+
+def test_profile_root_enablement_revalidates_drive_root(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    north_root = {
+        "id": "northroot123",
+        "name": "North Storage",
+        "mimeType": "application/vnd.google-apps.folder",
+        "trashed": False,
+        "parents": ["southroot123"],
+    }
+    south_root = {
+        "id": "southroot123",
+        "name": "South Storage",
+        "mimeType": "application/vnd.google-apps.folder",
+        "trashed": False,
+    }
+
+    class Client:
+        def __init__(self, folders: dict[str, dict[str, Any]]) -> None:
+            self.folders = folders
+
+        def folder(self, folder_id: str) -> dict[str, Any]:
+            return self.folders[folder_id]
+
+    client = Client({"northroot123": north_root, "southroot123": south_root})
+    monkeypatch.setattr(local_profile_admin, "load_oauth_config", lambda _secrets: object())
+    monkeypatch.setattr(
+        local_profile_admin,
+        "GoogleDriveClient",
+        lambda _config, _settings: client,
+    )
+
+    profiles = {
+        "north": {
+            "google_drive": {
+                "authorized_email": "same@example.com",
+                "storage_root": {"id": "northroot123", "name": "North Storage"},
+            }
+        },
+        "south": {
+            "google_drive": {
+                "authorized_email": "same@example.com",
+                "storage_root": {"id": "southroot123", "name": "South Storage"},
+            }
+        },
+    }
+
+    with pytest.raises(GoogleDriveConfigurationError, match="cannot be nested"):
+        local_profile_admin._validate_profile_root_storage_root(
+            {},
+            "north",
+            profiles,
+        )
