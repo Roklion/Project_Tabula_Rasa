@@ -101,11 +101,16 @@ def _ensure_storage_root_is_profile_isolated(
         other_id = str(other_root.get("id", ""))
         if not other_id:
             continue
+        if other_id in selected_ancestry:
+            raise GoogleDriveConfigurationError(
+                "Google Drive storage roots cannot be nested between business "
+                "profiles."
+            )
         other_ancestry = ancestry_cache.get(other_id)
         if other_ancestry is None:
             try:
                 other_ancestry = _folder_ancestry(client, client.folder(other_id))
-            except GoogleDriveError:
+            except GoogleDriveAuthorizationError:
                 # A profile may be authorized with a different Google account.
                 # That account's root is not necessarily readable with this
                 # token, so skip cross-account ancestry rather than blocking a
@@ -291,8 +296,19 @@ def _create_storage_root(
         profile_key,
         f"{profile_name} Storage",
     )
+    local_profiles = load_local_profiles(store_path)
+    full_root = client.folder(str(root.get("id", "")))
+    _ensure_storage_root_is_profile_isolated(
+        client,
+        profile_key,
+        full_root,
+        local_profiles,
+    )
     updated = dict(drive_settings)
-    updated["storage_root"] = root
+    updated["storage_root"] = {
+        "id": str(full_root["id"]),
+        "name": str(full_root["name"]),
+    }
     updated.pop("receipt_folder", None)
     updated.pop("backup_folder", None)
     update_local_profile_google_drive(profile_key, updated, path=store_path)
