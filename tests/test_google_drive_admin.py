@@ -190,6 +190,28 @@ def test_storage_root_isolation_skips_inaccessible_other_account_root() -> None:
     )
 
 
+def test_storage_root_isolation_allows_unreadable_unrelated_parent() -> None:
+    selected_root = managed_folder(
+        "northroot123",
+        "North Storage",
+        kind="storage-root",
+    )
+    selected_root["parents"] = ["ordinaryparent123"]
+
+    class ParentRestrictedClient(FolderClient):
+        def folder(self, folder_id: str) -> dict[str, Any]:
+            if folder_id == "ordinaryparent123":
+                raise GoogleDriveAuthorizationError("parent is outside drive.file scope")
+            return super().folder(folder_id)
+
+    _ensure_storage_root_is_profile_isolated(
+        ParentRestrictedClient({"northroot123": selected_root}),
+        "north",
+        selected_root,
+        {"north": {"google_drive": {"storage_root": {"id": "northroot123"}}}},
+    )
+
+
 def test_storage_root_isolation_does_not_skip_transient_other_root_failure() -> None:
     selected_root = managed_folder(
         "northroot123",

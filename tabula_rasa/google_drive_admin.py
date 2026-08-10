@@ -61,12 +61,14 @@ def _folder_ancestry(
 ) -> set[str]:
     """Return a folder ID plus all of its reachable Drive ancestors."""
     ancestry: set[str] = set()
+    visited: set[str] = set()
     pending = [dict(folder)]
     while pending:
         current = pending.pop()
         folder_id = str(current.get("id", ""))
-        if not folder_id or folder_id in ancestry:
+        if not folder_id or folder_id in visited:
             continue
+        visited.add(folder_id)
         ancestry.add(folder_id)
         parents = current.get("parents")
         if not isinstance(parents, list):
@@ -77,7 +79,13 @@ def _folder_ancestry(
                 len(normalized_parent_id) >= 10
                 and normalized_parent_id not in ancestry
             ):
-                pending.append(client.folder(normalized_parent_id))
+                # The parent ID is useful for direct root-isolation checks even
+                # when the narrow drive.file grant cannot open that parent.
+                ancestry.add(normalized_parent_id)
+                try:
+                    pending.append(client.folder(normalized_parent_id))
+                except GoogleDriveAuthorizationError:
+                    continue
     return ancestry
 
 
