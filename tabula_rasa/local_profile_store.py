@@ -481,6 +481,15 @@ def update_local_profile_google_drive(
             if isinstance(recovery, Mapping) and (
                 synology_recovery_layout(recovery) == PROFILE_ROOT_LAYOUT
             ):
+                if any(
+                    not isinstance(validated_drive.get(field), Mapping)
+                    for field in ("storage_root", "receipt_folder", "backup_folder")
+                ):
+                    raise LocalProfileStoreError(
+                        "Disable profile-root Synology recovery before saving "
+                        "Google Drive settings without its storage root and both "
+                        "child folders."
+                    )
                 existing_drive = candidate.get("google_drive")
                 existing_root = (
                     existing_drive.get("storage_root")

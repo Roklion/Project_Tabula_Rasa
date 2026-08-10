@@ -445,6 +445,19 @@ class TestLocalProfileStore:
             with pytest.raises(LocalProfileStoreError, match="Disable profile-root"):
                 update_local_profile_google_drive("north", None, path=path)
 
+            for missing_field in ("receipt_folder", "backup_folder"):
+                incomplete_drive = {
+                    field: value
+                    for field, value in drive.items()
+                    if field != missing_field
+                }
+                with pytest.raises(LocalProfileStoreError, match="both child folders"):
+                    update_local_profile_google_drive(
+                        "north",
+                        incomplete_drive,
+                        path=path,
+                    )
+
             stored = load_local_profiles(path)
 
         assert stored["north"]["google_drive"]["storage_root"]["id"] == (
