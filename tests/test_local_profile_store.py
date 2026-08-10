@@ -472,7 +472,7 @@ class TestLocalProfileStore:
             "/volume1/Backups/shared/south",
         ),
     )
-    def test_synology_destinations_cannot_overlap_between_profiles(
+    def test_synology_destinations_can_be_nested_between_profiles(
         self,
         south_destination: str,
     ) -> None:
@@ -514,13 +514,14 @@ class TestLocalProfileStore:
                 path=path,
             )
 
-            with pytest.raises(LocalProfileStoreError, match="overlap"):
-                update_local_profile_synology_recovery(
-                    "south",
-                    {**recovery, "destination_path": south_destination},
-                    path=path,
-                )
+            update_local_profile_synology_recovery(
+                "south",
+                {**recovery, "destination_path": south_destination},
+                path=path,
+            )
 
             stored = load_local_profiles(path)
 
-        assert "synology_recovery" not in stored["south"]
+        assert stored["south"]["synology_recovery"]["destination_path"] == (
+            south_destination
+        )

@@ -55,6 +55,63 @@ def _folder_display_name(
     return str(folder.get("name") or fallback)
 
 
+def _folder_ancestry(
+    client: GoogleDriveClient,
+    folder: Mapping[str, Any],
+) -> set[str]:
+    """Return a folder ID plus all of its reachable Drive ancestors."""
+    ancestry: set[str] = set()
+    pending = [dict(folder)]
+    while pending:
+        current = pending.pop()
+        folder_id = str(current.get("id", ""))
+        if not folder_id or folder_id in ancestry:
+            continue
+        ancestry.add(folder_id)
+        parents = current.get("parents")
+        if not isinstance(parents, list):
+            continue
+        for parent_id in parents:
+            normalized_parent_id = str(parent_id)
+            if (
+                len(normalized_parent_id) >= 10
+                and normalized_parent_id not in ancestry
+            ):
+                pending.append(client.folder(normalized_parent_id))
+    return ancestry
+
+
+def _ensure_storage_root_is_profile_isolated(
+    client: GoogleDriveClient,
+    profile_key: str,
+    selected_root: Mapping[str, Any],
+    local_profiles: Mapping[str, Mapping[str, Any]],
+) -> None:
+    """Reject Drive storage roots nested under another profile's root."""
+    selected_id = str(selected_root.get("id", ""))
+    selected_ancestry = _folder_ancestry(client, selected_root)
+    ancestry_cache = {selected_id: selected_ancestry}
+    for other_key, profile in local_profiles.items():
+        if other_key == profile_key:
+            continue
+        drive = profile.get("google_drive")
+        other_root = drive.get("storage_root") if isinstance(drive, Mapping) else None
+        if not isinstance(other_root, Mapping):
+            continue
+        other_id = str(other_root.get("id", ""))
+        if not other_id:
+            continue
+        other_ancestry = ancestry_cache.get(other_id)
+        if other_ancestry is None:
+            other_ancestry = _folder_ancestry(client, client.folder(other_id))
+            ancestry_cache[other_id] = other_ancestry
+        if other_id in selected_ancestry or selected_id in other_ancestry:
+            raise GoogleDriveConfigurationError(
+                "Google Drive storage roots cannot be nested between business "
+                "profiles."
+            )
+
+
 def _revalidated_storage_settings(
     client: GoogleDriveClient,
     profile_key: str,
@@ -152,6 +209,14 @@ def process_google_drive_oauth_callback(
                     previous_drive,
                 )
             )
+            storage_root = drive_settings.get("storage_root")
+            if isinstance(storage_root, Mapping):
+                _ensure_storage_root_is_profile_isolated(
+                    client,
+                    profile_key,
+                    storage_root,
+                    local_profiles,
+                )
         update_local_profile_google_drive(
             profile_key,
             drive_settings,
@@ -396,6 +461,14 @@ def render_google_drive_admin(
         )
         if selected_root is not None:
             try:
+                local_profiles = load_local_profiles(store_path)
+                folder = client.folder(str(selected_root.get("id", "")))
+                _ensure_storage_root_is_profile_isolated(
+                    client,
+                    profile_key,
+                    folder,
+                    local_profiles,
+                )
                 _save_storage_root(
                     profile_key,
                     drive_settings,

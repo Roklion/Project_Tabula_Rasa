@@ -410,6 +410,9 @@ configure the task, or prove that synchronization succeeded. Existing
 two-task profiles remain supported until an operator intentionally follows the
 safe migration procedure in the runbook.
 
+NAS path nesting and reuse are administrator decisions; the app records each
+configured path without enforcing a cross-profile topology.
+
 For root-managed profiles, both Drive destinations are app-managed children under
 the profile's selected storage root: `Receipts` contains receipt files and
 `Ledger Backups` contains verified archives. The stored child IDs remain the

@@ -11,6 +11,7 @@ from tabula_rasa.google_drive import (
 )
 from tabula_rasa.google_drive_admin import (
     _folder_display_name,
+    _ensure_storage_root_is_profile_isolated,
     _provision_storage_children,
     _revalidated_storage_settings,
 )
@@ -126,6 +127,38 @@ def test_reconnect_drops_managed_child_with_missing_parents_safely() -> None:
     assert preserved == {
         "storage_root": {"id": root_id, "name": "North Storage"}
     }
+
+
+@pytest.mark.parametrize("selected_key", ("north", "south"))
+def test_storage_roots_cannot_be_nested_between_profiles(selected_key: str) -> None:
+    north_root = managed_folder("northroot123", "North Storage", kind="storage-root")
+    south_root = managed_folder(
+        "southroot123",
+        "South Storage",
+        kind="storage-root",
+        root_id="northroot123",
+    )
+    client = FolderClient(
+        {
+            "northroot123": north_root,
+            "southroot123": south_root,
+        }
+    )
+    profiles = {
+        "north": {"google_drive": {"storage_root": {"id": "northroot123"}}},
+        "south": {"google_drive": {"storage_root": {"id": "southroot123"}}},
+    }
+    selected_root = (
+        north_root if selected_key == "north" else south_root
+    )
+
+    with pytest.raises(GoogleDriveConfigurationError, match="cannot be nested"):
+        _ensure_storage_root_is_profile_isolated(
+            client,
+            selected_key,
+            selected_root,
+            profiles,
+        )
 
 
 def test_provisioning_rejects_a_storage_root_without_an_id() -> None:

@@ -145,10 +145,11 @@ volume. Record the path DSM actually uses instead of copying the example
 blindly. Grant write access only to the administrator and the DSM service
 account that needs it. Recovery users can be given read-only access if needed.
 
-Separate destinations prevent identically named or similarly timed archives
-from different businesses from being mixed together. They also let one business
-disable its NAS copy or use a different schedule and retention policy without
-changing another business.
+Separate destinations are recommended for operational clarity, but the app does
+not restrict how an administrator arranges NAS paths. A business may
+intentionally place its destination below another business's destination or
+reuse a destination; configure and monitor the resulting DSM tasks according to
+the business's own recovery plan.
 
 ## Choose which businesses use the NAS
 
@@ -209,9 +210,9 @@ while the Streamlit app or the Windows development computer is turned off.
 
 Create one recursive task for each newly opted-in business. Its remote source
 is the profile storage root provisioned by Tabula Rosa, and its local
-destination is the matching profile-specific NAS root. Do not point multiple
-profiles at one NAS destination or use nested destinations that overlap another
-profile's recovery tree.
+destination is the matching profile-specific NAS root. NAS path nesting and
+reuse are administrator decisions; the app records each configured path without
+enforcing a cross-profile topology.
 
 Cloud Sync connections represent Google accounts; tasks represent source and
 destination folder pairs. If multiple businesses use the same Drive-owning
