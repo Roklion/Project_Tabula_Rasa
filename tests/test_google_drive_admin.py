@@ -232,6 +232,28 @@ def test_storage_root_isolation_allows_unreadable_unrelated_parent() -> None:
     )
 
 
+def test_storage_root_isolation_allows_unreadable_parent_404() -> None:
+    selected_root = managed_folder(
+        "northroot123",
+        "North Storage",
+        kind="storage-root",
+    )
+    selected_root["parents"] = ["ordinaryparent123"]
+
+    class ParentNotFoundClient(FolderClient):
+        def folder(self, folder_id: str) -> dict[str, Any]:
+            if folder_id == "ordinaryparent123":
+                raise GoogleDriveAccessError("folder not found")
+            return super().folder(folder_id)
+
+    _ensure_storage_root_is_profile_isolated(
+        ParentNotFoundClient({"northroot123": selected_root}),
+        "north",
+        selected_root,
+        {"north": {"google_drive": {"storage_root": {"id": "northroot123"}}}},
+    )
+
+
 def test_storage_root_isolation_rejects_unverified_same_account_ancestry() -> None:
     selected_root = managed_folder(
         "northroot123",

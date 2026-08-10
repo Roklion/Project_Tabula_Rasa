@@ -72,8 +72,8 @@ def ensure_google_drive_disconnect_allowed(
         synology_recovery_layout(recovery) == PROFILE_ROOT_LAYOUT
     ):
         raise LocalProfileStoreError(
-            "Disable profile-root Synology recovery before changing "
-            "this profile's Google Drive storage root."
+            "Disable profile-root Synology recovery before disconnecting "
+            "this profile's Google Drive."
         )
 
 

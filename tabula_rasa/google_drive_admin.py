@@ -71,6 +71,7 @@ def _folder_ancestry(
     """Return a folder ID plus all of its reachable Drive ancestors."""
     ancestry: set[str] = set()
     visited: set[str] = set()
+    incomplete = False
     pending = [dict(folder)]
     while pending:
         current = pending.pop()
@@ -93,8 +94,14 @@ def _folder_ancestry(
                 ancestry.add(normalized_parent_id)
                 try:
                     pending.append(client.folder(normalized_parent_id))
-                except GoogleDriveAuthorizationError as exc:
-                    raise _IncompleteDriveAncestry(ancestry) from exc
+                except GoogleDriveAuthorizationError:
+                    incomplete = True
+                except GoogleDriveAccessError as exc:
+                    if exc.retryable:
+                        raise
+                    incomplete = True
+    if incomplete:
+        raise _IncompleteDriveAncestry(ancestry)
     return ancestry
 
 
@@ -143,6 +150,11 @@ def _ensure_storage_root_is_profile_isolated(
                 "Google Drive storage roots cannot be nested between business "
                 "profiles."
             )
+        if selected_ancestry_incomplete:
+            raise GoogleDriveConfigurationError(
+                "Google Drive storage-root ancestry could not be verified while "
+                "another profile root is configured."
+            )
         other_email = str(drive.get("authorized_email", "")).strip().casefold()
         other_ancestry = ancestry_cache.get(other_id)
         if other_ancestry is None:
@@ -177,11 +189,6 @@ def _ensure_storage_root_is_profile_isolated(
                     raise
                 continue
             ancestry_cache[other_id] = other_ancestry
-        if selected_ancestry_incomplete:
-            raise GoogleDriveConfigurationError(
-                "Google Drive storage-root ancestry could not be verified while "
-                "another profile root is accessible."
-            )
         if other_id in selected_ancestry or selected_id in other_ancestry:
             raise GoogleDriveConfigurationError(
                 "Google Drive storage roots cannot be nested between business "
