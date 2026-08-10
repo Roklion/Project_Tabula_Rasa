@@ -396,6 +396,9 @@ class TestAppAuthentication:
                     "from_secrets",
                     return_value=fake_storage,
                 ),
+                patch(
+                    "tabula_rasa.local_profile_admin._validate_profile_root_storage_root"
+                ),
             ):
                 app = AppTest.from_file(
                     "tabula_rasa/app.py",
