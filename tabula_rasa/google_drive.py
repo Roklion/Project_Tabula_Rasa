@@ -61,6 +61,10 @@ class GoogleDriveAuthorizationError(GoogleDriveError):
 class GoogleDriveAccessError(GoogleDriveError):
     """Raised when a Drive API operation cannot be completed."""
 
+    def __init__(self, message: str, *, retryable: bool = False) -> None:
+        super().__init__(message)
+        self.retryable = retryable
+
 
 class GoogleDriveConflictError(GoogleDriveAccessError):
     """Raised when recovery would overwrite or ambiguously reuse a Drive file."""
@@ -620,7 +624,8 @@ class GoogleDriveClient:
             except requests.RequestException as exc:
                 if not retry_transient or attempt == 3:
                     raise GoogleDriveAccessError(
-                        "Google Drive is temporarily unavailable. Retry the request."
+                        "Google Drive is temporarily unavailable. Retry the request.",
+                        retryable=True,
                     ) from exc
                 self.sleeper(2**attempt)
                 continue
@@ -635,7 +640,8 @@ class GoogleDriveClient:
                     self.sleeper(2**attempt)
                     continue
                 raise GoogleDriveAccessError(
-                    "Google Drive is temporarily unavailable. Retry the request."
+                    "Google Drive is temporarily unavailable. Retry the request.",
+                    retryable=True,
                 )
             if response.status_code in {401, 403}:
                 raise GoogleDriveAuthorizationError(
@@ -645,7 +651,8 @@ class GoogleDriveClient:
                 "Google Drive could not complete the request. No success was reported."
             )
         raise GoogleDriveAccessError(
-            "Google Drive is temporarily unavailable. Retry the request."
+            "Google Drive is temporarily unavailable. Retry the request.",
+            retryable=True,
         )
 
     def folder(self, folder_id: str) -> dict[str, Any]:

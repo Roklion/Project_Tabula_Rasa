@@ -10,6 +10,7 @@ from typing import Any
 import streamlit as st
 
 from tabula_rasa.google_drive import (
+    GoogleDriveAccessError,
     GoogleDriveAuthorizationError,
     GoogleDriveClient,
     GoogleDriveConfigurationError,
@@ -138,19 +139,44 @@ def _ensure_storage_root_is_profile_isolated(
                 "Google Drive storage roots cannot be nested between business "
                 "profiles."
             )
-        other_email = str(drive.get("authorized_email", "")).strip().casefold()
-        if selected_email and other_email and selected_email != other_email:
-            # Different authorized accounts cannot expose one another's roots;
-            # avoid turning Drive's cross-account 404 into a connection error.
-            continue
         if selected_ancestry_incomplete:
             raise GoogleDriveConfigurationError(
                 "Google Drive storage-root ancestry could not be verified while "
                 "another profile root is configured."
             )
+        other_email = str(drive.get("authorized_email", "")).strip().casefold()
         other_ancestry = ancestry_cache.get(other_id)
         if other_ancestry is None:
-            other_ancestry = _folder_ancestry(client, client.folder(other_id))
+            try:
+                other_ancestry = _folder_ancestry(client, client.folder(other_id))
+            except _IncompleteDriveAncestry as exc:
+                other_ancestry = exc.ancestry
+                if selected_id in other_ancestry or other_id in selected_ancestry:
+                    raise GoogleDriveConfigurationError(
+                        "Google Drive storage roots cannot be nested between "
+                        "business profiles."
+                    )
+                raise GoogleDriveConfigurationError(
+                    "Google Drive storage-root ancestry could not be verified "
+                    "for another profile."
+                )
+            except GoogleDriveAuthorizationError:
+                if not (
+                    selected_email
+                    and other_email
+                    and selected_email != other_email
+                ):
+                    raise
+                continue
+            except GoogleDriveAccessError as exc:
+                if not (
+                    selected_email
+                    and other_email
+                    and selected_email != other_email
+                    and not exc.retryable
+                ):
+                    raise
+                continue
             ancestry_cache[other_id] = other_ancestry
         if other_id in selected_ancestry or selected_id in other_ancestry:
             raise GoogleDriveConfigurationError(

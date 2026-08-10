@@ -148,8 +148,18 @@ def test_storage_roots_cannot_be_nested_between_profiles(selected_key: str) -> N
         }
     )
     profiles = {
-        "north": {"google_drive": {"storage_root": {"id": "northroot123"}}},
-        "south": {"google_drive": {"storage_root": {"id": "southroot123"}}},
+        "north": {
+            "google_drive": {
+                "authorized_email": "north@example.com",
+                "storage_root": {"id": "northroot123"},
+            }
+        },
+        "south": {
+            "google_drive": {
+                "authorized_email": "south@example.com",
+                "storage_root": {"id": "southroot123"},
+            }
+        },
     }
     selected_root = (
         north_root if selected_key == "north" else south_root
@@ -270,13 +280,23 @@ def test_storage_root_isolation_does_not_skip_transient_other_root_failure() -> 
     class TransientClient(FolderClient):
         def folder(self, folder_id: str) -> dict[str, Any]:
             if folder_id == "southroot123":
-                raise GoogleDriveAccessError("temporary failure")
+                raise GoogleDriveAccessError("temporary failure", retryable=True)
             return super().folder(folder_id)
 
     client = TransientClient({"northroot123": selected_root})
     profiles = {
-        "north": {"google_drive": {"storage_root": {"id": "northroot123"}}},
-        "south": {"google_drive": {"storage_root": {"id": "southroot123"}}},
+        "north": {
+            "google_drive": {
+                "authorized_email": "north@example.com",
+                "storage_root": {"id": "northroot123"},
+            }
+        },
+        "south": {
+            "google_drive": {
+                "authorized_email": "south@example.com",
+                "storage_root": {"id": "southroot123"},
+            }
+        },
     }
 
     with pytest.raises(GoogleDriveAccessError, match="temporary"):
