@@ -17,7 +17,6 @@ from tabula_rasa.google_drive import (
 )
 from tabula_rasa.google_drive_admin import (
     _ensure_storage_root_is_profile_isolated,
-    _revalidated_storage_settings,
     render_google_drive_admin,
 )
 from tabula_rasa.ledger_auth import verify_password
@@ -189,15 +188,38 @@ def _validate_profile_root_storage_root(
         root,
         local_profiles,
     )
-    confirmed = _revalidated_storage_settings(client, profile_key, drive)
-    if any(
-        not isinstance(confirmed.get(field), Mapping)
-        for field in ("storage_root", "receipt_folder", "backup_folder")
+    root_id = str(root.get("id", ""))
+    for field, storage_kind in (
+        ("receipt_folder", "receipts"),
+        ("backup_folder", "ledger-backups"),
     ):
-        raise GoogleDriveConfigurationError(
-            "Reconfirm the profile storage root and both child folders before "
-            "enabling one-task Synology recovery."
-        )
+        child = drive.get(field)
+        if not isinstance(child, Mapping):
+            raise GoogleDriveConfigurationError(
+                "Reconfirm the profile storage root and both child folders "
+                "before enabling one-task Synology recovery."
+            )
+        try:
+            current_child = client.folder(str(child.get("id", "")))
+        except GoogleDriveError as exc:
+            raise GoogleDriveConfigurationError(
+                "Reconfirm the profile storage root and both child folders "
+                "before enabling one-task Synology recovery."
+            ) from exc
+        properties = current_child.get("appProperties")
+        parents = current_child.get("parents")
+        if (
+            not isinstance(parents, list)
+            or root_id not in parents
+            or not isinstance(properties, Mapping)
+            or properties.get("tabulaRasaKind") != storage_kind
+            or properties.get("tabulaRasaProfile") != profile_key
+            or properties.get("tabulaRasaStorageRoot") != root_id
+        ):
+            raise GoogleDriveConfigurationError(
+                "Reconfirm the profile storage root and both child folders "
+                "before enabling one-task Synology recovery."
+            )
 
 
 def _render_synology_recovery_admin(

@@ -216,3 +216,74 @@ def test_profile_root_enablement_requires_current_storage_children(
             "north",
             profiles,
         )
+
+
+def test_picker_root_with_current_children_can_be_revalidated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = {
+        "id": "northroot123",
+        "name": "Picker Root",
+        "mimeType": "application/vnd.google-apps.folder",
+        "trashed": False,
+    }
+    receipt = {
+        "id": "receiptchild123",
+        "name": "Receipts",
+        "mimeType": "application/vnd.google-apps.folder",
+        "trashed": False,
+        "parents": ["northroot123"],
+        "appProperties": {
+            "tabulaRasaKind": "receipts",
+            "tabulaRasaProfile": "north",
+            "tabulaRasaStorageRoot": "northroot123",
+        },
+    }
+    backup = {
+        "id": "backupchild123",
+        "name": "Ledger Backups",
+        "mimeType": "application/vnd.google-apps.folder",
+        "trashed": False,
+        "parents": ["northroot123"],
+        "appProperties": {
+            "tabulaRasaKind": "ledger-backups",
+            "tabulaRasaProfile": "north",
+            "tabulaRasaStorageRoot": "northroot123",
+        },
+    }
+
+    class Client:
+        def folder(self, folder_id: str) -> dict[str, Any]:
+            return {
+                "northroot123": root,
+                "receiptchild123": receipt,
+                "backupchild123": backup,
+            }[folder_id]
+
+    monkeypatch.setattr(local_profile_admin, "load_oauth_config", lambda _secrets: object())
+    monkeypatch.setattr(
+        local_profile_admin,
+        "GoogleDriveClient",
+        lambda _config, _settings: Client(),
+    )
+
+    local_profile_admin._validate_profile_root_storage_root(
+        {},
+        "north",
+        {
+            "north": {
+                "google_drive": {
+                    "authorized_email": "north@example.com",
+                    "storage_root": {"id": "northroot123", "name": "Picker Root"},
+                    "receipt_folder": {
+                        "id": "receiptchild123",
+                        "name": "Receipts",
+                    },
+                    "backup_folder": {
+                        "id": "backupchild123",
+                        "name": "Ledger Backups",
+                    },
+                }
+            }
+        },
+    )
