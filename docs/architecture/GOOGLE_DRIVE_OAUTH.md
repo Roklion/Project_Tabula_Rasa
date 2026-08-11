@@ -300,7 +300,8 @@ Then:
 
 1. Sign in to Tabula Rosa and open **Business profiles**.
 2. Re-enter the application password.
-3. Under **Google Drive OAuth**, select the intended business profile.
+3. In the guided workflow, select the intended business profile and continue to
+   its **Google Drive OAuth** step.
 4. Select **Connect Google Drive**.
 5. Sign in with the human Google account that should own that business's Drive
    files and approve access.

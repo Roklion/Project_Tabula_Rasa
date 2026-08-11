@@ -65,6 +65,22 @@ def test_matching_hosted_projection_is_ready_hosted() -> None:
     assert not report.hosted_export_needed
 
 
+def test_hosted_projection_matching_is_scoped_to_the_selected_profile() -> None:
+    north = _settings()
+    south = _settings(name="South Shop", spreadsheet_id="south-sheet")
+    from scripts.export_streamlit_secrets import project_hosted_profiles
+
+    hosted_north = project_hosted_profiles({"north": north})
+    report = profile_configuration_readiness(
+        "south",
+        south,
+        hosted_profiles=hosted_north,
+    )
+
+    assert report.status == "ready-local"
+    assert report.hosted_export_needed
+
+
 def test_local_only_validation_failure_is_sanitized_and_actionable() -> None:
     report = profile_configuration_readiness(
         "north",
