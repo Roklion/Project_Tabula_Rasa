@@ -18,7 +18,11 @@ from tabula_rasa.receipt_recovery import (
     ReceiptRecoveryError,
     recover_receipts_from_synology,
 )
-from tabula_rasa.storage import GoogleSheetsStorage, decode_receipt_references
+from tabula_rasa.storage import (
+    GoogleSheetsStorage,
+    StorageError,
+    decode_receipt_references,
+)
 from tests.fakes import FakeWorkbook
 
 
@@ -26,7 +30,9 @@ def _reference(index: int, content: bytes) -> dict[str, object]:
     return {
         "id": f"oldreceipt{index:02d}",
         "name": f"statement ({index}).pdf",
-        "receipt_id": f"{index:x}" * 32,
+        "receipt_id": hashlib.sha256(
+            f"receipt-{index}".encode("utf-8")
+        ).hexdigest()[:32],
         "original_filename": f"original-{index}.pdf",
         "mime_type": "application/pdf",
         "byte_size": len(content),
@@ -186,7 +192,6 @@ def test_recovery_reuses_original_drive_file_without_remapping() -> None:
     backup, target, _ = _backup_with_receipts([reference])
     drive = Mock()
     drive.restore_receipt.return_value = (_drive_file(reference), True)
-    target.remap_transaction_receipt = Mock()
 
     with TemporaryDirectory() as directory:
         root = Path(directory)
@@ -205,7 +210,6 @@ def test_recovery_reuses_original_drive_file_without_remapping() -> None:
     assert report["references_remapped"] == 0
     assert report["errors"] == 0
     assert report["skipped"] == 0
-    target.remap_transaction_receipt.assert_not_called()
 
 
 def test_recovery_preserves_conflict_check_before_skipping_reused_file() -> None:
@@ -252,12 +256,10 @@ def test_recovery_rejects_duplicate_ids_in_refreshed_transactions() -> None:
     content = b"receipt"
     reference = _reference(1, content)
     backup, target, _ = _backup_with_receipts([reference])
-    initial_transactions = target.list_transactions(_force_refresh=True)
     storage = Mock(wraps=target)
-    storage.list_transactions.side_effect = [
-        initial_transactions,
-        [initial_transactions[0], initial_transactions[0]],
-    ]
+    storage.apply_receipt_recovery_plan.side_effect = StorageError(
+        "Receipt recovery found duplicate live transaction IDs."
+    )
     drive = Mock()
     drive.restore_receipt.return_value = (_drive_file(reference), True)
 
@@ -280,21 +282,21 @@ def test_recovery_rejects_duplicate_ids_in_refreshed_transactions() -> None:
     assert report["issues"][0]["status"] == "errors"
 
 
-def test_recovery_handles_null_receipt_reference_cells() -> None:
+def test_recovery_handles_null_receipt_reference_cells_without_crashing() -> None:
     content = b"receipt"
     reference = _reference(1, content)
     backup, target, _ = _backup_with_receipts([reference])
     initial_transactions = target.list_transactions(_force_refresh=True)
-    refreshed_transactions = [
+    null_transactions = [
         {**initial_transactions[0], "receipt_references": None},
         {"id": "other-transaction", "receipt_references": None},
     ]
     storage = Mock(wraps=target)
-    storage.list_transactions.side_effect = [
-        initial_transactions,
-        refreshed_transactions,
+    storage.list_transactions.return_value = initial_transactions
+    storage.apply_receipt_recovery_plan.side_effect = [
+        (False, null_transactions),
+        (True, null_transactions),
     ]
-    storage.remap_transaction_receipt.return_value = initial_transactions[0]
     drive = Mock()
     drive.restore_receipt.return_value = (_drive_file(reference), True)
 
@@ -311,9 +313,9 @@ def test_recovery_handles_null_receipt_reference_cells() -> None:
             drive=drive,
         )
 
-    assert report["errors"] == 0
-    assert report["references_remapped"] == 1
-    storage.remap_transaction_receipt.assert_called_once()
+    assert report["errors"] == 1
+    assert report["references_remapped"] == 0
+    assert storage.apply_receipt_recovery_plan.call_count == 2
 
 
 def test_recovery_repairs_stale_live_reference_when_original_file_is_reused() -> None:
@@ -380,26 +382,63 @@ def test_recovery_remaps_legacy_reference_when_original_file_is_reused() -> None
     assert report["errors"] == 0
 
 
-def test_recovery_refreshes_transaction_before_skipping_reused_file() -> None:
+def test_recovery_retries_when_manual_edit_invalidates_cached_noop() -> None:
     content = b"receipt"
     reference = _reference(1, content)
     backup, target, transaction_id = _backup_with_receipts([reference])
-    initial_transactions = target.list_transactions(_force_refresh=True)
     stale_reference = {**reference, "id": "stale-recovered-id"}
-    stale_transaction = {
-        **initial_transactions[0],
-        "receipt_references": json.dumps([stale_reference]),
-    }
-    storage = Mock(wraps=target)
-    storage.list_transactions.side_effect = [
-        initial_transactions,
-        [stale_transaction],
-    ]
-    storage.remap_transaction_receipt.side_effect = (
-        target.remap_transaction_receipt
-    )
+    worksheet = target._workbook.sheets["Transactions"]
+    reference_index = worksheet.rows[0].index("receipt_references")
+
+    def restore_after_manual_edit(**_kwargs: object) -> tuple[dict[str, object], bool]:
+        worksheet.rows[1][reference_index] = json.dumps([stale_reference])
+        return _drive_file(reference), True
+
+    original_apply = target.apply_receipt_recovery_plan
+    target.apply_receipt_recovery_plan = Mock(wraps=original_apply)
     drive = Mock()
-    drive.restore_receipt.return_value = (_drive_file(reference), True)
+    drive.restore_receipt.side_effect = restore_after_manual_edit
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(reference["name"])).write_bytes(content)
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=target,
+            drive=drive,
+        )
+
+    assert report["reused"] == 1
+    assert report["references_remapped"] == 1
+    assert report["errors"] == 0
+    assert target.apply_receipt_recovery_plan.call_count == 2
+    current = target.list_transactions(_force_refresh=True)[0]
+    assert decode_receipt_references(current["receipt_references"])[0][
+        "id"
+    ] == str(reference["id"])
+
+
+def test_recovery_stops_after_three_unstable_reconciliation_attempts() -> None:
+    content = b"receipt"
+    reference = _reference(1, content)
+    backup, target, _ = _backup_with_receipts([reference])
+    initial_transactions = target.list_transactions(_force_refresh=True)
+    storage = Mock(wraps=target)
+    storage.list_transactions.return_value = initial_transactions
+    storage.apply_receipt_recovery_plan.side_effect = [
+        (False, initial_transactions),
+        (False, initial_transactions),
+        (False, initial_transactions),
+    ]
+    drive = Mock()
+    drive.restore_receipt.return_value = (
+        _drive_file(reference, file_id="newreceipt01"),
+        False,
+    )
 
     with TemporaryDirectory() as directory:
         root = Path(directory)
@@ -414,9 +453,201 @@ def test_recovery_refreshes_transaction_before_skipping_reused_file() -> None:
             drive=drive,
         )
 
-    assert report["reused"] == 1
+    assert report["restored"] == 0
+    assert report["references_remapped"] == 0
+    assert report["errors"] == 1
+    assert storage.apply_receipt_recovery_plan.call_count == 3
+
+
+def test_recovery_rechecks_cross_transaction_conflicts_after_manual_edit() -> None:
+    content = b"receipt"
+    reference = _reference(1, content)
+    backup, target, _ = _backup_with_receipts([reference])
+    accounts = target.list_accounts(_force_refresh=True)
+    categories = target.list_categories(_force_refresh=True)
+    other_transaction = target.create_transaction(
+        txn_date="2026-07-31",
+        kind="Income",
+        amount=10,
+        account_id=accounts[0]["id"],
+        category_id=categories[0]["id"],
+    )
+    worksheet = target._workbook.sheets["Transactions"]
+    id_index = worksheet.rows[0].index("id")
+    reference_index = worksheet.rows[0].index("receipt_references")
+
+    def restore_after_manual_edit(**_kwargs: object) -> tuple[dict[str, object], bool]:
+        other_row = next(
+            row for row in worksheet.rows[1:] if row[id_index] == other_transaction["id"]
+        )
+        other_row[reference_index] = json.dumps([reference])
+        return _drive_file(reference), True
+
+    original_apply = target.apply_receipt_recovery_plan
+    target.apply_receipt_recovery_plan = Mock(wraps=original_apply)
+    worksheet.batch_update = Mock(wraps=worksheet.batch_update)
+    drive = Mock()
+    drive.restore_receipt.side_effect = restore_after_manual_edit
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(reference["name"])).write_bytes(content)
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=target,
+            drive=drive,
+        )
+
+    assert report["reused"] == 0
+    assert report["references_remapped"] == 0
+    assert report["errors"] == 1
+    assert target.apply_receipt_recovery_plan.call_count == 2
+    worksheet.batch_update.assert_not_called()
+
+
+def test_recovery_rejects_duplicate_ids_added_after_preflight() -> None:
+    content = b"receipt"
+    reference = _reference(1, content)
+    backup, target, _ = _backup_with_receipts([reference])
+    worksheet = target._workbook.sheets["Transactions"]
+
+    def restore_after_duplicate(**_kwargs: object) -> tuple[dict[str, object], bool]:
+        worksheet.rows.append(list(worksheet.rows[1]))
+        return _drive_file(reference), True
+
+    worksheet.batch_update = Mock(wraps=worksheet.batch_update)
+    drive = Mock()
+    drive.restore_receipt.side_effect = restore_after_duplicate
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(reference["name"])).write_bytes(content)
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=target,
+            drive=drive,
+        )
+
+    assert report["reused"] == 0
+    assert report["references_remapped"] == 0
+    assert report["errors"] == 1
+    worksheet.batch_update.assert_not_called()
+
+
+def test_recovery_preserves_unrelated_manual_edits_before_batch_write() -> None:
+    content = b"receipt"
+    reference = _reference(1, content)
+    backup, target, _ = _backup_with_receipts([reference])
+    worksheet = target._workbook.sheets["Transactions"]
+    payee_index = worksheet.rows[0].index("payee")
+
+    def restore_after_manual_edit(**_kwargs: object) -> tuple[dict[str, object], bool]:
+        worksheet.rows[1][payee_index] = "Manually corrected payee"
+        return _drive_file(reference, file_id="newreceipt01"), False
+
+    drive = Mock()
+    drive.restore_receipt.side_effect = restore_after_manual_edit
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(reference["name"])).write_bytes(content)
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=target,
+            drive=drive,
+        )
+
+    assert report["restored"] == 1
     assert report["references_remapped"] == 1
-    storage.remap_transaction_receipt.assert_called_once()
+    current = target.list_transactions(_force_refresh=True)[0]
+    assert current["payee"] == "Manually corrected payee"
+
+
+def test_recovery_reports_unconfirmed_batch_write_failure() -> None:
+    content = b"receipt"
+    reference = _reference(1, content)
+    backup, target, _ = _backup_with_receipts([reference])
+    worksheet = target._workbook.sheets["Transactions"]
+    worksheet.batch_update = Mock(side_effect=OSError("temporary failure"))
+    drive = Mock()
+    drive.restore_receipt.return_value = (
+        _drive_file(reference, file_id="newreceipt01"),
+        False,
+    )
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(reference["name"])).write_bytes(content)
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=target,
+            drive=drive,
+        )
+
+    assert report["restored"] == 0
+    assert report["references_remapped"] == 0
+    assert report["errors"] == 1
+    assert worksheet.batch_update.call_count == 4
+    current = target.list_transactions(_force_refresh=True)[0]
+    assert decode_receipt_references(current["receipt_references"])[0][
+        "id"
+    ] == str(reference["id"])
+
+
+def test_recovery_confirms_batch_write_after_lost_response() -> None:
+    content = b"receipt"
+    reference = _reference(1, content)
+    backup, target, _ = _backup_with_receipts([reference])
+    worksheet = target._workbook.sheets["Transactions"]
+    original_batch_update = worksheet.batch_update
+
+    def commit_then_timeout(
+        data: list[dict[str, object]],
+        **kwargs: object,
+    ) -> None:
+        original_batch_update(data, **kwargs)
+        raise OSError("response lost after commit")
+
+    worksheet.batch_update = Mock(side_effect=commit_then_timeout)
+    drive = Mock()
+    drive.restore_receipt.return_value = (
+        _drive_file(reference, file_id="newreceipt01"),
+        False,
+    )
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(reference["name"])).write_bytes(content)
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=target,
+            drive=drive,
+        )
+
+    assert report["restored"] == 1
+    assert report["references_remapped"] == 1
+    assert report["errors"] == 0
+    assert worksheet.batch_update.call_count == 4
 
 
 def test_recovery_removes_old_reference_when_confirmed_reference_is_also_present() -> None:
@@ -459,11 +690,14 @@ def test_recovery_removes_old_reference_when_confirmed_reference_is_also_present
     assert [item["id"] for item in references] == ["newreceipt01"]
 
 
-def test_recovery_keeps_cache_when_remap_returns_no_transaction() -> None:
+def test_recovery_batches_multiple_receipts_into_one_reconciliation() -> None:
     first = _reference(1, b"first")
     second = _reference(2, b"second")
     backup, target, _ = _backup_with_receipts([first, second])
-    target.remap_transaction_receipt = Mock(return_value=None)
+    original_apply = target.apply_receipt_recovery_plan
+    target.apply_receipt_recovery_plan = Mock(
+        wraps=original_apply
+    )
     drive = Mock()
     drive.restore_receipt.side_effect = [
         (_drive_file(first, file_id="newreceipt01"), False),
@@ -487,7 +721,57 @@ def test_recovery_keeps_cache_when_remap_returns_no_transaction() -> None:
     assert report["restored"] == 2
     assert report["references_remapped"] == 2
     assert report["errors"] == 0
-    assert target.remap_transaction_receipt.call_count == 2
+    target.apply_receipt_recovery_plan.assert_called_once()
+
+
+def test_recovery_uses_two_reads_and_one_write_for_realistic_receipt_count() -> None:
+    receipt_count = 100
+    contents = [f"receipt-{index}".encode() for index in range(1, receipt_count + 1)]
+    references = [
+        _reference(index, content)
+        for index, content in enumerate(contents, start=1)
+    ]
+    backup, target, _ = _backup_with_receipts(references)
+    worksheet = target._workbook.sheets["Transactions"]
+    original_read = worksheet.get_all_values
+    original_batch_update = worksheet.batch_update
+    worksheet.get_all_values = Mock(wraps=original_read)
+    worksheet.batch_update = Mock(wraps=original_batch_update)
+    references_by_name = {
+        str(reference["name"]): (index, reference)
+        for index, reference in enumerate(references, start=1)
+    }
+
+    def restore_receipt(**kwargs: object) -> tuple[dict[str, object], bool]:
+        index, reference = references_by_name[str(kwargs["stored_filename"])]
+        return _drive_file(
+            reference,
+            file_id=f"newreceipt{index:03d}",
+        ), False
+
+    drive = Mock()
+    drive.restore_receipt.side_effect = restore_receipt
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        for reference, content in zip(references, contents):
+            (root / str(reference["name"])).write_bytes(content)
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=target,
+            drive=drive,
+        )
+
+    assert not report["issues"], report["issues"]
+    assert report["restored"] == receipt_count
+    assert report["references_remapped"] == receipt_count
+    assert report["errors"] == 0
+    assert worksheet.get_all_values.call_count == 2
+    worksheet.batch_update.assert_called_once()
 
 
 def test_missing_and_corrupt_files_do_not_block_other_valid_receipts() -> None:

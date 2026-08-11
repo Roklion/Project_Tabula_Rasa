@@ -167,6 +167,21 @@ callers, and failure behavior rather than reviewer identity or model agreement.
 Do not make speculative or disproportionate changes to satisfy a reviewer. Do
 not complete review while a validated blocking finding remains unresolved.
 
+### Receipt recovery performance changes
+
+Treat an in-memory receipt-reconciliation result as a tentative plan, never as
+authority to skip a write. Reviewers must verify that one final fresh Google
+Sheets snapshot covers all transaction IDs and receipt-reference cells used by
+the plan; drift must discard the whole plan and recompute from the fresh state
+within a documented retry bound. The stable write must remain profile-scoped,
+update only affected receipt-reference cells, use one batch where supported,
+and read back an uncertain response before reporting success. Regression
+coverage must include duplicate transaction IDs, stale-reference repair,
+remap idempotency, cross-transaction conflicts introduced after preflight,
+persistent snapshot churn, and realistic API-call/runtime measurements. A
+cache-only optimization that removes the final fresh validation is not an
+acceptable performance fix.
+
 ### Earlier-commit comments
 
 Review comments attached to an earlier commit remain part of the review record

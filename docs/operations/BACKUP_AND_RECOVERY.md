@@ -351,6 +351,39 @@ are counted and skipped while other valid entries continue. Formats 2, 3, and
 pre-inventory 4 can restore the ledger, but the validator and recovery command
 identify them as ledger-only sources.
 
+Referenced-receipt reconciliation uses a bounded optimistic batch. The initial
+fresh Transactions snapshot validates the manifest and becomes only a tentative
+planning cache while receipt bytes are restored. A second full snapshot must
+match every live transaction ID and receipt-reference cell before any cached
+skip is accepted or any ledger write begins. If receipt state changed, the new
+snapshot becomes the next base and the complete reconciliation is recomputed,
+for at most three attempts. A stable plan updates only affected
+`receipt_references` cells in one batch; unrelated transaction fields are never
+rewritten. Duplicate IDs, disappeared transactions, newly introduced
+cross-transaction conflicts, and stale references are therefore reevaluated
+from Google Sheets before the batch. An uncertain batch response is read back
+before success is reported. The small read-to-write race remains an optimistic
+concurrency boundary, while Google Sheets remains the active ledger source of
+truth.
+
+The issue-72 synthetic benchmark uses three runs and 2 ms simulated latency per
+Sheets request:
+
+| Receipts | Implementation | Full transaction reads | Writes | Median runtime |
+| ---: | --- | ---: | ---: | ---: |
+| 25 | Baseline `48cf0d3` | 76 | 25 row writes | 0.3511 s |
+| 25 | Optimistic batch | 2 | 1 batch write | 0.0565 s |
+| 100 | Baseline `48cf0d3` | 301 | 100 row writes | 1.9619 s |
+| 100 | Optimistic batch | 2 | 1 batch write | 0.3751 s |
+
+The latency is simulated, so the runtime comparison is directional; the call
+counts are asserted by regression coverage. Reproduce it with:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\benchmark_receipt_recovery.py `
+  --receipts 100 --latency-ms 2 --runs 3
+```
+
 The required recovery order is:
 
 1. Restore the archive into a new blank workbook.
