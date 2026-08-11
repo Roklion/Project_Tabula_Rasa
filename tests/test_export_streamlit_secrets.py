@@ -51,6 +51,7 @@ class TestExportStreamlitSecrets:
                     },
                 },
                 "synology_recovery": {
+                    "layout": "profile-root",
                     "destination_path": "/volume1/Backups/TabulaRasa/north-shop",
                     "schedule": "Continuous",
                     "retention_policy": "Retain until manual review.",
@@ -147,6 +148,7 @@ class TestExportStreamlitSecrets:
             "gcp_service_account": {"type": "service_account"},
             "backup_folder_path": r"G:\Backups\North",
             "synology_recovery": {
+                "layout": "profile-root",
                 "destination_path": "/volume1/Recovery/north",
                 "schedule": "Continuous",
                 "retention_policy": "Keep all.",

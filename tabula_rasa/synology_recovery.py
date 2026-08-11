@@ -11,19 +11,18 @@ from typing import Any
 SYNC_DIRECTION = "Download remote changes only"
 DESTINATION_DELETIONS = "Disabled"
 PROFILE_ROOT_LAYOUT = "profile-root"
-LEGACY_TWO_TASK_LAYOUT = "legacy-two-task"
 DEFAULT_BASE_PATH = "/volume1/Tabula_Rosa_Backups"
 DEFAULT_SCHEDULE = "Continuous"
 DEFAULT_RETENTION_POLICY = (
     "Retain all synchronized generations until quarterly manual review."
 )
 MAX_FIELD_LENGTH = 500
-LEGACY_REQUIRED_FIELDS = {
+REQUIRED_FIELDS = {
+    "layout",
     "destination_path",
     "schedule",
     "retention_policy",
 }
-PROFILE_ROOT_REQUIRED_FIELDS = {*LEGACY_REQUIRED_FIELDS, "layout"}
 DEFAULT_FIELDS = {"base_path", "schedule", "retention_policy"}
 DSM_VOLUME_PATTERN = re.compile(r"volume(?:\d+|usb\d+|sata\d+)", re.IGNORECASE)
 
@@ -65,18 +64,23 @@ def _absolute_dsm_path(value: str, label: str) -> str:
 
 
 def validate_synology_recovery_settings(value: object) -> dict[str, str]:
-    """Return normalized root-sync or legacy two-task recovery metadata."""
+    """Return normalized profile-root Synology recovery metadata."""
     if not isinstance(value, Mapping):
         raise SynologyRecoveryConfigurationError(
             "Synology recovery settings are invalid."
         )
     raw = {str(key): item for key, item in value.items()}
     fields = set(raw)
-    if fields not in (LEGACY_REQUIRED_FIELDS, PROFILE_ROOT_REQUIRED_FIELDS):
+    if fields == REQUIRED_FIELDS - {"layout"}:
+        raise SynologyRecoveryConfigurationError(
+            "Synology recovery settings use the retired three-field schema; "
+            f"include layout='{PROFILE_ROOT_LAYOUT}'."
+        )
+    if fields != REQUIRED_FIELDS:
         raise SynologyRecoveryConfigurationError(
             "Synology recovery settings contain unsupported fields."
         )
-    if "layout" in raw and raw["layout"] != PROFILE_ROOT_LAYOUT:
+    if raw["layout"] != PROFILE_ROOT_LAYOUT:
         raise SynologyRecoveryConfigurationError(
             f"Synology recovery layout must be '{PROFILE_ROOT_LAYOUT}'."
         )
@@ -92,18 +96,7 @@ def validate_synology_recovery_settings(value: object) -> dict[str, str]:
             "NAS retention policy",
         ),
     }
-    if "layout" in raw:
-        return {"layout": PROFILE_ROOT_LAYOUT, **normalized}
-    return normalized
-
-
-def synology_recovery_layout(value: Mapping[str, Any]) -> str:
-    """Identify explicit root sync while treating the old shape as legacy."""
-    return (
-        PROFILE_ROOT_LAYOUT
-        if value.get("layout") == PROFILE_ROOT_LAYOUT
-        else LEGACY_TWO_TASK_LAYOUT
-    )
+    return {"layout": PROFILE_ROOT_LAYOUT, **normalized}
 
 
 def resolve_synology_recovery_defaults(
