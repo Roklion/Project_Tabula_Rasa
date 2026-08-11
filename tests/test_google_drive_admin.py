@@ -113,6 +113,37 @@ def test_drive_validation_can_skip_profile_root_ancestry() -> None:
     )
 
 
+def test_drive_validation_without_ancestry_rejects_direct_known_root_parent() -> None:
+    client = Mock()
+    client.folder.return_value = {
+        "id": "northroot123",
+        "name": "North Storage",
+        "parents": ["southroot123"],
+    }
+    drive_settings = {"storage_root": {"id": "northroot123"}}
+    profiles = {
+        "north": {"google_drive": drive_settings},
+        "south": {
+            "google_drive": {"storage_root": {"id": "southroot123"}}
+        },
+    }
+
+    with patch(
+        "tabula_rasa.google_drive_admin.load_oauth_config",
+        return_value=Mock(),
+    ), patch(
+        "tabula_rasa.google_drive_admin._cached_drive_client",
+        return_value=client,
+    ), pytest.raises(GoogleDriveConfigurationError, match="cannot be nested"):
+        validate_google_drive_profile(
+            {},
+            "north",
+            drive_settings,
+            local_profiles=profiles,
+            enforce_root_isolation=False,
+        )
+
+
 def managed_folder(
     folder_id: str,
     name: str,
