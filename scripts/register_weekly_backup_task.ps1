@@ -44,7 +44,7 @@ $arguments = '"{0}" --keep 30 --once-per-week' -f $backupScript
 if ($AllProfiles) {
     $arguments += ' --all-profiles'
 }
-if ($GoogleDrive -or $AllProfiles -and -not $Local) {
+if ($GoogleDrive -or ($AllProfiles -and -not $Local)) {
     $arguments += ' --google-drive'
 }
 if ($Local) {
