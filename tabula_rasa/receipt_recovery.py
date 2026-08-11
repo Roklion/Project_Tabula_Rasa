@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +26,9 @@ from tabula_rasa.storage import (
 
 class ReceiptRecoveryError(RuntimeError):
     """Raised when receipt recovery cannot safely begin."""
+
+
+_MAX_RECONCILIATION_ATTEMPTS = 3
 
 
 def _preflight_transactions(
@@ -86,6 +89,123 @@ def _issue(report: dict[str, Any], entry: Mapping[str, Any], status: str) -> Non
     )
 
 
+def _plan_receipt_reconciliation(
+    transactions: Sequence[Mapping[str, Any]],
+    candidates: Sequence[Mapping[str, Any]],
+) -> tuple[
+    dict[str, list[Mapping[str, Any]]],
+    list[bool | None],
+]:
+    transactions_by_id = {
+        str(transaction["id"]): transaction for transaction in transactions
+    }
+    if len(transactions_by_id) != len(transactions):
+        raise StorageError(
+            "Receipt recovery found duplicate live transaction IDs."
+        )
+    references_by_transaction = {
+        transaction_id: decode_receipt_references(
+            transaction.get("receipt_references") or ""
+        )
+        for transaction_id, transaction in transactions_by_id.items()
+    }
+    reference_owners: dict[str, set[str]] = {}
+    for transaction_id, references in references_by_transaction.items():
+        for current_reference in references:
+            reference_owners.setdefault(
+                str(current_reference.get("id")), set()
+            ).add(transaction_id)
+    updates: dict[str, list[Mapping[str, Any]]] = {}
+    outcomes: list[bool | None] = []
+
+    for candidate in candidates:
+        entry = candidate["entry"]
+        reference = candidate["reference"]
+        transaction_id = str(entry["transaction_id"])
+        old_file_id = str(entry["old_drive_file_id"])
+        confirmed_file_id = str(reference["id"])
+        current_references = references_by_transaction.get(transaction_id)
+        if current_references is None:
+            outcomes.append(None)
+            continue
+
+        confirmed_reference_present = any(
+            str(current_reference.get("id")) == confirmed_file_id
+            and _reference_matches_entry(current_reference, entry)
+            for current_reference in current_references
+        )
+        confirmed_reference_conflict = bool(
+            reference_owners.get(confirmed_file_id, set()) - {transaction_id}
+        )
+        if confirmed_reference_conflict:
+            outcomes.append(None)
+            continue
+        stale_old_reference_present = (
+            old_file_id != confirmed_file_id
+            and any(
+                str(current_reference.get("id")) == old_file_id
+                for current_reference in current_references
+            )
+        )
+        if confirmed_reference_present and not stale_old_reference_present:
+            outcomes.append(False)
+            continue
+
+        replacement_indexes = [
+            index
+            for index, current_reference in enumerate(current_references)
+            if str(current_reference.get("id"))
+            in {old_file_id, confirmed_file_id}
+            or (
+                current_reference.get("receipt_id")
+                == reference["receipt_id"]
+                and current_reference.get("sha256") == reference["sha256"]
+            )
+        ]
+        if not replacement_indexes:
+            outcomes.append(None)
+            continue
+        first_index = replacement_indexes[0]
+        retained = [
+            current_reference
+            for index, current_reference in enumerate(current_references)
+            if index not in replacement_indexes
+        ]
+        retained.insert(first_index, reference)
+        for current_file_id in {
+            str(current_reference.get("id"))
+            for current_reference in current_references
+        }:
+            owners = reference_owners[current_file_id]
+            owners.discard(transaction_id)
+            if not owners:
+                del reference_owners[current_file_id]
+        for retained_reference in retained:
+            reference_owners.setdefault(
+                str(retained_reference.get("id")), set()
+            ).add(transaction_id)
+        references_by_transaction[transaction_id] = retained
+        updates[transaction_id] = retained
+        outcomes.append(True)
+
+    return updates, outcomes
+
+
+def _record_reconciliation_outcomes(
+    report: dict[str, Any],
+    candidates: Sequence[Mapping[str, Any]],
+    outcomes: Sequence[bool | None],
+) -> None:
+    for candidate, remapped in zip(candidates, outcomes):
+        entry = candidate["entry"]
+        if remapped is None:
+            _issue(report, entry, "errors")
+            continue
+        if remapped:
+            report["references_remapped"] += 1
+        report["reused" if candidate["reused"] else "restored"] += 1
+
+
 def recover_receipts_from_synology(
     backup: bytes,
     receipt_directory: Path,
@@ -134,6 +254,7 @@ def recover_receipts_from_synology(
         "skipped": 0,
         "issues": [],
     }
+    reconciliation_candidates: list[dict[str, Any]] = []
     for entry in manifest["receipts"]:
         candidate = recovery_root / str(entry["stored_filename"])
         try:
@@ -171,66 +292,14 @@ def recover_receipts_from_synology(
                     "Recovered receipt metadata does not match the manifest"
                 )
             if entry["reference_state"] == "referenced":
-                transaction_id = str(entry["transaction_id"])
-                old_file_id = str(entry["old_drive_file_id"])
-                refreshed_transactions = storage.list_transactions(
-                    _force_refresh=True
+                reconciliation_candidates.append(
+                    {
+                        "entry": entry,
+                        "reference": reference,
+                        "reused": reused,
+                    }
                 )
-                transactions_by_id = {
-                    str(transaction["id"]): transaction
-                    for transaction in refreshed_transactions
-                }
-                if len(transactions_by_id) != len(refreshed_transactions):
-                    raise StorageError(
-                        "Receipt recovery found duplicate live transaction IDs."
-                    )
-                current_transaction = transactions_by_id.get(transaction_id)
-                if current_transaction is None:
-                    raise StorageError(
-                        "The transaction disappeared during receipt recovery."
-                    )
-                current_references = decode_receipt_references(
-                    current_transaction.get("receipt_references") or ""
-                )
-                confirmed_reference_present = any(
-                    str(current_reference.get("id")) == str(reference["id"])
-                    and _reference_matches_entry(current_reference, entry)
-                    for current_reference in current_references
-                )
-                confirmed_reference_conflict = any(
-                    other_transaction_id != transaction_id
-                    and any(
-                        str(other_reference.get("id"))
-                        == str(reference["id"])
-                        for other_reference in decode_receipt_references(
-                            other_transaction.get("receipt_references") or ""
-                        )
-                    )
-                    for other_transaction_id, other_transaction in (
-                        transactions_by_id.items()
-                    )
-                )
-                stale_old_reference_present = (
-                    old_file_id != str(reference["id"])
-                    and any(
-                        str(current_reference.get("id")) == old_file_id
-                        for current_reference in current_references
-                    )
-                )
-                needs_remap = (
-                    not confirmed_reference_present
-                    or confirmed_reference_conflict
-                    or stale_old_reference_present
-                )
-                if needs_remap:
-                    updated_transaction = storage.remap_transaction_receipt(
-                        transaction_id,
-                        old_file_id=old_file_id,
-                        reference=reference,
-                    )
-                    if updated_transaction is not None:
-                        transactions_by_id[transaction_id] = updated_transaction
-                    report["references_remapped"] += 1
+                continue
             else:
                 report["unreferenced_preserved"] += 1
         except GoogleDriveConflictError:
@@ -240,4 +309,32 @@ def recover_receipts_from_synology(
             _issue(report, entry, "errors")
             continue
         report["reused" if reused else "restored"] += 1
+
+    if reconciliation_candidates:
+        base_transactions = transactions
+        for _attempt in range(_MAX_RECONCILIATION_ATTEMPTS):
+            try:
+                updates, outcomes = _plan_receipt_reconciliation(
+                    base_transactions,
+                    reconciliation_candidates,
+                )
+                applied, fresh_transactions = (
+                    storage.apply_receipt_recovery_plan(
+                        base_transactions,
+                        updates,
+                    )
+                )
+            except StorageError:
+                outcomes = [None] * len(reconciliation_candidates)
+                break
+            if applied:
+                break
+            base_transactions = fresh_transactions
+        else:
+            outcomes = [None] * len(reconciliation_candidates)
+        _record_reconciliation_outcomes(
+            report,
+            reconciliation_candidates,
+            outcomes,
+        )
     return report

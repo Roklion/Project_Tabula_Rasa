@@ -354,6 +354,18 @@ unreferenced receipts unattached. Missing, corrupt, conflicting, and failed
 entries are reported by count and stable receipt identity without blocking
 other valid entries.
 
+The transaction reconciliation is optimistic and bounded. Receipt work is
+planned from the initial fresh Sheets snapshot, but that cache cannot authorize
+a skip or write. Immediately before applying the plan, recovery rereads the
+complete live transaction receipt state and recomputes the plan when it changed,
+for at most three attempts. A stable plan writes only affected receipt-reference
+cells in one batch. If the batch response is uncertain, recovery reads the cells
+back before reporting success. It does not blindly retry the same batch; an
+unconfirmed retryable response feeds that fresh state back through the bounded
+reconciliation loop before another write. Persistent edits or duplicate
+transaction IDs stop the ledger batch and are reported as receipt errors; rerun
+the command only after the restored workbook is stable.
+
 Confirm the normal Tabula Rosa storage path can read the restored workbook
 without changing the selected business profile:
 

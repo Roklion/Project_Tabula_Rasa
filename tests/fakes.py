@@ -51,6 +51,18 @@ class FakeWorksheet:
                 target_row.extend([""] * (required_width - len(target_row)))
             target_row[column_index:required_width] = list(source_row)
 
+    def batch_update(
+        self,
+        data: list[dict[str, object]],
+        **kwargs: object,
+    ) -> None:
+        for item in data:
+            self.update(
+                item["values"],
+                range_name=str(item["range"]),
+                **kwargs,
+            )
+
     def delete_rows(self, row_number: int) -> None:
         del self.rows[row_number - 1]
 

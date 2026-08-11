@@ -1643,6 +1643,119 @@ class GoogleSheetsStorage:
         self._replace_row("Transactions", current, updated)
         return updated
 
+    def apply_receipt_recovery_plan(
+        self,
+        expected_transactions: Sequence[Mapping[str, Any]],
+        updates: Mapping[str, Sequence[Mapping[str, Any]]],
+    ) -> tuple[bool, list[dict[str, str]]]:
+        """Apply receipt-cell updates when the live receipt snapshot is unchanged.
+
+        A fresh full transaction read authorizes both cached no-op conclusions
+        and the write. Only receipt-reference cells are written, in one batch,
+        to reduce the remaining read/write race and preserve unrelated manual
+        edits. When receipt state drifted, the fresh snapshot is returned for
+        the caller's next bounded reconciliation attempt.
+        """
+        current_rows = self._rows("Transactions", force_refresh=True)
+        current_transactions = [dict(row.values) for row in current_rows]
+
+        expected_by_id = {
+            str(transaction["id"]): transaction
+            for transaction in expected_transactions
+        }
+        current_by_id = {
+            str(transaction["id"]): transaction
+            for transaction in current_transactions
+        }
+        if len(expected_by_id) != len(expected_transactions) or len(
+            current_by_id
+        ) != len(current_transactions):
+            raise StorageValidationError(
+                "Receipt recovery found duplicate live transaction IDs."
+            )
+
+        expected_receipts = {
+            transaction_id: str(
+                transaction.get("receipt_references") or ""
+            )
+            for transaction_id, transaction in expected_by_id.items()
+        }
+        current_receipts = {
+            transaction_id: str(
+                transaction.get("receipt_references") or ""
+            )
+            for transaction_id, transaction in current_by_id.items()
+        }
+        if expected_receipts != current_receipts:
+            return False, current_transactions
+
+        rows_by_id = {
+            str(row.values["id"]): row for row in current_rows
+        }
+        unknown = sorted(set(updates) - set(rows_by_id))
+        if unknown:
+            raise StorageNotFoundError(
+                "A transaction disappeared during receipt recovery."
+            )
+        if not updates:
+            return True, current_transactions
+
+        headers = self._headers("Transactions")
+        reference_column = headers.index("receipt_references") + 1
+        column_name = ""
+        while reference_column:
+            reference_column, remainder = divmod(reference_column - 1, 26)
+            column_name = chr(65 + remainder) + column_name
+        intended_values = {
+            str(transaction_id): _encode_receipt_references(references)
+            for transaction_id, references in updates.items()
+        }
+        batch = [
+            {
+                "range": f"{column_name}{rows_by_id[transaction_id].row_number}",
+                "values": [[value]],
+            }
+            for transaction_id, value in intended_values.items()
+        ]
+        worksheet = self._worksheet("Transactions")
+        try:
+            self._api(
+                lambda: worksheet.batch_update(batch, raw=True),
+                retry_safe=False,
+            )
+        except StorageUnavailableError as error:
+            confirmed_rows = self._rows("Transactions", force_refresh=True)
+            confirmed_by_id = {
+                str(row.values["id"]): row.values for row in confirmed_rows
+            }
+            confirmed_transactions = [
+                dict(row.values) for row in confirmed_rows
+            ]
+            if len(confirmed_by_id) != len(confirmed_rows):
+                if error.retryable:
+                    return False, confirmed_transactions
+                raise StorageValidationError(
+                    "Receipt recovery found duplicate live transaction IDs."
+                )
+            if all(
+                transaction_id in confirmed_by_id
+                and
+                str(
+                    confirmed_by_id[transaction_id].get(
+                        "receipt_references"
+                    )
+                    or ""
+                )
+                == value
+                for transaction_id, value in intended_values.items()
+            ):
+                return True, confirmed_transactions
+            if error.retryable:
+                return False, confirmed_transactions
+            raise
+        self._invalidate("Transactions")
+        return True, current_transactions
+
     def unlink_transaction_receipt(
         self,
         transaction_id: str,
