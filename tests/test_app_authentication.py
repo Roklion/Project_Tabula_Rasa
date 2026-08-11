@@ -398,7 +398,7 @@ class TestAppAuthentication:
                 ),
                 patch(
                     "tabula_rasa.local_profile_admin._validate_profile_root_storage_root"
-                ),
+                ) as validate_root,
             ):
                 app = AppTest.from_file(
                     "tabula_rasa/app.py",
@@ -478,3 +478,4 @@ class TestAppAuthentication:
                     "Synology recovery was enabled" in str(item.value)
                     for item in app.success
                 )
+                validate_root.assert_not_called()

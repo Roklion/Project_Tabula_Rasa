@@ -110,6 +110,7 @@ def recover_receipts_from_synology(
         raise ReceiptRecoveryError(str(exc)) from exc
     transactions = storage.list_transactions(_force_refresh=True)
     _preflight_transactions(manifest, transactions)
+    transactions_by_id = {transaction["id"]: transaction for transaction in transactions}
     try:
         recovery_root = receipt_directory.resolve(strict=True)
     except OSError as exc:
@@ -171,12 +172,23 @@ def recover_receipts_from_synology(
                     "Recovered receipt metadata does not match the manifest"
                 )
             if entry["reference_state"] == "referenced":
+                transaction_id = str(entry["transaction_id"])
+                current_transaction = transactions_by_id[transaction_id]
+                current_references = decode_receipt_references(
+                    current_transaction.get("receipt_references", "")
+                )
                 old_file_id = str(entry["old_drive_file_id"])
-                if str(reference["id"]) != old_file_id:
-                    storage.remap_transaction_receipt(
-                        str(entry["transaction_id"]),
-                        old_file_id=old_file_id,
-                        reference=reference,
+                if not any(
+                    str(current_reference["id"]) == str(reference["id"])
+                    and _reference_matches_entry(current_reference, entry)
+                    for current_reference in current_references
+                ):
+                    transactions_by_id[transaction_id] = (
+                        storage.remap_transaction_receipt(
+                            transaction_id,
+                            old_file_id=old_file_id,
+                            reference=reference,
+                        )
                     )
                     report["references_remapped"] += 1
             else:

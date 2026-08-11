@@ -331,12 +331,11 @@ def _render_synology_recovery_admin(
         else None
     )
     try:
-        if enabled and layout == PROFILE_ROOT_LAYOUT:
-            _validate_profile_root_storage_root(
-                app_secrets,
-                profile_key,
-                local_profiles,
-            )
+        # The Drive root and its managed children are validated when the
+        # profile's Drive settings are selected or provisioned. Saving this
+        # record only changes local NAS metadata; do not re-walk Drive
+        # ancestry here, because the narrow drive.file grant may not expose
+        # unrelated parent folders.
         update_local_profile_synology_recovery(
             profile_key,
             settings,
