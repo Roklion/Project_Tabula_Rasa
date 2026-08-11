@@ -67,6 +67,7 @@ def test_canonical_review_guide_covers_roles_and_dispositions() -> None:
         in normalized_guide
     )
     assert "without waiting for either reviewer to respond" in normalized_guide
+    assert "late trusted unavailability response permits one separately tracked fallback" in normalized_guide
     assert "one `@codex review` and exactly one `/gemini review`" in normalized_guide
     assert "`gemini_requested_sha`" in guide
     assert (

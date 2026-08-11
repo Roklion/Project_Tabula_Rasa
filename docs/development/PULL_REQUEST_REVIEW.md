@@ -81,7 +81,12 @@ review` for the same new current head. Do not wait for either reviewer before
 requesting the other. The two responses are tracked independently; Gemini
 uses the latest trusted Codex availability result when one exists and remains
 in normal complementary mode when that signal is not yet verifiable. Do not
-post a second Gemini request to select fallback mode.
+post a second Gemini request in the same round. If the authenticated Codex
+response later reports current-round unavailability after the normal Gemini
+request was already posted, record that request as normal/unverified and post
+exactly one additional `/gemini review` as a new fallback round for the same
+head. Do not post the fallback request if Gemini already reviewed in full
+fallback mode or a fallback request for that head is already associated.
 
 Track manual review requests by head SHA, including `codex_requested_sha`,
 `codex_response_sha`, `gemini_requested_sha`, and the Gemini trigger comment
@@ -203,7 +208,9 @@ The initial ready transition may start hosted reviews automatically. For
 manual current-head re-reviews, request both reviewers in the same round and
 track their responses independently. Gemini may inspect only the latest
 trusted Codex availability signal, not Codex findings; without a trusted
-signal, Gemini remains in normal mode and records the signal as unverified.
+signal, Gemini remains in normal mode and records the signal as unverified. A
+late trusted unavailability response permits one separately tracked fallback
+Gemini round for that same head.
 
 During iterative review remediation, focused tests and linting for the impacted
 functions or modules are sufficient. Run the full `ruff check .` and
