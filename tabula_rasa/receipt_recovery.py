@@ -195,6 +195,19 @@ def recover_receipts_from_synology(
                     and _reference_matches_entry(current_reference, entry)
                     for current_reference in current_references
                 )
+                confirmed_reference_conflict = any(
+                    other_transaction_id != transaction_id
+                    and any(
+                        str(other_reference.get("id"))
+                        == str(reference["id"])
+                        for other_reference in decode_receipt_references(
+                            other_transaction.get("receipt_references", "")
+                        )
+                    )
+                    for other_transaction_id, other_transaction in (
+                        transactions_by_id.items()
+                    )
+                )
                 stale_old_reference_present = (
                     old_file_id != str(reference["id"])
                     and any(
@@ -204,6 +217,7 @@ def recover_receipts_from_synology(
                 )
                 needs_remap = (
                     not confirmed_reference_present
+                    or confirmed_reference_conflict
                     or stale_old_reference_present
                 )
                 if needs_remap:

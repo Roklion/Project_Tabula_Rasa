@@ -208,6 +208,46 @@ def test_recovery_reuses_original_drive_file_without_remapping() -> None:
     target.remap_transaction_receipt.assert_not_called()
 
 
+def test_recovery_preserves_conflict_check_before_skipping_reused_file() -> None:
+    content = b"receipt"
+    reference = _reference(1, content)
+    backup, target, transaction_id = _backup_with_receipts([reference])
+    accounts = target.list_accounts(_force_refresh=True)
+    categories = target.list_categories(_force_refresh=True)
+    other_transaction = target.create_transaction(
+        txn_date="2026-07-31",
+        kind="Income",
+        amount=10,
+        account_id=accounts[0]["id"],
+        category_id=categories[0]["id"],
+    )
+    target.set_transaction_receipt_references(
+        other_transaction["id"],
+        [reference],
+    )
+    drive = Mock()
+    drive.restore_receipt.return_value = (_drive_file(reference), True)
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(reference["name"])).write_bytes(content)
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=target,
+            drive=drive,
+        )
+
+    assert report["reused"] == 0
+    assert report["references_remapped"] == 0
+    assert report["errors"] == 1
+    assert report["issues"][0]["status"] == "errors"
+    assert transaction_id != other_transaction["id"]
+
+
 def test_recovery_repairs_stale_live_reference_when_original_file_is_reused() -> None:
     content = b"receipt"
     reference = _reference(1, content)
