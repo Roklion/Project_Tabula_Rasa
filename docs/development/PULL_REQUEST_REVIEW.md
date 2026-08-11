@@ -194,15 +194,16 @@ context when recording the disposition.
    outstanding feedback from current and earlier commits. Each actionable
    comment must be fixed, disputed with evidence, deferred to a linked issue,
    or otherwise explicitly replied to and resolved. Do not post either review
-   trigger while feedback remains unaddressed. After that gate, post
-   `@codex review`, wait for its current-head response, and then post exactly
-   one `/gemini review`.
+   trigger while feedback remains unaddressed. After that gate, post exactly
+   one `@codex review` and exactly one `/gemini review` for the same current
+   head without waiting for either reviewer to respond.
 7. The human maintainer makes the final merge decision.
 
 The initial ready transition may start hosted reviews automatically. For
-manual current-head re-reviews, the Codex response gate sequences the trigger
-comments without sharing Codex findings with Gemini; Gemini remains
-independent and may inspect only the trusted availability signal.
+manual current-head re-reviews, request both reviewers in the same round and
+track their responses independently. Gemini may inspect only the latest
+trusted Codex availability signal, not Codex findings; without a trusted
+signal, Gemini remains in normal mode and records the signal as unverified.
 
 During iterative review remediation, focused tests and linting for the impacted
 functions or modules are sufficient. Run the full `ruff check .` and
