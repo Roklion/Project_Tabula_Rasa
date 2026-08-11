@@ -752,26 +752,12 @@ def render_local_profile_admin(
         selected_profile_key=selected_profile_key,
         store_path=store_path,
     )
-    try:
-        current_profiles = load_local_profiles(store_path)
-    except (LocalProfileStoreError, ValueError):
-        st.error(
-            "The local profile file became unavailable or malformed. "
-            "Reload the page and repair the profile file before continuing."
-        )
-        return
-    if selected_profile_key not in current_profiles:
-        st.warning(
-            "The selected profile was removed or changed externally. "
-            "Reload the page before continuing."
-        )
-        return
-    selected_settings = current_profiles[selected_profile_key]
+    selected_settings = local_profiles[selected_profile_key]
     _render_profile_readiness(
         selected_profile_key,
         selected_settings,
         app_secrets=base_secrets,
-        local_profiles=current_profiles,
+        local_profiles=local_profiles,
     )
     _render_add_profile_form(
         effective_secrets,
