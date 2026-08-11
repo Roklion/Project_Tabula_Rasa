@@ -1731,6 +1731,12 @@ class GoogleSheetsStorage:
             confirmed_transactions = [
                 dict(row.values) for row in confirmed_rows
             ]
+            if len(confirmed_by_id) != len(confirmed_rows):
+                if error.retryable:
+                    return False, confirmed_transactions
+                raise StorageValidationError(
+                    "Receipt recovery found duplicate live transaction IDs."
+                )
             if all(
                 transaction_id in confirmed_by_id
                 and

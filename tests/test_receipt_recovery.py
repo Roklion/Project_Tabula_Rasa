@@ -743,6 +743,49 @@ def test_recovery_does_not_confirm_lost_write_after_transaction_delete() -> None
     assert worksheet.batch_update.call_count == 1
 
 
+def test_recovery_rejects_duplicate_id_during_lost_write_readback() -> None:
+    content = b"receipt"
+    reference = _reference(1, content)
+    backup, target, _ = _backup_with_receipts([reference])
+    worksheet = target._workbook.sheets["Transactions"]
+    reference_index = worksheet.rows[0].index("receipt_references")
+    duplicate_reference = {**reference, "id": "newreceipt01"}
+
+    def append_duplicate_then_timeout(
+        _data: list[dict[str, object]],
+        **_kwargs: object,
+    ) -> None:
+        duplicate_row = list(worksheet.rows[1])
+        duplicate_row[reference_index] = json.dumps([duplicate_reference])
+        worksheet.rows.append(duplicate_row)
+        raise OSError("response lost before batch commit")
+
+    worksheet.batch_update = Mock(side_effect=append_duplicate_then_timeout)
+    drive = Mock()
+    drive.restore_receipt.return_value = (
+        _drive_file(reference, file_id="newreceipt01"),
+        False,
+    )
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(reference["name"])).write_bytes(content)
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=target,
+            drive=drive,
+        )
+
+    assert report["restored"] == 0
+    assert report["references_remapped"] == 0
+    assert report["errors"] == 1
+    assert worksheet.batch_update.call_count == 1
+
+
 def test_recovery_removes_old_reference_when_confirmed_reference_is_also_present() -> None:
     content = b"receipt"
     reference = _reference(1, content)
