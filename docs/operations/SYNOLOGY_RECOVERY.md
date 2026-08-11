@@ -66,8 +66,8 @@ of truth for actual transfer status and logs.
 
 ## Prerequisites
 
-- A selected Google Drive storage root with provisioned backup and receipt children
-- A verified format-version 6 backup in the backup folder
+- A selected Google Drive storage root with provisioned `Receipts` and `Ledger Backups` children
+- A verified format-version 6 backup in the `Ledger Backups` child
 - DSM administrator access to the DS220j
 - Synology Cloud Sync installed
 - A protected shared folder with enough capacity for ledger and receipt history
@@ -76,7 +76,7 @@ of truth for actual transfer status and logs.
 - A local recovery location that is outside the repository
 - A blank Google workbook for the restore drill
 
-Use the Google account that owns the selected backup folder when authorizing
+Use the Google account that owns the selected `Ledger Backups` child when authorizing
 Cloud Sync. Do not use a folder visible only through **Shared with me**, a Drive
 shortcut, the **Computers** area, or a Google Workspace Shared Drive.
 
@@ -246,7 +246,7 @@ tabula-rosa-backup-YYYYMMDDTHHMMSSZ.zip
 
 The manifest is stored inside the ZIP. Never place service-account JSON,
 Streamlit Secrets exports, OAuth tokens, temporary exports, receipt files, or
-source accounting CSV files in the backup folder. The recursive profile-root
+source accounting CSV files in the `Ledger Backups` child. The recursive profile-root
 task also copies the app-managed PDFs and images in the `Receipts` child whose
 metadata is inventoried by `receipts.json`.
 
@@ -255,8 +255,8 @@ allowlist. A dedicated source folder is therefore the primary safety control.
 As defense in depth, exclude `*.json`, `*.toml`, `*.csv`, and `*.tmp` if those
 filter choices are available. Before completing setup, inspect both the Drive
 source and NAS destination and confirm that the root contains only the expected
-receipt and ledger-backup children and that only intended timestamped ZIPs are
-present in the backup child.
+`Receipts` and `Ledger Backups` children and that only intended timestamped ZIPs are
+present in the `Ledger Backups` child.
 
 Google Drive retains the newest 30 app-managed ledger generations. With
 destination deletions disabled, older NAS copies and unlinked receipts remain
@@ -334,14 +334,14 @@ rejects a receipt inventory from a different selected profile, refuses
 populated or incompatible target worksheets, restores the archive, and rereads
 the target to verify the restored rows.
 
-Copy the matching `receipts` directory from the same protected NAS recovery
+Copy the matching `Receipts` directory from the same protected NAS recovery
 set to the safe local folder. Recover and remap the receipt IDs only in the new
 workbook:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\recover_synology_receipts.py `
   "C:\Safe-Recovery\tabula-rosa-backup-YYYYMMDDTHHMMSSZ.zip" `
-  "C:\Safe-Recovery\receipts" `
+  "C:\Safe-Recovery\Receipts" `
   --profile heathcote-advisory `
   --target-spreadsheet-id NEW_ID
 ```
@@ -436,7 +436,7 @@ profile and spreadsheet ID in the command, and retry with `--initialize`.
 
 Do not copy files blindly into Google Drive and do not rename them to make the
 run pass. Confirm the matching protected NAS version was selected, Cloud Sync
-had completed, and the copied `receipts` directory is the one paired with the
+had completed, and the copied `Receipts` directory is the one paired with the
 validated archive. Retry the command after correcting the recovery copy; its
 stable identity and checksum rules reuse already verified files without
 creating unnecessary suffixes.

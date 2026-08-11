@@ -323,14 +323,14 @@ be mistaken for the live ledger.
 
 Ledger restoration does not restore receipt bytes. After restoring a current
 format-version 6 archive, or a compatible format-version 5 archive, copy the
-matching profile receipt directory from the versioned Synology recovery set to
+matching profile `Receipts` directory from the versioned Synology recovery set to
 a safe local path. Then run the dedicated receipt operation against the newly
 restored, non-live workbook:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\recover_synology_receipts.py `
   "C:\Safe-Recovery\tabula-rosa-backup-YYYYMMDDTHHMMSSZ.zip" `
-  "C:\Safe-Recovery\receipts" `
+  "C:\Safe-Recovery\Receipts" `
   --profile PROFILE_KEY `
   --target-spreadsheet-id NEW_SPREADSHEET_ID
 ```
@@ -402,7 +402,7 @@ manual NAS retention policy only after validating another generation.
 
 Each newly opted-in business uses one recursive Synology Cloud Sync download
 task for its Google Drive storage root. The profile-specific NAS destination
-contains separate receipt and ledger-backup children, with destination deletions
+contains separate `Receipts` and `Ledger Backups` children, with destination deletions
 disabled as the independent second-layer copy. Optional versioned retention
 such as Hyper Backup or snapshots can add protection against accidental
 changes. Tabula Rosa records the expected setup but does not connect to DSM,
@@ -456,7 +456,7 @@ To rebuild a deployment after loss:
 1. restore protected application and profile configuration;
 2. validate each service account and workbook;
 3. reconnect any unavailable Drive grant;
-4. confirm the profile storage root and provisioned receipt/backup children;
+4. confirm the profile storage root and provisioned `Receipts` and `Ledger Backups` children;
 5. export hosted Secrets; and
 6. validate a current backup before resuming normal operation.
 
