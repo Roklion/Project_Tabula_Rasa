@@ -56,7 +56,9 @@ def project_hosted_profiles(
     except ValueError as exc:
         raise SecretsExportError("Business profiles failed validation.") from exc
     except GoogleDriveConfigurationError as exc:
-        raise SecretsExportError("Google Drive profile settings are invalid.") from exc
+        raise SecretsExportError(
+            f"Google Drive profile settings are invalid: {exc}"
+        ) from exc
 
 
 def _toml_key(value: object) -> str:
