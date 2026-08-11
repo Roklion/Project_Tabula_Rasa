@@ -1732,8 +1732,10 @@ class GoogleSheetsStorage:
                 dict(row.values) for row in confirmed_rows
             ]
             if all(
+                transaction_id in confirmed_by_id
+                and
                 str(
-                    confirmed_by_id.get(transaction_id, {}).get(
+                    confirmed_by_id[transaction_id].get(
                         "receipt_references"
                     )
                     or ""

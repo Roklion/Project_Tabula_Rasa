@@ -702,6 +702,47 @@ def test_recovery_preserves_manual_edit_after_lost_batch_response() -> None:
     ]
 
 
+def test_recovery_does_not_confirm_lost_write_after_transaction_delete() -> None:
+    content = b"receipt"
+    reference = _reference(1, content)
+    backup, target, _ = _backup_with_receipts([reference])
+    worksheet = target._workbook.sheets["Transactions"]
+    original_batch_update = worksheet.batch_update
+
+    def commit_then_delete_then_timeout(
+        data: list[dict[str, object]],
+        **kwargs: object,
+    ) -> None:
+        original_batch_update(data, **kwargs)
+        worksheet.rows.pop(1)
+        raise OSError("response lost after transaction deletion")
+
+    worksheet.batch_update = Mock(side_effect=commit_then_delete_then_timeout)
+    drive = Mock()
+    drive.restore_receipt.return_value = (
+        _drive_file(reference, file_id="newreceipt01"),
+        False,
+    )
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(reference["name"])).write_bytes(content)
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=target,
+            drive=drive,
+        )
+
+    assert report["restored"] == 0
+    assert report["references_remapped"] == 0
+    assert report["errors"] == 1
+    assert worksheet.batch_update.call_count == 1
+
+
 def test_recovery_removes_old_reference_when_confirmed_reference_is_also_present() -> None:
     content = b"receipt"
     reference = _reference(1, content)
