@@ -42,10 +42,16 @@ def profile_configuration_readiness(
     missing: list[str] = []
     drive = settings.get("google_drive")
     if isinstance(drive, Mapping):
-        if not isinstance(drive.get("storage_root"), Mapping):
+        storage_root = drive.get("storage_root")
+        if not isinstance(storage_root, Mapping) or not storage_root.get("id"):
             missing.append("Select or create the Google Drive storage root.")
-        if not isinstance(drive.get("receipt_folder"), Mapping) or not isinstance(
-            drive.get("backup_folder"), Mapping
+        receipt_folder = drive.get("receipt_folder")
+        backup_folder = drive.get("backup_folder")
+        if (
+            not isinstance(receipt_folder, Mapping)
+            or not receipt_folder.get("id")
+            or not isinstance(backup_folder, Mapping)
+            or not backup_folder.get("id")
         ):
             missing.append(
                 "Provision the Receipts and Ledger Backups folders under the root."

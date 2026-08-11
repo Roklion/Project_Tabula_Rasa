@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
+
 from tabula_rasa.profile_readiness import (
     profile_configuration_readiness,
     profile_settings_fingerprint,
@@ -53,6 +55,58 @@ def test_partial_drive_configuration_is_incomplete() -> None:
         "Select or create the Google Drive storage root.",
         "Provision the Receipts and Ledger Backups folders under the root.",
     )
+
+
+@pytest.mark.parametrize(
+    ("folder", "invalid_value", "expected_step"),
+    (
+        (
+            "storage_root",
+            {},
+            "Select or create the Google Drive storage root.",
+        ),
+        (
+            "storage_root",
+            {"id": None},
+            "Select or create the Google Drive storage root.",
+        ),
+        (
+            "receipt_folder",
+            {},
+            "Provision the Receipts and Ledger Backups folders under the root.",
+        ),
+        (
+            "receipt_folder",
+            {"id": None},
+            "Provision the Receipts and Ledger Backups folders under the root.",
+        ),
+        (
+            "backup_folder",
+            {},
+            "Provision the Receipts and Ledger Backups folders under the root.",
+        ),
+        (
+            "backup_folder",
+            {"id": None},
+            "Provision the Receipts and Ledger Backups folders under the root.",
+        ),
+    ),
+)
+def test_drive_folder_mappings_require_ids(
+    folder: str,
+    invalid_value: dict[str, object],
+    expected_step: str,
+) -> None:
+    drive = _drive_settings()
+    drive[folder] = invalid_value
+
+    report = profile_configuration_readiness(
+        "north",
+        _settings(google_drive=drive),
+    )
+
+    assert report.status == "incomplete"
+    assert expected_step in report.missing_steps
 
 
 def test_matching_hosted_projection_is_ready_hosted() -> None:
