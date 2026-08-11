@@ -752,13 +752,14 @@ def render_local_profile_admin(
         selected_profile_key=selected_profile_key,
         store_path=store_path,
     )
-    selected_settings = local_profiles[selected_profile_key]
-    _render_profile_readiness(
-        selected_profile_key,
-        selected_settings,
-        app_secrets=base_secrets,
-        local_profiles=local_profiles,
-    )
+    if selected_profile_key in local_profiles:
+        selected_settings = local_profiles[selected_profile_key]
+        _render_profile_readiness(
+            selected_profile_key,
+            selected_settings,
+            app_secrets=base_secrets,
+            local_profiles=local_profiles,
+        )
     _render_add_profile_form(
         effective_secrets,
         store_path=store_path,
