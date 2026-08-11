@@ -331,15 +331,25 @@ def validate_google_drive_profile(
     app_secrets: Mapping[str, Any],
     profile_key: str,
     drive_settings: Mapping[str, Any],
+    *,
+    local_profiles: Mapping[str, Mapping[str, Any]],
 ) -> None:
-    """Re-read one profile's Drive grant and managed destinations."""
+    """Re-read one profile's Drive grant, isolation, and destinations."""
     config = load_oauth_config(app_secrets)
     client = _cached_drive_client(
         config,
         profile_key,
         json.dumps(dict(drive_settings), sort_keys=True),
     )
-    client.validate_storage_configuration(profile_key)
+    validated = client.validate_storage_configuration(profile_key)
+    root = client.folder(str(validated["storage_root"]["id"]))
+    _ensure_storage_root_is_profile_isolated(
+        client,
+        profile_key,
+        root,
+        local_profiles,
+        selected_drive_settings=drive_settings,
+    )
 
 
 def _save_storage_root(

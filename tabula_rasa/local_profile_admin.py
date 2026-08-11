@@ -135,9 +135,11 @@ def _fresh_profile_readiness(
     *,
     app_secrets: Mapping[str, Any],
     hosted_profiles: Mapping[str, Any] | None,
+    local_profiles: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> ProfileReadiness:
     """Run fresh Sheets and configured Drive checks for one profile."""
     validation_errors: list[str] = []
+    profiles_for_isolation = local_profiles or {profile_key: settings}
     try:
         _initialize_candidate_storage(settings)
     except StorageError as error:
@@ -146,7 +148,12 @@ def _fresh_profile_readiness(
     drive = settings.get("google_drive")
     if isinstance(drive, Mapping):
         try:
-            validate_google_drive_profile(app_secrets, profile_key, drive)
+            validate_google_drive_profile(
+                app_secrets,
+                profile_key,
+                drive,
+                local_profiles=profiles_for_isolation,
+            )
         except (GoogleDriveError, LocalProfileStoreError) as error:
             validation_errors.append(_safe_readiness_error("Drive", error))
 
@@ -172,10 +179,11 @@ def _readiness_for_display(
         and isinstance(stored[1], ProfileReadiness)
     ):
         return stored[1]
-    return profile_configuration_readiness(
-        profile_key,
-        settings,
-        hosted_profiles=hosted_profiles,
+    return ProfileReadiness(
+        status="incomplete",
+        missing_steps=(
+            "Run the readiness check to verify current Sheets and Drive settings.",
+        ),
     )
 
 
@@ -184,6 +192,7 @@ def _render_profile_readiness(
     settings: Mapping[str, Any],
     *,
     app_secrets: Mapping[str, Any],
+    local_profiles: Mapping[str, Mapping[str, Any]],
 ) -> None:
     st.subheader("Profile readiness")
     hosted_profiles = app_secrets.get("business_profiles")
@@ -221,6 +230,7 @@ def _render_profile_readiness(
             settings,
             app_secrets=app_secrets,
             hosted_profiles=hosted_profiles,
+            local_profiles=local_profiles,
         )
         st.session_state[f"profile-readiness:{profile_key}"] = (
             profile_settings_fingerprint(settings),
@@ -691,6 +701,9 @@ def render_local_profile_admin(
     notice = st.session_state.pop("local_profile_admin_notice", None)
     if notice:
         st.success(notice)
+    if rows:
+        st.dataframe(rows, hide_index=True, width="stretch")
+
     if not local_profiles:
         _render_add_profile_form(
             effective_secrets,
@@ -698,9 +711,6 @@ def render_local_profile_admin(
             prominent=True,
         )
         return
-
-    if rows:
-        st.dataframe(rows, hide_index=True, width="stretch")
 
     selected_profile_key = st.selectbox(
         "Business profile to configure",
@@ -728,11 +738,13 @@ def render_local_profile_admin(
         selected_profile_key=selected_profile_key,
         store_path=store_path,
     )
-    selected_settings = load_local_profiles(store_path)[selected_profile_key]
+    current_profiles = load_local_profiles(store_path)
+    selected_settings = current_profiles[selected_profile_key]
     _render_profile_readiness(
         selected_profile_key,
         selected_settings,
         app_secrets=base_secrets,
+        local_profiles=current_profiles,
     )
     _render_add_profile_form(
         effective_secrets,

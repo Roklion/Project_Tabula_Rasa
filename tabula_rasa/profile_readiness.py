@@ -64,11 +64,11 @@ def profile_configuration_readiness(
     hosted_export_needed = True
     if hosted_profiles is not None:
         try:
-            projected = project_hosted_profiles({profile_key: settings})[profile_key]
+            projected = project_hosted_profiles({profile_key: settings}).get(profile_key)
         except (ValueError, GoogleDriveConfigurationError):
             projected = None
         current = hosted_profiles.get(profile_key)
-        hosted_export_needed = projected != current
+        hosted_export_needed = projected is None or projected != current
     return ProfileReadiness(
         status="ready-local" if hosted_export_needed else "ready-hosted",
         hosted_export_needed=hosted_export_needed,

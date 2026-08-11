@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from tabula_rasa.profile_readiness import (
     profile_configuration_readiness,
     profile_settings_fingerprint,
@@ -79,6 +81,21 @@ def test_hosted_projection_matching_is_scoped_to_the_selected_profile() -> None:
         south,
         hosted_profiles=hosted_north,
     )
+
+    assert report.status == "ready-local"
+    assert report.hosted_export_needed
+
+
+def test_failed_hosted_projection_requires_export_when_profile_is_absent() -> None:
+    with patch(
+        "tabula_rasa.profile_readiness.project_hosted_profiles",
+        side_effect=ValueError("invalid profile"),
+    ):
+        report = profile_configuration_readiness(
+            "north",
+            _settings(),
+            hosted_profiles={},
+        )
 
     assert report.status == "ready-local"
     assert report.hosted_export_needed

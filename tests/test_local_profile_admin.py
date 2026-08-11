@@ -154,4 +154,7 @@ def test_readiness_cache_is_ignored_after_profile_settings_change() -> None:
             hosted_profiles=None,
         )
 
-    assert report.status == "ready-local"
+    assert report.status == "incomplete"
+    assert report.missing_steps == (
+        "Run the readiness check to verify current Sheets and Drive settings.",
+    )
