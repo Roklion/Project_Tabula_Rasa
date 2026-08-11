@@ -15,6 +15,7 @@ from tabula_rasa.google_drive import (
     GoogleDriveAccessError,
     GoogleDriveAuthorizationError,
     GoogleDriveClient,
+    GoogleDriveConfigurationError,
     GoogleDriveConflictError,
     GoogleDriveOAuthConfig,
     authorization_url,
@@ -220,6 +221,155 @@ class TestGoogleDriveOAuth:
 
 
 class TestGoogleDriveFiles:
+    def test_freshly_validates_profile_root_and_managed_children(self) -> None:
+        root = {
+            "id": "rootfolder123",
+            "name": "North Storage",
+            "mimeType": "application/vnd.google-apps.folder",
+            "trashed": False,
+            "parents": [],
+        }
+        receipt = {
+            "id": "receiptfolder123",
+            "name": "Receipts",
+            "mimeType": "application/vnd.google-apps.folder",
+            "trashed": False,
+            "parents": ["rootfolder123"],
+            "appProperties": {
+                "tabulaRasaKind": "receipts",
+                "tabulaRasaProfile": "north",
+                "tabulaRasaStorageRoot": "rootfolder123",
+            },
+        }
+        backup = {
+            "id": "backupfolder123",
+            "name": "Ledger Backups",
+            "mimeType": "application/vnd.google-apps.folder",
+            "trashed": False,
+            "parents": ["rootfolder123"],
+            "appProperties": {
+                "tabulaRasaKind": "ledger-backups",
+                "tabulaRasaProfile": "north",
+                "tabulaRasaStorageRoot": "rootfolder123",
+            },
+        }
+        settings = {
+            **drive_settings(),
+            "storage_root": {"id": root["id"], "name": root["name"]},
+            "receipt_folder": {"id": receipt["id"], "name": receipt["name"]},
+            "backup_folder": {"id": backup["id"], "name": backup["name"]},
+        }
+        client = GoogleDriveClient(
+            oauth_config(),
+            settings,
+            session=DriveSession(
+                [FakeResponse(200, root), FakeResponse(200, receipt), FakeResponse(200, backup)]
+            ),
+        )
+
+        validated = client.validate_storage_configuration("north")
+
+        assert validated["storage_root"]["id"] == "rootfolder123"
+        assert validated["receipt_folder"]["id"] == "receiptfolder123"
+        assert validated["backup_folder"]["id"] == "backupfolder123"
+
+    def test_fresh_storage_validation_rejects_a_child_outside_the_root(self) -> None:
+        root = {
+            "id": "rootfolder123",
+            "name": "North Storage",
+            "mimeType": "application/vnd.google-apps.folder",
+            "trashed": False,
+            "parents": [],
+        }
+        outside = {
+            "id": "receiptfolder123",
+            "name": "Receipts",
+            "mimeType": "application/vnd.google-apps.folder",
+            "trashed": False,
+            "parents": ["different-root"],
+            "appProperties": {
+                "tabulaRasaKind": "receipts",
+                "tabulaRasaProfile": "north",
+                "tabulaRasaStorageRoot": "rootfolder123",
+            },
+        }
+        settings = {
+            **drive_settings(),
+            "storage_root": {"id": root["id"], "name": root["name"]},
+            "receipt_folder": {"id": outside["id"], "name": outside["name"]},
+            "backup_folder": {"id": "backupfolder123", "name": "Ledger Backups"},
+        }
+        client = GoogleDriveClient(
+            oauth_config(),
+            settings,
+            session=DriveSession([FakeResponse(200, root), FakeResponse(200, outside)]),
+        )
+
+        with pytest.raises(GoogleDriveAccessError, match="outside"):
+            client.validate_storage_configuration("north")
+
+    @pytest.mark.parametrize(
+        ("root_update", "message"),
+        [
+            ({"id": None}, "invalid"),
+            ({"name": None}, "not an available folder"),
+        ],
+    )
+    def test_fresh_storage_validation_rejects_null_root_values(
+        self,
+        root_update: dict[str, object],
+        message: str,
+    ) -> None:
+        root = {
+            "id": "rootfolder123",
+            "name": "North Storage",
+            "mimeType": "application/vnd.google-apps.folder",
+            "trashed": False,
+            "parents": [],
+        }
+        root.update(root_update)
+        settings = {
+            **drive_settings(),
+            "storage_root": {"id": "rootfolder123", "name": "North Storage"},
+            "receipt_folder": {"id": "receiptfolder123", "name": "Receipts"},
+            "backup_folder": {"id": "backupfolder123", "name": "Ledger Backups"},
+        }
+        client = GoogleDriveClient(
+            oauth_config(),
+            settings,
+            session=DriveSession([FakeResponse(200, root)]),
+        )
+
+        with pytest.raises(GoogleDriveAccessError, match=message):
+            client.validate_storage_configuration("north")
+
+    def test_fresh_storage_validation_rejects_null_child_id(self) -> None:
+        root = {
+            "id": "rootfolder123",
+            "name": "North Storage",
+            "mimeType": "application/vnd.google-apps.folder",
+            "trashed": False,
+            "parents": [],
+        }
+        settings = {
+            **drive_settings(),
+            "storage_root": {"id": "rootfolder123", "name": "North Storage"},
+            "receipt_folder": {"id": "receiptfolder123", "name": "Receipts"},
+            "backup_folder": {"id": "backupfolder123", "name": "Ledger Backups"},
+        }
+        client = GoogleDriveClient(
+            oauth_config(),
+            settings,
+            session=DriveSession([FakeResponse(200, root)]),
+        )
+        client.profile_settings["receipt_folder"] = {"id": None, "name": "Receipts"}
+
+        with pytest.raises(
+            GoogleDriveConfigurationError,
+            match="Provision the Receipts",
+        ):
+            client.validate_storage_configuration("north")
+
     @staticmethod
     def _managed_folder(
         folder_id: str,

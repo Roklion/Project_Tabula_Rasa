@@ -339,7 +339,7 @@ class TestAppAuthentication:
                 assert len(app.exception) == 0
                 assert sum(
                     field.label == "Business name" for field in app.text_input
-                ) >= 3
+                ) == 2
 
     def test_local_admin_saves_optional_synology_choice_per_profile(self) -> None:
         st.cache_resource.clear()

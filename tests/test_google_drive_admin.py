@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -17,6 +18,7 @@ from tabula_rasa.google_drive_admin import (
     _create_storage_root,
     _provision_storage_children,
     _revalidated_storage_settings,
+    validate_google_drive_profile,
 )
 
 
@@ -28,6 +30,48 @@ class FolderClient:
         if folder_id not in self.folders:
             raise GoogleDriveAccessError("folder unavailable")
         return self.folders[folder_id]
+
+
+def test_readiness_rechecks_profile_root_isolation() -> None:
+    client = Mock()
+    client.validate_storage_configuration.return_value = {
+        "storage_root": {"id": "northroot123", "name": "North Storage"}
+    }
+    client.folder.return_value = {
+        "id": "northroot123",
+        "name": "North Storage",
+        "parents": [],
+    }
+    drive_settings = {"storage_root": {"id": "northroot123"}}
+    profiles = {"north": {"google_drive": drive_settings}}
+
+    with patch(
+        "tabula_rasa.google_drive_admin.load_oauth_config",
+        return_value=Mock(),
+    ), patch(
+        "tabula_rasa.google_drive_admin._cached_drive_client",
+        return_value=client,
+    ), patch(
+        "tabula_rasa.google_drive_admin._ensure_storage_root_is_profile_isolated"
+    ) as ensure_isolated:
+        validate_google_drive_profile(
+            {},
+            "north",
+            drive_settings,
+            local_profiles=profiles,
+        )
+
+    ensure_isolated.assert_called_once_with(
+        client,
+        "north",
+        client.folder.return_value,
+        profiles,
+        selected_drive_settings=drive_settings,
+    )
+    client.validate_storage_configuration.assert_called_once_with(
+        "north",
+        root_folder=client.folder.return_value,
+    )
 
 
 def managed_folder(

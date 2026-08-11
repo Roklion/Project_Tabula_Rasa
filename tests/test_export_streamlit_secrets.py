@@ -3,20 +3,37 @@ from __future__ import annotations
 import tempfile
 import tomllib
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
+from tabula_rasa.google_drive import GoogleDriveConfigurationError
 from scripts.export_streamlit_secrets import (
     EXPORT_DIRECTORY,
     EXPORT_PREFIX,
     PROJECT_ROOT,
     SecretsExportError,
     build_streamlit_secrets_toml,
+    project_hosted_profiles,
     write_secure_export,
 )
 
 
 class TestExportStreamlitSecrets:
+    def test_hosted_projection_error_preserves_profile_context(self) -> None:
+        with patch(
+            "scripts.export_streamlit_secrets._project_hosted_profiles",
+            side_effect=GoogleDriveConfigurationError(
+                "Google Drive settings for profile 'north' are invalid: "
+                "missing storage root"
+            ),
+        ):
+            with pytest.raises(
+                SecretsExportError,
+                match="profile 'north'.*missing storage root",
+            ):
+                project_hosted_profiles({})
+
     def test_combines_app_secrets_and_multiple_profiles(self) -> None:
         profiles = {
             "north-shop": {

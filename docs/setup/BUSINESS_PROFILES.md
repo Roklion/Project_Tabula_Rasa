@@ -140,13 +140,22 @@ The launcher sets the flag only for its process and binds Streamlit to the
 loopback interface. If it reports that `.venv` is not runnable, recreate the
 ignored virtual environment using the root README's installation commands.
 
-## 6. Add or edit the profile
+## 6. Follow the guided profile workflow
+
+The loopback-only **Business profiles** page is organized around one selected
+profile. When no local profiles exist, it leads with profile creation and does
+not show unrelated Drive or Synology controls. After the first save, select the
+profile being configured and proceed through Sheets, optional Drive, optional
+Synology, and the single readiness result in that order.
+
+### Create a profile
 
 To add a profile:
 
 1. Sign in to Tabula Rosa normally.
 2. Open **Business profiles** and re-enter the application password.
-3. Enter the business name and a safe profile key.
+3. Enter the business name and review the derived safe profile key. The key is
+   editable before the first save and remains immutable afterward.
 4. Enter the Google spreadsheet URL or ID.
 5. Optionally enter an absolute local backup directory for local scheduled
    copies. Leave it blank when backups should use the profile-scoped repository
@@ -157,6 +166,12 @@ To add a profile:
 Validation authenticates with the uploaded credential, opens the workbook,
 checks or initializes its required worksheets, and seeds defaults before
 storing the profile.
+
+After saving, use **Profile readiness** for the selected profile. It reports
+**Incomplete**, **Ready locally**, or **Ready for hosted Secrets**. The
+readiness action re-reads the selected workbook and any configured Drive root
+and managed children. It reports missing optional setup steps without showing
+credentials, refresh tokens, private ledger data, or receipt contents.
 
 To edit a locally managed profile, use its **Edit local profile settings**
 section. The profile key is immutable. Business name, spreadsheet, and optional
@@ -182,7 +197,8 @@ submission protection are isolated by profile.
 
 ## 7. Connect optional Google Drive storage
 
-If the profile needs receipts or cloud-native backups, follow
+From the selected profile's guided **Google Drive OAuth** step, if the profile
+needs receipts or cloud-native backups, follow
 [Google Drive OAuth and per-business access](../architecture/GOOGLE_DRIVE_OAUTH.md).
 The Drive-owning human Google account may differ from both:
 
@@ -205,7 +221,8 @@ destination have been reviewed.
 
 ## 8. Configure optional Synology defaults
 
-New Synology opt-ins use one recursive Cloud Sync task for the profile storage
+From the selected profile's guided **Synology recovery copy** step, new Synology
+opt-ins use one recursive Cloud Sync task for the profile storage
 root. Put reviewable app-wide defaults in `.streamlit/secrets.toml`:
 
 ```toml
@@ -226,6 +243,13 @@ folder hierarchy; Drive storage-root and child-folder validation occurs when
 the Drive settings are selected or provisioned.
 
 ## 9. Export profiles to Streamlit Community Cloud
+
+When readiness reports **Ready locally**, complete the hosted export once after
+all hosted-runtime settings, including any Drive root and managed children, are
+ready. Local backup paths and Synology metadata are excluded from the hosted
+projection, so changing only those local settings does not require a new
+export. When readiness reports **Ready for hosted Secrets**, the current hosted
+projection already matches the local profile.
 
 Local development uses split files, while the hosted app expects one combined
 Streamlit Secrets document. Generate it with:

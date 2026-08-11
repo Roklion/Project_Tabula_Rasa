@@ -3,13 +3,17 @@ from __future__ import annotations
 from unittest.mock import Mock, patch
 
 import pytest
+import streamlit as st
 
 from tabula_rasa.local_profile_admin import (
     _initialize_candidate_storage,
     _profile_rows,
     _profile_setup_error_message,
+    _fresh_profile_readiness,
+    _readiness_for_display,
     _validate_profile_edit_action,
 )
+from tabula_rasa.profile_readiness import ProfileReadiness, profile_settings_fingerprint
 from tabula_rasa.local_profile_store import LocalProfileStoreError
 from tabula_rasa.storage import (
     StorageAuthenticationError,
@@ -87,6 +91,10 @@ def test_profile_rows_use_a_safe_fallback_for_null_backup_paths() -> None:
     assert rows[0]["Local backup folder"] == "Not configured"
 
 
+def test_profile_rows_allow_clean_install_without_hosted_profiles() -> None:
+    assert _profile_rows({"app_password_hash": "configured"}, {}) == []
+
+
 @pytest.mark.parametrize(
     "error",
     (StorageWorkbookAccessError("access"), StorageValidationError("invalid")),
@@ -104,3 +112,78 @@ def test_candidate_storage_preserves_specific_storage_errors(
             _initialize_candidate_storage(SETTINGS)
 
     assert raised.value is error
+
+
+def test_fresh_readiness_reports_sheets_failure_without_secret_values() -> None:
+    with patch(
+        "tabula_rasa.local_profile_admin.GoogleSheetsStorage.from_secrets_read_only",
+        side_effect=StorageWorkbookAccessError("contains no secret"),
+    ), patch(
+        "tabula_rasa.local_profile_admin.validate_google_drive_profile"
+    ) as validate_drive:
+        report = _fresh_profile_readiness(
+            "north",
+            {
+                **SETTINGS,
+                "name": "North Shop",
+            },
+            app_secrets={},
+            hosted_profiles=None,
+        )
+
+    assert report.status == "incomplete"
+    assert report.validation_errors == (
+        "Sheets workbook validation failed. Confirm sharing and the workbook ID.",
+    )
+    validate_drive.assert_not_called()
+
+
+def test_fresh_readiness_skips_drive_validation_without_a_storage_root() -> None:
+    with patch(
+        "tabula_rasa.local_profile_admin.GoogleSheetsStorage.from_secrets_read_only"
+    ), patch(
+        "tabula_rasa.local_profile_admin.validate_google_drive_profile"
+    ) as validate_drive:
+        report = _fresh_profile_readiness(
+            "north",
+            {
+                **SETTINGS,
+                "name": "North Shop",
+                "google_drive": {"authorized_email": "owner@example.test"},
+            },
+            app_secrets={},
+            hosted_profiles=None,
+        )
+
+    assert report.status == "incomplete"
+    assert report.missing_steps == (
+        "Select or create the Google Drive storage root.",
+        "Provision the Receipts and Ledger Backups folders under the root.",
+    )
+    assert report.validation_errors == ()
+    validate_drive.assert_not_called()
+
+
+def test_readiness_cache_is_ignored_after_profile_settings_change() -> None:
+    original = {"name": "North Shop", **SETTINGS}
+    changed = {**original, "backup_folder_path": r"G:\\Backups\\north"}
+    cached = ProfileReadiness(status="ready-hosted")
+    with patch.object(
+        st,
+        "session_state",
+        {
+            "profile-readiness:north": (
+                profile_settings_fingerprint(original),
+                cached,
+            )
+        },
+    ):
+        report = _readiness_for_display(
+            "north",
+            changed,
+        )
+
+    assert report.status == "incomplete"
+    assert report.missing_steps == (
+        "Run the readiness check to verify current Sheets and Drive settings.",
+    )

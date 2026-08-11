@@ -16,6 +16,7 @@ import stat
 import tempfile
 import threading
 import tomllib
+import unicodedata
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -42,6 +43,11 @@ LOCAL_PROFILE_STORE_PATH = (
 )
 STORE_VERSION = 1
 MAX_CREDENTIAL_BYTES = 64 * 1024
+HOSTED_PROFILE_FIELDS = (
+    "name",
+    "spreadsheet_id",
+    "gcp_service_account",
+)
 PROFILE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,47}$")
 SPREADSHEET_URL_PATTERN = re.compile(
     r"https://docs\.google\.com/spreadsheets/d/([A-Za-z0-9_-]+)"
@@ -130,6 +136,45 @@ def validate_profile_key(value: str) -> str:
             "lowercase letters, numbers, underscores, or hyphens (48 characters max)."
         )
     return key
+
+
+def suggest_profile_key(value: str) -> str:
+    """Suggest an editable safe profile key from a business display name."""
+    normalized = unicodedata.normalize("NFKD", str(value or "")).encode(
+        "ascii", "ignore"
+    ).decode("ascii")
+    slug = re.sub(r"[^a-z0-9]+", "-", normalized.casefold()).strip("-")
+    if not slug or not slug[0].isalpha():
+        slug = f"business-{slug}" if slug else "business"
+    return slug[:48].rstrip("-_") or "business"
+
+
+def project_hosted_profiles(
+    profiles: Mapping[str, Mapping[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Return the explicit profile subset consumed by the hosted runtime."""
+    configured = load_business_profiles({"business_profiles": profiles})
+    projected: dict[str, dict[str, Any]] = {}
+    for profile in configured:
+        settings = profile.secrets
+        hosted = {
+            key: settings[key]
+            for key in HOSTED_PROFILE_FIELDS
+            if key in settings
+        }
+        hosted["name"] = profile.name
+        if "google_drive" in settings:
+            try:
+                hosted["google_drive"] = validate_drive_profile_settings(
+                    settings["google_drive"]
+                )
+            except GoogleDriveConfigurationError as exc:
+                raise GoogleDriveConfigurationError(
+                    f"Google Drive settings for profile '{profile.key}' are invalid: "
+                    f"{exc}"
+                ) from exc
+        projected[profile.key] = hosted
+    return projected
 
 
 def parse_service_account_json(upload: bytes) -> dict[str, str]:
