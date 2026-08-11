@@ -362,9 +362,11 @@ for at most three attempts. A stable plan updates only affected
 rewritten. Duplicate IDs, disappeared transactions, newly introduced
 cross-transaction conflicts, and stale references are therefore reevaluated
 from Google Sheets before the batch. An uncertain batch response is read back
-before success is reported. The small read-to-write race remains an optimistic
-concurrency boundary, while Google Sheets remains the active ledger source of
-truth.
+before success is reported. The batch request itself is never blindly retried:
+an unconfirmed retryable response returns the fresh readback to the bounded
+reconciliation loop so the entire plan is recomputed before another write.
+The small read-to-write race remains an optimistic concurrency boundary, while
+Google Sheets remains the active ledger source of truth.
 
 The issue-72 synthetic benchmark uses three runs and 2 ms simulated latency per
 Sheets request:

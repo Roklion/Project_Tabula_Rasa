@@ -180,7 +180,9 @@ coverage must include duplicate transaction IDs, stale-reference repair,
 remap idempotency, cross-transaction conflicts introduced after preflight,
 persistent snapshot churn, and realistic API-call/runtime measurements. A
 cache-only optimization that removes the final fresh validation is not an
-acceptable performance fix.
+acceptable performance fix. The batch write is not retry-safe: reviewers must
+confirm that an uncertain response is read back before the fresh state is
+reconciled into any later attempt, rather than blindly resubmitting the batch.
 
 ### Earlier-commit comments
 

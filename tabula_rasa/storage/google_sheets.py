@@ -1719,12 +1719,18 @@ class GoogleSheetsStorage:
         ]
         worksheet = self._worksheet("Transactions")
         try:
-            self._api(lambda: worksheet.batch_update(batch, raw=True))
-        except StorageUnavailableError:
+            self._api(
+                lambda: worksheet.batch_update(batch, raw=True),
+                retry_safe=False,
+            )
+        except StorageUnavailableError as error:
             confirmed_rows = self._rows("Transactions", force_refresh=True)
             confirmed_by_id = {
                 str(row.values["id"]): row.values for row in confirmed_rows
             }
+            confirmed_transactions = [
+                dict(row.values) for row in confirmed_rows
+            ]
             if all(
                 str(
                     confirmed_by_id.get(transaction_id, {}).get(
@@ -1735,7 +1741,9 @@ class GoogleSheetsStorage:
                 == value
                 for transaction_id, value in intended_values.items()
             ):
-                return True, [dict(row.values) for row in confirmed_rows]
+                return True, confirmed_transactions
+            if error.retryable:
+                return False, confirmed_transactions
             raise
         self._invalidate("Transactions")
         return True, current_transactions

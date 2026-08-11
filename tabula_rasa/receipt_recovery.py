@@ -109,6 +109,12 @@ def _plan_receipt_reconciliation(
         )
         for transaction_id, transaction in transactions_by_id.items()
     }
+    reference_owners: dict[str, set[str]] = {}
+    for transaction_id, references in references_by_transaction.items():
+        for current_reference in references:
+            reference_owners.setdefault(
+                str(current_reference.get("id")), set()
+            ).add(transaction_id)
     updates: dict[str, list[Mapping[str, Any]]] = {}
     outcomes: list[bool | None] = []
 
@@ -117,31 +123,25 @@ def _plan_receipt_reconciliation(
         reference = candidate["reference"]
         transaction_id = str(entry["transaction_id"])
         old_file_id = str(entry["old_drive_file_id"])
+        confirmed_file_id = str(reference["id"])
         current_references = references_by_transaction.get(transaction_id)
         if current_references is None:
             outcomes.append(None)
             continue
 
         confirmed_reference_present = any(
-            str(current_reference.get("id")) == str(reference["id"])
+            str(current_reference.get("id")) == confirmed_file_id
             and _reference_matches_entry(current_reference, entry)
             for current_reference in current_references
         )
-        confirmed_reference_conflict = any(
-            other_transaction_id != transaction_id
-            and any(
-                str(other_reference.get("id")) == str(reference["id"])
-                for other_reference in other_references
-            )
-            for other_transaction_id, other_references in (
-                references_by_transaction.items()
-            )
+        confirmed_reference_conflict = bool(
+            reference_owners.get(confirmed_file_id, set()) - {transaction_id}
         )
         if confirmed_reference_conflict:
             outcomes.append(None)
             continue
         stale_old_reference_present = (
-            old_file_id != str(reference["id"])
+            old_file_id != confirmed_file_id
             and any(
                 str(current_reference.get("id")) == old_file_id
                 for current_reference in current_references
@@ -155,7 +155,7 @@ def _plan_receipt_reconciliation(
             index
             for index, current_reference in enumerate(current_references)
             if str(current_reference.get("id"))
-            in {old_file_id, str(reference["id"])}
+            in {old_file_id, confirmed_file_id}
             or (
                 current_reference.get("receipt_id")
                 == reference["receipt_id"]
@@ -172,6 +172,18 @@ def _plan_receipt_reconciliation(
             if index not in replacement_indexes
         ]
         retained.insert(first_index, reference)
+        for current_file_id in {
+            str(current_reference.get("id"))
+            for current_reference in current_references
+        }:
+            owners = reference_owners[current_file_id]
+            owners.discard(transaction_id)
+            if not owners:
+                del reference_owners[current_file_id]
+        for retained_reference in retained:
+            reference_owners.setdefault(
+                str(retained_reference.get("id")), set()
+            ).add(transaction_id)
         references_by_transaction[transaction_id] = retained
         updates[transaction_id] = retained
         outcomes.append(True)

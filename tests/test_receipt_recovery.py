@@ -44,6 +44,7 @@ def _drive_file(
     reference: dict[str, object],
     *,
     file_id: str | None = None,
+    profile_key: str = "north",
 ) -> dict[str, object]:
     return {
         "id": file_id or reference["id"],
@@ -52,7 +53,7 @@ def _drive_file(
         "size": str(reference["byte_size"]),
         "appProperties": {
             "tabulaRasaKind": "receipt",
-            "tabulaRasaProfile": "north",
+            "tabulaRasaProfile": profile_key,
             "tabulaRasaReceiptId": reference["receipt_id"],
             "tabulaRasaSha256": reference["sha256"],
             "tabulaRasaOriginalName": reference["original_filename"],
@@ -65,6 +66,7 @@ def _backup_with_receipts(
     references: list[dict[str, object]],
     *,
     unreferenced: list[dict[str, object]] | None = None,
+    profile_key: str = "north",
 ) -> tuple[bytes, GoogleSheetsStorage, str]:
     source = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
     account = source.create_account("Checking", "Bank")
@@ -83,9 +85,12 @@ def _backup_with_receipts(
         )
     all_references = [*references, *(unreferenced or [])]
     manifest = build_receipt_manifest(
-        "north",
+        profile_key,
         source.list_transactions(_force_refresh=True),
-        [_drive_file(reference) for reference in all_references],
+        [
+            _drive_file(reference, profile_key=profile_key)
+            for reference in all_references
+        ],
     )
     backup = source.export_backup_zip(manifest)
     target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
@@ -603,7 +608,7 @@ def test_recovery_reports_unconfirmed_batch_write_failure() -> None:
     assert report["restored"] == 0
     assert report["references_remapped"] == 0
     assert report["errors"] == 1
-    assert worksheet.batch_update.call_count == 4
+    assert worksheet.batch_update.call_count == 3
     current = target.list_transactions(_force_refresh=True)[0]
     assert decode_receipt_references(current["receipt_references"])[0][
         "id"
@@ -647,7 +652,54 @@ def test_recovery_confirms_batch_write_after_lost_response() -> None:
     assert report["restored"] == 1
     assert report["references_remapped"] == 1
     assert report["errors"] == 0
-    assert worksheet.batch_update.call_count == 4
+    assert worksheet.batch_update.call_count == 1
+
+
+def test_recovery_preserves_manual_edit_after_lost_batch_response() -> None:
+    content = b"receipt"
+    reference = _reference(1, content)
+    manual_reference = _reference(99, b"manual")
+    backup, target, _ = _backup_with_receipts([reference])
+    worksheet = target._workbook.sheets["Transactions"]
+    original_batch_update = worksheet.batch_update
+    reference_index = worksheet.rows[0].index("receipt_references")
+
+    def commit_then_edit_then_timeout(
+        data: list[dict[str, object]],
+        **kwargs: object,
+    ) -> None:
+        original_batch_update(data, **kwargs)
+        worksheet.rows[1][reference_index] = json.dumps([manual_reference])
+        raise OSError("response lost after commit and manual edit")
+
+    worksheet.batch_update = Mock(side_effect=commit_then_edit_then_timeout)
+    drive = Mock()
+    drive.restore_receipt.return_value = (
+        _drive_file(reference, file_id="newreceipt01"),
+        False,
+    )
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(reference["name"])).write_bytes(content)
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=target,
+            drive=drive,
+        )
+
+    assert report["restored"] == 0
+    assert report["references_remapped"] == 0
+    assert report["errors"] == 1
+    assert worksheet.batch_update.call_count == 1
+    current = target.list_transactions(_force_refresh=True)[0]
+    assert decode_receipt_references(current["receipt_references"]) == [
+        manual_reference
+    ]
 
 
 def test_recovery_removes_old_reference_when_confirmed_reference_is_also_present() -> None:
@@ -772,6 +824,88 @@ def test_recovery_uses_two_reads_and_one_write_for_realistic_receipt_count() -> 
     assert report["errors"] == 0
     assert worksheet.get_all_values.call_count == 2
     worksheet.batch_update.assert_called_once()
+
+
+def test_recovery_batching_remains_isolated_between_profiles() -> None:
+    north_content = b"north receipt"
+    south_content = b"south receipt"
+    north_reference = _reference(1, north_content)
+    south_reference = _reference(2, south_content)
+    north_backup, north_target, _ = _backup_with_receipts(
+        [north_reference],
+        profile_key="north",
+    )
+    south_backup, south_target, _ = _backup_with_receipts(
+        [south_reference],
+        profile_key="south",
+    )
+    north_drive = Mock()
+    north_drive.restore_receipt.return_value = (
+        _drive_file(
+            north_reference,
+            file_id="northreceipt01",
+            profile_key="north",
+        ),
+        False,
+    )
+    south_drive = Mock()
+    south_drive.restore_receipt.return_value = (
+        _drive_file(
+            south_reference,
+            file_id="southreceipt01",
+            profile_key="south",
+        ),
+        False,
+    )
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        north_root = root / "north"
+        south_root = root / "south"
+        north_root.mkdir()
+        south_root.mkdir()
+        (north_root / str(north_reference["name"])).write_bytes(
+            north_content
+        )
+        (south_root / str(south_reference["name"])).write_bytes(
+            south_content
+        )
+        untouched_south = south_target.list_transactions(_force_refresh=True)
+
+        north_report = recover_receipts_from_synology(
+            north_backup,
+            north_root,
+            profile_key="north",
+            folder_id="northfolder123",
+            storage=north_target,
+            drive=north_drive,
+        )
+
+        assert south_target.list_transactions(_force_refresh=True) == untouched_south
+        untouched_north = north_target.list_transactions(_force_refresh=True)
+
+        south_report = recover_receipts_from_synology(
+            south_backup,
+            south_root,
+            profile_key="south",
+            folder_id="southfolder123",
+            storage=south_target,
+            drive=south_drive,
+        )
+
+    assert north_report["references_remapped"] == 1
+    assert south_report["references_remapped"] == 1
+    assert north_target.list_transactions(_force_refresh=True) == untouched_north
+    north_current = north_target.list_transactions(_force_refresh=True)[0]
+    south_current = south_target.list_transactions(_force_refresh=True)[0]
+    assert decode_receipt_references(north_current["receipt_references"])[0][
+        "id"
+    ] == "northreceipt01"
+    assert decode_receipt_references(south_current["receipt_references"])[0][
+        "id"
+    ] == "southreceipt01"
+    north_drive.restore_receipt.assert_called_once()
+    south_drive.restore_receipt.assert_called_once()
 
 
 def test_missing_and_corrupt_files_do_not_block_other_valid_receipts() -> None:
