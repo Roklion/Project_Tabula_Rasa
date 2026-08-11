@@ -16,6 +16,7 @@ import stat
 import tempfile
 import threading
 import tomllib
+import unicodedata
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -130,6 +131,17 @@ def validate_profile_key(value: str) -> str:
             "lowercase letters, numbers, underscores, or hyphens (48 characters max)."
         )
     return key
+
+
+def suggest_profile_key(value: str) -> str:
+    """Suggest an editable safe profile key from a business display name."""
+    normalized = unicodedata.normalize("NFKD", str(value or "")).encode(
+        "ascii", "ignore"
+    ).decode("ascii")
+    slug = re.sub(r"[^a-z0-9]+", "-", normalized.casefold()).strip("-")
+    if not slug or not slug[0].isalpha():
+        slug = f"business-{slug}" if slug else "business"
+    return slug[:48].rstrip("-_") or "business"
 
 
 def parse_service_account_json(upload: bytes) -> dict[str, str]:

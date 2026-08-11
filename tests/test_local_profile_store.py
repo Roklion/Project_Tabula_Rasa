@@ -17,6 +17,7 @@ from tabula_rasa.local_profile_store import (
     merged_profile_secrets,
     parse_service_account_json,
     save_local_profile,
+    suggest_profile_key,
     update_local_profile,
     update_local_profile_google_drive,
     update_local_profile_synology_recovery,
@@ -52,6 +53,21 @@ def settings(name: str = "North Shop") -> dict:
 
 
 class TestLocalProfileStore:
+    @pytest.mark.parametrize(
+        ("business_name", "expected"),
+        (
+            ("North Shop & Café", "north-shop-cafe"),
+            ("123 Holdings", "business-123-holdings"),
+            ("   ", "business"),
+        ),
+    )
+    def test_profile_key_suggestion_is_safe_and_editable(
+        self,
+        business_name: str,
+        expected: str,
+    ) -> None:
+        assert suggest_profile_key(business_name) == expected
+
     def test_admin_flag_is_strict_and_fail_closed(self) -> None:
         assert not local_profile_admin_enabled({})
         assert not local_profile_admin_enabled({LOCAL_PROFILE_ADMIN_ENV: "true"})
