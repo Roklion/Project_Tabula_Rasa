@@ -175,16 +175,27 @@ def recover_receipts_from_synology(
                 )
             if entry["reference_state"] == "referenced":
                 transaction_id = str(entry["transaction_id"])
-                current_transaction = transactions_by_id[transaction_id]
+                old_file_id = str(entry["old_drive_file_id"])
+                transactions_by_id = {
+                    str(transaction["id"]): transaction
+                    for transaction in storage.list_transactions(
+                        _force_refresh=True
+                    )
+                }
+                current_transaction = transactions_by_id.get(transaction_id)
+                if current_transaction is None:
+                    raise StorageError(
+                        "The transaction disappeared during receipt recovery."
+                    )
                 current_references = decode_receipt_references(
                     current_transaction.get("receipt_references", "")
                 )
-                old_file_id = str(entry["old_drive_file_id"])
-                if not any(
+                needs_remap = not any(
                     str(current_reference.get("id")) == str(reference["id"])
                     and _reference_matches_entry(current_reference, entry)
                     for current_reference in current_references
-                ):
+                )
+                if needs_remap:
                     updated_transaction = storage.remap_transaction_receipt(
                         transaction_id,
                         old_file_id=old_file_id,
