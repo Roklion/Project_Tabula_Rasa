@@ -180,6 +180,34 @@ def test_recovery_retry_reuses_file_and_repairs_reference_idempotently() -> None
     assert [item["id"] for item in references] == ["newreceipt01"]
 
 
+def test_recovery_reuses_original_drive_file_without_remapping() -> None:
+    content = b"receipt"
+    reference = _reference(1, content)
+    backup, target, _ = _backup_with_receipts([reference])
+    drive = Mock()
+    drive.restore_receipt.return_value = (_drive_file(reference), True)
+    target.remap_transaction_receipt = Mock()
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(reference["name"])).write_bytes(content)
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=target,
+            drive=drive,
+        )
+
+    assert report["reused"] == 1
+    assert report["references_remapped"] == 0
+    assert report["errors"] == 0
+    assert report["skipped"] == 0
+    target.remap_transaction_receipt.assert_not_called()
+
+
 def test_missing_and_corrupt_files_do_not_block_other_valid_receipts() -> None:
     contents = [b"missing", b"corrupt", b"valid"]
     references = [

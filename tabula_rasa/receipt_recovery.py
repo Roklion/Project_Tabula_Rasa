@@ -171,12 +171,14 @@ def recover_receipts_from_synology(
                     "Recovered receipt metadata does not match the manifest"
                 )
             if entry["reference_state"] == "referenced":
-                storage.remap_transaction_receipt(
-                    str(entry["transaction_id"]),
-                    old_file_id=str(entry["old_drive_file_id"]),
-                    reference=reference,
-                )
-                report["references_remapped"] += 1
+                old_file_id = str(entry["old_drive_file_id"])
+                if str(reference["id"]) != old_file_id:
+                    storage.remap_transaction_receipt(
+                        str(entry["transaction_id"]),
+                        old_file_id=old_file_id,
+                        reference=reference,
+                    )
+                    report["references_remapped"] += 1
             else:
                 report["unreferenced_preserved"] += 1
         except GoogleDriveConflictError:
