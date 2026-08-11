@@ -176,12 +176,17 @@ def recover_receipts_from_synology(
             if entry["reference_state"] == "referenced":
                 transaction_id = str(entry["transaction_id"])
                 old_file_id = str(entry["old_drive_file_id"])
+                refreshed_transactions = storage.list_transactions(
+                    _force_refresh=True
+                )
                 transactions_by_id = {
                     str(transaction["id"]): transaction
-                    for transaction in storage.list_transactions(
-                        _force_refresh=True
-                    )
+                    for transaction in refreshed_transactions
                 }
+                if len(transactions_by_id) != len(refreshed_transactions):
+                    raise StorageError(
+                        "Receipt recovery found duplicate live transaction IDs."
+                    )
                 current_transaction = transactions_by_id.get(transaction_id)
                 if current_transaction is None:
                     raise StorageError(

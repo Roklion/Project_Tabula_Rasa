@@ -248,6 +248,38 @@ def test_recovery_preserves_conflict_check_before_skipping_reused_file() -> None
     assert transaction_id != other_transaction["id"]
 
 
+def test_recovery_rejects_duplicate_ids_in_refreshed_transactions() -> None:
+    content = b"receipt"
+    reference = _reference(1, content)
+    backup, target, _ = _backup_with_receipts([reference])
+    initial_transactions = target.list_transactions(_force_refresh=True)
+    storage = Mock(wraps=target)
+    storage.list_transactions.side_effect = [
+        initial_transactions,
+        [initial_transactions[0], initial_transactions[0]],
+    ]
+    drive = Mock()
+    drive.restore_receipt.return_value = (_drive_file(reference), True)
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(reference["name"])).write_bytes(content)
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=storage,
+            drive=drive,
+        )
+
+    assert report["reused"] == 0
+    assert report["references_remapped"] == 0
+    assert report["errors"] == 1
+    assert report["issues"][0]["status"] == "errors"
+
+
 def test_recovery_repairs_stale_live_reference_when_original_file_is_reused() -> None:
     content = b"receipt"
     reference = _reference(1, content)
