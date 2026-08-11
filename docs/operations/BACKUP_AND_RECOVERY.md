@@ -406,12 +406,12 @@ contains separate receipt and ledger-backup children, with destination deletions
 disabled as the independent second-layer copy. Optional versioned retention
 such as Hyper Backup or snapshots can add protection against accidental
 changes. Tabula Rosa records the expected setup but does not connect to DSM,
-configure the task, or prove that synchronization succeeded. Existing
-two-task profiles remain supported until an operator intentionally follows the
-safe migration procedure in the runbook.
+configure the task, or prove that synchronization succeeded. This profile-root
+task is the only supported Synology topology.
 
-NAS path nesting and reuse are administrator decisions; the app records each
-configured path without enforcing a cross-profile topology.
+Each enabled profile must use a distinct, non-overlapping NAS destination. The
+app canonicalizes DSM paths before comparison and rejects equivalent, shared, or
+nested destinations across profiles.
 
 For root-managed profiles, both Drive destinations are app-managed children under
 the profile's selected storage root: `Receipts` contains receipt files and

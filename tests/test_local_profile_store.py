@@ -156,6 +156,7 @@ class TestLocalProfileStore:
             "backup_folder": {"id": "backupfolder123", "name": "Backups"},
         }
         recovery = {
+            "layout": "profile-root",
             "destination_path": "/volume1/Backups/TabulaRasa/north",
             "schedule": "Continuous",
             "retention_policy": "Retain until manual review.",
@@ -330,6 +331,10 @@ class TestLocalProfileStore:
                 "token_uri": "https://oauth2.googleapis.com/token",
                 "scopes": ["https://www.googleapis.com/auth/drive.file"],
                 "storage_root": {"id": "rootfolder123", "name": "North Storage"},
+                "receipt_folder": {
+                    "id": "receiptfolder123",
+                    "name": "Receipts",
+                },
                 "backup_folder": {
                     "id": "backupfolder123",
                     "name": "North Backups",
@@ -337,6 +342,7 @@ class TestLocalProfileStore:
             }
             update_local_profile_google_drive("north", drive, path=path)
             recovery = {
+                "layout": "profile-root",
                 "destination_path": "/volume1/Backups/TabulaRasa/north",
                 "schedule": "Continuous",
                 "retention_policy": "Retain until manual review.",
@@ -348,14 +354,14 @@ class TestLocalProfileStore:
             update_local_profile_synology_recovery("north", None, path=path)
             assert "synology_recovery" not in load_local_profiles(path)["north"]
 
-    def test_synology_recovery_requires_a_drive_backup_folder(self) -> None:
+    def test_synology_recovery_rejects_retired_three_field_record(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "local_business_profiles.json"
             save_local_profile("north", settings(), path=path)
 
             with pytest.raises(
                 LocalProfileStoreError,
-                match="Google Drive backup folder",
+                match="retired three-field schema",
             ):
                 update_local_profile_synology_recovery(
                     "north",
@@ -429,7 +435,7 @@ class TestLocalProfileStore:
                 path=path,
             )
 
-            with pytest.raises(LocalProfileStoreError, match="Disable profile-root"):
+            with pytest.raises(LocalProfileStoreError, match="Disable Synology recovery"):
                 update_local_profile_google_drive(
                     "north",
                     {
@@ -442,7 +448,7 @@ class TestLocalProfileStore:
                     path=path,
                 )
 
-            with pytest.raises(LocalProfileStoreError, match="Disable profile-root"):
+            with pytest.raises(LocalProfileStoreError, match="Disable Synology recovery"):
                 update_local_profile_google_drive("north", None, path=path)
 
             for missing_field in ("receipt_folder", "backup_folder"):
@@ -470,9 +476,11 @@ class TestLocalProfileStore:
         (
             "/volume1/Backups/shared",
             "/volume1/Backups/shared/south",
+            "/VOLUME1/Backups/SHARED",
+            "/volume1/Backups/SHARED/south",
         ),
     )
-    def test_synology_destinations_can_be_nested_between_profiles(
+    def test_synology_destinations_cannot_share_or_overlap_between_profiles(
         self,
         south_destination: str,
     ) -> None:
@@ -483,9 +491,11 @@ class TestLocalProfileStore:
             "token_uri": "https://oauth2.googleapis.com/token",
             "scopes": ["https://www.googleapis.com/auth/drive.file"],
             "storage_root": {"id": "northroot123", "name": "Storage"},
+            "receipt_folder": {"id": "receiptfolder123", "name": "Receipts"},
             "backup_folder": {"id": "backupfolder123", "name": "Backups"},
         }
         recovery = {
+            "layout": "profile-root",
             "destination_path": "/volume1/Backups/shared",
             "schedule": "Continuous",
             "retention_policy": "Keep all.",
@@ -506,6 +516,10 @@ class TestLocalProfileStore:
                         "id": "southroot123",
                         "name": "Storage",
                     },
+                    "receipt_folder": {
+                        "id": "southreceiptfolder123",
+                        "name": "Receipts",
+                    },
                     "backup_folder": {
                         "id": "southbackupfolder123",
                         "name": "Backups",
@@ -514,14 +528,14 @@ class TestLocalProfileStore:
                 path=path,
             )
 
-            update_local_profile_synology_recovery(
-                "south",
-                {**recovery, "destination_path": south_destination},
-                path=path,
-            )
+            with pytest.raises(
+                LocalProfileStoreError,
+                match="must not share or overlap",
+            ):
+                update_local_profile_synology_recovery(
+                    "south",
+                    {**recovery, "destination_path": south_destination},
+                    path=path,
+                )
 
-            stored = load_local_profiles(path)
-
-        assert stored["south"]["synology_recovery"]["destination_path"] == (
-            south_destination
-        )
+            assert "synology_recovery" not in load_local_profiles(path)["south"]

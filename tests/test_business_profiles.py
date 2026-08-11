@@ -54,6 +54,7 @@ class TestBusinessProfiles:
                     },
                     "backup_folder_path": r"G:\Backups\North",
                     "synology_recovery": {
+                        "layout": "profile-root",
                         "destination_path": "/volume1/Recovery/north",
                         "schedule": "Continuous",
                         "retention_policy": "Keep all.",

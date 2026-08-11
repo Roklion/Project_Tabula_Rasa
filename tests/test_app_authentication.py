@@ -429,6 +429,9 @@ class TestAppAuthentication:
                     if checkbox.label
                     == "Maintain an optional Synology recovery copy for this business"
                 ).check()
+                assert not any(
+                    field.label == "Cloud Sync layout" for field in app.radio
+                )
                 assert next(
                     field
                     for field in app.text_input

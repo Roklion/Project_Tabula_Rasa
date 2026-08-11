@@ -57,8 +57,7 @@ The in-app option is a configuration record, not a Cloud Sync controller.
 Enabling it:
 
 - marks that business as expecting a Synology recovery copy;
-- records whether it uses the one-task profile-root or legacy two-task layout;
-- records the expected NAS destination, schedule, and retention policy; and
+- records the canonical profile-root destination, schedule, and retention policy; and
 - displays those expectations on **Data & backup**.
 
 It does not install Cloud Sync, create a DSM task, test NAS connectivity, store
@@ -145,11 +144,9 @@ volume. Record the path DSM actually uses instead of copying the example
 blindly. Grant write access only to the administrator and the DSM service
 account that needs it. Recovery users can be given read-only access if needed.
 
-Separate destinations are recommended for operational clarity, but the app does
-not restrict how an administrator arranges NAS paths. A business may
-intentionally place its destination below another business's destination or
-reuse a destination; configure and monitor the resulting DSM tasks according to
-the business's own recovery plan.
+Each enabled profile must use a distinct, non-overlapping NAS destination. The
+app canonicalizes DSM paths before comparing them and rejects equivalent,
+shared, or nested destinations across profiles.
 
 ## Choose which businesses use the NAS
 
@@ -164,15 +161,13 @@ copy**. For each business:
 
 1. Choose the business profile.
 2. Select **Maintain an optional Synology recovery copy for this business**.
-3. Leave **One task: profile storage root (recommended)** selected for a new
-   opt-in. Existing configurations display **Two tasks: receipt and ledger
-   folders (legacy)** until intentionally changed.
-4. Review its derived absolute DSM destination, for example
+3. Review its derived absolute DSM destination, for example
    `/volume1/Tabula_Rosa_Backups/heathcote-advisory`. Destinations must include
    both a Synology volume and shared folder; filesystem and volume roots are
    rejected.
-5. Review or override the Cloud Sync schedule and NAS retention policy.
-6. Save the choice, then configure DSM to match the saved record.
+4. Review or override the Cloud Sync schedule and NAS retention policy.
+5. Save the choice, then configure DSM to match the saved record. The app stores
+   `layout = "profile-root"` automatically.
 
 Saving this record changes only local NAS metadata. It does not inspect the
 whole Google Drive or walk ordinary parent folders. The selected storage root
@@ -195,12 +190,12 @@ Leaving the option cleared keeps that business on Google Drive backup only.
 Disabling it later removes only the application's operational metadata. It does
 not delete a DSM task or any NAS archive.
 
-When one-task profile-root recovery is enabled, the local administrator blocks
-changing or disconnecting that profile's Google Drive storage root until the
-recovery record is disabled and saved. This prevents DSM from continuing to
-copy the old root after the app switches to a new remote source. After the new
-root and its `Receipts` and `Ledger Backups` children are provisioned, configure
-and save the recovery record again, then update the DSM task to the new source.
+When Synology recovery is enabled, the local administrator blocks changing or
+disconnecting that profile's Google Drive storage root until the recovery record
+is disabled and saved. This prevents DSM from continuing to copy the old root
+after the app switches to a new remote source. After the new root and its
+`Receipts` and `Ledger Backups` children are provisioned, configure and save the
+recovery record again, then update the DSM task to the new source.
 
 Synology metadata is deliberately excluded from hosted Streamlit Secrets. A
 NAS destination, layout, schedule, retention policy, or app-wide default change
@@ -212,13 +207,12 @@ expectations.
 Cloud Sync continues to operate directly between Google Drive and DSM even
 while the Streamlit app or the Windows development computer is turned off.
 
-## Configure one Cloud Sync task per newly opted-in business
+## Configure one Cloud Sync task per opted-in business
 
-Create one recursive task for each newly opted-in business. Its remote source
+Create one recursive task for each opted-in business. Its remote source
 is the profile storage root provisioned by Tabula Rosa, and its local
-destination is the matching profile-specific NAS root. NAS path nesting and
-reuse are administrator decisions; the app records each configured path without
-enforcing a cross-profile topology.
+destination is the matching profile-specific NAS root. The app rejects NAS
+destinations that are shared with or nested under another profile's destination.
 
 Cloud Sync connections represent Google accounts; tasks represent source and
 destination folder pairs. If multiple businesses use the same Drive-owning
@@ -279,32 +273,6 @@ automatic deletion event. During the initial accumulation period, retain every
 generation. If space later requires pruning, validate a newer generation first,
 never delete the newest verified archive, and keep at least one verified archive
 for every recovery period the business still needs.
-
-## Safely migrate an existing two-task profile
-
-Migration is optional. The existing two-task layout remains operational and
-continues to display as legacy until its app setting is intentionally changed.
-For each profile, migrate without deleting the only verified recovery copy:
-
-1. Leave both legacy tasks running and create a fresh verified cloud backup.
-2. Wait for both tasks to become current. Copy one ledger archive and its
-   matching receipt set to a separate protected location, validate the archive,
-   and retain that copy through the migration.
-3. Create a new empty profile-specific NAS destination. Do not reuse, rename,
-   or clear either legacy destination.
-4. Create the new download-only recursive task from the profile Drive storage
-   root to the new destination, with destination deletions disabled.
-5. Wait for the task to become current. Confirm both child folders arrived,
-   validate a copied ledger archive, and complete the receipt-plus-ledger
-   restore drill below from the new destination.
-6. In **Business profiles**, select the one-task layout, review the destination,
-   schedule, and retention fields, and save.
-7. Pause rather than delete the legacy tasks. Keep their verified files and the
-   separate protected migration copy until the new task has completed another
-   scheduled generation and the administrator accepts the evidence.
-8. Only then remove obsolete DSM tasks or copies according to the recorded
-   retention policy. Never remove the sole verified generation for a required
-   recovery period.
 
 ## Create and validate the first NAS copy
 
@@ -408,7 +376,7 @@ mistaken for the live ledger.
 Keep a private operational record for each opted-in business containing:
 
 - Google Drive storage-root name and both expected child names
-- One-task or legacy two-task layout
+- One recursive Cloud Sync task per profile storage root
 - NAS destination path
 - Cloud Sync direction, deletion protection, and schedule
 - NAS retention policy
@@ -424,45 +392,6 @@ Keep a private operational record for each opted-in business containing:
 
 Do not put credentials, tokens, private ledger data, or full service-account
 emails in the GitHub issue.
-
-## Initial DS220j legacy two-task deployment record
-
-Completed on July 28, 2026:
-
-- Synology recovery was enabled for `heathcote-advisory` and
-  `rok-collectibles`.
-- The businesses use different Google Drive owner accounts, so each has a
-  separate Cloud Sync connection.
-- Both connections use **Download remote changes only** with destination
-  deletions disabled.
-- Both tasks run continuously.
-- The protected shared folder is `/volume1/Tabula_Rosa_Backups`.
-- The business destinations are
-  `/volume1/Tabula_Rosa_Backups/heathcote-advisory` and
-  `/volume1/Tabula_Rosa_Backups/rok-collectibles`.
-- Only the intended timestamped versioned ZIP archives were observed in the
-  recovery destinations.
-- Multiple historical generations were retained.
-- A pause-and-resume drill demonstrated that a delayed or interrupted task is
-  visible and safely retryable.
-- A format-version 3 NAS archive was copied to a safe local recovery location
-  and passed the current manifest, checksum, worksheet, relationship, and row
-  count validator.
-- The validated archive was restored into a new blank Google workbook, and the
-  restored headers, relationships, checksums, and row counts were verified.
-
-Validation outputs, workbook IDs, Google account addresses, and private ledger
-contents remain in the private operational record and are intentionally not
-stored in Git or the GitHub issue.
-
-This July 28 record predates the version-5 receipt inventory and covers only
-ledger archives. It is not evidence that receipt bytes are synchronized or
-versioned. The verified installation is the supported legacy baseline: its
-receipt and ledger children remain on separate tasks until each profile is
-intentionally migrated using the safe procedure above. Both legacy and one-task
-layouts use destination-deletion protection as the independent second-layer
-copy. Optional versioned retention, receipt preparation during backup, and the
-complete ledger-plus-receipt recovery drill provide additional safeguards.
 
 ## Troubleshooting
 

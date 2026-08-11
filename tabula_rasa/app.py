@@ -62,10 +62,8 @@ from tabula_rasa.storage import (
 )
 from tabula_rasa.synology_recovery import (
     DESTINATION_DELETIONS,
-    PROFILE_ROOT_LAYOUT,
     SYNC_DIRECTION,
     SynologyRecoveryConfigurationError,
-    synology_recovery_layout,
     validate_synology_recovery_settings,
 )
 from tabula_rasa.submission_guard import is_recent_duplicate, mark_completed
@@ -2514,7 +2512,6 @@ elif page == "Data & backup":
                 "Repair this profile from the loopback-only Business profiles page."
             )
         else:
-            recovery_layout = synology_recovery_layout(synology_recovery)
             if not isinstance(backup_folder, Mapping):
                 st.warning(
                     "Synology recovery is enabled, but this profile does not have a "
@@ -2525,46 +2522,21 @@ elif page == "Data & backup":
                     "Synology recovery is enabled, but this profile does not have a "
                     "Google Drive receipt folder selected."
                 )
-            if (
-                recovery_layout == PROFILE_ROOT_LAYOUT
-                and not isinstance(storage_root, Mapping)
-            ):
+            if not isinstance(storage_root, Mapping):
                 st.warning(
-                    "One-task Synology recovery is enabled, but this profile does "
+                    "Synology recovery is enabled, but this profile does "
                     "not have a Google Drive storage root selected."
                 )
-            backup_source_name = (
-                str(backup_folder.get("name", "Google Drive backup folder"))
-                if isinstance(backup_folder, Mapping)
+            root_source_name = (
+                str(storage_root.get("name", "Google Drive storage root"))
+                if isinstance(storage_root, Mapping)
                 else "Not configured"
             )
-            receipt_source_name = (
-                str(
-                    recovery_receipt_folder.get(
-                        "name",
-                        "Google Drive receipt folder",
-                    )
-                )
-                if isinstance(recovery_receipt_folder, Mapping)
-                else "Not configured"
+            source_lines = (
+                "- **Cloud Sync task:** One recursive profile-root task",
+                f"- **Remote source:** {root_source_name}",
+                "- **Expected NAS children:** Receipts and Ledger Backups",
             )
-            if recovery_layout == PROFILE_ROOT_LAYOUT:
-                root_source_name = (
-                    str(storage_root.get("name", "Google Drive storage root"))
-                    if isinstance(storage_root, Mapping)
-                    else "Not configured"
-                )
-                source_lines = (
-                    "- **Cloud Sync layout:** One profile-root task",
-                    f"- **Remote source:** {root_source_name}",
-                    "- **Expected NAS children:** Receipts and Ledger Backups",
-                )
-            else:
-                source_lines = (
-                    "- **Cloud Sync layout:** Two folder tasks (legacy)",
-                    f"- **Ledger backup source:** {backup_source_name}",
-                    f"- **Receipt source:** {receipt_source_name}",
-                )
             st.markdown(
                 "\n".join(
                     (

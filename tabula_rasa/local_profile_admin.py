@@ -31,11 +31,9 @@ from tabula_rasa.storage import (
     StorageWorkbookAccessError,
 )
 from tabula_rasa.synology_recovery import (
-    LEGACY_TWO_TASK_LAYOUT,
     PROFILE_ROOT_LAYOUT,
     SynologyRecoveryConfigurationError,
     resolve_synology_recovery_defaults,
-    synology_recovery_layout,
 )
 
 
@@ -194,29 +192,10 @@ def _render_synology_recovery_admin(
             "schedule": "",
             "retention_policy": "",
         }
-    selected_layout = (
-        synology_recovery_layout(existing) if existing else PROFILE_ROOT_LAYOUT
-    )
     with st.form("synology_recovery_form"):
         enabled = st.checkbox(
             "Maintain an optional Synology recovery copy for this business",
             value=bool(existing),
-        )
-        layout = st.radio(
-            "Cloud Sync layout",
-            (PROFILE_ROOT_LAYOUT, LEGACY_TWO_TASK_LAYOUT),
-            index=(
-                0 if selected_layout == PROFILE_ROOT_LAYOUT else 1
-            ),
-            format_func=lambda value: (
-                "One task: profile storage root (recommended)"
-                if value == PROFILE_ROOT_LAYOUT
-                else "Two tasks: receipt and ledger folders (legacy)"
-            ),
-            help=(
-                "Existing legacy records stay on two tasks until this choice is "
-                "intentionally changed and saved."
-            ),
         )
         destination_path = st.text_input(
             "NAS destination path",
@@ -261,7 +240,7 @@ def _render_synology_recovery_admin(
 
     settings = (
         {
-            **({"layout": PROFILE_ROOT_LAYOUT} if layout == PROFILE_ROOT_LAYOUT else {}),
+            "layout": PROFILE_ROOT_LAYOUT,
             "destination_path": destination_path,
             "schedule": schedule,
             "retention_policy": retention_policy,

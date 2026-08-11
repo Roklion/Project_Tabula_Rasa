@@ -3,11 +3,9 @@ from __future__ import annotations
 import pytest
 
 from tabula_rasa.synology_recovery import (
-    LEGACY_TWO_TASK_LAYOUT,
     PROFILE_ROOT_LAYOUT,
     SynologyRecoveryConfigurationError,
     resolve_synology_recovery_defaults,
-    synology_recovery_layout,
     validate_synology_recovery_settings,
 )
 
@@ -15,22 +13,68 @@ from tabula_rasa.synology_recovery import (
 def test_normalizes_synology_recovery_settings() -> None:
     settings = validate_synology_recovery_settings(
         {
+            "layout": PROFILE_ROOT_LAYOUT,
             "destination_path": " /volume1/Backups/TabulaRasa/north ",
             "schedule": " Continuous ",
             "retention_policy": " Keep until manual review. ",
         }
     )
     assert settings == {
+        "layout": PROFILE_ROOT_LAYOUT,
         "destination_path": "/volume1/Backups/TabulaRasa/north",
         "schedule": "Continuous",
         "retention_policy": "Keep until manual review.",
     }
-    assert synology_recovery_layout(settings) == LEGACY_TWO_TASK_LAYOUT
+
+
+def test_rejects_retired_three_field_synology_record_explicitly() -> None:
+    with pytest.raises(
+        SynologyRecoveryConfigurationError,
+        match="retired three-field schema.*layout='profile-root'",
+    ):
+        validate_synology_recovery_settings(
+            {
+                "destination_path": "/volume1/Backups/TabulaRasa/north",
+                "schedule": "Continuous",
+                "retention_policy": "Keep until manual review.",
+            }
+        )
+
+
+def test_rejects_missing_synology_recovery_fields_explicitly() -> None:
+    with pytest.raises(
+        SynologyRecoveryConfigurationError,
+        match="missing required fields: retention_policy",
+    ):
+        validate_synology_recovery_settings(
+            {
+                "layout": PROFILE_ROOT_LAYOUT,
+                "destination_path": "/volume1/Backups/TabulaRasa/north",
+                "schedule": "Continuous",
+            }
+        )
+
+
+def test_rejects_unsupported_synology_recovery_fields_explicitly() -> None:
+    with pytest.raises(
+        SynologyRecoveryConfigurationError,
+        match="unsupported fields: legacy_task_id",
+    ):
+        validate_synology_recovery_settings(
+            {
+                "layout": PROFILE_ROOT_LAYOUT,
+                "destination_path": "/volume1/Backups/TabulaRasa/north",
+                "schedule": "Continuous",
+                "retention_policy": "Keep all.",
+                "legacy_task_id": "task-123",
+            }
+        )
 
 
 def test_normalizes_equivalent_dsm_paths() -> None:
     settings = validate_synology_recovery_settings(
         {
+            "layout": PROFILE_ROOT_LAYOUT,
             "destination_path": "/volume1/Backups/team/../north//",
             "schedule": "Continuous",
             "retention_policy": "Keep all.",
@@ -43,6 +87,7 @@ def test_normalizes_equivalent_dsm_paths() -> None:
 def test_collapses_double_leading_dsm_slashes() -> None:
     settings = validate_synology_recovery_settings(
         {
+            "layout": PROFILE_ROOT_LAYOUT,
             "destination_path": "//volume1/Backups/north",
             "schedule": "Continuous",
             "retention_policy": "Keep all.",
@@ -68,7 +113,6 @@ def test_resolves_profile_root_defaults_and_overrides() -> None:
         "schedule": "Daily at 11:00 PM",
         "retention_policy": "Keep quarterly versions.",
     }
-    assert synology_recovery_layout(defaults) == PROFILE_ROOT_LAYOUT
 
 
 def test_default_destinations_are_isolated_by_profile_key() -> None:
@@ -85,36 +129,43 @@ def test_default_destinations_are_isolated_by_profile_key() -> None:
     (
         {},
         {
+            "layout": PROFILE_ROOT_LAYOUT,
             "destination_path": "relative/path",
             "schedule": "Continuous",
             "retention_policy": "Keep all",
         },
         {
+            "layout": PROFILE_ROOT_LAYOUT,
             "destination_path": "/",
             "schedule": "Continuous",
             "retention_policy": "Keep all",
         },
         {
+            "layout": PROFILE_ROOT_LAYOUT,
             "destination_path": "/volume1",
             "schedule": "Continuous",
             "retention_policy": "Keep all",
         },
         {
+            "layout": PROFILE_ROOT_LAYOUT,
             "destination_path": "/etc/tabula-rasa",
             "schedule": "Continuous",
             "retention_policy": "Keep all",
         },
         {
+            "layout": PROFILE_ROOT_LAYOUT,
             "destination_path": "/volume1/Backups/../../../etc/tabula-rasa",
             "schedule": "Continuous",
             "retention_policy": "Keep all",
         },
         {
+            "layout": PROFILE_ROOT_LAYOUT,
             "destination_path": "/volume1/Backups/north",
             "schedule": "",
             "retention_policy": "Keep all",
         },
         {
+            "layout": PROFILE_ROOT_LAYOUT,
             "destination_path": "/volume1/Backups/north",
             "schedule": "Continuous",
             "retention_policy": "Keep all",

@@ -29,9 +29,7 @@ from tabula_rasa.google_drive import (
     validate_drive_profile_settings,
 )
 from tabula_rasa.synology_recovery import (
-    PROFILE_ROOT_LAYOUT,
     SynologyRecoveryConfigurationError,
-    synology_recovery_layout,
     validate_synology_recovery_settings,
 )
 
@@ -66,13 +64,11 @@ class LocalProfileStoreError(ValueError):
 def ensure_google_drive_disconnect_allowed(
     profile_settings: Mapping[str, Any],
 ) -> None:
-    """Reject Drive disconnect while profile-root recovery depends on it."""
+    """Reject Drive disconnect while Synology recovery depends on it."""
     recovery = profile_settings.get("synology_recovery")
-    if isinstance(recovery, Mapping) and (
-        synology_recovery_layout(recovery) == PROFILE_ROOT_LAYOUT
-    ):
+    if isinstance(recovery, Mapping):
         raise LocalProfileStoreError(
-            "Disable profile-root Synology recovery before disconnecting "
+            "Disable Synology recovery before disconnecting "
             "this profile's Google Drive."
         )
 
@@ -215,6 +211,7 @@ def _validate_stored_profiles(profiles: object) -> dict[str, dict[str, Any]]:
         raise LocalProfileStoreError("Local profile store has an invalid format.")
     normalized: dict[str, dict[str, Any]] = {}
     storage_roots: dict[str, str] = {}
+    synology_destinations: dict[str, str] = {}
     for raw_key, raw_settings in profiles.items():
         key = validate_profile_key(str(raw_key))
         if not isinstance(raw_settings, dict):
@@ -242,7 +239,7 @@ def _validate_stored_profiles(profiles: object) -> dict[str, dict[str, Any]]:
             )
         except (TypeError, LocalProfileStoreError) as exc:
             raise LocalProfileStoreError(
-                f"Local profile '{key}' is incomplete or malformed."
+                f"Local profile '{key}' is incomplete or malformed: {exc}"
             ) from exc
         drive_settings = settings.get("google_drive")
         storage_root = (
@@ -262,6 +259,20 @@ def _validate_stored_profiles(profiles: object) -> dict[str, dict[str, Any]]:
             )
         if root_id:
             storage_roots[root_id] = key
+        recovery = settings.get("synology_recovery")
+        if isinstance(recovery, Mapping):
+            destination = str(recovery["destination_path"]).casefold()
+            for other_key, other_destination in synology_destinations.items():
+                if (
+                    destination == other_destination
+                    or destination.startswith(other_destination + "/")
+                    or other_destination.startswith(destination + "/")
+                ):
+                    raise LocalProfileStoreError(
+                        "Synology recovery destinations for profiles "
+                        f"'{other_key}' and '{key}' must not share or overlap."
+                    )
+            synology_destinations[key] = destination
         normalized[key] = settings
     try:
         load_business_profiles({"business_profiles": normalized})
@@ -454,15 +465,13 @@ def update_local_profile_google_drive(
             except GoogleDriveConfigurationError as exc:
                 raise LocalProfileStoreError(str(exc)) from exc
             recovery = candidate.get("synology_recovery")
-            if isinstance(recovery, Mapping) and (
-                synology_recovery_layout(recovery) == PROFILE_ROOT_LAYOUT
-            ):
+            if isinstance(recovery, Mapping):
                 if any(
                     not isinstance(validated_drive.get(field), Mapping)
                     for field in ("storage_root", "receipt_folder", "backup_folder")
                 ):
                     raise LocalProfileStoreError(
-                        "Disable profile-root Synology recovery before saving "
+                        "Disable Synology recovery before saving "
                         "Google Drive settings without its storage root and both "
                         "child folders."
                     )
@@ -485,7 +494,7 @@ def update_local_profile_google_drive(
                 )
                 if existing_root_id != proposed_root_id:
                     raise LocalProfileStoreError(
-                        "Disable profile-root Synology recovery before changing "
+                        "Disable Synology recovery before changing "
                         "this profile's Google Drive storage root."
                     )
             candidate["google_drive"] = validated_drive
@@ -512,26 +521,18 @@ def update_local_profile_synology_recovery(
         if synology_recovery is None:
             candidate.pop("synology_recovery", None)
         else:
-            drive = candidate.get("google_drive")
-            if not isinstance(drive, Mapping) or not isinstance(
-                drive.get("backup_folder"),
-                Mapping,
-            ):
-                raise LocalProfileStoreError(
-                    "Select a Google Drive backup folder for this profile before "
-                    "enabling its Synology recovery copy."
-                )
             try:
                 recovery = validate_synology_recovery_settings(synology_recovery)
             except SynologyRecoveryConfigurationError as exc:
                 raise LocalProfileStoreError(str(exc)) from exc
-            if synology_recovery_layout(recovery) == PROFILE_ROOT_LAYOUT and (
-                not isinstance(drive.get("storage_root"), Mapping)
-                or not isinstance(drive.get("receipt_folder"), Mapping)
+            drive = candidate.get("google_drive")
+            if not isinstance(drive, Mapping) or any(
+                not isinstance(drive.get(field), Mapping)
+                for field in ("storage_root", "receipt_folder", "backup_folder")
             ):
                 raise LocalProfileStoreError(
                     "Provision the profile storage root and both Google Drive "
-                    "children before enabling one-task Synology recovery."
+                    "children before enabling its Synology recovery copy."
                 )
             candidate["synology_recovery"] = recovery
         profiles[profile_key] = candidate

@@ -2432,7 +2432,7 @@ Preserve profile-scoped controls for:
 Preserve Synology configuration:
 
 - Enable/disable choice
-- Cloud Sync layout choice
+- Canonical profile-root Cloud Sync task summary
 - NAS destination path
 - Cloud Sync schedule
 - Retention policy
@@ -2446,16 +2446,16 @@ schedule and retention defaults prefill the form and remain editable before
 save. A saved per-profile value is the operational record; the app does not
 configure or observe DSM.
 
-Saving Synology destination, layout, schedule, or retention metadata is a
-local-only operation. It must not access Google Drive or revalidate Drive
-ancestry; Drive root and managed-child validation remains in the dedicated
-Google Drive settings workflow.
+Saving Synology destination, schedule, or retention metadata is a local-only
+operation. The canonical layout field is stored automatically. Saving must not
+access Google Drive or revalidate Drive ancestry; Drive root and managed-child
+validation remains in the dedicated Google Drive settings workflow.
 
-Existing three-field Synology records remain the supported two-task legacy
-layout. The layout control must continue to show that state and must not convert
-it unless the administrator intentionally selects the one-task layout and saves.
-The Data & backup summary must identify the configured layout and show either
-the profile storage root or the two child folders as the remote source.
+Enabled records always use `layout = "profile-root"`. The administrator has no
+layout selector. The Data & backup summary shows the profile storage root as the
+remote source and `Receipts` and `Ledger Backups` as the expected child folders.
+Equivalent, shared, or nested normalized DSM destinations across profiles are
+rejected.
 
 All app-wide and per-profile Synology fields remain outside the hosted profile
 projection. Changing only these fields must not change generated hosted Secrets
