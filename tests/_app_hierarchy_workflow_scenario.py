@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 import sys
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 
@@ -63,6 +64,11 @@ def add_category(
 
 
 def main() -> None:
+    local_profiles = TemporaryDirectory()
+    patch(
+        "tabula_rasa.local_profile_store.LOCAL_PROFILE_STORE_PATH",
+        Path(local_profiles.name) / "business_profiles.json",
+    ).start()
     storages = {
         "alpha-sheet": GoogleSheetsStorage(FakeWorkbook()),
         "beta-sheet": GoogleSheetsStorage(FakeWorkbook()),

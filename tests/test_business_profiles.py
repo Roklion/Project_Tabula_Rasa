@@ -43,6 +43,30 @@ class TestBusinessProfiles:
                 }
             )
 
+    def test_existing_hosted_profiles_with_local_fields_remain_readable(self) -> None:
+        secrets = {
+            "business_profiles": {
+                "north": {
+                    "name": "North Shop",
+                    "spreadsheet_id": "north-sheet",
+                    "gcp_service_account": {
+                        "client_email": "north@example.test"
+                    },
+                    "backup_folder_path": r"G:\Backups\North",
+                    "synology_recovery": {
+                        "destination_path": "/volume1/Recovery/north",
+                        "schedule": "Continuous",
+                        "retention_policy": "Keep all.",
+                    },
+                }
+            }
+        }
+
+        selected = select_profile_secrets(secrets, "north")
+
+        assert selected["spreadsheet_id"] == "north-sheet"
+        assert selected["synology_recovery"]["schedule"] == "Continuous"
+
     def test_rejects_profile_without_credential(self) -> None:
         with pytest.raises(BusinessProfileConfigurationError):
             load_business_profiles(

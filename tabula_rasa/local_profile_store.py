@@ -29,7 +29,9 @@ from tabula_rasa.google_drive import (
     validate_drive_profile_settings,
 )
 from tabula_rasa.synology_recovery import (
+    PROFILE_ROOT_LAYOUT,
     SynologyRecoveryConfigurationError,
+    synology_recovery_layout,
     validate_synology_recovery_settings,
 )
 
@@ -59,6 +61,20 @@ _STORE_LOCK = threading.Lock()
 
 class LocalProfileStoreError(ValueError):
     """Raised when local profile configuration is missing or malformed."""
+
+
+def ensure_google_drive_disconnect_allowed(
+    profile_settings: Mapping[str, Any],
+) -> None:
+    """Reject Drive disconnect while profile-root recovery depends on it."""
+    recovery = profile_settings.get("synology_recovery")
+    if isinstance(recovery, Mapping) and (
+        synology_recovery_layout(recovery) == PROFILE_ROOT_LAYOUT
+    ):
+        raise LocalProfileStoreError(
+            "Disable profile-root Synology recovery before disconnecting "
+            "this profile's Google Drive."
+        )
 
 
 def local_profile_admin_enabled(environment: Mapping[str, str] | None = None) -> bool:
@@ -430,14 +446,49 @@ def update_local_profile_google_drive(
             )
         candidate = dict(profiles[profile_key])
         if google_drive is None:
+            ensure_google_drive_disconnect_allowed(candidate)
             candidate.pop("google_drive", None)
         else:
             try:
-                candidate["google_drive"] = validate_drive_profile_settings(
-                    google_drive
-                )
+                validated_drive = validate_drive_profile_settings(google_drive)
             except GoogleDriveConfigurationError as exc:
                 raise LocalProfileStoreError(str(exc)) from exc
+            recovery = candidate.get("synology_recovery")
+            if isinstance(recovery, Mapping) and (
+                synology_recovery_layout(recovery) == PROFILE_ROOT_LAYOUT
+            ):
+                if any(
+                    not isinstance(validated_drive.get(field), Mapping)
+                    for field in ("storage_root", "receipt_folder", "backup_folder")
+                ):
+                    raise LocalProfileStoreError(
+                        "Disable profile-root Synology recovery before saving "
+                        "Google Drive settings without its storage root and both "
+                        "child folders."
+                    )
+                existing_drive = candidate.get("google_drive")
+                existing_root = (
+                    existing_drive.get("storage_root")
+                    if isinstance(existing_drive, Mapping)
+                    else None
+                )
+                proposed_root = validated_drive.get("storage_root")
+                existing_root_id = (
+                    str(existing_root.get("id", ""))
+                    if isinstance(existing_root, Mapping)
+                    else ""
+                )
+                proposed_root_id = (
+                    str(proposed_root.get("id", ""))
+                    if isinstance(proposed_root, Mapping)
+                    else ""
+                )
+                if existing_root_id != proposed_root_id:
+                    raise LocalProfileStoreError(
+                        "Disable profile-root Synology recovery before changing "
+                        "this profile's Google Drive storage root."
+                    )
+            candidate["google_drive"] = validated_drive
         profiles[profile_key] = candidate
         _write_local_profiles(path, profiles)
 
@@ -471,11 +522,18 @@ def update_local_profile_synology_recovery(
                     "enabling its Synology recovery copy."
                 )
             try:
-                candidate["synology_recovery"] = (
-                    validate_synology_recovery_settings(synology_recovery)
-                )
+                recovery = validate_synology_recovery_settings(synology_recovery)
             except SynologyRecoveryConfigurationError as exc:
                 raise LocalProfileStoreError(str(exc)) from exc
+            if synology_recovery_layout(recovery) == PROFILE_ROOT_LAYOUT and (
+                not isinstance(drive.get("storage_root"), Mapping)
+                or not isinstance(drive.get("receipt_folder"), Mapping)
+            ):
+                raise LocalProfileStoreError(
+                    "Provision the profile storage root and both Google Drive "
+                    "children before enabling one-task Synology recovery."
+                )
+            candidate["synology_recovery"] = recovery
         profiles[profile_key] = candidate
         _write_local_profiles(path, profiles)
 

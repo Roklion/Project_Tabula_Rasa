@@ -366,3 +366,162 @@ class TestLocalProfileStore:
                     },
                     path=path,
                 )
+
+    def test_profile_root_synology_requires_complete_root_layout(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "local_business_profiles.json"
+            save_local_profile("north", settings(), path=path)
+            update_local_profile_google_drive(
+                "north",
+                {
+                    "authorized_email": "north@example.test",
+                    "authorized_name": "North Owner",
+                    "refresh_token": "durable-refresh-token",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "scopes": ["https://www.googleapis.com/auth/drive.file"],
+                    "storage_root": {
+                        "id": "rootfolder123",
+                        "name": "North Storage",
+                    },
+                    "backup_folder": {
+                        "id": "backupfolder123",
+                        "name": "North Backups",
+                    },
+                },
+                path=path,
+            )
+
+            with pytest.raises(LocalProfileStoreError, match="storage root"):
+                update_local_profile_synology_recovery(
+                    "north",
+                    {
+                        "layout": "profile-root",
+                        "destination_path": "/volume1/Backups/north",
+                        "schedule": "Continuous",
+                        "retention_policy": "Keep all.",
+                    },
+                    path=path,
+                )
+
+    def test_profile_root_synology_blocks_drive_root_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "local_business_profiles.json"
+            save_local_profile("north", settings(), path=path)
+            drive = {
+                "authorized_email": "north@example.test",
+                "authorized_name": "North Owner",
+                "refresh_token": "durable-refresh-token",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "scopes": ["https://www.googleapis.com/auth/drive.file"],
+                "storage_root": {"id": "rootfolder123", "name": "North Storage"},
+                "receipt_folder": {"id": "receiptfolder123", "name": "Receipts"},
+                "backup_folder": {"id": "backupfolder123", "name": "Backups"},
+            }
+            update_local_profile_google_drive("north", drive, path=path)
+            update_local_profile_synology_recovery(
+                "north",
+                {
+                    "layout": "profile-root",
+                    "destination_path": "/volume1/Backups/north",
+                    "schedule": "Continuous",
+                    "retention_policy": "Keep all.",
+                },
+                path=path,
+            )
+
+            with pytest.raises(LocalProfileStoreError, match="Disable profile-root"):
+                update_local_profile_google_drive(
+                    "north",
+                    {
+                        **drive,
+                        "storage_root": {
+                            "id": "differentroot123",
+                            "name": "Different Storage",
+                        },
+                    },
+                    path=path,
+                )
+
+            with pytest.raises(LocalProfileStoreError, match="Disable profile-root"):
+                update_local_profile_google_drive("north", None, path=path)
+
+            for missing_field in ("receipt_folder", "backup_folder"):
+                incomplete_drive = {
+                    field: value
+                    for field, value in drive.items()
+                    if field != missing_field
+                }
+                with pytest.raises(LocalProfileStoreError, match="both child folders"):
+                    update_local_profile_google_drive(
+                        "north",
+                        incomplete_drive,
+                        path=path,
+                    )
+
+            stored = load_local_profiles(path)
+
+        assert stored["north"]["google_drive"]["storage_root"]["id"] == (
+            "rootfolder123"
+        )
+        assert stored["north"]["synology_recovery"]["layout"] == "profile-root"
+
+    @pytest.mark.parametrize(
+        "south_destination",
+        (
+            "/volume1/Backups/shared",
+            "/volume1/Backups/shared/south",
+        ),
+    )
+    def test_synology_destinations_can_be_nested_between_profiles(
+        self,
+        south_destination: str,
+    ) -> None:
+        drive = {
+            "authorized_email": "owner@example.test",
+            "authorized_name": "Owner",
+            "refresh_token": "durable-refresh-token",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "scopes": ["https://www.googleapis.com/auth/drive.file"],
+            "storage_root": {"id": "northroot123", "name": "Storage"},
+            "backup_folder": {"id": "backupfolder123", "name": "Backups"},
+        }
+        recovery = {
+            "destination_path": "/volume1/Backups/shared",
+            "schedule": "Continuous",
+            "retention_policy": "Keep all.",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "local_business_profiles.json"
+            save_local_profile("north", settings(), path=path)
+            save_local_profile("south", settings("South Shop"), path=path)
+            update_local_profile_google_drive("north", drive, path=path)
+            update_local_profile_synology_recovery("north", recovery, path=path)
+            update_local_profile_google_drive(
+                "south",
+                {
+                    **drive,
+                    "authorized_email": "south@example.test",
+                    "refresh_token": "south-refresh-token",
+                    "storage_root": {
+                        "id": "southroot123",
+                        "name": "Storage",
+                    },
+                    "backup_folder": {
+                        "id": "southbackupfolder123",
+                        "name": "Backups",
+                    },
+                },
+                path=path,
+            )
+
+            update_local_profile_synology_recovery(
+                "south",
+                {**recovery, "destination_path": south_destination},
+                path=path,
+            )
+
+            stored = load_local_profiles(path)
+
+        assert stored["south"]["synology_recovery"]["destination_path"] == (
+            south_destination
+        )

@@ -37,6 +37,14 @@ class TestExportStreamlitSecrets:
                     "refresh_token": "north-refresh-token",
                     "token_uri": "https://oauth2.googleapis.com/token",
                     "scopes": ["https://www.googleapis.com/auth/drive.file"],
+                    "storage_root": {
+                        "id": "northrootfolder123",
+                        "name": "North Storage",
+                    },
+                    "receipt_folder": {
+                        "id": "northreceiptfolder123",
+                        "name": "Receipts",
+                    },
                     "backup_folder": {
                         "id": "northbackupfolder123",
                         "name": "Backups",
@@ -47,6 +55,7 @@ class TestExportStreamlitSecrets:
                     "schedule": "Continuous",
                     "retention_policy": "Retain until manual review.",
                 },
+                "future_local_operations": {"enabled": True},
             },
             "south_shop": {
                 "name": "South Shop",
@@ -75,6 +84,11 @@ class TestExportStreamlitSecrets:
                     "picker_api_key": "picker-key",
                     "project_number": "123456789",
                 },
+                "synology_recovery_defaults": {
+                    "base_path": "/volume1/Tabula_Rosa_Backups",
+                    "schedule": "Continuous",
+                    "retention_policy": "Quarterly manual review.",
+                },
             },
             profiles,
         )
@@ -85,10 +99,13 @@ class TestExportStreamlitSecrets:
             key: value for key, value in parsed.items() if key != "business_profiles"
         }
         assert set(parsed["business_profiles"]) == {"north-shop", "south_shop"}
-        assert (
-            parsed["business_profiles"]["north-shop"]["backup_folder_path"]
-            == r"G:\My Drive\North"
-        )
+        hosted_north = parsed["business_profiles"]["north-shop"]
+        assert set(hosted_north) == {
+            "name",
+            "spreadsheet_id",
+            "gcp_service_account",
+            "google_drive",
+        }
         assert (
             "\nsecret\n"
             in parsed["business_profiles"]["north-shop"]["gcp_service_account"][
@@ -98,18 +115,66 @@ class TestExportStreamlitSecrets:
         assert (
             parsed["google_drive_oauth"]["client_secret"] == "oauth-secret"
         )
-        assert (
-            parsed["business_profiles"]["north-shop"]["google_drive"][
-                "refresh_token"
-            ]
-            == "north-refresh-token"
+        assert hosted_north["google_drive"]["refresh_token"] == (
+            "north-refresh-token"
         )
-        assert (
-            parsed["business_profiles"]["north-shop"]["synology_recovery"][
-                "destination_path"
-            ]
-            == "/volume1/Backups/TabulaRasa/north-shop"
+        assert hosted_north["google_drive"]["storage_root"]["id"] == (
+            "northrootfolder123"
         )
+        assert hosted_north["google_drive"]["receipt_folder"]["id"] == (
+            "northreceiptfolder123"
+        )
+        assert hosted_north["google_drive"]["backup_folder"]["id"] == (
+            "northbackupfolder123"
+        )
+        assert "backup_folder_path" not in hosted_north
+        assert "synology_recovery" not in hosted_north
+        assert "future_local_operations" not in hosted_north
+        assert "synology_recovery_defaults" not in parsed
+
+    def test_local_only_edits_leave_hosted_export_unchanged(self) -> None:
+        app_secrets = {
+            "app_password_hash": "scrypt$hash",
+            "synology_recovery_defaults": {
+                "base_path": "/volume1/Recovery",
+                "schedule": "Continuous",
+                "retention_policy": "Keep all.",
+            },
+        }
+        profile = {
+            "name": "North Shop",
+            "spreadsheet_id": "north-sheet-id",
+            "gcp_service_account": {"type": "service_account"},
+            "backup_folder_path": r"G:\Backups\North",
+            "synology_recovery": {
+                "destination_path": "/volume1/Recovery/north",
+                "schedule": "Continuous",
+                "retention_policy": "Keep all.",
+            },
+        }
+        before = build_streamlit_secrets_toml(
+            app_secrets,
+            {"north": profile},
+        )
+
+        app_secrets["synology_recovery_defaults"] = {
+            "base_path": "/volume2/New-Recovery",
+            "schedule": "Nightly",
+            "retention_policy": "Keep quarterly versions.",
+        }
+        profile["backup_folder_path"] = r"H:\New\North"
+        profile["synology_recovery"] = {
+            "layout": "profile-root",
+            "destination_path": "/volume2/New-Recovery/north",
+            "schedule": "Nightly",
+            "retention_policy": "Keep quarterly versions.",
+        }
+        after = build_streamlit_secrets_toml(
+            app_secrets,
+            {"north": profile},
+        )
+
+        assert after == before
 
     def test_secure_writer_refuses_to_overwrite(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -20,6 +20,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from tabula_rasa.business_profiles import load_business_profiles
+from tabula_rasa.google_drive import (
+    GoogleDriveConfigurationError,
+    validate_drive_profile_settings,
+)
 from tabula_rasa.local_profile_store import (
     LOCAL_PROFILE_STORE_PATH,
     LocalProfileStoreError,
@@ -37,11 +41,48 @@ PROFILE_CONFIG_KEYS = {
     "gcp_service_account",
     "business_profiles",
 }
+LOCAL_ONLY_APP_KEYS = {"synology_recovery_defaults"}
+HOSTED_PROFILE_FIELDS = (
+    "name",
+    "spreadsheet_id",
+    "gcp_service_account",
+)
 BARE_KEY_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 class SecretsExportError(ValueError):
     """Raised when a safe Streamlit Secrets export cannot be produced."""
+
+
+def project_hosted_profiles(
+    profiles: Mapping[str, Mapping[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Return the explicit profile subset consumed by the hosted runtime."""
+    try:
+        configured = load_business_profiles({"business_profiles": profiles})
+    except ValueError as exc:
+        raise SecretsExportError("Business profiles failed validation.") from exc
+
+    projected: dict[str, dict[str, Any]] = {}
+    for profile in configured:
+        settings = profile.secrets
+        hosted = {
+            key: settings[key]
+            for key in HOSTED_PROFILE_FIELDS
+            if key in settings
+        }
+        hosted["name"] = profile.name
+        if "google_drive" in settings:
+            try:
+                hosted["google_drive"] = validate_drive_profile_settings(
+                    settings["google_drive"]
+                )
+            except GoogleDriveConfigurationError as exc:
+                raise SecretsExportError(
+                    f"Google Drive settings for profile '{profile.key}' are invalid."
+                ) from exc
+        projected[profile.key] = hosted
+    return projected
 
 
 def _toml_key(value: object) -> str:
@@ -99,9 +140,9 @@ def build_streamlit_secrets_toml(
     combined: dict[str, Any] = {
         str(key): value
         for key, value in app_secrets.items()
-        if key not in PROFILE_CONFIG_KEYS
+        if key not in PROFILE_CONFIG_KEYS | LOCAL_ONLY_APP_KEYS
     }
-    combined["business_profiles"] = profiles
+    combined["business_profiles"] = project_hosted_profiles(profiles)
 
     lines = [
         "# Generated for Streamlit Secrets. Contains credentials; do not commit.",

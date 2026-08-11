@@ -92,6 +92,11 @@ modes:
 - split local app secrets plus `.streamlit/business_profiles.json`; and
 - the combined hosted Streamlit Secrets representation.
 
+The combined representation is intentionally a hosted-runtime projection, not
+a whole-profile copy. Export tests must keep Sheets and hosted Drive fields while
+excluding local filesystem and Synology operational metadata. Adding a new
+local-only profile field must not change the generated hosted profile table.
+
 Validate one configured workbook and its required headers with:
 
 ```powershell

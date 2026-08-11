@@ -9,7 +9,16 @@ from typing import Any
 import streamlit as st
 
 from tabula_rasa.business_profiles import load_business_profiles
-from tabula_rasa.google_drive_admin import render_google_drive_admin
+from tabula_rasa.google_drive import (
+    GoogleDriveClient,
+    GoogleDriveConfigurationError,
+    GoogleDriveError,
+    load_oauth_config,
+)
+from tabula_rasa.google_drive_admin import (
+    _ensure_storage_root_is_profile_isolated,
+    render_google_drive_admin,
+)
 from tabula_rasa.ledger_auth import verify_password
 from tabula_rasa.local_profile_store import (
     LOCAL_PROFILE_STORE_PATH,
@@ -29,6 +38,13 @@ from tabula_rasa.storage import (
     StorageInitializationError,
     StorageValidationError,
     StorageWorkbookAccessError,
+)
+from tabula_rasa.synology_recovery import (
+    LEGACY_TWO_TASK_LAYOUT,
+    PROFILE_ROOT_LAYOUT,
+    SynologyRecoveryConfigurationError,
+    resolve_synology_recovery_defaults,
+    synology_recovery_layout,
 )
 
 
@@ -154,9 +170,63 @@ def _profile_rows(
     return rows
 
 
+def _validate_profile_root_storage_root(
+    app_secrets: Mapping[str, Any],
+    profile_key: str,
+    local_profiles: Mapping[str, Mapping[str, Any]],
+) -> None:
+    drive = local_profiles[profile_key].get("google_drive")
+    if not isinstance(drive, Mapping) or not isinstance(
+        drive.get("storage_root"), Mapping
+    ):
+        return
+    client = GoogleDriveClient(load_oauth_config(app_secrets), drive)
+    root = client.folder(str(drive["storage_root"].get("id", "")))
+    _ensure_storage_root_is_profile_isolated(
+        client,
+        profile_key,
+        root,
+        local_profiles,
+    )
+    root_id = str(root.get("id", ""))
+    for field, storage_kind in (
+        ("receipt_folder", "receipts"),
+        ("backup_folder", "ledger-backups"),
+    ):
+        child = drive.get(field)
+        if not isinstance(child, Mapping):
+            raise GoogleDriveConfigurationError(
+                "Reconfirm the profile storage root and both child folders "
+                "before enabling one-task Synology recovery."
+            )
+        try:
+            current_child = client.folder(str(child.get("id", "")))
+        except GoogleDriveError as exc:
+            raise GoogleDriveConfigurationError(
+                "Reconfirm the profile storage root and both child folders "
+                "before enabling one-task Synology recovery."
+            ) from exc
+        properties = current_child.get("appProperties")
+        parents = current_child.get("parents")
+        if (
+            not isinstance(parents, list)
+            or root_id not in parents
+            or not isinstance(properties, Mapping)
+            or properties.get("tabulaRasaKind") != storage_kind
+            or properties.get("tabulaRasaProfile") != profile_key
+            or properties.get("tabulaRasaStorageRoot") != root_id
+        ):
+            raise GoogleDriveConfigurationError(
+                "Reconfirm the profile storage root and both child folders "
+                "before enabling one-task Synology recovery."
+            )
+
+
 def _render_synology_recovery_admin(
     local_profiles: Mapping[str, Mapping[str, Any]],
     *,
+    app_secrets: Mapping[str, Any],
+    app_defaults: object = None,
     store_path: Path,
 ) -> None:
     st.subheader("Synology recovery copy")
@@ -175,14 +245,48 @@ def _render_synology_recovery_admin(
     )
     existing = local_profiles[profile_key].get("synology_recovery")
     existing = existing if isinstance(existing, Mapping) else {}
+    try:
+        defaults = resolve_synology_recovery_defaults(app_defaults, profile_key)
+    except SynologyRecoveryConfigurationError as error:
+        st.error(str(error))
+        defaults = {
+            "layout": PROFILE_ROOT_LAYOUT,
+            "destination_path": "",
+            "schedule": "",
+            "retention_policy": "",
+        }
+    selected_layout = (
+        synology_recovery_layout(existing) if existing else PROFILE_ROOT_LAYOUT
+    )
     with st.form("synology_recovery_form"):
         enabled = st.checkbox(
             "Maintain an optional Synology recovery copy for this business",
             value=bool(existing),
         )
+        layout = st.radio(
+            "Cloud Sync layout",
+            (PROFILE_ROOT_LAYOUT, LEGACY_TWO_TASK_LAYOUT),
+            index=(
+                0 if selected_layout == PROFILE_ROOT_LAYOUT else 1
+            ),
+            format_func=lambda value: (
+                "One task: profile storage root (recommended)"
+                if value == PROFILE_ROOT_LAYOUT
+                else "Two tasks: receipt and ledger folders (legacy)"
+            ),
+            help=(
+                "Existing legacy records stay on two tasks until this choice is "
+                "intentionally changed and saved."
+            ),
+        )
         destination_path = st.text_input(
             "NAS destination path",
-            value=str(existing.get("destination_path", "")),
+            value=str(
+                existing.get(
+                    "destination_path",
+                    defaults["destination_path"],
+                )
+            ),
             placeholder=f"/volume1/Backups/TabulaRasa/{profile_key}",
             help=(
                 "Informational DSM path only. The app never opens or writes to it."
@@ -190,7 +294,7 @@ def _render_synology_recovery_admin(
         )
         schedule = st.text_input(
             "Cloud Sync schedule",
-            value=str(existing.get("schedule", "Continuous")),
+            value=str(existing.get("schedule", defaults["schedule"])),
             help="For example: Continuous, or Daily at 11:00 PM.",
         )
         retention_policy = st.text_area(
@@ -198,7 +302,7 @@ def _render_synology_recovery_admin(
             value=str(
                 existing.get(
                     "retention_policy",
-                    "Retain all synchronized generations until manual review.",
+                    defaults["retention_policy"],
                 )
             ),
             help=(
@@ -210,13 +314,15 @@ def _render_synology_recovery_admin(
 
     st.caption(
         "Required DSM settings: Download remote changes only; destination "
-        "deletions disabled. Confirm the actual task and its logs in Cloud Sync."
+        "deletions disabled. One-task mode uses the profile storage root as its "
+        "remote source. Confirm the actual task and its logs in Cloud Sync."
     )
     if not save:
         return
 
     settings = (
         {
+            **({"layout": PROFILE_ROOT_LAYOUT} if layout == PROFILE_ROOT_LAYOUT else {}),
             "destination_path": destination_path,
             "schedule": schedule,
             "retention_policy": retention_policy,
@@ -225,12 +331,18 @@ def _render_synology_recovery_admin(
         else None
     )
     try:
+        if enabled and layout == PROFILE_ROOT_LAYOUT:
+            _validate_profile_root_storage_root(
+                app_secrets,
+                profile_key,
+                local_profiles,
+            )
         update_local_profile_synology_recovery(
             profile_key,
             settings,
             path=store_path,
         )
-    except LocalProfileStoreError as error:
+    except (GoogleDriveError, LocalProfileStoreError) as error:
         st.error(str(error))
         return
 
@@ -404,6 +516,8 @@ def render_local_profile_admin(
     )
     _render_synology_recovery_admin(
         local_profiles,
+        app_secrets=base_secrets,
+        app_defaults=base_secrets.get("synology_recovery_defaults"),
         store_path=store_path,
     )
 
