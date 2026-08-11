@@ -311,6 +311,46 @@ def test_recovery_refreshes_transaction_before_skipping_reused_file() -> None:
     storage.remap_transaction_receipt.assert_called_once()
 
 
+def test_recovery_removes_old_reference_when_confirmed_reference_is_also_present() -> None:
+    content = b"receipt"
+    reference = _reference(1, content)
+    backup, target, transaction_id = _backup_with_receipts([reference])
+    target.remap_transaction_receipt(
+        transaction_id,
+        old_file_id=str(reference["id"]),
+        reference={**reference, "id": "newreceipt01"},
+    )
+    target.link_transaction_receipt(
+        transaction_id,
+        file_id=str(reference["id"]),
+        name=str(reference["name"]),
+    )
+    drive = Mock()
+    drive.restore_receipt.return_value = (
+        _drive_file(reference, file_id="newreceipt01"),
+        True,
+    )
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(reference["name"])).write_bytes(content)
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=target,
+            drive=drive,
+        )
+
+    assert report["reused"] == 1
+    assert report["references_remapped"] == 1
+    current = target.list_transactions(_force_refresh=True)[0]
+    references = decode_receipt_references(current["receipt_references"])
+    assert [item["id"] for item in references] == ["newreceipt01"]
+
+
 def test_recovery_keeps_cache_when_remap_returns_no_transaction() -> None:
     first = _reference(1, b"first")
     second = _reference(2, b"second")
