@@ -2446,6 +2446,11 @@ schedule and retention defaults prefill the form and remain editable before
 save. A saved per-profile value is the operational record; the app does not
 configure or observe DSM.
 
+Saving Synology destination, layout, schedule, or retention metadata is a
+local-only operation. It must not access Google Drive or revalidate Drive
+ancestry; Drive root and managed-child validation remains in the dedicated
+Google Drive settings workflow.
+
 Existing three-field Synology records remain the supported two-task legacy
 layout. The layout control must continue to show that state and must not convert
 it unless the administrator intentionally selects the one-task layout and saves.
