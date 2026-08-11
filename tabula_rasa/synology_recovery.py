@@ -76,9 +76,17 @@ def validate_synology_recovery_settings(value: object) -> dict[str, str]:
             "Synology recovery settings use the retired three-field schema; "
             f"include layout='{PROFILE_ROOT_LAYOUT}'."
         )
-    if fields != REQUIRED_FIELDS:
+    missing_fields = REQUIRED_FIELDS - fields
+    if missing_fields:
         raise SynologyRecoveryConfigurationError(
-            "Synology recovery settings contain unsupported fields."
+            "Synology recovery settings are missing required fields: "
+            f"{', '.join(sorted(missing_fields))}."
+        )
+    unsupported_fields = fields - REQUIRED_FIELDS
+    if unsupported_fields:
+        raise SynologyRecoveryConfigurationError(
+            "Synology recovery settings contain unsupported fields: "
+            f"{', '.join(sorted(unsupported_fields))}."
         )
     if raw["layout"] != PROFILE_ROOT_LAYOUT:
         raise SynologyRecoveryConfigurationError(

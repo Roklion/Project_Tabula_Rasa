@@ -41,6 +41,36 @@ def test_rejects_retired_three_field_synology_record_explicitly() -> None:
         )
 
 
+def test_rejects_missing_synology_recovery_fields_explicitly() -> None:
+    with pytest.raises(
+        SynologyRecoveryConfigurationError,
+        match="missing required fields: retention_policy",
+    ):
+        validate_synology_recovery_settings(
+            {
+                "layout": PROFILE_ROOT_LAYOUT,
+                "destination_path": "/volume1/Backups/TabulaRasa/north",
+                "schedule": "Continuous",
+            }
+        )
+
+
+def test_rejects_unsupported_synology_recovery_fields_explicitly() -> None:
+    with pytest.raises(
+        SynologyRecoveryConfigurationError,
+        match="unsupported fields: legacy_task_id",
+    ):
+        validate_synology_recovery_settings(
+            {
+                "layout": PROFILE_ROOT_LAYOUT,
+                "destination_path": "/volume1/Backups/TabulaRasa/north",
+                "schedule": "Continuous",
+                "retention_policy": "Keep all.",
+                "legacy_task_id": "task-123",
+            }
+        )
+
+
 def test_normalizes_equivalent_dsm_paths() -> None:
     settings = validate_synology_recovery_settings(
         {
