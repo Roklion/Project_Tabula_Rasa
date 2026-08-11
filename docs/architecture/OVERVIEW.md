@@ -56,7 +56,7 @@ objects every subsequent operation uses.
 | Receipts and cloud backups | Shared OAuth client plus profile refresh token | Profile storage root and receipt/backup children | Files selected or created through the app |
 | Local configuration | Operating-system file permissions | `.streamlit/secrets.toml` and `.streamlit/business_profiles.json` | Local deployment |
 | Hosted configuration | Streamlit Secrets | Streamlit Community Cloud | Hosted deployment |
-| NAS recovery | DSM account and separate Google authorization in Cloud Sync | Profile-specific Synology root | One recursive task for the profile Drive root; legacy profiles may retain two child-folder tasks |
+| NAS recovery | DSM account and separate Google authorization in Cloud Sync | Profile-specific Synology root | One recursive task for each profile Drive root |
 
 The canonical local profile document contains both runtime configuration and
 local operational metadata. Hosted Streamlit Secrets are an explicit

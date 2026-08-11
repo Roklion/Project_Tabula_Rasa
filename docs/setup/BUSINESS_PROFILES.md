@@ -217,12 +217,10 @@ retention_policy = "Retain all synchronized generations until quarterly manual r
 
 The form always appends the selected profile key to `base_path`; it never uses
 the shared base as a profile destination. Schedule, retention, and destination
-remain editable before save. Existing three-field profile records display as
-the supported two-task legacy layout and are not migrated automatically. Follow
-the [Synology recovery runbook](../operations/SYNOLOGY_RECOVERY.md) before
-changing that layout.
+remain editable before save. Enabled records always store
+`layout = "profile-root"`; the administrator does not select a layout.
 
-Saving Synology destination, layout, schedule, or retention metadata is a
+Saving Synology destination, schedule, or retention metadata is a
 local-only operation. It does not require access to the Google Drive parent
 folder hierarchy; Drive storage-root and child-folder validation occurs when
 the Drive settings are selected or provisioned.
@@ -263,7 +261,7 @@ Repeat the export after any:
 Do not repeat the export when only local operational metadata changes:
 
 - Windows or local backup directory;
-- Synology destination or layout;
+- Synology destination;
 - Cloud Sync schedule;
 - NAS retention/versioning policy; or
 - app-wide `synology_recovery_defaults`.
