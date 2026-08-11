@@ -261,7 +261,7 @@ def _validate_stored_profiles(profiles: object) -> dict[str, dict[str, Any]]:
             storage_roots[root_id] = key
         recovery = settings.get("synology_recovery")
         if isinstance(recovery, Mapping):
-            destination = str(recovery["destination_path"])
+            destination = str(recovery["destination_path"]).casefold()
             for other_key, other_destination in synology_destinations.items():
                 if (
                     destination == other_destination

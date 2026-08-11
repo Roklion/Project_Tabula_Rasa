@@ -476,6 +476,8 @@ class TestLocalProfileStore:
         (
             "/volume1/Backups/shared",
             "/volume1/Backups/shared/south",
+            "/VOLUME1/Backups/SHARED",
+            "/volume1/Backups/SHARED/south",
         ),
     )
     def test_synology_destinations_cannot_share_or_overlap_between_profiles(
