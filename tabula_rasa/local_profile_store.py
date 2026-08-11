@@ -164,9 +164,15 @@ def project_hosted_profiles(
         }
         hosted["name"] = profile.name
         if "google_drive" in settings:
-            hosted["google_drive"] = validate_drive_profile_settings(
-                settings["google_drive"]
-            )
+            try:
+                hosted["google_drive"] = validate_drive_profile_settings(
+                    settings["google_drive"]
+                )
+            except GoogleDriveConfigurationError as exc:
+                raise GoogleDriveConfigurationError(
+                    f"Google Drive settings for profile '{profile.key}' are invalid: "
+                    f"{exc}"
+                ) from exc
         projected[profile.key] = hosted
     return projected
 

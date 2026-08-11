@@ -740,7 +740,14 @@ def render_local_profile_admin(
         selected_profile_key=selected_profile_key,
         store_path=store_path,
     )
-    current_profiles = load_local_profiles(store_path)
+    try:
+        current_profiles = load_local_profiles(store_path)
+    except (LocalProfileStoreError, ValueError):
+        st.error(
+            "The local profile file became unavailable or malformed. "
+            "Reload the page and repair the profile file before continuing."
+        )
+        return
     if selected_profile_key not in current_profiles:
         st.warning(
             "The selected profile was removed or changed externally. "
