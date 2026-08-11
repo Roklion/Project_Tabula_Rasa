@@ -141,7 +141,7 @@ def _fresh_profile_readiness(
     validation_errors: list[str] = []
     profiles_for_isolation = local_profiles or {profile_key: settings}
     try:
-        _initialize_candidate_storage(settings)
+        GoogleSheetsStorage.from_secrets_read_only(settings)
     except StorageError as error:
         validation_errors.append(_safe_readiness_error("Sheets", error))
 

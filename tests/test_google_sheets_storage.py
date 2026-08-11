@@ -17,6 +17,7 @@ from tabula_rasa.storage.google_sheets import (
     decode_receipt_references,
     GoogleSheetsStorage,
     SHEETS_SCOPE,
+    SHEETS_READONLY_SCOPE,
     StorageAuthenticationError,
     StorageConflictError,
     StorageInitializationError,
@@ -292,6 +293,73 @@ class TestGoogleSheetsStorage:
         assert workbook.sheets["Sheet1"].rows == [[]]
         for title, headers in WORKSHEET_HEADERS.items():
             assert workbook.sheets[title].rows == [list(headers)]
+
+    def test_read_only_profile_storage_validates_without_mutating_workbook(
+        self,
+    ) -> None:
+        workbook = FakeWorkbook()
+        google_client = Mock()
+        google_client.open_by_key.return_value = workbook
+        for worksheet in workbook.sheets.values():
+            worksheet.update = Mock()
+            worksheet.add_cols = Mock()
+            worksheet.append_row = Mock()
+            worksheet.append_rows = Mock()
+
+        with (
+            patch.object(
+                Credentials,
+                "from_service_account_info",
+                return_value=object(),
+            ) as from_service_account_info,
+            patch.object(gspread, "authorize", return_value=google_client),
+        ):
+            storage = GoogleSheetsStorage.from_secrets_read_only(
+                {
+                    "spreadsheet_id": "given-spreadsheet-id",
+                    "gcp_service_account": {"type": "service_account"},
+                }
+            )
+
+        assert storage.workbook_title == workbook.title
+        from_service_account_info.assert_called_once_with(
+            {"type": "service_account"}, scopes=[SHEETS_READONLY_SCOPE]
+        )
+        for worksheet in workbook.sheets.values():
+            worksheet.update.assert_not_called()
+            worksheet.add_cols.assert_not_called()
+            worksheet.append_row.assert_not_called()
+            worksheet.append_rows.assert_not_called()
+
+    def test_read_only_profile_storage_rejects_legacy_headers_without_migration(
+        self,
+    ) -> None:
+        workbook = FakeWorkbook(VERSION_5_WORKSHEET_HEADERS)
+        google_client = Mock()
+        google_client.open_by_key.return_value = workbook
+        for worksheet in workbook.sheets.values():
+            worksheet.update = Mock()
+            worksheet.add_cols = Mock()
+
+        with (
+            patch.object(
+                Credentials,
+                "from_service_account_info",
+                return_value=object(),
+            ),
+            patch.object(gspread, "authorize", return_value=google_client),
+            pytest.raises(StorageValidationError, match="missing headers"),
+        ):
+            GoogleSheetsStorage.from_secrets_read_only(
+                {
+                    "spreadsheet_id": "given-spreadsheet-id",
+                    "gcp_service_account": {"type": "service_account"},
+                }
+            )
+
+        for worksheet in workbook.sheets.values():
+            worksheet.update.assert_not_called()
+            worksheet.add_cols.assert_not_called()
 
     def test_profile_storage_does_not_overwrite_incompatible_tab(self) -> None:
         headers = dict(WORKSHEET_HEADERS)

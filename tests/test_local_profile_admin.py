@@ -116,7 +116,7 @@ def test_candidate_storage_preserves_specific_storage_errors(
 
 def test_fresh_readiness_reports_sheets_failure_without_secret_values() -> None:
     with patch(
-        "tabula_rasa.local_profile_admin._initialize_candidate_storage",
+        "tabula_rasa.local_profile_admin.GoogleSheetsStorage.from_secrets_read_only",
         side_effect=StorageWorkbookAccessError("contains no secret"),
     ), patch(
         "tabula_rasa.local_profile_admin.validate_google_drive_profile"
@@ -140,7 +140,7 @@ def test_fresh_readiness_reports_sheets_failure_without_secret_values() -> None:
 
 def test_fresh_readiness_skips_drive_validation_without_a_storage_root() -> None:
     with patch(
-        "tabula_rasa.local_profile_admin._initialize_candidate_storage"
+        "tabula_rasa.local_profile_admin.GoogleSheetsStorage.from_secrets_read_only"
     ), patch(
         "tabula_rasa.local_profile_admin.validate_google_drive_profile"
     ) as validate_drive:

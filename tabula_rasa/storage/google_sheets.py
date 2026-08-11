@@ -134,6 +134,7 @@ BACKUP_HEADERS_BY_VERSION = {
 }
 SUPPORTED_BACKUP_FORMAT_VERSIONS = set(BACKUP_HEADERS_BY_VERSION)
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
+SHEETS_READONLY_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly"
 DEFAULT_ACCOUNTS = (("Checking", "Bank"), ("Cash", "Cash"))
 DEFAULT_CATEGORIES = {
     "Income": ("Sales", "Services", "Interest", "Other income"),
@@ -559,9 +560,13 @@ class GoogleSheetsStorage:
             for title in WORKSHEET_HEADERS:
                 self._cache_values(title, _initial_values[title])
 
-    @classmethod
-    def from_secrets(cls, secrets: Mapping[str, Any]) -> "GoogleSheetsStorage":
-        """Create and initialize storage from Streamlit-compatible secrets."""
+    @staticmethod
+    def _open_workbook_from_secrets(
+        secrets: Mapping[str, Any],
+        *,
+        scopes: Sequence[str],
+    ) -> Any:
+        """Open a configured workbook without changing its contents."""
         try:
             credential_info = dict(secrets["gcp_service_account"])
             spreadsheet_id = str(secrets["spreadsheet_id"]).strip()
@@ -574,7 +579,7 @@ class GoogleSheetsStorage:
 
         try:
             credentials = Credentials.from_service_account_info(
-                credential_info, scopes=[SHEETS_SCOPE]
+                credential_info, scopes=list(scopes)
             )
             client = gspread.authorize(credentials)
         except (
@@ -605,6 +610,35 @@ class GoogleSheetsStorage:
             raise StorageWorkbookAccessError(
                 "Google Sheets could not open the configured spreadsheet"
             ) from exc
+
+        return workbook
+
+    @classmethod
+    def from_secrets_read_only(
+        cls,
+        secrets: Mapping[str, Any],
+    ) -> "GoogleSheetsStorage":
+        """Create storage using only read access to the configured workbook."""
+        workbook = cls._open_workbook_from_secrets(
+            secrets,
+            scopes=[SHEETS_READONLY_SCOPE],
+        )
+        try:
+            return cls(workbook)
+        except StorageValidationError:
+            raise
+        except StorageUnavailableError as exc:
+            raise StorageInitializationError(
+                "The workbook opened, but worksheet validation could not finish"
+            ) from exc
+
+    @classmethod
+    def from_secrets(cls, secrets: Mapping[str, Any]) -> "GoogleSheetsStorage":
+        """Create and initialize storage from Streamlit-compatible secrets."""
+        workbook = cls._open_workbook_from_secrets(
+            secrets,
+            scopes=[SHEETS_SCOPE],
+        )
 
         try:
             actual_worksheets = {
