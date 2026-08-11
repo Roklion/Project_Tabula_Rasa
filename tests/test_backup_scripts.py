@@ -295,7 +295,9 @@ class TestBackupScripts:
             assert main() == 1
 
     def test_windows_registration_defaults_to_one_all_profile_task(self) -> None:
-        script = (PROJECT_ROOT / "scripts" / "register_weekly_backup_task.ps1").read_text()
+        script = (PROJECT_ROOT / "scripts" / "register_weekly_backup_task.ps1").read_text(
+            encoding="utf-8"
+        )
         assert "$AllProfiles = $true" in script
         assert "$arguments += ' --all-profiles'" in script
         assert "-MultipleInstances IgnoreNew" in script
