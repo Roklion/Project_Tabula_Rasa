@@ -92,13 +92,13 @@ Gemini review's `commit.oid` is definitive evidence of the reviewed SHA, while
 an older PR-wide `/gemini review` comment is not evidence that Gemini was
 requested for a newer head.
 
-When reconstructing state, Gemini requests that predate the current-head
-`@codex review` comment or its authenticated Codex response belong to an older
-round and must not block the current-head request. If Codex has responded for
-the current head and no Gemini request is associated with that SHA, posting one
-`/gemini review` is safe and required. Do not stop the review cycle or request
-maintainer input merely because older Gemini trigger comments exist elsewhere
-on the pull request.
+When reconstructing state, Gemini requests that predate the current-head review
+round belong to an older round and must not block the current-head request. If
+no Gemini request is associated with the current head in the current round,
+posting one `/gemini review` is safe and required after feedback is
+dispositioned, even while the current-round Codex response is pending. Do not
+stop the review cycle or request maintainer input merely because older Gemini
+trigger comments exist elsewhere on the pull request.
 
 ### Gemini mode selection
 

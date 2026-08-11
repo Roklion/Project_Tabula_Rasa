@@ -74,6 +74,7 @@ def test_canonical_review_guide_covers_roles_and_dispositions() -> None:
         in normalized_guide
     )
     assert "posting one `/gemini review` is safe and required" in normalized_guide
+    assert "even while the current-round Codex response is pending" in normalized_guide
     assert "### Earlier-commit comments" in guide
     assert (
         "Do not ignore a comment merely because GitHub marks its line outdated"
