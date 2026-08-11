@@ -146,7 +146,12 @@ def _fresh_profile_readiness(
         validation_errors.append(_safe_readiness_error("Sheets", error))
 
     drive = settings.get("google_drive")
-    if isinstance(drive, Mapping):
+    storage_root = drive.get("storage_root") if isinstance(drive, Mapping) else None
+    if (
+        isinstance(drive, Mapping)
+        and isinstance(storage_root, Mapping)
+        and storage_root.get("id")
+    ):
         try:
             validate_google_drive_profile(
                 app_secrets,

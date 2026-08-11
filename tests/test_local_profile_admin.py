@@ -134,6 +134,32 @@ def test_fresh_readiness_reports_sheets_failure_without_secret_values() -> None:
     validate_drive.assert_not_called()
 
 
+def test_fresh_readiness_skips_drive_validation_without_a_storage_root() -> None:
+    with patch(
+        "tabula_rasa.local_profile_admin._initialize_candidate_storage"
+    ), patch(
+        "tabula_rasa.local_profile_admin.validate_google_drive_profile"
+    ) as validate_drive:
+        report = _fresh_profile_readiness(
+            "north",
+            {
+                **SETTINGS,
+                "name": "North Shop",
+                "google_drive": {"authorized_email": "owner@example.test"},
+            },
+            app_secrets={},
+            hosted_profiles=None,
+        )
+
+    assert report.status == "incomplete"
+    assert report.missing_steps == (
+        "Select or create the Google Drive storage root.",
+        "Provision the Receipts and Ledger Backups folders under the root.",
+    )
+    assert report.validation_errors == ()
+    validate_drive.assert_not_called()
+
+
 def test_readiness_cache_is_ignored_after_profile_settings_change() -> None:
     original = {"name": "North Shop", **SETTINGS}
     changed = {**original, "backup_folder_path": r"G:\\Backups\\north"}
