@@ -70,6 +70,21 @@ the trusted project layer is reloaded.
 - Do not leave template guidance comments or placeholder text as the
   substantive description.
 
+## GitHub text formatting
+
+- For pull-request descriptions, review feedback, and issue or pull-request
+  comments, send Markdown with real newline characters. Never encode line
+  breaks as literal `\n` text.
+- Prefer a body file or an API field that preserves multiline text over an
+  inline shell argument. Do not rely on shell escape interpretation to produce
+  line breaks.
+- Before posting, inspect the final rendered Markdown or the exact payload and
+  verify that headings, lists, paragraphs, inline code, fenced code blocks, and
+  blank lines are formatted as intended.
+- After posting or editing, read the published text back from GitHub and fix it
+  promptly if escape sequences, collapsed sections, broken code spans, or
+  other formatting defects are visible.
+
 ## PR description completeness
 
 - Before reviewing the implementation, check whether the pull-request
