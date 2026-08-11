@@ -164,6 +164,47 @@ def test_fresh_readiness_skips_drive_validation_without_a_storage_root() -> None
     validate_drive.assert_not_called()
 
 
+def test_fresh_readiness_does_not_walk_drive_parent_ancestry() -> None:
+    drive = {
+        "storage_root": {"id": "northroot123", "name": "North Storage"},
+        "receipt_folder": {"id": "receipts123", "name": "Receipts"},
+        "backup_folder": {"id": "backups1234", "name": "Ledger Backups"},
+    }
+    settings = {**SETTINGS, "name": "North Shop", "google_drive": drive}
+    local_profiles = {
+        "north": settings,
+        "south": {
+            **SETTINGS,
+            "name": "South Shop",
+            "spreadsheet_id": "southsheet123",
+            "google_drive": {
+                "storage_root": {"id": "southroot123"},
+            },
+        },
+    }
+    with patch(
+        "tabula_rasa.local_profile_admin.GoogleSheetsStorage.from_secrets_read_only"
+    ), patch(
+        "tabula_rasa.local_profile_admin.validate_google_drive_profile"
+    ) as validate_drive:
+        report = _fresh_profile_readiness(
+            "north",
+            settings,
+            app_secrets={},
+            hosted_profiles=None,
+            local_profiles=local_profiles,
+        )
+
+    assert report.status == "ready-local"
+    validate_drive.assert_called_once_with(
+        {},
+        "north",
+        drive,
+        local_profiles=local_profiles,
+        enforce_root_isolation=False,
+    )
+
+
 def test_readiness_cache_is_ignored_after_profile_settings_change() -> None:
     original = {"name": "North Shop", **SETTINGS}
     changed = {**original, "backup_folder_path": r"G:\\Backups\\north"}

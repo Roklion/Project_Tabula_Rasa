@@ -158,6 +158,7 @@ def _fresh_profile_readiness(
                 profile_key,
                 drive,
                 local_profiles=profiles_for_isolation,
+                enforce_root_isolation=False,
             )
         except (GoogleDriveError, LocalProfileStoreError) as error:
             validation_errors.append(_safe_readiness_error("Drive", error))

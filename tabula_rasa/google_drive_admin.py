@@ -196,6 +196,34 @@ def _ensure_storage_root_is_profile_isolated(
             )
 
 
+def _ensure_storage_root_is_not_directly_nested(
+    profile_key: str,
+    selected_root: Mapping[str, Any],
+    local_profiles: Mapping[str, Mapping[str, Any]],
+) -> None:
+    """Reject known root reuse or direct nesting without opening parent folders."""
+    selected_id = str(selected_root.get("id", ""))
+    parents = selected_root.get("parents")
+    parent_ids = (
+        {str(parent_id) for parent_id in parents}
+        if isinstance(parents, list)
+        else set()
+    )
+    for other_key, profile in local_profiles.items():
+        if other_key == profile_key:
+            continue
+        drive = profile.get("google_drive")
+        other_root = drive.get("storage_root") if isinstance(drive, Mapping) else None
+        if not isinstance(other_root, Mapping):
+            continue
+        other_id = str(other_root.get("id", ""))
+        if other_id and (other_id == selected_id or other_id in parent_ids):
+            raise GoogleDriveConfigurationError(
+                "Google Drive storage roots cannot be nested between business "
+                "profiles."
+            )
+
+
 def _revalidated_storage_settings(
     client: GoogleDriveClient,
     profile_key: str,
@@ -333,8 +361,9 @@ def validate_google_drive_profile(
     drive_settings: Mapping[str, Any],
     *,
     local_profiles: Mapping[str, Mapping[str, Any]],
+    enforce_root_isolation: bool = True,
 ) -> None:
-    """Re-read one profile's Drive grant, isolation, and destinations."""
+    """Re-read one profile's Drive grant and configured destinations."""
     storage_root = drive_settings.get("storage_root")
     if not isinstance(storage_root, Mapping) or not storage_root.get("id"):
         raise GoogleDriveConfigurationError(
@@ -349,13 +378,19 @@ def validate_google_drive_profile(
     )
     root = client.folder(root_id)
     client.validate_storage_configuration(profile_key, root_folder=root)
-    _ensure_storage_root_is_profile_isolated(
-        client,
+    _ensure_storage_root_is_not_directly_nested(
         profile_key,
         root,
         local_profiles,
-        selected_drive_settings=drive_settings,
     )
+    if enforce_root_isolation:
+        _ensure_storage_root_is_profile_isolated(
+            client,
+            profile_key,
+            root,
+            local_profiles,
+            selected_drive_settings=drive_settings,
+        )
 
 
 def _save_storage_root(
