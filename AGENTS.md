@@ -77,7 +77,8 @@ the trusted project layer is reloaded.
   breaks as literal `\n` text.
 - Prefer a body file or an API field that preserves multiline text over an
   inline shell argument. Do not rely on shell escape interpretation to produce
-  line breaks.
+  line breaks, which also avoids command-injection risks when handling dynamic
+  text.
 - Before posting, inspect the final rendered Markdown or the exact payload and
   verify that headings, lists, paragraphs, inline code, fenced code blocks, and
   blank lines are formatted as intended.
