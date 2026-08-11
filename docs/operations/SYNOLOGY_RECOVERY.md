@@ -174,6 +174,12 @@ copy**. For each business:
 5. Review or override the Cloud Sync schedule and NAS retention policy.
 6. Save the choice, then configure DSM to match the saved record.
 
+Saving this record changes only local NAS metadata. It does not inspect the
+whole Google Drive or walk ordinary parent folders. The selected storage root
+and its `Receipts` and `Ledger Backups` children are validated when the Drive
+settings are selected or provisioned; changing only the NAS destination,
+layout, schedule, or retention policy does not require another Drive check.
+
 Set app-wide defaults only in local `.streamlit/secrets.toml`. The base path is
 never used directly as a profile destination; the app always appends the
 profile key.

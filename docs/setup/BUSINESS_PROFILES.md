@@ -222,6 +222,11 @@ the supported two-task legacy layout and are not migrated automatically. Follow
 the [Synology recovery runbook](../operations/SYNOLOGY_RECOVERY.md) before
 changing that layout.
 
+Saving Synology destination, layout, schedule, or retention metadata is a
+local-only operation. It does not require access to the Google Drive parent
+folder hierarchy; Drive storage-root and child-folder validation occurs when
+the Drive settings are selected or provisioned.
+
 ## 9. Export profiles to Streamlit Community Cloud
 
 Local development uses split files, while the hosted app expects one combined

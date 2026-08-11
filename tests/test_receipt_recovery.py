@@ -173,11 +173,321 @@ def test_recovery_retry_reuses_file_and_repairs_reference_idempotently() -> None
 
     assert first["restored"] == 1
     assert second["reused"] == 1
-    assert second["references_remapped"] == 1
+    assert second["references_remapped"] == 0
     references = decode_receipt_references(
         target.list_transactions(_force_refresh=True)[0]["receipt_references"]
     )
     assert [item["id"] for item in references] == ["newreceipt01"]
+
+
+def test_recovery_reuses_original_drive_file_without_remapping() -> None:
+    content = b"receipt"
+    reference = _reference(1, content)
+    backup, target, _ = _backup_with_receipts([reference])
+    drive = Mock()
+    drive.restore_receipt.return_value = (_drive_file(reference), True)
+    target.remap_transaction_receipt = Mock()
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(reference["name"])).write_bytes(content)
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=target,
+            drive=drive,
+        )
+
+    assert report["reused"] == 1
+    assert report["references_remapped"] == 0
+    assert report["errors"] == 0
+    assert report["skipped"] == 0
+    target.remap_transaction_receipt.assert_not_called()
+
+
+def test_recovery_preserves_conflict_check_before_skipping_reused_file() -> None:
+    content = b"receipt"
+    reference = _reference(1, content)
+    backup, target, transaction_id = _backup_with_receipts([reference])
+    accounts = target.list_accounts(_force_refresh=True)
+    categories = target.list_categories(_force_refresh=True)
+    other_transaction = target.create_transaction(
+        txn_date="2026-07-31",
+        kind="Income",
+        amount=10,
+        account_id=accounts[0]["id"],
+        category_id=categories[0]["id"],
+    )
+    target.set_transaction_receipt_references(
+        other_transaction["id"],
+        [reference],
+    )
+    drive = Mock()
+    drive.restore_receipt.return_value = (_drive_file(reference), True)
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(reference["name"])).write_bytes(content)
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=target,
+            drive=drive,
+        )
+
+    assert report["reused"] == 0
+    assert report["references_remapped"] == 0
+    assert report["errors"] == 1
+    assert report["issues"][0]["status"] == "errors"
+    assert transaction_id != other_transaction["id"]
+
+
+def test_recovery_rejects_duplicate_ids_in_refreshed_transactions() -> None:
+    content = b"receipt"
+    reference = _reference(1, content)
+    backup, target, _ = _backup_with_receipts([reference])
+    initial_transactions = target.list_transactions(_force_refresh=True)
+    storage = Mock(wraps=target)
+    storage.list_transactions.side_effect = [
+        initial_transactions,
+        [initial_transactions[0], initial_transactions[0]],
+    ]
+    drive = Mock()
+    drive.restore_receipt.return_value = (_drive_file(reference), True)
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(reference["name"])).write_bytes(content)
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=storage,
+            drive=drive,
+        )
+
+    assert report["reused"] == 0
+    assert report["references_remapped"] == 0
+    assert report["errors"] == 1
+    assert report["issues"][0]["status"] == "errors"
+
+
+def test_recovery_handles_null_receipt_reference_cells() -> None:
+    content = b"receipt"
+    reference = _reference(1, content)
+    backup, target, _ = _backup_with_receipts([reference])
+    initial_transactions = target.list_transactions(_force_refresh=True)
+    refreshed_transactions = [
+        {**initial_transactions[0], "receipt_references": None},
+        {"id": "other-transaction", "receipt_references": None},
+    ]
+    storage = Mock(wraps=target)
+    storage.list_transactions.side_effect = [
+        initial_transactions,
+        refreshed_transactions,
+    ]
+    storage.remap_transaction_receipt.return_value = initial_transactions[0]
+    drive = Mock()
+    drive.restore_receipt.return_value = (_drive_file(reference), True)
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(reference["name"])).write_bytes(content)
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=storage,
+            drive=drive,
+        )
+
+    assert report["errors"] == 0
+    assert report["references_remapped"] == 1
+    storage.remap_transaction_receipt.assert_called_once()
+
+
+def test_recovery_repairs_stale_live_reference_when_original_file_is_reused() -> None:
+    content = b"receipt"
+    reference = _reference(1, content)
+    backup, target, transaction_id = _backup_with_receipts([reference])
+    stale_reference = {**reference, "id": "stale-recovered-id"}
+    target.remap_transaction_receipt(
+        transaction_id,
+        old_file_id=str(reference["id"]),
+        reference=stale_reference,
+    )
+    drive = Mock()
+    drive.restore_receipt.return_value = (_drive_file(reference), True)
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(reference["name"])).write_bytes(content)
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=target,
+            drive=drive,
+        )
+
+    assert report["reused"] == 1
+    assert report["references_remapped"] == 1
+    assert report["errors"] == 0
+    current = target.list_transactions(_force_refresh=True)[0]
+    references = decode_receipt_references(current["receipt_references"])
+    assert [item["id"] for item in references] == [str(reference["id"])]
+
+
+def test_recovery_remaps_legacy_reference_when_original_file_is_reused() -> None:
+    content = b"receipt"
+    reference = _reference(1, content)
+    backup, target, transaction_id = _backup_with_receipts([reference])
+    target.link_transaction_receipt(
+        transaction_id,
+        file_id=str(reference["id"]),
+        name=str(reference["name"]),
+    )
+    drive = Mock()
+    drive.restore_receipt.return_value = (_drive_file(reference), True)
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(reference["name"])).write_bytes(content)
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=target,
+            drive=drive,
+        )
+
+    assert report["reused"] == 1
+    assert report["references_remapped"] == 1
+    assert report["errors"] == 0
+
+
+def test_recovery_refreshes_transaction_before_skipping_reused_file() -> None:
+    content = b"receipt"
+    reference = _reference(1, content)
+    backup, target, transaction_id = _backup_with_receipts([reference])
+    initial_transactions = target.list_transactions(_force_refresh=True)
+    stale_reference = {**reference, "id": "stale-recovered-id"}
+    stale_transaction = {
+        **initial_transactions[0],
+        "receipt_references": json.dumps([stale_reference]),
+    }
+    storage = Mock(wraps=target)
+    storage.list_transactions.side_effect = [
+        initial_transactions,
+        [stale_transaction],
+    ]
+    storage.remap_transaction_receipt.side_effect = (
+        target.remap_transaction_receipt
+    )
+    drive = Mock()
+    drive.restore_receipt.return_value = (_drive_file(reference), True)
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(reference["name"])).write_bytes(content)
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=storage,
+            drive=drive,
+        )
+
+    assert report["reused"] == 1
+    assert report["references_remapped"] == 1
+    storage.remap_transaction_receipt.assert_called_once()
+
+
+def test_recovery_removes_old_reference_when_confirmed_reference_is_also_present() -> None:
+    content = b"receipt"
+    reference = _reference(1, content)
+    backup, target, transaction_id = _backup_with_receipts([reference])
+    target.remap_transaction_receipt(
+        transaction_id,
+        old_file_id=str(reference["id"]),
+        reference={**reference, "id": "newreceipt01"},
+    )
+    target.link_transaction_receipt(
+        transaction_id,
+        file_id=str(reference["id"]),
+        name=str(reference["name"]),
+    )
+    drive = Mock()
+    drive.restore_receipt.return_value = (
+        _drive_file(reference, file_id="newreceipt01"),
+        True,
+    )
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(reference["name"])).write_bytes(content)
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=target,
+            drive=drive,
+        )
+
+    assert report["reused"] == 1
+    assert report["references_remapped"] == 1
+    current = target.list_transactions(_force_refresh=True)[0]
+    references = decode_receipt_references(current["receipt_references"])
+    assert [item["id"] for item in references] == ["newreceipt01"]
+
+
+def test_recovery_keeps_cache_when_remap_returns_no_transaction() -> None:
+    first = _reference(1, b"first")
+    second = _reference(2, b"second")
+    backup, target, _ = _backup_with_receipts([first, second])
+    target.remap_transaction_receipt = Mock(return_value=None)
+    drive = Mock()
+    drive.restore_receipt.side_effect = [
+        (_drive_file(first, file_id="newreceipt01"), False),
+        (_drive_file(second, file_id="newreceipt02"), False),
+    ]
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(first["name"])).write_bytes(b"first")
+        (root / str(second["name"])).write_bytes(b"second")
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=target,
+            drive=drive,
+        )
+
+    assert report["restored"] == 2
+    assert report["references_remapped"] == 2
+    assert report["errors"] == 0
+    assert target.remap_transaction_receipt.call_count == 2
 
 
 def test_missing_and_corrupt_files_do_not_block_other_valid_receipts() -> None:

@@ -66,7 +66,7 @@ def _reference_matches_entry(
     entry: Mapping[str, Any],
 ) -> bool:
     return all(
-        reference[reference_field] == entry[entry_field]
+        reference.get(reference_field) == entry[entry_field]
         for reference_field, entry_field in (
             ("name", "stored_filename"),
             ("receipt_id", "receipt_id"),
@@ -171,12 +171,66 @@ def recover_receipts_from_synology(
                     "Recovered receipt metadata does not match the manifest"
                 )
             if entry["reference_state"] == "referenced":
-                storage.remap_transaction_receipt(
-                    str(entry["transaction_id"]),
-                    old_file_id=str(entry["old_drive_file_id"]),
-                    reference=reference,
+                transaction_id = str(entry["transaction_id"])
+                old_file_id = str(entry["old_drive_file_id"])
+                refreshed_transactions = storage.list_transactions(
+                    _force_refresh=True
                 )
-                report["references_remapped"] += 1
+                transactions_by_id = {
+                    str(transaction["id"]): transaction
+                    for transaction in refreshed_transactions
+                }
+                if len(transactions_by_id) != len(refreshed_transactions):
+                    raise StorageError(
+                        "Receipt recovery found duplicate live transaction IDs."
+                    )
+                current_transaction = transactions_by_id.get(transaction_id)
+                if current_transaction is None:
+                    raise StorageError(
+                        "The transaction disappeared during receipt recovery."
+                    )
+                current_references = decode_receipt_references(
+                    current_transaction.get("receipt_references") or ""
+                )
+                confirmed_reference_present = any(
+                    str(current_reference.get("id")) == str(reference["id"])
+                    and _reference_matches_entry(current_reference, entry)
+                    for current_reference in current_references
+                )
+                confirmed_reference_conflict = any(
+                    other_transaction_id != transaction_id
+                    and any(
+                        str(other_reference.get("id"))
+                        == str(reference["id"])
+                        for other_reference in decode_receipt_references(
+                            other_transaction.get("receipt_references") or ""
+                        )
+                    )
+                    for other_transaction_id, other_transaction in (
+                        transactions_by_id.items()
+                    )
+                )
+                stale_old_reference_present = (
+                    old_file_id != str(reference["id"])
+                    and any(
+                        str(current_reference.get("id")) == old_file_id
+                        for current_reference in current_references
+                    )
+                )
+                needs_remap = (
+                    not confirmed_reference_present
+                    or confirmed_reference_conflict
+                    or stale_old_reference_present
+                )
+                if needs_remap:
+                    updated_transaction = storage.remap_transaction_receipt(
+                        transaction_id,
+                        old_file_id=old_file_id,
+                        reference=reference,
+                    )
+                    if updated_transaction is not None:
+                        transactions_by_id[transaction_id] = updated_transaction
+                    report["references_remapped"] += 1
             else:
                 report["unreferenced_preserved"] += 1
         except GoogleDriveConflictError:

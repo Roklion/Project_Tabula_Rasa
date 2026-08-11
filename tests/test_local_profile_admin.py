@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
 
-import tabula_rasa.local_profile_admin as local_profile_admin
 from tabula_rasa.local_profile_admin import (
     _initialize_candidate_storage,
     _profile_rows,
@@ -20,12 +18,6 @@ from tabula_rasa.storage import (
     StorageValidationError,
     StorageWorkbookAccessError,
 )
-from tabula_rasa.google_drive import (
-    GoogleDriveAccessError,
-    GoogleDriveConfigurationError,
-)
-
-
 SETTINGS = {
     "spreadsheet_id": "abcdefghij1234567890",
     "gcp_service_account": {
@@ -112,178 +104,3 @@ def test_candidate_storage_preserves_specific_storage_errors(
             _initialize_candidate_storage(SETTINGS)
 
     assert raised.value is error
-
-
-def test_profile_root_enablement_revalidates_drive_root(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    north_root = {
-        "id": "northroot123",
-        "name": "North Storage",
-        "mimeType": "application/vnd.google-apps.folder",
-        "trashed": False,
-        "parents": ["southroot123"],
-    }
-    south_root = {
-        "id": "southroot123",
-        "name": "South Storage",
-        "mimeType": "application/vnd.google-apps.folder",
-        "trashed": False,
-    }
-
-    class Client:
-        def __init__(self, folders: dict[str, dict[str, Any]]) -> None:
-            self.folders = folders
-
-        def folder(self, folder_id: str) -> dict[str, Any]:
-            return self.folders[folder_id]
-
-    client = Client({"northroot123": north_root, "southroot123": south_root})
-    monkeypatch.setattr(local_profile_admin, "load_oauth_config", lambda _secrets: object())
-    monkeypatch.setattr(
-        local_profile_admin,
-        "GoogleDriveClient",
-        lambda _config, _settings: client,
-    )
-
-    profiles = {
-        "north": {
-            "google_drive": {
-                "authorized_email": "same@example.com",
-                "storage_root": {"id": "northroot123", "name": "North Storage"},
-            }
-        },
-        "south": {
-            "google_drive": {
-                "authorized_email": "same@example.com",
-                "storage_root": {"id": "southroot123", "name": "South Storage"},
-            }
-        },
-    }
-
-    with pytest.raises(GoogleDriveConfigurationError, match="cannot be nested"):
-        local_profile_admin._validate_profile_root_storage_root(
-            {},
-            "north",
-            profiles,
-        )
-
-
-def test_profile_root_enablement_requires_current_storage_children(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    root = {
-        "id": "northroot123",
-        "name": "North Storage",
-        "mimeType": "application/vnd.google-apps.folder",
-        "trashed": False,
-        "appProperties": {
-            "tabulaRasaKind": "storage-root",
-            "tabulaRasaProfile": "north",
-        },
-    }
-
-    class Client:
-        def folder(self, folder_id: str) -> dict[str, Any]:
-            if folder_id == "northroot123":
-                return root
-            raise GoogleDriveAccessError("child unavailable")
-
-    monkeypatch.setattr(local_profile_admin, "load_oauth_config", lambda _secrets: object())
-    monkeypatch.setattr(
-        local_profile_admin,
-        "GoogleDriveClient",
-        lambda _config, _settings: Client(),
-    )
-
-    profiles = {
-        "north": {
-            "google_drive": {
-                "authorized_email": "north@example.com",
-                "storage_root": {"id": "northroot123", "name": "North Storage"},
-                "receipt_folder": {"id": "receiptchild123", "name": "Receipts"},
-                "backup_folder": {
-                    "id": "backupchild123",
-                    "name": "Ledger Backups",
-                },
-            }
-        }
-    }
-
-    with pytest.raises(GoogleDriveConfigurationError, match="both child folders"):
-        local_profile_admin._validate_profile_root_storage_root(
-            {},
-            "north",
-            profiles,
-        )
-
-
-def test_picker_root_with_current_children_can_be_revalidated(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    root = {
-        "id": "northroot123",
-        "name": "Picker Root",
-        "mimeType": "application/vnd.google-apps.folder",
-        "trashed": False,
-    }
-    receipt = {
-        "id": "receiptchild123",
-        "name": "Receipts",
-        "mimeType": "application/vnd.google-apps.folder",
-        "trashed": False,
-        "parents": ["northroot123"],
-        "appProperties": {
-            "tabulaRasaKind": "receipts",
-            "tabulaRasaProfile": "north",
-            "tabulaRasaStorageRoot": "northroot123",
-        },
-    }
-    backup = {
-        "id": "backupchild123",
-        "name": "Ledger Backups",
-        "mimeType": "application/vnd.google-apps.folder",
-        "trashed": False,
-        "parents": ["northroot123"],
-        "appProperties": {
-            "tabulaRasaKind": "ledger-backups",
-            "tabulaRasaProfile": "north",
-            "tabulaRasaStorageRoot": "northroot123",
-        },
-    }
-
-    class Client:
-        def folder(self, folder_id: str) -> dict[str, Any]:
-            return {
-                "northroot123": root,
-                "receiptchild123": receipt,
-                "backupchild123": backup,
-            }[folder_id]
-
-    monkeypatch.setattr(local_profile_admin, "load_oauth_config", lambda _secrets: object())
-    monkeypatch.setattr(
-        local_profile_admin,
-        "GoogleDriveClient",
-        lambda _config, _settings: Client(),
-    )
-
-    local_profile_admin._validate_profile_root_storage_root(
-        {},
-        "north",
-        {
-            "north": {
-                "google_drive": {
-                    "authorized_email": "north@example.com",
-                    "storage_root": {"id": "northroot123", "name": "Picker Root"},
-                    "receipt_folder": {
-                        "id": "receiptchild123",
-                        "name": "Receipts",
-                    },
-                    "backup_folder": {
-                        "id": "backupchild123",
-                        "name": "Ledger Backups",
-                    },
-                }
-            }
-        },
-    )

@@ -73,21 +73,20 @@ assume that a push automatically re-triggers Codex.
 
 Gemini reviewer functionality is also disabled while a pull request is a
 draft. Marking the pull request ready automatically begins Gemini's initial
-complementary review; no comment is required. If the hosted integration does
-not start that review within ten minutes, wait for the current-head Codex
-response before posting `/gemini review` as a standalone top-level comment.
-Post it only once for that head, and only if an automatic Gemini review has not
-already started.
+complementary review; no comment is required.
 
-After every material push, wait for an authenticated Codex response for the
-new current head before requesting Gemini. A Codex review result, a looking or
-eyes acknowledgement, or an explicit current-round unavailability response is
-enough to establish that Codex has responded. Do not post `/gemini review`
-while Codex is still silent, including when a monitoring interval has elapsed.
-After the response is observed, post exactly one standalone `/gemini review`
-for that head. Do not post a second Gemini request to select fallback mode; the
-single request uses the already-observed Codex availability result to select
-normal or full fallback scope.
+After every material push, once all existing feedback is dispositioned, post
+exactly one standalone `@codex review` and exactly one standalone `/gemini
+review` for the same new current head. Do not wait for either reviewer before
+requesting the other. The two responses are tracked independently; Gemini
+uses the latest trusted Codex availability result when one exists and remains
+in normal complementary mode when that signal is not yet verifiable. Do not
+post a second Gemini request in the same round. If the authenticated Codex
+response later reports current-round unavailability after the normal Gemini
+request was already posted, record that request as normal/unverified and post
+exactly one additional `/gemini review` as a new fallback round for the same
+head. Do not post the fallback request if Gemini already reviewed in full
+fallback mode or a fallback request for that head is already associated.
 
 Track manual review requests by head SHA, including `codex_requested_sha`,
 `codex_response_sha`, `gemini_requested_sha`, and the Gemini trigger comment
@@ -98,13 +97,13 @@ Gemini review's `commit.oid` is definitive evidence of the reviewed SHA, while
 an older PR-wide `/gemini review` comment is not evidence that Gemini was
 requested for a newer head.
 
-When reconstructing state, Gemini requests that predate the current-head
-`@codex review` comment or its authenticated Codex response belong to an older
-round and must not block the current-head request. If Codex has responded for
-the current head and no Gemini request is associated with that SHA, posting one
-`/gemini review` is safe and required. Do not stop the review cycle or request
-maintainer input merely because older Gemini trigger comments exist elsewhere
-on the pull request.
+When reconstructing state, Gemini requests that predate the current-head review
+round belong to an older round and must not block the current-head request. If
+no Gemini request is associated with the current head in the current round,
+posting one `/gemini review` is safe and required after feedback is
+dispositioned, even while the current-round Codex response is pending. Do not
+stop the review cycle or request maintainer input merely because older Gemini
+trigger comments exist elsewhere on the pull request.
 
 ### Gemini mode selection
 
@@ -185,10 +184,11 @@ context when recording the disposition.
    marks the pull request ready for review. Reviewers do not review drafts.
 2. Codex automatically performs its primary review while Gemini automatically
    performs its initial complementary review of the same current head.
-3. After the current-head Codex response is observed, post exactly one
-   `/gemini review`. If that response reports current-round unavailability,
-   the same single request selects full fallback coverage from the trusted
-   availability result. The maintainer or another coding agent coordinates
+3. After the feedback gate, post exactly one `@codex review` and exactly one
+   `/gemini review` for the same current head. If a trusted Codex
+   availability result exists, Gemini uses it to select normal or full
+   fallback coverage; otherwise Gemini remains normal and records the signal
+   as unverified. The maintainer or another coding agent coordinates
    remediation.
 4. Accepted findings receive focused fixes and regression coverage.
 5. During remediation, run focused tests and linting for impacted functions or
@@ -199,15 +199,18 @@ context when recording the disposition.
    outstanding feedback from current and earlier commits. Each actionable
    comment must be fixed, disputed with evidence, deferred to a linked issue,
    or otherwise explicitly replied to and resolved. Do not post either review
-   trigger while feedback remains unaddressed. After that gate, post
-   `@codex review`, wait for its current-head response, and then post exactly
-   one `/gemini review`.
+   trigger while feedback remains unaddressed. After that gate, post exactly
+   one `@codex review` and exactly one `/gemini review` for the same current
+   head without waiting for either reviewer to respond.
 7. The human maintainer makes the final merge decision.
 
 The initial ready transition may start hosted reviews automatically. For
-manual current-head re-reviews, the Codex response gate sequences the trigger
-comments without sharing Codex findings with Gemini; Gemini remains
-independent and may inspect only the trusted availability signal.
+manual current-head re-reviews, request both reviewers in the same round and
+track their responses independently. Gemini may inspect only the latest
+trusted Codex availability signal, not Codex findings; without a trusted
+signal, Gemini remains in normal mode and records the signal as unverified. A
+late trusted unavailability response permits one separately tracked fallback
+Gemini round for that same head.
 
 During iterative review remediation, focused tests and linting for the impacted
 functions or modules are sufficient. Run the full `ruff check .` and

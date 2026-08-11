@@ -66,17 +66,16 @@ def test_canonical_review_guide_covers_roles_and_dispositions() -> None:
         "Do not assume that a push automatically re-triggers Codex."
         in normalized_guide
     )
-    assert (
-        "Do not post `/gemini review` while Codex is still silent"
-        in normalized_guide
-    )
-    assert "post exactly one standalone `/gemini review`" in normalized_guide
+    assert "without waiting for either reviewer to respond" in normalized_guide
+    assert "late trusted unavailability response permits one separately tracked fallback" in normalized_guide
+    assert "one `@codex review` and exactly one `/gemini review`" in normalized_guide
     assert "`gemini_requested_sha`" in guide
     assert (
         "an older PR-wide `/gemini review` comment is not evidence"
         in normalized_guide
     )
     assert "posting one `/gemini review` is safe and required" in normalized_guide
+    assert "even while the current-round Codex response is pending" in normalized_guide
     assert "### Earlier-commit comments" in guide
     assert (
         "Do not ignore a comment merely because GitHub marks its line outdated"
