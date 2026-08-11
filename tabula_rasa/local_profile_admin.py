@@ -168,8 +168,6 @@ def _fresh_profile_readiness(
 def _readiness_for_display(
     profile_key: str,
     settings: Mapping[str, Any],
-    *,
-    hosted_profiles: Mapping[str, Any] | None,
 ) -> ProfileReadiness:
     stored = st.session_state.get(f"profile-readiness:{profile_key}")
     if (
@@ -200,7 +198,6 @@ def _render_profile_readiness(
     report = _readiness_for_display(
         profile_key,
         settings,
-        hosted_profiles=hosted_profiles,
     )
     labels = {
         "incomplete": "Incomplete",

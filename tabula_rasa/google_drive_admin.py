@@ -335,15 +335,19 @@ def validate_google_drive_profile(
     local_profiles: Mapping[str, Mapping[str, Any]],
 ) -> None:
     """Re-read one profile's Drive grant, isolation, and destinations."""
+    storage_root = drive_settings.get("storage_root")
+    if not isinstance(storage_root, Mapping) or not storage_root.get("id"):
+        raise GoogleDriveConfigurationError(
+            "Select or create the Google Drive storage root."
+        )
+    root_id = str(storage_root.get("id") or "")
     config = load_oauth_config(app_secrets)
     client = _cached_drive_client(
         config,
         profile_key,
         json.dumps(dict(drive_settings), sort_keys=True),
     )
-    storage_root = drive_settings.get("storage_root")
-    root_id = storage_root.get("id") if isinstance(storage_root, Mapping) else ""
-    root = client.folder(str(root_id or ""))
+    root = client.folder(root_id)
     client.validate_storage_configuration(profile_key, root_folder=root)
     _ensure_storage_root_is_profile_isolated(
         client,

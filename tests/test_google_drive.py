@@ -15,6 +15,7 @@ from tabula_rasa.google_drive import (
     GoogleDriveAccessError,
     GoogleDriveAuthorizationError,
     GoogleDriveClient,
+    GoogleDriveConfigurationError,
     GoogleDriveConflictError,
     GoogleDriveOAuthConfig,
     authorization_url,
@@ -363,7 +364,10 @@ class TestGoogleDriveFiles:
         )
         client.profile_settings["receipt_folder"] = {"id": None, "name": "Receipts"}
 
-        with pytest.raises(GoogleDriveAccessError, match="invalid"):
+        with pytest.raises(
+            GoogleDriveConfigurationError,
+            match="Provision the Receipts",
+        ):
             client.validate_storage_configuration("north")
 
     @staticmethod

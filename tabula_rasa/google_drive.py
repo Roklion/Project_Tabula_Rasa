@@ -681,7 +681,7 @@ class GoogleDriveClient:
     ) -> dict[str, dict[str, str]]:
         """Freshly validate the saved root and managed child folders."""
         storage_root = self.profile_settings.get("storage_root")
-        if not isinstance(storage_root, Mapping):
+        if not isinstance(storage_root, Mapping) or not storage_root.get("id"):
             raise GoogleDriveConfigurationError(
                 "Select or create the Google Drive storage root."
             )
@@ -700,7 +700,7 @@ class GoogleDriveClient:
             ("backup_folder", "ledger-backups"),
         ):
             child = self.profile_settings.get(field)
-            if not isinstance(child, Mapping):
+            if not isinstance(child, Mapping) or not child.get("id"):
                 raise GoogleDriveConfigurationError(
                     "Provision the Receipts and Ledger Backups folders under "
                     "the root."

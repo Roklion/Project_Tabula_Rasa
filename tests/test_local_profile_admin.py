@@ -151,7 +151,6 @@ def test_readiness_cache_is_ignored_after_profile_settings_change() -> None:
         report = _readiness_for_display(
             "north",
             changed,
-            hosted_profiles=None,
         )
 
     assert report.status == "incomplete"
