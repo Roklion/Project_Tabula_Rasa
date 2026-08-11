@@ -676,6 +676,8 @@ class GoogleDriveClient:
     def validate_storage_configuration(
         self,
         profile_key: str,
+        *,
+        root_folder: Mapping[str, Any] | None = None,
     ) -> dict[str, dict[str, str]]:
         """Freshly validate the saved root and managed child folders."""
         storage_root = self.profile_settings.get("storage_root")
@@ -683,10 +685,10 @@ class GoogleDriveClient:
             raise GoogleDriveConfigurationError(
                 "Select or create the Google Drive storage root."
             )
-        root = self.folder(str(storage_root.get("id", "")))
+        root = root_folder or self.folder(str(storage_root.get("id") or ""))
         validated_root = {
-            "id": self._valid_folder_id(str(root.get("id", ""))),
-            "name": str(root.get("name", "")),
+            "id": self._valid_folder_id(str(root.get("id") or "")),
+            "name": str(root.get("name") or ""),
         }
         if not validated_root["name"].strip():
             raise GoogleDriveAccessError(
@@ -704,7 +706,7 @@ class GoogleDriveClient:
                     "the root."
                 )
             validated[field] = self._validate_managed_folder(
-                self.folder(str(child.get("id", ""))),
+                self.folder(str(child.get("id") or "")),
                 profile_key=profile_key,
                 storage_kind=storage_kind,
                 root_id=validated_root["id"],

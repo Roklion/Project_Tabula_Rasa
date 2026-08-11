@@ -341,8 +341,10 @@ def validate_google_drive_profile(
         profile_key,
         json.dumps(dict(drive_settings), sort_keys=True),
     )
-    validated = client.validate_storage_configuration(profile_key)
-    root = client.folder(str(validated["storage_root"]["id"]))
+    storage_root = drive_settings.get("storage_root")
+    root_id = storage_root.get("id") if isinstance(storage_root, Mapping) else ""
+    root = client.folder(str(root_id or ""))
+    client.validate_storage_configuration(profile_key, root_folder=root)
     _ensure_storage_root_is_profile_isolated(
         client,
         profile_key,

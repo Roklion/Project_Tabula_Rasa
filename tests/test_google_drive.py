@@ -307,6 +307,65 @@ class TestGoogleDriveFiles:
         with pytest.raises(GoogleDriveAccessError, match="outside"):
             client.validate_storage_configuration("north")
 
+    @pytest.mark.parametrize(
+        ("root_update", "message"),
+        [
+            ({"id": None}, "invalid"),
+            ({"name": None}, "not an available folder"),
+        ],
+    )
+    def test_fresh_storage_validation_rejects_null_root_values(
+        self,
+        root_update: dict[str, object],
+        message: str,
+    ) -> None:
+        root = {
+            "id": "rootfolder123",
+            "name": "North Storage",
+            "mimeType": "application/vnd.google-apps.folder",
+            "trashed": False,
+            "parents": [],
+        }
+        root.update(root_update)
+        settings = {
+            **drive_settings(),
+            "storage_root": {"id": "rootfolder123", "name": "North Storage"},
+            "receipt_folder": {"id": "receiptfolder123", "name": "Receipts"},
+            "backup_folder": {"id": "backupfolder123", "name": "Ledger Backups"},
+        }
+        client = GoogleDriveClient(
+            oauth_config(),
+            settings,
+            session=DriveSession([FakeResponse(200, root)]),
+        )
+
+        with pytest.raises(GoogleDriveAccessError, match=message):
+            client.validate_storage_configuration("north")
+
+    def test_fresh_storage_validation_rejects_null_child_id(self) -> None:
+        root = {
+            "id": "rootfolder123",
+            "name": "North Storage",
+            "mimeType": "application/vnd.google-apps.folder",
+            "trashed": False,
+            "parents": [],
+        }
+        settings = {
+            **drive_settings(),
+            "storage_root": {"id": "rootfolder123", "name": "North Storage"},
+            "receipt_folder": {"id": "receiptfolder123", "name": "Receipts"},
+            "backup_folder": {"id": "backupfolder123", "name": "Ledger Backups"},
+        }
+        client = GoogleDriveClient(
+            oauth_config(),
+            settings,
+            session=DriveSession([FakeResponse(200, root)]),
+        )
+        client.profile_settings["receipt_folder"] = {"id": None, "name": "Receipts"}
+
+        with pytest.raises(GoogleDriveAccessError, match="invalid"):
+            client.validate_storage_configuration("north")
+
     @staticmethod
     def _managed_folder(
         folder_id: str,

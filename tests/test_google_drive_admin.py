@@ -68,6 +68,10 @@ def test_readiness_rechecks_profile_root_isolation() -> None:
         profiles,
         selected_drive_settings=drive_settings,
     )
+    client.validate_storage_configuration.assert_called_once_with(
+        "north",
+        root_folder=client.folder.return_value,
+    )
 
 
 def managed_folder(

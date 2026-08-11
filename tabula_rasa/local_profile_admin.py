@@ -739,6 +739,12 @@ def render_local_profile_admin(
         store_path=store_path,
     )
     current_profiles = load_local_profiles(store_path)
+    if selected_profile_key not in current_profiles:
+        st.warning(
+            "The selected profile was removed or changed externally. "
+            "Reload the page before continuing."
+        )
+        return
     selected_settings = current_profiles[selected_profile_key]
     _render_profile_readiness(
         selected_profile_key,
