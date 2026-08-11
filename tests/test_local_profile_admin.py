@@ -3,14 +3,17 @@ from __future__ import annotations
 from unittest.mock import Mock, patch
 
 import pytest
+import streamlit as st
 
 from tabula_rasa.local_profile_admin import (
     _initialize_candidate_storage,
     _profile_rows,
     _profile_setup_error_message,
     _fresh_profile_readiness,
+    _readiness_for_display,
     _validate_profile_edit_action,
 )
+from tabula_rasa.profile_readiness import ProfileReadiness, profile_settings_fingerprint
 from tabula_rasa.local_profile_store import LocalProfileStoreError
 from tabula_rasa.storage import (
     StorageAuthenticationError,
@@ -129,3 +132,26 @@ def test_fresh_readiness_reports_sheets_failure_without_secret_values() -> None:
         "Sheets workbook validation failed. Confirm sharing and the workbook ID.",
     )
     validate_drive.assert_not_called()
+
+
+def test_readiness_cache_is_ignored_after_profile_settings_change() -> None:
+    original = {"name": "North Shop", **SETTINGS}
+    changed = {**original, "backup_folder_path": r"G:\\Backups\\north"}
+    cached = ProfileReadiness(status="ready-hosted")
+    with patch.object(
+        st,
+        "session_state",
+        {
+            "profile-readiness:north": (
+                profile_settings_fingerprint(original),
+                cached,
+            )
+        },
+    ):
+        report = _readiness_for_display(
+            "north",
+            changed,
+            hosted_profiles=None,
+        )
+
+    assert report.status == "ready-local"

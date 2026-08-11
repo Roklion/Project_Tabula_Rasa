@@ -684,11 +684,14 @@ class GoogleDriveClient:
                 "Select or create the Google Drive storage root."
             )
         root = self.folder(str(storage_root.get("id", "")))
-        validated_root = self._validate_managed_folder(
-            root,
-            profile_key=profile_key,
-            storage_kind="storage-root",
-        )
+        validated_root = {
+            "id": self._valid_folder_id(str(root.get("id", ""))),
+            "name": str(root.get("name", "")),
+        }
+        if not validated_root["name"].strip():
+            raise GoogleDriveAccessError(
+                "The selected Google Drive storage root is not an available folder."
+            )
         validated: dict[str, dict[str, str]] = {"storage_root": validated_root}
         for field, storage_kind in (
             ("receipt_folder", "receipts"),

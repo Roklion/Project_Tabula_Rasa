@@ -227,10 +227,6 @@ class TestGoogleDriveFiles:
             "mimeType": "application/vnd.google-apps.folder",
             "trashed": False,
             "parents": [],
-            "appProperties": {
-                "tabulaRasaKind": "storage-root",
-                "tabulaRasaProfile": "north",
-            },
         }
         receipt = {
             "id": "receiptfolder123",
@@ -283,10 +279,6 @@ class TestGoogleDriveFiles:
             "mimeType": "application/vnd.google-apps.folder",
             "trashed": False,
             "parents": [],
-            "appProperties": {
-                "tabulaRasaKind": "storage-root",
-                "tabulaRasaProfile": "north",
-            },
         }
         outside = {
             "id": "receiptfolder123",

@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+import hashlib
+import json
 from typing import Any, Literal
 
-from scripts.export_streamlit_secrets import project_hosted_profiles
+from tabula_rasa.google_drive import GoogleDriveConfigurationError
+from tabula_rasa.local_profile_store import project_hosted_profiles
 
 
 ReadinessStatus = Literal["incomplete", "ready-local", "ready-hosted"]
@@ -20,6 +23,12 @@ class ProfileReadiness:
     missing_steps: tuple[str, ...] = ()
     validation_errors: tuple[str, ...] = ()
     hosted_export_needed: bool = False
+
+
+def profile_settings_fingerprint(settings: Mapping[str, Any]) -> str:
+    """Return a non-secret cache key for the current persisted settings."""
+    encoded = json.dumps(dict(settings), sort_keys=True, default=str).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def profile_configuration_readiness(
@@ -56,7 +65,7 @@ def profile_configuration_readiness(
     if hosted_profiles is not None:
         try:
             projected = project_hosted_profiles({profile_key: settings})[profile_key]
-        except ValueError:
+        except (ValueError, GoogleDriveConfigurationError):
             projected = None
         current = hosted_profiles.get(profile_key)
         hosted_export_needed = projected != current

@@ -30,6 +30,7 @@ from tabula_rasa.local_profile_store import (
 from tabula_rasa.profile_readiness import (
     ProfileReadiness,
     profile_configuration_readiness,
+    profile_settings_fingerprint,
 )
 from tabula_rasa.storage import (
     GoogleSheetsStorage,
@@ -164,8 +165,13 @@ def _readiness_for_display(
     hosted_profiles: Mapping[str, Any] | None,
 ) -> ProfileReadiness:
     stored = st.session_state.get(f"profile-readiness:{profile_key}")
-    if isinstance(stored, ProfileReadiness):
-        return stored
+    if (
+        isinstance(stored, tuple)
+        and len(stored) == 2
+        and stored[0] == profile_settings_fingerprint(settings)
+        and isinstance(stored[1], ProfileReadiness)
+    ):
+        return stored[1]
     return profile_configuration_readiness(
         profile_key,
         settings,
@@ -210,13 +216,19 @@ def _render_profile_readiness(
         type="primary",
         key=f"profile-readiness-check-{profile_key}",
     ):
-        st.session_state[f"profile-readiness:{profile_key}"] = _fresh_profile_readiness(
+        report = _fresh_profile_readiness(
             profile_key,
             settings,
             app_secrets=app_secrets,
             hosted_profiles=hosted_profiles,
         )
+        st.session_state[f"profile-readiness:{profile_key}"] = (
+            profile_settings_fingerprint(settings),
+            report,
+        )
         st.rerun()
+
+
 def _initialize_candidate_storage(
     settings: Mapping[str, Any],
 ) -> GoogleSheetsStorage:
@@ -696,15 +708,10 @@ def render_local_profile_admin(
         format_func=lambda key: str(local_profiles[key].get("name", key)),
         key="local_profile_selected",
     )
-    selected_settings = local_profiles[selected_profile_key]
-    _render_profile_readiness(
-        selected_profile_key,
-        selected_settings,
-        app_secrets=base_secrets,
-    )
     _render_local_profile_edits(
         effective_secrets,
         local_profiles,
+        selected_profile_key=selected_profile_key,
         store_path=store_path,
     )
     render_google_drive_admin(
@@ -720,6 +727,12 @@ def render_local_profile_admin(
         app_defaults=base_secrets.get("synology_recovery_defaults"),
         selected_profile_key=selected_profile_key,
         store_path=store_path,
+    )
+    selected_settings = load_local_profiles(store_path)[selected_profile_key]
+    _render_profile_readiness(
+        selected_profile_key,
+        selected_settings,
+        app_secrets=base_secrets,
     )
     _render_add_profile_form(
         effective_secrets,
