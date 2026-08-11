@@ -327,6 +327,21 @@ def process_google_drive_oauth_callback(
     return True
 
 
+def validate_google_drive_profile(
+    app_secrets: Mapping[str, Any],
+    profile_key: str,
+    drive_settings: Mapping[str, Any],
+) -> None:
+    """Re-read one profile's Drive grant and managed destinations."""
+    config = load_oauth_config(app_secrets)
+    client = _cached_drive_client(
+        config,
+        profile_key,
+        json.dumps(dict(drive_settings), sort_keys=True),
+    )
+    client.validate_storage_configuration(profile_key)
+
+
 def _save_storage_root(
     profile_key: str,
     drive_settings: Mapping[str, Any],
@@ -430,6 +445,7 @@ def render_google_drive_admin(
     local_profiles: Mapping[str, Mapping[str, Any]],
     *,
     current_url: str,
+    selected_profile_key: str | None = None,
     store_path: Path = LOCAL_PROFILE_STORE_PATH,
 ) -> None:
     """Render connection, folder selection, test, and disconnect controls."""
@@ -472,12 +488,17 @@ def render_google_drive_admin(
         st.info("Add a local business profile before connecting Google Drive.")
         return
 
-    profile_key = st.selectbox(
-        "Business profile to connect",
-        list(local_profiles),
-        format_func=lambda key: str(local_profiles[key].get("name", key)),
-        key="google_drive_profile_key",
-    )
+    profile_key = selected_profile_key
+    if profile_key is None:
+        profile_key = st.selectbox(
+            "Business profile to connect",
+            list(local_profiles),
+            format_func=lambda key: str(local_profiles[key].get("name", key)),
+            key="google_drive_profile_key",
+        )
+    if profile_key not in local_profiles:
+        st.info("Select a local business profile before configuring Google Drive.")
+        return
     profile = local_profiles[profile_key]
     drive_settings = profile.get("google_drive")
     if not isinstance(drive_settings, Mapping):

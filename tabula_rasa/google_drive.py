@@ -673,6 +673,41 @@ class GoogleDriveClient:
             )
         return folder
 
+    def validate_storage_configuration(
+        self,
+        profile_key: str,
+    ) -> dict[str, dict[str, str]]:
+        """Freshly validate the saved root and managed child folders."""
+        storage_root = self.profile_settings.get("storage_root")
+        if not isinstance(storage_root, Mapping):
+            raise GoogleDriveConfigurationError(
+                "Select or create the Google Drive storage root."
+            )
+        root = self.folder(str(storage_root.get("id", "")))
+        validated_root = self._validate_managed_folder(
+            root,
+            profile_key=profile_key,
+            storage_kind="storage-root",
+        )
+        validated: dict[str, dict[str, str]] = {"storage_root": validated_root}
+        for field, storage_kind in (
+            ("receipt_folder", "receipts"),
+            ("backup_folder", "ledger-backups"),
+        ):
+            child = self.profile_settings.get(field)
+            if not isinstance(child, Mapping):
+                raise GoogleDriveConfigurationError(
+                    "Provision the Receipts and Ledger Backups folders under "
+                    "the root."
+                )
+            validated[field] = self._validate_managed_folder(
+                self.folder(str(child.get("id", ""))),
+                profile_key=profile_key,
+                storage_kind=storage_kind,
+                root_id=validated_root["id"],
+            )
+        return validated
+
     def _managed_folder_query(
         self,
         *,
