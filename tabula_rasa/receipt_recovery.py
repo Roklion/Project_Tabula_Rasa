@@ -66,7 +66,7 @@ def _reference_matches_entry(
     entry: Mapping[str, Any],
 ) -> bool:
     return all(
-        reference[reference_field] == entry[entry_field]
+        reference.get(reference_field) == entry[entry_field]
         for reference_field, entry_field in (
             ("name", "stored_filename"),
             ("receipt_id", "receipt_id"),
@@ -110,7 +110,9 @@ def recover_receipts_from_synology(
         raise ReceiptRecoveryError(str(exc)) from exc
     transactions = storage.list_transactions(_force_refresh=True)
     _preflight_transactions(manifest, transactions)
-    transactions_by_id = {transaction["id"]: transaction for transaction in transactions}
+    transactions_by_id = {
+        str(transaction["id"]): transaction for transaction in transactions
+    }
     try:
         recovery_root = receipt_directory.resolve(strict=True)
     except OSError as exc:
@@ -179,17 +181,17 @@ def recover_receipts_from_synology(
                 )
                 old_file_id = str(entry["old_drive_file_id"])
                 if not any(
-                    str(current_reference["id"]) == str(reference["id"])
+                    str(current_reference.get("id")) == str(reference["id"])
                     and _reference_matches_entry(current_reference, entry)
                     for current_reference in current_references
                 ):
-                    transactions_by_id[transaction_id] = (
-                        storage.remap_transaction_receipt(
-                            transaction_id,
-                            old_file_id=old_file_id,
-                            reference=reference,
-                        )
+                    updated_transaction = storage.remap_transaction_receipt(
+                        transaction_id,
+                        old_file_id=old_file_id,
+                        reference=reference,
                     )
+                    if updated_transaction is not None:
+                        transactions_by_id[transaction_id] = updated_transaction
                     report["references_remapped"] += 1
             else:
                 report["unreferenced_preserved"] += 1

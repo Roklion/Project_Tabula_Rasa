@@ -242,6 +242,67 @@ def test_recovery_repairs_stale_live_reference_when_original_file_is_reused() ->
     assert [item["id"] for item in references] == [str(reference["id"])]
 
 
+def test_recovery_remaps_legacy_reference_when_original_file_is_reused() -> None:
+    content = b"receipt"
+    reference = _reference(1, content)
+    backup, target, transaction_id = _backup_with_receipts([reference])
+    target.link_transaction_receipt(
+        transaction_id,
+        file_id=str(reference["id"]),
+        name=str(reference["name"]),
+    )
+    drive = Mock()
+    drive.restore_receipt.return_value = (_drive_file(reference), True)
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(reference["name"])).write_bytes(content)
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=target,
+            drive=drive,
+        )
+
+    assert report["reused"] == 1
+    assert report["references_remapped"] == 1
+    assert report["errors"] == 0
+
+
+def test_recovery_keeps_cache_when_remap_returns_no_transaction() -> None:
+    first = _reference(1, b"first")
+    second = _reference(2, b"second")
+    backup, target, _ = _backup_with_receipts([first, second])
+    target.remap_transaction_receipt = Mock(return_value=None)
+    drive = Mock()
+    drive.restore_receipt.side_effect = [
+        (_drive_file(first, file_id="newreceipt01"), False),
+        (_drive_file(second, file_id="newreceipt02"), False),
+    ]
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(first["name"])).write_bytes(b"first")
+        (root / str(second["name"])).write_bytes(b"second")
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=target,
+            drive=drive,
+        )
+
+    assert report["restored"] == 2
+    assert report["references_remapped"] == 2
+    assert report["errors"] == 0
+    assert target.remap_transaction_receipt.call_count == 2
+
+
 def test_missing_and_corrupt_files_do_not_block_other_valid_receipts() -> None:
     contents = [b"missing", b"corrupt", b"valid"]
     references = [
