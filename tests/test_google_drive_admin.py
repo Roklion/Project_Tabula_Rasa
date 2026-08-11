@@ -74,6 +74,45 @@ def test_readiness_rechecks_profile_root_isolation() -> None:
     )
 
 
+def test_drive_validation_can_skip_profile_root_ancestry() -> None:
+    client = Mock()
+    client.folder.return_value = {
+        "id": "northroot123",
+        "name": "North Storage",
+        "parents": ["unreadableparent123"],
+    }
+    drive_settings = {"storage_root": {"id": "northroot123"}}
+    profiles = {
+        "north": {"google_drive": drive_settings},
+        "south": {
+            "google_drive": {"storage_root": {"id": "southroot123"}}
+        },
+    }
+
+    with patch(
+        "tabula_rasa.google_drive_admin.load_oauth_config",
+        return_value=Mock(),
+    ), patch(
+        "tabula_rasa.google_drive_admin._cached_drive_client",
+        return_value=client,
+    ), patch(
+        "tabula_rasa.google_drive_admin._ensure_storage_root_is_profile_isolated"
+    ) as ensure_isolated:
+        validate_google_drive_profile(
+            {},
+            "north",
+            drive_settings,
+            local_profiles=profiles,
+            enforce_root_isolation=False,
+        )
+
+    ensure_isolated.assert_not_called()
+    client.validate_storage_configuration.assert_called_once_with(
+        "north",
+        root_folder=client.folder.return_value,
+    )
+
+
 def managed_folder(
     folder_id: str,
     name: str,

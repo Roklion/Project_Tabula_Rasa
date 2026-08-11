@@ -2436,6 +2436,11 @@ Preserve profile-scoped controls for:
 - Provision or reuse Receipts and Ledger Backups child folders
 - Display the authorized account and configured destinations
 
+**Current behavior:** Profile readiness revalidates the selected root and its
+managed children without walking ordinary Drive parent folders. Cross-profile
+root ancestry remains a dedicated Drive root-selection, creation, and
+reconnection guard for recursive recovery safety.
+
 #### Recovery section
 
 Preserve Synology configuration:

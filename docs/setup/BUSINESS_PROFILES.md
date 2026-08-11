@@ -172,6 +172,9 @@ After saving, use **Profile readiness** for the selected profile. It reports
 readiness action re-reads the selected workbook and any configured Drive root
 and managed children. It reports missing optional setup steps without showing
 credentials, refresh tokens, private ledger data, or receipt contents.
+Readiness does not walk ordinary Drive parent folders. Cross-profile root
+ancestry remains enforced when a root is selected, created, or reconnected
+before recursive profile-root recovery is configured.
 
 To edit a locally managed profile, use its **Edit local profile settings**
 section. The profile key is immutable. Business name, spreadsheet, and optional

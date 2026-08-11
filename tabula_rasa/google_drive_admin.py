@@ -333,8 +333,9 @@ def validate_google_drive_profile(
     drive_settings: Mapping[str, Any],
     *,
     local_profiles: Mapping[str, Mapping[str, Any]],
+    enforce_root_isolation: bool = True,
 ) -> None:
-    """Re-read one profile's Drive grant, isolation, and destinations."""
+    """Re-read one profile's Drive grant and configured destinations."""
     storage_root = drive_settings.get("storage_root")
     if not isinstance(storage_root, Mapping) or not storage_root.get("id"):
         raise GoogleDriveConfigurationError(
@@ -349,13 +350,14 @@ def validate_google_drive_profile(
     )
     root = client.folder(root_id)
     client.validate_storage_configuration(profile_key, root_folder=root)
-    _ensure_storage_root_is_profile_isolated(
-        client,
-        profile_key,
-        root,
-        local_profiles,
-        selected_drive_settings=drive_settings,
-    )
+    if enforce_root_isolation:
+        _ensure_storage_root_is_profile_isolated(
+            client,
+            profile_key,
+            root,
+            local_profiles,
+            selected_drive_settings=drive_settings,
+        )
 
 
 def _save_storage_root(
