@@ -267,7 +267,7 @@ def _profile_rows(
     local_profiles: Mapping[str, Any],
 ) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
-    for profile in load_business_profiles(effective_secrets):
+    for profile in _configured_profiles_or_empty(effective_secrets):
         credential = profile.secrets.get("gcp_service_account", {})
         synology_recovery = profile.secrets.get("synology_recovery")
         source = (
@@ -305,6 +305,16 @@ def _profile_rows(
             }
         )
     return rows
+
+
+def _configured_profiles_or_empty(
+    effective_secrets: Mapping[str, Any],
+) -> list[Any]:
+    """Treat a clean install without hosted profiles as having no profiles."""
+    configured = effective_secrets.get("business_profiles")
+    if configured is None or (isinstance(configured, Mapping) and not configured):
+        return []
+    return load_business_profiles(effective_secrets)
 
 
 def _render_synology_recovery_admin(
@@ -611,7 +621,9 @@ def _render_add_profile_form(
 
         try:
             key = validate_profile_key(profile_key)
-            if key in {profile.key for profile in load_business_profiles(effective_secrets)}:
+            if key in {
+                profile.key for profile in _configured_profiles_or_empty(effective_secrets)
+            }:
                 raise LocalProfileStoreError(
                     "That profile key already exists. Use its edit or credential "
                     "rotation controls instead."
@@ -631,7 +643,7 @@ def _render_add_profile_form(
             folded_name = settings["name"].casefold()
             if any(
                 profile.key != key and profile.name.casefold() == folded_name
-                for profile in load_business_profiles(effective_secrets)
+                for profile in _configured_profiles_or_empty(effective_secrets)
             ):
                 raise LocalProfileStoreError(
                     "Business display names must be unique."

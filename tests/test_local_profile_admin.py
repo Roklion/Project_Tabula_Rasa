@@ -91,6 +91,10 @@ def test_profile_rows_use_a_safe_fallback_for_null_backup_paths() -> None:
     assert rows[0]["Local backup folder"] == "Not configured"
 
 
+def test_profile_rows_allow_clean_install_without_hosted_profiles() -> None:
+    assert _profile_rows({"app_password_hash": "configured"}, {}) == []
+
+
 @pytest.mark.parametrize(
     "error",
     (StorageWorkbookAccessError("access"), StorageValidationError("invalid")),
