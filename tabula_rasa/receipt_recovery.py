@@ -110,9 +110,6 @@ def recover_receipts_from_synology(
         raise ReceiptRecoveryError(str(exc)) from exc
     transactions = storage.list_transactions(_force_refresh=True)
     _preflight_transactions(manifest, transactions)
-    transactions_by_id = {
-        str(transaction["id"]): transaction for transaction in transactions
-    }
     try:
         recovery_root = receipt_directory.resolve(strict=True)
     except OSError as exc:
@@ -193,7 +190,7 @@ def recover_receipts_from_synology(
                         "The transaction disappeared during receipt recovery."
                     )
                 current_references = decode_receipt_references(
-                    current_transaction.get("receipt_references", "")
+                    current_transaction.get("receipt_references") or ""
                 )
                 confirmed_reference_present = any(
                     str(current_reference.get("id")) == str(reference["id"])
@@ -206,7 +203,7 @@ def recover_receipts_from_synology(
                         str(other_reference.get("id"))
                         == str(reference["id"])
                         for other_reference in decode_receipt_references(
-                            other_transaction.get("receipt_references", "")
+                            other_transaction.get("receipt_references") or ""
                         )
                     )
                     for other_transaction_id, other_transaction in (
