@@ -333,7 +333,7 @@ class TestAppAuthentication:
                     field
                     for field in app.text_input
                     if field.label == "Optional local backup folder path"
-                ).input(r"G:\My Drive\Tabula Rosa Backups\north")
+                ).input(r"G:\My Drive\Project Tabula Rasa Backups\north")
                 next(
                     button
                     for button in app.button

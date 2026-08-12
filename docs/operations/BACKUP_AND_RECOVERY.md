@@ -209,7 +209,7 @@ python scripts\backup_google_sheets.py --all-profiles --local-dir --keep 30
 powershell -ExecutionPolicy Bypass -File scripts\register_weekly_backup_task.ps1 `
   -AllProfiles `
   -GoogleDrive `
-  -TaskName "Tabula Rosa Weekly Backup"
+  -TaskName "Project Tabula Rasa Weekly Backup"
 ```
 
 Omitting `-AllProfiles` and `-Profile` has the same all-profile behavior. A
@@ -219,7 +219,7 @@ single-profile task remains available when needed for repair or recovery:
 powershell -ExecutionPolicy Bypass -File scripts\register_weekly_backup_task.ps1 `
   -Profile PROFILE_KEY `
   -GoogleDrive `
-  -TaskName "Tabula Rosa Cloud Backup - PROFILE_KEY"
+  -TaskName "Project Tabula Rasa Cloud Backup - PROFILE_KEY"
 ```
 
 ### Local or synchronized-folder scheduled backup
@@ -228,13 +228,12 @@ powershell -ExecutionPolicy Bypass -File scripts\register_weekly_backup_task.ps1
 powershell -ExecutionPolicy Bypass -File scripts\register_weekly_backup_task.ps1 `
   -AllProfiles `
   -Local `
-  -TaskName "Tabula Rosa Weekly Local Backup"
+  -TaskName "Project Tabula Rasa Weekly Local Backup"
 ```
 
-The scheduled-task names intentionally retain the legacy `Tabula Rosa`
-identity so upgrades replace existing tasks rather than creating duplicates.
-The application and user-facing documentation use the current Project Tabula
-Rasa brand.
+> TODO: Existing installations need a one-time manual scheduled-task rename or
+> removal before registering the current Project Tabula Rasa task name. The
+> registration script intentionally does not alter existing tasks.
 
 For an explicit local destination, select one profile and pass
 `-BackupDirectory`; the script rejects that override in all-profile mode so
