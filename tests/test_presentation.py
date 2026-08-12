@@ -72,6 +72,11 @@ def test_profile_switch_clears_unscoped_presentation_state() -> None:
     session_state = {
         "edit_transaction_id": "north-transaction",
         "edit_account_id": "north-account",
+        "edit_account_name_shared": "North account",
+        "edit_category_kind_shared": "Expense",
+        "confirm_delete_category_shared": True,
+        "save_account_shared": True,
+        "save_category_shared": True,
         "ledger_start": "north-start",
         "write_success_notice": "North saved",
         "add_transaction_amount": 42,
@@ -87,6 +92,11 @@ def test_profile_switch_clears_unscoped_presentation_state() -> None:
 
     assert "edit_transaction_id" not in session_state
     assert "edit_account_id" not in session_state
+    assert "edit_account_name_shared" not in session_state
+    assert "edit_category_kind_shared" not in session_state
+    assert "confirm_delete_category_shared" not in session_state
+    assert "save_account_shared" not in session_state
+    assert "save_category_shared" not in session_state
     assert "ledger_start" not in session_state
     assert "write_success_notice" not in session_state
     assert "add_transaction_amount" not in session_state
