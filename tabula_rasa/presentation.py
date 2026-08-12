@@ -255,6 +255,10 @@ def reset_profile_presentation_state(
         "mileage_log_",
         "account_table_",
         "category_table_",
+        "new_account_",
+        "new_category_",
+        "receipt-existing-",
+        "prepared-live-exports:",
     )
     for key in list(session_state):
         if key in keys or key.startswith(prefixes):
