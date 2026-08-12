@@ -75,6 +75,10 @@ def test_profile_switch_clears_unscoped_presentation_state() -> None:
         "edit_account_id": "north-account",
         "edit_account_name_shared": "North account",
         "edit_category_kind_shared": "Expense",
+        "edit_transaction_amount_north_north-transaction": 42.0,
+        "edit_transaction_confirm_delete_north_north-transaction": True,
+        "edit_mileage_trip_notes_north_north-trip": "North notes",
+        "edit_mileage_trip_confirm_delete_north_north-trip": True,
         "confirm_delete_category_shared": True,
         "save_account_shared": True,
         "save_category_shared": True,
@@ -108,6 +112,10 @@ def test_profile_switch_clears_unscoped_presentation_state() -> None:
     assert "edit_account_id" not in session_state
     assert "edit_account_name_shared" not in session_state
     assert "edit_category_kind_shared" not in session_state
+    assert "edit_transaction_amount_north_north-transaction" not in session_state
+    assert "edit_transaction_confirm_delete_north_north-transaction" not in session_state
+    assert "edit_mileage_trip_notes_north_north-trip" not in session_state
+    assert "edit_mileage_trip_confirm_delete_north_north-trip" not in session_state
     assert "confirm_delete_category_shared" not in session_state
     assert "save_account_shared" not in session_state
     assert "save_category_shared" not in session_state

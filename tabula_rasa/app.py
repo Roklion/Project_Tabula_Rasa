@@ -815,6 +815,7 @@ elif page == "Transactions":
                 selected = next(
                     transaction for transaction in transactions if transaction["id"] == edit_id
                 )
+                edit_widget_scope = f"{selected_profile_key}_{edit_id}"
                 with st.form("edit_transaction"):
                     current_account_ids = [
                         selected["account_id"],
@@ -835,6 +836,7 @@ elif page == "Transactions":
                         editable_account_ids,
                         index=editable_account_ids.index(selected["account_id"]),
                         format_func=account_paths.get,
+                        key=f"edit_transaction_account_{edit_widget_scope}",
                     )
                     edited_to_account_id = ""
                     edited_category_id = ""
@@ -846,6 +848,7 @@ elif page == "Transactions":
                                 selected["to_account_id"]
                             ),
                             format_func=account_paths.get,
+                            key=f"edit_transaction_to_account_{edit_widget_scope}",
                         )
                     else:
                         category_ids = [
@@ -862,42 +865,57 @@ elif page == "Transactions":
                                 else None
                             ),
                             format_func=category_paths.get,
+                            key=f"edit_transaction_category_{edit_widget_scope}",
                         )
                     c1, c2 = st.columns(2)
                     edited_date = c1.date_input(
-                        "Edit date", date.fromisoformat(selected["txn_date"])
+                        "Edit date",
+                        date.fromisoformat(selected["txn_date"]),
+                        key=f"edit_transaction_date_{edit_widget_scope}",
                     )
                     edited_amount = c2.number_input(
                         "Edit amount",
                         min_value=0.01,
                         value=float(selected["amount"]),
                         format="%.2f",
+                        key=f"edit_transaction_amount_{edit_widget_scope}",
                     )
                     edited_payee = st.text_input(
-                        "Edit payee / customer", value=selected.get("payee", "")
+                        "Edit payee / customer",
+                        value=selected.get("payee", ""),
+                        key=f"edit_transaction_payee_{edit_widget_scope}",
                     )
                     edited_reference = st.text_input(
-                        "Edit reference", value=selected.get("reference", "")
+                        "Edit reference",
+                        value=selected.get("reference", ""),
+                        key=f"edit_transaction_reference_{edit_widget_scope}",
                     )
                     edited_description = st.text_input(
-                        "Edit description", value=selected.get("description", "")
+                        "Edit description",
+                        value=selected.get("description", ""),
+                        key=f"edit_transaction_description_{edit_widget_scope}",
                     )
                     st.warning(
                         "Deleting this transaction is permanent and cannot be undone.",
                         icon="⚠️",
                     )
                     confirm_delete = st.checkbox(
-                        "I understand this transaction will be permanently deleted"
+                        "I understand this transaction will be permanently deleted",
+                        key=f"edit_transaction_confirm_delete_{edit_widget_scope}",
                     )
                     save_column, delete_column = st.columns(2)
                     save_requested = save_column.form_submit_button(
-                        "Save changes", type="primary", width="stretch"
+                        "Save changes",
+                        type="primary",
+                        width="stretch",
+                        key=f"edit_transaction_save_{edit_widget_scope}",
                     )
                     delete_requested = delete_column.form_submit_button(
                         "Permanently delete",
                         icon=":material/delete_forever:",
                         help="Permanently delete this transaction",
                         width="stretch",
+                        key=f"edit_transaction_delete_{edit_widget_scope}",
                     )
                     if save_requested:
                         payload = {
@@ -1533,11 +1551,13 @@ elif page == "Mileage":
                     key="edit_mileage_trip_id",
                 )
                 selected = next(trip for trip in trips if trip["id"] == edit_id)
+                edit_widget_scope = f"{selected_profile_key}_{edit_id}"
                 with st.form("edit_mileage_trip"):
                     c1, c2 = st.columns(2)
                     edited_date = c1.date_input(
                         "Edit trip date",
                         date.fromisoformat(selected["trip_date"]),
+                        key=f"edit_mileage_trip_date_{edit_widget_scope}",
                     )
                     edited_miles = c2.number_input(
                         "Edit business miles",
@@ -1545,42 +1565,53 @@ elif page == "Mileage":
                         step=0.1,
                         value=float(selected["miles"]),
                         format="%.1f",
+                        key=f"edit_mileage_trip_miles_{edit_widget_scope}",
                     )
                     edited_vehicle = st.text_input(
-                        "Edit vehicle", value=selected.get("vehicle", "")
+                        "Edit vehicle",
+                        value=selected.get("vehicle", ""),
+                        key=f"edit_mileage_trip_vehicle_{edit_widget_scope}",
                     )
                     c1, c2 = st.columns(2)
                     edited_start = c1.text_input(
                         "Edit starting location",
                         value=selected.get("start_location", ""),
+                        key=f"edit_mileage_trip_start_{edit_widget_scope}",
                     )
                     edited_destination = c2.text_input(
                         "Edit destination",
                         value=selected.get("destination", ""),
+                        key=f"edit_mileage_trip_destination_{edit_widget_scope}",
                     )
                     edited_purpose = st.text_input(
                         "Edit business purpose",
                         value=selected.get("business_purpose", ""),
+                        key=f"edit_mileage_trip_purpose_{edit_widget_scope}",
                     )
                     edited_notes = st.text_area(
-                        "Edit notes", value=selected.get("notes", "")
+                        "Edit notes",
+                        value=selected.get("notes", ""),
+                        key=f"edit_mileage_trip_notes_{edit_widget_scope}",
                     )
                     st.warning(
                         "Deleting this mileage trip is permanent and cannot be undone."
                     )
                     confirm_delete = st.checkbox(
-                        "I understand this mileage trip will be permanently deleted"
+                        "I understand this mileage trip will be permanently deleted",
+                        key=f"edit_mileage_trip_confirm_delete_{edit_widget_scope}",
                     )
                     save_column, delete_column = st.columns(2)
                     save_requested = save_column.form_submit_button(
                         "Save mileage changes",
                         type="primary",
                         width="stretch",
+                        key=f"edit_mileage_trip_save_{edit_widget_scope}",
                     )
                     delete_requested = delete_column.form_submit_button(
                         "Permanently delete mileage trip",
                         icon=":material/delete_forever:",
                         width="stretch",
+                        key=f"edit_mileage_trip_delete_{edit_widget_scope}",
                     )
                     if save_requested:
                         payload = {
