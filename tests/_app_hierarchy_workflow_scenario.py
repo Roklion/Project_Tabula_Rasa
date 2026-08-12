@@ -120,7 +120,7 @@ def main() -> None:
         assert "Payables" not in parent_options
         assert "Layer 2" in app.dataframe[0].value["Layer"].tolist()
         assert "Operations" in app.dataframe[0].value["Parent"].tolist()
-        assert app.dataframe[0].key == "account_table_1"
+        assert app.dataframe[0].key == "account_table_alpha_1"
         assert any(
             "Select an account row" in str(caption.value)
             for caption in app.caption
@@ -157,7 +157,7 @@ def main() -> None:
         travel = add_category(app, alpha, "Travel")
         flights = add_category(app, alpha, "Flights", parent_id=travel["id"])
         assert "Travel" in app.dataframe[0].value["Parent"].tolist()
-        assert app.dataframe[0].key == "category_table_1"
+        assert app.dataframe[0].key == "category_table_alpha_1"
         assert any(
             "Select a category row" in str(caption.value)
             for caption in app.caption
