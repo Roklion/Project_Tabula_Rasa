@@ -708,7 +708,9 @@ elif page == "Transactions":
         )
         end = c2.date_input("To", date.today(), key="ledger_end")
         filter_type = c3.selectbox(
-            "Type", ["All", "Income", "Expense", "Transfer"]
+            "Type",
+            ["All", "Income", "Expense", "Transfer"],
+            key=f"ledger_filter_type_{selected_profile_key}",
         )
         ledger_account_map = {
             account_paths[account_id]: account_id
@@ -718,6 +720,7 @@ elif page == "Transactions":
         selected_account_names = st.multiselect(
             "Accounts",
             list(ledger_account_map),
+            key=f"ledger_filter_accounts_{selected_profile_key}",
             placeholder="All accounts",
             help=(
                 "Includes transactions where a selected account is either side "

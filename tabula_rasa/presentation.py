@@ -265,6 +265,7 @@ def reset_profile_presentation_state(
         "new_category_",
         "receipt-existing-",
         "prepared-live-exports:",
+        "ledger_filter_",
     )
     for key in list(session_state):
         if key in keys or key.startswith(prefixes):
