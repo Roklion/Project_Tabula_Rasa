@@ -77,6 +77,11 @@ def test_profile_switch_clears_unscoped_presentation_state() -> None:
         "confirm_delete_category_shared": True,
         "save_account_shared": True,
         "save_category_shared": True,
+        "transaction_ledger_north_0": "selected-rows",
+        "mileage_log_north_0": "selected-rows",
+        "account_table_north_0": "selected-rows",
+        "category_table_north_0": "selected-rows",
+        "transaction_csv_upload_north": "private-upload",
         "ledger_start": "north-start",
         "write_success_notice": "North saved",
         "add_transaction_amount": 42,
@@ -97,6 +102,11 @@ def test_profile_switch_clears_unscoped_presentation_state() -> None:
     assert "confirm_delete_category_shared" not in session_state
     assert "save_account_shared" not in session_state
     assert "save_category_shared" not in session_state
+    assert "transaction_ledger_north_0" not in session_state
+    assert "mileage_log_north_0" not in session_state
+    assert "account_table_north_0" not in session_state
+    assert "category_table_north_0" not in session_state
+    assert "transaction_csv_upload_north" not in session_state
     assert "ledger_start" not in session_state
     assert "write_success_notice" not in session_state
     assert "add_transaction_amount" not in session_state

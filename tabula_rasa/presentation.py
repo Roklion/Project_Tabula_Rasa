@@ -244,7 +244,12 @@ def reset_profile_presentation_state(
         "receipt_candidate_",
         "receipt-upload-",
         "quickbooks_",
+        "transaction_csv_upload_",
         "reset_",
+        "transaction_ledger_",
+        "mileage_log_",
+        "account_table_",
+        "category_table_",
     )
     for key in list(session_state):
         if key in keys or key.startswith(prefixes):

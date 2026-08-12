@@ -2637,7 +2637,11 @@ elif page == "Data & backup":
             "Upload a CSV with: Date, Type, Amount, Account, Category, Payee, "
             "Description, Reference. Type must be Income or Expense."
         )
-        plain_upload = st.file_uploader("CSV file", type="csv")
+        plain_upload = st.file_uploader(
+            "CSV file",
+            type="csv",
+            key=f"transaction_csv_upload_{selected_profile_key}",
+        )
         if plain_upload:
             try:
                 plain_incoming = pd.read_csv(plain_upload).where(
@@ -2667,7 +2671,11 @@ elif page == "Data & backup":
         "or a QuickBooks Self-Employed **General ledger** XLSX or ZIP export. "
         "Review the validation results and summary before committing."
     )
-    upload = st.file_uploader("QuickBooks export", type=["csv", "xlsx", "zip"])
+    upload = st.file_uploader(
+        "QuickBooks export",
+        type=["csv", "xlsx", "zip"],
+        key=f"quickbooks_transaction_upload_{selected_profile_key}",
+    )
     if upload:
         try:
             upload_bytes = upload.getvalue()
