@@ -1,4 +1,4 @@
-"""Storage backends for Tabula Rosa."""
+"""Storage backends for Project Tabula Rasa."""
 
 from .google_sheets import (
     decode_receipt_references,

@@ -1,6 +1,6 @@
 # Backup and recovery
 
-Tabula Rosa creates validated, timestamped ZIP archives from a business
+Project Tabula Rasa creates validated, timestamped ZIP archives from a business
 profile's live Google Sheets workbook. An archive can be downloaded manually,
 written to local storage, uploaded to the profile's Google Drive backup folder,
 and optionally copied to a Synology NAS.
@@ -209,7 +209,7 @@ python scripts\backup_google_sheets.py --all-profiles --local-dir --keep 30
 powershell -ExecutionPolicy Bypass -File scripts\register_weekly_backup_task.ps1 `
   -AllProfiles `
   -GoogleDrive `
-  -TaskName "Tabula Rosa Weekly Backup"
+  -TaskName "Project Tabula Rasa Weekly Backup"
 ```
 
 Omitting `-AllProfiles` and `-Profile` has the same all-profile behavior. A
@@ -219,7 +219,7 @@ single-profile task remains available when needed for repair or recovery:
 powershell -ExecutionPolicy Bypass -File scripts\register_weekly_backup_task.ps1 `
   -Profile PROFILE_KEY `
   -GoogleDrive `
-  -TaskName "Tabula Rosa Cloud Backup - PROFILE_KEY"
+  -TaskName "Project Tabula Rasa Cloud Backup - PROFILE_KEY"
 ```
 
 ### Local or synchronized-folder scheduled backup
@@ -228,7 +228,7 @@ powershell -ExecutionPolicy Bypass -File scripts\register_weekly_backup_task.ps1
 powershell -ExecutionPolicy Bypass -File scripts\register_weekly_backup_task.ps1 `
   -AllProfiles `
   -Local `
-  -TaskName "Tabula Rosa Weekly Local Backup"
+  -TaskName "Project Tabula Rasa Weekly Local Backup"
 ```
 
 For an explicit local destination, select one profile and pass
@@ -440,7 +440,7 @@ task for its Google Drive storage root. The profile-specific NAS destination
 contains separate `Receipts` and `Ledger Backups` children, with destination deletions
 disabled as the independent second-layer copy. Optional versioned retention
 such as Hyper Backup or snapshots can add protection against accidental
-changes. Tabula Rosa records the expected setup but does not connect to DSM,
+changes. Project Tabula Rasa records the expected setup but does not connect to DSM,
 configure the task, or prove that synchronization succeeded. This profile-root
 task is the only supported Synology topology.
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, MutableMapping
 
 import streamlit as st
 
@@ -26,6 +26,7 @@ DESIGN_TOKENS: Mapping[str, str] = {
     "positive-background": "#EAF5EE",
     "positive-border": "#B7DCC5",
     "negative-text": "#B33A3A",
+    "negative-hover": "#942F2F",
     "negative-background": "#FBECEC",
     "negative-border": "#E8BABA",
     "warning-text": "#9A6700",
@@ -40,7 +41,7 @@ DESIGN_TOKENS: Mapping[str, str] = {
 
 def _css_variables(tokens: Mapping[str, str]) -> str:
     return "\n".join(
-        f"        --tr-{name.replace('-', '-')}: {value};"
+        f"        --tr-{name.replace('_', '-')}: {value};"
         for name, value in tokens.items()
     )
 
@@ -187,12 +188,12 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
     .st-key-edit_transaction [data-testid="stFormSubmitButton"]:has(
         [data-testid="stIconMaterial"]
     ) button:hover {{
-        background: #942f2f;
-        border-color: #942f2f;
+        background: var(--tr-negative-hover);
+        border-color: var(--tr-negative-hover);
         color: var(--tr-surface-primary);
     }}
 
-    .tr-auth-surface {{
+    [data-testid="stVerticalBlockBorderWrapper"]:has(input[type="password"]) {{
         max-width: 480px;
         margin: 24px auto;
     }}
@@ -203,6 +204,46 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
 def apply_global_styles() -> None:
     """Install the shared presentation layer before any page is rendered."""
     st.markdown(global_styles(), unsafe_allow_html=True)
+
+
+def reset_profile_presentation_state(
+    session_state: MutableMapping[str, object],
+    *,
+    previous_profile_key: str | None,
+    selected_profile_key: str | None,
+) -> None:
+    """Clear unscoped page state when the active business profile changes."""
+    if previous_profile_key == selected_profile_key:
+        return
+
+    keys = {
+        "edit_transaction_id",
+        "edit_mileage_trip_id",
+        "edit_account_id",
+        "edit_category_id",
+        "write_success_notice",
+        "ledger_start",
+        "ledger_end",
+        "mileage_start",
+        "mileage_end",
+        "report_start",
+        "report_end",
+        "balance_sheet_date",
+    }
+    prefixes = (
+        "add_transaction_",
+        "add_mileage_",
+        "edit_transaction_",
+        "edit_mileage_",
+        "receipt_notice_",
+        "receipt_candidate_",
+        "receipt-upload-",
+        "quickbooks_",
+        "reset_",
+    )
+    for key in list(session_state):
+        if key in keys or key.startswith(prefixes):
+            session_state.pop(key, None)
 
 
 def render_page_header(title: str, description: str | None = None) -> None:

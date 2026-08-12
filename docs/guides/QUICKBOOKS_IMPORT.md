@@ -1,6 +1,6 @@
 # Import from QuickBooks
 
-Tabula Rosa supports:
+Project Tabula Rasa supports:
 
 - QuickBooks Online **Transaction Detail by Account** CSV exports;
 - QuickBooks Self-Employed **General ledger** XLSX or ZIP exports; and
@@ -42,15 +42,15 @@ In QuickBooks Self-Employed:
 4. Upload either the exported ZIP or its `General_ledger.xlsx` file directly.
 
 The importer pairs debit and credit entries so each accounting event becomes
-one Tabula Rosa transaction. A separate chart-of-accounts export is not
+one Project Tabula Rasa transaction. A separate chart-of-accounts export is not
 required.
 
 ## Transaction field mapping
 
-Account and category names must already exist in Tabula Rosa unless automatic
+Account and category names must already exist in Project Tabula Rasa unless automatic
 creation is enabled. Matching is case-insensitive.
 
-| QuickBooks field | Tabula Rosa field or behavior |
+| QuickBooks field | Project Tabula Rasa field or behavior |
 | --- | --- |
 | `Account` | Source ledger account |
 | `Split` on income or expense | Category |

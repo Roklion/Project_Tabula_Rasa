@@ -77,7 +77,7 @@ def require_authentication() -> None:
 
     with st.container(border=True):
         render_page_header(
-            "Tabula Rosa", "Enter the application password to continue."
+            "Project Tabula Rasa", "Enter the application password to continue."
         )
         with st.form("login_form", clear_on_submit=True):
             password = st.text_input("Password", type="password")

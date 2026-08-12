@@ -1,6 +1,6 @@
 # Documentation
 
-This directory is the canonical source for Tabula Rosa's technical and
+This directory is the canonical source for Project Tabula Rasa's technical and
 operational documentation. The root README remains intentionally short and
 points here for durable setup, architecture, and recovery guidance.
 
@@ -30,7 +30,7 @@ points here for durable setup, architecture, and recovery guidance.
 
 ### Use and develop
 
-- [Using Tabula Rosa](guides/USING_TABULA_ROSA.md) covers profile selection,
+- [Using Project Tabula Rasa](guides/USING_TABULA_ROSA.md) covers profile selection,
   ledger behavior, receipts, mileage, reports, and exports.
 - [QuickBooks import](guides/QUICKBOOKS_IMPORT.md) covers transaction and
   mileage import formats, validation, and duplicate handling.

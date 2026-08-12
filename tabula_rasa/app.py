@@ -54,7 +54,11 @@ from tabula_rasa.local_profile_store import (
     local_profile_revision,
     merged_profile_secrets,
 )
-from tabula_rasa.presentation import apply_global_styles, render_page_header
+from tabula_rasa.presentation import (
+    apply_global_styles,
+    render_page_header,
+    reset_profile_presentation_state,
+)
 from tabula_rasa.storage import (
     decode_receipt_references,
     GoogleSheetsStorage,
@@ -338,7 +342,7 @@ def confirmed_write(
     st.rerun()
 
 
-st.set_page_config(page_title="Tabula Rosa", page_icon="📒", layout="wide")
+st.set_page_config(page_title="Project Tabula Rasa", page_icon="📒", layout="wide")
 apply_global_styles()
 
 require_authentication()
@@ -376,7 +380,7 @@ if profile_admin_enabled and (
 
 profile_by_key = {profile.key: profile for profile in profiles}
 with st.sidebar:
-    st.title("Tabula Rosa")
+    st.title("Project Tabula Rasa")
     if profiles:
         selected_profile_key = st.selectbox(
             "Business",
@@ -388,6 +392,13 @@ with st.sidebar:
     else:
         selected_profile_key = None
         st.info("Add the first business profile to continue.")
+
+    reset_profile_presentation_state(
+        st.session_state,
+        previous_profile_key=st.session_state.get("previous_business_profile"),
+        selected_profile_key=selected_profile_key,
+    )
+    st.session_state["previous_business_profile"] = selected_profile_key
 
     pages = [
         "Dashboard",
@@ -687,6 +698,7 @@ elif page == "Transactions":
     with tab_ledger:
         transaction_ledger_key = (
             "transaction_ledger_"
+            f"{selected_profile_key}_"
             f"{st.session_state.get('transaction_ledger_generation', 0)}"
         )
         c1, c2, c3 = st.columns(3)
@@ -1471,8 +1483,10 @@ elif page == "Mileage":
 
         trip_ids = trip_frame["ID"].tolist()
 
+        mileage_table_key = f"mileage_log_{selected_profile_key}"
+
         def select_mileage_trip() -> None:
-            selected_rows = st.session_state["mileage_log"].selection.rows
+            selected_rows = st.session_state[mileage_table_key].selection.rows
             if selected_rows:
                 st.session_state["edit_mileage_trip_id"] = trip_ids[
                     selected_rows[0]
@@ -1482,7 +1496,7 @@ elif page == "Mileage":
             trip_frame,
             hide_index=True,
             width="stretch",
-            key="mileage_log",
+            key=mileage_table_key,
             on_select=select_mileage_trip,
             selection_mode="single-row",
             column_config={
@@ -1661,6 +1675,7 @@ elif page == "Accounts":
         )
     account_table_key = (
         "account_table_"
+        f"{selected_profile_key}_"
         f"{st.session_state.get('account_table_generation', 0)}"
     )
 
@@ -1923,6 +1938,7 @@ elif page == "Categories":
     category_frame = pd.DataFrame(category_rows)
     category_table_key = (
         "category_table_"
+        f"{selected_profile_key}_"
         f"{st.session_state.get('category_table_generation', 0)}"
     )
 
@@ -2515,7 +2531,7 @@ elif page == "Data & backup":
                 )
             )
             st.caption(
-                "These are the expected per-business settings. Tabula Rosa does not "
+                "These are the expected per-business settings. Project Tabula Rasa does not "
                 "connect to the NAS; confirm transfers, failures, and retries in DSM "
                 "Cloud Sync with destination deletions disabled is the independent "
                 "second-layer copy. Optional versioned retention can protect both "
@@ -2612,7 +2628,7 @@ elif page == "Data & backup":
                 "application/zip",
                 width="stretch",
             )
-    with st.expander("Import Tabula Rosa CSV"):
+    with st.expander("Import Project Tabula Rasa CSV"):
         st.write(
             "Upload a CSV with: Date, Type, Amount, Account, Category, Payee, "
             "Description, Reference. Type must be Income or Expense."

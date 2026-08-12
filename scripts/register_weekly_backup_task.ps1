@@ -4,7 +4,7 @@ param(
     [switch]$AllProfiles,
     [switch]$Local,
     [switch]$GoogleDrive,
-    [string]$TaskName = "Tabula Rosa Weekly Backup"
+    [string]$TaskName = "Project Tabula Rasa Weekly Backup"
 )
 
 $ErrorActionPreference = "Stop"
@@ -88,7 +88,7 @@ Register-ScheduledTask `
     -Trigger $trigger `
     -Settings $settings `
     -Principal $principal `
-    -Description "Create one verified Tabula Rosa backup weekly; Monday with Tuesday/Wednesday retry opportunities." `
+    -Description "Create one verified Project Tabula Rasa backup weekly; Monday with Tuesday/Wednesday retry opportunities." `
     -Force | Out-Null
 
 Get-ScheduledTask -TaskName $TaskName | Select-Object TaskName, State, Description

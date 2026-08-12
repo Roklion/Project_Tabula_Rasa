@@ -122,7 +122,7 @@ def validate_backup_folder_path(value: str) -> str:
     if not path.is_absolute():
         raise LocalProfileStoreError(
             "Backup folder path must be absolute, such as "
-            r"G:\My Drive\Tabula Rosa Backups\business."
+            r"G:\My Drive\Project Tabula Rasa Backups\business."
         )
     return str(path)
 

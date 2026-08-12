@@ -1,6 +1,6 @@
 # Google Drive OAuth and per-business access
 
-This guide explains how one Tabula Rosa OAuth application accesses separate
+This guide explains how one Project Tabula Rasa OAuth application accesses separate
 Google Drives for multiple business profiles. It is also the setup and
 operations guide for Google Picker, per-profile storage roots, receipt folders, cloud backup folders,
 token lifecycle, and production publishing.
@@ -13,7 +13,7 @@ human-owned Google Drive files.
 
 | Component | Question it answers | Ownership |
 | --- | --- | --- |
-| OAuth client ID | Which application is requesting access? | Shared by Tabula Rosa |
+| OAuth client ID | Which application is requesting access? | Shared by Project Tabula Rasa |
 | OAuth client secret | Can the server prove it is that application? | Shared and server-side only |
 | Human Google account | Whose Drive is being authorized? | Chosen independently per profile |
 | Refresh token | Which persistent permission grant belongs to this profile? | Stored separately per profile |
@@ -23,7 +23,7 @@ human-owned Google Drive files.
 | Storage root ID | Which profile-owned Drive folder contains app-managed children? | Selected or created and stored per profile |
 | Child folder IDs | Where should this profile store receipts and backups? | Provisioned under the root and stored per profile |
 
-The OAuth client identifies Tabula Rosa; it does not identify a business and
+The OAuth client identifies Project Tabula Rasa; it does not identify a business and
 does not grant Drive access by itself. Each business's Google account grants the
 shared application an independent permission, represented by that profile's
 refresh token.
@@ -32,7 +32,7 @@ refresh token.
 
 ```mermaid
 flowchart LR
-    subgraph Shared["Shared Tabula Rosa OAuth application"]
+    subgraph Shared["Shared Project Tabula Rasa OAuth application"]
         Client["OAuth client ID and secret"]
         Picker["Picker API key and project number"]
         Redirects["Approved redirect URIs"]
@@ -87,16 +87,16 @@ No business needs its own OAuth client, API key, or OAuth Cloud project.
 
 Three independent controls are involved:
 
-1. **Tabula Rosa authentication** checks the application password and permits
+1. **Project Tabula Rasa authentication** checks the application password and permits
    entry to the deployment.
 2. **Google authentication** lets Google confirm the human account through its
-   own password, MFA, and account-selection flow. Tabula Rosa never sees those
+   own password, MFA, and account-selection flow. Project Tabula Rasa never sees those
    Google credentials.
 3. **Google authorization** lets that account approve the `drive.file` scope
-   for the shared Tabula Rosa OAuth client.
+   for the shared Project Tabula Rasa OAuth client.
 
-Google OAuth does not provide profile-level authorization inside Tabula Rosa.
-The application currently treats every authenticated Tabula Rosa user as able
+Google OAuth does not provide profile-level authorization inside Project Tabula Rasa.
+The application currently treats every authenticated Project Tabula Rasa user as able
 to select every configured profile. Use separate deployments or implement
 profile-level application authorization when users must be restricted to
 particular businesses.
@@ -105,8 +105,8 @@ particular businesses.
 
 ```mermaid
 sequenceDiagram
-    actor Admin as Tabula Rosa administrator
-    participant App as Tabula Rosa server
+    actor Admin as Project Tabula Rasa administrator
+    participant App as Project Tabula Rasa server
     participant Google as Google OAuth
     participant Store as Local profile store
 
@@ -132,7 +132,7 @@ code is one-time input and is not persisted.
 ```mermaid
 sequenceDiagram
     actor Admin
-    participant Server as Tabula Rosa server
+    participant Server as Project Tabula Rasa server
     participant Token as Google OAuth token endpoint
     participant Picker as Google Picker in browser
     participant Drive as Google Drive API
@@ -173,7 +173,7 @@ After onboarding, the user does not need to approve every upload:
 ```mermaid
 sequenceDiagram
     actor User
-    participant App as Tabula Rosa server
+    participant App as Project Tabula Rasa server
     participant Store as Profile configuration
     participant Google as Google OAuth
     participant Drive as Google Drive
@@ -197,7 +197,7 @@ handling.
 
 ## Permission scope
 
-Tabula Rosa requests only:
+Project Tabula Rasa requests only:
 
 ```text
 https://www.googleapis.com/auth/drive.file
@@ -298,16 +298,16 @@ powershell -ExecutionPolicy Bypass -File scripts\run_local_profile_admin.ps1
 
 Then:
 
-1. Sign in to Tabula Rosa and open **Business profiles**.
+1. Sign in to Project Tabula Rasa and open **Business profiles**.
 2. Re-enter the application password.
 3. In the guided workflow, select the intended business profile and continue to
    its **Google Drive OAuth** step.
 4. Select **Connect Google Drive**.
 5. Sign in with the human Google account that should own that business's Drive
    files and approve access.
-6. Back in Tabula Rosa, use the single Google Picker selection to choose a
+6. Back in Project Tabula Rasa, use the single Google Picker selection to choose a
    storage root, or create an app-managed root.
-7. Choose **Provision storage folders**. Tabula Rosa creates or reuses the
+7. Choose **Provision storage folders**. Project Tabula Rasa creates or reuses the
    `Receipts` and `Ledger Backups` children under that root. Existing Drive files
    are not moved, merged, or deleted.
 8. Repeat for every profile.
@@ -368,7 +368,7 @@ The hosted copy belongs only in Streamlit's encrypted Secrets settings.
 
 ### A business revokes access
 
-The next refresh attempt fails and Tabula Rosa requests reconnection for that
+The next refresh attempt fails and Project Tabula Rasa requests reconnection for that
 profile. Its Sheets service-account access remains unaffected.
 
 ### A business changes Google accounts

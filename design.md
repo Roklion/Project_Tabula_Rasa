@@ -367,6 +367,19 @@ Every workbook read, write, import, export, receipt operation, backup, and cache
 
 The active business and workbook context must remain discoverable. A redesign must not make cross-profile scope ambiguous.
 
+### 6.11 Current shell identity and profile transitions
+
+The current application display identity is **Project Tabula Rasa**. The sign-in
+surface, sidebar title, Streamlit page title, and shell-level documentation use
+that name. The operational route label **Business profiles** remains current
+until the separate #62 information-architecture change is implemented.
+
+When the selected business changes, the sidebar continues to show the selected
+business and workbook context. Page selections, table widget keys, edit-row
+selections, date filters, and pending write notices must not be reused across
+profiles in a way that makes the active workbook ambiguous. A profile change
+must not initialize or access another profile's storage.
+
 ---
 
 ## 7. Color System

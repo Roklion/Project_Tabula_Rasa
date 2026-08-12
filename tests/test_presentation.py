@@ -4,7 +4,12 @@ from pathlib import Path
 import tomllib
 from unittest.mock import patch
 
-from tabula_rasa.presentation import DESIGN_TOKENS, global_styles, render_page_header
+from tabula_rasa.presentation import (
+    DESIGN_TOKENS,
+    global_styles,
+    render_page_header,
+    reset_profile_presentation_state,
+)
 
 
 def test_design_tokens_match_the_shared_visual_foundation() -> None:
@@ -13,6 +18,7 @@ def test_design_tokens_match_the_shared_visual_foundation() -> None:
     assert DESIGN_TOKENS["interactive-primary"] == "#3267D6"
     assert DESIGN_TOKENS["interactive-focus"] == "#6B96ED"
     assert DESIGN_TOKENS["negative-text"] == "#B33A3A"
+    assert DESIGN_TOKENS["negative-hover"] == "#942F2F"
 
 
 def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
@@ -25,12 +31,16 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
         '[data-testid="stForm"]',
         '[data-testid="stExpander"]',
         '[data-testid="stAlert"]',
+        '[data-testid="stVerticalBlockBorderWrapper"]:has(input[type="password"])',
         ":focus-visible",
     ):
         assert selector in css
 
     assert "--tr-canvas: #F5F4F0" in css
     assert "--tr-interactive-focus: #6B96ED" in css
+    assert "--tr-negative-hover: #942F2F" in css
+    assert "var(--tr-negative-hover)" in css
+    assert ".tr-auth-surface" not in css
     assert "[class*=" not in css
 
 
@@ -56,3 +66,28 @@ def test_render_page_header_keeps_description_optional() -> None:
         render_page_header("Mileage", "Keep a dated mileage log.")
         assert title.call_count == 2
         caption.assert_called_once_with("Keep a dated mileage log.")
+
+
+def test_profile_switch_clears_unscoped_presentation_state() -> None:
+    session_state = {
+        "edit_transaction_id": "north-transaction",
+        "edit_account_id": "north-account",
+        "ledger_start": "north-start",
+        "write_success_notice": "North saved",
+        "add_transaction_amount": 42,
+        "business_profile": "north",
+        "profile_scoped_cache": "retain",
+    }
+
+    reset_profile_presentation_state(
+        session_state,
+        previous_profile_key="north",
+        selected_profile_key="south",
+    )
+
+    assert "edit_transaction_id" not in session_state
+    assert "edit_account_id" not in session_state
+    assert "ledger_start" not in session_state
+    assert "write_success_notice" not in session_state
+    assert "add_transaction_amount" not in session_state
+    assert session_state["profile_scoped_cache"] == "retain"

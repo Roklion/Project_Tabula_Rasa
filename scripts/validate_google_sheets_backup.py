@@ -1,4 +1,4 @@
-"""Validate one local Tabula Rosa backup archive without restoring it."""
+"""Validate one local Project Tabula Rasa backup archive without restoring it."""
 
 from __future__ import annotations
 

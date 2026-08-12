@@ -330,7 +330,7 @@ def _render_synology_recovery_admin(
     st.subheader("Synology recovery copy")
     st.write(
         "Optionally record the expected Google Drive-to-NAS Cloud Sync setup for "
-        "each business. Tabula Rosa does not mount or connect to the NAS."
+        "each business. Project Tabula Rasa does not mount or connect to the NAS."
     )
     if not local_profiles:
         st.info("Add a local business profile before configuring Synology recovery.")

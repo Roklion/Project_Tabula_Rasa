@@ -1,6 +1,6 @@
 # Architecture overview
 
-Tabula Rosa is a single Streamlit application that serves one or more isolated
+Project Tabula Rasa is a single Streamlit application that serves one or more isolated
 business profiles. Each profile selects its own Google Sheets workbook,
 service-account credential, optional Google Drive authorization, and recovery
 destinations.
@@ -9,9 +9,9 @@ destinations.
 
 ```mermaid
 flowchart LR
-    User["Authorized Tabula Rosa user"]
+    User["Authorized Project Tabula Rasa user"]
 
-    subgraph App["Tabula Rosa deployment"]
+    subgraph App["Project Tabula Rasa deployment"]
         Auth["Application password"]
         Profile["Selected business profile"]
         Ledger["Ledger and reporting services"]
@@ -81,7 +81,7 @@ complete identity, token, Picker, and file-access flow.
 ```mermaid
 sequenceDiagram
     actor User
-    participant App as Tabula Rosa
+    participant App as Project Tabula Rasa
     participant Profile as Selected profile
     participant Sheets as Google Sheets
 
