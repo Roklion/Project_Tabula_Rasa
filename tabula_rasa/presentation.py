@@ -179,6 +179,9 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
 
     .st-key-edit_transaction [data-testid="stFormSubmitButton"]:has(
         [data-testid="stIconMaterial"]
+    ) button,
+    .st-key-edit_mileage_trip [data-testid="stFormSubmitButton"]:has(
+        [data-testid="stIconMaterial"]
     ) button {{
         background: var(--tr-negative-text);
         border-color: var(--tr-negative-text);
@@ -186,6 +189,9 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
     }}
 
     .st-key-edit_transaction [data-testid="stFormSubmitButton"]:has(
+        [data-testid="stIconMaterial"]
+    ) button:hover,
+    .st-key-edit_mileage_trip [data-testid="stFormSubmitButton"]:has(
         [data-testid="stIconMaterial"]
     ) button:hover {{
         background: var(--tr-negative-hover);

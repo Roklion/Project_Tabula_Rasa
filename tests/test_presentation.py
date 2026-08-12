@@ -40,6 +40,7 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
     assert "--tr-interactive-focus: #6B96ED" in css
     assert "--tr-negative-hover: #942F2F" in css
     assert "var(--tr-negative-hover)" in css
+    assert ".st-key-edit_mileage_trip" in css
     assert ".tr-auth-surface" not in css
     assert "[class*=" not in css
 
