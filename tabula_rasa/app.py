@@ -32,8 +32,8 @@ from tabula_rasa.google_drive import (
     load_oauth_config,
 )
 from tabula_rasa.google_drive_admin import process_google_drive_oauth_callback
+from tabula_rasa.ledger_presentation import balances_frame, ledger_frame, money
 from tabula_rasa.ledger_reporting import (
-    account_balances,
     balance_sheet,
     category_activity_rollups,
     monthly_performance,
@@ -54,6 +54,7 @@ from tabula_rasa.local_profile_store import (
     local_profile_revision,
     merged_profile_secrets,
 )
+from tabula_rasa.pages.dashboard import DashboardContext, render_dashboard
 from tabula_rasa.presentation import (
     apply_global_styles,
     render_page_header,
@@ -101,10 +102,6 @@ FIXED_TYPE_CLASSIFICATIONS = {
 }
 
 
-def money(value: float) -> str:
-    return f"${value:,.2f}"
-
-
 def transaction_has_receipts(transaction: Mapping[str, object]) -> bool:
     references = transaction.get("receipt_references", "")
     if not references or (
@@ -138,73 +135,6 @@ def get_storage(
     )
     return GoogleSheetsStorage.from_secrets(
         select_profile_secrets(secrets, profile_key)
-    )
-
-
-def ledger_frame(
-    transactions: list[dict],
-    accounts: list[dict],
-    categories: list[dict],
-    *,
-    display_paths: bool = True,
-) -> pd.DataFrame:
-    account_names = (
-        hierarchy_paths(accounts)
-        if display_paths
-        else {account["id"]: account["name"] for account in accounts}
-    )
-    category_names = (
-        hierarchy_paths(categories)
-        if display_paths
-        else {category["id"]: category["name"] for category in categories}
-    )
-    rows = [
-        {
-            "ID": transaction["id"],
-            "Date": transaction["txn_date"],
-            "Type": transaction["kind"],
-            "Account": account_names.get(transaction["account_id"], "Unknown"),
-            "To account": account_names.get(transaction.get("to_account_id"), ""),
-            "Category": category_names.get(transaction.get("category_id"), ""),
-            "Payee": transaction.get("payee", ""),
-            "Description": transaction.get("description", ""),
-            "Reference": transaction.get("reference", ""),
-            "Amount": float(transaction["amount"]),
-        }
-        for transaction in transactions
-    ]
-    return pd.DataFrame(
-        rows,
-        columns=[
-            "ID",
-            "Date",
-            "Type",
-            "Account",
-            "To account",
-            "Category",
-            "Payee",
-            "Description",
-            "Reference",
-            "Amount",
-        ],
-    )
-
-
-def balances_frame(accounts: list[dict], transactions: list[dict]) -> pd.DataFrame:
-    rows = account_balances(accounts, transactions)
-    account_paths = hierarchy_paths(accounts)
-    return pd.DataFrame(
-        [
-            {
-                "ID": account["id"],
-                "Account": account_paths.get(account["id"], account["name"]),
-                "Type": account["type"],
-                "Classification": account["classification"],
-                "Active": account["active"],
-                "Balance": account["balance"],
-            }
-            for account in rows
-        ]
     )
 
 
@@ -478,64 +408,7 @@ if page != "Business profiles":
 
 
 if page == "Dashboard":
-    render_page_header(
-        "Your books at a glance",
-        "A current view of cash, income, and spending.",
-    )
-    try:
-        today = date.today()
-        month_start = today.replace(day=1)
-        storage.prefetch_worksheets(
-            "Accounts",
-            "Categories",
-            "Transactions",
-        )
-        accounts = storage.list_accounts(active_only=False)
-        categories = storage.list_categories()
-        transactions = storage.list_transactions()
-        monthly_totals = profit_and_loss(
-            transactions, start=month_start, end=today
-        )
-        balances = balances_frame(accounts, transactions)
-    except StorageError as error:
-        report_storage_error(error)
-        st.stop()
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total balance", money(float(balances["Balance"].sum())))
-    c2.metric("Income this month", money(monthly_totals["income"]))
-    c3.metric("Expenses this month", money(monthly_totals["expenses"]))
-    c4.metric("Net this month", money(monthly_totals["net"]))
-    left, right = st.columns([1.4, 1])
-    with left:
-        st.subheader("Recent activity")
-        recent = ledger_frame(transactions[:8], accounts, categories)
-        if recent.empty:
-            st.info("No transactions yet. Add your first one from Transactions.")
-        else:
-            display = recent[
-                ["Date", "Type", "Payee", "Category", "Account", "Amount"]
-            ].copy()
-            display["Amount"] = display.apply(
-                lambda row: -row.Amount if row.Type == "Expense" else row.Amount,
-                axis=1,
-            )
-            st.dataframe(
-                display,
-                hide_index=True,
-                width="stretch",
-                column_config={
-                    "Amount": st.column_config.NumberColumn(format="$%.2f")
-                },
-            )
-    with right:
-        st.subheader("Account balances")
-        st.dataframe(
-            balances[["Account", "Classification", "Type", "Balance"]],
-            hide_index=True,
-            width="stretch",
-            column_config={"Balance": st.column_config.NumberColumn(format="$%.2f")},
-        )
+    render_dashboard(DashboardContext(selected_profile_key, storage))
 
 
 elif page == "Transactions":
