@@ -46,12 +46,12 @@ def render_dashboard(context: DashboardContext) -> None:
         st.error(str(error))
         st.stop()
 
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3, c4 = st.columns([1.25, 1, 1, 1], gap="small")
     c1.metric("Total balance", money(float(balances["Balance"].sum())))
     c2.metric("Income this month", money(monthly_totals["income"]))
     c3.metric("Expenses this month", money(monthly_totals["expenses"]))
     c4.metric("Net this month", money(monthly_totals["net"]))
-    left, right = st.columns([1.4, 1])
+    left, right = st.columns([1.6, 1], gap="large")
     with left:
         st.subheader("Recent activity")
         recent = ledger_frame(transactions[:8], accounts, categories)

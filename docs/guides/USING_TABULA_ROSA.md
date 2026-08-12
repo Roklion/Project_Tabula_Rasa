@@ -31,6 +31,22 @@ title visible while clearing page-local selections and pending notices from the
 previous business. The route remains available, but table selections and edit
 targets are rebuilt for the newly selected workbook.
 
+## Dashboard
+
+The Dashboard keeps the current four summary values near the top:
+
+- **Total balance**;
+- **Income this month**;
+- **Expenses this month**; and
+- **Net this month**.
+
+Recent activity is the wider lower section and shows up to eight transactions
+with Date, Type, Payee, Category, Account, and Amount. Account balances remain
+alongside it on wide screens and stack after recent activity in a narrow
+viewport. The tables keep their existing fields and use intentional table
+scrolling when their content needs more width; no additional trends or cash
+flow claims are inferred from the Dashboard.
+
 ## Accounts
 
 Accounts store a balance-sheet classification separately from their subtype:

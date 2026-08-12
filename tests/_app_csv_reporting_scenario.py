@@ -127,6 +127,16 @@ def main() -> None:
         assert dashboard_metrics["Expenses this month"] == "$40.00"
         assert dashboard_metrics["Net this month"] == "$60.00"
         assert dashboard_metrics["Total balance"] == "$60.00"
+        dashboard_frames = [frame.value for frame in app.dataframe]
+        assert any(
+            list(frame.columns)
+            == ["Date", "Type", "Payee", "Category", "Account", "Amount"]
+            for frame in dashboard_frames
+        )
+        assert any(
+            list(frame.columns) == ["Account", "Classification", "Type", "Balance"]
+            for frame in dashboard_frames
+        )
 
 
 if __name__ == "__main__":
