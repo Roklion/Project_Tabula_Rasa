@@ -54,6 +54,11 @@ from tabula_rasa.local_profile_store import (
     local_profile_revision,
     merged_profile_secrets,
 )
+from tabula_rasa.presentation import (
+    apply_global_styles,
+    render_page_header,
+    reset_profile_presentation_state,
+)
 from tabula_rasa.storage import (
     decode_receipt_references,
     GoogleSheetsStorage,
@@ -337,47 +342,8 @@ def confirmed_write(
     st.rerun()
 
 
-st.set_page_config(page_title="Tabula Rosa", page_icon="📒", layout="wide")
-st.markdown(
-    """
-    <style>
-    :root { color-scheme:light; --ink:#17211b; --green:#206a4b; --cream:#f7f5ef; }
-    .stApp { background: var(--cream); color: var(--ink); }
-    [data-testid="stMetric"] { background:white; border:1px solid #dedbd2; padding:18px; border-radius:14px; }
-    [data-testid="stSidebar"] { background:#173f32; }
-    [data-testid="stSidebar"] * { color:#f7f5ef; }
-    [data-testid="stWidgetLabel"] {
-        width:fit-content !important;
-        max-width:100%;
-        justify-content:flex-start;
-        gap:.3rem;
-    }
-    [data-testid="stWidgetLabel"] > [data-testid="stMarkdownContainer"] {
-        width:fit-content !important;
-        flex:0 1 auto;
-    }
-    [data-testid="stWidgetLabel"] p {
-        flex:0 0 auto;
-    }
-    [data-testid="stWidgetLabel"] [data-testid="stTooltipIcon"] {
-        flex:0 0 auto;
-    }
-    .st-key-edit_transaction [data-testid="stFormSubmitButton"]:has([data-testid="stIconMaterial"]) button {
-        background:#b42318;
-        border-color:#b42318;
-        color:white;
-    }
-    .st-key-edit_transaction [data-testid="stFormSubmitButton"]:has([data-testid="stIconMaterial"]) button:hover {
-        background:#912018;
-        border-color:#912018;
-        color:white;
-    }
-    h1,h2,h3 { letter-spacing:-.025em; }
-    .muted { color:#67716b; margin-top:-.8rem; }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+st.set_page_config(page_title="Project Tabula Rasa", page_icon="📒", layout="wide")
+apply_global_styles()
 
 require_authentication()
 
@@ -414,7 +380,7 @@ if profile_admin_enabled and (
 
 profile_by_key = {profile.key: profile for profile in profiles}
 with st.sidebar:
-    st.title("Tabula Rosa")
+    st.title("Project Tabula Rasa")
     if profiles:
         selected_profile_key = st.selectbox(
             "Business",
@@ -426,6 +392,13 @@ with st.sidebar:
     else:
         selected_profile_key = None
         st.info("Add the first business profile to continue.")
+
+    reset_profile_presentation_state(
+        st.session_state,
+        previous_profile_key=st.session_state.get("previous_business_profile"),
+        selected_profile_key=selected_profile_key,
+    )
+    st.session_state["previous_business_profile"] = selected_profile_key
 
     pages = [
         "Dashboard",
@@ -447,6 +420,7 @@ with st.sidebar:
     if previous_page != page:
         table_generation_by_page = {
             "Transactions": "transaction_ledger_generation",
+            "Mileage": "mileage_log_generation",
             "Accounts": "account_table_generation",
             "Categories": "category_table_generation",
         }
@@ -504,10 +478,9 @@ if page != "Business profiles":
 
 
 if page == "Dashboard":
-    st.title("Your books at a glance")
-    st.markdown(
-        '<p class="muted">A current view of cash, income, and spending.</p>',
-        unsafe_allow_html=True,
+    render_page_header(
+        "Your books at a glance",
+        "A current view of cash, income, and spending.",
     )
     try:
         today = date.today()
@@ -566,7 +539,7 @@ if page == "Dashboard":
 
 
 elif page == "Transactions":
-    st.title("Transactions")
+    render_page_header("Transactions")
     tab_add, tab_ledger = st.tabs(["Add transaction", "View & edit ledger"])
     try:
         storage.prefetch_worksheets(
@@ -726,6 +699,7 @@ elif page == "Transactions":
     with tab_ledger:
         transaction_ledger_key = (
             "transaction_ledger_"
+            f"{selected_profile_key}_"
             f"{st.session_state.get('transaction_ledger_generation', 0)}"
         )
         c1, c2, c3 = st.columns(3)
@@ -734,7 +708,9 @@ elif page == "Transactions":
         )
         end = c2.date_input("To", date.today(), key="ledger_end")
         filter_type = c3.selectbox(
-            "Type", ["All", "Income", "Expense", "Transfer"]
+            "Type",
+            ["All", "Income", "Expense", "Transfer"],
+            key=f"ledger_filter_type_{selected_profile_key}",
         )
         ledger_account_map = {
             account_paths[account_id]: account_id
@@ -744,6 +720,7 @@ elif page == "Transactions":
         selected_account_names = st.multiselect(
             "Accounts",
             list(ledger_account_map),
+            key=f"ledger_filter_accounts_{selected_profile_key}",
             placeholder="All accounts",
             help=(
                 "Includes transactions where a selected account is either side "
@@ -838,6 +815,7 @@ elif page == "Transactions":
                 selected = next(
                     transaction for transaction in transactions if transaction["id"] == edit_id
                 )
+                edit_widget_scope = f"{selected_profile_key}_{edit_id}"
                 with st.form("edit_transaction"):
                     current_account_ids = [
                         selected["account_id"],
@@ -858,6 +836,7 @@ elif page == "Transactions":
                         editable_account_ids,
                         index=editable_account_ids.index(selected["account_id"]),
                         format_func=account_paths.get,
+                        key=f"edit_transaction_account_{edit_widget_scope}",
                     )
                     edited_to_account_id = ""
                     edited_category_id = ""
@@ -869,6 +848,7 @@ elif page == "Transactions":
                                 selected["to_account_id"]
                             ),
                             format_func=account_paths.get,
+                            key=f"edit_transaction_to_account_{edit_widget_scope}",
                         )
                     else:
                         category_ids = [
@@ -885,42 +865,57 @@ elif page == "Transactions":
                                 else None
                             ),
                             format_func=category_paths.get,
+                            key=f"edit_transaction_category_{edit_widget_scope}",
                         )
                     c1, c2 = st.columns(2)
                     edited_date = c1.date_input(
-                        "Edit date", date.fromisoformat(selected["txn_date"])
+                        "Edit date",
+                        date.fromisoformat(selected["txn_date"]),
+                        key=f"edit_transaction_date_{edit_widget_scope}",
                     )
                     edited_amount = c2.number_input(
                         "Edit amount",
                         min_value=0.01,
                         value=float(selected["amount"]),
                         format="%.2f",
+                        key=f"edit_transaction_amount_{edit_widget_scope}",
                     )
                     edited_payee = st.text_input(
-                        "Edit payee / customer", value=selected.get("payee", "")
+                        "Edit payee / customer",
+                        value=selected.get("payee", ""),
+                        key=f"edit_transaction_payee_{edit_widget_scope}",
                     )
                     edited_reference = st.text_input(
-                        "Edit reference", value=selected.get("reference", "")
+                        "Edit reference",
+                        value=selected.get("reference", ""),
+                        key=f"edit_transaction_reference_{edit_widget_scope}",
                     )
                     edited_description = st.text_input(
-                        "Edit description", value=selected.get("description", "")
+                        "Edit description",
+                        value=selected.get("description", ""),
+                        key=f"edit_transaction_description_{edit_widget_scope}",
                     )
                     st.warning(
                         "Deleting this transaction is permanent and cannot be undone.",
                         icon="⚠️",
                     )
                     confirm_delete = st.checkbox(
-                        "I understand this transaction will be permanently deleted"
+                        "I understand this transaction will be permanently deleted",
+                        key=f"edit_transaction_confirm_delete_{edit_widget_scope}",
                     )
                     save_column, delete_column = st.columns(2)
                     save_requested = save_column.form_submit_button(
-                        "Save changes", type="primary", width="stretch"
+                        "Save changes",
+                        type="primary",
+                        width="stretch",
+                        key=f"edit_transaction_save_{edit_widget_scope}",
                     )
                     delete_requested = delete_column.form_submit_button(
                         "Permanently delete",
                         icon=":material/delete_forever:",
                         help="Permanently delete this transaction",
                         width="stretch",
+                        key=f"edit_transaction_delete_{edit_widget_scope}",
                     )
                     if save_requested:
                         payload = {
@@ -1365,9 +1360,9 @@ elif page == "Transactions":
 
 
 elif page == "Mileage":
-    st.title("Mileage")
-    st.caption(
-        "Keep a dated business-mileage log with the route, purpose, and vehicle."
+    render_page_header(
+        "Mileage",
+        "Keep a dated business-mileage log with the route, purpose, and vehicle.",
     )
     tab_add, tab_log = st.tabs(["Add trip", "View & edit mileage log"])
 
@@ -1510,8 +1505,13 @@ elif page == "Mileage":
 
         trip_ids = trip_frame["ID"].tolist()
 
+        mileage_table_key = (
+            f"mileage_log_{selected_profile_key}_"
+            f"{st.session_state.get('mileage_log_generation', 0)}"
+        )
+
         def select_mileage_trip() -> None:
-            selected_rows = st.session_state["mileage_log"].selection.rows
+            selected_rows = st.session_state[mileage_table_key].selection.rows
             if selected_rows:
                 st.session_state["edit_mileage_trip_id"] = trip_ids[
                     selected_rows[0]
@@ -1521,7 +1521,7 @@ elif page == "Mileage":
             trip_frame,
             hide_index=True,
             width="stretch",
-            key="mileage_log",
+            key=mileage_table_key,
             on_select=select_mileage_trip,
             selection_mode="single-row",
             column_config={
@@ -1551,11 +1551,13 @@ elif page == "Mileage":
                     key="edit_mileage_trip_id",
                 )
                 selected = next(trip for trip in trips if trip["id"] == edit_id)
+                edit_widget_scope = f"{selected_profile_key}_{edit_id}"
                 with st.form("edit_mileage_trip"):
                     c1, c2 = st.columns(2)
                     edited_date = c1.date_input(
                         "Edit trip date",
                         date.fromisoformat(selected["trip_date"]),
+                        key=f"edit_mileage_trip_date_{edit_widget_scope}",
                     )
                     edited_miles = c2.number_input(
                         "Edit business miles",
@@ -1563,42 +1565,53 @@ elif page == "Mileage":
                         step=0.1,
                         value=float(selected["miles"]),
                         format="%.1f",
+                        key=f"edit_mileage_trip_miles_{edit_widget_scope}",
                     )
                     edited_vehicle = st.text_input(
-                        "Edit vehicle", value=selected.get("vehicle", "")
+                        "Edit vehicle",
+                        value=selected.get("vehicle", ""),
+                        key=f"edit_mileage_trip_vehicle_{edit_widget_scope}",
                     )
                     c1, c2 = st.columns(2)
                     edited_start = c1.text_input(
                         "Edit starting location",
                         value=selected.get("start_location", ""),
+                        key=f"edit_mileage_trip_start_{edit_widget_scope}",
                     )
                     edited_destination = c2.text_input(
                         "Edit destination",
                         value=selected.get("destination", ""),
+                        key=f"edit_mileage_trip_destination_{edit_widget_scope}",
                     )
                     edited_purpose = st.text_input(
                         "Edit business purpose",
                         value=selected.get("business_purpose", ""),
+                        key=f"edit_mileage_trip_purpose_{edit_widget_scope}",
                     )
                     edited_notes = st.text_area(
-                        "Edit notes", value=selected.get("notes", "")
+                        "Edit notes",
+                        value=selected.get("notes", ""),
+                        key=f"edit_mileage_trip_notes_{edit_widget_scope}",
                     )
                     st.warning(
                         "Deleting this mileage trip is permanent and cannot be undone."
                     )
                     confirm_delete = st.checkbox(
-                        "I understand this mileage trip will be permanently deleted"
+                        "I understand this mileage trip will be permanently deleted",
+                        key=f"edit_mileage_trip_confirm_delete_{edit_widget_scope}",
                     )
                     save_column, delete_column = st.columns(2)
                     save_requested = save_column.form_submit_button(
                         "Save mileage changes",
                         type="primary",
                         width="stretch",
+                        key=f"edit_mileage_trip_save_{edit_widget_scope}",
                     )
                     delete_requested = delete_column.form_submit_button(
                         "Permanently delete mileage trip",
                         icon=":material/delete_forever:",
                         width="stretch",
+                        key=f"edit_mileage_trip_delete_{edit_widget_scope}",
                     )
                     if save_requested:
                         payload = {
@@ -1641,8 +1654,9 @@ elif page == "Mileage":
 
 
 elif page == "Accounts":
-    st.title("Accounts")
-    st.caption("Track bank, cash, credit card, and other manual balances.")
+    render_page_header(
+        "Accounts", "Track bank, cash, credit card, and other manual balances."
+    )
     try:
         storage.prefetch_worksheets("Accounts", "Transactions")
         accounts = storage.list_accounts(active_only=False)
@@ -1699,6 +1713,7 @@ elif page == "Accounts":
         )
     account_table_key = (
         "account_table_"
+        f"{selected_profile_key}_"
         f"{st.session_state.get('account_table_generation', 0)}"
     )
 
@@ -1918,7 +1933,7 @@ elif page == "Accounts":
 
 
 elif page == "Categories":
-    st.title("Categories")
+    render_page_header("Categories")
     try:
         storage.prefetch_worksheets("Categories", "Transactions")
         categories = storage.list_categories()
@@ -1961,6 +1976,7 @@ elif page == "Categories":
     category_frame = pd.DataFrame(category_rows)
     category_table_key = (
         "category_table_"
+        f"{selected_profile_key}_"
         f"{st.session_state.get('category_table_generation', 0)}"
     )
 
@@ -2125,7 +2141,7 @@ elif page == "Categories":
 
 
 elif page == "Reports":
-    st.title("Reports")
+    render_page_header("Reports")
     c1, c2 = st.columns(2)
     start = c1.date_input(
         "From", date(date.today().year, 1, 1), key="report_start"
@@ -2356,8 +2372,10 @@ elif page == "Reports":
 
 
 elif page == "Data & backup":
-    st.title("Data & backup")
-    st.caption("Your live records are stored in the private Google Sheets workbook.")
+    render_page_header(
+        "Data & backup",
+        "Your live records are stored in the private Google Sheets workbook.",
+    )
     selected_profile = profile_by_key[selected_profile_key].secrets
     drive_settings = selected_profile.get("google_drive")
     storage_root = (
@@ -2551,7 +2569,7 @@ elif page == "Data & backup":
                 )
             )
             st.caption(
-                "These are the expected per-business settings. Tabula Rosa does not "
+                "These are the expected per-business settings. Project Tabula Rasa does not "
                 "connect to the NAS; confirm transfers, failures, and retries in DSM "
                 "Cloud Sync with destination deletions disabled is the independent "
                 "second-layer copy. Optional versioned retention can protect both "
@@ -2648,12 +2666,16 @@ elif page == "Data & backup":
                 "application/zip",
                 width="stretch",
             )
-    with st.expander("Import Tabula Rosa CSV"):
+    with st.expander("Import Project Tabula Rasa CSV"):
         st.write(
             "Upload a CSV with: Date, Type, Amount, Account, Category, Payee, "
             "Description, Reference. Type must be Income or Expense."
         )
-        plain_upload = st.file_uploader("CSV file", type="csv")
+        plain_upload = st.file_uploader(
+            "CSV file",
+            type="csv",
+            key=f"transaction_csv_upload_{selected_profile_key}",
+        )
         if plain_upload:
             try:
                 plain_incoming = pd.read_csv(plain_upload).where(
@@ -2683,7 +2705,11 @@ elif page == "Data & backup":
         "or a QuickBooks Self-Employed **General ledger** XLSX or ZIP export. "
         "Review the validation results and summary before committing."
     )
-    upload = st.file_uploader("QuickBooks export", type=["csv", "xlsx", "zip"])
+    upload = st.file_uploader(
+        "QuickBooks export",
+        type=["csv", "xlsx", "zip"],
+        key=f"quickbooks_transaction_upload_{selected_profile_key}",
+    )
     if upload:
         try:
             upload_bytes = upload.getvalue()

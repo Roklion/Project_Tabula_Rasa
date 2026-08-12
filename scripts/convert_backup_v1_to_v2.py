@@ -1,4 +1,4 @@
-"""Convert a validated Tabula Rosa format-1 backup to format 2."""
+"""Convert a validated Project Tabula Rasa format-1 backup to format 2."""
 
 from __future__ import annotations
 

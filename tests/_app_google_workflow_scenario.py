@@ -140,7 +140,7 @@ def main() -> None:
 
         app.radio[0].set_value("Transactions").run()
         initial_ledger_key = app.dataframe[0].key
-        assert initial_ledger_key == "transaction_ledger_1"
+        assert initial_ledger_key == "transaction_ledger_test_1"
         by_label(app.segmented_control, "Transaction type").set_value("Expense").run()
         assert app.dataframe[0].key == initial_ledger_key
         by_label(app.date_input, "Date").set_value(
@@ -263,10 +263,11 @@ def main() -> None:
 
         app.radio[0].set_value("Accounts").run()
         app.radio[0].set_value("Transactions").run()
-        assert app.dataframe[0].key == "transaction_ledger_2"
+        assert app.dataframe[0].key == "transaction_ledger_test_2"
         assert app.dataframe[0].key != initial_ledger_key
 
         app.radio[0].set_value("Mileage").run()
+        assert app.dataframe[0].key == "mileage_log_test_1"
         by_label(app.number_input, "Business miles").set_value(18.6)
         by_label(app.text_input, "Vehicle (optional)").input("Blue car")
         by_label(app.text_input, "Starting location").input("Office")
@@ -312,6 +313,10 @@ def main() -> None:
         assert by_label(app.checkbox, "Round trip").value is False
         assert by_label(app.text_input, "Business purpose").value == ""
         assert by_label(app.text_area, "Notes (optional)").value == ""
+
+        app.radio[0].set_value("Accounts").run()
+        app.radio[0].set_value("Mileage").run()
+        assert app.dataframe[0].key == "mileage_log_test_2"
 
         by_label(app.selectbox, "Mileage trip to edit").set_value(
             outbound["id"]

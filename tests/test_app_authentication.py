@@ -87,6 +87,11 @@ class TestAppAuthentication:
                 assert len(app.exception) == 0
                 assert app.radio[0].label == "Navigate"
                 assert "Business profiles" not in app.radio[0].options
+                assert any(
+                    item.value == "Project Tabula Rasa" for item in app.title
+                )
+                assert len(app.metric) == 4
+                assert len(app.dataframe) >= 1
                 assert (
                     from_secrets.call_args.args[0]["spreadsheet_id"]
                     == "hosted-sheet-id"
@@ -98,6 +103,119 @@ class TestAppAuthentication:
                 logout_button.click().run()
                 assert app.text_input[0].label == "Password"
                 assert "authenticated" not in app.session_state
+
+    def test_zero_profile_local_admin_never_initializes_ledger_storage(self) -> None:
+        st.cache_resource.clear()
+        with tempfile.TemporaryDirectory() as directory:
+            absent_local_store = Path(directory) / "business_profiles.json"
+            with (
+                patch.dict(
+                    os.environ,
+                    {LOCAL_PROFILE_ADMIN_ENV: "1"},
+                    clear=False,
+                ),
+                patch(
+                    "tabula_rasa.local_profile_store.LOCAL_PROFILE_STORE_PATH",
+                    absent_local_store,
+                ),
+                patch.object(
+                    st,
+                    "get_option",
+                    side_effect=lambda name: (
+                        "127.0.0.1" if name == "server.address" else None
+                    ),
+                ),
+                patch.object(GoogleSheetsStorage, "from_secrets") as from_secrets,
+            ):
+                app = AppTest.from_file("tabula_rasa/app.py", default_timeout=30)
+                app.secrets["app_password_hash"] = hash_password(TEST_PASSWORD)
+                app.run()
+                app.text_input[0].input(TEST_PASSWORD)
+                app.button[0].click().run()
+
+                assert len(app.exception) == 0
+                assert app.radio[0].options == ["Business profiles"]
+                from_secrets.assert_not_called()
+
+    def test_hosted_missing_profile_configuration_fails_closed(self) -> None:
+        st.cache_resource.clear()
+        with tempfile.TemporaryDirectory() as directory:
+            absent_local_store = Path(directory) / "business_profiles.json"
+            with (
+                patch.dict(
+                    os.environ,
+                    {LOCAL_PROFILE_ADMIN_ENV: ""},
+                    clear=False,
+                ),
+                patch(
+                    "tabula_rasa.local_profile_store.LOCAL_PROFILE_STORE_PATH",
+                    absent_local_store,
+                ),
+                patch.object(
+                    st,
+                    "get_option",
+                    side_effect=lambda name: (
+                        "0.0.0.0" if name == "server.address" else None
+                    ),
+                ),
+                patch.object(GoogleSheetsStorage, "from_secrets") as from_secrets,
+            ):
+                app = AppTest.from_file("tabula_rasa/app.py", default_timeout=30)
+                app.secrets["app_password_hash"] = hash_password(TEST_PASSWORD)
+                app.run()
+                app.text_input[0].input(TEST_PASSWORD)
+                app.button[0].click().run()
+
+                assert len(app.radio) == 0
+                assert any("business profile" in str(item.value).lower() for item in app.error)
+                from_secrets.assert_not_called()
+
+    def test_profile_switch_rebuilds_visible_business_and_workbook_context(self) -> None:
+        st.cache_resource.clear()
+        north_storage = GoogleSheetsStorage(FakeWorkbook())
+        north_storage._workbook.title = "North Ledger"
+        south_storage = GoogleSheetsStorage(FakeWorkbook())
+        south_storage._workbook.title = "South Ledger"
+        north = profile_settings("North Shop", "north-sheet-id")
+        south = profile_settings("South Shop", "south-sheet-id")
+
+        def storage_for_profile(settings: dict) -> GoogleSheetsStorage:
+            return {
+                "north-sheet-id": north_storage,
+                "south-sheet-id": south_storage,
+            }[settings["spreadsheet_id"]]
+
+        with tempfile.TemporaryDirectory() as directory:
+            absent_local_store = Path(directory) / "business_profiles.json"
+            with (
+                patch(
+                    "tabula_rasa.local_profile_store.LOCAL_PROFILE_STORE_PATH",
+                    absent_local_store,
+                ),
+                patch.object(
+                    GoogleSheetsStorage,
+                    "from_secrets",
+                    side_effect=storage_for_profile,
+                ) as from_secrets,
+            ):
+                app = AppTest.from_file("tabula_rasa/app.py", default_timeout=30)
+                app.secrets["app_password_hash"] = hash_password(TEST_PASSWORD)
+                app.secrets["business_profiles"] = {
+                    "north": north,
+                    "south": south,
+                }
+                app.run()
+                app.text_input[0].input(TEST_PASSWORD)
+                app.button[0].click().run()
+
+                assert any("North Shop" in str(item.value) for item in app.caption)
+                assert any("North Ledger" in str(item.value) for item in app.caption)
+                app.selectbox[0].set_value("south").run()
+
+                assert app.session_state["previous_business_profile"] == "south"
+                assert any("South Shop" in str(item.value) for item in app.caption)
+                assert any("South Ledger" in str(item.value) for item in app.caption)
+                assert from_secrets.call_args.args[0]["spreadsheet_id"] == "south-sheet-id"
 
     def test_split_local_secrets_and_profile_json_work_together(self) -> None:
         st.cache_resource.clear()
@@ -215,7 +333,7 @@ class TestAppAuthentication:
                     field
                     for field in app.text_input
                     if field.label == "Optional local backup folder path"
-                ).input(r"G:\My Drive\Tabula Rosa Backups\north")
+                ).input(r"G:\My Drive\Project Tabula Rasa Backups\north")
                 next(
                     button
                     for button in app.button

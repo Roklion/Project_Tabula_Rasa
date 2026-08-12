@@ -367,6 +367,24 @@ Every workbook read, write, import, export, receipt operation, backup, and cache
 
 The active business and workbook context must remain discoverable. A redesign must not make cross-profile scope ambiguous.
 
+### 6.11 Current shell identity and profile transitions
+
+The current application display identity is **Project Tabula Rasa**. The sign-in
+surface, sidebar title, Streamlit page title, and shell-level documentation use
+that name. The operational route label **Business profiles** remains current
+until the separate #62 information-architecture change is implemented.
+
+When the selected business changes, the sidebar continues to show the selected
+business and workbook context. Page selections, table widget keys, edit-row
+selections, date filters, and pending write notices must not be reused across
+profiles in a way that makes the active workbook ambiguous. A profile change
+must not initialize or access another profile's storage.
+
+The sign-in surface uses the keyed native container `login_surface` so its
+responsive width rule targets the rendered login surface without depending on
+an undocumented bordered-container test ID. The supported Streamlit DOM should
+keep that keyed surface at a readable width on desktop layouts.
+
 ---
 
 ## 7. Color System
@@ -1992,6 +2010,15 @@ Avoid CSS that targets:
 - Unstable internal widget structure
 - Positional selectors dependent on page order
 - Deeply nested Streamlit DOM structure
+
+The current shared shell implementation keeps these rules in
+`tabula_rasa/presentation.py`. It uses the documented theme options in
+`.streamlit/config.toml` plus stable `data-testid` hooks for the sidebar,
+metrics, tables, alerts, widget labels, and focus treatment. The existing
+widget-label and tooltip layout is part of the current behavior and must be
+preserved when those hooks change in a future Streamlit release. The
+`test_global_styles_use_stable_shell_hooks_and_accessible_states` regression
+test is the compatibility guard for this CSS boundary.
 
 ### 30.3 Custom components
 

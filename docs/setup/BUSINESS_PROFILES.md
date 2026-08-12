@@ -60,7 +60,7 @@ different deployment authentication method will be required.
 ## 3. Create and organize the ledger workbook
 
 1. Sign in to the Google account that should own the business records.
-2. Create a restricted folder such as `Tabula Rosa - Example Business`.
+2. Create a restricted folder such as `Project Tabula Rasa - Example Business`.
 3. Inside it, create a blank spreadsheet with a clear business-specific name.
 4. Keep **General access** set to **Restricted**.
 5. Share only the spreadsheet with the service account's `client_email` as
@@ -74,7 +74,7 @@ different deployment authentication method will be required.
 Sharing only the spreadsheet is the least-privilege choice. Sharing the
 containing folder is optional and grants broader inherited access.
 
-Leave the workbook blank. When the profile is validated and saved, Tabula Rosa
+Leave the workbook blank. When the profile is validated and saved, Project Tabula Rasa
 creates or validates the required worksheets and first-row headers:
 
 | Worksheet | Row 1 headers, from left to right |
@@ -152,7 +152,7 @@ Synology, and the single readiness result in that order.
 
 To add a profile:
 
-1. Sign in to Tabula Rosa normally.
+1. Sign in to Project Tabula Rasa normally.
 2. Open **Business profiles** and re-enter the application password.
 3. Enter the business name and review the derived safe profile key. The key is
    editable before the first save and remains immutable afterward.
@@ -215,7 +215,7 @@ someone separately shares them, which is not required.
 
 After connecting Drive, new profiles use one **storage root**. Select an
 existing root with the single picker or create an app-managed root, then choose
-**Provision storage folders**. Tabula Rosa creates or reuses exactly one
+**Provision storage folders**. Project Tabula Rasa creates or reuses exactly one
 `Receipts` child and one `Ledger Backups` child under that root and stores their
 IDs. Every configured profile uses this root-and-child layout. Existing Drive
 files are not moved, merged, or deleted when a destination is changed. If

@@ -1,6 +1,6 @@
 # Pull-request review
 
-Tabula Rosa uses Codex and Gemini Code Assist as advisory reviewers with
+Project Tabula Rasa uses Codex and Gemini Code Assist as advisory reviewers with
 different default responsibilities. The human maintainer remains responsible
 for requirements, residual risk, approval, and merge decisions.
 

@@ -1,7 +1,7 @@
 # Optional Synology recovery copy
 
 Each business profile can independently opt in to an isolated recovery copy on
-the Synology DS220j. Tabula Rosa uploads verified, timestamped ZIP archives to
+the Synology DS220j. Project Tabula Rasa uploads verified, timestamped ZIP archives to
 that profile's Google Drive `Ledger Backups` child and stores live receipt bytes
 in its `Receipts` child. These children are provisioned under one profile storage
 root. For new opt-ins, one recursive Synology Cloud Sync task downloads that
@@ -16,7 +16,7 @@ Sync task that an administrator must configure and monitor in DSM.
 Use [Backup and recovery](BACKUP_AND_RECOVERY.md) for archive creation,
 validation, scheduling, and blank-workbook restoration. Use
 [Google Drive OAuth and per-business access](../architecture/GOOGLE_DRIVE_OAUTH.md)
-for the Tabula Rosa Drive connection. DSM uses its own independent Google
+for the Project Tabula Rasa Drive connection. DSM uses its own independent Google
 authorization.
 
 ## How the pieces fit together
@@ -47,7 +47,7 @@ with destination deletions disabled is accepted as the independent second-layer
 copy. Hyper Backup, Snapshot Replication where supported, or another versioned
 retention mechanism is optional additional protection if the operator wants a
 separate recovery point when synchronization reproduces accidental changes.
-The NAS does not read the live workbook, and Tabula Rosa does not send requests
+The NAS does not read the live workbook, and Project Tabula Rasa does not send requests
 to the NAS.
 This means neither Google Drive Desktop nor a permanently mapped NAS drive is
 part of normal backup operation. Temporary File Station or SMB access is needed
@@ -210,7 +210,7 @@ while the Streamlit app or the Windows development computer is turned off.
 ## Configure one Cloud Sync task per opted-in business
 
 Create one recursive task for each opted-in business. Its remote source
-is the profile storage root provisioned by Tabula Rosa, and its local
+is the profile storage root provisioned by Project Tabula Rasa, and its local
 destination is the matching profile-specific NAS root. The app rejects NAS
 destinations that are shared with or nested under another profile's destination.
 
@@ -219,7 +219,7 @@ destination folder pairs. If multiple businesses use the same Drive-owning
 Google account, create one connection for that account and add a separate task
 for each business. If their Drive folders are owned by different Google
 accounts, create a separate connection for each account. Do not expose or copy
-the Google password into Tabula Rosa; DSM completes its own OAuth authorization.
+the Google password into Project Tabula Rasa; DSM completes its own OAuth authorization.
 
 | Setting | Required value |
 | --- | --- |
@@ -233,7 +233,7 @@ the Google password into Tabula Rosa; DSM completes its own OAuth authorization.
 
 Use **Continuous** for the initial setup and recovery drill so new archives are
 easy to observe. A restricted schedule can be chosen later, but its run window
-should begin after the Tabula Rosa backup job. If DSM offers **Advanced
+should begin after the Project Tabula Rasa backup job. If DSM offers **Advanced
 consistency check**, it can be enabled to make Cloud Sync compare supported file
 hashes as well as basic metadata. The application validator remains required
 because it also verifies the archive's internal manifest and ledger structure.
@@ -366,7 +366,7 @@ reconciliation loop before another write. Persistent edits or duplicate
 transaction IDs stop the ledger batch and are reported as receipt errors; rerun
 the command only after the restored workbook is stable.
 
-Confirm the normal Tabula Rosa storage path can read the restored workbook
+Confirm the normal Project Tabula Rasa storage path can read the restored workbook
 without changing the selected business profile:
 
 ```powershell

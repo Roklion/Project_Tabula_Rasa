@@ -1,8 +1,21 @@
-# Using Tabula Rosa
+# Using Project Tabula Rasa
 
 This guide summarizes the application's ledger, receipt, mileage, reporting, and
 export behavior. Setup and recovery procedures live in the task-specific guides
 linked from the [documentation index](../README.md).
+
+## Sign in and application shell
+
+Enter the application password before any ledger page or workbook data is
+rendered. After sign-in, the sidebar keeps the active business, operational
+routes, selected workbook title, and **Log out** action discoverable. The
+business selector scopes all subsequent work to one profile; signing out clears
+the authenticated session and returns to the password gate.
+
+The shell uses a warm application canvas, white data surfaces, compact spacing,
+visible keyboard focus, and text-backed status messages. These presentation
+choices do not change route order, form fields, ledger columns, profile
+selection, or storage behavior.
 
 ## Select a business
 
@@ -12,6 +25,11 @@ export, and report is scoped to that selected profile.
 
 The current application password grants access to every configured profile. It
 does not implement per-profile user permissions.
+
+Changing the business selector keeps the selected business and its workbook
+title visible while clearing page-local selections and pending notices from the
+previous business. The route remains available, but table selections and edit
+targets are rebuilt for the newly selected workbook.
 
 ## Accounts
 
@@ -120,7 +138,7 @@ the transaction editor's **Unreferenced receipt** list.
 
 Linking an unreferenced receipt copies its existing integrity metadata without
 renaming or rewriting the Drive file. Before a complete backup is created,
-Tabula Rosa refreshes the selected profile's receipt folder and reconciles
+Project Tabula Rasa refreshes the selected profile's receipt folder and reconciles
 active references with Drive. This preparation is resumable, does not download
 receipts that already have valid metadata, and preserves an explicitly empty
 reference list as intentionally unlinked. If preparation fails, no backup is
@@ -159,7 +177,7 @@ QuickBooks mileage imports remain a separate workflow described in
 
 ## Reports
 
-Tabula Rosa provides account balances, income-and-expense reporting, and a
+Project Tabula Rasa provides account balances, income-and-expense reporting, and a
 balance sheet.
 
 Current earnings are calculated as income minus expenses and included in total

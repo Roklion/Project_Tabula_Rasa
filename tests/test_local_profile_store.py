@@ -51,7 +51,7 @@ def settings(name: str = "North Shop") -> dict:
         name,
         "https://docs.google.com/spreadsheets/d/abcdefghij1234567890/edit",
         json.dumps(credential()).encode("utf-8"),
-        r"G:\My Drive\Tabula Rosa Backups\north",
+        r"G:\My Drive\Project Tabula Rasa Backups\north",
     )
 
 
@@ -250,7 +250,7 @@ class TestLocalProfileStore:
                 "north",
                 name="North Shop",
                 spreadsheet="abcdefghij1234567890",
-                backup_folder_path=r"G:\My Drive\Tabula Rosa Backups\north",
+                backup_folder_path=r"G:\My Drive\Project Tabula Rasa Backups\north",
                 credential_upload=json.dumps(replacement).encode("utf-8"),
                 path=path,
             )
