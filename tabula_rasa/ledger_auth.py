@@ -8,6 +8,8 @@ import secrets
 
 import streamlit as st
 
+from tabula_rasa.presentation import render_page_header
+
 
 SCHEME = "scrypt"
 SCRYPT_N = 2**14
@@ -73,13 +75,15 @@ def require_authentication() -> None:
         st.error("Application authentication is not configured.")
         st.stop()
 
-    st.title("Tabula Rosa")
-    st.caption("Enter the application password to continue.")
-    with st.form("login_form", clear_on_submit=True):
-        password = st.text_input("Password", type="password")
-        submitted = st.form_submit_button(
-            "Sign in", type="primary", width="stretch"
+    with st.container(border=True):
+        render_page_header(
+            "Tabula Rosa", "Enter the application password to continue."
         )
+        with st.form("login_form", clear_on_submit=True):
+            password = st.text_input("Password", type="password")
+            submitted = st.form_submit_button(
+                "Sign in", type="primary", width="stretch"
+            )
 
     if submitted:
         if verify_password(password, encoded_hash):

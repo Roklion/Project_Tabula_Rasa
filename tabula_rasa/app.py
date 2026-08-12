@@ -54,6 +54,7 @@ from tabula_rasa.local_profile_store import (
     local_profile_revision,
     merged_profile_secrets,
 )
+from tabula_rasa.presentation import apply_global_styles, render_page_header
 from tabula_rasa.storage import (
     decode_receipt_references,
     GoogleSheetsStorage,
@@ -338,46 +339,7 @@ def confirmed_write(
 
 
 st.set_page_config(page_title="Tabula Rosa", page_icon="📒", layout="wide")
-st.markdown(
-    """
-    <style>
-    :root { color-scheme:light; --ink:#17211b; --green:#206a4b; --cream:#f7f5ef; }
-    .stApp { background: var(--cream); color: var(--ink); }
-    [data-testid="stMetric"] { background:white; border:1px solid #dedbd2; padding:18px; border-radius:14px; }
-    [data-testid="stSidebar"] { background:#173f32; }
-    [data-testid="stSidebar"] * { color:#f7f5ef; }
-    [data-testid="stWidgetLabel"] {
-        width:fit-content !important;
-        max-width:100%;
-        justify-content:flex-start;
-        gap:.3rem;
-    }
-    [data-testid="stWidgetLabel"] > [data-testid="stMarkdownContainer"] {
-        width:fit-content !important;
-        flex:0 1 auto;
-    }
-    [data-testid="stWidgetLabel"] p {
-        flex:0 0 auto;
-    }
-    [data-testid="stWidgetLabel"] [data-testid="stTooltipIcon"] {
-        flex:0 0 auto;
-    }
-    .st-key-edit_transaction [data-testid="stFormSubmitButton"]:has([data-testid="stIconMaterial"]) button {
-        background:#b42318;
-        border-color:#b42318;
-        color:white;
-    }
-    .st-key-edit_transaction [data-testid="stFormSubmitButton"]:has([data-testid="stIconMaterial"]) button:hover {
-        background:#912018;
-        border-color:#912018;
-        color:white;
-    }
-    h1,h2,h3 { letter-spacing:-.025em; }
-    .muted { color:#67716b; margin-top:-.8rem; }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+apply_global_styles()
 
 require_authentication()
 
@@ -504,10 +466,9 @@ if page != "Business profiles":
 
 
 if page == "Dashboard":
-    st.title("Your books at a glance")
-    st.markdown(
-        '<p class="muted">A current view of cash, income, and spending.</p>',
-        unsafe_allow_html=True,
+    render_page_header(
+        "Your books at a glance",
+        "A current view of cash, income, and spending.",
     )
     try:
         today = date.today()
@@ -566,7 +527,7 @@ if page == "Dashboard":
 
 
 elif page == "Transactions":
-    st.title("Transactions")
+    render_page_header("Transactions")
     tab_add, tab_ledger = st.tabs(["Add transaction", "View & edit ledger"])
     try:
         storage.prefetch_worksheets(
@@ -1365,9 +1326,9 @@ elif page == "Transactions":
 
 
 elif page == "Mileage":
-    st.title("Mileage")
-    st.caption(
-        "Keep a dated business-mileage log with the route, purpose, and vehicle."
+    render_page_header(
+        "Mileage",
+        "Keep a dated business-mileage log with the route, purpose, and vehicle.",
     )
     tab_add, tab_log = st.tabs(["Add trip", "View & edit mileage log"])
 
@@ -1641,8 +1602,9 @@ elif page == "Mileage":
 
 
 elif page == "Accounts":
-    st.title("Accounts")
-    st.caption("Track bank, cash, credit card, and other manual balances.")
+    render_page_header(
+        "Accounts", "Track bank, cash, credit card, and other manual balances."
+    )
     try:
         storage.prefetch_worksheets("Accounts", "Transactions")
         accounts = storage.list_accounts(active_only=False)
@@ -1918,7 +1880,7 @@ elif page == "Accounts":
 
 
 elif page == "Categories":
-    st.title("Categories")
+    render_page_header("Categories")
     try:
         storage.prefetch_worksheets("Categories", "Transactions")
         categories = storage.list_categories()
@@ -2125,7 +2087,7 @@ elif page == "Categories":
 
 
 elif page == "Reports":
-    st.title("Reports")
+    render_page_header("Reports")
     c1, c2 = st.columns(2)
     start = c1.date_input(
         "From", date(date.today().year, 1, 1), key="report_start"
@@ -2356,8 +2318,10 @@ elif page == "Reports":
 
 
 elif page == "Data & backup":
-    st.title("Data & backup")
-    st.caption("Your live records are stored in the private Google Sheets workbook.")
+    render_page_header(
+        "Data & backup",
+        "Your live records are stored in the private Google Sheets workbook.",
+    )
     selected_profile = profile_by_key[selected_profile_key].secrets
     drive_settings = selected_profile.get("google_drive")
     storage_root = (
