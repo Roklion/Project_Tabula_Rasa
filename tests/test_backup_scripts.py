@@ -304,6 +304,7 @@ class TestBackupScripts:
         assert "New-TimeSpan -Days 3" in script
         assert "New-TimeSpan -Minutes 15" in script
         assert "-not $BackupDirectory" in script
+        assert '[string]$TaskName = "Tabula Rosa Weekly Backup"' in script
 
     def test_current_backup_inventories_the_configured_receipt_folder(self) -> None:
         storage = Mock(spec=GoogleSheetsStorage)

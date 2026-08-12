@@ -82,6 +82,8 @@ def test_profile_switch_clears_unscoped_presentation_state() -> None:
         "account_table_north_0": "selected-rows",
         "category_table_north_0": "selected-rows",
         "transaction_csv_upload_north": "private-upload",
+        "receipt-unlink-notice-north-transaction": "Receipt removed",
+        "receipt-unlink-candidate-north-transaction": "receipt-123",
         "ledger_start": "north-start",
         "write_success_notice": "North saved",
         "add_transaction_amount": 42,
@@ -107,6 +109,8 @@ def test_profile_switch_clears_unscoped_presentation_state() -> None:
     assert "account_table_north_0" not in session_state
     assert "category_table_north_0" not in session_state
     assert "transaction_csv_upload_north" not in session_state
+    assert "receipt-unlink-notice-north-transaction" not in session_state
+    assert "receipt-unlink-candidate-north-transaction" not in session_state
     assert "ledger_start" not in session_state
     assert "write_success_notice" not in session_state
     assert "add_transaction_amount" not in session_state

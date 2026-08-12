@@ -4,7 +4,9 @@ param(
     [switch]$AllProfiles,
     [switch]$Local,
     [switch]$GoogleDrive,
-    [string]$TaskName = "Project Tabula Rasa Weekly Backup"
+    # Keep the legacy task identity so upgrades replace the existing task
+    # instead of creating a second weekly backup task.
+    [string]$TaskName = "Tabula Rosa Weekly Backup"
 )
 
 $ErrorActionPreference = "Stop"
