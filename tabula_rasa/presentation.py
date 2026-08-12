@@ -142,9 +142,19 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
         padding: 12px 16px;
     }}
 
-    [data-testid="stDataFrame"],
+    [data-testid="stDataFrame"] {{
+        background: var(--tr-surface-primary);
+        border: 1px solid var(--tr-border-default);
+        border-radius: 8px;
+        overflow: hidden;
+    }}
+
+    [data-testid="stForm"],
+    [data-testid="stExpander"],
     [data-testid="stVerticalBlockBorderWrapper"] {{
+        background: var(--tr-surface-primary);
         border-color: var(--tr-border-default);
+        border-radius: 8px;
     }}
 
     [data-testid="stButton"] button,

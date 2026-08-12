@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+import tomllib
 from unittest.mock import patch
 
 from tabula_rasa.presentation import DESIGN_TOKENS, global_styles, render_page_header
@@ -20,6 +22,8 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
         '[data-testid="stSidebar"]',
         '[data-testid="stMetric"]',
         '[data-testid="stDataFrame"]',
+        '[data-testid="stForm"]',
+        '[data-testid="stExpander"]',
         '[data-testid="stAlert"]',
         ":focus-visible",
     ):
@@ -28,6 +32,17 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
     assert "--tr-canvas: #F5F4F0" in css
     assert "--tr-interactive-focus: #6B96ED" in css
     assert "[class*=" not in css
+
+
+def test_streamlit_theme_matches_the_shared_tokens() -> None:
+    with Path(".streamlit/config.toml").open("rb") as config_file:
+        theme = tomllib.load(config_file)["theme"]
+
+    assert theme["primaryColor"] == DESIGN_TOKENS["interactive-primary"]
+    assert theme["backgroundColor"] == DESIGN_TOKENS["canvas"]
+    assert theme["secondaryBackgroundColor"] == DESIGN_TOKENS["surface-secondary"]
+    assert theme["textColor"] == DESIGN_TOKENS["text-primary"]
+    assert theme["borderColor"] == DESIGN_TOKENS["border-default"]
 
 
 def test_render_page_header_keeps_description_optional() -> None:
