@@ -380,6 +380,11 @@ selections, date filters, and pending write notices must not be reused across
 profiles in a way that makes the active workbook ambiguous. A profile change
 must not initialize or access another profile's storage.
 
+The sign-in surface uses the keyed native container `login_surface` so its
+responsive width rule targets the rendered login surface without depending on
+an undocumented bordered-container test ID. The supported Streamlit DOM should
+keep that keyed surface at a readable width on desktop layouts.
+
 ---
 
 ## 7. Color System

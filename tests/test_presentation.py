@@ -31,7 +31,7 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
         '[data-testid="stForm"]',
         '[data-testid="stExpander"]',
         '[data-testid="stAlert"]',
-        '[data-testid="stVerticalBlockBorderWrapper"]:has(input[type="password"])',
+        ".st-key-login_surface",
         ":focus-visible",
     ):
         assert selector in css
@@ -91,3 +91,21 @@ def test_profile_switch_clears_unscoped_presentation_state() -> None:
     assert "write_success_notice" not in session_state
     assert "add_transaction_amount" not in session_state
     assert session_state["profile_scoped_cache"] == "retain"
+
+
+def test_initial_profile_selection_preserves_existing_session_state() -> None:
+    session_state = {
+        "authenticated": True,
+        "preinitialized_value": "retain",
+    }
+
+    reset_profile_presentation_state(
+        session_state,
+        previous_profile_key=None,
+        selected_profile_key="north",
+    )
+
+    assert session_state == {
+        "authenticated": True,
+        "preinitialized_value": "retain",
+    }

@@ -193,7 +193,7 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
         color: var(--tr-surface-primary);
     }}
 
-    [data-testid="stVerticalBlockBorderWrapper"]:has(input[type="password"]) {{
+    .st-key-login_surface {{
         max-width: 480px;
         margin: 24px auto;
     }}
@@ -213,7 +213,7 @@ def reset_profile_presentation_state(
     selected_profile_key: str | None,
 ) -> None:
     """Clear unscoped page state when the active business profile changes."""
-    if previous_profile_key == selected_profile_key:
+    if previous_profile_key is None or previous_profile_key == selected_profile_key:
         return
 
     keys = {

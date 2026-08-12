@@ -420,6 +420,7 @@ with st.sidebar:
     if previous_page != page:
         table_generation_by_page = {
             "Transactions": "transaction_ledger_generation",
+            "Mileage": "mileage_log_generation",
             "Accounts": "account_table_generation",
             "Categories": "category_table_generation",
         }
@@ -1483,7 +1484,10 @@ elif page == "Mileage":
 
         trip_ids = trip_frame["ID"].tolist()
 
-        mileage_table_key = f"mileage_log_{selected_profile_key}"
+        mileage_table_key = (
+            f"mileage_log_{selected_profile_key}_"
+            f"{st.session_state.get('mileage_log_generation', 0)}"
+        )
 
         def select_mileage_trip() -> None:
             selected_rows = st.session_state[mileage_table_key].selection.rows

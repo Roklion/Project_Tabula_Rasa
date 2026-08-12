@@ -75,7 +75,7 @@ def require_authentication() -> None:
         st.error("Application authentication is not configured.")
         st.stop()
 
-    with st.container(border=True):
+    with st.container(border=True, key="login_surface"):
         render_page_header(
             "Project Tabula Rasa", "Enter the application password to continue."
         )
