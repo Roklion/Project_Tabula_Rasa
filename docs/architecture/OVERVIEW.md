@@ -184,6 +184,7 @@ recovery record.
 | Area | Primary implementation |
 | --- | --- |
 | Streamlit application and workflows | [`tabula_rasa/app.py`](../../tabula_rasa/app.py) |
+| Shared shell presentation tokens and CSS | [`tabula_rasa/presentation.py`](../../tabula_rasa/presentation.py) and [`.streamlit/config.toml`](../../.streamlit/config.toml) |
 | Business-profile selection | [`tabula_rasa/business_profiles.py`](../../tabula_rasa/business_profiles.py) |
 | Local profile storage | [`tabula_rasa/local_profile_store.py`](../../tabula_rasa/local_profile_store.py) |
 | Google Sheets storage and backup format | [`tabula_rasa/storage/google_sheets.py`](../../tabula_rasa/storage/google_sheets.py) |

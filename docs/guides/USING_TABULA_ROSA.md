@@ -4,6 +4,19 @@ This guide summarizes the application's ledger, receipt, mileage, reporting, and
 export behavior. Setup and recovery procedures live in the task-specific guides
 linked from the [documentation index](../README.md).
 
+## Sign in and application shell
+
+Enter the application password before any ledger page or workbook data is
+rendered. After sign-in, the sidebar keeps the active business, operational
+routes, selected workbook title, and **Log out** action discoverable. The
+business selector scopes all subsequent work to one profile; signing out clears
+the authenticated session and returns to the password gate.
+
+The shell uses a warm application canvas, white data surfaces, compact spacing,
+visible keyboard focus, and text-backed status messages. These presentation
+choices do not change route order, form fields, ledger columns, profile
+selection, or storage behavior.
+
 ## Select a business
 
 Choose the active business in the sidebar after signing in. Every workbook

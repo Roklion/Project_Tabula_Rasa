@@ -54,7 +54,7 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
         color-scheme: light;
     }}
 
-    html, body, [class*="css"] {{
+    html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] {{
         font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont,
             "Segoe UI", sans-serif;
     }}

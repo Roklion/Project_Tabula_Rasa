@@ -32,6 +32,7 @@ from tabula_rasa.profile_readiness import (
     profile_configuration_readiness,
     profile_settings_fingerprint,
 )
+from tabula_rasa.presentation import render_page_header
 from tabula_rasa.storage import (
     GoogleSheetsStorage,
     StorageAuthenticationError,
@@ -678,10 +679,10 @@ def render_local_profile_admin(
     store_path: Path = LOCAL_PROFILE_STORE_PATH,
 ) -> None:
     """Render the reauthenticated local profile-administration page."""
-    st.title("Business profiles")
-    st.caption(
+    render_page_header(
+        "Business profiles",
         "Profile onboarding. Private keys are written to the ignored "
-        "business profile JSON file and are never displayed after upload."
+        "business profile JSON file and are never displayed after upload.",
     )
 
     if not st.session_state.get("local_profile_admin_unlocked"):

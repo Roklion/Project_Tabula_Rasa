@@ -1993,6 +1993,15 @@ Avoid CSS that targets:
 - Positional selectors dependent on page order
 - Deeply nested Streamlit DOM structure
 
+The current shared shell implementation keeps these rules in
+`tabula_rasa/presentation.py`. It uses the documented theme options in
+`.streamlit/config.toml` plus stable `data-testid` hooks for the sidebar,
+metrics, tables, alerts, widget labels, and focus treatment. The existing
+widget-label and tooltip layout is part of the current behavior and must be
+preserved when those hooks change in a future Streamlit release. The
+`test_global_styles_use_stable_shell_hooks_and_accessible_states` regression
+test is the compatibility guard for this CSS boundary.
+
 ### 30.3 Custom components
 
 A custom component requires explicit justification.
