@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 import sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 
@@ -40,7 +41,14 @@ def main() -> None:
         }
     }
 
-    with patch.object(GoogleSheetsStorage, "from_secrets", return_value=storage):
+    with (
+        TemporaryDirectory() as temp_dir,
+        patch(
+            "tabula_rasa.local_profile_store.LOCAL_PROFILE_STORE_PATH",
+            Path(temp_dir) / "profiles.json",
+        ),
+        patch.object(GoogleSheetsStorage, "from_secrets", return_value=storage),
+    ):
         app.run()
         app.text_input[0].input(TEST_PASSWORD)
         app.button[0].click().run()
