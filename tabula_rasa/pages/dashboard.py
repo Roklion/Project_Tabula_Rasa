@@ -61,10 +61,10 @@ def render_dashboard(context: DashboardContext) -> None:
             display = recent[
                 ["Date", "Type", "Payee", "Category", "Account", "Amount"]
             ].copy()
-            display["Amount"] = display.apply(
-                lambda row: -row.Amount if row.Type == "Expense" else row.Amount,
-                axis=1,
-            )
+            expense_rows = display["Type"] == "Expense"
+            display.loc[expense_rows, "Amount"] = -display.loc[
+                expense_rows, "Amount"
+            ]
             st.dataframe(
                 display,
                 hide_index=True,

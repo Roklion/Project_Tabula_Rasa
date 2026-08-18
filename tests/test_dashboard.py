@@ -77,3 +77,16 @@ def test_dashboard_frames_preserve_visible_table_fields() -> None:
         "Type",
         "Balance",
     ]
+
+
+def test_empty_balances_frame_preserves_dashboard_columns() -> None:
+    balances = balances_frame([], [])
+
+    assert list(balances.columns) == [
+        "ID",
+        "Account",
+        "Type",
+        "Classification",
+        "Active",
+        "Balance",
+    ]

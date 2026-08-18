@@ -75,5 +75,6 @@ def balances_frame(accounts: list[dict], transactions: list[dict]) -> pd.DataFra
                 "Balance": account["balance"],
             }
             for account in rows
-        ]
+        ],
+        columns=["ID", "Account", "Type", "Classification", "Active", "Balance"],
     )
