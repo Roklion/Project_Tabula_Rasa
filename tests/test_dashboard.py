@@ -6,7 +6,7 @@ from unittest.mock import patch
 import streamlit as st
 
 from tabula_rasa.ledger_presentation import balances_frame, ledger_frame
-from tabula_rasa.pages import dashboard
+from tabula_rasa.page_renderers import dashboard
 
 
 def test_dashboard_module_import_does_not_render_or_bootstrap() -> None:

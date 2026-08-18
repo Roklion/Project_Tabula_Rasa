@@ -54,7 +54,7 @@ from tabula_rasa.local_profile_store import (
     local_profile_revision,
     merged_profile_secrets,
 )
-from tabula_rasa.pages.dashboard import DashboardContext, render_dashboard
+from tabula_rasa.page_renderers.dashboard import DashboardContext, render_dashboard
 from tabula_rasa.presentation import (
     apply_global_styles,
     render_page_header,
