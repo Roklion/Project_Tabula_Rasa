@@ -47,7 +47,7 @@ def render_dashboard(context: DashboardContext) -> None:
         st.stop()
 
     c1, c2, c3, c4 = st.columns([1.25, 1, 1, 1], gap="small")
-    c1.metric("Total balance", money(float(balances["Balance"].sum())))
+    c1.metric("Total balance", money(balances["Balance"].sum()))
     c2.metric("Income this month", money(monthly_totals["income"]))
     c3.metric("Expenses this month", money(monthly_totals["expenses"]))
     c4.metric("Net this month", money(monthly_totals["net"]))
@@ -62,9 +62,7 @@ def render_dashboard(context: DashboardContext) -> None:
                 ["Date", "Type", "Payee", "Category", "Account", "Amount"]
             ].copy()
             expense_rows = display["Type"] == "Expense"
-            display.loc[expense_rows, "Amount"] = -display.loc[
-                expense_rows, "Amount"
-            ]
+            display.loc[expense_rows, "Amount"] *= -1
             st.dataframe(
                 display,
                 hide_index=True,
