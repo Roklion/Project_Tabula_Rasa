@@ -426,7 +426,7 @@ Blue must not communicate financial gain or positive performance.
 |---|---|---|---|
 | Positive / Success | `#287A4B` | `#EAF5EE` | `#B7DCC5` |
 | Negative / Error | `#B33A3A` | `#FBECEC` | `#E8BABA` |
-| Warning / Attention | `#9A6700` | `#FFF5D9` | `#E7CE8C` |
+| Warning / Attention | `#996600` | `#FFF5D9` | `#E7CE8C` |
 | Informational | `#3267D6` | `#EAF0FC` | `#B8CAF1` |
 | Neutral / Pending | `#62666B` | `#F1F2F1` | `#D5D7D4` |
 

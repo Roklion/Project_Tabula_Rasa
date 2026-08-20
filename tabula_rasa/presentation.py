@@ -29,7 +29,7 @@ DESIGN_TOKENS: Mapping[str, str] = {
     "negative-hover": "#942F2F",
     "negative-background": "#FBECEC",
     "negative-border": "#E8BABA",
-    "warning-text": "#9A6700",
+    "warning-text": "#996600",
     "warning-background": "#FFF5D9",
     "warning-border": "#E7CE8C",
     "informational-background": "#EAF0FC",
@@ -85,6 +85,15 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
     [data-testid="stWidgetLabel"] p,
     [data-testid="stWidgetLabel"] [data-testid="stTooltipIcon"] {{
         flex: 0 0 auto;
+        color: var(--tr-text-primary) !important;
+    }}
+
+    [data-testid="stTabs"] [role="tab"] {{
+        color: var(--tr-text-secondary) !important;
+    }}
+
+    [data-testid="stTabs"] [role="tab"][aria-selected="true"] {{
+        color: var(--tr-text-primary) !important;
     }}
 
     [data-testid="stSidebar"] {{
@@ -177,26 +186,36 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
         border-radius: 6px;
     }}
 
-    .st-key-edit_transaction [data-testid="stFormSubmitButton"]:has(
-        [data-testid="stIconMaterial"]
-    ) button,
-    .st-key-edit_mileage_trip [data-testid="stFormSubmitButton"]:has(
-        [data-testid="stIconMaterial"]
-    ) button {{
-        background: var(--tr-negative-text);
-        border-color: var(--tr-negative-text);
-        color: var(--tr-surface-primary);
+    [data-testid="stAlert"]:has(
+        [data-testid="stAlertContentWarning"]
+    ) [data-testid="stAlertContainer"] {{
+        background: var(--tr-warning-background) !important;
+        border-color: var(--tr-warning-border) !important;
     }}
 
-    .st-key-edit_transaction [data-testid="stFormSubmitButton"]:has(
+    [data-testid="stAlert"]:has([data-testid="stAlertContentWarning"])
+    [data-testid="stMarkdownContainer"],
+    [data-testid="stAlert"]:has([data-testid="stAlertContentWarning"])
+    [data-testid="stMarkdownContainer"] p,
+    [data-testid="stAlert"]:has([data-testid="stAlertContentWarning"])
+    [data-testid="stAlertDynamicIcon"] {{
+        color: var(--tr-warning-text) !important;
+    }}
+
+    [data-testid="stFormSubmitButton"]:has(
         [data-testid="stIconMaterial"]
-    ) button:hover,
-    .st-key-edit_mileage_trip [data-testid="stFormSubmitButton"]:has(
+    ) button {{
+        background: var(--tr-negative-text) !important;
+        border-color: var(--tr-negative-text) !important;
+        color: var(--tr-surface-primary) !important;
+    }}
+
+    [data-testid="stFormSubmitButton"]:has(
         [data-testid="stIconMaterial"]
     ) button:hover {{
-        background: var(--tr-negative-hover);
-        border-color: var(--tr-negative-hover);
-        color: var(--tr-surface-primary);
+        background: var(--tr-negative-hover) !important;
+        border-color: var(--tr-negative-hover) !important;
+        color: var(--tr-surface-primary) !important;
     }}
 
     .st-key-login_surface {{

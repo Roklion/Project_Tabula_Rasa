@@ -19,6 +19,7 @@ def test_design_tokens_match_the_shared_visual_foundation() -> None:
     assert DESIGN_TOKENS["interactive-focus"] == "#6B96ED"
     assert DESIGN_TOKENS["negative-text"] == "#B33A3A"
     assert DESIGN_TOKENS["negative-hover"] == "#942F2F"
+    assert DESIGN_TOKENS["warning-text"] == "#996600"
 
 
 def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
@@ -40,7 +41,14 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
     assert "--tr-interactive-focus: #6B96ED" in css
     assert "--tr-negative-hover: #942F2F" in css
     assert "var(--tr-negative-hover)" in css
-    assert ".st-key-edit_mileage_trip" in css
+    assert '[data-testid="stAlertContentWarning"]' in css
+    assert '[data-testid="stFormSubmitButton"]:has(' in css
+    assert '[data-testid="stWidgetLabel"] p' in css
+    assert '[data-testid="stTabs"] [role="tab"]' in css
+    assert '[aria-selected="true"]' in css
+    assert "var(--tr-warning-background) !important" in css
+    assert "var(--tr-warning-text) !important" in css
+    assert "var(--tr-negative-text) !important" in css
     assert ".tr-auth-surface" not in css
     assert "[class*=" not in css
 
