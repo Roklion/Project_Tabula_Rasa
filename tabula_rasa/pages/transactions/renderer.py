@@ -344,7 +344,11 @@ def render_transactions(context: TransactionsContext) -> None:
                             else "Edit account"
                         ),
                         editable_account_ids,
-                        index=editable_account_ids.index(selected["account_id"]),
+                        index=(
+                            editable_account_ids.index(selected["account_id"])
+                            if selected["account_id"] in editable_account_ids
+                            else None
+                        ),
                         format_func=account_paths.get,
                         key=f"edit_transaction_account_{edit_widget_scope}",
                     )
@@ -354,8 +358,13 @@ def render_transactions(context: TransactionsContext) -> None:
                         edited_to_account_id = st.selectbox(
                             "Edit to account",
                             editable_account_ids,
-                            index=editable_account_ids.index(
-                                selected["to_account_id"]
+                            index=(
+                                editable_account_ids.index(
+                                    selected["to_account_id"]
+                                )
+                                if selected.get("to_account_id")
+                                in editable_account_ids
+                                else None
                             ),
                             format_func=account_paths.get,
                             key=f"edit_transaction_to_account_{edit_widget_scope}",
