@@ -120,6 +120,15 @@ def main() -> None:
             "Total liabilities": "$0.00",
             "Total equity": "$60.00",
         }
+        report_subheaders = {item.value for item in app.subheader}
+        assert report_subheaders == {
+            "Monthly performance",
+            "Expenses by category",
+            "Balance sheet",
+        }
+        assert "Balance sheet is balanced." in {
+            item.value for item in app.success
+        }
 
         app.radio[0].set_value("Dashboard").run()
         dashboard_metrics = {metric.label: metric.value for metric in app.metric}
