@@ -86,7 +86,11 @@ def _statement_frame(
 
 def render_reports(context: ReportsContext) -> None:
     """Render reports for the selected business profile."""
-    render_page_header("Reports")
+    render_page_header(
+        "Reports",
+        "Analyze income and spending for a selected period, then review the balance sheet.",
+    )
+    st.caption("Income and expense analytics")
     c1, c2 = st.columns(2)
     start = c1.date_input(
         "From", date(date.today().year, 1, 1), key="report_start"
@@ -106,7 +110,7 @@ def render_reports(context: ReportsContext) -> None:
         st.stop()
     category_paths = hierarchy_paths(categories)
     summary = profit_and_loss(transactions, start=start, end=end)
-    a, b, c = st.columns(3)
+    a, b, c = st.columns(3, gap="small")
     a.metric("Income", money(summary["income"]))
     b.metric("Expenses", money(summary["expenses"]))
     c.metric("Net", money(summary["net"]))
@@ -133,14 +137,27 @@ def render_reports(context: ReportsContext) -> None:
     with left:
         st.subheader("Monthly performance")
         if not monthly.empty:
+            monthly_chart = px.bar(
+                monthly,
+                x="Month",
+                y=["Income", "Expenses"],
+                barmode="group",
+                color_discrete_sequence=["#3267D6", "#8EA5D5"],
+                labels={"value": "Amount", "variable": "Series"},
+            )
+            monthly_chart.update_layout(
+                height=300,
+                margin={"l": 12, "r": 12, "t": 28, "b": 12},
+                legend_title_text="",
+            )
+            monthly_chart.update_yaxes(
+                title="Amount",
+                tickprefix="$",
+                tickformat=",.2f",
+                rangemode="tozero",
+            )
             st.plotly_chart(
-                px.bar(
-                    monthly,
-                    x="Month",
-                    y=["Income", "Expenses"],
-                    barmode="group",
-                    color_discrete_sequence=["#206a4b", "#d47b55"],
-                ),
+                monthly_chart,
                 width="stretch",
             )
         else:
@@ -148,14 +165,27 @@ def render_reports(context: ReportsContext) -> None:
     with right:
         st.subheader("Expenses by category")
         if not by_category.empty:
+            category_chart = px.bar(
+                by_category,
+                x="Total",
+                y="Category",
+                orientation="h",
+                color_discrete_sequence=["#3267D6"],
+                labels={"Total": "Amount", "Category": "Expense category"},
+            )
+            category_chart.update_layout(
+                height=300,
+                margin={"l": 12, "r": 12, "t": 28, "b": 12},
+                showlegend=False,
+            )
+            category_chart.update_xaxes(
+                title="Amount",
+                tickprefix="$",
+                tickformat=",.2f",
+                rangemode="tozero",
+            )
             st.plotly_chart(
-                px.bar(
-                    by_category,
-                    x="Total",
-                    y="Category",
-                    orientation="h",
-                    color_discrete_sequence=["#d47b55"],
-                ),
+                category_chart,
                 width="stretch",
             )
         else:
@@ -195,6 +225,7 @@ def render_reports(context: ReportsContext) -> None:
 
     st.divider()
     st.subheader("Balance sheet")
+    st.caption("The As of date is independent from the income-and-expense period.")
     as_of = st.date_input("As of", date.today(), key="balance_sheet_date")
     statement = balance_sheet(accounts, transactions, as_of=as_of)
     asset_metric, liability_metric, equity_metric = st.columns(3)
@@ -229,8 +260,10 @@ def render_reports(context: ReportsContext) -> None:
                     },
                 )
     if abs(statement["difference"]) < 0.005:
+        st.markdown("**Status: Balanced** — Assets = Liabilities + Equity.")
         st.success("Balance sheet is balanced.")
     else:
+        st.markdown("**Status: Out of balance** — review the difference below.")
         st.warning(
             "Balance sheet is out of balance by "
             f"{money(statement['difference'])}. Review opening balances and "
