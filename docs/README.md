@@ -41,6 +41,9 @@ points here for durable setup, architecture, and recovery guidance.
 - [Transactions surface inventory](development/TRANSACTIONS_SURFACE_INVENTORY.md)
   records the controls, state, feedback, and failure paths preserved by issue
   #54 for later transaction work.
+- [Transactions extraction and redesign audit](development/TRANSACTIONS_CHANGE_AUDIT.md)
+  separates mechanical movement, presentation changes, review remediations,
+  and end-to-end AppTest evidence for issue #54.
 
 ## Documentation map
 
@@ -61,6 +64,7 @@ docs/
 `-- development/
     |-- DEVELOPMENT.md
     |-- PULL_REQUEST_REVIEW.md
+    |-- TRANSACTIONS_CHANGE_AUDIT.md
     `-- TRANSACTIONS_SURFACE_INVENTORY.md
 ```
 
