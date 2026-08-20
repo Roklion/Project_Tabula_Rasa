@@ -677,6 +677,8 @@ def render_transactions(context: TransactionsContext) -> None:
                                         transaction["id"]
                                     )
                                     continue
+                                if raw_references == "[]":
+                                    continue
                                 try:
                                     referenced_receipt_ids.update(
                                         reference["id"]
