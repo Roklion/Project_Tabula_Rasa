@@ -38,12 +38,6 @@ points here for durable setup, architecture, and recovery guidance.
   checks, test isolation, and read-only live validation.
 - [Pull-request review](development/PULL_REQUEST_REVIEW.md) defines reviewer
   roles, Gemini command modes, finding disposition, and validation.
-- [Transactions surface inventory](development/TRANSACTIONS_SURFACE_INVENTORY.md)
-  records the controls, state, feedback, and failure paths preserved by issue
-  #54 for later transaction work.
-- [Transactions extraction and redesign audit](development/TRANSACTIONS_CHANGE_AUDIT.md)
-  separates mechanical movement, presentation changes, review remediations,
-  and end-to-end AppTest evidence for issue #54.
 
 ## Documentation map
 
@@ -63,9 +57,7 @@ docs/
 |   `-- USING_TABULA_ROSA.md
 `-- development/
     |-- DEVELOPMENT.md
-    |-- PULL_REQUEST_REVIEW.md
-    |-- TRANSACTIONS_CHANGE_AUDIT.md
-    `-- TRANSACTIONS_SURFACE_INVENTORY.md
+    `-- PULL_REQUEST_REVIEW.md
 ```
 
 ## Maintenance rules
