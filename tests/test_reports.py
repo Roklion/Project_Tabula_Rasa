@@ -57,3 +57,14 @@ def test_statement_frame_preserves_balance_sheet_columns_and_current_earnings() 
         {"Account": "Owner equity", "Type": "Equity", "Balance": 10.0},
         {"Account": "Current earnings", "Type": "Calculated", "Balance": 5.0},
     ]
+
+
+def test_reports_responsive_css_uses_stable_keyed_containers() -> None:
+    css = reports._REPORTS_RESPONSIVE_CSS
+
+    assert "@media (max-width: 1100px)" in css
+    assert ".st-key-reports_summary_metrics" in css
+    assert ".st-key-reports_charts" in css
+    assert ".st-key-reports_statement_metrics" in css
+    assert ".st-key-reports_statement_tables" in css
+    assert "st-emotion-cache" not in css
