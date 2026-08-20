@@ -55,7 +55,10 @@ from tabula_rasa.local_profile_store import (
     merged_profile_secrets,
 )
 from tabula_rasa.page_renderers.dashboard import DashboardContext, render_dashboard
-from tabula_rasa.pages.transactions import TransactionsContext, render_transactions
+from tabula_rasa.page_renderers.transactions import (
+    TransactionsContext,
+    render_transactions,
+)
 from tabula_rasa.presentation import (
     apply_global_styles,
     render_page_header,
