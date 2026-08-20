@@ -45,6 +45,7 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
     assert '[data-testid="stFormSubmitButton"]:has(' in css
     assert '[data-testid="stWidgetLabel"] p' in css
     assert '[data-testid="stTabs"] [role="tab"]' in css
+    assert '[data-testid="stTabs"] [role="tab"]:hover' in css
     assert '[aria-selected="true"]' in css
     assert "var(--tr-warning-background) !important" in css
     assert "var(--tr-warning-text) !important" in css

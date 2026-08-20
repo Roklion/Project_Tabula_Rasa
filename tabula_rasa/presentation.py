@@ -92,6 +92,10 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
         color: var(--tr-text-secondary) !important;
     }}
 
+    [data-testid="stTabs"] [role="tab"]:hover {{
+        color: var(--tr-text-primary) !important;
+    }}
+
     [data-testid="stTabs"] [role="tab"][aria-selected="true"] {{
         color: var(--tr-text-primary) !important;
     }}
