@@ -247,9 +247,14 @@ def main() -> None:
             for account in storage.list_accounts(active_only=False)
             if account["name"] == "Checking"
         )
+        storage.deactivate_account(owner_equity["id"])
+        app.run()
         by_label(app.selectbox, "Transaction to edit").set_value(
             transaction["id"]
         ).run()
+        assert "Owner-paid expenses" in by_label(
+            app.selectbox, "Edit account"
+        ).options
         by_label(app.selectbox, "Edit account").set_value(checking["id"])
         by_label(app.number_input, "Edit amount").set_value(30)
         by_label(app.button, "Save changes").click().run()
