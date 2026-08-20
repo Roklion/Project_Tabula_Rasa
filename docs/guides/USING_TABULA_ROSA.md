@@ -196,6 +196,42 @@ QuickBooks mileage imports remain a separate workflow described in
 Project Tabula Rasa provides account balances, income-and-expense reporting, and a
 balance sheet.
 
+The Reports page is organized in this order:
+
+1. **Report period** — separate **From** and **To** date controls for income and
+   expense analytics;
+2. **Income and expense analytics** — Income, Expenses, and Net metrics followed
+   by Monthly performance and Expenses by category charts;
+3. **Category detail** — a Category, Layer, Parent, Direct activity, and Layer 1
+   total table when category activity exists; and
+4. **Balance sheet** — a separate **As of** date, total assets/liabilities/equity
+   metrics, Assets/Liabilities/Equity tables, and an explicit balance status.
+
+The monthly performance chart is a grouped bar chart and the category chart is a
+horizontal ranking bar chart. Both use currency axes and resize within their
+columns. Charts are supporting views for the values above them; they do not add
+cash-flow, reconciliation, or transaction-detail reports.
+
+The complete current Reports inventory is:
+
+- Controls: **From**, **To**, and the separate balance-sheet **As of** date.
+- Income-and-expense metrics: **Income**, **Expenses**, and **Net**.
+- Charts: **Monthly performance** with Income and Expenses series, and
+  **Expenses by category** using Layer 1 rollup totals.
+- Category table: **Category**, **Layer**, **Parent**, **Direct activity**, and
+  **Layer 1 total**. Layer 1 totals include direct activity and Layer 2 children
+  without double-counting them.
+- Balance-sheet metrics: **Total assets**, **Total liabilities**, and **Total
+  equity**.
+- Balance-sheet tables: **Assets**, **Liabilities**, and **Equity**, each with
+  **Account**, **Type**, and **Balance**. Equity also includes **Current
+  earnings**. Hierarchical accounts may include **Layer 1 total** and **Direct
+  activity** rows.
+- States and errors: no activity in the selected period, no expenses in the
+  selected period, no accounts in an empty statement group, a text-backed
+  balanced status, a text-backed out-of-balance warning with the difference, and
+  a storage error when the selected profile's Sheets reads fail.
+
 Current earnings are calculated as income minus expenses and included in total
 equity. The balance sheet flags any difference in:
 

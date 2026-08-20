@@ -2312,6 +2312,23 @@ Provide current income-and-expense analytics and a balance sheet.
 - Balanced success or out-of-balance warning with the difference
 - Guidance that liabilities and equity are presented conventionally positive while opening ledger balances are entered negative
 
+#### Current presentation hierarchy
+
+Reports present the period controls first, followed by the income-and-expense
+summary, its supporting charts, the category detail table, and then the separate
+balance sheet. The balance-sheet **As of** date remains independent from the
+income-and-expense **From**/**To** range.
+
+Metrics use compact grouped columns. Charts remain subordinate to the values:
+monthly performance uses grouped bars with currency axes, while expenses by
+category uses a horizontal ranking bar with Layer 1 rollup totals. The palette
+uses the shared blue interaction color and a related muted blue series; color is
+not the sole indicator of financial or balance-sheet state.
+
+The page explicitly communicates empty activity, empty expense results, empty
+statement groups, storage errors, and balanced or out-of-balance status. The
+status text remains meaningful without relying on success or warning color.
+
 #### Acceptance criteria
 
 - All current metrics, charts, detail tables, and balance-sheet sections remain present.
