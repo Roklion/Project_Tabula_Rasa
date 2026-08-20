@@ -38,6 +38,9 @@ points here for durable setup, architecture, and recovery guidance.
   checks, test isolation, and read-only live validation.
 - [Pull-request review](development/PULL_REQUEST_REVIEW.md) defines reviewer
   roles, Gemini command modes, finding disposition, and validation.
+- [Transactions surface inventory](development/TRANSACTIONS_SURFACE_INVENTORY.md)
+  records the controls, state, feedback, and failure paths preserved by issue
+  #54 for later transaction work.
 
 ## Documentation map
 
@@ -57,7 +60,8 @@ docs/
 |   `-- USING_TABULA_ROSA.md
 `-- development/
     |-- DEVELOPMENT.md
-    `-- PULL_REQUEST_REVIEW.md
+    |-- PULL_REQUEST_REVIEW.md
+    `-- TRANSACTIONS_SURFACE_INVENTORY.md
 ```
 
 ## Maintenance rules
