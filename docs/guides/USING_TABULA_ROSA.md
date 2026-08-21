@@ -200,6 +200,15 @@ The **Mileage** page records:
 
 It supports date filtering, editing, deletion, totals, and CSV export.
 
+On **Add trip**, the form keeps related inputs compact: Trip date and Vehicle
+share a row, Business miles and Round trip share a row, and Starting location
+and Destination share a row. The primary **Save mileage trip** action remains
+at the end of the form. In **View & edit mileage log**, From and To appear above
+the Trips and Business miles metrics, followed by the secondary filtered CSV
+download and the eight-column mileage table. Select a row or use **Mileage trip
+to edit** in the **Edit mileage trip** section; its save and permanent-delete
+actions remain independent.
+
 Selecting **Round trip** while adding a trip creates two entries in one write:
 
 1. the outbound entry; and

@@ -281,6 +281,24 @@ def main() -> None:
 
         app.radio[0].set_value("Mileage").run()
         assert app.dataframe[0].key == "mileage_log_test_1"
+        assert list(app.dataframe[0].value.columns) == [
+            "ID",
+            "Date",
+            "Miles",
+            "Vehicle",
+            "From",
+            "Destination",
+            "Business purpose",
+            "Notes",
+        ]
+        assert {metric.label for metric in app.metric} == {
+            "Trips",
+            "Business miles",
+        }
+        assert any(
+            button.label == "Download filtered mileage CSV"
+            for button in app.download_button
+        )
         by_label(app.number_input, "Business miles").set_value(18.6)
         by_label(app.text_input, "Vehicle (optional)").input("Blue car")
         by_label(app.text_input, "Starting location").input("Office")
@@ -317,8 +335,34 @@ def main() -> None:
         )
         assert outbound["destination"] == "Client site"
         assert return_trip["destination"] == "Office"
+        assert outbound["id"] != return_trip["id"]
+        assert set(outbound) == {
+            "id",
+            "trip_date",
+            "miles",
+            "vehicle",
+            "start_location",
+            "destination",
+            "business_purpose",
+            "notes",
+            "created_at",
+        }
+        assert set(return_trip) == set(outbound)
         assert outbound["miles"] == return_trip["miles"] == "18.6"
         assert outbound["business_purpose"] == "Project meeting"
+        return_trip_id = return_trip["id"]
+        return_trip_snapshot = {
+            key: return_trip[key]
+            for key in (
+                "trip_date",
+                "miles",
+                "vehicle",
+                "start_location",
+                "destination",
+                "business_purpose",
+                "notes",
+            )
+        }
         assert by_label(app.number_input, "Business miles").value == 0.1
         assert by_label(app.text_input, "Vehicle (optional)").value == ""
         assert by_label(app.text_input, "Starting location").value == ""
@@ -342,6 +386,15 @@ def main() -> None:
             if trip["id"] == outbound["id"]
         )
         assert edited_outbound["miles"] == "20.1"
+        unchanged_return = next(
+            trip
+            for trip in storage.list_mileage_trips()
+            if trip["id"] == return_trip_id
+        )
+        assert {
+            key: unchanged_return[key] for key in return_trip_snapshot
+        } == return_trip_snapshot
+        assert unchanged_return["id"] == return_trip_id
 
         by_label(
             app.checkbox,
@@ -349,6 +402,7 @@ def main() -> None:
         ).check()
         by_label(app.button, "Permanently delete mileage trip").click().run()
         assert len(storage.list_mileage_trips()) == 1
+        assert storage.list_mileage_trips()[0]["id"] == return_trip_id
         by_label(
             app.checkbox,
             "I understand this mileage trip will be permanently deleted",
