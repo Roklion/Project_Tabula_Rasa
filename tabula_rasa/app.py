@@ -50,7 +50,11 @@ from tabula_rasa.local_profile_store import (
     merged_profile_secrets,
 )
 from tabula_rasa.page_renderers.dashboard import DashboardContext, render_dashboard
-from tabula_rasa.page_renderers.mileage import MileageContext, render_mileage
+from tabula_rasa.page_renderers.mileage import (
+    MileageContext,
+    mileage_frame,
+    render_mileage,
+)
 from tabula_rasa.page_renderers.reports import ReportsContext, render_reports
 from tabula_rasa.page_renderers.transactions import (
     TransactionsContext,
