@@ -1115,7 +1115,7 @@ only visible rows, and exposes only the approved actions below.
 - A separate transaction selector remains available inside that expander.
 - The user can choose any transaction in the current filtered and searched result set.
 
-#### Bulk mode — proposed
+#### Bulk mode — current
 
 - Uses multi-row selection.
 - The edit expander is disabled or visually de-emphasized while bulk mode is active.
@@ -1166,7 +1166,7 @@ Categories table:
 
 Report and profile tables must preserve the fields specified in their page contracts.
 
-### 17.7 Proposed bulk ledger actions
+### 17.7 Current bulk ledger actions
 
 Bulk actions are available only in explicit Bulk mode.
 
