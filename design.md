@@ -1352,8 +1352,8 @@ When one or more receipts are selected:
 3. After Sheets confirms creation and returns the transaction ID, upload each
    receipt to the selected profile's receipt folder.
 4. Persist each receipt reference on the saved transaction independently.
-5. Show the transaction result and each receipt's linked, uploaded, or failed
-   outcome as one understandable workflow.
+5. Show one concise saved-transaction notice with the number of complete and
+   unresolved receipts, any available unresolved errors, and one retry action.
 6. Reset the form only after every selected receipt is linked.
 
 Failure behavior:
@@ -1753,14 +1753,14 @@ The user experiences one submission workflow, while the system performs ordered 
 3. Upload each receipt using that transaction ID.
 4. Link each resulting receipt reference independently.
 
-Progress text should identify the current stage without exposing internal secrets or Drive metadata.
+The notice should identify the saved transaction, the complete and unresolved
+receipt counts, and the retry action without exposing internal secrets or Drive
+metadata. Do not expose a pending/uploaded/linked/failed state machine or add
+background progress stages.
 
-Recommended states:
-
-- `Saving transaction…`
-- `Uploading receipt…`
-- `Linking receipt…`
-- `Transaction saved and receipt linked.` (with the confirmed receipt count)
+The success notice is `Transaction saved and N receipt(s) linked.` when every
+selected receipt is complete. A partial result keeps the transaction saved and
+offers `Retry unresolved receipts`.
 
 Partial failure rules follow Section 19.3. A receipt failure never converts a confirmed transaction save into a reported total failure.
 

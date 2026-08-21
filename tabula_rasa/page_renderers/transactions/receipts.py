@@ -81,6 +81,18 @@ def process_receipt_recovery(
         if receipt.get("linked") is True:
             continue
         reference = receipt.get("reference")
+        if not isinstance(reference, Mapping) and isinstance(
+            receipt.get("drive_file"), Mapping
+        ):
+            try:
+                reference = receipt_reference_from_drive_file(receipt["drive_file"])
+            except Exception as error:  # noqa: BLE001 - preserve Drive recovery pointer
+                receipt["error"] = (
+                    "The Drive file was uploaded, but its receipt metadata "
+                    f"could not be read: {error}"
+                )
+                continue
+            receipt["reference"] = reference
         if not isinstance(reference, Mapping):
             try:
                 drive_file = dict(upload_receipt(receipt))
@@ -203,11 +215,12 @@ def handle_confirmed_transaction_receipts(
 
 
 def _render_receipt_workflow_status(workflow: Mapping[str, Any]) -> None:
-    _linked, unresolved = receipt_creation_counts(workflow)
+    linked, unresolved = receipt_creation_counts(workflow)
     if unresolved:
         st.warning(
-            f"The transaction is saved, but {unresolved} receipt(s) still need "
-            "attention. Click Retry unresolved receipts to continue."
+            f"The transaction is saved: {linked} receipt(s) complete and "
+            f"{unresolved} receipt(s) unresolved. Click Retry unresolved "
+            "receipts to continue."
         )
         for receipt in workflow.get("receipts", []):
             if receipt.get("linked") is not True and receipt.get("error"):

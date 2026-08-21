@@ -145,8 +145,14 @@ def main() -> None:
             "Transaction saved" in str(success.value) for success in app.success
         )
         assert any(
+            "1 receipt(s) complete" in str(warning.value)
+            and "1 receipt(s) unresolved" in str(warning.value)
+            for warning in app.warning
+        )
+        assert any(
             "Retry unresolved receipts" in button.label for button in app.button
         )
+        assert not any(button.label == "Save transaction" for button in app.button)
 
         fail_second_upload["value"] = False
         by_label(app.button, "Retry unresolved receipts").click().run()

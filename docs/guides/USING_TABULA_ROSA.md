@@ -142,11 +142,12 @@ the application upload and link each receipt in the selected profile's Google
 Drive folder. Duplicate filenames are retained as separate files with numeric
 suffixes, such as `receipt (2).pdf`.
 
-The transaction remains saved if any receipt fails. The form reports each
-receipt independently and provides **Retry unresolved receipts**. A receipt
-that is already linked is not re-uploaded or re-linked during recovery. If a
-file was uploaded but linking failed, recovery retries the same Drive file or
-uses the transaction editor's **Unreferenced receipt** workflow.
+The transaction remains saved if any receipt fails. The form shows one concise
+notice with the number of complete and unresolved receipts, reports available
+errors, and provides **Retry unresolved receipts**. A receipt that is already
+linked is not re-uploaded or re-linked during recovery. If a file was uploaded
+but linking failed, recovery retries the same Drive file or uses the transaction
+editor's **Unreferenced receipt** workflow.
 
 ## Receipts
 

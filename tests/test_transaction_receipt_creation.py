@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
+import streamlit as st
 
 from tabula_rasa.google_drive import GoogleDriveAccessError
 from tabula_rasa.page_renderers.transactions.receipts import (
@@ -10,6 +13,8 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     prepare_receipt_uploads,
     process_receipt_recovery,
     receipt_creation_counts,
+    receipt_creation_workflow_key,
+    render_receipt_creation_recovery,
 )
 
 
@@ -133,9 +138,64 @@ def test_partial_link_failure_retries_only_unresolved_receipt() -> None:
 def test_receipt_recovery_state_is_scoped_to_profile() -> None:
     north = new_receipt_creation_workflow("north-txn", [], profile_key="north")
     south = new_receipt_creation_workflow("south-txn", [], profile_key="south")
+    session_state = {
+        receipt_creation_workflow_key("north"): north,
+        receipt_creation_workflow_key("south"): south,
+    }
 
-    assert north["profile_key"] == "north"
-    assert south["profile_key"] == "south"
+    with (
+        patch.object(st, "session_state", session_state),
+        patch.object(st, "info") as info,
+        patch.object(st, "warning"),
+        patch.object(st, "caption"),
+        patch.object(st, "button", return_value=False),
+    ):
+        assert render_receipt_creation_recovery(
+            SimpleNamespace(profile_key="south", profile_secrets={})
+        )
+
+    info.assert_called_once_with(
+        "Transaction south-txn is saved in Google Sheets. "
+        "Receipt processing can be resumed independently."
+    )
+    assert session_state[receipt_creation_workflow_key("north")] is north
+    assert session_state[receipt_creation_workflow_key("south")] is south
+
+
+def test_confirmed_upload_metadata_failure_does_not_upload_again() -> None:
+    workflow = new_receipt_creation_workflow(
+        "txn-1",
+        [
+            {
+                "key": "metadata-failure",
+                "original_name": "receipt.pdf",
+                "content": b"receipt",
+                "mime_type": "application/pdf",
+                "linked": False,
+            }
+        ],
+    )
+    uploaded: list[str] = []
+
+    def upload(item: Mapping[str, object]) -> Mapping[str, object]:
+        uploaded.append(str(item["key"]))
+        return {
+            "id": "drive123456",
+            "name": "receipt.pdf",
+            "mimeType": "application/pdf",
+            "size": "7",
+        }
+
+    for _ in range(2):
+        process_receipt_recovery(
+            workflow,
+            upload_receipt=upload,
+            link_receipt=lambda _reference: None,
+        )
+
+    assert uploaded == ["metadata-failure"]
+    assert receipt_creation_counts(workflow) == (0, 1)
+    assert "metadata" in workflow["receipts"][0]["error"]
 
 
 def test_upload_failure_does_not_stop_later_receipts() -> None:

@@ -25,7 +25,8 @@ def render_add_transaction(
     category_paths: Mapping[str, str],
 ) -> None:
     """Render the existing profile-scoped transaction creation workflow."""
-    render_receipt_creation_recovery(context)
+    if render_receipt_creation_recovery(context):
+        return
     st.subheader("Add transaction")
     st.caption("Record income, expenses, or transfers in the active account set.")
     transaction_form_keys = (
