@@ -1246,11 +1246,13 @@ class GoogleSheetsStorage:
                 operation="category change",
                 error=error,
                 expected_by_id=current_by_id,
-                postcondition=lambda current: set(current) == set(current_by_id)
-                and all(current[item] == current_by_id[item] for item in current_by_id),
-                fully_applied=lambda current: set(current) == set(current_by_id)
-                and all(
-                    {
+                postcondition=lambda current: all(
+                    item in current and current[item] == current_by_id[item]
+                    for item in current_by_id
+                ),
+                fully_applied=lambda current: all(
+                    item in current
+                    and {
                         **current_by_id[item],
                         "category_id": category_id,
                     }
@@ -1301,9 +1303,13 @@ class GoogleSheetsStorage:
                 operation="transaction deletion",
                 error=error,
                 expected_by_id=current_by_id,
-                postcondition=lambda current: set(current) == set(current_by_id)
-                and all(current[item] == current_by_id[item] for item in current_by_id),
-                fully_applied=lambda current: not set(current).intersection(current_by_id),
+                postcondition=lambda current: all(
+                    item in current and current[item] == current_by_id[item]
+                    for item in current_by_id
+                ),
+                fully_applied=lambda current: not any(
+                    item in current for item in current_by_id
+                ),
             )
             if outcome is not None:
                 return outcome

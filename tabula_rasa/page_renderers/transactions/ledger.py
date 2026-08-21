@@ -272,7 +272,8 @@ def render_ledger(
                 _bulk_selection_key(context.profile_key), ()
             )
         )
-        if any(transaction_id not in transaction_ids for transaction_id in selected_ids):
+        transaction_ids_set = set(transaction_ids)
+        if any(transaction_id not in transaction_ids_set for transaction_id in selected_ids):
             _clear_bulk_selection(context.profile_key)
             selected_ids = ()
         st.caption(f"{len(selected_ids)} transaction(s) selected")
@@ -309,6 +310,7 @@ def render_ledger(
                     for category in categories
                     if category["kind"] == common_kind
                     and (category_id := str(category.get("id") or "").strip())
+                    and category_id in category_paths
                 }
                 with st.form(
                     "transaction_bulk_category",

@@ -2398,7 +2398,11 @@ class TestGoogleSheetsStorage:
 
     def test_bulk_category_change_uses_one_minimal_atomic_batch(self) -> None:
         first, second, replacement = self._bulk_transaction_fixture()
-        expected = self.storage.list_transactions(_force_refresh=True)
+        expected = [
+            transaction
+            for transaction in self.storage.list_transactions(_force_refresh=True)
+            if transaction["id"] in {first["id"], second["id"]}
+        ]
         workbook_batch = Mock(wraps=self.workbook.batch_update)
         self.workbook.batch_update = workbook_batch
 
@@ -2425,7 +2429,11 @@ class TestGoogleSheetsStorage:
 
     def test_bulk_delete_resolves_fresh_rows_after_row_order_changes(self) -> None:
         first, second, _ = self._bulk_transaction_fixture()
-        expected = self.storage.list_transactions(_force_refresh=True)
+        expected = [
+            transaction
+            for transaction in self.storage.list_transactions(_force_refresh=True)
+            if transaction["id"] in {first["id"], second["id"]}
+        ]
         transaction_sheet = self.workbook.sheets["Transactions"]
         transaction_sheet.rows[1], transaction_sheet.rows[2] = (
             transaction_sheet.rows[2],
@@ -2489,6 +2497,37 @@ class TestGoogleSheetsStorage:
         assert result == {"status": "fully_applied", "count": "2"}
         assert self.workbook.batch_update.call_count == 1
 
+    def test_uncertain_bulk_category_ignores_unselected_rows(self) -> None:
+        first, second, replacement = self._bulk_transaction_fixture()
+        unrelated = self.storage.create_transaction(
+            txn_date="2026-07-20",
+            kind="Expense",
+            amount=3,
+            account_id=first["account_id"],
+            category_id=first["category_id"],
+        )
+        expected = [
+            transaction
+            for transaction in self.storage.list_transactions(_force_refresh=True)
+            if transaction["id"] in {first["id"], second["id"]}
+        ]
+        self.workbook.batch_update = Mock(
+            side_effect=OSError("temporary response lost before commit")
+        )
+
+        with pytest.raises(StorageUnavailableError) as raised:
+            self.storage.bulk_change_transaction_category(
+                [first["id"], second["id"]],
+                expected_transactions=expected,
+                category_id=replacement["id"],
+            )
+
+        assert raised.value.outcome == "not_applied"
+        assert raised.value.retryable is True
+        assert unrelated["id"] in {
+            transaction["id"] for transaction in self.storage.list_transactions()
+        }
+
     def test_uncertain_bulk_delete_response_classifies_not_applied_without_retry(
         self,
     ) -> None:
@@ -2510,6 +2549,36 @@ class TestGoogleSheetsStorage:
         assert {
             transaction["id"] for transaction in self.storage.list_transactions()
         } == {first["id"], second["id"]}
+
+    def test_uncertain_bulk_delete_ignores_unselected_rows(self) -> None:
+        first, second, _ = self._bulk_transaction_fixture()
+        unrelated = self.storage.create_transaction(
+            txn_date="2026-07-20",
+            kind="Expense",
+            amount=3,
+            account_id=first["account_id"],
+            category_id=first["category_id"],
+        )
+        expected = [
+            transaction
+            for transaction in self.storage.list_transactions(_force_refresh=True)
+            if transaction["id"] in {first["id"], second["id"]}
+        ]
+        self.workbook.batch_update = Mock(
+            side_effect=OSError("temporary response lost before commit")
+        )
+
+        with pytest.raises(StorageUnavailableError) as raised:
+            self.storage.bulk_delete_transactions(
+                [first["id"], second["id"]],
+                expected_transactions=expected,
+            )
+
+        assert raised.value.outcome == "not_applied"
+        assert raised.value.retryable is True
+        assert {
+            transaction["id"] for transaction in self.storage.list_transactions()
+        } == {first["id"], second["id"], unrelated["id"]}
 
     def test_uncertain_bulk_delete_response_classifies_mixed_without_retry(
         self,
