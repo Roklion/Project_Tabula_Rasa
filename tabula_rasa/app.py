@@ -31,16 +31,7 @@ from tabula_rasa.google_drive import (
     load_oauth_config,
 )
 from tabula_rasa.google_drive_admin import process_google_drive_oauth_callback
-from tabula_rasa.ledger_presentation import balances_frame, ledger_frame
-from tabula_rasa.ledger_reporting import (
-    rollup_account_values,
-)
-from tabula_rasa.hierarchy import (
-    eligible_parent_ids,
-    has_hierarchy_children,
-    hierarchy_paths,
-    ordered_hierarchy,
-)
+from tabula_rasa.ledger_presentation import ledger_frame
 from tabula_rasa.local_profile_admin import render_local_profile_admin
 from tabula_rasa.local_profile_store import (
     LOCAL_PROFILE_STORE_PATH,
@@ -48,6 +39,11 @@ from tabula_rasa.local_profile_store import (
     local_profile_admin_available,
     local_profile_revision,
     merged_profile_secrets,
+)
+from tabula_rasa.page_renderers.accounts import AccountsContext, render_accounts
+from tabula_rasa.page_renderers.categories import (
+    CategoriesContext,
+    render_categories,
 )
 from tabula_rasa.page_renderers.dashboard import DashboardContext, render_dashboard
 from tabula_rasa.page_renderers.mileage import (
@@ -93,18 +89,7 @@ from tabula_rasa.receipt_backfill import (
 )
 
 
-STORAGE_IMPLEMENTATION_VERSION = 10
-ACCOUNT_TYPES = ["Bank", "Cash", "Credit card", "Short-term debt", "Equity", "Other"]
-ACCOUNT_CLASSIFICATIONS = ["Asset", "Liability", "Equity"]
-FIXED_TYPE_CLASSIFICATIONS = {
-    "Bank": "Asset",
-    "Cash": "Asset",
-    "Credit card": "Liability",
-    "Short-term debt": "Liability",
-    "Equity": "Equity",
-}
-
-
+STORAGE_IMPLEMENTATION_VERSION = 11
 def alert_list(title: str, messages: list[str]) -> str:
     """Format multiple alert messages as a readable Markdown list."""
     return f"**{title}**\n\n- " + "\n- ".join(messages)
@@ -408,492 +393,29 @@ elif page == "Mileage":
 
 
 elif page == "Accounts":
-    render_page_header(
-        "Accounts", "Track bank, cash, credit card, and other manual balances."
-    )
-    try:
-        storage.prefetch_worksheets("Accounts", "Transactions")
-        accounts = storage.list_accounts(active_only=False)
-        transactions = storage.list_transactions()
-        balances = balances_frame(accounts, transactions)
-    except StorageError as error:
-        report_storage_error(error)
-        st.stop()
-    account_paths = hierarchy_paths(accounts)
-    account_by_id = {
-        account_id: account
-        for account in accounts
-        if (account_id := str(account.get("id") or "").strip())
-    }
-    account_option_ids = [
-        account["id"] for account in ordered_hierarchy(accounts)
-    ]
-    direct_balance_by_id = balances.set_index("ID")["Balance"].to_dict()
-    balance_by_id = rollup_account_values(accounts, direct_balance_by_id)
-    transaction_count_by_account: dict[str, int] = {}
-    for transaction in transactions:
-        involved_account_ids = {
-            str(transaction.get("account_id") or "").strip(),
-            str(transaction.get("to_account_id") or "").strip(),
-        }
-        for account_id in involved_account_ids - {""}:
-            transaction_count_by_account[account_id] = (
-                transaction_count_by_account.get(account_id, 0) + 1
-            )
-    transaction_count_by_account = rollup_account_values(
-        accounts, transaction_count_by_account
-    )
-    account_rows = []
-    account_ids = []
-    for account in ordered_hierarchy(accounts):
-        account_ids.append(account["id"])
-        parent_id = str(account.get("parent_id") or "").strip()
-        parent = account_by_id.get(parent_id) if parent_id else None
-        account_rows.append(
-            {
-                "Account": (
-                    f'↳ {account["name"]}' if parent else account["name"]
-                ),
-                "Layer": "Layer 2" if parent else "Layer 1",
-                "Parent": parent.get("name") or "" if parent else "",
-                "Classification": account["classification"],
-                "Type": account["type"],
-                "Active": account["active"],
-                "Balance": balance_by_id.get(account["id"], 0.0),
-                "Transaction count": transaction_count_by_account.get(
-                    account["id"], 0
-                ),
-            }
+    render_accounts(
+        AccountsContext(
+            profile_key=selected_profile_key,
+            storage=storage,
+            confirmed_write=confirmed_write,
+            report_storage_error=report_storage_error,
+            reset_widget_state_if_requested=reset_widget_state_if_requested,
+            schedule_widget_reset=schedule_widget_reset,
         )
-    account_table_key = (
-        "account_table_"
-        f"{selected_profile_key}_"
-        f"{st.session_state.get('account_table_generation', 0)}"
     )
-
-    def select_account() -> None:
-        selected_rows = st.session_state[account_table_key].selection.rows
-        if selected_rows:
-            st.session_state["edit_account_id"] = account_ids[selected_rows[0]]
-
-    account_event = st.dataframe(
-        pd.DataFrame(account_rows),
-        hide_index=True,
-        width="stretch",
-        key=account_table_key,
-        on_select=select_account,
-        selection_mode="single-row",
-        column_config={"Balance": st.column_config.NumberColumn(format="$%.2f")},
-    )
-    reset_widget_state_if_requested(
-        "reset_add_account_form",
-        keys=(
-            f"new_account_name_{selected_profile_key}",
-            f"new_account_type_{selected_profile_key}",
-            f"new_account_opening_{selected_profile_key}",
-        ),
-        prefixes=(
-            f"new_account_classification_{selected_profile_key}_",
-            f"new_account_parent_{selected_profile_key}_",
-        ),
-    )
-    with st.expander("Add account", expanded=True):
-        with st.container(border=True):
-            c1, c2, c3, c4, c5 = st.columns(5)
-            name = c1.text_input(
-                "Account name", key=f"new_account_name_{selected_profile_key}"
-            )
-            account_type = c2.selectbox(
-                "Type",
-                ACCOUNT_TYPES,
-                key=f"new_account_type_{selected_profile_key}",
-            )
-            classification_options = [
-                FIXED_TYPE_CLASSIFICATIONS[account_type]
-            ] if account_type in FIXED_TYPE_CLASSIFICATIONS else ACCOUNT_CLASSIFICATIONS
-            classification = c3.selectbox(
-                "Balance-sheet classification",
-                classification_options,
-                key=(
-                    f"new_account_classification_{selected_profile_key}_"
-                    f"{account_type}"
-                ),
-            )
-            opening = c4.number_input(
-                "Opening balance",
-                value=0.0,
-                format="%.2f",
-                key=f"new_account_opening_{selected_profile_key}",
-                help=(
-                    "Use positive balances for assets and negative balances for "
-                    "liabilities and equity."
-                ),
-            )
-            parent_options = [""] + eligible_parent_ids(
-                accounts,
-                compatibility_field="classification",
-                compatibility_value=classification,
-            )
-            parent_id = c5.selectbox(
-                "Parent account (optional)",
-                parent_options,
-                key=(
-                    f"new_account_parent_{selected_profile_key}_"
-                    f"{classification}"
-                ),
-                format_func=lambda value: (
-                    "None (Layer 1)" if not value else account_paths[value]
-                ),
-            )
-            if st.button("Add account", type="primary"):
-                payload = {
-                    "name": name,
-                    "account_type": account_type,
-                    "classification": classification,
-                    "opening_balance": opening,
-                    "parent_id": parent_id,
-                }
-                confirmed_write(
-                    "create_account",
-                    payload,
-                    lambda: storage.create_account(
-                        name,
-                        account_type,
-                        opening,
-                        classification=classification,
-                        parent_id=parent_id,
-                    ),
-                    "Account added.",
-                    on_success=lambda: schedule_widget_reset(
-                        "reset_add_account_form"
-                    ),
-                )
-
-    if accounts:
-        selected_rows = account_event.selection.rows
-        if st.session_state.get("edit_account_id") not in account_by_id:
-            st.session_state["edit_account_id"] = account_ids[0]
-        st.caption("Select an account row (or double-click it) to edit it.")
-        with st.expander(
-            "Edit or deactivate account", expanded=bool(selected_rows)
-        ):
-            account_id = st.selectbox(
-                "Account to manage",
-                account_option_ids,
-                format_func=account_paths.get,
-                key="edit_account_id",
-            )
-            selected = account_by_id[account_id]
-            with st.container(border=True):
-                edited_name = st.text_input(
-                    "Edit account name",
-                    value=selected["name"],
-                    key=f"edit_account_name_{account_id}",
-                )
-                edited_type = st.selectbox(
-                    "Edit account type",
-                    ACCOUNT_TYPES,
-                    index=ACCOUNT_TYPES.index(selected["type"]),
-                    key=f"edit_account_type_{account_id}",
-                )
-                edited_classification_options = [
-                    FIXED_TYPE_CLASSIFICATIONS[edited_type]
-                ] if edited_type in FIXED_TYPE_CLASSIFICATIONS else ACCOUNT_CLASSIFICATIONS
-                edited_classification = st.selectbox(
-                    "Edit balance-sheet classification",
-                    edited_classification_options,
-                    index=edited_classification_options.index(
-                        FIXED_TYPE_CLASSIFICATIONS.get(
-                            edited_type,
-                            selected["classification"],
-                        )
-                    ),
-                    key=(
-                        f"edit_account_classification_{account_id}_{edited_type}"
-                    ),
-                )
-                edited_opening = st.number_input(
-                    "Edit opening balance",
-                    value=float(selected["opening_balance"]),
-                    format="%.2f",
-                    key=f"edit_account_opening_{account_id}",
-                )
-                edited_active = st.checkbox(
-                    "Active",
-                    value=selected["active"],
-                    key=f"edit_account_active_{account_id}",
-                )
-                has_children = has_hierarchy_children(accounts, account_id)
-                edited_parent_options = [""] + eligible_parent_ids(
-                    accounts,
-                    compatibility_field="classification",
-                    compatibility_value=edited_classification,
-                    item_id=account_id,
-                )
-                current_parent_id = str(selected.get("parent_id") or "").strip()
-                edited_parent_id = st.selectbox(
-                    "Edit parent account",
-                    edited_parent_options,
-                    index=(
-                        edited_parent_options.index(current_parent_id)
-                        if current_parent_id in edited_parent_options
-                        else 0
-                    ),
-                    key=(
-                        f"edit_account_parent_{selected_profile_key}_{account_id}_"
-                        f"{edited_classification}"
-                    ),
-                    format_func=lambda value: (
-                        "None (Layer 1)" if not value else account_paths[value]
-                    ),
-                    disabled=has_children,
-                )
-                if has_children:
-                    st.info(
-                        "This Layer 1 account has children. Promote or reparent "
-                        "those children before moving this account under a parent."
-                    )
-                if st.button(
-                    "Save account changes",
-                    type="primary",
-                    key=f"save_account_{account_id}",
-                ):
-                    payload = {
-                        "id": account_id,
-                        "name": edited_name,
-                        "type": edited_type,
-                        "classification": edited_classification,
-                        "opening_balance": edited_opening,
-                        "active": edited_active,
-                        "parent_id": edited_parent_id,
-                    }
-                    confirmed_write(
-                        "edit_account",
-                        payload,
-                        lambda: storage.edit_account(
-                            account_id,
-                            name=edited_name,
-                            type=edited_type,
-                            classification=edited_classification,
-                            opening_balance=edited_opening,
-                            active=edited_active,
-                            parent_id=edited_parent_id,
-                        ),
-                        "Account updated.",
-                    )
-            st.caption(
-                "Accounts are deactivated rather than deleted so transaction references remain valid."
-            )
 
 
 elif page == "Categories":
-    render_page_header("Categories")
-    try:
-        storage.prefetch_worksheets("Categories", "Transactions")
-        categories = storage.list_categories()
-        transactions = storage.list_transactions()
-    except StorageError as error:
-        report_storage_error(error)
-        st.stop()
-    category_paths = hierarchy_paths(categories)
-    transaction_count_by_category: dict[str, int] = {}
-    for transaction in transactions:
-        category_id = str(transaction.get("category_id") or "").strip()
-        if category_id:
-            transaction_count_by_category[category_id] = (
-                transaction_count_by_category.get(category_id, 0) + 1
-            )
-    category_by_id = {
-        category_id: category
-        for category in categories
-        if (category_id := str(category.get("id") or "").strip())
-    }
-    category_rows = []
-    category_ids = []
-    for category in ordered_hierarchy(categories):
-        category_ids.append(category["id"])
-        parent_id = str(category.get("parent_id") or "").strip()
-        parent = category_by_id.get(parent_id) if parent_id else None
-        category_rows.append(
-            {
-                "Category": (
-                    f'↳ {category["name"]}' if parent else category["name"]
-                ),
-                "Layer": "Layer 2" if parent else "Layer 1",
-                "Parent": parent.get("name") or "" if parent else "",
-                "Type": category["kind"],
-                "Transaction count": transaction_count_by_category.get(
-                    category["id"], 0
-                ),
-            }
+    render_categories(
+        CategoriesContext(
+            profile_key=selected_profile_key,
+            storage=storage,
+            confirmed_write=confirmed_write,
+            report_storage_error=report_storage_error,
+            reset_widget_state_if_requested=reset_widget_state_if_requested,
+            schedule_widget_reset=schedule_widget_reset,
         )
-    category_frame = pd.DataFrame(category_rows)
-    category_table_key = (
-        "category_table_"
-        f"{selected_profile_key}_"
-        f"{st.session_state.get('category_table_generation', 0)}"
     )
-
-    def select_category() -> None:
-        selected_rows = st.session_state[category_table_key].selection.rows
-        if selected_rows:
-            st.session_state["edit_category_id"] = category_ids[selected_rows[0]]
-
-    category_event = st.dataframe(
-        category_frame,
-        hide_index=True,
-        width="stretch",
-        key=category_table_key,
-        on_select=select_category,
-        selection_mode="single-row",
-    )
-    reset_widget_state_if_requested(
-        "reset_add_category_form",
-        keys=(
-            f"new_category_name_{selected_profile_key}",
-            f"new_category_kind_{selected_profile_key}",
-        ),
-        prefixes=(f"new_category_parent_{selected_profile_key}_",),
-    )
-    with st.container(border=True):
-        c1, c2, c3 = st.columns(3)
-        name = c1.text_input(
-            "Category name", key=f"new_category_name_{selected_profile_key}"
-        )
-        kind = c2.selectbox(
-            "Type",
-            ["Expense", "Income"],
-            key=f"new_category_kind_{selected_profile_key}",
-        )
-        parent_options = [""] + eligible_parent_ids(
-            categories,
-            compatibility_field="kind",
-            compatibility_value=kind,
-        )
-        parent_id = c3.selectbox(
-            "Parent category (optional)",
-            parent_options,
-            key=f"new_category_parent_{selected_profile_key}_{kind}",
-            format_func=lambda value: (
-                "None (Layer 1)" if not value else category_paths[value]
-            ),
-        )
-        if st.button("Add category", type="primary"):
-            payload = {"name": name, "kind": kind, "parent_id": parent_id}
-            confirmed_write(
-                "create_category",
-                payload,
-                lambda: storage.create_category(name, kind, parent_id=parent_id),
-                "Category added.",
-                on_success=lambda: schedule_widget_reset(
-                    "reset_add_category_form"
-                ),
-            )
-    if categories:
-        selected_rows = category_event.selection.rows
-        if st.session_state.get("edit_category_id") not in category_by_id:
-            st.session_state["edit_category_id"] = category_ids[0]
-        st.caption("Select a category row (or double-click it) to edit it.")
-        with st.expander("Edit category", expanded=bool(selected_rows)):
-            category_id = st.selectbox(
-                "Category to edit",
-                category_ids,
-                format_func=lambda value: (
-                    f'{category_paths[value]} '
-                    f'({category_by_id[value]["kind"]})'
-                ),
-                key="edit_category_id",
-            )
-            selected = category_by_id[category_id]
-            with st.container(border=True):
-                edited_name = st.text_input(
-                    "Edit category name",
-                    value=selected["name"],
-                    key=f"edit_category_name_{category_id}",
-                )
-                edited_kind = st.selectbox(
-                    "Edit category type",
-                    ["Expense", "Income"],
-                    index=["Expense", "Income"].index(selected["kind"]),
-                    key=f"edit_category_kind_{category_id}",
-                )
-                has_children = has_hierarchy_children(categories, category_id)
-                edited_parent_options = [""] + eligible_parent_ids(
-                    categories,
-                    compatibility_field="kind",
-                    compatibility_value=edited_kind,
-                    item_id=category_id,
-                )
-                current_parent_id = str(selected.get("parent_id") or "").strip()
-                edited_parent_id = st.selectbox(
-                    "Edit parent category",
-                    edited_parent_options,
-                    index=(
-                        edited_parent_options.index(current_parent_id)
-                        if current_parent_id in edited_parent_options
-                        else 0
-                    ),
-                    key=(
-                        f"edit_category_parent_{selected_profile_key}_{category_id}_"
-                        f"{edited_kind}"
-                    ),
-                    format_func=lambda value: (
-                        "None (Layer 1)" if not value else category_paths[value]
-                    ),
-                    disabled=has_children,
-                )
-                if has_children:
-                    st.info(
-                        "This Layer 1 category has children. Promote or reparent "
-                        "those children before moving this category under a parent."
-                    )
-                if st.button(
-                    "Save category changes",
-                    type="primary",
-                    key=f"save_category_{category_id}",
-                ):
-                    payload = {
-                        "id": category_id,
-                        "name": edited_name,
-                        "kind": edited_kind,
-                        "parent_id": edited_parent_id,
-                    }
-                    confirmed_write(
-                        "edit_category",
-                        payload,
-                        lambda: storage.edit_category(
-                            category_id,
-                            name=edited_name,
-                            kind=edited_kind,
-                            parent_id=edited_parent_id,
-                        ),
-                        "Category updated.",
-                    )
-                confirm_delete = st.checkbox(
-                    "I understand this category will be permanently deleted",
-                    key=f"confirm_delete_category_{category_id}",
-                )
-                if st.button(
-                    "Permanently delete category",
-                    icon=":material/delete_forever:",
-                    key=f"delete_category_{category_id}",
-                ):
-                    if not confirm_delete:
-                        st.error(
-                            "Confirm that you understand deletion is permanent."
-                        )
-                    else:
-                        confirmed_write(
-                            "delete_category",
-                            {"id": category_id},
-                            lambda: storage.delete_category(category_id),
-                            "Category deleted.",
-                        )
-    st.caption(
-        "Categories with transactions or child categories cannot be deleted."
-    )
-
-
 elif page == "Reports":
     render_reports(
         ReportsContext(

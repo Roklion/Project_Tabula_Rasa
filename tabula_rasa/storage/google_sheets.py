@@ -1000,7 +1000,7 @@ class GoogleSheetsStorage:
         matches = [
             row
             for row in self._rows(title, force_refresh=True)
-            if row.values.get("id") == record_id
+            if _clean_text(row.values.get("id"), "ID") == record_id
         ]
         if not matches:
             raise StorageNotFoundError(f"{title[:-1]} no longer exists")
@@ -1026,7 +1026,7 @@ class GoogleSheetsStorage:
                     raise
                 try:
                     if record_id and any(
-                        row.values.get("id") == record_id
+                        _clean_text(row.values.get("id"), "ID") == record_id
                         for row in self._rows(title, force_refresh=True)
                     ):
                         return
@@ -1090,8 +1090,21 @@ class GoogleSheetsStorage:
         self, *, active_only: bool = True, _force_refresh: bool = False
     ) -> list[dict[str, Any]]:
         accounts = []
+        account_ids: set[str] = set()
         for row in self._rows("Accounts", force_refresh=_force_refresh):
             record: dict[str, Any] = dict(row.values)
+            record["id"] = _clean_text(record.get("id"), "ID", required=True)
+            if record["id"] in account_ids:
+                raise StorageValidationError(
+                    "Account IDs must be unique after normalization"
+                )
+            account_ids.add(record["id"])
+            record["name"] = _clean_text(
+                record.get("name"), "Account name", required=True
+            )
+            record["parent_id"] = _clean_text(
+                record.get("parent_id"), "Account parent"
+            )
             account_type = _clean_text(
                 record.get("type"), "Account type", required=True
             )
@@ -1222,6 +1235,30 @@ class GoogleSheetsStorage:
             dict(row.values)
             for row in self._rows("Categories", force_refresh=_force_refresh)
         ]
+        category_ids: set[str] = set()
+        for category in categories:
+            category["id"] = _clean_text(
+                category.get("id"), "ID", required=True
+            )
+            if category["id"] in category_ids:
+                raise StorageValidationError(
+                    "Category IDs must be unique after normalization"
+                )
+            category_ids.add(category["id"])
+            category["name"] = _clean_text(
+                category.get("name"), "Category name", required=True
+            )
+            category["parent_id"] = _clean_text(
+                category.get("parent_id"), "Category parent"
+            )
+            category_kind = _clean_text(
+                category.get("kind"), "Category kind", required=True
+            ).title()
+            if category_kind not in CATEGORY_KINDS:
+                raise StorageValidationError(
+                    "Category kind must be Income or Expense"
+                )
+            category["kind"] = category_kind
         if kind is not None:
             categories = [item for item in categories if item["kind"] == kind]
         return sorted(categories, key=lambda item: (item["kind"], item["name"].casefold()))
@@ -1445,6 +1482,14 @@ class GoogleSheetsStorage:
         transactions = []
         for row in self._rows("Transactions", force_refresh=_force_refresh):
             item = dict(row.values)
+            item["txn_date"] = _iso_date(item.get("txn_date"))
+            item["account_id"] = _clean_text(
+                item.get("account_id"), "Account", required=True
+            )
+            item["to_account_id"] = _clean_text(
+                item.get("to_account_id"), "Destination account"
+            )
+            item["category_id"] = _clean_text(item.get("category_id"), "Category")
             if start_text and item["txn_date"] < start_text:
                 continue
             if end_text and item["txn_date"] > end_text:

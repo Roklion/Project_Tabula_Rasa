@@ -81,8 +81,12 @@ opening balance or transactions, a separate **Direct activity** row explains
 that component before the child detail. Grand totals still count every direct
 account balance exactly once; displayed family totals are never added again.
 
-The Accounts table shows the same family balance on a Layer 1 parent row and
-counts the parent's transactions together with transactions posted to its
+The Accounts page presents the required Account, Layer, Parent, Classification,
+Type, Active, Balance, and Transaction count columns in a compact selectable
+table. The Active column says **Active** or **Inactive** in text; it does not
+rely on color. The add and edit controls are grouped in the **Add account** and
+**Edit or deactivate account** sections. The same family balance appears on a
+Layer 1 parent row, and its transaction count includes transactions posted to
 children. Layer 2 rows continue to show their own direct balance and count.
 
 ## Categories
@@ -104,10 +108,15 @@ amounts remain explainable without double-counting. Transactions may post
 directly to either layer; transfers remain category-free and mileage remains a
 separate workflow.
 
-Categories can be renamed without changing their IDs. A category with no
-transactions or child categories can be permanently deleted. Categories that
-are still referenced by transactions, or that still have child categories, must
-be retained or edited instead.
+The Categories page presents Category, Layer, Parent, Type, and Transaction
+count in a compact selectable table. Add and edit controls are grouped in the
+**Add category** and **Edit category** sections, and the parent selector shows
+the full hierarchy path while storing the stable parent ID. Categories can be
+renamed without changing their IDs. A category with no transactions or child
+categories can be permanently deleted only after acknowledging the permanent
+consequence. Categories that are still referenced by transactions, or that
+still have child categories, are blocked by a fresh reference check and must be
+retained or edited instead.
 
 The initial default accounts and categories are seeded only in a blank
 workbook, so renaming or deleting a default does not recreate it later.

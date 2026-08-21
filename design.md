@@ -1602,6 +1602,7 @@ Current uses include:
 - Edit transaction
 - Edit mileage trip
 - Add account
+- Add category
 - Edit account
 - Edit category
 - Import Tabula Rasa CSV
