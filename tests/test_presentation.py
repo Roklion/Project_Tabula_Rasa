@@ -104,6 +104,7 @@ def test_profile_switch_clears_unscoped_presentation_state() -> None:
         "prepared-live-exports:north:1:0": b"export-bytes",
         "ledger_filter_type_north": "Expense",
         "ledger_filter_accounts_north": ["Checking"],
+        "ledger_search_north_1": "vendor",
         "ledger_start": "north-start",
         "write_success_notice": "North saved",
         "add_transaction_amount": 42,
@@ -141,6 +142,7 @@ def test_profile_switch_clears_unscoped_presentation_state() -> None:
     assert "prepared-live-exports:north:1:0" not in session_state
     assert "ledger_filter_type_north" not in session_state
     assert "ledger_filter_accounts_north" not in session_state
+    assert "ledger_search_north_1" not in session_state
     assert "ledger_start" not in session_state
     assert "write_success_notice" not in session_state
     assert "add_transaction_amount" not in session_state

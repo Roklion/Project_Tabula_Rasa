@@ -380,6 +380,14 @@ def main() -> None:
         assert unchanged_transaction["account_id"] == petty_cash["id"]
         assert unchanged_transaction["category_id"] == flights["id"]
 
+        app.radio[0].set_value("Transactions").run()
+        by_label(app.text_input, "Search transactions").input("Flights").run()
+        assert not app.dataframe[0].value.empty
+        by_label(app.selectbox, "Business").set_value("beta").run()
+        app.radio[0].set_value("Transactions").run()
+        assert by_label(app.text_input, "Search transactions").value == ""
+        assert app.dataframe[0].value.empty
+
 
 if __name__ == "__main__":
     main()
