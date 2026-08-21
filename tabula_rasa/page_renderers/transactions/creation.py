@@ -9,10 +9,10 @@ import streamlit as st
 
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
 from tabula_rasa.page_renderers.transactions.receipts import (
-    RECEIPT_CREATION_WORKFLOW_KEY,
     RECEIPT_UPLOAD_TYPES,
     handle_confirmed_transaction_receipts,
     prepare_receipt_uploads,
+    receipt_creation_workflow_key,
     render_receipt_creation_recovery,
 )
 
@@ -189,7 +189,9 @@ def render_add_transaction(
                                 "attention; use the recovery controls above."
                                 if prepared_receipts
                                 and st.session_state.get(
-                                    RECEIPT_CREATION_WORKFLOW_KEY
+                                    receipt_creation_workflow_key(
+                                        context.profile_key
+                                    )
                                 )
                                 else "Transaction saved."
                             ),

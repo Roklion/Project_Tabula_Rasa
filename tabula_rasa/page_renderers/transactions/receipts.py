@@ -24,6 +24,11 @@ RECEIPT_UPLOAD_TYPES = ["pdf", "png", "jpg", "jpeg", "webp", "heic"]
 RECEIPT_CREATION_WORKFLOW_KEY = "transaction_receipt_creation_workflow"
 
 
+def receipt_creation_workflow_key(profile_key: str) -> str:
+    """Return the session key for one profile's in-progress recovery."""
+    return f"{RECEIPT_CREATION_WORKFLOW_KEY}:{profile_key}"
+
+
 def prepare_receipt_uploads(uploaded_files: Sequence[object]) -> list[dict[str, Any]]:
     """Copy and validate every selected file before the Sheets write."""
     prepared: list[dict[str, Any]] = []
@@ -52,9 +57,12 @@ def prepare_receipt_uploads(uploaded_files: Sequence[object]) -> list[dict[str, 
 def new_receipt_creation_workflow(
     transaction_id: str,
     receipts: Sequence[Mapping[str, Any]],
+    *,
+    profile_key: str = "",
 ) -> dict[str, Any]:
     """Create session-only recovery state after a confirmed Sheets write."""
     return {
+        "profile_key": profile_key,
         "transaction_id": transaction_id,
         "receipts": [dict(receipt) for receipt in receipts],
     }
@@ -164,7 +172,10 @@ def finish_receipt_creation_if_complete(
     if not _workflow_complete(workflow):
         return False
     linked, _uploaded, _unresolved = receipt_creation_counts(workflow)
-    st.session_state.pop(RECEIPT_CREATION_WORKFLOW_KEY, None)
+    st.session_state.pop(
+        receipt_creation_workflow_key(context.profile_key),
+        None,
+    )
     context.schedule_widget_reset("reset_add_transaction_form")
     notice = (
         f"Transaction saved and {linked} receipt(s) linked."
@@ -180,8 +191,12 @@ def handle_confirmed_transaction_receipts(
     receipts: Sequence[Mapping[str, Any]],
 ) -> None:
     """Upload/link selected receipts after the Sheets write is confirmed."""
-    workflow = new_receipt_creation_workflow(str(transaction["id"]), receipts)
-    st.session_state[RECEIPT_CREATION_WORKFLOW_KEY] = workflow
+    workflow = new_receipt_creation_workflow(
+        str(transaction["id"]),
+        receipts,
+        profile_key=context.profile_key,
+    )
+    st.session_state[receipt_creation_workflow_key(context.profile_key)] = workflow
     receipt_folder = _receipt_folder(context)
     if receipt_folder is None:
         workflow["configuration_error"] = (
@@ -218,12 +233,17 @@ def _render_receipt_workflow_status(workflow: Mapping[str, Any]) -> None:
 
 def render_receipt_creation_recovery(context: TransactionsContext) -> bool:
     """Render and optionally resume the current session's receipt recovery."""
-    workflow = st.session_state.get(RECEIPT_CREATION_WORKFLOW_KEY)
+    workflow = st.session_state.get(
+        receipt_creation_workflow_key(context.profile_key)
+    )
     if not isinstance(workflow, MutableMapping):
         return False
     transaction_id = str(workflow.get("transaction_id", ""))
     if not transaction_id:
-        st.session_state.pop(RECEIPT_CREATION_WORKFLOW_KEY, None)
+        st.session_state.pop(
+            receipt_creation_workflow_key(context.profile_key),
+            None,
+        )
         return False
     st.info(
         f"Transaction {transaction_id} is saved in Google Sheets. "

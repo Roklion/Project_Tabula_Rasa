@@ -133,6 +133,14 @@ def test_partial_link_failure_retries_only_unresolved_receipt() -> None:
     assert len(linked) == 3
 
 
+def test_receipt_recovery_state_is_scoped_to_profile() -> None:
+    north = new_receipt_creation_workflow("north-txn", [], profile_key="north")
+    south = new_receipt_creation_workflow("south-txn", [], profile_key="south")
+
+    assert north["profile_key"] == "north"
+    assert south["profile_key"] == "south"
+
+
 def test_upload_failure_does_not_stop_later_receipts() -> None:
     workflow = new_receipt_creation_workflow(
         "txn-1",
