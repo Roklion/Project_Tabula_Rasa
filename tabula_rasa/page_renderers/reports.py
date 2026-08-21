@@ -22,6 +22,28 @@ from tabula_rasa.presentation import render_page_header
 from tabula_rasa.storage import GoogleSheetsStorage, StorageError
 
 
+_REPORTS_RESPONSIVE_CSS = """
+<style>
+@media (max-width: 1100px) {
+    .st-key-reports_summary_metrics [data-testid="stHorizontalBlock"],
+    .st-key-reports_charts [data-testid="stHorizontalBlock"],
+    .st-key-reports_statement_metrics [data-testid="stHorizontalBlock"],
+    .st-key-reports_statement_tables [data-testid="stHorizontalBlock"] {
+        flex-wrap: wrap;
+    }
+
+    .st-key-reports_summary_metrics [data-testid="stColumn"],
+    .st-key-reports_charts [data-testid="stColumn"],
+    .st-key-reports_statement_metrics [data-testid="stColumn"],
+    .st-key-reports_statement_tables [data-testid="stColumn"] {
+        flex: 1 1 100%;
+        min-width: 100%;
+    }
+}
+</style>
+"""
+
+
 @dataclass(frozen=True)
 class ReportsContext:
     """Dependencies supplied by the application shell for one profile."""
@@ -84,12 +106,71 @@ def _statement_frame(
     return pd.DataFrame(display_rows, columns=["Account", "Type", "Balance"])
 
 
+def _expense_category_chart(by_category: pd.DataFrame):
+    chart = px.bar(
+        by_category,
+        x="Total",
+        y="Category",
+        orientation="h",
+        color_discrete_sequence=["#3267D6"],
+        labels={"Total": "Amount", "Category": "Expense category"},
+    )
+    chart.update_layout(
+        height=300,
+        margin={"l": 12, "r": 12, "t": 28, "b": 12},
+        showlegend=False,
+    )
+    chart.update_xaxes(
+        title="Amount",
+        tickprefix="$",
+        tickformat=",.2f",
+        rangemode="tozero",
+        automargin=True,
+    )
+    chart.update_yaxes(autorange="reversed", automargin=True)
+    return chart
+
+
+def _monthly_performance_chart(monthly: pd.DataFrame):
+    chart = px.bar(
+        monthly,
+        x="Month",
+        y=["Income", "Expenses"],
+        barmode="group",
+        color_discrete_sequence=["#3267D6", "#8EA5D5"],
+        labels={"value": "Amount", "variable": "Series"},
+    )
+    chart.update_layout(
+        height=300,
+        margin={"l": 12, "r": 12, "t": 28, "b": 12},
+        legend_title_text="",
+    )
+    chart.update_xaxes(automargin=True)
+    chart.update_yaxes(
+        title="Amount",
+        tickprefix="$",
+        tickformat=",.2f",
+        rangemode="tozero",
+        automargin=True,
+    )
+    return chart
+
+
+def _out_of_balance_message(difference: float) -> str:
+    return (
+        "Balance sheet is out of balance by "
+        f"{money(abs(difference))}. Review opening balances and "
+        "account classifications."
+    )
+
+
 def render_reports(context: ReportsContext) -> None:
     """Render reports for the selected business profile."""
     render_page_header(
         "Reports",
         "Analyze income and spending for a selected period, then review the balance sheet.",
     )
+    st.markdown(_REPORTS_RESPONSIVE_CSS, unsafe_allow_html=True)
     st.caption("Income and expense analytics")
     c1, c2 = st.columns(2)
     start = c1.date_input(
@@ -110,10 +191,11 @@ def render_reports(context: ReportsContext) -> None:
         st.stop()
     category_paths = hierarchy_paths(categories)
     summary = profit_and_loss(transactions, start=start, end=end)
-    a, b, c = st.columns(3, gap="small")
-    a.metric("Income", money(summary["income"]))
-    b.metric("Expenses", money(summary["expenses"]))
-    c.metric("Net", money(summary["net"]))
+    with st.container(key="reports_summary_metrics"):
+        a, b, c = st.columns(3, gap="small")
+        a.metric("Income", money(summary["income"]))
+        b.metric("Expenses", money(summary["expenses"]))
+        c.metric("Net", money(summary["net"]))
     monthly = pd.DataFrame(
         monthly_performance(transactions, start=start, end=end)
     ).rename(columns={"month": "Month", "income": "Income", "expenses": "Expenses"})
@@ -133,63 +215,28 @@ def render_reports(context: ReportsContext) -> None:
             )
         ]
     )
-    left, right = st.columns(2)
-    with left:
-        st.subheader("Monthly performance")
-        if not monthly.empty:
-            monthly_chart = px.bar(
-                monthly,
-                x="Month",
-                y=["Income", "Expenses"],
-                barmode="group",
-                color_discrete_sequence=["#3267D6", "#8EA5D5"],
-                labels={"value": "Amount", "variable": "Series"},
-            )
-            monthly_chart.update_layout(
-                height=300,
-                margin={"l": 12, "r": 12, "t": 28, "b": 12},
-                legend_title_text="",
-            )
-            monthly_chart.update_yaxes(
-                title="Amount",
-                tickprefix="$",
-                tickformat=",.2f",
-                rangemode="tozero",
-            )
-            st.plotly_chart(
-                monthly_chart,
-                width="stretch",
-            )
-        else:
-            st.info("No activity in this period.")
-    with right:
-        st.subheader("Expenses by category")
-        if not by_category.empty:
-            category_chart = px.bar(
-                by_category,
-                x="Total",
-                y="Category",
-                orientation="h",
-                color_discrete_sequence=["#3267D6"],
-                labels={"Total": "Amount", "Category": "Expense category"},
-            )
-            category_chart.update_layout(
-                height=300,
-                margin={"l": 12, "r": 12, "t": 28, "b": 12},
-                showlegend=False,
-            )
-            category_chart.update_xaxes(
-                title="Amount",
-                tickprefix="$",
-                tickformat=",.2f",
-                rangemode="tozero",
-            )
-            st.plotly_chart(
-                category_chart,
-                width="stretch",
-            )
-        else:
-            st.info("No expenses in this period.")
+    with st.container(key="reports_charts"):
+        left, right = st.columns(2)
+        with left:
+            st.subheader("Monthly performance")
+            if not monthly.empty:
+                monthly_chart = _monthly_performance_chart(monthly)
+                st.plotly_chart(
+                    monthly_chart,
+                    width="stretch",
+                )
+            else:
+                st.info("No activity in this period.")
+        with right:
+            st.subheader("Expenses by category")
+            if not by_category.empty:
+                category_chart = _expense_category_chart(by_category)
+                st.plotly_chart(
+                    category_chart,
+                    width="stretch",
+                )
+            else:
+                st.info("No expenses in this period.")
     if category_detail_rows:
         st.caption("Layer 1 totals include direct activity and all Layer 2 children.")
         st.dataframe(
@@ -228,47 +275,51 @@ def render_reports(context: ReportsContext) -> None:
     st.caption("The As of date is independent from the income-and-expense period.")
     as_of = st.date_input("As of", date.today(), key="balance_sheet_date")
     statement = balance_sheet(accounts, transactions, as_of=as_of)
-    asset_metric, liability_metric, equity_metric = st.columns(3)
-    asset_metric.metric("Total assets", money(statement["total_assets"]))
-    liability_metric.metric("Total liabilities", money(statement["total_liabilities"]))
-    equity_metric.metric("Total equity", money(statement["total_equity"]))
+    with st.container(key="reports_statement_metrics"):
+        asset_metric, liability_metric, equity_metric = st.columns(3)
+        asset_metric.metric("Total assets", money(statement["total_assets"]))
+        liability_metric.metric(
+            "Total liabilities", money(statement["total_liabilities"])
+        )
+        equity_metric.metric("Total equity", money(statement["total_equity"]))
 
-    asset_column, liability_column, equity_column = st.columns(3)
-    for column, title, frame in (
-        (asset_column, "Assets", _statement_frame(statement["assets"])),
-        (liability_column, "Liabilities", _statement_frame(statement["liabilities"])),
-        (
-            equity_column,
-            "Equity",
-            _statement_frame(
-                statement["equity"],
-                current_earnings=statement["current_earnings"],
+    with st.container(key="reports_statement_tables"):
+        asset_column, liability_column, equity_column = st.columns(3)
+        for column, title, frame in (
+            (asset_column, "Assets", _statement_frame(statement["assets"])),
+            (
+                liability_column,
+                "Liabilities",
+                _statement_frame(statement["liabilities"]),
             ),
-        ),
-    ):
-        with column:
-            st.markdown(f"**{title}**")
-            if frame.empty:
-                st.caption("No accounts")
-            else:
-                st.dataframe(
-                    frame,
-                    hide_index=True,
-                    width="stretch",
-                    column_config={
-                        "Balance": st.column_config.NumberColumn(format="$%.2f")
-                    },
-                )
+            (
+                equity_column,
+                "Equity",
+                _statement_frame(
+                    statement["equity"],
+                    current_earnings=statement["current_earnings"],
+                ),
+            ),
+        ):
+            with column:
+                st.markdown(f"**{title}**")
+                if frame.empty:
+                    st.caption("No accounts")
+                else:
+                    st.dataframe(
+                        frame,
+                        hide_index=True,
+                        width="stretch",
+                        column_config={
+                            "Balance": st.column_config.NumberColumn(format="$%.2f")
+                        },
+                    )
     if abs(statement["difference"]) < 0.005:
         st.markdown("**Status: Balanced** — Assets = Liabilities + Equity.")
         st.success("Balance sheet is balanced.")
     else:
         st.markdown("**Status: Out of balance** — review the difference below.")
-        st.warning(
-            "Balance sheet is out of balance by "
-            f"{money(statement['difference'])}. Review opening balances and "
-            "account classifications."
-        )
+        st.warning(_out_of_balance_message(statement["difference"]))
     st.caption(
         "Liabilities and equity are presented with conventional positive "
         "balances. Enter their opening ledger balances as negative amounts."
