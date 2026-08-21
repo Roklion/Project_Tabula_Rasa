@@ -2760,6 +2760,7 @@ class TestGoogleSheetsStorage:
 
         assert raised.value.outcome == "not_applied"
         assert raised.value.retryable is False
+        assert "Do not retry" in str(raised.value)
 
     def test_uncertain_bulk_readback_failure_is_ambiguous(self) -> None:
         first, second, replacement = self._bulk_transaction_fixture()
