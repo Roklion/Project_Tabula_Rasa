@@ -149,6 +149,33 @@ after leaving Transactions and returning. If the current edit row is filtered
 out, selection moves to the first visible row; if none remain, the stale edit
 selection is cleared.
 
+### Bulk transaction actions
+
+The ledger defaults to **Edit** mode, where the table selects one row and the
+existing transaction editor remains available. Choose **Bulk** mode explicitly
+to select multiple rows from the currently visible result set. Changing the
+business, filters, search, mode, or navigation clears the bulk selection.
+
+Bulk mode provides only these actions:
+
+- **Export selected** downloads the selected user-facing ledger columns in the
+  current visible order without changing the workbook.
+- **Change category** is available only for a homogeneous Income or Expense
+  selection and offers categories of that same kind.
+- **Permanently delete selected** shows the count and aggregate absolute amount,
+  requires an explicit acknowledgement, and removes only the ledger rows. The
+  linked receipt references are removed, but the Google Drive files remain and
+  become unreferenced files.
+
+Category changes and deletions re-read the selected stable transaction IDs and
+resolve worksheet rows immediately before one atomic Google Sheets
+`spreadsheets.batchUpdate` request. Google validates the complete request before
+applying it ([API reference](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets/batchUpdate)); a collaborator can still
+change the final sheet. If a network response is uncertain, the application
+reads the selected IDs again and reports whether the batch fully applied, did
+not apply and is safely retryable, or has a mixed/ambiguous outcome. It never
+blindly retries an ambiguous mutation.
+
 The application validates required references, fresh account/category state,
 and duplicate submissions before writing. A success message appears only after
 Google Sheets confirms the operation.

@@ -1105,6 +1105,9 @@ The redesign may adjust responsive presentation and column widths, but must not 
 
 The ledger has two explicit modes.
 
+Bulk mode implements the following behavior: it is entered explicitly, selects
+only visible rows, and exposes only the approved actions below.
+
 #### Edit mode — default
 
 - Uses single-row selection.
@@ -1112,7 +1115,7 @@ The ledger has two explicit modes.
 - A separate transaction selector remains available inside that expander.
 - The user can choose any transaction in the current filtered and searched result set.
 
-#### Bulk mode — proposed
+#### Bulk mode — current
 
 - Uses multi-row selection.
 - The edit expander is disabled or visually de-emphasized while bulk mode is active.
@@ -1163,7 +1166,7 @@ Categories table:
 
 Report and profile tables must preserve the fields specified in their page contracts.
 
-### 17.7 Proposed bulk ledger actions
+### 17.7 Current bulk ledger actions
 
 Bulk actions are available only in explicit Bulk mode.
 
@@ -1200,6 +1203,15 @@ Not approved as initial bulk actions:
 - Add tags
 
 Do not add reconciliation, import-source, or unsupported status columns.
+
+Bulk category changes and deletions use one Google Sheets
+[`spreadsheets.batchUpdate`](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets/batchUpdate)
+request per mutation. Google validates every request before applying the batch
+and guarantees that the requests are applied atomically; a collaborator may
+still change the final sheet while the operation is in flight. An uncertain
+response is followed by a fresh ID-based read and is classified as fully
+applied, not applied and safely retryable, or mixed/ambiguous. The application
+never retries an ambiguous mutation automatically.
 
 ### 17.8 Table empty states
 

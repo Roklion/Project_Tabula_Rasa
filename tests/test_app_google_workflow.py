@@ -20,6 +20,7 @@ RECEIPT_CREATE_GUARDS_SCENARIO = Path(__file__).with_name(
 HIERARCHY_SCENARIO = Path(__file__).with_name(
     "_app_hierarchy_workflow_scenario.py"
 )
+BULK_SCENARIO = Path(__file__).with_name("_app_transaction_bulk_scenario.py")
 
 
 class TestAppGoogleWorkflow:
@@ -62,3 +63,6 @@ class TestAppGoogleWorkflow:
 
     def test_hierarchy_workflows_and_profile_isolation(self) -> None:
         self._run_scenario(HIERARCHY_SCENARIO)
+
+    def test_transaction_bulk_actions_and_profile_isolation(self) -> None:
+        self._run_scenario(BULK_SCENARIO)
