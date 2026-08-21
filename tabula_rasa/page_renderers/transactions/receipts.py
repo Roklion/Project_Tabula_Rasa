@@ -139,11 +139,9 @@ def receipt_creation_counts(workflow: Mapping[str, Any]) -> tuple[int, int]:
 
 def _receipt_folder(context: TransactionsContext) -> Mapping[str, object] | None:
     drive_settings = context.profile_secrets.get("google_drive")
-    receipt_folder = (
-        drive_settings.get("receipt_folder")
-        if isinstance(drive_settings, Mapping)
-        else None
-    )
+    if not isinstance(drive_settings, Mapping):
+        return None
+    receipt_folder = drive_settings.get("receipt_folder")
     return receipt_folder if isinstance(receipt_folder, Mapping) else None
 
 
