@@ -31,7 +31,7 @@ def test_hierarchy_responsive_css_scopes_table_and_form_behavior() -> None:
         hierarchy_ui._HIERARCHY_RESPONSIVE_CSS
     )
     assert "overflow-x: auto" in hierarchy_ui._HIERARCHY_RESPONSIVE_CSS
-    assert "min-width: 100%" in hierarchy_ui._HIERARCHY_RESPONSIVE_CSS
+    assert "max-width: 100%" in hierarchy_ui._HIERARCHY_RESPONSIVE_CSS
 
 
 def test_account_page_frame_preserves_columns_states_and_rollups() -> None:
