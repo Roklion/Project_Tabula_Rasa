@@ -139,11 +139,6 @@ def render_accounts(context: AccountsContext) -> None:
         accounts, transactions
     )
     account_paths = hierarchy_paths(accounts)
-    account_option_ids = [
-        str(account.get("id") or "").strip()
-        for account in ordered_hierarchy(accounts)
-        if str(account.get("id") or "").strip()
-    ]
     table_key = (
         f"account_table_{context.profile_key}_"
         f"{st.session_state.get('account_table_generation', 0)}"
@@ -256,7 +251,7 @@ def render_accounts(context: AccountsContext) -> None:
         with st.expander("Edit or deactivate account", expanded=bool(selected_rows)):
             account_id = st.selectbox(
                 "Account to manage",
-                account_option_ids,
+                account_ids,
                 format_func=account_paths.get,
                 key="edit_account_id",
             )

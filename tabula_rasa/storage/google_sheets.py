@@ -1090,9 +1090,15 @@ class GoogleSheetsStorage:
         self, *, active_only: bool = True, _force_refresh: bool = False
     ) -> list[dict[str, Any]]:
         accounts = []
+        account_ids: set[str] = set()
         for row in self._rows("Accounts", force_refresh=_force_refresh):
             record: dict[str, Any] = dict(row.values)
             record["id"] = _clean_text(record.get("id"), "ID", required=True)
+            if record["id"] in account_ids:
+                raise StorageValidationError(
+                    "Account IDs must be unique after normalization"
+                )
+            account_ids.add(record["id"])
             record["name"] = _clean_text(
                 record.get("name"), "Account name", required=True
             )
@@ -1229,10 +1235,16 @@ class GoogleSheetsStorage:
             dict(row.values)
             for row in self._rows("Categories", force_refresh=_force_refresh)
         ]
+        category_ids: set[str] = set()
         for category in categories:
             category["id"] = _clean_text(
                 category.get("id"), "ID", required=True
             )
+            if category["id"] in category_ids:
+                raise StorageValidationError(
+                    "Category IDs must be unique after normalization"
+                )
+            category_ids.add(category["id"])
             category["name"] = _clean_text(
                 category.get("name"), "Category name", required=True
             )

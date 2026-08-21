@@ -739,6 +739,35 @@ class TestGoogleSheetsStorage:
         assert listed_category["parent_id"] == category_parent["id"]
         assert listed_category["kind"] == "Expense"
 
+    def test_list_records_rejects_ids_that_collide_after_normalization(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        duplicate_account = self.storage.create_account("Savings", "Bank")
+        account_sheet = self.workbook.sheets["Accounts"]
+        duplicate_account_row = next(
+            row
+            for row in account_sheet.rows[1:]
+            if row[0] == duplicate_account["id"]
+        )
+        duplicate_account_row[account_sheet.rows[0].index("id")] = (
+            f" {account['id']} "
+        )
+        with pytest.raises(StorageValidationError, match="unique"):
+            self.storage.list_accounts(active_only=False, _force_refresh=True)
+
+        category = self.storage.create_category("Office", "Expense")
+        duplicate_category = self.storage.create_category("Travel", "Expense")
+        category_sheet = self.workbook.sheets["Categories"]
+        duplicate_category_row = next(
+            row
+            for row in category_sheet.rows[1:]
+            if row[0] == duplicate_category["id"]
+        )
+        duplicate_category_row[category_sheet.rows[0].index("id")] = (
+            f" {category['id']} "
+        )
+        with pytest.raises(StorageValidationError, match="unique"):
+            self.storage.list_categories(_force_refresh=True)
+
     def test_list_transactions_normalizes_category_and_date(self) -> None:
         account = self.storage.create_account("Checking", "Bank")
         category = self.storage.create_category("Office", "Expense")
