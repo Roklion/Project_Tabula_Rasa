@@ -19,6 +19,7 @@ from tabula_rasa.storage.google_sheets import (
     SHEETS_SCOPE,
     SHEETS_READONLY_SCOPE,
     StorageAuthenticationError,
+    StorageBulkMutationUncertainError,
     StorageConflictError,
     StorageInitializationError,
     StorageNotFoundError,
@@ -2461,6 +2462,86 @@ class TestGoogleSheetsStorage:
             reverse=True,
         )
         assert self.storage.list_transactions() == []
+
+    def test_bulk_category_change_rejects_row_drift_after_snapshot(self) -> None:
+        first, second, replacement = self._bulk_transaction_fixture()
+        unrelated = self.storage.create_transaction(
+            txn_date="2026-07-20",
+            kind="Expense",
+            amount=3,
+            account_id=first["account_id"],
+            category_id=first["category_id"],
+        )
+        expected = [
+            transaction
+            for transaction in self.storage.list_transactions(_force_refresh=True)
+            if transaction["id"] in {first["id"], second["id"]}
+        ]
+        original_batch = self.workbook.batch_update
+
+        def reorder_before_batch(body: dict[str, object]) -> None:
+            transaction_sheet = self.workbook.sheets["Transactions"]
+            transaction_sheet.rows[1], transaction_sheet.rows[3] = (
+                transaction_sheet.rows[3],
+                transaction_sheet.rows[1],
+            )
+            original_batch(body)
+
+        self.workbook.batch_update = Mock(side_effect=reorder_before_batch)
+
+        with pytest.raises(StorageBulkMutationUncertainError) as raised:
+            self.storage.bulk_change_transaction_category(
+                [first["id"], second["id"]],
+                expected_transactions=expected,
+                category_id=replacement["id"],
+            )
+
+        assert raised.value.outcome == "mixed_ambiguous"
+        assert raised.value.retryable is False
+        assert unrelated["id"] in {
+            transaction["id"] for transaction in self.storage.list_transactions()
+        }
+
+    def test_bulk_delete_rejects_row_drift_after_snapshot(self) -> None:
+        first, second, _ = self._bulk_transaction_fixture()
+        unrelated = self.storage.create_transaction(
+            txn_date="2026-07-20",
+            kind="Expense",
+            amount=3,
+            account_id=first["account_id"],
+            category_id=first["category_id"],
+        )
+        expected = [
+            transaction
+            for transaction in self.storage.list_transactions(_force_refresh=True)
+            if transaction["id"] in {first["id"], second["id"]}
+        ]
+        original_batch = self.workbook.batch_update
+
+        def reorder_before_batch(body: dict[str, object]) -> None:
+            transaction_sheet = self.workbook.sheets["Transactions"]
+            transaction_sheet.rows[1], transaction_sheet.rows[3] = (
+                transaction_sheet.rows[3],
+                transaction_sheet.rows[1],
+            )
+            original_batch(body)
+
+        self.workbook.batch_update = Mock(side_effect=reorder_before_batch)
+
+        with pytest.raises(StorageBulkMutationUncertainError) as raised:
+            self.storage.bulk_delete_transactions(
+                [first["id"], second["id"]],
+                expected_transactions=expected,
+            )
+
+        assert raised.value.outcome == "mixed_ambiguous"
+        assert raised.value.retryable is False
+        assert first["id"] in {
+            transaction["id"] for transaction in self.storage.list_transactions()
+        }
+        assert unrelated["id"] not in {
+            transaction["id"] for transaction in self.storage.list_transactions()
+        }
 
     def test_bulk_mutation_rejects_changed_complete_selection(self) -> None:
         first, second, replacement = self._bulk_transaction_fixture()

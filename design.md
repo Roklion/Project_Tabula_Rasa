@@ -1105,7 +1105,7 @@ The redesign may adjust responsive presentation and column widths, but must not 
 
 The ledger has two explicit modes.
 
-Bulk mode is implemented current behavior: it is entered explicitly, selects
+Bulk mode implements the following behavior: it is entered explicitly, selects
 only visible rows, and exposes only the approved actions below.
 
 #### Edit mode — default

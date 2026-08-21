@@ -181,6 +181,8 @@ def render_ledger(
             "ID",
         ]
     ]
+    transaction_ids = transaction_frame["ID"].tolist()
+    transaction_ids_set = set(transaction_ids)
     searchable_rows = transaction_frame.to_dict(orient="records")
     matched_rows = filter_transaction_rows(searchable_rows, search_query)
     matched_ids = {str(row["ID"]) for row in matched_rows}
@@ -204,10 +206,18 @@ def render_ledger(
         mode,
     )
     previous_scope = st.session_state.get("transaction_bulk_scope")
-    if previous_scope != selection_scope:
-        if previous_scope is not None or st.session_state.get(
-            _bulk_selection_key(context.profile_key)
-        ):
+    selected_scope_ids = tuple(
+        str(transaction_id)
+        for transaction_id in st.session_state.get(
+            _bulk_selection_key(context.profile_key), ()
+        )
+    )
+    scope_changed = previous_scope != selection_scope
+    selection_is_stale = any(
+        transaction_id not in transaction_ids_set for transaction_id in selected_scope_ids
+    )
+    if scope_changed or selection_is_stale:
+        if selected_scope_ids:
             _clear_bulk_selection(context.profile_key)
         st.session_state["transaction_bulk_scope"] = selection_scope
     transaction_ledger_key = "transaction_ledger_" f"{context.profile_key}_" f"{st.session_state.get('transaction_ledger_generation', 0)}"
@@ -231,8 +241,6 @@ def render_ledger(
                 "No transactions match the active date, type, or account filters."
             )
     st.caption(f"Showing {len(transaction_frame)} transaction(s).")
-    transaction_ids = transaction_frame["ID"].tolist()
-
     if transaction_ids:
         if st.session_state.get("edit_transaction_id") not in transaction_ids:
             st.session_state["edit_transaction_id"] = transaction_ids[0]
@@ -273,10 +281,6 @@ def render_ledger(
                 _bulk_selection_key(context.profile_key), ()
             )
         )
-        transaction_ids_set = set(transaction_ids)
-        if any(transaction_id not in transaction_ids_set for transaction_id in selected_ids):
-            _clear_bulk_selection(context.profile_key)
-            selected_ids = ()
         st.caption(f"{len(selected_ids)} transaction(s) selected")
         if selected_ids:
             selected_by_id = {
@@ -306,13 +310,13 @@ def render_ledger(
                 )
             else:
                 common_kind = next(iter(selected_kinds))
-                category_map = {
-                    category_paths[category_id]: category_id
-                    for category in categories
-                    if category["kind"] == common_kind
-                    and (category_id := str(category.get("id") or "").strip())
-                    and category_id in category_paths
-                }
+                category_map = {}
+                for category in categories:
+                    if category["kind"] != common_kind:
+                        continue
+                    category_id = str(category.get("id") or "").strip()
+                    if category_id in category_paths:
+                        category_map[category_paths[category_id]] = category_id
                 if not category_map:
                     st.info(f"No categories of type {common_kind.lower()} are available.")
                 else:

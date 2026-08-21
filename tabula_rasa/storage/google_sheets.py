@@ -1179,6 +1179,25 @@ class GoogleSheetsStorage:
             retryable=False,
         ) from error
 
+    def _verify_bulk_success(
+        self,
+        *,
+        operation: str,
+        postcondition: Callable[[Mapping[str, Mapping[str, str]]], bool],
+    ) -> None:
+        current_rows = self._rows("Transactions", force_refresh=True)
+        current_by_id = {
+            str(row.values["id"]): dict(row.values) for row in current_rows
+        }
+        if postcondition(current_by_id):
+            return
+        raise StorageBulkMutationUncertainError(
+            f"The {operation} batch completed but its postcondition is ambiguous. "
+            "Review the selected rows before retrying.",
+            outcome="mixed_ambiguous",
+            retryable=False,
+        )
+
     def _batch_update_spreadsheet(self, requests: Sequence[Mapping[str, Any]]) -> None:
         if not requests:
             return
@@ -1263,6 +1282,18 @@ class GoogleSheetsStorage:
             if outcome is not None:
                 return outcome
             raise AssertionError("Bulk category postcondition did not classify")
+        self._verify_bulk_success(
+            operation="category change",
+            postcondition=lambda current: all(
+                item in current
+                and {
+                    **current_by_id[item],
+                    "category_id": category_id,
+                }
+                == current[item]
+                for item in current_by_id
+            ),
+        )
         self._invalidate("Transactions")
         return {"status": "fully_applied", "count": str(len(selected_rows))}
 
@@ -1314,6 +1345,12 @@ class GoogleSheetsStorage:
             if outcome is not None:
                 return outcome
             raise AssertionError("Bulk deletion postcondition did not classify")
+        self._verify_bulk_success(
+            operation="transaction deletion",
+            postcondition=lambda current: not any(
+                item in current for item in current_by_id
+            ),
+        )
         self._invalidate("Transactions")
         return {"status": "fully_applied", "count": str(len(selected_rows))}
 
