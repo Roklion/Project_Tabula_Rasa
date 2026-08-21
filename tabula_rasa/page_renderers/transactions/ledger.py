@@ -14,6 +14,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     clear_receipt_creation_recovery,
     render_receipts,
 )
+from tabula_rasa.page_renderers.transactions.search import filter_transaction_rows
 from tabula_rasa.storage import StorageError, decode_receipt_references
 
 
@@ -72,9 +73,32 @@ def render_ledger(
     selected_account_ids = [
         ledger_account_map[name] for name in selected_account_names
     ]
+    table_generation = st.session_state.get("transaction_ledger_generation", 0)
+    search_state_key = (
+        f"ledger_search_{context.profile_key}_{table_generation}"
+    )
+
+    def clear_search() -> None:
+        st.session_state[search_state_key] = ""
+
+    search_query = st.text_input(
+        "Search transactions",
+        key=search_state_key,
+        placeholder="Type, account, payee, description, reference, or ID",
+        help=(
+            "Searches Type, Account, To account, Category, Payee, "
+            "Description, Reference, and ID."
+        ),
+    )
+    if search_query:
+        st.button(
+            "Clear search",
+            key=f"ledger_search_clear_{context.profile_key}_{table_generation}",
+            on_click=clear_search,
+        )
     try:
         all_transactions = context.storage.list_transactions()
-        transactions = context.storage.list_transactions(
+        structured_transactions = context.storage.list_transactions(
             start=start,
             end=end,
             kind=None if filter_type == "All" else filter_type,
@@ -83,10 +107,14 @@ def render_ledger(
     except StorageError as error:
         context.report_storage_error(error)
         st.stop()
-    transaction_frame = ledger_frame(transactions, accounts, categories)
+    transaction_frame = ledger_frame(
+        structured_transactions,
+        accounts,
+        categories,
+    )
     transaction_frame["Receipt"] = [
         "\U0001f4ce" if transaction_has_receipts(transaction) else ""
-        for transaction in transactions
+        for transaction in structured_transactions
     ]
     transaction_frame = transaction_frame.sort_values(
         "Date",
@@ -109,13 +137,45 @@ def render_ledger(
             "ID",
         ]
     ]
+    searchable_rows = transaction_frame.to_dict(orient="records")
+    matched_rows = filter_transaction_rows(searchable_rows, search_query)
+    matched_ids = {str(row["ID"]) for row in matched_rows}
+    transactions = [
+        transaction
+        for transaction in structured_transactions
+        if str(transaction.get("id", "")) in matched_ids
+    ]
+    transaction_frame = transaction_frame[
+        transaction_frame["ID"].isin(matched_ids)
+    ].reset_index(drop=True)
+    if not all_transactions:
+        st.info("No transactions exist yet. Add a transaction to populate the ledger.")
+    elif transaction_frame.empty:
+        if search_query.strip():
+            st.info(
+                "No transactions match your search and current filters. "
+                "Clear search or adjust the filters."
+            )
+        else:
+            st.info(
+                "No transactions match the active date, type, or account filters."
+            )
+    st.caption(f"Showing {len(transaction_frame)} transaction(s).")
     transaction_ids = transaction_frame["ID"].tolist()
+
+    if transaction_ids:
+        if st.session_state.get("edit_transaction_id") not in transaction_ids:
+            st.session_state["edit_transaction_id"] = transaction_ids[0]
+    else:
+        # Keep the widget key initialized while the edit expander is hidden;
+        # this avoids a stale selectbox event being replayed on the next run.
+        st.session_state["edit_transaction_id"] = None
 
     def select_ledger_transaction() -> None:
         selected_rows = st.session_state[
             transaction_ledger_key
         ].selection.rows
-        if selected_rows:
+        if selected_rows and selected_rows[0] < len(transaction_ids):
             st.session_state["edit_transaction_id"] = transaction_ids[
                 selected_rows[0]
             ]
@@ -137,8 +197,6 @@ def render_ledger(
     )
     if not transaction_frame.empty:
         selected_rows = ledger_event.selection.rows
-        if st.session_state.get("edit_transaction_id") not in transaction_ids:
-            st.session_state["edit_transaction_id"] = transaction_ids[0]
 
         def transaction_label(transaction_id: str) -> str:
             row = transaction_frame.loc[

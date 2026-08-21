@@ -1,0 +1,40 @@
+"""Pure helpers for searching the visible transaction ledger fields."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from typing import TypeVar
+
+
+SEARCHABLE_TRANSACTION_FIELDS = (
+    "Type",
+    "Account",
+    "To account",
+    "Category",
+    "Payee",
+    "Description",
+    "Reference",
+    "ID",
+)
+
+Row = TypeVar("Row", bound=Mapping[str, object])
+
+
+def filter_transaction_rows(rows: Sequence[Row], query: str) -> list[Row]:
+    """Return rows whose visible text contains the trimmed query.
+
+    An empty or whitespace-only query is intentionally a no-op.  The helper
+    receives the already-rendered ledger rows, so receipt metadata, dates, and
+    amounts cannot accidentally become searchable.
+    """
+    normalized_query = query.strip().casefold()
+    if not normalized_query:
+        return list(rows)
+    return [
+        row
+        for row in rows
+        if any(
+            normalized_query in str(row.get(field, "") or "").casefold()
+            for field in SEARCHABLE_TRANSACTION_FIELDS
+        )
+    ]

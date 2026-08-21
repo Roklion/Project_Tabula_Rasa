@@ -239,6 +239,25 @@ def main() -> None:
         ledger_dates = app.dataframe[0].value["Date"].tolist()
         assert ledger_dates == sorted(ledger_dates, reverse=True)
 
+        by_label(app.selectbox, "Type").set_value("Expense").run()
+        by_label(app.multiselect, "Accounts").set_value(
+            ["Owner-paid expenses"]
+        ).run()
+        search = by_label(app.text_input, "Search transactions")
+        search.input("  test VENDOR  ").run()
+        assert app.dataframe[0].value["Payee"].tolist() == ["Test vendor"]
+        assert app.dataframe[0].value["Type"].tolist() == ["Expense"]
+
+        by_label(app.button, "Clear search").click().run()
+        assert by_label(app.text_input, "Search transactions").value == ""
+        assert by_label(app.selectbox, "Type").value == "Expense"
+        assert by_label(app.multiselect, "Accounts").value == [
+            "Owner-paid expenses"
+        ]
+        assert len(app.dataframe[0].value) == 1
+        by_label(app.selectbox, "Type").set_value("All").run()
+        by_label(app.multiselect, "Accounts").set_value([]).run()
+
         transaction = next(
             item for item in storage.list_transactions() if item["kind"] == "Expense"
         )
@@ -273,6 +292,14 @@ def main() -> None:
         ).check()
         by_label(app.button, "Permanently delete").click().run()
         assert len(storage.list_transactions()) == 2
+
+        by_label(app.text_input, "Search transactions").input("not-found").run()
+        assert app.dataframe[0].value.empty
+        assert any(
+            "No transactions match your search" in str(message.value)
+            for message in app.info
+        )
+        by_label(app.button, "Clear search").click().run()
 
         app.radio[0].set_value("Accounts").run()
         app.radio[0].set_value("Transactions").run()

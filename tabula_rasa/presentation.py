@@ -289,6 +289,7 @@ def reset_profile_presentation_state(
         "receipt-existing-",
         "prepared-live-exports:",
         "ledger_filter_",
+        "ledger_search_",
     )
     for key in list(session_state):
         if key in keys or key.startswith(prefixes):
