@@ -1264,6 +1264,11 @@ class GoogleSheetsStorage:
             )
         if all(transaction["category_id"] == category_id for transaction in current_by_id.values()):
             return {"status": "fully_applied", "count": "0"}
+        pending_by_id = {
+            transaction_id: transaction
+            for transaction_id, transaction in current_by_id.items()
+            if transaction["category_id"] != category_id
+        }
 
         headers = self._headers("Transactions")
         category_column = self._sheet_column_index(headers, "category_id")
@@ -1284,7 +1289,7 @@ class GoogleSheetsStorage:
                     "fields": "userEnteredValue",
                 }
             }
-            for transaction_id in selected_rows
+            for transaction_id in pending_by_id
         ]
         try:
             self._batch_update_spreadsheet(requests)
@@ -1292,15 +1297,15 @@ class GoogleSheetsStorage:
             outcome = self._bulk_postcondition_error(
                 operation="category change",
                 error=error,
-                expected_by_id=current_by_id,
+                expected_by_id=pending_by_id,
                 postcondition=lambda current: all(
-                    item in current and current[item] == current_by_id[item]
-                    for item in current_by_id
+                    item in current and current[item] == pending_by_id[item]
+                    for item in pending_by_id
                 ),
                 fully_applied=lambda current: all(
                     item in current
                     and current[item].get("category_id") == category_id
-                    for item in current_by_id
+                    for item in pending_by_id
                 ),
             )
             if outcome is not None:
@@ -1311,11 +1316,11 @@ class GoogleSheetsStorage:
             postcondition=lambda current: all(
                 item in current
                 and current[item].get("category_id") == category_id
-                for item in current_by_id
+                for item in pending_by_id
             ),
         )
         self._invalidate("Transactions")
-        return {"status": "fully_applied", "count": str(len(selected_rows))}
+        return {"status": "fully_applied", "count": str(len(pending_by_id))}
 
     def bulk_delete_transactions(
         self,

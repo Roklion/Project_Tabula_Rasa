@@ -347,7 +347,6 @@ def render_ledger(
                             width="stretch",
                         )
                     if category_requested:
-                        _clear_bulk_selection(context.profile_key)
                         context.confirmed_write(
                             "bulk_change_transaction_category",
                             {
@@ -386,7 +385,6 @@ def render_ledger(
                 if not confirm_delete:
                     st.error("Confirm the permanent deletion before continuing.")
                 else:
-                    _clear_bulk_selection(context.profile_key)
                     context.confirmed_write(
                         "bulk_delete_transactions",
                         {"ids": list(selected_ids), "expected": expected_selected},

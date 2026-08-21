@@ -2452,6 +2452,29 @@ class TestGoogleSheetsStorage:
 
         assert result == {"status": "fully_applied", "count": "2"}
 
+    def test_bulk_category_change_skips_rows_already_in_target_category(self) -> None:
+        first, second, replacement = self._bulk_transaction_fixture()
+        transaction_sheet = self.workbook.sheets["Transactions"]
+        category_index = transaction_sheet.rows[0].index("category_id")
+        transaction_sheet.rows[1][category_index] = replacement["id"]
+        expected = [
+            transaction
+            for transaction in self.storage.list_transactions(_force_refresh=True)
+            if transaction["id"] in {first["id"], second["id"]}
+        ]
+        workbook_batch = Mock(wraps=self.workbook.batch_update)
+        self.workbook.batch_update = workbook_batch
+
+        result = self.storage.bulk_change_transaction_category(
+            [first["id"], second["id"]],
+            expected_transactions=expected,
+            category_id=replacement["id"],
+        )
+
+        assert result == {"status": "fully_applied", "count": "1"}
+        requests = workbook_batch.call_args.args[0]["requests"]
+        assert len(requests) == 1
+
     def test_bulk_category_change_ignores_unrelated_concurrent_edit(self) -> None:
         first, second, replacement = self._bulk_transaction_fixture()
         expected = [
