@@ -6,9 +6,9 @@ import pytest
 
 from tabula_rasa.google_drive import GoogleDriveAccessError
 from tabula_rasa.page_renderers.transactions.receipts import (
-    advance_receipt_creation_workflow,
     new_receipt_creation_workflow,
     prepare_receipt_uploads,
+    process_receipt_recovery,
     receipt_creation_counts,
 )
 
@@ -51,7 +51,7 @@ def test_prepare_receipts_preserves_duplicate_names_as_independent_items() -> No
         "receipt.pdf",
     ]
     assert prepared[0]["key"] != prepared[1]["key"]
-    assert [item["status"] for item in prepared] == ["pending", "pending"]
+    assert [item["linked"] for item in prepared] == [False, False]
 
 
 @pytest.mark.parametrize(
@@ -79,14 +79,14 @@ def test_partial_link_failure_retries_only_unresolved_receipt() -> None:
             "original_name": "receipt.pdf",
             "content": b"first",
             "mime_type": "application/pdf",
-            "status": "pending",
+            "linked": False,
         },
         {
             "key": "second",
             "original_name": "receipt.pdf",
             "content": b"second",
             "mime_type": "application/pdf",
-            "status": "pending",
+            "linked": False,
         },
     ]
     workflow = new_receipt_creation_workflow("txn-1", receipts)
@@ -108,27 +108,24 @@ def test_partial_link_failure_retries_only_unresolved_receipt() -> None:
         if receipt_id.startswith("c") and fail_second_link["value"]:
             raise RuntimeError("Sheets link failed")
 
-    advance_receipt_creation_workflow(
+    process_receipt_recovery(
         workflow,
         upload_receipt=upload,
         link_receipt=link,
     )
 
-    assert receipt_creation_counts(workflow) == (1, 1, 1)
+    assert receipt_creation_counts(workflow) == (1, 1)
     assert uploaded == ["first", "second"]
-    assert [item["status"] for item in workflow["receipts"]] == [
-        "linked",
-        "uploaded",
-    ]
+    assert [item["linked"] for item in workflow["receipts"]] == [True, False]
 
     fail_second_link["value"] = False
-    advance_receipt_creation_workflow(
+    process_receipt_recovery(
         workflow,
         upload_receipt=upload,
         link_receipt=link,
     )
 
-    assert receipt_creation_counts(workflow) == (2, 0, 0)
+    assert receipt_creation_counts(workflow) == (2, 0)
     assert uploaded == ["first", "second"]
     assert len(linked) == 3
 
@@ -150,14 +147,14 @@ def test_upload_failure_does_not_stop_later_receipts() -> None:
                 "original_name": "failed.pdf",
                 "content": b"failed",
                 "mime_type": "application/pdf",
-                "status": "pending",
+                "linked": False,
             },
             {
                 "key": "successful",
                 "original_name": "successful.pdf",
                 "content": b"successful",
                 "mime_type": "application/pdf",
-                "status": "pending",
+                "linked": False,
             },
         ],
     )
@@ -167,14 +164,11 @@ def test_upload_failure_does_not_stop_later_receipts() -> None:
             raise RuntimeError("Drive upload failed")
         return _drive_file("d", str(item["original_name"]))
 
-    advance_receipt_creation_workflow(
+    process_receipt_recovery(
         workflow,
         upload_receipt=upload,
         link_receipt=lambda _reference: None,
     )
 
-    assert [item["status"] for item in workflow["receipts"]] == [
-        "failed",
-        "linked",
-    ]
-    assert receipt_creation_counts(workflow) == (1, 0, 1)
+    assert [item["linked"] for item in workflow["receipts"]] == [False, True]
+    assert receipt_creation_counts(workflow) == (1, 1)

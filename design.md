@@ -1764,10 +1764,10 @@ Recommended states:
 
 Partial failure rules follow Section 19.3. A receipt failure never converts a confirmed transaction save into a reported total failure.
 
-Each receipt retains a session recovery state of pending, uploaded, linked, or
-failed. Successful links are never retried solely because another selected
-receipt failed; an uploaded-but-unlinked file is retried by reference rather
-than re-uploaded.
+The session retains only the saved transaction ID plus the minimum per-receipt
+recovery pointers needed to retry. Successful links are never retried solely
+because another selected receipt failed; an uploaded-but-unlinked file is
+retried by reference rather than re-uploaded.
 
 The post-creation editor remains available for later upload, retry, linking, opening, and unlinking.
 
