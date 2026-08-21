@@ -75,7 +75,8 @@ def render_ledger(
         default="Edit",
         key=f"transaction_ledger_mode_{context.profile_key}",
         help="Edit manages one row. Bulk enables only the approved multi-row actions.",
-        on_change=lambda: _change_ledger_mode(context.profile_key),
+        on_change=_change_ledger_mode,
+        args=(context.profile_key,),
     )
     mode = mode or "Edit"
     c1, c2, c3 = st.columns(3)
@@ -83,13 +84,15 @@ def render_ledger(
         "From",
         date(date.today().year, 1, 1),
         key="ledger_start",
-        on_change=lambda: _clear_bulk_selection(context.profile_key),
+        on_change=_clear_bulk_selection,
+        args=(context.profile_key,),
     )
     end = c2.date_input(
         "To",
         date.today(),
         key="ledger_end",
-        on_change=lambda: _clear_bulk_selection(context.profile_key),
+        on_change=_clear_bulk_selection,
+        args=(context.profile_key,),
     )
     filter_type = c3.selectbox(
         "Type",

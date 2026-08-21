@@ -1174,6 +1174,13 @@ class GoogleSheetsStorage:
         postcondition: Callable[[Mapping[str, Mapping[str, str]]], bool],
         fully_applied: Callable[[Mapping[str, Mapping[str, str]]], bool],
     ) -> dict[str, str] | None:
+        if not error.retryable:
+            raise StorageBulkMutationUncertainError(
+                f"The {operation} batch was rejected. Do not retry until the underlying "
+                "error is corrected.",
+                outcome="not_applied",
+                retryable=False,
+            ) from error
         try:
             current_rows = self._rows("Transactions", force_refresh=True)
         except StorageUnavailableError as read_error:
@@ -1324,7 +1331,6 @@ class GoogleSheetsStorage:
                 for item in pending_by_id
             ),
         )
-        self._invalidate("Transactions")
         return {"status": "fully_applied", "count": str(len(pending_by_id))}
 
     def bulk_delete_transactions(
@@ -1379,7 +1385,6 @@ class GoogleSheetsStorage:
                 item in current for item in current_by_id
             ),
         )
-        self._invalidate("Transactions")
         return {"status": "fully_applied", "count": str(len(selected_rows))}
 
     def list_accounts(
