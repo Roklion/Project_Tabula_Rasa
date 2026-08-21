@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from collections.abc import Mapping, Sequence
 from typing import TypeVar
 
@@ -22,8 +21,13 @@ Row = TypeVar("Row", bound=Mapping[str, object])
 
 
 def _searchable_text(value: object) -> str:
-    if value is None or isinstance(value, float) and math.isnan(value):
+    if value is None:
         return ""
+    try:
+        if value != value:
+            return ""
+    except (TypeError, ValueError):
+        pass
     return str(value).casefold()
 
 
