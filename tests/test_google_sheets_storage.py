@@ -2397,6 +2397,13 @@ class TestGoogleSheetsStorage:
         )
         return first, second, replacement
 
+    def test_bulk_mutation_rejects_empty_selection(self) -> None:
+        with pytest.raises(StorageValidationError, match="No transactions selected"):
+            self.storage.bulk_delete_transactions(
+                [],
+                expected_transactions=[],
+            )
+
     def test_bulk_category_change_uses_one_minimal_atomic_batch(self) -> None:
         first, second, replacement = self._bulk_transaction_fixture()
         expected = [
@@ -2662,6 +2669,44 @@ class TestGoogleSheetsStorage:
         assert {
             transaction["id"] for transaction in self.storage.list_transactions()
         } == {first["id"], second["id"]}
+
+    def test_uncertain_bulk_readback_failure_is_ambiguous(self) -> None:
+        first, second, replacement = self._bulk_transaction_fixture()
+        expected = [
+            transaction
+            for transaction in self.storage.list_transactions(_force_refresh=True)
+            if transaction["id"] in {first["id"], second["id"]}
+        ]
+        original_rows = self.storage._rows
+        transaction_reads = 0
+
+        def fail_second_transaction_read(
+            title: str, *, force_refresh: bool = False
+        ) -> object:
+            nonlocal transaction_reads
+            if title == "Transactions":
+                transaction_reads += 1
+                if transaction_reads == 2:
+                    raise StorageUnavailableError("readback unavailable", retryable=True)
+            return original_rows(title, force_refresh=force_refresh)
+
+        self.storage._rows = fail_second_transaction_read  # type: ignore[method-assign]
+        self.workbook.batch_update = Mock(
+            side_effect=OSError("temporary response lost before commit")
+        )
+
+        try:
+            with pytest.raises(StorageBulkMutationUncertainError) as raised:
+                self.storage.bulk_change_transaction_category(
+                    [first["id"], second["id"]],
+                    expected_transactions=expected,
+                    category_id=replacement["id"],
+                )
+        finally:
+            self.storage._rows = original_rows  # type: ignore[method-assign]
+
+        assert raised.value.outcome == "mixed_ambiguous"
+        assert raised.value.retryable is False
 
     def test_uncertain_bulk_delete_ignores_unselected_rows(self) -> None:
         first, second, _ = self._bulk_transaction_fixture()

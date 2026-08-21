@@ -1112,6 +1112,8 @@ class GoogleSheetsStorage:
             _clean_text(transaction_id, "Transaction ID", required=True)
             for transaction_id in transaction_ids
         ]
+        if not normalized_ids:
+            raise StorageValidationError("No transactions selected")
         if len(normalized_ids) != len(set(normalized_ids)):
             raise StorageValidationError("Bulk transaction IDs must be unique")
         expected_by_id = {
@@ -1124,7 +1126,15 @@ class GoogleSheetsStorage:
             raise StorageConflictError(
                 "The visible transaction selection changed; select the rows again."
             )
-        current_rows = self._rows("Transactions", force_refresh=True)
+        try:
+            current_rows = self._rows("Transactions", force_refresh=True)
+        except StorageUnavailableError as read_error:
+            raise StorageBulkMutationUncertainError(
+                "The bulk batch outcome is ambiguous because its postcondition "
+                "could not be read. Do not retry until the selected rows are reviewed.",
+                outcome="mixed_ambiguous",
+                retryable=False,
+            ) from read_error
         current_by_id: dict[str, _StoredRow] = {}
         for row in current_rows:
             row_id = str(row.values.get("id", ""))
@@ -1160,7 +1170,15 @@ class GoogleSheetsStorage:
         postcondition: Callable[[Mapping[str, Mapping[str, str]]], bool],
         fully_applied: Callable[[Mapping[str, Mapping[str, str]]], bool],
     ) -> dict[str, str] | None:
-        current_rows = self._rows("Transactions", force_refresh=True)
+        try:
+            current_rows = self._rows("Transactions", force_refresh=True)
+        except StorageUnavailableError as read_error:
+            raise StorageBulkMutationUncertainError(
+                f"The {operation} batch completed but its postcondition could not be "
+                "read. Review the selected rows before retrying.",
+                outcome="mixed_ambiguous",
+                retryable=False,
+            ) from read_error
         current_by_id = {
             str(row.values["id"]): dict(row.values) for row in current_rows
         }

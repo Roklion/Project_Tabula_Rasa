@@ -204,6 +204,7 @@ def render_ledger(
         tuple(sorted(selected_account_ids)),
         search_query.strip(),
         mode,
+        tuple(transaction_ids),
     )
     previous_scope = st.session_state.get("transaction_bulk_scope")
     selected_scope_ids = tuple(
@@ -220,7 +221,10 @@ def render_ledger(
         if selected_scope_ids:
             _clear_bulk_selection(context.profile_key)
         st.session_state["transaction_bulk_scope"] = selection_scope
-    transaction_ledger_key = "transaction_ledger_" f"{context.profile_key}_" f"{st.session_state.get('transaction_ledger_generation', 0)}"
+    transaction_ledger_key = (
+        f"transaction_ledger_{context.profile_key}_"
+        f"{st.session_state.get('transaction_ledger_generation', 0)}"
+    )
     if st.session_state.get("transaction_ledger_mode_generation", 0):
         transaction_ledger_key += f"_{st.session_state['transaction_ledger_mode_generation']}"
     if mode == "Bulk":
@@ -284,7 +288,8 @@ def render_ledger(
         st.caption(f"{len(selected_ids)} transaction(s) selected")
         if selected_ids:
             selected_by_id = {
-                str(transaction["id"]): transaction for transaction in transactions
+                str(transaction.get("id", "")): transaction
+                for transaction in transactions
             }
             expected_selected = [selected_by_id[item] for item in selected_ids]
             selected_frame = transaction_frame[
