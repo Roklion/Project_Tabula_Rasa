@@ -19,6 +19,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     render_receipt_creation_recovery,
     _workflow_configuration_matches,
     _link_recovery_configuration_matches,
+    _transaction_still_exists,
 )
 
 
@@ -79,6 +80,13 @@ def test_prepare_receipts_rejects_invalid_files_before_sheets_write(
         prepare_receipt_uploads(
             [UploadedFile(name, content, "application/octet-stream")]
         )
+
+
+def test_prepare_receipts_rejects_more_than_manifest_limit_before_sheets_write() -> None:
+    uploaded = UploadedFile("receipt.pdf", b"receipt", "application/pdf")
+
+    with pytest.raises(GoogleDriveAccessError, match="no more than 100"):
+        prepare_receipt_uploads([uploaded] * 101)
 
 
 def test_partial_link_failure_retries_only_unresolved_receipt() -> None:
@@ -325,6 +333,76 @@ def test_receipt_recovery_ignores_unrelated_profile_revision_change() -> None:
         {"id": "north-folder"},
     )
     assert "configuration_error" not in workflow
+
+
+def test_transaction_recovery_rechecks_fresh_sheets_data() -> None:
+    storage = SimpleNamespace(
+        list_transactions=lambda **kwargs: (
+            assert_force_refresh(kwargs),
+            [{"id": "txn-1"}],
+        )[1]
+    )
+    context = SimpleNamespace(storage=storage)
+
+    assert _transaction_still_exists(context, "txn-1")
+
+
+def test_transaction_recovery_does_not_upload_after_cross_session_deletion() -> None:
+    storage = SimpleNamespace(
+        list_transactions=lambda **kwargs: (
+            assert_force_refresh(kwargs),
+            [],
+        )[1]
+    )
+    context = SimpleNamespace(
+        profile_key="north",
+        storage=storage,
+        profile_secrets={"google_drive": {"receipt_folder": {"id": "folder"}}},
+        configuration_revision="revision",
+        get_drive_client=lambda *_args: (_ for _ in ()).throw(
+            AssertionError("Drive upload must not start after deletion")
+        ),
+        schedule_widget_reset=lambda _flag: None,
+    )
+    workflow = new_receipt_creation_workflow(
+        "txn-1",
+        [
+            {
+                "key": "receipt",
+                "original_name": "receipt.pdf",
+                "content": b"receipt",
+                "mime_type": "application/pdf",
+                "linked": False,
+            }
+        ],
+        profile_key="north",
+        configuration_revision="revision",
+        spreadsheet_id="",
+        receipt_folder_id="folder",
+    )
+    session_state = {receipt_creation_workflow_key("north"): workflow}
+
+    with (
+        patch.object(st, "session_state", session_state),
+        patch.object(st, "info"),
+        patch.object(st, "warning") as warning,
+        patch.object(st, "error"),
+        patch.object(st, "caption"),
+        patch.object(st, "button", return_value=True),
+        patch.object(st, "rerun", side_effect=RuntimeError("rerun")),
+    ):
+        with pytest.raises(RuntimeError, match="rerun"):
+            render_receipt_creation_recovery(context)
+
+    assert receipt_creation_workflow_key("north") not in session_state
+    warning.assert_any_call(
+        "The saved transaction no longer exists. "
+        "Start a new transaction and select its receipts again."
+    )
+
+
+def assert_force_refresh(kwargs: Mapping[str, object]) -> None:
+    assert kwargs == {"_force_refresh": True}
 
 
 def test_post_create_link_recovery_refuses_changed_storage_configuration() -> None:

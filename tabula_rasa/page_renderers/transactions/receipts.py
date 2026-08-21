@@ -10,11 +10,13 @@ from typing import Any, Callable, MutableMapping
 import streamlit as st
 
 from tabula_rasa.google_drive import (
+    GoogleDriveAccessError,
     GoogleDriveError,
     validate_receipt_upload,
 )
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
 from tabula_rasa.receipt_manifest import (
+    MAX_RECEIPT_REFERENCES,
     ReceiptManifestError,
     receipt_reference_from_drive_file,
 )
@@ -32,6 +34,10 @@ def receipt_creation_workflow_key(profile_key: str) -> str:
 
 def prepare_receipt_uploads(uploaded_files: Sequence[Any]) -> list[dict[str, Any]]:
     """Copy and validate every selected file before the Sheets write."""
+    if len(uploaded_files) > MAX_RECEIPT_REFERENCES:
+        raise GoogleDriveAccessError(
+            "Select no more than 100 receipts for one transaction."
+        )
     prepared: list[dict[str, Any]] = []
     for index, uploaded_file in enumerate(uploaded_files):
         name = str(getattr(uploaded_file, "name", "") or "")
@@ -205,6 +211,17 @@ def _workflow_complete(workflow: Mapping[str, Any]) -> bool:
     return receipt_creation_counts(workflow)[1] == 0
 
 
+def _transaction_still_exists(
+    context: TransactionsContext,
+    transaction_id: str,
+) -> bool:
+    """Confirm the recovery target still exists in fresh Sheets data."""
+    return any(
+        str(transaction.get("id", "")) == transaction_id
+        for transaction in context.storage.list_transactions(_force_refresh=True)
+    )
+
+
 def finish_receipt_creation_if_complete(
     context: TransactionsContext,
     workflow: MutableMapping[str, Any],
@@ -370,9 +387,28 @@ def render_receipt_creation_recovery(context: TransactionsContext) -> bool:
             workflow.pop("configuration_error", None)
             if _workflow_configuration_matches(context, workflow, receipt_folder):
                 try:
-                    _process_context_receipts(context, workflow, receipt_folder)
+                    if not _transaction_still_exists(context, transaction_id):
+                        st.session_state.pop(
+                            receipt_creation_workflow_key(context.profile_key),
+                            None,
+                        )
+                        st.warning(
+                            "The saved transaction no longer exists. "
+                            "Start a new transaction and select its receipts again."
+                        )
+                    else:
+                        _process_context_receipts(
+                            context,
+                            workflow,
+                            receipt_folder,
+                        )
                 except GoogleDriveError as error:
                     workflow["configuration_error"] = str(error)
+                except StorageError as error:
+                    workflow["configuration_error"] = (
+                        "The saved transaction could not be rechecked. "
+                        f"Retry unresolved receipts again: {error}"
+                    )
                 finish_receipt_creation_if_complete(context, workflow)
             st.rerun()
     return True
