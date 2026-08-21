@@ -1092,6 +1092,8 @@ class GoogleSheetsStorage:
         accounts = []
         for row in self._rows("Accounts", force_refresh=_force_refresh):
             record: dict[str, Any] = dict(row.values)
+            _clean_text(record.get("id"), "ID", required=True)
+            _clean_text(record.get("name"), "Account name", required=True)
             account_type = _clean_text(
                 record.get("type"), "Account type", required=True
             )
@@ -1222,6 +1224,16 @@ class GoogleSheetsStorage:
             dict(row.values)
             for row in self._rows("Categories", force_refresh=_force_refresh)
         ]
+        for category in categories:
+            _clean_text(category.get("id"), "ID", required=True)
+            _clean_text(category.get("name"), "Category name", required=True)
+            category_kind = _clean_text(
+                category.get("kind"), "Category kind", required=True
+            )
+            if category_kind not in CATEGORY_KINDS:
+                raise StorageValidationError(
+                    "Category kind must be Income or Expense"
+                )
         if kind is not None:
             categories = [item for item in categories if item["kind"] == kind]
         return sorted(categories, key=lambda item: (item["kind"], item["name"].casefold()))

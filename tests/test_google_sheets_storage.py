@@ -590,6 +590,43 @@ class TestGoogleSheetsStorage:
             item["parent_id"] == "" for item in self.storage.list_categories()
         )
 
+    @pytest.mark.parametrize("field", ["id", "name"])
+    def test_list_accounts_rejects_missing_required_display_fields(
+        self, field: str
+    ) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        worksheet = self.workbook.sheets["Accounts"]
+        field_index = worksheet.rows[0].index(field)
+        account_row = next(
+            row for row in worksheet.rows[1:] if row[0] == account["id"]
+        )
+        account_row[field_index] = ""
+
+        with pytest.raises(StorageValidationError, match="required"):
+            self.storage.list_accounts(active_only=False, _force_refresh=True)
+
+    @pytest.mark.parametrize(
+        ("field", "value", "message"),
+        [
+            ("id", "", "required"),
+            ("name", "", "required"),
+            ("kind", "Legacy", "must be Income or Expense"),
+        ],
+    )
+    def test_list_categories_rejects_invalid_display_fields(
+        self, field: str, value: str, message: str
+    ) -> None:
+        category = self.storage.create_category("Sales", "Income")
+        worksheet = self.workbook.sheets["Categories"]
+        field_index = worksheet.rows[0].index(field)
+        category_row = next(
+            row for row in worksheet.rows[1:] if row[0] == category["id"]
+        )
+        category_row[field_index] = value
+
+        with pytest.raises(StorageValidationError, match=message):
+            self.storage.list_categories(_force_refresh=True)
+
     def test_default_seed_does_not_recreate_renamed_defaults(self) -> None:
         self.storage.ensure_defaults()
         checking = next(
