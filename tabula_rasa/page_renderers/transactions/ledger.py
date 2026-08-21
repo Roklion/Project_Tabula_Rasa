@@ -98,7 +98,8 @@ def render_ledger(
         "Type",
         ["All", "Income", "Expense", "Transfer"],
         key=f"ledger_filter_type_{context.profile_key}",
-        on_change=lambda: _clear_bulk_selection(context.profile_key),
+        on_change=_clear_bulk_selection,
+        args=(context.profile_key,),
     )
     ledger_account_map = {
         account_paths[account_id]: account_id
@@ -114,7 +115,8 @@ def render_ledger(
             "Includes transactions where a selected account is either side "
             "of a transfer."
         ),
-        on_change=lambda: _clear_bulk_selection(context.profile_key),
+        on_change=_clear_bulk_selection,
+        args=(context.profile_key,),
     )
     selected_account_ids = [
         ledger_account_map[name] for name in selected_account_names
@@ -136,7 +138,8 @@ def render_ledger(
             "Searches Type, Account, To account, Category, Payee, "
             "Description, Reference, and ID."
         ),
-        on_change=lambda: _clear_bulk_selection(context.profile_key),
+        on_change=_clear_bulk_selection,
+        args=(context.profile_key,),
     )
     if search_query.strip():
         st.button(

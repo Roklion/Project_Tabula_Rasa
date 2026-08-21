@@ -1197,15 +1197,10 @@ class GoogleSheetsStorage:
             self._invalidate("Transactions")
             return {"status": "fully_applied", "count": str(len(expected_by_id))}
         if postcondition(current_by_id):
-            retry_message = (
-                "Review the current ledger before retrying."
-                if error.retryable
-                else "Do not retry until the underlying error is corrected."
-            )
             raise StorageBulkMutationUncertainError(
-                f"The {operation} batch was not applied. {retry_message}",
+                f"The {operation} batch was not applied. Review the current ledger before retrying.",
                 outcome="not_applied",
-                retryable=error.retryable,
+                retryable=True,
             ) from error
         raise StorageBulkMutationUncertainError(
             f"The {operation} batch outcome is ambiguous. Do not retry until the selected rows are reviewed.",
