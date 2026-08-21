@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from fractions import Fraction
+
 import pytest
 
 from tabula_rasa.page_renderers.transactions.search import filter_transaction_rows
@@ -77,6 +79,12 @@ def test_search_ignores_nan_values():
     rows = [{"Type": "Expense", "Reference": float("nan"), "ID": 1}]
 
     assert filter_transaction_rows(rows, "nan") == []
+
+
+def test_search_handles_non_float_real_values():
+    rows = [{"Type": "Expense", "Reference": Fraction(1, 3), "ID": 1}]
+
+    assert filter_transaction_rows(rows, "1/3") == rows
 
 
 @pytest.mark.parametrize("query", ["2026-01-02", "1250", "📎", "receipt-file.pdf"])

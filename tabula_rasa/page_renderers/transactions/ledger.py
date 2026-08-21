@@ -90,7 +90,7 @@ def render_ledger(
             "Description, Reference, and ID."
         ),
     )
-    if search_query:
+    if search_query.strip():
         st.button(
             "Clear search",
             key=f"ledger_search_clear_{context.profile_key}_{table_generation}",
