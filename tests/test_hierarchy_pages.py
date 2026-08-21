@@ -23,6 +23,17 @@ def test_hierarchy_page_modules_import_without_rendering_or_bootstrap() -> None:
     secrets.assert_not_called()
 
 
+def test_hierarchy_responsive_css_scopes_table_and_form_behavior() -> None:
+    assert '[data-testid="stDataFrameResizable"]' in (
+        hierarchy_ui._HIERARCHY_RESPONSIVE_CSS
+    )
+    assert '[data-testid="stHorizontalBlock"]' in (
+        hierarchy_ui._HIERARCHY_RESPONSIVE_CSS
+    )
+    assert "overflow-x: auto" in hierarchy_ui._HIERARCHY_RESPONSIVE_CSS
+    assert "min-width: 100%" in hierarchy_ui._HIERARCHY_RESPONSIVE_CSS
+
+
 def test_account_page_frame_preserves_columns_states_and_rollups() -> None:
     account_frame, account_ids, account_by_id = accounts._account_frame(
         [

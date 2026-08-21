@@ -8,6 +8,51 @@ import pandas as pd
 import streamlit as st
 
 
+_HIERARCHY_RESPONSIVE_CSS = """
+<style>
+@media (max-width: 640px) {
+    [data-testid="stMain"],
+    [data-testid="stMainBlockContainer"],
+    [data-testid="stAppViewContainer"] {
+        max-width: 100vw;
+        min-width: 0;
+        overflow-x: hidden;
+    }
+
+    [data-testid="stCaptionContainer"] {
+        overflow-wrap: anywhere;
+        white-space: normal;
+    }
+
+    [data-testid="stHorizontalBlock"] {
+        flex-wrap: wrap;
+    }
+
+    [data-testid="stHorizontalBlock"] [data-testid="stColumn"] {
+        flex: 1 1 100%;
+        min-width: 100%;
+    }
+
+    [data-testid="stDataFrame"],
+    [data-testid="stDataFrameResizable"] {
+        max-width: 100% !important;
+        min-width: 0 !important;
+        width: 100% !important;
+    }
+
+    [data-testid="stDataFrame"] {
+        overflow-x: auto !important;
+    }
+}
+</style>
+"""
+
+
+def render_hierarchy_responsive_css() -> None:
+    """Keep hierarchy forms usable while allowing intentional table scrolling."""
+    st.markdown(_HIERARCHY_RESPONSIVE_CSS, unsafe_allow_html=True)
+
+
 def hierarchy_option_label(value: str, paths: Mapping[str, str]) -> str:
     """Render a parent selector value without changing its stored ID."""
     return "None (Layer 1)" if not value else paths.get(value, value)

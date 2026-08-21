@@ -21,6 +21,7 @@ from tabula_rasa.page_renderers.hierarchy_ui import (
     hierarchy_option_label,
     hierarchy_row_label,
     render_hierarchy_table,
+    render_hierarchy_responsive_css,
 )
 from tabula_rasa.presentation import render_page_header
 from tabula_rasa.storage import GoogleSheetsStorage, StorageError
@@ -122,6 +123,7 @@ def _account_frame(
 
 def render_accounts(context: AccountsContext) -> None:
     """Render account creation, hierarchy management, and balances."""
+    render_hierarchy_responsive_css()
     render_page_header(
         "Accounts", "Track bank, cash, credit card, and other manual balances."
     )
@@ -176,7 +178,7 @@ def render_accounts(context: AccountsContext) -> None:
         ),
     )
     with st.expander("Add account", expanded=True):
-        with st.container(border=True):
+        with st.container(border=True, key="accounts_add_form"):
             st.caption("Add a Layer 1 account or choose a compatible Layer 1 parent.")
             c1, c2, c3, c4, c5 = st.columns(5, gap="small")
             name = c1.text_input(

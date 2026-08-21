@@ -19,6 +19,7 @@ from tabula_rasa.page_renderers.hierarchy_ui import (
     hierarchy_option_label,
     hierarchy_row_label,
     render_hierarchy_table,
+    render_hierarchy_responsive_css,
 )
 from tabula_rasa.presentation import render_page_header
 from tabula_rasa.storage import GoogleSheetsStorage, StorageError
@@ -89,6 +90,7 @@ def _category_frame(
 
 def render_categories(context: CategoriesContext) -> None:
     """Render category creation, hierarchy management, and deletion safety."""
+    render_hierarchy_responsive_css()
     render_page_header(
         "Categories",
         "Organize income and expense activity with compatible two-level paths.",
@@ -133,7 +135,7 @@ def render_categories(context: CategoriesContext) -> None:
         prefixes=(f"new_category_parent_{context.profile_key}_",),
     )
     with st.expander("Add category", expanded=True):
-        with st.container(border=True):
+        with st.container(border=True, key="categories_add_form"):
             c1, c2, c3 = st.columns(3, gap="small")
             name = c1.text_input(
                 "Category name", key=f"new_category_name_{context.profile_key}"
