@@ -165,6 +165,15 @@ def main() -> None:
             "2 receipt(s) linked" in str(success.value) for success in app.success
         ), [str(success.value) for success in app.success]
 
+        by_label(app.number_input, "Amount").set_value(30)
+        by_label(app.button, "Save transaction").click().run()
+        assert len(storage.list_transactions()) == 2
+        assert len(upload_calls) == 3
+        assert any(str(success.value) == "Transaction saved." for success in app.success)
+        assert not any(
+            "2 receipt(s) linked" in str(success.value) for success in app.success
+        )
+
         fail_next_post_create_link["value"] = True
         by_label(app.file_uploader, "Upload receipt").set_value(
             ("later.pdf", b"later receipt", "application/pdf")
@@ -177,7 +186,10 @@ def main() -> None:
         by_label(app.button, "Retry linking uploaded receipt").click().run()
         assert len(upload_calls) == 4
         assert len(link_calls) == 3
-        assert storage.list_transactions()[0]["receipt_references"].count('"id"') == 3
+        assert sum(
+            transaction["receipt_references"].count('"id"')
+            for transaction in storage.list_transactions()
+        ) == 3
 
         fail_second_upload["value"] = False
         by_label(app.number_input, "Amount").set_value(40)
@@ -189,14 +201,17 @@ def main() -> None:
             ]
         )
         by_label(app.button, "Save transaction").click().run()
-        assert len(storage.list_transactions()) == 2
+        assert len(storage.list_transactions()) == 3
         assert len(upload_calls) == 7
         assert len(link_calls) == 6
-        assert storage.list_transactions()[-1]["receipt_references"].count('"id"') == 3
+        assert sum(
+            transaction["receipt_references"].count('"id"')
+            for transaction in storage.list_transactions()
+        ) == 6
 
         by_label(app.number_input, "Amount").set_value(41)
         by_label(app.button, "Save transaction").click().run()
-        assert len(storage.list_transactions()) == 3
+        assert len(storage.list_transactions()) == 4
         assert len(upload_calls) == 7
         assert any(str(success.value) == "Transaction saved." for success in app.success)
         assert not any(

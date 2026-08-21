@@ -125,6 +125,8 @@ def test_partial_link_failure_retries_only_unresolved_receipt() -> None:
     assert receipt_creation_counts(workflow) == (1, 1)
     assert uploaded == ["first", "second"]
     assert [item["linked"] for item in workflow["receipts"]] == [True, False]
+    assert workflow["receipts"][0]["content"] == b""
+    assert workflow["receipts"][1]["content"] == b""
 
     fail_second_link["value"] = False
     process_receipt_recovery(
@@ -335,4 +337,6 @@ def test_upload_failure_does_not_stop_later_receipts() -> None:
     )
 
     assert [item["linked"] for item in workflow["receipts"]] == [False, True]
+    assert workflow["receipts"][0]["content"] == b"failed"
+    assert workflow["receipts"][1]["content"] == b""
     assert receipt_creation_counts(workflow) == (1, 1)

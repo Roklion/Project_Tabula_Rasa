@@ -109,6 +109,7 @@ def process_receipt_recovery(
                 receipt["error"] = str(error)
                 continue
             receipt["drive_file"] = drive_file
+            receipt["content"] = b""
             try:
                 reference = receipt_reference_from_drive_file(drive_file)
             except Exception as error:  # noqa: BLE001 - preserve Drive recovery pointer
@@ -118,6 +119,7 @@ def process_receipt_recovery(
                 )
                 continue
             receipt["reference"] = reference
+        receipt["content"] = b""
         try:
             link_receipt(reference)
         except Exception as error:  # noqa: BLE001 - retain uploaded file for retry
@@ -757,6 +759,7 @@ def render_receipts(
                         except GoogleDriveError as error:
                             st.error(str(error))
                         else:
+                            uploaded_reference: Mapping[str, Any] | None = None
                             try:
                                 uploaded_reference = (
                                     receipt_reference_from_drive_file(
@@ -772,7 +775,7 @@ def render_receipts(
                                 ReceiptManifestError,
                                 StorageError,
                             ) as error:
-                                if "uploaded_reference" in locals():
+                                if uploaded_reference is not None:
                                     st.session_state[receipt_link_recovery_key] = {
                                         "reference": uploaded_reference,
                                         "error": str(error),
