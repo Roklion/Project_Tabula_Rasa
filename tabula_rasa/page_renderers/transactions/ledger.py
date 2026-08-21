@@ -195,6 +195,7 @@ def render_ledger(
     selection_scope = (
         context.profile_key,
         st.session_state.get("transaction_ledger_generation", 0),
+        st.session_state.get("workbook_data_revision", 0),
         start.isoformat(),
         end.isoformat(),
         filter_type,
