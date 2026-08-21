@@ -125,6 +125,21 @@ interactive table sort remains in place while moving between **Add transaction**
 and **View & edit ledger**, and resets to latest-first after navigating away and
 back to **Transactions**.
 
+The **View & edit ledger** tab includes a **Search transactions** field in
+addition to the From, To, Type, and Accounts filters. Search is a trimmed,
+case-insensitive substring match over Type, Account, To account, Category,
+Payee, Description, Reference, and transaction ID. It applies after the
+structured filters, so clearing the search restores exactly the current
+date/type/account result set. Empty or whitespace-only text behaves like a
+cleared search. Search does not inspect dates, amounts, receipt contents or
+filenames, or hidden Google Drive metadata. The ledger reports the number of
+visible rows and shows a separate no-results message when a search/filter
+combination matches nothing; an entirely empty ledger has its own empty state.
+Search persists while switching between the two Transactions tabs and resets
+after leaving Transactions and returning. If the current edit row is filtered
+out, selection moves to the first visible row; if none remain, the stale edit
+selection is cleared.
+
 The application validates required references, fresh account/category state,
 and duplicate submissions before writing. A success message appears only after
 Google Sheets confirms the operation.

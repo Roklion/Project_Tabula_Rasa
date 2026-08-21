@@ -126,7 +126,7 @@ This design approves the following additive features for implementation:
    - The saved transaction, receipt upload, and reference-link result are presented as one user workflow.
    - Existing post-creation receipt management remains available.
 
-2. **Transaction ledger search**
+2. **Transaction ledger search (current behavior)**
    - Search is additive to the existing date, type, and account filters.
    - Search is case-insensitive and covers the visible transaction text fields specified in Section 18.
    - Search does not replace existing filters.
@@ -1216,7 +1216,7 @@ Each state should preserve the relevant current next action.
 
 ## 18. Filters and Table Scope
 
-### 18.1 Transaction-ledger filters and proposed search
+### 18.1 Transaction-ledger filters and search
 
 The transaction ledger preserves these current filters:
 
@@ -1239,6 +1239,8 @@ Search behavior:
 - Displays the resulting row count.
 - Provides a clear control when text is present.
 - Shows an explicit no-results state without clearing the other filters.
+- Empty or whitespace-only search text is treated as no search and restores the structured-filter result set.
+- A completely empty ledger has a distinct empty state from a ledger with no rows matching the active filters or search.
 
 The date, type, account, and search controls must remain visible above the ledger. Search must not replace the structured filters.
 
@@ -1272,6 +1274,7 @@ The balance sheet uses the As of date.
 - Search and filters combine using AND semantics.
 - Changing the result scope clears bulk selection.
 - Clearing search restores the structured-filter result set and preserves date, type, account, and sort choices.
+- Single-row edit selection is repaired to a visible row when a search changes the result set, and cleared when no rows remain.
 - Search text may persist while switching between Add transaction and View & edit ledger, but should reset after leaving Transactions if that matches the existing table-generation reset behavior.
 
 ### 18.5 Future filters
@@ -2143,7 +2146,7 @@ Follow Sections 19.2, 19.3, and 25.6.
 #### Ledger behavior
 
 - Preserve From, To, Type, and Accounts filters.
-- Add Search transactions according to Section 18.1.
+- Provide the current Search transactions control according to Section 18.1.
 - Preserve the exact current headers in Section 17.4.
 - Default to latest dates first.
 - Preserve interactive sorting across the two Transactions tabs.
@@ -2631,7 +2634,7 @@ Provide explicit Cancel and Remove reference actions after the initial request.
 - Change Prepare downloadable exports to Refresh downloadable exports when a prepared set exists.
 - Invalidate or separate prepared exports after confirmed workbook writes.
 
-### 32.10 Ledger search
+### 32.10 Ledger search (current behavior)
 
 - Label: `Search transactions`.
 - Use case-insensitive substring matching over the fields defined in Section 18.1.
@@ -2639,6 +2642,8 @@ Provide explicit Cancel and Remove reference actions after the initial request.
 - Search combines with structured filters.
 - Search must have a distinct no-results state.
 - Search changes clear bulk selection.
+- Empty or whitespace-only search is a no-op.
+- Search state persists between the two Transactions tabs and resets when the Transactions table-generation boundary is recreated after leaving the page.
 
 ### 32.11 Bulk action bar
 
@@ -2896,9 +2901,12 @@ Codex must not present a target behavior as completed until its code, storage op
 Approved target behavior includes:
 
 - Receipt upload during transaction creation
-- Transaction search
 - Explicit bulk ledger mode and the approved bulk actions
 - Account settings information architecture and route label
+
+Transaction search is now current behavior: its implementation, state boundary,
+selection repair, failure/empty states, tests, and user documentation are part of
+the functional baseline.
 
 Until each target is fully implemented, preserve the current workflow and identify the feature as incomplete rather than removing the current path.
 
