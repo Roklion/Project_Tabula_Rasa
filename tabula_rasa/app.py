@@ -89,7 +89,7 @@ from tabula_rasa.receipt_backfill import (
 )
 
 
-STORAGE_IMPLEMENTATION_VERSION = 10
+STORAGE_IMPLEMENTATION_VERSION = 11
 def alert_list(title: str, messages: list[str]) -> str:
     """Format multiple alert messages as a readable Markdown list."""
     return f"**{title}**\n\n- " + "\n- ".join(messages)
