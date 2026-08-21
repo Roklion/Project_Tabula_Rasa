@@ -369,38 +369,40 @@ def render_ledger(
                 f"totaling {money(total_amount)}. Linked receipt references will be "
                 "removed, but the Google Drive files will remain in Drive as unreferenced files."
             )
+            confirm_delete = st.checkbox(
+                "I understand these transactions will be permanently deleted and cannot be undone",
+                key=(
+                    "transaction_bulk_confirm_delete_"
+                    f"{context.profile_key}_{st.session_state.get('transaction_bulk_selection_generation', 0)}"
+                ),
+            )
             with st.form("transaction_bulk_delete", clear_on_submit=False):
-                confirm_delete = st.checkbox(
-                    "I understand these transactions will be permanently deleted and cannot be undone",
-                    key=(
-                        "transaction_bulk_confirm_delete_"
-                        f"{context.profile_key}_{st.session_state.get('transaction_bulk_selection_generation', 0)}"
-                    ),
-                )
                 delete_requested = st.form_submit_button(
                     "Permanently delete selected",
                     type="primary",
-                    disabled=not confirm_delete,
                     width="stretch",
                 )
             if delete_requested:
-                _clear_bulk_selection(context.profile_key)
-                context.confirmed_write(
-                    "bulk_delete_transactions",
-                    {"ids": list(selected_ids), "expected": expected_selected},
-                    lambda: context.storage.bulk_delete_transactions(
-                        selected_ids,
-                        expected_transactions=expected_selected,
+                if not confirm_delete:
+                    st.error("Confirm the permanent deletion before continuing.")
+                else:
+                    _clear_bulk_selection(context.profile_key)
+                    context.confirmed_write(
+                        "bulk_delete_transactions",
+                        {"ids": list(selected_ids), "expected": expected_selected},
+                        lambda: context.storage.bulk_delete_transactions(
+                            selected_ids,
+                            expected_transactions=expected_selected,
+                        ),
+                        lambda result: (
+                            f"Permanently deleted {result['count']} transactions; "
+                            "linked Drive files were retained."
+                        ),
+                        on_success=lambda: [
+                            clear_receipt_creation_recovery(context, item)
+                            for item in selected_ids
+                        ],
                     ),
-                    lambda result: (
-                        f"Permanently deleted {result['count']} transactions; "
-                        "linked Drive files were retained."
-                    ),
-                    on_success=lambda: [
-                        clear_receipt_creation_recovery(context, item)
-                        for item in selected_ids
-                    ],
-                )
         else:
             st.info("Select one or more visible transactions to use Bulk actions.")
     elif not transaction_frame.empty:

@@ -92,7 +92,7 @@ def main() -> None:
         warning_text = " ".join(str(element.value) for element in app.warning)
         assert "Google Drive files will remain" in warning_text
         delete_button = by_label(app.button, "Permanently delete selected")
-        assert delete_button.disabled is True
+        assert delete_button.disabled is False
         by_label(
             app.checkbox,
             "I understand these transactions will be permanently deleted and cannot be undone",
