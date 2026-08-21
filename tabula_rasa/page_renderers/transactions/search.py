@@ -34,7 +34,10 @@ def filter_transaction_rows(rows: Sequence[Row], query: str) -> list[Row]:
         row
         for row in rows
         if any(
-            normalized_query in str(row.get(field, "") or "").casefold()
+            normalized_query
+            in str(
+                row.get(field) if row.get(field) is not None else ""
+            ).casefold()
             for field in SEARCHABLE_TRANSACTION_FIELDS
         )
     ]

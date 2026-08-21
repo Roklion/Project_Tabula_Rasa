@@ -146,7 +146,7 @@ def render_ledger(
         if str(transaction.get("id", "")) in matched_ids
     ]
     transaction_frame = transaction_frame[
-        transaction_frame["ID"].isin(matched_ids)
+        transaction_frame["ID"].astype(str).isin(matched_ids)
     ].reset_index(drop=True)
     if not all_transactions:
         st.info("No transactions exist yet. Add a transaction to populate the ledger.")
