@@ -392,7 +392,7 @@ def render_receipt_creation_recovery(context: TransactionsContext) -> bool:
                             receipt_creation_workflow_key(context.profile_key),
                             None,
                         )
-                        st.warning(
+                        st.session_state["write_success_notice"] = (
                             "The saved transaction no longer exists. "
                             "Start a new transaction and select its receipts again."
                         )

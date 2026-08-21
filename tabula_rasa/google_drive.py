@@ -673,6 +673,11 @@ class GoogleDriveClient:
                     "Google Drive is temporarily unavailable. Retry the request.",
                     retryable=True,
                 )
+            if response.status_code in {429, 500, 502, 503, 504}:
+                raise GoogleDriveAccessError(
+                    "Google Drive is temporarily unavailable. Retry the request.",
+                    retryable=True,
+                )
             if response.status_code in {401, 403}:
                 raise GoogleDriveAuthorizationError(
                     "Google Drive access was revoked or is insufficient. Reconnect this profile."

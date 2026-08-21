@@ -385,7 +385,7 @@ def test_transaction_recovery_does_not_upload_after_cross_session_deletion() -> 
     with (
         patch.object(st, "session_state", session_state),
         patch.object(st, "info"),
-        patch.object(st, "warning") as warning,
+        patch.object(st, "warning"),
         patch.object(st, "error"),
         patch.object(st, "caption"),
         patch.object(st, "button", return_value=True),
@@ -395,7 +395,7 @@ def test_transaction_recovery_does_not_upload_after_cross_session_deletion() -> 
             render_receipt_creation_recovery(context)
 
     assert receipt_creation_workflow_key("north") not in session_state
-    warning.assert_any_call(
+    assert session_state["write_success_notice"] == (
         "The saved transaction no longer exists. "
         "Start a new transaction and select its receipts again."
     )
