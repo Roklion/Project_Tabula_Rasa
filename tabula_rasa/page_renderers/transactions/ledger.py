@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import date
+import hashlib
 
 import streamlit as st
 
@@ -292,12 +293,16 @@ def render_ledger(
                 for transaction in transactions
             }
             expected_selected = [selected_by_id[item] for item in selected_ids]
-            selected_snapshot_key = repr(
-                tuple(
-                    tuple(sorted((str(key), str(value)) for key, value in item.items()))
-                    for item in expected_selected
-                )
-            )
+            selected_snapshot_key = hashlib.sha256(
+                repr(
+                    tuple(
+                        tuple(
+                            sorted((str(key), str(value)) for key, value in item.items())
+                        )
+                        for item in expected_selected
+                    )
+                ).encode("utf-8")
+            ).hexdigest()
             selected_frame = transaction_frame[
                 transaction_frame["ID"].astype(str).isin(selected_ids)
             ]
@@ -379,7 +384,7 @@ def render_ledger(
                 key=(
                     "transaction_bulk_confirm_delete_"
                     f"{context.profile_key}_{st.session_state.get('transaction_bulk_selection_generation', 0)}_"
-                    f"{'_'.join(selected_ids)}_{selected_snapshot_key}"
+                    f"{selected_snapshot_key}"
                 ),
             )
             with st.form("transaction_bulk_delete", clear_on_submit=False):
