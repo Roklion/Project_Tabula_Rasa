@@ -305,7 +305,10 @@ def render_ledger(
                         tuple(
                             sorted((str(key), str(value)) for key, value in item.items())
                         )
-                        for item in expected_selected
+                        for item in sorted(
+                            expected_selected,
+                            key=lambda item: str(item.get("id", "")),
+                        )
                     )
                 ).encode("utf-8")
             ).hexdigest()

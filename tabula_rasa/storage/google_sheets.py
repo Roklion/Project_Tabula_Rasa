@@ -1184,6 +1184,7 @@ class GoogleSheetsStorage:
         try:
             current_rows = self._rows("Transactions", force_refresh=True)
         except StorageUnavailableError as read_error:
+            self._invalidate("Transactions")
             raise StorageBulkMutationUncertainError(
                 f"The {operation} batch completed but its postcondition could not be "
                 "read. Review the selected rows before retrying.",
@@ -1217,6 +1218,7 @@ class GoogleSheetsStorage:
         try:
             current_rows = self._rows("Transactions", force_refresh=True)
         except StorageUnavailableError as read_error:
+            self._invalidate("Transactions")
             raise StorageBulkMutationUncertainError(
                 f"The {operation} batch completed but its postcondition could not be "
                 "read. Review the selected rows before retrying.",

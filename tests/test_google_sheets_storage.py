@@ -2833,6 +2833,7 @@ class TestGoogleSheetsStorage:
 
         assert raised.value.outcome == "mixed_ambiguous"
         assert raised.value.retryable is False
+        assert "Transactions" not in self.storage._row_cache
 
     def test_uncertain_bulk_delete_ignores_unselected_rows(self) -> None:
         first, second, _ = self._bulk_transaction_fixture()
