@@ -113,6 +113,23 @@ def main() -> None:
             item["id"] for item in north_transactions
         )
         app.run()
+        confirmation = by_label(
+            app.checkbox,
+            "I understand these transactions will be permanently deleted and cannot be undone",
+        )
+        confirmation.check()
+        transaction_sheet = north._workbook.sheets["Transactions"]
+        amount_index = transaction_sheet.rows[0].index("amount")
+        transaction_sheet.rows[1][amount_index] = "99"
+        north._invalidate("Transactions")
+        app.run()
+        assert (
+            by_label(
+                app.checkbox,
+                "I understand these transactions will be permanently deleted and cannot be undone",
+            ).value
+            is False
+        )
         by_label(
             app.checkbox,
             "I understand these transactions will be permanently deleted and cannot be undone",

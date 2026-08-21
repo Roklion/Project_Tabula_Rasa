@@ -292,6 +292,12 @@ def render_ledger(
                 for transaction in transactions
             }
             expected_selected = [selected_by_id[item] for item in selected_ids]
+            selected_snapshot_key = repr(
+                tuple(
+                    tuple(sorted((str(key), str(value)) for key, value in item.items()))
+                    for item in expected_selected
+                )
+            )
             selected_frame = transaction_frame[
                 transaction_frame["ID"].astype(str).isin(selected_ids)
             ]
@@ -373,7 +379,7 @@ def render_ledger(
                 key=(
                     "transaction_bulk_confirm_delete_"
                     f"{context.profile_key}_{st.session_state.get('transaction_bulk_selection_generation', 0)}_"
-                    f"{'_'.join(selected_ids)}"
+                    f"{'_'.join(selected_ids)}_{selected_snapshot_key}"
                 ),
             )
             with st.form("transaction_bulk_delete", clear_on_submit=False):
@@ -402,7 +408,7 @@ def render_ledger(
                             "linked Drive files were retained."
                         ),
                         on_success=clear_recovery,
-                    ),
+                    )
         else:
             st.info("Select one or more visible transactions to use Bulk actions.")
     elif not transaction_frame.empty:
