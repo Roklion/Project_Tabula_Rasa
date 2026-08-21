@@ -1078,6 +1078,7 @@ class GoogleDriveClient:
         original_name: str,
         content: bytes,
         mime_type: str,
+        receipt_id: str | None = None,
     ) -> dict[str, Any]:
         """Create one receipt without replacing a same-named Drive file."""
         validate_receipt_upload(original_name, content)
@@ -1114,7 +1115,9 @@ class GoogleDriveClient:
                 "Google Drive contains too many receipts with this filename. "
                 "Rename the local file and retry."
             )
-        receipt_id = secrets.token_hex(16)
+        receipt_id = str(receipt_id or secrets.token_hex(16))
+        if not RECEIPT_ID_PATTERN.fullmatch(receipt_id):
+            raise GoogleDriveAccessError("Receipt identity is invalid.")
         committed_query = " and ".join(
             [
                 f"'{_escape_query_value(folder_id)}' in parents",

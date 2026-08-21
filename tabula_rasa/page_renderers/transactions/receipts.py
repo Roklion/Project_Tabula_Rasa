@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import secrets
 from collections.abc import Mapping, Sequence
 from typing import Any, Callable, MutableMapping
 
@@ -29,7 +30,7 @@ def receipt_creation_workflow_key(profile_key: str) -> str:
     return f"{RECEIPT_CREATION_WORKFLOW_KEY}:{profile_key}"
 
 
-def prepare_receipt_uploads(uploaded_files: Sequence[object]) -> list[dict[str, Any]]:
+def prepare_receipt_uploads(uploaded_files: Sequence[Any]) -> list[dict[str, Any]]:
     """Copy and validate every selected file before the Sheets write."""
     prepared: list[dict[str, Any]] = []
     for index, uploaded_file in enumerate(uploaded_files):
@@ -39,6 +40,7 @@ def prepare_receipt_uploads(uploaded_files: Sequence[object]) -> list[dict[str, 
         prepared.append(
             {
                 "key": f"{index}:{hashlib.sha256(content).hexdigest()}",
+                "receipt_id": secrets.token_hex(16),
                 "original_name": name,
                 "mime_type": str(
                     getattr(uploaded_file, "type", "")
@@ -59,11 +61,17 @@ def new_receipt_creation_workflow(
     receipts: Sequence[Mapping[str, Any]],
     *,
     profile_key: str = "",
+    configuration_revision: str = "",
+    spreadsheet_id: str = "",
+    receipt_folder_id: str = "",
 ) -> dict[str, Any]:
     """Create session-only recovery state after a confirmed Sheets write."""
     return {
         "profile_key": profile_key,
         "transaction_id": transaction_id,
+        "configuration_revision": configuration_revision,
+        "spreadsheet_id": spreadsheet_id,
+        "receipt_folder_id": receipt_folder_id,
         "receipts": [dict(receipt) for receipt in receipts],
     }
 
@@ -78,6 +86,7 @@ def process_receipt_recovery(
     for receipt in workflow.get("receipts", []):
         if not isinstance(receipt, MutableMapping):
             continue
+        receipt.setdefault("receipt_id", secrets.token_hex(16))
         if receipt.get("linked") is True:
             continue
         reference = receipt.get("reference")
@@ -156,6 +165,7 @@ def _process_context_receipts(
             original_name=str(receipt["original_name"]),
             content=bytes(receipt["content"]),
             mime_type=str(receipt["mime_type"]),
+            receipt_id=str(receipt["receipt_id"]),
         ),
         link_receipt=lambda reference: context.storage.link_transaction_receipt(
             transaction_id,
@@ -188,6 +198,50 @@ def finish_receipt_creation_if_complete(
     return True
 
 
+def clear_receipt_creation_recovery(
+    context: TransactionsContext,
+    transaction_id: str,
+) -> None:
+    """Discard recovery for a transaction that was deliberately deleted."""
+    workflow = st.session_state.get(
+        receipt_creation_workflow_key(context.profile_key)
+    )
+    if (
+        isinstance(workflow, Mapping)
+        and str(workflow.get("transaction_id", "")) == str(transaction_id)
+    ):
+        st.session_state.pop(
+            receipt_creation_workflow_key(context.profile_key),
+            None,
+        )
+
+
+def _workflow_configuration_matches(
+    context: TransactionsContext,
+    workflow: MutableMapping[str, Any],
+    receipt_folder: Mapping[str, object],
+) -> bool:
+    expected_revision = str(workflow.get("configuration_revision", ""))
+    expected_spreadsheet = str(workflow.get("spreadsheet_id", ""))
+    expected_folder = str(workflow.get("receipt_folder_id", ""))
+    if not any((expected_revision, expected_spreadsheet, expected_folder)):
+        return True
+    current_spreadsheet = str(context.profile_secrets.get("spreadsheet_id", ""))
+    current_folder = str(receipt_folder.get("id", ""))
+    if (
+        expected_revision != str(context.configuration_revision)
+        or expected_spreadsheet != current_spreadsheet
+        or expected_folder != current_folder
+    ):
+        workflow["configuration_error"] = (
+            "The profile's Google Sheets or Drive receipt configuration "
+            "changed while this receipt was waiting for recovery. Restore "
+            "the previous profile configuration before retrying."
+        )
+        return False
+    return True
+
+
 def handle_confirmed_transaction_receipts(
     context: TransactionsContext,
     transaction: Mapping[str, Any],
@@ -198,6 +252,11 @@ def handle_confirmed_transaction_receipts(
         str(transaction["id"]),
         receipts,
         profile_key=context.profile_key,
+        configuration_revision=context.configuration_revision,
+        spreadsheet_id=str(context.profile_secrets.get("spreadsheet_id", "")),
+        receipt_folder_id=str(
+            (_receipt_folder(context) or {}).get("id", "")
+        ),
     )
     st.session_state[receipt_creation_workflow_key(context.profile_key)] = workflow
     receipt_folder = _receipt_folder(context)
@@ -263,14 +322,13 @@ def render_receipt_creation_recovery(context: TransactionsContext) -> bool:
             )
         else:
             workflow.pop("configuration_error", None)
-            try:
-                _process_context_receipts(context, workflow, receipt_folder)
-            except GoogleDriveError as error:
-                workflow["configuration_error"] = str(error)
-            if finish_receipt_creation_if_complete(context, workflow):
-                st.rerun()
-            else:
-                st.rerun()
+            if _workflow_configuration_matches(context, workflow, receipt_folder):
+                try:
+                    _process_context_receipts(context, workflow, receipt_folder)
+                except GoogleDriveError as error:
+                    workflow["configuration_error"] = str(error)
+                finish_receipt_creation_if_complete(context, workflow)
+            st.rerun()
     return True
 
 
@@ -657,10 +715,7 @@ def render_receipts(
                             "available in Google Drive."
                         )
                 receipt_upload = None
-                if not isinstance(
-                    link_recovery,
-                    Mapping,
-                ):
+                if not isinstance(recovery_reference, Mapping):
                     receipt_upload = st.file_uploader(
                         "Upload receipt",
                         type=RECEIPT_UPLOAD_TYPES,

@@ -10,12 +10,14 @@ import streamlit as st
 from tabula_rasa.google_drive import GoogleDriveAccessError
 from tabula_rasa.page_renderers.transactions.receipts import (
     handle_confirmed_transaction_receipts,
+    clear_receipt_creation_recovery,
     new_receipt_creation_workflow,
     prepare_receipt_uploads,
     process_receipt_recovery,
     receipt_creation_counts,
     receipt_creation_workflow_key,
     render_receipt_creation_recovery,
+    _workflow_configuration_matches,
 )
 
 
@@ -239,6 +241,7 @@ def test_receipt_recovery_uses_selected_profile_clients() -> None:
         "original_name": "receipt.pdf",
         "content": b"receipt",
         "mime_type": "application/pdf",
+        "receipt_id": "a" * 32,
         "linked": False,
     }
     with patch.object(st, "session_state", session_state):
@@ -257,6 +260,46 @@ def test_receipt_recovery_uses_selected_profile_clients() -> None:
     assert session_state[receipt_creation_workflow_key("south")]["transaction_id"] == (
         "south-txn"
     )
+
+
+def test_deleted_transaction_clears_only_matching_recovery() -> None:
+    session_state: dict[str, object] = {}
+    north_context = SimpleNamespace(profile_key="north")
+    session_state[receipt_creation_workflow_key("north")] = (
+        new_receipt_creation_workflow(
+            "north-txn",
+            [],
+            profile_key="north",
+        )
+    )
+    with patch.object(st, "session_state", session_state):
+        clear_receipt_creation_recovery(north_context, "other-txn")
+        assert receipt_creation_workflow_key("north") in session_state
+        clear_receipt_creation_recovery(north_context, "north-txn")
+
+    assert receipt_creation_workflow_key("north") not in session_state
+
+
+def test_receipt_recovery_refuses_changed_profile_configuration() -> None:
+    workflow = new_receipt_creation_workflow(
+        "north-txn",
+        [],
+        profile_key="north",
+        configuration_revision="old-revision",
+        spreadsheet_id="old-sheet",
+        receipt_folder_id="old-folder",
+    )
+    context = SimpleNamespace(
+        configuration_revision="new-revision",
+        profile_secrets={"spreadsheet_id": "new-sheet"},
+    )
+
+    assert not _workflow_configuration_matches(
+        context,
+        workflow,
+        {"id": "new-folder"},
+    )
+    assert "configuration changed" in workflow["configuration_error"]
 
 
 def test_upload_failure_does_not_stop_later_receipts() -> None:

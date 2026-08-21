@@ -1013,6 +1013,56 @@ class TestGoogleDriveFiles:
         assert "key='tabulaRasaReceiptId'" in recovery_query
         assert "key='tabulaRasaSha256'" in recovery_query
 
+    def test_receipt_upload_retries_with_a_stable_identity(self) -> None:
+        receipt_id = "a" * 32
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": []}),
+                requests.ConnectionError("response lost"),
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, {"id": "receipt123456", "name": "statement.pdf"}),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        with pytest.raises(GoogleDriveAccessError):
+            client.upload_receipt(
+                profile_key="north",
+                transaction_id="txn-1",
+                folder_id="folder123456",
+                original_name="statement.pdf",
+                content=b"receipt",
+                mime_type="application/pdf",
+                receipt_id=receipt_id,
+            )
+        uploaded = client.upload_receipt(
+            profile_key="north",
+            transaction_id="txn-1",
+            folder_id="folder123456",
+            original_name="statement.pdf",
+            content=b"receipt",
+            mime_type="application/pdf",
+            receipt_id=receipt_id,
+        )
+
+        assert uploaded["id"] == "receipt123456"
+        post_bodies = [
+            request[2]["data"]
+            for request in session.requests
+            if request[0] == "POST"
+        ]
+        assert len(post_bodies) == 2
+        assert all(
+            f'"tabulaRasaReceiptId":"{receipt_id}"'.encode() in body
+            for body in post_bodies
+        )
+
     def test_profile_receipt_listing_is_not_transaction_scoped(self) -> None:
         receipt = {
             "id": "receipt123456",

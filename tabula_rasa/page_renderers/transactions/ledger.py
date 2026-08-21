@@ -10,7 +10,10 @@ import streamlit as st
 from tabula_rasa.hierarchy import ordered_hierarchy
 from tabula_rasa.ledger_presentation import ledger_frame, money
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
-from tabula_rasa.page_renderers.transactions.receipts import render_receipts
+from tabula_rasa.page_renderers.transactions.receipts import (
+    clear_receipt_creation_recovery,
+    render_receipts,
+)
 from tabula_rasa.storage import StorageError, decode_receipt_references
 
 
@@ -311,6 +314,10 @@ def render_ledger(
                             payload,
                             lambda: context.storage.delete_transaction(edit_id),
                             "Transaction deleted.",
+                            on_success=lambda: clear_receipt_creation_recovery(
+                                context,
+                                edit_id,
+                            ),
                         )
             render_receipts(
                 context,
@@ -318,4 +325,3 @@ def render_ledger(
                 all_transactions=all_transactions,
                 edit_id=edit_id,
             )
-
