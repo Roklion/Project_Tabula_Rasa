@@ -130,7 +130,11 @@ def process_receipt_recovery(
                 try:
                     drive_file = dict(upload_receipt(receipt))
                 except Exception as error:  # noqa: BLE001 - keep other receipts moving
-                    if getattr(error, "retryable", False):
+                    if getattr(error, "retryable", False) and getattr(
+                        error,
+                        "upload_attempted",
+                        True,
+                    ) is not False:
                         receipt["upload_uncertain"] = True
                     receipt["error"] = str(error)
                     continue
@@ -218,6 +222,7 @@ def _workflow_has_uploaded_receipt(workflow: Mapping[str, Any]) -> bool:
         and (
             isinstance(receipt.get("reference"), Mapping)
             or isinstance(receipt.get("drive_file"), Mapping)
+            or receipt.get("upload_uncertain") is True
         )
         for receipt in workflow.get("receipts", [])
     )

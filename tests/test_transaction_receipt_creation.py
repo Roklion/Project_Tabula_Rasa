@@ -363,6 +363,11 @@ def test_transaction_recovery_detects_uploaded_receipt_pointer() -> None:
     assert not _workflow_has_uploaded_receipt(
         new_receipt_creation_workflow("txn-2", [{"linked": False}])
     )
+    uncertain_workflow = new_receipt_creation_workflow(
+        "txn-3",
+        [{"linked": False, "upload_uncertain": True}],
+    )
+    assert _workflow_has_uploaded_receipt(uncertain_workflow)
 
 
 def test_transaction_recovery_does_not_upload_after_cross_session_deletion() -> None:
@@ -483,6 +488,36 @@ def test_upload_failure_does_not_stop_later_receipts() -> None:
     assert workflow["receipts"][0]["content"] == b"failed"
     assert workflow["receipts"][1]["content"] == b""
     assert receipt_creation_counts(workflow) == (1, 1)
+
+
+def test_preflight_failure_does_not_mark_upload_as_uncertain() -> None:
+    workflow = new_receipt_creation_workflow(
+        "txn-1",
+        [
+            {
+                "key": "preflight-failed",
+                "original_name": "receipt.pdf",
+                "content": b"receipt",
+                "mime_type": "application/pdf",
+                "linked": False,
+            }
+        ],
+    )
+
+    def upload(_item: Mapping[str, object]) -> Mapping[str, object]:
+        raise GoogleDriveAccessError(
+            "Drive inventory unavailable",
+            retryable=True,
+            upload_attempted=False,
+        )
+
+    process_receipt_recovery(
+        workflow,
+        upload_receipt=upload,
+        link_receipt=lambda _reference: None,
+    )
+
+    assert workflow["receipts"][0].get("upload_uncertain") is not True
 
 
 def test_uncertain_upload_reconciles_without_a_second_create() -> None:

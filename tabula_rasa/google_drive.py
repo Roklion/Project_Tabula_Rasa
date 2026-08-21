@@ -69,9 +69,16 @@ class GoogleDriveAuthorizationError(GoogleDriveError):
 class GoogleDriveAccessError(GoogleDriveError):
     """Raised when a Drive API operation cannot be completed."""
 
-    def __init__(self, message: str, *, retryable: bool = False) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        retryable: bool = False,
+        upload_attempted: bool | None = None,
+    ) -> None:
         super().__init__(message)
         self.retryable = retryable
+        self.upload_attempted = upload_attempted
 
 
 class GoogleDriveConflictError(GoogleDriveAccessError):
@@ -1054,23 +1061,30 @@ class GoogleDriveClient:
         ).encode("utf-8")
         body += content
         body += f"\r\n--{boundary}--\r\n".encode("utf-8")
-        response = self._request(
-            "POST",
-            f"{DRIVE_UPLOAD_ROOT}/files",
-            expected=(200, 201),
-            retry_transient=False,
-            params={
-                "uploadType": "multipart",
-                "fields": (
-                    "id,name,mimeType,size,createdTime,modifiedTime,description,"
-                    "webViewLink,appProperties"
-                ),
-                "supportsAllDrives": "true",
-            },
-            headers={"Content-Type": f"multipart/related; boundary={boundary}"},
-            data=body,
-        )
-        return dict(_json_response(response, retryable=True))
+        try:
+            response = self._request(
+                "POST",
+                f"{DRIVE_UPLOAD_ROOT}/files",
+                expected=(200, 201),
+                retry_transient=False,
+                params={
+                    "uploadType": "multipart",
+                    "fields": (
+                        "id,name,mimeType,size,createdTime,modifiedTime,description,"
+                        "webViewLink,appProperties"
+                    ),
+                    "supportsAllDrives": "true",
+                },
+                headers={"Content-Type": f"multipart/related; boundary={boundary}"},
+                data=body,
+            )
+            return dict(_json_response(response, retryable=True))
+        except GoogleDriveAccessError as error:
+            raise GoogleDriveAccessError(
+                str(error),
+                retryable=error.retryable,
+                upload_attempted=True,
+            ) from error
 
     def delete_file(self, file_id: str) -> None:
         """Delete a file created and managed by the app."""
@@ -1128,7 +1142,14 @@ class GoogleDriveClient:
                 ),
             ]
         )
-        existing_by_identity = self._list(identity_query, page_size=2)
+        try:
+            existing_by_identity = self._list(identity_query, page_size=2)
+        except GoogleDriveAccessError as error:
+            raise GoogleDriveAccessError(
+                str(error),
+                retryable=error.retryable,
+                upload_attempted=False,
+            ) from error
         if existing_by_identity:
             uploaded = existing_by_identity[0]
             filename = str(uploaded.get("name") or base_filename)
@@ -1139,15 +1160,22 @@ class GoogleDriveClient:
                     "trashed = false",
                 ]
             )
-            existing_names = {
-                str(item.get("name", "")).casefold()
-                for item in self._list(
-                    inventory_query,
-                    page_size=1000,
-                    fetch_all=True,
-                )
-                if item.get("name")
-            }
+            try:
+                existing_names = {
+                    str(item.get("name", "")).casefold()
+                    for item in self._list(
+                        inventory_query,
+                        page_size=1000,
+                        fetch_all=True,
+                    )
+                    if item.get("name")
+                }
+            except GoogleDriveAccessError as error:
+                raise GoogleDriveAccessError(
+                    str(error),
+                    retryable=error.retryable,
+                    upload_attempted=False,
+                ) from error
             filename = ""
             for occurrence in range(1, 1001):
                 candidate = suffixed_receipt_filename(
@@ -1184,11 +1212,14 @@ class GoogleDriveClient:
                     content,
                     mime_type or "application/octet-stream",
                 )
-            except GoogleDriveAccessError:
+            except GoogleDriveAccessError as error:
                 # A disconnected response after Google committed the upload is
                 # uncertain. Query by the deterministic identity and filename
                 # before reporting failure so a retry cannot create a duplicate.
-                committed = self._list(committed_query, page_size=2)
+                try:
+                    committed = self._list(committed_query, page_size=2)
+                except GoogleDriveError as reconciliation_error:
+                    raise error from reconciliation_error
                 if committed:
                     uploaded = committed[0]
                 else:
