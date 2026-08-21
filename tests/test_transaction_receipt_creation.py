@@ -304,6 +304,28 @@ def test_receipt_recovery_refuses_changed_profile_configuration() -> None:
     assert "configuration changed" in workflow["configuration_error"]
 
 
+def test_receipt_recovery_ignores_unrelated_profile_revision_change() -> None:
+    workflow = new_receipt_creation_workflow(
+        "north-txn",
+        [],
+        profile_key="north",
+        configuration_revision="old-revision",
+        spreadsheet_id="north-sheet",
+        receipt_folder_id="north-folder",
+    )
+    context = SimpleNamespace(
+        configuration_revision="new-revision",
+        profile_secrets={"spreadsheet_id": "north-sheet"},
+    )
+
+    assert _workflow_configuration_matches(
+        context,
+        workflow,
+        {"id": "north-folder"},
+    )
+    assert "configuration_error" not in workflow
+
+
 def test_upload_failure_does_not_stop_later_receipts() -> None:
     workflow = new_receipt_creation_workflow(
         "txn-1",

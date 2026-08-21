@@ -226,13 +226,15 @@ def _workflow_configuration_matches(
     expected_revision = str(workflow.get("configuration_revision", ""))
     expected_spreadsheet = str(workflow.get("spreadsheet_id", ""))
     expected_folder = str(workflow.get("receipt_folder_id", ""))
-    if not any((expected_revision, expected_spreadsheet, expected_folder)):
-        return True
     current_spreadsheet = str(context.profile_secrets.get("spreadsheet_id", ""))
     current_folder = str(receipt_folder.get("id", ""))
+    if not any((expected_spreadsheet, expected_folder)):
+        return (
+            not expected_revision
+            or expected_revision == str(context.configuration_revision)
+        )
     if (
-        expected_revision != str(context.configuration_revision)
-        or expected_spreadsheet != current_spreadsheet
+        expected_spreadsheet != current_spreadsheet
         or expected_folder != current_folder
     ):
         workflow["configuration_error"] = (
