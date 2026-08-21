@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 from unittest.mock import patch
 
+import pandas as pd
 import streamlit as st
 
 from tabula_rasa.page_renderers import reports
@@ -68,3 +69,24 @@ def test_reports_responsive_css_uses_stable_keyed_containers() -> None:
     assert ".st-key-reports_statement_metrics" in css
     assert ".st-key-reports_statement_tables" in css
     assert "st-emotion-cache" not in css
+
+
+def test_expense_category_chart_places_largest_sorted_category_first() -> None:
+    chart = reports._expense_category_chart(
+        pd.DataFrame(
+            [
+                {"Category": "Largest", "Total": 100.0},
+                {"Category": "Smallest", "Total": 10.0},
+            ]
+        )
+    )
+
+    assert list(chart.data[0].y) == ["Largest", "Smallest"]
+    assert chart.layout.yaxis.autorange == "reversed"
+
+
+def test_out_of_balance_message_uses_positive_difference_amount() -> None:
+    assert reports._out_of_balance_message(-100.0) == (
+        "Balance sheet is out of balance by $100.00. Review opening balances and "
+        "account classifications."
+    )

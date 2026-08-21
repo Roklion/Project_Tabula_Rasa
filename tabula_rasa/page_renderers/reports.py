@@ -106,6 +106,38 @@ def _statement_frame(
     return pd.DataFrame(display_rows, columns=["Account", "Type", "Balance"])
 
 
+def _expense_category_chart(by_category: pd.DataFrame):
+    chart = px.bar(
+        by_category,
+        x="Total",
+        y="Category",
+        orientation="h",
+        color_discrete_sequence=["#3267D6"],
+        labels={"Total": "Amount", "Category": "Expense category"},
+    )
+    chart.update_layout(
+        height=300,
+        margin={"l": 12, "r": 12, "t": 28, "b": 12},
+        showlegend=False,
+    )
+    chart.update_xaxes(
+        title="Amount",
+        tickprefix="$",
+        tickformat=",.2f",
+        rangemode="tozero",
+    )
+    chart.update_yaxes(autorange="reversed")
+    return chart
+
+
+def _out_of_balance_message(difference: float) -> str:
+    return (
+        "Balance sheet is out of balance by "
+        f"{money(abs(difference))}. Review opening balances and "
+        "account classifications."
+    )
+
+
 def render_reports(context: ReportsContext) -> None:
     """Render reports for the selected business profile."""
     render_page_header(
@@ -190,25 +222,7 @@ def render_reports(context: ReportsContext) -> None:
         with right:
             st.subheader("Expenses by category")
             if not by_category.empty:
-                category_chart = px.bar(
-                    by_category,
-                    x="Total",
-                    y="Category",
-                    orientation="h",
-                    color_discrete_sequence=["#3267D6"],
-                    labels={"Total": "Amount", "Category": "Expense category"},
-                )
-                category_chart.update_layout(
-                    height=300,
-                    margin={"l": 12, "r": 12, "t": 28, "b": 12},
-                    showlegend=False,
-                )
-                category_chart.update_xaxes(
-                    title="Amount",
-                    tickprefix="$",
-                    tickformat=",.2f",
-                    rangemode="tozero",
-                )
+                category_chart = _expense_category_chart(by_category)
                 st.plotly_chart(
                     category_chart,
                     width="stretch",
@@ -297,11 +311,7 @@ def render_reports(context: ReportsContext) -> None:
         st.success("Balance sheet is balanced.")
     else:
         st.markdown("**Status: Out of balance** — review the difference below.")
-        st.warning(
-            "Balance sheet is out of balance by "
-            f"{money(statement['difference'])}. Review opening balances and "
-            "account classifications."
-        )
+        st.warning(_out_of_balance_message(statement["difference"]))
     st.caption(
         "Liabilities and equity are presented with conventional positive "
         "balances. Enter their opening ledger balances as negative amounts."
