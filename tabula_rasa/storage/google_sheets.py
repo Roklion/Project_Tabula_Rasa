@@ -1096,6 +1096,9 @@ class GoogleSheetsStorage:
             record["name"] = _clean_text(
                 record.get("name"), "Account name", required=True
             )
+            record["parent_id"] = _clean_text(
+                record.get("parent_id"), "Account parent"
+            )
             account_type = _clean_text(
                 record.get("type"), "Account type", required=True
             )
@@ -1233,9 +1236,12 @@ class GoogleSheetsStorage:
             category["name"] = _clean_text(
                 category.get("name"), "Category name", required=True
             )
+            category["parent_id"] = _clean_text(
+                category.get("parent_id"), "Category parent"
+            )
             category_kind = _clean_text(
                 category.get("kind"), "Category kind", required=True
-            )
+            ).title()
             if category_kind not in CATEGORY_KINDS:
                 raise StorageValidationError(
                     "Category kind must be Income or Expense"
@@ -1464,12 +1470,14 @@ class GoogleSheetsStorage:
         transactions = []
         for row in self._rows("Transactions", force_refresh=_force_refresh):
             item = dict(row.values)
+            item["txn_date"] = _iso_date(item.get("txn_date"))
             item["account_id"] = _clean_text(
                 item.get("account_id"), "Account", required=True
             )
             item["to_account_id"] = _clean_text(
                 item.get("to_account_id"), "Destination account"
             )
+            item["category_id"] = _clean_text(item.get("category_id"), "Category")
             if start_text and item["txn_date"] < start_text:
                 continue
             if end_text and item["txn_date"] > end_text:

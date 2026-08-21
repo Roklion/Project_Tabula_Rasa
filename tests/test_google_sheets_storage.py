@@ -700,6 +700,85 @@ class TestGoogleSheetsStorage:
         }
         assert balances == {source["id"]: -25.0, destination["id"]: 25.0}
 
+    def test_list_hierarchy_records_normalizes_parent_ids_and_category_kind(
+        self,
+    ) -> None:
+        account_parent = self.storage.create_account("Operating", "Bank")
+        account_child = self.storage.create_account(
+            "Reserve", "Cash", parent_id=account_parent["id"]
+        )
+        category_parent = self.storage.create_category("Travel", "Expense")
+        category_child = self.storage.create_category(
+            "Flights", "Expense", parent_id=category_parent["id"]
+        )
+        account_sheet = self.workbook.sheets["Accounts"]
+        category_sheet = self.workbook.sheets["Categories"]
+        account_row = next(
+            row for row in account_sheet.rows[1:] if row[0] == account_child["id"]
+        )
+        category_row = next(
+            row for row in category_sheet.rows[1:] if row[0] == category_child["id"]
+        )
+        account_row[account_sheet.rows[0].index("parent_id")] = (
+            f" {account_parent['id']} "
+        )
+        category_row[category_sheet.rows[0].index("parent_id")] = (
+            f" {category_parent['id']} "
+        )
+        category_row[category_sheet.rows[0].index("kind")] = " expense "
+
+        accounts = self.storage.list_accounts(active_only=False, _force_refresh=True)
+        categories = self.storage.list_categories(_force_refresh=True)
+
+        assert next(item for item in accounts if item["id"] == account_child["id"])[
+            "parent_id"
+        ] == account_parent["id"]
+        listed_category = next(
+            item for item in categories if item["id"] == category_child["id"]
+        )
+        assert listed_category["parent_id"] == category_parent["id"]
+        assert listed_category["kind"] == "Expense"
+
+    def test_list_transactions_normalizes_category_and_date(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Office", "Expense")
+        transaction = self.storage.create_transaction(
+            txn_date="2026-08-01",
+            kind="Expense",
+            amount=10,
+            account_id=account["id"],
+            category_id=category["id"],
+        )
+        worksheet = self.workbook.sheets["Transactions"]
+        row = next(item for item in worksheet.rows[1:] if item[0] == transaction["id"])
+        row[worksheet.rows[0].index("txn_date")] = " 2026-08-01 "
+        row[worksheet.rows[0].index("category_id")] = f" {category['id']} "
+
+        listed = self.storage.list_transactions(
+            start="2026-08-01", end="2026-08-01", _force_refresh=True
+        )
+
+        assert listed[0]["txn_date"] == "2026-08-01"
+        assert listed[0]["category_id"] == category["id"]
+
+    @pytest.mark.parametrize("value", ["", "not-a-date"])
+    def test_list_transactions_rejects_invalid_dates(self, value: str) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Office", "Expense")
+        transaction = self.storage.create_transaction(
+            txn_date="2026-08-01",
+            kind="Expense",
+            amount=10,
+            account_id=account["id"],
+            category_id=category["id"],
+        )
+        worksheet = self.workbook.sheets["Transactions"]
+        row = next(item for item in worksheet.rows[1:] if item[0] == transaction["id"])
+        row[worksheet.rows[0].index("txn_date")] = value
+
+        with pytest.raises(StorageValidationError, match="Date"):
+            self.storage.list_transactions(_force_refresh=True)
+
     def test_default_seed_does_not_recreate_renamed_defaults(self) -> None:
         self.storage.ensure_defaults()
         checking = next(
