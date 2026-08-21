@@ -37,6 +37,9 @@ FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 STATE_MAX_AGE_SECONDS = 10 * 60
 HTTP_TIMEOUT_SECONDS = 30
 MAX_RECEIPT_BYTES = 20 * 1024 * 1024
+RECEIPT_FILE_EXTENSIONS = frozenset(
+    {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".heic"}
+)
 PROFILE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,47}$")
 DRIVE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{10,}$")
 SAFE_RECEIPT_NAME_PATTERN = re.compile(r"[^A-Za-z0-9._() -]+")
@@ -482,6 +485,25 @@ def safe_receipt_filename(original_name: str) -> str:
         return validate_receipt_filename(cleaned, "Receipt filename")
     except ReceiptManifestError:
         return validate_receipt_filename(f"_{cleaned}", "Receipt filename")
+
+
+def validate_receipt_upload(
+    original_name: str,
+    content: bytes,
+) -> None:
+    """Validate the shared receipt upload contract before any write."""
+    filename = str(original_name or "").strip()
+    if not filename or not any(
+        filename.casefold().endswith(extension)
+        for extension in RECEIPT_FILE_EXTENSIONS
+    ):
+        raise GoogleDriveAccessError(
+            "Receipt files must be PDF, PNG, JPG, JPEG, WEBP, or HEIC."
+        )
+    if not content or len(content) > MAX_RECEIPT_BYTES:
+        raise GoogleDriveAccessError(
+            "Receipt files must be non-empty and no larger than 20 MB."
+        )
 
 
 def suffixed_receipt_filename(filename: str, occurrence: int) -> str:
@@ -1058,10 +1080,7 @@ class GoogleDriveClient:
         mime_type: str,
     ) -> dict[str, Any]:
         """Create one receipt without replacing a same-named Drive file."""
-        if not content or len(content) > MAX_RECEIPT_BYTES:
-            raise GoogleDriveAccessError(
-                "Receipt files must be non-empty and no larger than 20 MB."
-            )
+        validate_receipt_upload(original_name, content)
         folder_id = self._valid_folder_id(folder_id)
         base_filename = safe_receipt_filename(original_name)
         original_filename = safe_receipt_filename(original_name)

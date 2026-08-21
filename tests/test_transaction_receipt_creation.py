@@ -1,0 +1,172 @@
+from __future__ import annotations
+
+from collections.abc import Mapping
+
+import pytest
+
+from tabula_rasa.google_drive import GoogleDriveAccessError
+from tabula_rasa.page_renderers.transactions.receipts import (
+    advance_receipt_creation_workflow,
+    new_receipt_creation_workflow,
+    prepare_receipt_uploads,
+    receipt_creation_counts,
+)
+
+
+class UploadedFile:
+    def __init__(self, name: str, content: bytes, mime_type: str) -> None:
+        self.name = name
+        self.type = mime_type
+        self._content = content
+
+    def getvalue(self) -> bytes:
+        return self._content
+
+
+def _drive_file(receipt_id: str, name: str) -> dict[str, object]:
+    return {
+        "id": f"drive-{receipt_id}123456",
+        "name": name,
+        "mimeType": "application/pdf",
+        "size": "7",
+        "appProperties": {
+            "tabulaRasaKind": "receipt",
+            "tabulaRasaReceiptId": receipt_id * 32,
+            "tabulaRasaSha256": "b" * 64,
+            "tabulaRasaOriginalName": name,
+        },
+    }
+
+
+def test_prepare_receipts_preserves_duplicate_names_as_independent_items() -> None:
+    prepared = prepare_receipt_uploads(
+        [
+            UploadedFile("receipt.pdf", b"first", "application/pdf"),
+            UploadedFile("receipt.pdf", b"second", "application/pdf"),
+        ]
+    )
+
+    assert [item["original_name"] for item in prepared] == [
+        "receipt.pdf",
+        "receipt.pdf",
+    ]
+    assert prepared[0]["key"] != prepared[1]["key"]
+    assert [item["status"] for item in prepared] == ["pending", "pending"]
+
+
+@pytest.mark.parametrize(
+    ("name", "content", "message"),
+    [
+        ("receipt.txt", b"receipt", "must be PDF"),
+        ("receipt.pdf", b"", "non-empty"),
+    ],
+)
+def test_prepare_receipts_rejects_invalid_files_before_sheets_write(
+    name: str,
+    content: bytes,
+    message: str,
+) -> None:
+    with pytest.raises(GoogleDriveAccessError, match=message):
+        prepare_receipt_uploads(
+            [UploadedFile(name, content, "application/octet-stream")]
+        )
+
+
+def test_partial_link_failure_retries_only_unresolved_receipt() -> None:
+    receipts = [
+        {
+            "key": "first",
+            "original_name": "receipt.pdf",
+            "content": b"first",
+            "mime_type": "application/pdf",
+            "status": "pending",
+        },
+        {
+            "key": "second",
+            "original_name": "receipt.pdf",
+            "content": b"second",
+            "mime_type": "application/pdf",
+            "status": "pending",
+        },
+    ]
+    workflow = new_receipt_creation_workflow("txn-1", receipts)
+    uploaded: list[str] = []
+    linked: list[str] = []
+    fail_second_link = {"value": True}
+
+    def upload(item: Mapping[str, object]) -> Mapping[str, object]:
+        key = str(item["key"])
+        uploaded.append(key)
+        return _drive_file(
+            "a" if key == "first" else "c",
+            str(item["original_name"]),
+        )
+
+    def link(reference: Mapping[str, object]) -> None:
+        receipt_id = str(reference["receipt_id"])
+        linked.append(receipt_id)
+        if receipt_id.startswith("c") and fail_second_link["value"]:
+            raise RuntimeError("Sheets link failed")
+
+    advance_receipt_creation_workflow(
+        workflow,
+        upload_receipt=upload,
+        link_receipt=link,
+    )
+
+    assert receipt_creation_counts(workflow) == (1, 1, 1)
+    assert uploaded == ["first", "second"]
+    assert [item["status"] for item in workflow["receipts"]] == [
+        "linked",
+        "uploaded",
+    ]
+
+    fail_second_link["value"] = False
+    advance_receipt_creation_workflow(
+        workflow,
+        upload_receipt=upload,
+        link_receipt=link,
+    )
+
+    assert receipt_creation_counts(workflow) == (2, 0, 0)
+    assert uploaded == ["first", "second"]
+    assert len(linked) == 3
+
+
+def test_upload_failure_does_not_stop_later_receipts() -> None:
+    workflow = new_receipt_creation_workflow(
+        "txn-1",
+        [
+            {
+                "key": "failed",
+                "original_name": "failed.pdf",
+                "content": b"failed",
+                "mime_type": "application/pdf",
+                "status": "pending",
+            },
+            {
+                "key": "successful",
+                "original_name": "successful.pdf",
+                "content": b"successful",
+                "mime_type": "application/pdf",
+                "status": "pending",
+            },
+        ],
+    )
+
+    def upload(item: Mapping[str, object]) -> Mapping[str, object]:
+        if item["key"] == "failed":
+            raise RuntimeError("Drive upload failed")
+        return _drive_file("d", str(item["original_name"]))
+
+    advance_receipt_creation_workflow(
+        workflow,
+        upload_receipt=upload,
+        link_receipt=lambda _reference: None,
+    )
+
+    assert [item["status"] for item in workflow["receipts"]] == [
+        "failed",
+        "linked",
+    ]
+    assert receipt_creation_counts(workflow) == (1, 0, 1)

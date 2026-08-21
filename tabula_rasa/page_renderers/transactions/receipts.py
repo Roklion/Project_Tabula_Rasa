@@ -2,17 +2,255 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Mapping, Sequence
+from typing import Any, Callable, MutableMapping
 
 import streamlit as st
 
-from tabula_rasa.google_drive import GoogleDriveError
+from tabula_rasa.google_drive import (
+    GoogleDriveError,
+    validate_receipt_upload,
+)
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
 from tabula_rasa.receipt_manifest import (
     ReceiptManifestError,
     receipt_reference_from_drive_file,
 )
 from tabula_rasa.storage import StorageError, decode_receipt_references
+
+
+RECEIPT_UPLOAD_TYPES = ["pdf", "png", "jpg", "jpeg", "webp", "heic"]
+RECEIPT_CREATION_WORKFLOW_KEY = "transaction_receipt_creation_workflow"
+
+
+def prepare_receipt_uploads(uploaded_files: Sequence[object]) -> list[dict[str, Any]]:
+    """Copy and validate every selected file before the Sheets write."""
+    prepared: list[dict[str, Any]] = []
+    for index, uploaded_file in enumerate(uploaded_files):
+        name = str(getattr(uploaded_file, "name", "") or "")
+        content = uploaded_file.getvalue()
+        validate_receipt_upload(name, content)
+        prepared.append(
+            {
+                "key": f"{index}:{hashlib.sha256(content).hexdigest()}",
+                "original_name": name,
+                "mime_type": str(
+                    getattr(uploaded_file, "type", "")
+                    or "application/octet-stream"
+                ),
+                "content": content,
+                "status": "pending",
+                "reference": None,
+                "drive_file": None,
+                "error": "",
+            }
+        )
+    return prepared
+
+
+def new_receipt_creation_workflow(
+    transaction_id: str,
+    receipts: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Create session-only recovery state after a confirmed Sheets write."""
+    return {
+        "transaction_id": transaction_id,
+        "receipts": [dict(receipt) for receipt in receipts],
+    }
+
+
+def advance_receipt_creation_workflow(
+    workflow: MutableMapping[str, Any],
+    *,
+    upload_receipt: Callable[[Mapping[str, Any]], Mapping[str, Any]],
+    link_receipt: Callable[[Mapping[str, Any]], object],
+) -> None:
+    """Advance each receipt independently, retaining safe retry state."""
+    for receipt in workflow.get("receipts", []):
+        if not isinstance(receipt, MutableMapping):
+            continue
+        status = str(receipt.get("status", "pending"))
+        if status == "linked":
+            continue
+        if status != "uploaded":
+            try:
+                drive_file = dict(upload_receipt(receipt))
+            except Exception as error:  # noqa: BLE001 - keep other receipts moving
+                receipt["status"] = "failed"
+                receipt["error"] = str(error)
+                continue
+            receipt["drive_file"] = drive_file
+            try:
+                reference = receipt_reference_from_drive_file(drive_file)
+            except Exception as error:  # noqa: BLE001 - preserve Drive recovery pointer
+                receipt["status"] = "uploaded"
+                receipt["error"] = (
+                    "The Drive file was uploaded, but its receipt metadata "
+                    f"could not be read: {error}"
+                )
+                continue
+            receipt["reference"] = reference
+            receipt["status"] = "uploaded"
+        reference = receipt.get("reference")
+        if not isinstance(reference, Mapping):
+            continue
+        try:
+            link_receipt(reference)
+        except Exception as error:  # noqa: BLE001 - retain uploaded file for retry
+            receipt["status"] = "uploaded"
+            receipt["error"] = str(error)
+        else:
+            receipt["status"] = "linked"
+            receipt["error"] = ""
+
+
+def receipt_creation_counts(workflow: Mapping[str, Any]) -> tuple[int, int, int]:
+    """Return linked, uploaded, and unresolved receipt counts."""
+    receipts = workflow.get("receipts", [])
+    linked = sum(item.get("status") == "linked" for item in receipts)
+    uploaded = sum(item.get("status") == "uploaded" for item in receipts)
+    unresolved = len(receipts) - linked
+    return linked, uploaded, unresolved
+
+
+def _receipt_folder(context: TransactionsContext) -> Mapping[str, object] | None:
+    drive_settings = context.profile_secrets.get("google_drive")
+    receipt_folder = (
+        drive_settings.get("receipt_folder")
+        if isinstance(drive_settings, Mapping)
+        else None
+    )
+    return receipt_folder if isinstance(receipt_folder, Mapping) else None
+
+
+def _advance_context_workflow(
+    context: TransactionsContext,
+    workflow: MutableMapping[str, Any],
+    receipt_folder: Mapping[str, object],
+) -> None:
+    receipt_drive = context.get_drive_client(
+        context.profile_key,
+        context.configuration_revision,
+    )
+    transaction_id = str(workflow["transaction_id"])
+    folder_id = str(receipt_folder["id"])
+    advance_receipt_creation_workflow(
+        workflow,
+        upload_receipt=lambda receipt: receipt_drive.upload_receipt(
+            profile_key=context.profile_key,
+            transaction_id=transaction_id,
+            folder_id=folder_id,
+            original_name=str(receipt["original_name"]),
+            content=bytes(receipt["content"]),
+            mime_type=str(receipt["mime_type"]),
+        ),
+        link_receipt=lambda reference: context.storage.link_transaction_receipt(
+            transaction_id,
+            reference=reference,
+        ),
+    )
+
+
+def _workflow_complete(workflow: Mapping[str, Any]) -> bool:
+    return receipt_creation_counts(workflow)[2] == 0
+
+
+def finish_receipt_creation_if_complete(
+    context: TransactionsContext,
+    workflow: MutableMapping[str, Any],
+) -> bool:
+    """Clear successful recovery state and schedule the form reset."""
+    if not _workflow_complete(workflow):
+        return False
+    linked, _uploaded, _unresolved = receipt_creation_counts(workflow)
+    st.session_state.pop(RECEIPT_CREATION_WORKFLOW_KEY, None)
+    context.schedule_widget_reset("reset_add_transaction_form")
+    st.session_state["receipt_creation_success_notice"] = (
+        f"Transaction saved and {linked} receipt(s) linked."
+    )
+    return True
+
+
+def handle_confirmed_transaction_receipts(
+    context: TransactionsContext,
+    transaction: Mapping[str, Any],
+    receipts: Sequence[Mapping[str, Any]],
+) -> None:
+    """Upload/link selected receipts after the Sheets write is confirmed."""
+    workflow = new_receipt_creation_workflow(str(transaction["id"]), receipts)
+    st.session_state[RECEIPT_CREATION_WORKFLOW_KEY] = workflow
+    receipt_folder = _receipt_folder(context)
+    if receipt_folder is None:
+        workflow["configuration_error"] = (
+            "Google Drive receipt storage is not configured for this profile."
+        )
+        return
+    try:
+        _advance_context_workflow(context, workflow, receipt_folder)
+    except GoogleDriveError as error:
+        workflow["configuration_error"] = str(error)
+    finish_receipt_creation_if_complete(context, workflow)
+
+
+def _render_receipt_workflow_status(workflow: Mapping[str, Any]) -> None:
+    linked, uploaded, unresolved = receipt_creation_counts(workflow)
+    st.caption(
+        f"Receipt progress: {linked} linked, {uploaded} uploaded and awaiting "
+        f"linking, {unresolved} unresolved."
+    )
+    for receipt in workflow.get("receipts", []):
+        name = str(receipt.get("original_name", "receipt"))
+        status = str(receipt.get("status", "pending"))
+        if status == "linked":
+            st.success(f"{name}: linked")
+        elif status == "uploaded":
+            st.warning(
+                f"{name}: uploaded to Drive; linking is still unresolved. "
+                "Retry linking this existing file or use Unreferenced receipt."
+            )
+        else:
+            st.warning(f"{name}: upload unresolved. {receipt.get('error', '')}")
+
+
+def render_receipt_creation_recovery(context: TransactionsContext) -> bool:
+    """Render and optionally resume the current session's receipt recovery."""
+    workflow = st.session_state.get(RECEIPT_CREATION_WORKFLOW_KEY)
+    if not isinstance(workflow, MutableMapping):
+        return False
+    transaction_id = str(workflow.get("transaction_id", ""))
+    if not transaction_id:
+        st.session_state.pop(RECEIPT_CREATION_WORKFLOW_KEY, None)
+        return False
+    st.info(
+        f"Transaction {transaction_id} is saved in Google Sheets. "
+        "Receipt processing can be resumed independently."
+    )
+    if workflow.get("configuration_error"):
+        st.error(str(workflow["configuration_error"]))
+    _render_receipt_workflow_status(workflow)
+    if not _workflow_complete(workflow) and st.button(
+        "Retry unresolved receipts",
+        type="primary",
+        key=f"retry-receipts-{transaction_id}",
+    ):
+        receipt_folder = _receipt_folder(context)
+        if receipt_folder is None:
+            st.error(
+                "Connect Google Drive and configure the profile's receipt "
+                "folder before retrying."
+            )
+        else:
+            workflow.pop("configuration_error", None)
+            try:
+                _advance_context_workflow(context, workflow, receipt_folder)
+            except GoogleDriveError as error:
+                workflow["configuration_error"] = str(error)
+            if finish_receipt_creation_if_complete(context, workflow):
+                st.rerun()
+            else:
+                st.rerun()
+    return True
 
 
 def render_receipts(
@@ -410,7 +648,8 @@ def render_receipts(
                                     "The receipt was uploaded to "
                                     "Google Drive but could not be "
                                     "linked to this transaction. "
-                                    f"Retry the upload. {error}"
+                                    "Retry linking the existing file or use the "
+                                    f"Unreferenced receipt workflow. {error}"
                                 )
                             else:
                                 st.success(
@@ -418,4 +657,3 @@ def render_receipts(
                                     f"{uploaded_receipt.get('name', receipt_upload.name)}"
                                 )
                                 st.rerun()
-

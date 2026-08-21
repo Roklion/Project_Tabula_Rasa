@@ -8,6 +8,13 @@ from datetime import date
 import streamlit as st
 
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
+from tabula_rasa.page_renderers.transactions.receipts import (
+    RECEIPT_CREATION_WORKFLOW_KEY,
+    RECEIPT_UPLOAD_TYPES,
+    handle_confirmed_transaction_receipts,
+    prepare_receipt_uploads,
+    render_receipt_creation_recovery,
+)
 
 
 def render_add_transaction(
@@ -18,6 +25,7 @@ def render_add_transaction(
     category_paths: Mapping[str, str],
 ) -> None:
     """Render the existing profile-scoped transaction creation workflow."""
+    render_receipt_creation_recovery(context)
     st.subheader("Add transaction")
     st.caption("Record income, expenses, or transfers in the active account set.")
     transaction_form_keys = (
@@ -32,6 +40,7 @@ def render_add_transaction(
         "add_transaction_payee",
         "add_transaction_reference",
         "add_transaction_description",
+        "add_transaction_receipts",
     )
     context.reset_widget_state_if_requested(
         "reset_add_transaction_form",
@@ -119,6 +128,16 @@ def render_add_transaction(
             "Description / memo",
             key="add_transaction_description",
         )
+        receipt_uploads = st.file_uploader(
+            "Receipt (optional)",
+            type=RECEIPT_UPLOAD_TYPES,
+            accept_multiple_files=True,
+            key="add_transaction_receipts",
+            help=(
+                "Select zero or more PDF, PNG, JPG, JPEG, WEBP, or HEIC "
+                "files. Each file must be non-empty and no larger than 20 MB."
+            ),
+        )
         submitted = st.form_submit_button(
             "Save transaction", type="primary", width="stretch"
         )
@@ -137,12 +156,57 @@ def render_add_transaction(
                     "description": description,
                     "reference": reference,
                 }
-                context.confirmed_write(
-                    "create_transaction",
-                    payload,
-                    lambda: context.storage.create_transaction(**payload),
-                    "Transaction saved.",
-                    on_success=lambda: context.schedule_widget_reset(
-                        "reset_add_transaction_form"
-                    ),
-                )
+                try:
+                    prepared_receipts = prepare_receipt_uploads(
+                        receipt_uploads or []
+                    )
+                except Exception as error:  # noqa: BLE001 - show safe validation
+                    st.error(f"Receipt validation failed: {error}")
+                else:
+                    receipt_folder = None
+                    drive_settings = context.profile_secrets.get("google_drive")
+                    if isinstance(drive_settings, Mapping):
+                        receipt_folder = drive_settings.get("receipt_folder")
+                    if prepared_receipts and not (
+                        isinstance(receipt_folder, Mapping)
+                        and receipt_folder.get("id")
+                    ):
+                        st.error(
+                            "Configure a Google Drive receipt folder for this "
+                            "profile before saving a transaction with receipts."
+                        )
+                    else:
+                        context.confirmed_write(
+                            "create_transaction",
+                            payload,
+                            lambda: context.storage.create_transaction(**payload),
+                            lambda _result: st.session_state.pop(
+                                "receipt_creation_success_notice",
+                                None,
+                            )
+                            or (
+                                "Transaction saved. Receipt processing needs "
+                                "attention; use the recovery controls above."
+                                if prepared_receipts
+                                and st.session_state.get(
+                                    RECEIPT_CREATION_WORKFLOW_KEY
+                                )
+                                else "Transaction saved."
+                            ),
+                            on_success=(
+                                lambda: context.schedule_widget_reset(
+                                    "reset_add_transaction_form"
+                                )
+                                if not prepared_receipts
+                                else None
+                            ),
+                            on_confirmed=(
+                                lambda result: handle_confirmed_transaction_receipts(
+                                    context,
+                                    result,
+                                    prepared_receipts,
+                                )
+                                if prepared_receipts
+                                else None
+                            ),
+                        )
