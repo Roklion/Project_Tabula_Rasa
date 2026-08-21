@@ -1464,6 +1464,12 @@ class GoogleSheetsStorage:
         transactions = []
         for row in self._rows("Transactions", force_refresh=_force_refresh):
             item = dict(row.values)
+            item["account_id"] = _clean_text(
+                item.get("account_id"), "Account", required=True
+            )
+            item["to_account_id"] = _clean_text(
+                item.get("to_account_id"), "Destination account"
+            )
             if start_text and item["txn_date"] < start_text:
                 continue
             if end_text and item["txn_date"] > end_text:

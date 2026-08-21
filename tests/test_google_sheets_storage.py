@@ -34,6 +34,7 @@ from tabula_rasa.quickbooks_import import (
     suggested_account_classification,
     suggested_account_type,
 )
+from tabula_rasa.ledger_reporting import account_balances
 from tabula_rasa.receipt_manifest import (
     build_receipt_manifest,
     ReceiptManifestError,
@@ -660,6 +661,44 @@ class TestGoogleSheetsStorage:
         assert self.storage.edit_category(listed_category["id"], name="Renamed sales")[
             "name"
         ] == "Renamed sales"
+
+    def test_list_transactions_normalizes_account_references_for_balances(self) -> None:
+        source = self.storage.create_account("Checking", "Bank")
+        destination = self.storage.create_account("Savings", "Bank")
+        transfer = self.storage.create_transaction(
+            txn_date="2026-08-01",
+            kind="Transfer",
+            amount=25,
+            account_id=source["id"],
+            to_account_id=destination["id"],
+        )
+        account_sheet = self.workbook.sheets["Accounts"]
+        transaction_sheet = self.workbook.sheets["Transactions"]
+        for account_id in (source["id"], destination["id"]):
+            account_row = next(
+                row for row in account_sheet.rows[1:] if row[0] == account_id
+            )
+            account_row[account_sheet.rows[0].index("id")] = f" {account_id} "
+        transaction_row = next(
+            row for row in transaction_sheet.rows[1:] if row[0] == transfer["id"]
+        )
+        transaction_row[transaction_sheet.rows[0].index("account_id")] = (
+            f" {source['id']} "
+        )
+        transaction_row[transaction_sheet.rows[0].index("to_account_id")] = (
+            f" {destination['id']} "
+        )
+
+        accounts = self.storage.list_accounts(active_only=False, _force_refresh=True)
+        transactions = self.storage.list_transactions(_force_refresh=True)
+
+        assert transactions[0]["account_id"] == source["id"]
+        assert transactions[0]["to_account_id"] == destination["id"]
+        balances = {
+            account["id"]: account["balance"]
+            for account in account_balances(accounts, transactions)
+        }
+        assert balances == {source["id"]: -25.0, destination["id"]: 25.0}
 
     def test_default_seed_does_not_recreate_renamed_defaults(self) -> None:
         self.storage.ensure_defaults()
