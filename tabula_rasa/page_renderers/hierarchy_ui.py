@@ -14,9 +14,15 @@ _HIERARCHY_RESPONSIVE_CSS = """
     [data-testid="stMain"],
     [data-testid="stMainBlockContainer"],
     [data-testid="stAppViewContainer"] {
+        box-sizing: border-box;
         max-width: 100vw;
         min-width: 0;
         overflow-x: hidden;
+        width: 100vw;
+    }
+
+    [data-testid="stMainBlockContainer"] * {
+        min-width: 0;
     }
 
     [data-testid="stCaptionContainer"] {
@@ -24,13 +30,19 @@ _HIERARCHY_RESPONSIVE_CSS = """
         white-space: normal;
     }
 
+    [data-testid="stCaptionContainer"] p {
+        max-width: 100%;
+        overflow-wrap: anywhere;
+    }
+
     [data-testid="stHorizontalBlock"] {
         flex-wrap: wrap;
+        width: 100%;
     }
 
     [data-testid="stHorizontalBlock"] [data-testid="stColumn"] {
         flex: 1 1 100%;
-        min-width: 100%;
+        max-width: 100%;
     }
 
     [data-testid="stDataFrame"],
