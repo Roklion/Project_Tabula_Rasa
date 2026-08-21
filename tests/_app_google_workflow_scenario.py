@@ -281,6 +281,24 @@ def main() -> None:
 
         app.radio[0].set_value("Mileage").run()
         assert app.dataframe[0].key == "mileage_log_test_1"
+        assert list(app.dataframe[0].value.columns) == [
+            "ID",
+            "Date",
+            "Miles",
+            "Vehicle",
+            "From",
+            "Destination",
+            "Business purpose",
+            "Notes",
+        ]
+        assert {metric.label for metric in app.metric} == {
+            "Trips",
+            "Business miles",
+        }
+        assert any(
+            button.label == "Download filtered mileage CSV"
+            for button in app.download_button
+        )
         by_label(app.number_input, "Business miles").set_value(18.6)
         by_label(app.text_input, "Vehicle (optional)").input("Blue car")
         by_label(app.text_input, "Starting location").input("Office")
@@ -317,6 +335,19 @@ def main() -> None:
         )
         assert outbound["destination"] == "Client site"
         assert return_trip["destination"] == "Office"
+        assert outbound["id"] != return_trip["id"]
+        assert set(outbound) == {
+            "id",
+            "trip_date",
+            "miles",
+            "vehicle",
+            "start_location",
+            "destination",
+            "business_purpose",
+            "notes",
+            "created_at",
+        }
+        assert set(return_trip) == set(outbound)
         assert outbound["miles"] == return_trip["miles"] == "18.6"
         assert outbound["business_purpose"] == "Project meeting"
         assert by_label(app.number_input, "Business miles").value == 0.1
