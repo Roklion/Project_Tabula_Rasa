@@ -247,6 +247,14 @@ def main() -> None:
         search.input("  test VENDOR  ").run()
         assert app.dataframe[0].value["Payee"].tolist() == ["Test vendor"]
         assert app.dataframe[0].value["Type"].tolist() == ["Expense"]
+        matching_transaction = next(
+            item
+            for item in storage.list_transactions()
+            if item.get("payee") == "Test vendor"
+        )
+        assert app.session_state.get("edit_transaction_id") == matching_transaction[
+            "id"
+        ]
 
         by_label(app.button, "Clear search").click().run()
         assert by_label(app.text_input, "Search transactions").value == ""
@@ -299,6 +307,7 @@ def main() -> None:
             "No transactions match your search" in str(message.value)
             for message in app.info
         )
+        assert app.session_state.get("edit_transaction_id") is None
         by_label(app.button, "Clear search").click().run()
 
         app.radio[0].set_value("Accounts").run()
