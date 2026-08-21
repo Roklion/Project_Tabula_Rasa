@@ -77,14 +77,6 @@ def render_ledger(
         on_change=lambda: _change_ledger_mode(context.profile_key),
     )
     mode = mode or "Edit"
-    transaction_ledger_key = "transaction_ledger_" f"{context.profile_key}_" f"{st.session_state.get('transaction_ledger_generation', 0)}"
-    if st.session_state.get("transaction_ledger_mode_generation", 0):
-        transaction_ledger_key += f"_{st.session_state['transaction_ledger_mode_generation']}"
-    if mode == "Bulk":
-        transaction_ledger_key += (
-            "_bulk_"
-            f"{st.session_state.get('transaction_bulk_selection_generation', 0)}"
-        )
     c1, c2, c3 = st.columns(3)
     start = c1.date_input(
         "From",
@@ -217,6 +209,14 @@ def render_ledger(
         ):
             _clear_bulk_selection(context.profile_key)
         st.session_state["transaction_bulk_scope"] = selection_scope
+    transaction_ledger_key = "transaction_ledger_" f"{context.profile_key}_" f"{st.session_state.get('transaction_ledger_generation', 0)}"
+    if st.session_state.get("transaction_ledger_mode_generation", 0):
+        transaction_ledger_key += f"_{st.session_state['transaction_ledger_mode_generation']}"
+    if mode == "Bulk":
+        transaction_ledger_key += (
+            "_bulk_"
+            f"{st.session_state.get('transaction_bulk_selection_generation', 0)}"
+        )
     if not all_transactions:
         st.info("No transactions exist yet. Add a transaction to populate the ledger.")
     elif transaction_frame.empty:
