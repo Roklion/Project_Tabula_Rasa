@@ -258,6 +258,9 @@ def reset_profile_presentation_state(
         "report_start",
         "report_end",
         "balance_sheet_date",
+        "transaction_bulk_scope",
+        "transaction_bulk_selection_generation",
+        "transaction_ledger_mode_generation",
     }
     prefixes = (
         "add_transaction_",
@@ -290,6 +293,8 @@ def reset_profile_presentation_state(
         "prepared-live-exports:",
         "ledger_filter_",
         "ledger_search_",
+        "transaction_bulk_selected_ids_",
+        "transaction_ledger_mode_",
     )
     for key in list(session_state):
         if key in keys or key.startswith(prefixes):

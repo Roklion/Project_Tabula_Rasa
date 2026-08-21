@@ -29,6 +29,34 @@ def transaction_has_receipts(transaction: Mapping[str, object]) -> bool:
     except StorageError:
         return False
 
+
+def _bulk_selection_key(profile_key: str) -> str:
+    return f"transaction_bulk_selected_ids_{profile_key}"
+
+
+def _clear_bulk_selection(profile_key: str) -> None:
+    st.session_state[_bulk_selection_key(profile_key)] = ()
+    st.session_state["transaction_bulk_selection_generation"] = int(
+        st.session_state.get("transaction_bulk_selection_generation", 0)
+    ) + 1
+
+
+def _change_ledger_mode(profile_key: str) -> None:
+    _clear_bulk_selection(profile_key)
+    st.session_state["transaction_ledger_mode_generation"] = int(
+        st.session_state.get("transaction_ledger_mode_generation", 0)
+    ) + 1
+    st.session_state.pop("edit_transaction_id", None)
+
+
+def _selection_ids(transaction_ids: Sequence[str], rows: Sequence[int]) -> tuple[str, ...]:
+    return tuple(
+        transaction_ids[row_index]
+        for row_index in rows
+        if 0 <= row_index < len(transaction_ids)
+    )
+
+
 def render_ledger(
     context: TransactionsContext,
     *,
@@ -39,21 +67,42 @@ def render_ledger(
 ) -> None:
     """Render structured filters, the ledger, and single-row editing."""
     st.subheader("View & edit ledger")
-    st.caption("Filter the ledger, select one row, and manage its details or receipts.")
-    transaction_ledger_key = (
-        "transaction_ledger_"
-        f"{context.profile_key}_"
-        f"{st.session_state.get('transaction_ledger_generation', 0)}"
+    st.caption("Filter the ledger, then choose Edit or Bulk mode explicitly.")
+    mode = st.segmented_control(
+        "Ledger mode",
+        ["Edit", "Bulk"],
+        default="Edit",
+        key=f"transaction_ledger_mode_{context.profile_key}",
+        help="Edit manages one row. Bulk enables only the approved multi-row actions.",
+        on_change=lambda: _change_ledger_mode(context.profile_key),
     )
+    mode = mode or "Edit"
+    transaction_ledger_key = "transaction_ledger_" f"{context.profile_key}_" f"{st.session_state.get('transaction_ledger_generation', 0)}"
+    if st.session_state.get("transaction_ledger_mode_generation", 0):
+        transaction_ledger_key += f"_{st.session_state['transaction_ledger_mode_generation']}"
+    if mode == "Bulk":
+        transaction_ledger_key += (
+            "_bulk_"
+            f"{st.session_state.get('transaction_bulk_selection_generation', 0)}"
+        )
     c1, c2, c3 = st.columns(3)
     start = c1.date_input(
-        "From", date(date.today().year, 1, 1), key="ledger_start"
+        "From",
+        date(date.today().year, 1, 1),
+        key="ledger_start",
+        on_change=lambda: _clear_bulk_selection(context.profile_key),
     )
-    end = c2.date_input("To", date.today(), key="ledger_end")
+    end = c2.date_input(
+        "To",
+        date.today(),
+        key="ledger_end",
+        on_change=lambda: _clear_bulk_selection(context.profile_key),
+    )
     filter_type = c3.selectbox(
         "Type",
         ["All", "Income", "Expense", "Transfer"],
         key=f"ledger_filter_type_{context.profile_key}",
+        on_change=lambda: _clear_bulk_selection(context.profile_key),
     )
     ledger_account_map = {
         account_paths[account_id]: account_id
@@ -69,6 +118,7 @@ def render_ledger(
             "Includes transactions where a selected account is either side "
             "of a transfer."
         ),
+        on_change=lambda: _clear_bulk_selection(context.profile_key),
     )
     selected_account_ids = [
         ledger_account_map[name] for name in selected_account_names
@@ -80,6 +130,7 @@ def render_ledger(
 
     def clear_search() -> None:
         st.session_state[search_state_key] = ""
+        _clear_bulk_selection(context.profile_key)
 
     search_query = st.text_input(
         "Search transactions",
@@ -89,6 +140,7 @@ def render_ledger(
             "Searches Type, Account, To account, Category, Payee, "
             "Description, Reference, and ID."
         ),
+        on_change=lambda: _clear_bulk_selection(context.profile_key),
     )
     if search_query.strip():
         st.button(
@@ -148,6 +200,23 @@ def render_ledger(
     transaction_frame = transaction_frame[
         transaction_frame["ID"].astype(str).isin(matched_ids)
     ].reset_index(drop=True)
+    selection_scope = (
+        context.profile_key,
+        st.session_state.get("transaction_ledger_generation", 0),
+        start.isoformat(),
+        end.isoformat(),
+        filter_type,
+        tuple(sorted(selected_account_ids)),
+        search_query.strip(),
+        mode,
+    )
+    previous_scope = st.session_state.get("transaction_bulk_scope")
+    if previous_scope != selection_scope:
+        if previous_scope is not None or st.session_state.get(
+            _bulk_selection_key(context.profile_key)
+        ):
+            _clear_bulk_selection(context.profile_key)
+        st.session_state["transaction_bulk_scope"] = selection_scope
     if not all_transactions:
         st.info("No transactions exist yet. Add a transaction to populate the ledger.")
     elif transaction_frame.empty:
@@ -172,13 +241,13 @@ def render_ledger(
         st.session_state["edit_transaction_id"] = None
 
     def select_ledger_transaction() -> None:
-        selected_rows = st.session_state[
-            transaction_ledger_key
-        ].selection.rows
-        if selected_rows and selected_rows[0] < len(transaction_ids):
-            st.session_state["edit_transaction_id"] = transaction_ids[
-                selected_rows[0]
-            ]
+        selected_rows = st.session_state[transaction_ledger_key].selection.rows
+        if mode == "Bulk":
+            st.session_state[_bulk_selection_key(context.profile_key)] = _selection_ids(
+                transaction_ids, selected_rows
+            )
+        elif selected_rows and selected_rows[0] < len(transaction_ids):
+            st.session_state["edit_transaction_id"] = transaction_ids[selected_rows[0]]
 
     ledger_event = st.dataframe(
         transaction_frame,
@@ -186,7 +255,7 @@ def render_ledger(
         width="stretch",
         key=transaction_ledger_key,
         on_select=select_ledger_transaction,
-        selection_mode="single-row",
+        selection_mode="multi-row" if mode == "Bulk" else "single-row",
         column_config={
             "Amount": st.column_config.NumberColumn(format="$%.2f"),
             "Receipt": st.column_config.TextColumn(
@@ -195,8 +264,132 @@ def render_ledger(
             ),
         },
     )
-    if not transaction_frame.empty:
-        selected_rows = ledger_event.selection.rows
+    selected_rows = ledger_event.selection.rows
+    if mode == "Bulk":
+        selected_ids = tuple(
+            str(transaction_id)
+            for transaction_id in st.session_state.get(
+                _bulk_selection_key(context.profile_key), ()
+            )
+        )
+        if any(transaction_id not in transaction_ids for transaction_id in selected_ids):
+            _clear_bulk_selection(context.profile_key)
+            selected_ids = ()
+        st.caption(f"{len(selected_ids)} transaction(s) selected")
+        if selected_ids:
+            selected_by_id = {
+                str(transaction["id"]): transaction for transaction in transactions
+            }
+            expected_selected = [selected_by_id[item] for item in selected_ids]
+            selected_frame = transaction_frame[
+                transaction_frame["ID"].astype(str).isin(selected_ids)
+            ]
+            st.download_button(
+                "Export selected",
+                selected_frame.to_csv(index=False).encode("utf-8"),
+                file_name=f"tabula-rosa-selected-{date.today()}.csv",
+                mime="text/csv",
+                width="stretch",
+                key=(
+                    "transaction_bulk_export_"
+                    f"{context.profile_key}_{st.session_state.get('transaction_bulk_selection_generation', 0)}"
+                ),
+            )
+            selected_kinds = {item["kind"] for item in expected_selected}
+            category_eligible = selected_kinds in ({"Income"}, {"Expense"})
+            if not category_eligible:
+                st.info(
+                    "Change category is disabled because Bulk category changes require "
+                    "a homogeneous Income or Expense selection; transfers are not eligible."
+                )
+            else:
+                common_kind = next(iter(selected_kinds))
+                category_map = {
+                    category_paths[category_id]: category_id
+                    for category in categories
+                    if category["kind"] == common_kind
+                    and (category_id := str(category.get("id") or "").strip())
+                }
+                with st.form(
+                    "transaction_bulk_category",
+                    clear_on_submit=False,
+                ):
+                    target_category_id = category_map[
+                        st.selectbox(
+                            "New category",
+                            list(category_map),
+                            key=(
+                                "transaction_bulk_category_"
+                                f"{context.profile_key}_{st.session_state.get('transaction_bulk_selection_generation', 0)}"
+                            ),
+                        )
+                    ]
+                    st.caption(
+                        f"Review: change category for {len(selected_ids)} {common_kind.lower()} transaction(s)."
+                    )
+                    category_requested = st.form_submit_button(
+                        "Change category",
+                        type="primary",
+                        width="stretch",
+                    )
+                if category_requested:
+                    _clear_bulk_selection(context.profile_key)
+                    context.confirmed_write(
+                        "bulk_change_transaction_category",
+                        {
+                            "ids": list(selected_ids),
+                            "expected": expected_selected,
+                            "category_id": target_category_id,
+                        },
+                        lambda: context.storage.bulk_change_transaction_category(
+                            selected_ids,
+                            expected_transactions=expected_selected,
+                            category_id=target_category_id,
+                        ),
+                        lambda result: f"Category updated for {result['count']} transactions.",
+                    )
+
+            total_amount = sum(abs(float(item["amount"])) for item in expected_selected)
+            st.warning(
+                f"Review: permanently delete {len(selected_ids)} transaction(s) "
+                f"totaling {money(total_amount)}. Linked receipt references will be "
+                "removed, but the Google Drive files will remain in Drive as unreferenced files."
+            )
+            with st.form("transaction_bulk_delete", clear_on_submit=False):
+                confirm_delete = st.checkbox(
+                    "I understand these transactions will be permanently deleted and cannot be undone",
+                    key=(
+                        "transaction_bulk_confirm_delete_"
+                        f"{context.profile_key}_{st.session_state.get('transaction_bulk_selection_generation', 0)}"
+                    ),
+                )
+                delete_requested = st.form_submit_button(
+                    "Permanently delete selected",
+                    type="primary",
+                    disabled=not confirm_delete,
+                    width="stretch",
+                )
+            if delete_requested:
+                _clear_bulk_selection(context.profile_key)
+                context.confirmed_write(
+                    "bulk_delete_transactions",
+                    {"ids": list(selected_ids), "expected": expected_selected},
+                    lambda: context.storage.bulk_delete_transactions(
+                        selected_ids,
+                        expected_transactions=expected_selected,
+                    ),
+                    lambda result: (
+                        f"Permanently deleted {result['count']} transactions; "
+                        "linked Drive files were retained."
+                    ),
+                    on_success=lambda: [
+                        clear_receipt_creation_recovery(context, item)
+                        for item in selected_ids
+                    ],
+                )
+        else:
+            st.info("Select one or more visible transactions to use Bulk actions.")
+    elif not transaction_frame.empty:
 
         def transaction_label(transaction_id: str) -> str:
             row = transaction_frame.loc[
