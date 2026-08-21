@@ -2717,6 +2717,27 @@ class TestGoogleSheetsStorage:
             transaction["id"] for transaction in self.storage.list_transactions()
         } == {first["id"], second["id"]}
 
+    def test_definitive_bulk_failure_remains_non_retryable(self) -> None:
+        first, second, replacement = self._bulk_transaction_fixture()
+        expected = [
+            transaction
+            for transaction in self.storage.list_transactions(_force_refresh=True)
+            if transaction["id"] in {first["id"], second["id"]}
+        ]
+        self.storage._batch_update_spreadsheet = Mock(
+            side_effect=StorageUnavailableError("permission denied", retryable=False)
+        )
+
+        with pytest.raises(StorageUnavailableError) as raised:
+            self.storage.bulk_change_transaction_category(
+                [first["id"], second["id"]],
+                expected_transactions=expected,
+                category_id=replacement["id"],
+            )
+
+        assert raised.value.outcome == "not_applied"
+        assert raised.value.retryable is False
+
     def test_uncertain_bulk_readback_failure_is_ambiguous(self) -> None:
         first, second, replacement = self._bulk_transaction_fixture()
         expected = [

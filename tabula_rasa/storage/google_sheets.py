@@ -1193,7 +1193,7 @@ class GoogleSheetsStorage:
             raise StorageBulkMutationUncertainError(
                 f"The {operation} batch was not applied. Review the current ledger before retrying.",
                 outcome="not_applied",
-                retryable=True,
+                retryable=error.retryable,
             ) from error
         raise StorageBulkMutationUncertainError(
             f"The {operation} batch outcome is ambiguous. Do not retry until the selected rows are reviewed.",
