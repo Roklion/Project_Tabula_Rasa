@@ -13,7 +13,7 @@ from streamlit.testing.v1 import AppTest
 
 from tabula_rasa.google_drive import DRIVE_SCOPE, GoogleDriveClient
 from tabula_rasa.ledger_auth import hash_password
-from tabula_rasa.storage import GoogleSheetsStorage
+from tabula_rasa.storage import GoogleSheetsStorage, StorageUnavailableError
 from tests.fakes import FakeWorkbook
 
 
@@ -30,6 +30,7 @@ def main() -> None:
     upload_calls: list[str] = []
     link_calls: list[str] = []
     fail_second_upload = {"value": True}
+    fail_next_post_create_link = {"value": False}
     original_link_transaction_receipt = GoogleSheetsStorage.link_transaction_receipt
 
     def upload_receipt(
@@ -66,6 +67,9 @@ def main() -> None:
         *,
         reference: dict[str, object],
     ) -> dict[str, str]:
+        if fail_next_post_create_link["value"]:
+            fail_next_post_create_link["value"] = False
+            raise StorageUnavailableError("simulated post-create link failure")
         link_calls.append(str(reference["id"]))
         return original_link_transaction_receipt(
             storage_client,
@@ -154,6 +158,20 @@ def main() -> None:
         assert any(
             "2 receipt(s) linked" in str(success.value) for success in app.success
         ), [str(success.value) for success in app.success]
+
+        fail_next_post_create_link["value"] = True
+        by_label(app.file_uploader, "Upload receipt").set_value(
+            ("later.pdf", b"later receipt", "application/pdf")
+        ).run()
+        by_label(app.button, "Upload receipt to Google Drive").click().run()
+        assert len(upload_calls) == 4
+        assert len(link_calls) == 2
+        assert by_label(app.button, "Retry linking uploaded receipt")
+
+        by_label(app.button, "Retry linking uploaded receipt").click().run()
+        assert len(upload_calls) == 4
+        assert len(link_calls) == 3
+        assert storage.list_transactions()[0]["receipt_references"].count('"id"') == 3
 
 
 if __name__ == "__main__":
