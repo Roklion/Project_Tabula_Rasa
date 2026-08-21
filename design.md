@@ -2201,6 +2201,13 @@ Record and maintain a dated business-mileage log.
 - Edit all stored mileage fields
 - Explicit permanent-delete warning and acknowledgement
 
+The current presentation uses compact two-column groupings for related Add trip
+inputs (Trip date/Vehicle, Business miles/Round trip, and Starting
+location/Destination). The log keeps From and To above the Trips and Business
+miles metrics, then the secondary filtered CSV action, the complete eight-column
+table, and the Edit mileage trip section. The table may scroll horizontally on
+narrow viewports; no mileage field or schema column is omitted.
+
 #### Acceptance criteria
 
 - Round-trip explanatory help remains available.
