@@ -2477,6 +2477,38 @@ class TestGoogleSheetsStorage:
                 category_id=replacement["id"],
             )
 
+    def test_bulk_category_change_normalizes_transaction_ids(self) -> None:
+        first, second, replacement = self._bulk_transaction_fixture()
+        expected = [
+            transaction
+            for transaction in self.storage.list_transactions(_force_refresh=True)
+            if transaction["id"] in {first["id"], second["id"]}
+        ]
+
+        result = self.storage.bulk_change_transaction_category(
+            [f" {first['id']} ", f"{second['id']} "],
+            expected_transactions=expected,
+            category_id=replacement["id"],
+        )
+
+        assert result == {"status": "fully_applied", "count": "2"}
+
+    def test_bulk_delete_normalizes_transaction_ids(self) -> None:
+        first, second, _ = self._bulk_transaction_fixture()
+        expected = [
+            transaction
+            for transaction in self.storage.list_transactions(_force_refresh=True)
+            if transaction["id"] in {first["id"], second["id"]}
+        ]
+
+        result = self.storage.bulk_delete_transactions(
+            [f" {first['id']} ", f"{second['id']} "],
+            expected_transactions=expected,
+        )
+
+        assert result == {"status": "fully_applied", "count": "2"}
+        assert self.storage.list_transactions() == []
+
     def test_uncertain_bulk_category_response_is_confirmed_without_retry(self) -> None:
         first, second, replacement = self._bulk_transaction_fixture()
         expected = self.storage.list_transactions(_force_refresh=True)

@@ -312,12 +312,14 @@ def render_ledger(
                     and (category_id := str(category.get("id") or "").strip())
                     and category_id in category_paths
                 }
-                with st.form(
-                    "transaction_bulk_category",
-                    clear_on_submit=False,
-                ):
-                    target_category_id = category_map[
-                        st.selectbox(
+                if not category_map:
+                    st.info(f"No categories of type {common_kind.lower()} are available.")
+                else:
+                    with st.form(
+                        "transaction_bulk_category",
+                        clear_on_submit=False,
+                    ):
+                        selected_category_name = st.selectbox(
                             "New category",
                             list(category_map),
                             key=(
@@ -325,31 +327,31 @@ def render_ledger(
                                 f"{context.profile_key}_{st.session_state.get('transaction_bulk_selection_generation', 0)}"
                             ),
                         )
-                    ]
-                    st.caption(
-                        f"Review: change category for {len(selected_ids)} {common_kind.lower()} transaction(s)."
-                    )
-                    category_requested = st.form_submit_button(
-                        "Change category",
-                        type="primary",
-                        width="stretch",
-                    )
-                if category_requested:
-                    _clear_bulk_selection(context.profile_key)
-                    context.confirmed_write(
-                        "bulk_change_transaction_category",
-                        {
-                            "ids": list(selected_ids),
-                            "expected": expected_selected,
-                            "category_id": target_category_id,
-                        },
-                        lambda: context.storage.bulk_change_transaction_category(
-                            selected_ids,
-                            expected_transactions=expected_selected,
-                            category_id=target_category_id,
-                        ),
-                        lambda result: f"Category updated for {result['count']} transactions.",
-                    )
+                        target_category_id = category_map[selected_category_name]
+                        st.caption(
+                            f"Review: change category for {len(selected_ids)} {common_kind.lower()} transaction(s)."
+                        )
+                        category_requested = st.form_submit_button(
+                            "Change category",
+                            type="primary",
+                            width="stretch",
+                        )
+                    if category_requested:
+                        _clear_bulk_selection(context.profile_key)
+                        context.confirmed_write(
+                            "bulk_change_transaction_category",
+                            {
+                                "ids": list(selected_ids),
+                                "expected": expected_selected,
+                                "category_id": target_category_id,
+                            },
+                            lambda: context.storage.bulk_change_transaction_category(
+                                selected_ids,
+                                expected_transactions=expected_selected,
+                                category_id=target_category_id,
+                            ),
+                            lambda result: f"Category updated for {result['count']} transactions.",
+                        )
 
             total_amount = sum(abs(float(item["amount"])) for item in expected_selected)
             st.warning(

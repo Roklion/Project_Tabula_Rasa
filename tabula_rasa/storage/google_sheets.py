@@ -1237,7 +1237,7 @@ class GoogleSheetsStorage:
                     "fields": "userEnteredValue",
                 }
             }
-            for transaction_id in transaction_ids
+            for transaction_id in selected_rows
         ]
         try:
             self._batch_update_spreadsheet(requests)
@@ -1264,7 +1264,7 @@ class GoogleSheetsStorage:
                 return outcome
             raise AssertionError("Bulk category postcondition did not classify")
         self._invalidate("Transactions")
-        return {"status": "fully_applied", "count": str(len(transaction_ids))}
+        return {"status": "fully_applied", "count": str(len(selected_rows))}
 
     def bulk_delete_transactions(
         self,
@@ -1291,7 +1291,7 @@ class GoogleSheetsStorage:
                 }
             }
             for transaction_id in sorted(
-                transaction_ids,
+                selected_rows,
                 key=lambda item: selected_rows[item].row_number,
                 reverse=True,
             )
@@ -1315,7 +1315,7 @@ class GoogleSheetsStorage:
                 return outcome
             raise AssertionError("Bulk deletion postcondition did not classify")
         self._invalidate("Transactions")
-        return {"status": "fully_applied", "count": str(len(transaction_ids))}
+        return {"status": "fully_applied", "count": str(len(selected_rows))}
 
     def list_accounts(
         self, *, active_only: bool = True, _force_refresh: bool = False
