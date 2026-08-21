@@ -37,8 +37,13 @@ FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 STATE_MAX_AGE_SECONDS = 10 * 60
 HTTP_TIMEOUT_SECONDS = 30
 MAX_RECEIPT_BYTES = 20 * 1024 * 1024
-RECEIPT_FILE_EXTENSIONS = frozenset(
-    {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".heic"}
+RECEIPT_FILE_EXTENSIONS = (
+    ".pdf",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    ".heic",
 )
 PROFILE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,47}$")
 DRIVE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{10,}$")
@@ -493,10 +498,7 @@ def validate_receipt_upload(
 ) -> None:
     """Validate the shared receipt upload contract before any write."""
     filename = str(original_name or "").strip()
-    if not filename or not any(
-        filename.casefold().endswith(extension)
-        for extension in RECEIPT_FILE_EXTENSIONS
-    ):
+    if not filename or not filename.casefold().endswith(RECEIPT_FILE_EXTENSIONS):
         raise GoogleDriveAccessError(
             "Receipt files must be PDF, PNG, JPG, JPEG, WEBP, or HEIC."
         )
@@ -1193,6 +1195,49 @@ class GoogleDriveClient:
             ),
         }
         return uploaded
+
+    def find_receipt_by_identity(
+        self,
+        *,
+        profile_key: str,
+        transaction_id: str,
+        folder_id: str,
+        receipt_id: str,
+        content: bytes,
+    ) -> dict[str, Any] | None:
+        """Find an uncertain receipt without creating another Drive file."""
+        folder_id = self._valid_folder_id(folder_id)
+        if not RECEIPT_ID_PATTERN.fullmatch(str(receipt_id)):
+            raise GoogleDriveAccessError("Receipt identity is invalid.")
+        content_sha256 = hashlib.sha256(content).hexdigest()
+        identity_query = " and ".join(
+            [
+                f"'{_escape_query_value(folder_id)}' in parents",
+                "trashed = false",
+                (
+                    "appProperties has { key='tabulaRasaKind' and "
+                    "value='receipt' }"
+                ),
+                (
+                    "appProperties has { key='tabulaRasaProfile' and "
+                    f"value='{_escape_query_value(profile_key)}' }}"
+                ),
+                (
+                    "appProperties has { key='tabulaRasaTransaction' and "
+                    f"value='{_escape_query_value(transaction_id)}' }}"
+                ),
+                (
+                    "appProperties has { key='tabulaRasaReceiptId' and "
+                    f"value='{_escape_query_value(receipt_id)}' }}"
+                ),
+                (
+                    "appProperties has { key='tabulaRasaSha256' and "
+                    f"value='{content_sha256}' }}"
+                ),
+            ]
+        )
+        matches = self._list(identity_query, page_size=2)
+        return dict(matches[0]) if matches else None
 
     def list_receipts(
         self,

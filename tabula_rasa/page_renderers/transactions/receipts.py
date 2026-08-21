@@ -80,6 +80,9 @@ def process_receipt_recovery(
     workflow: MutableMapping[str, Any],
     *,
     upload_receipt: Callable[[Mapping[str, Any]], Mapping[str, Any]],
+    reconcile_receipt: Callable[
+        [Mapping[str, Any]], Mapping[str, Any] | None
+    ] | None = None,
     link_receipt: Callable[[Mapping[str, Any]], object],
 ) -> None:
     """Upload and link unresolved receipts, retaining only retry pointers."""
@@ -103,11 +106,28 @@ def process_receipt_recovery(
                 continue
             receipt["reference"] = reference
         if not isinstance(reference, Mapping):
-            try:
-                drive_file = dict(upload_receipt(receipt))
-            except Exception as error:  # noqa: BLE001 - keep other receipts moving
-                receipt["error"] = str(error)
-                continue
+            if receipt.get("upload_uncertain") is True and reconcile_receipt:
+                try:
+                    reconciled = reconcile_receipt(receipt)
+                except Exception as error:  # noqa: BLE001 - keep retryable state
+                    receipt["error"] = str(error)
+                    continue
+                if not isinstance(reconciled, Mapping):
+                    receipt["error"] = (
+                        "The Drive upload is still being confirmed. "
+                        "Retry unresolved receipts again."
+                    )
+                    continue
+                drive_file = dict(reconciled)
+                receipt["upload_uncertain"] = False
+            else:
+                try:
+                    drive_file = dict(upload_receipt(receipt))
+                except Exception as error:  # noqa: BLE001 - keep other receipts moving
+                    if getattr(error, "retryable", False):
+                        receipt["upload_uncertain"] = True
+                    receipt["error"] = str(error)
+                    continue
             receipt["drive_file"] = drive_file
             receipt["content"] = b""
             try:
@@ -166,6 +186,13 @@ def _process_context_receipts(
             content=bytes(receipt["content"]),
             mime_type=str(receipt["mime_type"]),
             receipt_id=str(receipt["receipt_id"]),
+        ),
+        reconcile_receipt=lambda receipt: receipt_drive.find_receipt_by_identity(
+            profile_key=context.profile_key,
+            transaction_id=transaction_id,
+            folder_id=folder_id,
+            receipt_id=str(receipt["receipt_id"]),
+            content=bytes(receipt["content"]),
         ),
         link_receipt=lambda reference: context.storage.link_transaction_receipt(
             transaction_id,

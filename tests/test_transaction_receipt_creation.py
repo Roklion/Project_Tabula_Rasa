@@ -387,3 +387,68 @@ def test_upload_failure_does_not_stop_later_receipts() -> None:
     assert workflow["receipts"][0]["content"] == b"failed"
     assert workflow["receipts"][1]["content"] == b""
     assert receipt_creation_counts(workflow) == (1, 1)
+
+
+def test_uncertain_upload_reconciles_without_a_second_create() -> None:
+    workflow = new_receipt_creation_workflow(
+        "txn-1",
+        [
+            {
+                "key": "uncertain",
+                "original_name": "receipt.pdf",
+                "content": b"receipt",
+                "mime_type": "application/pdf",
+                "receipt_id": "a" * 32,
+                "linked": False,
+            }
+        ],
+    )
+    upload_calls = 0
+    reconcile_calls = 0
+
+    def upload(_item: Mapping[str, object]) -> Mapping[str, object]:
+        nonlocal upload_calls
+        upload_calls += 1
+        raise GoogleDriveAccessError(
+            "Drive response was lost",
+            retryable=True,
+        )
+
+    def reconcile(_item: Mapping[str, object]) -> Mapping[str, object] | None:
+        nonlocal reconcile_calls
+        reconcile_calls += 1
+        if reconcile_calls == 1:
+            return None
+        return _drive_file("d", "receipt.pdf")
+
+    process_receipt_recovery(
+        workflow,
+        upload_receipt=upload,
+        reconcile_receipt=reconcile,
+        link_receipt=lambda _reference: None,
+    )
+    assert upload_calls == 1
+    assert receipt_creation_counts(workflow) == (0, 1)
+    assert workflow["receipts"][0]["upload_uncertain"] is True
+
+    process_receipt_recovery(
+        workflow,
+        upload_receipt=upload,
+        reconcile_receipt=reconcile,
+        link_receipt=lambda _reference: None,
+    )
+
+    assert upload_calls == 1
+    assert reconcile_calls == 1
+    assert receipt_creation_counts(workflow) == (0, 1)
+
+    process_receipt_recovery(
+        workflow,
+        upload_receipt=upload,
+        reconcile_receipt=reconcile,
+        link_receipt=lambda _reference: None,
+    )
+
+    assert upload_calls == 1
+    assert reconcile_calls == 2
+    assert receipt_creation_counts(workflow) == (1, 0)
