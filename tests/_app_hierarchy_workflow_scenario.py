@@ -111,7 +111,7 @@ def main() -> None:
             account_type="Cash",
             parent_id=operations["id"],
         )
-        add_account(app, alpha, "Payables", account_type="Credit card")
+        payables = add_account(app, alpha, "Payables", account_type="Credit card")
         parent_options = by_label(
             app.selectbox, "Parent account (optional)"
         ).options
@@ -174,6 +174,16 @@ def main() -> None:
         )
         assert category_options.index(travel_option) < category_options.index(
             flights_option
+        )
+        by_label(app.selectbox, "Category to edit").set_value(travel["id"]).run()
+        by_label(
+            app.checkbox,
+            "I understand this category will be permanently deleted",
+        ).check()
+        by_label(app.button, "Permanently delete category").click().run()
+        assert any(
+            "child categories" in str(error.value).casefold()
+            for error in app.error
         )
         unused = add_category(app, alpha, "Unused")
         by_label(app.selectbox, "Category to edit").set_value(unused["id"]).run()
@@ -275,6 +285,19 @@ def main() -> None:
         assert operations_account_row["Transaction count"] == 3
         assert petty_cash_account_row["Transaction count"] == 2
         assert payables_account_row["Transaction count"] == 1
+
+        by_label(app.selectbox, "Account to manage").set_value(payables["id"]).run()
+        by_label(app.checkbox, "Active").uncheck()
+        by_label(app.button, "Save account changes").click().run()
+        assert next(
+            account
+            for account in alpha.list_accounts(active_only=False)
+            if account["id"] == payables["id"]
+        )["active"] is False
+        inactive_row = app.dataframe[0].value.loc[
+            app.dataframe[0].value["Account"] == "Payables"
+        ].iloc[0]
+        assert inactive_row["Active"] == "Inactive"
 
         app.radio[0].set_value("Categories").run()
         category_table = app.dataframe[0].value

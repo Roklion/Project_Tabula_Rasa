@@ -1,0 +1,94 @@
+from __future__ import annotations
+
+import importlib
+from unittest.mock import patch
+
+import streamlit as st
+
+from tabula_rasa.page_renderers import accounts, categories, hierarchy_ui
+
+
+def test_hierarchy_page_modules_import_without_rendering_or_bootstrap() -> None:
+    with (
+        patch.object(st, "markdown") as markdown,
+        patch.object(st, "error") as error,
+        patch.object(st, "secrets", create=True) as secrets,
+    ):
+        importlib.reload(accounts)
+        importlib.reload(categories)
+        importlib.reload(hierarchy_ui)
+
+    markdown.assert_not_called()
+    error.assert_not_called()
+    secrets.assert_not_called()
+
+
+def test_account_page_frame_preserves_columns_states_and_rollups() -> None:
+    account_frame, account_ids, account_by_id = accounts._account_frame(
+        [
+            {
+                "id": "root",
+                "name": "Operating",
+                "type": "Bank",
+                "classification": "Asset",
+                "opening_balance": 100.0,
+                "active": True,
+                "parent_id": "",
+            },
+            {
+                "id": "child",
+                "name": "Petty cash",
+                "type": "Cash",
+                "classification": "Asset",
+                "opening_balance": 25.0,
+                "active": False,
+                "parent_id": "root",
+            },
+        ],
+        [],
+    )
+
+    assert list(account_frame.columns) == [
+        "Account",
+        "Layer",
+        "Parent",
+        "Classification",
+        "Type",
+        "Active",
+        "Balance",
+        "Transaction count",
+    ]
+    assert account_ids == ["root", "child"]
+    assert set(account_by_id) == {"root", "child"}
+    assert account_frame.loc[0, "Balance"] == 125.0
+    assert account_frame.loc[0, "Active"] == "Active"
+    assert account_frame.loc[1, "Active"] == "Inactive"
+    assert account_frame.loc[1, "Layer"] == "Layer 2"
+
+
+def test_category_page_frame_preserves_columns_paths_and_counts() -> None:
+    category_frame, category_ids, category_by_id = categories._category_frame(
+        [
+            {"id": "travel", "name": "Travel", "kind": "Expense", "parent_id": ""},
+            {
+                "id": "flights",
+                "name": "Flights",
+                "kind": "Expense",
+                "parent_id": "travel",
+            },
+        ],
+        [{"category_id": "flights"}, {"category_id": "flights"}],
+    )
+
+    assert list(category_frame.columns) == [
+        "Category",
+        "Layer",
+        "Parent",
+        "Type",
+        "Transaction count",
+    ]
+    assert category_ids == ["travel", "flights"]
+    assert set(category_by_id) == {"travel", "flights"}
+    assert category_frame.loc[1, "Category"] == "↳ Flights"
+    assert category_frame.loc[1, "Parent"] == "Travel"
+    assert category_frame.loc[1, "Transaction count"] == 2
