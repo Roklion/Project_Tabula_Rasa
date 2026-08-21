@@ -627,6 +627,38 @@ class TestGoogleSheetsStorage:
         with pytest.raises(StorageValidationError, match=message):
             self.storage.list_categories(_force_refresh=True)
 
+    def test_list_records_normalizes_legacy_whitespace_for_edit_lookup(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Sales", "Income")
+        account_sheet = self.workbook.sheets["Accounts"]
+        category_sheet = self.workbook.sheets["Categories"]
+        account_row = next(
+            row for row in account_sheet.rows[1:] if row[0] == account["id"]
+        )
+        category_row = next(
+            row for row in category_sheet.rows[1:] if row[0] == category["id"]
+        )
+        account_row[account_sheet.rows[0].index("id")] = f" {account['id']} "
+        account_row[account_sheet.rows[0].index("name")] = " Checking "
+        category_row[category_sheet.rows[0].index("id")] = f" {category['id']} "
+        category_row[category_sheet.rows[0].index("name")] = " Sales "
+
+        listed_account = self.storage.list_accounts(
+            active_only=False, _force_refresh=True
+        )[0]
+        listed_category = self.storage.list_categories(_force_refresh=True)[0]
+
+        assert listed_account["id"] == account["id"]
+        assert listed_account["name"] == "Checking"
+        assert listed_category["id"] == category["id"]
+        assert listed_category["name"] == "Sales"
+        assert self.storage.edit_account(listed_account["id"], name="Renamed")[
+            "name"
+        ] == "Renamed"
+        assert self.storage.edit_category(listed_category["id"], name="Renamed sales")[
+            "name"
+        ] == "Renamed sales"
+
     def test_default_seed_does_not_recreate_renamed_defaults(self) -> None:
         self.storage.ensure_defaults()
         checking = next(

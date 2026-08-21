@@ -1000,7 +1000,7 @@ class GoogleSheetsStorage:
         matches = [
             row
             for row in self._rows(title, force_refresh=True)
-            if row.values.get("id") == record_id
+            if _clean_text(row.values.get("id"), "ID") == record_id
         ]
         if not matches:
             raise StorageNotFoundError(f"{title[:-1]} no longer exists")
@@ -1026,7 +1026,7 @@ class GoogleSheetsStorage:
                     raise
                 try:
                     if record_id and any(
-                        row.values.get("id") == record_id
+                        _clean_text(row.values.get("id"), "ID") == record_id
                         for row in self._rows(title, force_refresh=True)
                     ):
                         return
@@ -1092,8 +1092,10 @@ class GoogleSheetsStorage:
         accounts = []
         for row in self._rows("Accounts", force_refresh=_force_refresh):
             record: dict[str, Any] = dict(row.values)
-            _clean_text(record.get("id"), "ID", required=True)
-            _clean_text(record.get("name"), "Account name", required=True)
+            record["id"] = _clean_text(record.get("id"), "ID", required=True)
+            record["name"] = _clean_text(
+                record.get("name"), "Account name", required=True
+            )
             account_type = _clean_text(
                 record.get("type"), "Account type", required=True
             )
@@ -1225,8 +1227,12 @@ class GoogleSheetsStorage:
             for row in self._rows("Categories", force_refresh=_force_refresh)
         ]
         for category in categories:
-            _clean_text(category.get("id"), "ID", required=True)
-            _clean_text(category.get("name"), "Category name", required=True)
+            category["id"] = _clean_text(
+                category.get("id"), "ID", required=True
+            )
+            category["name"] = _clean_text(
+                category.get("name"), "Category name", required=True
+            )
             category_kind = _clean_text(
                 category.get("kind"), "Category kind", required=True
             )
