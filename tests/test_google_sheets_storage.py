@@ -642,6 +642,7 @@ class TestGoogleSheetsStorage:
         account_row[account_sheet.rows[0].index("name")] = " Checking "
         category_row[category_sheet.rows[0].index("id")] = f" {category['id']} "
         category_row[category_sheet.rows[0].index("name")] = " Sales "
+        category_row[category_sheet.rows[0].index("kind")] = " Income "
 
         listed_account = self.storage.list_accounts(
             active_only=False, _force_refresh=True
@@ -652,6 +653,7 @@ class TestGoogleSheetsStorage:
         assert listed_account["name"] == "Checking"
         assert listed_category["id"] == category["id"]
         assert listed_category["name"] == "Sales"
+        assert listed_category["kind"] == "Income"
         assert self.storage.edit_account(listed_account["id"], name="Renamed")[
             "name"
         ] == "Renamed"

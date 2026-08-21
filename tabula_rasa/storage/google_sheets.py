@@ -1240,6 +1240,7 @@ class GoogleSheetsStorage:
                 raise StorageValidationError(
                     "Category kind must be Income or Expense"
                 )
+            category["kind"] = category_kind
         if kind is not None:
             categories = [item for item in categories if item["kind"] == kind]
         return sorted(categories, key=lambda item: (item["kind"], item["name"].casefold()))
