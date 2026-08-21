@@ -18,6 +18,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     receipt_creation_workflow_key,
     render_receipt_creation_recovery,
     _workflow_configuration_matches,
+    _link_recovery_configuration_matches,
 )
 
 
@@ -324,6 +325,30 @@ def test_receipt_recovery_ignores_unrelated_profile_revision_change() -> None:
         {"id": "north-folder"},
     )
     assert "configuration_error" not in workflow
+
+
+def test_post_create_link_recovery_refuses_changed_storage_configuration() -> None:
+    context = SimpleNamespace(
+        profile_secrets={"spreadsheet_id": "new-sheet"},
+    )
+    recovery = {
+        "spreadsheet_id": "old-sheet",
+        "receipt_folder_id": "old-folder",
+    }
+
+    assert not _link_recovery_configuration_matches(
+        context,
+        recovery,
+        {"id": "new-folder"},
+    )
+    assert _link_recovery_configuration_matches(
+        context,
+        {
+            "spreadsheet_id": "new-sheet",
+            "receipt_folder_id": "new-folder",
+        },
+        {"id": "new-folder"},
+    )
 
 
 def test_upload_failure_does_not_stop_later_receipts() -> None:

@@ -246,6 +246,23 @@ def _workflow_configuration_matches(
     return True
 
 
+def _link_recovery_configuration_matches(
+    context: TransactionsContext,
+    recovery: Mapping[str, Any],
+    receipt_folder: Mapping[str, object],
+) -> bool:
+    """Keep post-create link recovery bound to its selected profile storage."""
+    expected_spreadsheet = str(recovery.get("spreadsheet_id", ""))
+    expected_folder = str(recovery.get("receipt_folder_id", ""))
+    if not any((expected_spreadsheet, expected_folder)):
+        return True
+    return (
+        expected_spreadsheet
+        == str(context.profile_secrets.get("spreadsheet_id", ""))
+        and expected_folder == str(receipt_folder.get("id", ""))
+    )
+
+
 def handle_confirmed_transaction_receipts(
     context: TransactionsContext,
     transaction: Mapping[str, Any],
@@ -388,17 +405,33 @@ def render_receipts(
                 st.success(str(receipt_notice))
             link_recovery = st.session_state.get(receipt_link_recovery_key)
             recovery_reference: Mapping[str, object] | None = None
+            recovery_configuration_matches = True
             if isinstance(link_recovery, Mapping):
+                recovery_configuration_matches = (
+                    _link_recovery_configuration_matches(
+                        context,
+                        link_recovery,
+                        receipt_folder,
+                    )
+                )
                 candidate_reference = link_recovery.get("reference")
                 if isinstance(candidate_reference, Mapping):
                     recovery_reference = candidate_reference
                 if isinstance(recovery_reference, Mapping):
-                    st.warning(
-                        "This receipt is already uploaded to Google Drive. "
-                        "Retry linking the existing file before uploading another copy. "
-                        f"{link_recovery.get('error', '')}"
-                    )
-                    if st.button(
+                    if not recovery_configuration_matches:
+                        st.error(
+                            "The receipt's Google Sheets or Drive folder "
+                            "configuration changed while it was waiting for "
+                            "link recovery. Restore the previous selected "
+                            "profile configuration before retrying."
+                        )
+                    else:
+                        st.warning(
+                            "This receipt is already uploaded to Google Drive. "
+                            "Retry linking the existing file before uploading another copy. "
+                            f"{link_recovery.get('error', '')}"
+                        )
+                    if recovery_configuration_matches and st.button(
                         "Retry linking uploaded receipt",
                         type="primary",
                         key=(
@@ -781,6 +814,15 @@ def render_receipts(
                                     st.session_state[receipt_link_recovery_key] = {
                                         "reference": uploaded_reference,
                                         "error": str(error),
+                                        "spreadsheet_id": str(
+                                            selected_profile.get(
+                                                "spreadsheet_id",
+                                                "",
+                                            )
+                                        ),
+                                        "receipt_folder_id": str(
+                                            receipt_folder["id"]
+                                        ),
                                     }
                                     st.rerun()
                                 st.error(
