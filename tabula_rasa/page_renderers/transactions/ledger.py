@@ -181,8 +181,6 @@ def render_ledger(
             "ID",
         ]
     ]
-    transaction_ids = transaction_frame["ID"].tolist()
-    transaction_ids_set = set(transaction_ids)
     searchable_rows = transaction_frame.to_dict(orient="records")
     matched_rows = filter_transaction_rows(searchable_rows, search_query)
     matched_ids = {str(row["ID"]) for row in matched_rows}
@@ -194,6 +192,8 @@ def render_ledger(
     transaction_frame = transaction_frame[
         transaction_frame["ID"].astype(str).isin(matched_ids)
     ].reset_index(drop=True)
+    transaction_ids = [str(transaction_id) for transaction_id in transaction_frame["ID"]]
+    transaction_ids_set = set(transaction_ids)
     selection_scope = (
         context.profile_key,
         st.session_state.get("transaction_ledger_generation", 0),

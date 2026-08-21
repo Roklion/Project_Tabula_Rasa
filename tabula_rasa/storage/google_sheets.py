@@ -1103,6 +1103,17 @@ class GoogleSheetsStorage:
                 f"Transactions is missing the {column} header"
             ) from exc
 
+    def _transactions_sheet_id(self) -> int:
+        sheet_id = getattr(self._worksheet("Transactions"), "id", None)
+        if sheet_id is None:
+            raise StorageValidationError("Transactions worksheet has no stable sheet ID")
+        try:
+            return int(sheet_id)
+        except (TypeError, ValueError) as exc:
+            raise StorageValidationError(
+                f"Transactions worksheet has an invalid sheet ID: {sheet_id}"
+            ) from exc
+
     def _fresh_bulk_transaction_snapshot(
         self,
         transaction_ids: Sequence[str],
@@ -1126,15 +1137,7 @@ class GoogleSheetsStorage:
             raise StorageConflictError(
                 "The visible transaction selection changed; select the rows again."
             )
-        try:
-            current_rows = self._rows("Transactions", force_refresh=True)
-        except StorageUnavailableError as read_error:
-            raise StorageBulkMutationUncertainError(
-                "The bulk batch outcome is ambiguous because its postcondition "
-                "could not be read. Do not retry until the selected rows are reviewed.",
-                outcome="mixed_ambiguous",
-                retryable=False,
-            ) from read_error
+        current_rows = self._rows("Transactions", force_refresh=True)
         current_by_id: dict[str, _StoredRow] = {}
         for row in current_rows:
             row_id = str(row.values.get("id", ""))
@@ -1203,7 +1206,15 @@ class GoogleSheetsStorage:
         operation: str,
         postcondition: Callable[[Mapping[str, Mapping[str, str]]], bool],
     ) -> None:
-        current_rows = self._rows("Transactions", force_refresh=True)
+        try:
+            current_rows = self._rows("Transactions", force_refresh=True)
+        except StorageUnavailableError as read_error:
+            raise StorageBulkMutationUncertainError(
+                f"The {operation} batch completed but its postcondition could not be "
+                "read. Review the selected rows before retrying.",
+                outcome="mixed_ambiguous",
+                retryable=False,
+            ) from read_error
         current_by_id = {
             str(row.values["id"]): dict(row.values) for row in current_rows
         }
@@ -1255,9 +1266,7 @@ class GoogleSheetsStorage:
 
         headers = self._headers("Transactions")
         category_column = self._sheet_column_index(headers, "category_id")
-        sheet_id = getattr(self._worksheet("Transactions"), "id", None)
-        if sheet_id is None:
-            raise StorageValidationError("Transactions worksheet has no stable sheet ID")
+        sheet_id = self._transactions_sheet_id()
         requests = [
             {
                 "updateCells": {
@@ -1325,9 +1334,7 @@ class GoogleSheetsStorage:
         selected_rows, current_by_id = self._fresh_bulk_transaction_snapshot(
             transaction_ids, expected_transactions
         )
-        sheet_id = getattr(self._worksheet("Transactions"), "id", None)
-        if sheet_id is None:
-            raise StorageValidationError("Transactions worksheet has no stable sheet ID")
+        sheet_id = self._transactions_sheet_id()
         requests = [
             {
                 "deleteDimension": {

@@ -2435,6 +2435,13 @@ class TestGoogleSheetsStorage:
             for transaction in self.storage.list_transactions()
         } == {replacement["id"]}
 
+    def test_bulk_mutations_coerce_string_sheet_id(self) -> None:
+        self._bulk_transaction_fixture()
+        transaction_sheet = self.workbook.sheets["Transactions"]
+        transaction_sheet.id = str(transaction_sheet.id)
+
+        assert self.storage._transactions_sheet_id() == int(transaction_sheet.id)
+
     def test_bulk_delete_resolves_fresh_rows_after_row_order_changes(self) -> None:
         first, second, _ = self._bulk_transaction_fixture()
         expected = [
@@ -2695,6 +2702,40 @@ class TestGoogleSheetsStorage:
             side_effect=OSError("temporary response lost before commit")
         )
 
+        try:
+            with pytest.raises(StorageBulkMutationUncertainError) as raised:
+                self.storage.bulk_change_transaction_category(
+                    [first["id"], second["id"]],
+                    expected_transactions=expected,
+                    category_id=replacement["id"],
+                )
+        finally:
+            self.storage._rows = original_rows  # type: ignore[method-assign]
+
+        assert raised.value.outcome == "mixed_ambiguous"
+        assert raised.value.retryable is False
+
+    def test_successful_bulk_readback_failure_is_ambiguous(self) -> None:
+        first, second, replacement = self._bulk_transaction_fixture()
+        expected = [
+            transaction
+            for transaction in self.storage.list_transactions(_force_refresh=True)
+            if transaction["id"] in {first["id"], second["id"]}
+        ]
+        original_rows = self.storage._rows
+        transaction_reads = 0
+
+        def fail_second_transaction_read(
+            title: str, *, force_refresh: bool = False
+        ) -> object:
+            nonlocal transaction_reads
+            if title == "Transactions":
+                transaction_reads += 1
+                if transaction_reads == 2:
+                    raise StorageUnavailableError("readback unavailable", retryable=True)
+            return original_rows(title, force_refresh=force_refresh)
+
+        self.storage._rows = fail_second_transaction_read  # type: ignore[method-assign]
         try:
             with pytest.raises(StorageBulkMutationUncertainError) as raised:
                 self.storage.bulk_change_transaction_category(
