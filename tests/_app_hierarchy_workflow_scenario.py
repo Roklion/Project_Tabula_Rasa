@@ -103,6 +103,7 @@ def main() -> None:
         app.radio[0].set_value("Accounts").run()
 
         alpha = storages["alpha-sheet"]
+        beta = storages["beta-sheet"]
         operations = add_account(app, alpha, "Operations")
         petty_cash = add_account(
             app,
@@ -215,6 +216,20 @@ def main() -> None:
         assert "Sales" in edit_parent_options
         assert "Travel" not in edit_parent_options
         by_label(app.selectbox, "Edit category type").set_value("Expense").run()
+
+        by_label(app.selectbox, "Business").set_value("beta").run()
+        app.radio[0].set_value("Categories").run()
+        beta_only = add_category(app, beta, "Beta only")
+        app.session_state["edit_category_id"] = beta_only["id"]
+        app.run()
+        assert "Beta only" in app.dataframe[0].value["Category"].tolist()
+        by_label(app.selectbox, "Business").set_value("alpha").run()
+        app.radio[0].set_value("Categories").run()
+        assert "Beta only" not in app.dataframe[0].value["Category"].tolist()
+        assert (
+            "edit_category_id" not in app.session_state
+            or app.session_state["edit_category_id"] != beta_only["id"]
+        )
 
         app.radio[0].set_value("Transactions").run()
         by_label(app.segmented_control, "Transaction type").set_value(
