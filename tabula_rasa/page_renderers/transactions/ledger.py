@@ -372,7 +372,8 @@ def render_ledger(
                 "I understand these transactions will be permanently deleted and cannot be undone",
                 key=(
                     "transaction_bulk_confirm_delete_"
-                    f"{context.profile_key}_{st.session_state.get('transaction_bulk_selection_generation', 0)}"
+                    f"{context.profile_key}_{st.session_state.get('transaction_bulk_selection_generation', 0)}_"
+                    f"{'_'.join(selected_ids)}"
                 ),
             )
             with st.form("transaction_bulk_delete", clear_on_submit=False):
@@ -385,6 +386,10 @@ def render_ledger(
                 if not confirm_delete:
                     st.error("Confirm the permanent deletion before continuing.")
                 else:
+                    def clear_recovery() -> None:
+                        for item in selected_ids:
+                            clear_receipt_creation_recovery(context, item)
+
                     context.confirmed_write(
                         "bulk_delete_transactions",
                         {"ids": list(selected_ids), "expected": expected_selected},
@@ -396,10 +401,7 @@ def render_ledger(
                             f"Permanently deleted {result['count']} transactions; "
                             "linked Drive files were retained."
                         ),
-                        on_success=lambda: [
-                            clear_receipt_creation_recovery(context, item)
-                            for item in selected_ids
-                        ],
+                        on_success=clear_recovery,
                     ),
         else:
             st.info("Select one or more visible transactions to use Bulk actions.")

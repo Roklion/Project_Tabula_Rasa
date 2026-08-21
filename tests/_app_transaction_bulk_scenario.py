@@ -93,6 +93,26 @@ def main() -> None:
         assert "Google Drive files will remain" in warning_text
         delete_button = by_label(app.button, "Permanently delete selected")
         assert delete_button.disabled is False
+        confirmation = by_label(
+            app.checkbox,
+            "I understand these transactions will be permanently deleted and cannot be undone",
+        )
+        confirmation.check()
+        app.session_state["transaction_bulk_selected_ids_north"] = (
+            north_transactions[0]["id"],
+        )
+        app.run()
+        assert (
+            by_label(
+                app.checkbox,
+                "I understand these transactions will be permanently deleted and cannot be undone",
+            ).value
+            is False
+        )
+        app.session_state["transaction_bulk_selected_ids_north"] = tuple(
+            item["id"] for item in north_transactions
+        )
+        app.run()
         by_label(
             app.checkbox,
             "I understand these transactions will be permanently deleted and cannot be undone",
