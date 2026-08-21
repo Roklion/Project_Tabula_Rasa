@@ -10,7 +10,7 @@ import streamlit as st
 
 _HIERARCHY_RESPONSIVE_CSS = """
 <style>
-@media (max-width: 640px) {
+@media (max-width: 1100px) {
     [data-testid="stMain"],
     [data-testid="stMainBlockContainer"],
     [data-testid="stAppViewContainer"] {
