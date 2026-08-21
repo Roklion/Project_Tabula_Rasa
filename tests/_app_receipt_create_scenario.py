@@ -179,6 +179,30 @@ def main() -> None:
         assert len(link_calls) == 3
         assert storage.list_transactions()[0]["receipt_references"].count('"id"') == 3
 
+        fail_second_upload["value"] = False
+        by_label(app.number_input, "Amount").set_value(40)
+        by_label(app.file_uploader, "Receipt (optional)").set_value(
+            [
+                ("receipt.pdf", b"third receipt", "application/pdf"),
+                ("receipt.pdf", b"fourth receipt", "application/pdf"),
+                ("other.png", b"fifth receipt", "image/png"),
+            ]
+        )
+        by_label(app.button, "Save transaction").click().run()
+        assert len(storage.list_transactions()) == 2
+        assert len(upload_calls) == 7
+        assert len(link_calls) == 6
+        assert storage.list_transactions()[-1]["receipt_references"].count('"id"') == 3
+
+        by_label(app.number_input, "Amount").set_value(41)
+        by_label(app.button, "Save transaction").click().run()
+        assert len(storage.list_transactions()) == 3
+        assert len(upload_calls) == 7
+        assert any(str(success.value) == "Transaction saved." for success in app.success)
+        assert not any(
+            "2 receipt(s) linked" in str(success.value) for success in app.success
+        )
+
 
 if __name__ == "__main__":
     main()

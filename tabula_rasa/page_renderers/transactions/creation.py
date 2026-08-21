@@ -181,9 +181,8 @@ def render_add_transaction(
                             "create_transaction",
                             payload,
                             lambda: context.storage.create_transaction(**payload),
-                            lambda _result: st.session_state.pop(
-                                "receipt_creation_success_notice",
-                                None,
+                            lambda _result: st.session_state.get(
+                                "write_success_notice"
                             )
                             or (
                                 "Transaction saved. Receipt processing needs "

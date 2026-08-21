@@ -184,7 +184,6 @@ def finish_receipt_creation_if_complete(
     notice = (
         f"Transaction saved and {linked} receipt(s) linked."
     )
-    st.session_state["receipt_creation_success_notice"] = notice
     st.session_state["write_success_notice"] = notice
     return True
 

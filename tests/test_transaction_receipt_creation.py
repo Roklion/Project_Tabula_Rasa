@@ -9,6 +9,7 @@ import streamlit as st
 
 from tabula_rasa.google_drive import GoogleDriveAccessError
 from tabula_rasa.page_renderers.transactions.receipts import (
+    handle_confirmed_transaction_receipts,
     new_receipt_creation_workflow,
     prepare_receipt_uploads,
     process_receipt_recovery,
@@ -196,6 +197,66 @@ def test_confirmed_upload_metadata_failure_does_not_upload_again() -> None:
     assert uploaded == ["metadata-failure"]
     assert receipt_creation_counts(workflow) == (0, 1)
     assert "metadata" in workflow["receipts"][0]["error"]
+
+
+def test_receipt_recovery_uses_selected_profile_clients() -> None:
+    session_state: dict[str, object] = {}
+    drive_profiles: list[str] = []
+    storage_profiles: list[str] = []
+
+    def drive_client_for(profile_key: str, _revision: str):
+        drive_profiles.append(profile_key)
+
+        class DriveClient:
+            def upload_receipt(self, **_kwargs: object) -> Mapping[str, object]:
+                receipt_id = "a" if profile_key == "north" else "b"
+                return _drive_file(receipt_id, f"{profile_key}.pdf")
+
+        return DriveClient()
+
+    def make_context(profile_key: str) -> SimpleNamespace:
+        class StorageClient:
+            def link_transaction_receipt(
+                self,
+                _transaction_id: str,
+                *,
+                reference: Mapping[str, object],
+            ) -> None:
+                storage_profiles.append(str(reference["original_filename"]).split(".")[0])
+                raise RuntimeError("link pending")
+
+        return SimpleNamespace(
+            profile_key=profile_key,
+            storage=StorageClient(),
+            profile_secrets={"google_drive": {"receipt_folder": {"id": "folder"}}},
+            configuration_revision="1",
+            get_drive_client=drive_client_for,
+            schedule_widget_reset=lambda _flag: None,
+        )
+
+    receipt = {
+        "key": "receipt",
+        "original_name": "receipt.pdf",
+        "content": b"receipt",
+        "mime_type": "application/pdf",
+        "linked": False,
+    }
+    with patch.object(st, "session_state", session_state):
+        handle_confirmed_transaction_receipts(
+            make_context("north"), {"id": "north-txn"}, [receipt]
+        )
+        handle_confirmed_transaction_receipts(
+            make_context("south"), {"id": "south-txn"}, [receipt]
+        )
+
+    assert drive_profiles == ["north", "south"]
+    assert storage_profiles == ["north", "south"]
+    assert session_state[receipt_creation_workflow_key("north")]["transaction_id"] == (
+        "north-txn"
+    )
+    assert session_state[receipt_creation_workflow_key("south")]["transaction_id"] == (
+        "south-txn"
+    )
 
 
 def test_upload_failure_does_not_stop_later_receipts() -> None:
