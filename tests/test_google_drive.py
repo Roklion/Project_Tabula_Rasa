@@ -1018,6 +1018,41 @@ class TestGoogleDriveFiles:
         assert "key='tabulaRasaReceiptId'" in recovery_query
         assert "key='tabulaRasaSha256'" in recovery_query
 
+    def test_receipt_upload_marks_unreadable_success_as_uncertain(self) -> None:
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, payload="not-json"),
+                FakeResponse(200, {"files": []}),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        with pytest.raises(GoogleDriveAccessError) as raised:
+            client.upload_receipt(
+                profile_key="north",
+                transaction_id="txn-1",
+                folder_id="folder123456",
+                original_name="statement.pdf",
+                content=b"receipt",
+                mime_type="application/pdf",
+                receipt_id="a" * 32,
+            )
+
+        assert raised.value.retryable is True
+        assert [request[0] for request in session.requests] == [
+            "GET",
+            "GET",
+            "POST",
+            "GET",
+        ]
+
     def test_receipt_upload_retries_with_a_stable_identity(self) -> None:
         receipt_id = "a" * 32
         session = DriveSession(

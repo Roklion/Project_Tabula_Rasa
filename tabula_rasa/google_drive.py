@@ -304,16 +304,22 @@ def authorization_url(
     return f"{AUTHORIZATION_ENDPOINT}?{urlencode(parameters)}"
 
 
-def _json_response(response: requests.Response) -> Mapping[str, Any]:
+def _json_response(
+    response: requests.Response,
+    *,
+    retryable: bool = False,
+) -> Mapping[str, Any]:
     try:
         parsed = response.json()
     except (ValueError, json.JSONDecodeError) as exc:
         raise GoogleDriveAccessError(
-            "Google Drive returned an unreadable response. Retry the request."
+            "Google Drive returned an unreadable response. Retry the request.",
+            retryable=retryable,
         ) from exc
     if not isinstance(parsed, Mapping):
         raise GoogleDriveAccessError(
-            "Google Drive returned an unreadable response. Retry the request."
+            "Google Drive returned an unreadable response. Retry the request.",
+            retryable=retryable,
         )
     return parsed
 
@@ -1059,7 +1065,7 @@ class GoogleDriveClient:
             headers={"Content-Type": f"multipart/related; boundary={boundary}"},
             data=body,
         )
-        return dict(_json_response(response))
+        return dict(_json_response(response, retryable=True))
 
     def delete_file(self, file_id: str) -> None:
         """Delete a file created and managed by the app."""
