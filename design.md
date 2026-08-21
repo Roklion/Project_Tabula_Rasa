@@ -1105,6 +1105,9 @@ The redesign may adjust responsive presentation and column widths, but must not 
 
 The ledger has two explicit modes.
 
+Bulk mode is implemented current behavior: it is entered explicitly, selects
+only visible rows, and exposes only the approved actions below.
+
 #### Edit mode — default
 
 - Uses single-row selection.
@@ -1200,6 +1203,15 @@ Not approved as initial bulk actions:
 - Add tags
 
 Do not add reconciliation, import-source, or unsupported status columns.
+
+Bulk category changes and deletions use one Google Sheets
+[`spreadsheets.batchUpdate`](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets/batchUpdate)
+request per mutation. Google validates every request before applying the batch
+and guarantees that the requests are applied atomically; a collaborator may
+still change the final sheet while the operation is in flight. An uncertain
+response is followed by a fresh ID-based read and is classified as fully
+applied, not applied and safely retryable, or mixed/ambiguous. The application
+never retries an ambiguous mutation automatically.
 
 ### 17.8 Table empty states
 
