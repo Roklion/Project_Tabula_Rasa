@@ -19,6 +19,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     render_receipt_creation_recovery,
     _workflow_configuration_matches,
     _link_recovery_configuration_matches,
+    _workflow_has_uploaded_receipt,
     _transaction_still_exists,
 )
 
@@ -345,6 +346,23 @@ def test_transaction_recovery_rechecks_fresh_sheets_data() -> None:
     context = SimpleNamespace(storage=storage)
 
     assert _transaction_still_exists(context, "txn-1")
+
+
+def test_transaction_recovery_detects_uploaded_receipt_pointer() -> None:
+    workflow = new_receipt_creation_workflow(
+        "txn-1",
+        [
+            {
+                "linked": False,
+                "reference": {"id": "receipt123456"},
+            }
+        ],
+    )
+
+    assert _workflow_has_uploaded_receipt(workflow)
+    assert not _workflow_has_uploaded_receipt(
+        new_receipt_creation_workflow("txn-2", [{"linked": False}])
+    )
 
 
 def test_transaction_recovery_does_not_upload_after_cross_session_deletion() -> None:

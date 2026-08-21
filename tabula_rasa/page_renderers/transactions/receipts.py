@@ -211,6 +211,18 @@ def _workflow_complete(workflow: Mapping[str, Any]) -> bool:
     return receipt_creation_counts(workflow)[1] == 0
 
 
+def _workflow_has_uploaded_receipt(workflow: Mapping[str, Any]) -> bool:
+    """Return whether recovery retains a Drive file for any receipt."""
+    return any(
+        isinstance(receipt, Mapping)
+        and (
+            isinstance(receipt.get("reference"), Mapping)
+            or isinstance(receipt.get("drive_file"), Mapping)
+        )
+        for receipt in workflow.get("receipts", [])
+    )
+
+
 def _transaction_still_exists(
     context: TransactionsContext,
     transaction_id: str,
@@ -392,10 +404,19 @@ def render_receipt_creation_recovery(context: TransactionsContext) -> bool:
                             receipt_creation_workflow_key(context.profile_key),
                             None,
                         )
-                        st.session_state["write_success_notice"] = (
-                            "The saved transaction no longer exists. "
-                            "Start a new transaction and select its receipts again."
-                        )
+                        if _workflow_has_uploaded_receipt(workflow):
+                            st.session_state["write_success_notice"] = (
+                                "The saved transaction no longer exists. "
+                                "Create the replacement transaction without "
+                                "re-uploading these files, then link the "
+                                "existing files from the Unreferenced receipt "
+                                "workflow."
+                            )
+                        else:
+                            st.session_state["write_success_notice"] = (
+                                "The saved transaction no longer exists. "
+                                "Start a new transaction and select its receipts again."
+                            )
                     else:
                         _process_context_receipts(
                             context,
@@ -790,12 +811,7 @@ def render_receipts(
                                     f"linked. {error}"
                                 )
                             else:
-                                if isinstance(
-                                    recovery_reference,
-                                    Mapping,
-                                ) and recovery_reference.get("id") == (
-                                    existing_receipt_id
-                                ):
+                                if isinstance(recovery_reference, Mapping):
                                     st.session_state.pop(
                                         receipt_link_recovery_key,
                                         None,
