@@ -1153,7 +1153,8 @@ class GoogleSheetsStorage:
                     "A selected transaction no longer exists; select the rows again."
                 )
             expected = {
-                str(key): str(value) for key, value in expected_by_id[transaction_id].items()
+                str(key): (str(value) if value is not None else "")
+                for key, value in expected_by_id[transaction_id].items()
             }
             current = dict(row.values)
             if current != expected:
@@ -1298,11 +1299,7 @@ class GoogleSheetsStorage:
                 ),
                 fully_applied=lambda current: all(
                     item in current
-                    and {
-                        **current_by_id[item],
-                        "category_id": category_id,
-                    }
-                    == current[item]
+                    and current[item].get("category_id") == category_id
                     for item in current_by_id
                 ),
             )
@@ -1313,11 +1310,7 @@ class GoogleSheetsStorage:
             operation="category change",
             postcondition=lambda current: all(
                 item in current
-                and {
-                    **current_by_id[item],
-                    "category_id": category_id,
-                }
-                == current[item]
+                and current[item].get("category_id") == category_id
                 for item in current_by_id
             ),
         )

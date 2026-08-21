@@ -2435,6 +2435,46 @@ class TestGoogleSheetsStorage:
             for transaction in self.storage.list_transactions()
         } == {replacement["id"]}
 
+    def test_bulk_category_change_normalizes_none_optional_values(self) -> None:
+        first, second, replacement = self._bulk_transaction_fixture()
+        expected = [
+            transaction
+            for transaction in self.storage.list_transactions(_force_refresh=True)
+            if transaction["id"] in {first["id"], second["id"]}
+        ]
+        expected[0]["payee"] = None
+
+        result = self.storage.bulk_change_transaction_category(
+            [first["id"], second["id"]],
+            expected_transactions=expected,
+            category_id=replacement["id"],
+        )
+
+        assert result == {"status": "fully_applied", "count": "2"}
+
+    def test_bulk_category_change_ignores_unrelated_concurrent_edit(self) -> None:
+        first, second, replacement = self._bulk_transaction_fixture()
+        expected = [
+            transaction
+            for transaction in self.storage.list_transactions(_force_refresh=True)
+            if transaction["id"] in {first["id"], second["id"]}
+        ]
+        original_batch = self.workbook.batch_update
+
+        def apply_category_then_edit(body: dict[str, object]) -> None:
+            original_batch(body)
+            self.workbook.sheets["Transactions"].rows[1][7] = "Collaborator edit"
+
+        self.workbook.batch_update = apply_category_then_edit
+
+        result = self.storage.bulk_change_transaction_category(
+            [first["id"], second["id"]],
+            expected_transactions=expected,
+            category_id=replacement["id"],
+        )
+
+        assert result == {"status": "fully_applied", "count": "2"}
+
     def test_bulk_mutations_coerce_string_sheet_id(self) -> None:
         self._bulk_transaction_fixture()
         transaction_sheet = self.workbook.sheets["Transactions"]
