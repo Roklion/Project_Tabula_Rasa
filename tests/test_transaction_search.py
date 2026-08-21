@@ -73,6 +73,12 @@ def test_search_preserves_falsy_visible_values():
     assert filter_transaction_rows(rows, "0") == rows
 
 
+def test_search_ignores_nan_values():
+    rows = [{"Type": "Expense", "Reference": float("nan"), "ID": 1}]
+
+    assert filter_transaction_rows(rows, "nan") == []
+
+
 @pytest.mark.parametrize("query", ["2026-01-02", "1250", "📎", "receipt-file.pdf"])
 def test_search_excludes_date_amount_receipt_and_drive_metadata(
     rows: list[dict[str, object]], query: str

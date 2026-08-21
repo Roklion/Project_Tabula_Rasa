@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
+from numbers import Real
 from typing import TypeVar
 
 
@@ -20,6 +22,12 @@ SEARCHABLE_TRANSACTION_FIELDS = (
 Row = TypeVar("Row", bound=Mapping[str, object])
 
 
+def _searchable_text(value: object) -> str:
+    if value is None or isinstance(value, Real) and math.isnan(value):
+        return ""
+    return str(value).casefold()
+
+
 def filter_transaction_rows(rows: Sequence[Row], query: str) -> list[Row]:
     """Return rows whose visible text contains the trimmed query.
 
@@ -34,10 +42,7 @@ def filter_transaction_rows(rows: Sequence[Row], query: str) -> list[Row]:
         row
         for row in rows
         if any(
-            normalized_query
-            in str(
-                row.get(field) if row.get(field) is not None else ""
-            ).casefold()
+            normalized_query in _searchable_text(row.get(field))
             for field in SEARCHABLE_TRANSACTION_FIELDS
         )
     ]
