@@ -7,8 +7,12 @@ from tabula_rasa.storage.google_sheets import WORKSHEET_HEADERS
 
 
 class FakeWorksheet:
+    _next_id = 1
+
     def __init__(self, title: str, headers: tuple[str, ...]):
         self.title = title
+        self.id = FakeWorksheet._next_id
+        FakeWorksheet._next_id += 1
         self.rows = [list(headers)]
         self.col_count = len(headers)
 
@@ -81,6 +85,37 @@ class FakeWorkbook:
 
     def worksheet(self, title: str) -> FakeWorksheet:
         return self.sheets[title]
+
+    def batch_update(self, body: dict[str, object]) -> dict[str, object]:
+        for request in body["requests"]:
+            if "updateCells" in request:
+                update = request["updateCells"]
+                sheet = next(
+                    sheet
+                    for sheet in self.sheets.values()
+                    if sheet.id == update["range"]["sheetId"]
+                )
+                row = update["range"]["startRowIndex"]
+                column = update["range"]["startColumnIndex"]
+                value = update["rows"][0]["values"][0]["userEnteredValue"]["stringValue"]
+                while len(sheet.rows) <= row:
+                    sheet.rows.append([])
+                while len(sheet.rows[row]) <= column:
+                    sheet.rows[row].append("")
+                sheet.rows[row][column] = value
+            elif "deleteDimension" in request:
+                deletion = request["deleteDimension"]["range"]
+                sheet = next(
+                    sheet
+                    for sheet in self.sheets.values()
+                    if sheet.id == deletion["sheetId"]
+                )
+                start = deletion["startIndex"]
+                end = deletion["endIndex"]
+                del sheet.rows[start:end]
+            else:
+                raise AssertionError(f"Unexpected batch request: {request}")
+        return {}
 
     def add_worksheet(
         self, title: str, rows: int, cols: int

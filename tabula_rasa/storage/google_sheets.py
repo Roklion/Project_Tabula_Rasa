@@ -167,6 +167,14 @@ class StorageUnavailableError(StorageError):
         self.retryable = retryable
 
 
+class StorageBulkMutationUncertainError(StorageUnavailableError):
+    """Raised when a bulk write's postcondition is not safely complete."""
+
+    def __init__(self, message: str, *, outcome: str, retryable: bool):
+        super().__init__(message, retryable=retryable)
+        self.outcome = outcome
+
+
 class StorageAuthenticationError(StorageUnavailableError):
     """Raised when Google rejects a service-account credential."""
 
@@ -1085,6 +1093,223 @@ class GoogleSheetsStorage:
             )
         )
         self._invalidate(title)
+
+    @staticmethod
+    def _sheet_column_index(headers: Sequence[str], column: str) -> int:
+        try:
+            return list(headers).index(column)
+        except ValueError as exc:
+            raise StorageValidationError(
+                f"Transactions is missing the {column} header"
+            ) from exc
+
+    def _fresh_bulk_transaction_snapshot(
+        self,
+        transaction_ids: Sequence[str],
+        expected_transactions: Sequence[Mapping[str, Any]],
+    ) -> tuple[dict[str, _StoredRow], dict[str, dict[str, str]]]:
+        normalized_ids = [
+            _clean_text(transaction_id, "Transaction ID", required=True)
+            for transaction_id in transaction_ids
+        ]
+        if len(normalized_ids) != len(set(normalized_ids)):
+            raise StorageValidationError("Bulk transaction IDs must be unique")
+        expected_by_id = {
+            _clean_text(item.get("id"), "Transaction ID", required=True): dict(item)
+            for item in expected_transactions
+        }
+        if set(expected_by_id) != set(normalized_ids) or len(expected_by_id) != len(
+            expected_transactions
+        ):
+            raise StorageConflictError(
+                "The visible transaction selection changed; select the rows again."
+            )
+        current_rows = self._rows("Transactions", force_refresh=True)
+        current_by_id: dict[str, _StoredRow] = {}
+        for row in current_rows:
+            row_id = str(row.values.get("id", ""))
+            if row_id in current_by_id:
+                raise StorageValidationError("Duplicate ID detected in Transactions")
+            current_by_id[row_id] = row
+        selected_rows = {}
+        current_by_id_values = {}
+        for transaction_id in normalized_ids:
+            row = current_by_id.get(transaction_id)
+            if row is None:
+                raise StorageConflictError(
+                    "A selected transaction no longer exists; select the rows again."
+                )
+            expected = {
+                str(key): str(value) for key, value in expected_by_id[transaction_id].items()
+            }
+            current = dict(row.values)
+            if current != expected:
+                raise StorageConflictError(
+                    "A selected transaction changed; review the current rows and try again."
+                )
+            selected_rows[transaction_id] = row
+            current_by_id_values[transaction_id] = current
+        return selected_rows, current_by_id_values
+
+    def _bulk_postcondition_error(
+        self,
+        *,
+        operation: str,
+        error: StorageUnavailableError,
+        expected_by_id: Mapping[str, Mapping[str, str]],
+        postcondition: Callable[[Mapping[str, Mapping[str, str]]], bool],
+        fully_applied: Callable[[Mapping[str, Mapping[str, str]]], bool],
+    ) -> dict[str, str] | None:
+        current_rows = self._rows("Transactions", force_refresh=True)
+        current_by_id = {
+            str(row.values["id"]): dict(row.values) for row in current_rows
+        }
+        if fully_applied(current_by_id):
+            self._invalidate("Transactions")
+            return {"status": "fully_applied", "count": str(len(expected_by_id))}
+        if postcondition(current_by_id):
+            raise StorageBulkMutationUncertainError(
+                f"The {operation} batch was not applied. Review the current ledger before retrying.",
+                outcome="not_applied",
+                retryable=True,
+            ) from error
+        raise StorageBulkMutationUncertainError(
+            f"The {operation} batch outcome is ambiguous. Do not retry until the selected rows are reviewed.",
+            outcome="mixed_ambiguous",
+            retryable=False,
+        ) from error
+
+    def _batch_update_spreadsheet(self, requests: Sequence[Mapping[str, Any]]) -> None:
+        if not requests:
+            return
+        self._api(
+            lambda: self._workbook.batch_update({"requests": list(requests)}),
+            retry_safe=False,
+        )
+
+    def bulk_change_transaction_category(
+        self,
+        transaction_ids: Sequence[str],
+        *,
+        expected_transactions: Sequence[Mapping[str, Any]],
+        category_id: str,
+    ) -> dict[str, str]:
+        """Revalidate and change categories with one atomic minimal-cell batch."""
+        selected_rows, current_by_id = self._fresh_bulk_transaction_snapshot(
+            transaction_ids, expected_transactions
+        )
+        categories = self._category_lookup(force_refresh=True)
+        category_id = _clean_text(category_id, "Category", required=True)
+        target = categories.get(category_id)
+        if target is None:
+            raise StorageValidationError("Category does not exist")
+        kinds = {transaction["kind"] for transaction in current_by_id.values()}
+        if len(kinds) != 1 or kinds == {"Transfer"}:
+            raise StorageValidationError(
+                "Category changes require a homogeneous Income or Expense selection"
+            )
+        kind = next(iter(kinds))
+        if kind not in {"Income", "Expense"} or target["kind"] != kind:
+            raise StorageValidationError(
+                "The selected category must match the transaction kind"
+            )
+        if all(transaction["category_id"] == category_id for transaction in current_by_id.values()):
+            return {"status": "fully_applied", "count": "0"}
+
+        headers = self._headers("Transactions")
+        category_column = self._sheet_column_index(headers, "category_id")
+        sheet_id = getattr(self._worksheet("Transactions"), "id", None)
+        if sheet_id is None:
+            raise StorageValidationError("Transactions worksheet has no stable sheet ID")
+        requests = [
+            {
+                "updateCells": {
+                    "range": {
+                        "sheetId": sheet_id,
+                        "startRowIndex": selected_rows[transaction_id].row_number - 1,
+                        "endRowIndex": selected_rows[transaction_id].row_number,
+                        "startColumnIndex": category_column,
+                        "endColumnIndex": category_column + 1,
+                    },
+                    "rows": [
+                        {"values": [{"userEnteredValue": {"stringValue": category_id}}]}
+                    ],
+                    "fields": "userEnteredValue",
+                }
+            }
+            for transaction_id in transaction_ids
+        ]
+        try:
+            self._batch_update_spreadsheet(requests)
+        except StorageUnavailableError as error:
+            outcome = self._bulk_postcondition_error(
+                operation="category change",
+                error=error,
+                expected_by_id=current_by_id,
+                postcondition=lambda current: set(current) == set(current_by_id)
+                and all(current[item] == current_by_id[item] for item in current_by_id),
+                fully_applied=lambda current: set(current) == set(current_by_id)
+                and all(
+                    {
+                        **current_by_id[item],
+                        "category_id": category_id,
+                    }
+                    == current[item]
+                    for item in current_by_id
+                ),
+            )
+            if outcome is not None:
+                return outcome
+            raise AssertionError("Bulk category postcondition did not classify")
+        self._invalidate("Transactions")
+        return {"status": "fully_applied", "count": str(len(transaction_ids))}
+
+    def bulk_delete_transactions(
+        self,
+        transaction_ids: Sequence[str],
+        *,
+        expected_transactions: Sequence[Mapping[str, Any]],
+    ) -> dict[str, str]:
+        """Revalidate and delete transactions with one atomic row-index batch."""
+        selected_rows, current_by_id = self._fresh_bulk_transaction_snapshot(
+            transaction_ids, expected_transactions
+        )
+        sheet_id = getattr(self._worksheet("Transactions"), "id", None)
+        if sheet_id is None:
+            raise StorageValidationError("Transactions worksheet has no stable sheet ID")
+        requests = [
+            {
+                "deleteDimension": {
+                    "range": {
+                        "sheetId": sheet_id,
+                        "dimension": "ROWS",
+                        "startIndex": selected_rows[transaction_id].row_number - 1,
+                        "endIndex": selected_rows[transaction_id].row_number,
+                    }
+                }
+            }
+            for transaction_id in sorted(
+                transaction_ids,
+                key=lambda item: selected_rows[item].row_number,
+                reverse=True,
+            )
+        ]
+        try:
+            self._batch_update_spreadsheet(requests)
+        except StorageUnavailableError as error:
+            outcome = self._bulk_postcondition_error(
+                operation="transaction deletion",
+                error=error,
+                expected_by_id=current_by_id,
+                postcondition=lambda current: set(current) == set(current_by_id)
+                and all(current[item] == current_by_id[item] for item in current_by_id),
+                fully_applied=lambda current: not set(current).intersection(current_by_id),
+            )
+            if outcome is not None:
+                return outcome
+            raise AssertionError("Bulk deletion postcondition did not classify")
+        self._invalidate("Transactions")
+        return {"status": "fully_applied", "count": str(len(transaction_ids))}
 
     def list_accounts(
         self, *, active_only: bool = True, _force_refresh: bool = False
