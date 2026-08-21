@@ -37,6 +37,14 @@ FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 STATE_MAX_AGE_SECONDS = 10 * 60
 HTTP_TIMEOUT_SECONDS = 30
 MAX_RECEIPT_BYTES = 20 * 1024 * 1024
+RECEIPT_FILE_EXTENSIONS = (
+    ".pdf",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    ".heic",
+)
 PROFILE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,47}$")
 DRIVE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{10,}$")
 SAFE_RECEIPT_NAME_PATTERN = re.compile(r"[^A-Za-z0-9._() -]+")
@@ -61,9 +69,16 @@ class GoogleDriveAuthorizationError(GoogleDriveError):
 class GoogleDriveAccessError(GoogleDriveError):
     """Raised when a Drive API operation cannot be completed."""
 
-    def __init__(self, message: str, *, retryable: bool = False) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        retryable: bool = False,
+        upload_attempted: bool | None = None,
+    ) -> None:
         super().__init__(message)
         self.retryable = retryable
+        self.upload_attempted = upload_attempted
 
 
 class GoogleDriveConflictError(GoogleDriveAccessError):
@@ -296,16 +311,22 @@ def authorization_url(
     return f"{AUTHORIZATION_ENDPOINT}?{urlencode(parameters)}"
 
 
-def _json_response(response: requests.Response) -> Mapping[str, Any]:
+def _json_response(
+    response: requests.Response,
+    *,
+    retryable: bool = False,
+) -> Mapping[str, Any]:
     try:
         parsed = response.json()
     except (ValueError, json.JSONDecodeError) as exc:
         raise GoogleDriveAccessError(
-            "Google Drive returned an unreadable response. Retry the request."
+            "Google Drive returned an unreadable response. Retry the request.",
+            retryable=retryable,
         ) from exc
     if not isinstance(parsed, Mapping):
         raise GoogleDriveAccessError(
-            "Google Drive returned an unreadable response. Retry the request."
+            "Google Drive returned an unreadable response. Retry the request.",
+            retryable=retryable,
         )
     return parsed
 
@@ -484,6 +505,22 @@ def safe_receipt_filename(original_name: str) -> str:
         return validate_receipt_filename(f"_{cleaned}", "Receipt filename")
 
 
+def validate_receipt_upload(
+    original_name: str,
+    content: bytes,
+) -> None:
+    """Validate the shared receipt upload contract before any write."""
+    filename = str(original_name or "").strip()
+    if not filename or not filename.casefold().endswith(RECEIPT_FILE_EXTENSIONS):
+        raise GoogleDriveAccessError(
+            "Receipt files must be PDF, PNG, JPG, JPEG, WEBP, or HEIC."
+        )
+    if not content or len(content) > MAX_RECEIPT_BYTES:
+        raise GoogleDriveAccessError(
+            "Receipt files must be non-empty and no larger than 20 MB."
+        )
+
+
 def suffixed_receipt_filename(filename: str, occurrence: int) -> str:
     """Add a numeric duplicate suffix before a filename extension."""
     if occurrence <= 1:
@@ -639,6 +676,11 @@ class GoogleDriveClient:
                 if attempt < 3:
                     self.sleeper(2**attempt)
                     continue
+                raise GoogleDriveAccessError(
+                    "Google Drive is temporarily unavailable. Retry the request.",
+                    retryable=True,
+                )
+            if response.status_code in {429, 500, 502, 503, 504}:
                 raise GoogleDriveAccessError(
                     "Google Drive is temporarily unavailable. Retry the request.",
                     retryable=True,
@@ -1019,23 +1061,30 @@ class GoogleDriveClient:
         ).encode("utf-8")
         body += content
         body += f"\r\n--{boundary}--\r\n".encode("utf-8")
-        response = self._request(
-            "POST",
-            f"{DRIVE_UPLOAD_ROOT}/files",
-            expected=(200, 201),
-            retry_transient=False,
-            params={
-                "uploadType": "multipart",
-                "fields": (
-                    "id,name,mimeType,size,createdTime,modifiedTime,description,"
-                    "webViewLink,appProperties"
-                ),
-                "supportsAllDrives": "true",
-            },
-            headers={"Content-Type": f"multipart/related; boundary={boundary}"},
-            data=body,
-        )
-        return dict(_json_response(response))
+        try:
+            response = self._request(
+                "POST",
+                f"{DRIVE_UPLOAD_ROOT}/files",
+                expected=(200, 201),
+                retry_transient=False,
+                params={
+                    "uploadType": "multipart",
+                    "fields": (
+                        "id,name,mimeType,size,createdTime,modifiedTime,description,"
+                        "webViewLink,appProperties"
+                    ),
+                    "supportsAllDrives": "true",
+                },
+                headers={"Content-Type": f"multipart/related; boundary={boundary}"},
+                data=body,
+            )
+            return dict(_json_response(response, retryable=True))
+        except GoogleDriveAccessError as error:
+            raise GoogleDriveAccessError(
+                str(error),
+                retryable=error.retryable,
+                upload_attempted=True,
+            ) from error
 
     def delete_file(self, file_id: str) -> None:
         """Delete a file created and managed by the app."""
@@ -1056,51 +1105,21 @@ class GoogleDriveClient:
         original_name: str,
         content: bytes,
         mime_type: str,
+        receipt_id: str | None = None,
     ) -> dict[str, Any]:
         """Create one receipt without replacing a same-named Drive file."""
-        if not content or len(content) > MAX_RECEIPT_BYTES:
-            raise GoogleDriveAccessError(
-                "Receipt files must be non-empty and no larger than 20 MB."
-            )
+        validate_receipt_upload(original_name, content)
         folder_id = self._valid_folder_id(folder_id)
         base_filename = safe_receipt_filename(original_name)
         original_filename = safe_receipt_filename(original_name)
         content_sha256 = hashlib.sha256(content).hexdigest()
-        inventory_query = " and ".join(
+        receipt_id = str(receipt_id or secrets.token_hex(16))
+        if not RECEIPT_ID_PATTERN.fullmatch(receipt_id):
+            raise GoogleDriveAccessError("Receipt identity is invalid.")
+        identity_query = " and ".join(
             [
                 f"'{_escape_query_value(folder_id)}' in parents",
                 "trashed = false",
-            ]
-        )
-        existing_names = {
-            str(item.get("name", "")).casefold()
-            for item in self._list(
-                inventory_query,
-                page_size=1000,
-                fetch_all=True,
-            )
-            if item.get("name")
-        }
-        filename = ""
-        for occurrence in range(1, 1001):
-            candidate = suffixed_receipt_filename(
-                base_filename,
-                occurrence,
-            )
-            if candidate.casefold() not in existing_names:
-                filename = candidate
-                break
-        if not filename:
-            raise GoogleDriveAccessError(
-                "Google Drive contains too many receipts with this filename. "
-                "Rename the local file and retry."
-            )
-        receipt_id = secrets.token_hex(16)
-        committed_query = " and ".join(
-            [
-                f"'{_escape_query_value(folder_id)}' in parents",
-                "trashed = false",
-                f"name = '{_escape_query_value(filename)}'",
                 (
                     "appProperties has { key='tabulaRasaKind' and "
                     "value='receipt' }"
@@ -1123,6 +1142,54 @@ class GoogleDriveClient:
                 ),
             ]
         )
+        try:
+            existing_by_identity = self._list(identity_query, page_size=2)
+        except GoogleDriveAccessError as error:
+            raise GoogleDriveAccessError(
+                str(error),
+                retryable=error.retryable,
+                upload_attempted=False,
+            ) from error
+        if existing_by_identity:
+            uploaded = existing_by_identity[0]
+            filename = str(uploaded.get("name") or base_filename)
+        else:
+            inventory_query = " and ".join(
+                [
+                    f"'{_escape_query_value(folder_id)}' in parents",
+                    "trashed = false",
+                ]
+            )
+            try:
+                existing_names = {
+                    str(item.get("name", "")).casefold()
+                    for item in self._list(
+                        inventory_query,
+                        page_size=1000,
+                        fetch_all=True,
+                    )
+                    if item.get("name")
+                }
+            except GoogleDriveAccessError as error:
+                raise GoogleDriveAccessError(
+                    str(error),
+                    retryable=error.retryable,
+                    upload_attempted=False,
+                ) from error
+            filename = ""
+            for occurrence in range(1, 1001):
+                candidate = suffixed_receipt_filename(
+                    base_filename,
+                    occurrence,
+                )
+                if candidate.casefold() not in existing_names:
+                    filename = candidate
+                    break
+            if not filename:
+                raise GoogleDriveAccessError(
+                    "Google Drive contains too many receipts with this filename. "
+                    "Rename the local file and retry."
+                )
         metadata = {
             "name": filename,
             "parents": [folder_id],
@@ -1135,21 +1202,28 @@ class GoogleDriveClient:
                 "tabulaRasaSha256": content_sha256,
             },
         }
-        try:
-            uploaded = self._multipart_create(
-                metadata,
-                content,
-                mime_type or "application/octet-stream",
+        if not existing_by_identity:
+            committed_query = " and ".join(
+                [identity_query, f"name = '{_escape_query_value(filename)}'"]
             )
-        except GoogleDriveAccessError:
-            # A disconnected response after Google committed the upload is
-            # uncertain. Query by the deterministic name and app-properties
-            # before reporting failure so a retry cannot create a duplicate.
-            committed = self._list(committed_query, page_size=2)
-            if committed:
-                uploaded = committed[0]
-            else:
-                raise
+            try:
+                uploaded = self._multipart_create(
+                    metadata,
+                    content,
+                    mime_type or "application/octet-stream",
+                )
+            except GoogleDriveAccessError as error:
+                # A disconnected response after Google committed the upload is
+                # uncertain. Query by the deterministic identity and filename
+                # before reporting failure so a retry cannot create a duplicate.
+                try:
+                    committed = self._list(committed_query, page_size=2)
+                except GoogleDriveError as reconciliation_error:
+                    raise error from reconciliation_error
+                if committed:
+                    uploaded = committed[0]
+                else:
+                    raise
         uploaded.setdefault("name", filename)
         uploaded.setdefault("mimeType", mime_type or "application/octet-stream")
         uploaded.setdefault("size", str(len(content)))
@@ -1163,6 +1237,49 @@ class GoogleDriveClient:
             ),
         }
         return uploaded
+
+    def find_receipt_by_identity(
+        self,
+        *,
+        profile_key: str,
+        transaction_id: str,
+        folder_id: str,
+        receipt_id: str,
+        content: bytes,
+    ) -> dict[str, Any] | None:
+        """Find an uncertain receipt without creating another Drive file."""
+        folder_id = self._valid_folder_id(folder_id)
+        if not RECEIPT_ID_PATTERN.fullmatch(str(receipt_id)):
+            raise GoogleDriveAccessError("Receipt identity is invalid.")
+        content_sha256 = hashlib.sha256(content).hexdigest()
+        identity_query = " and ".join(
+            [
+                f"'{_escape_query_value(folder_id)}' in parents",
+                "trashed = false",
+                (
+                    "appProperties has { key='tabulaRasaKind' and "
+                    "value='receipt' }"
+                ),
+                (
+                    "appProperties has { key='tabulaRasaProfile' and "
+                    f"value='{_escape_query_value(profile_key)}' }}"
+                ),
+                (
+                    "appProperties has { key='tabulaRasaTransaction' and "
+                    f"value='{_escape_query_value(transaction_id)}' }}"
+                ),
+                (
+                    "appProperties has { key='tabulaRasaReceiptId' and "
+                    f"value='{_escape_query_value(receipt_id)}' }}"
+                ),
+                (
+                    "appProperties has { key='tabulaRasaSha256' and "
+                    f"value='{content_sha256}' }}"
+                ),
+            ]
+        )
+        matches = self._list(identity_query, page_size=2)
+        return dict(matches[0]) if matches else None
 
     def list_receipts(
         self,

@@ -129,6 +129,26 @@ The application validates required references, fresh account/category state,
 and duplicate submissions before writing. A success message appears only after
 Google Sheets confirms the operation.
 
+### Receipts during transaction creation
+
+The **Add transaction** form accepts zero, one, or multiple optional receipt
+files for income, expense, and transfer entries. Select PDF, PNG, JPG, JPEG,
+WEBP, or HEIC files; each file must be non-empty and no larger than 20 MB.
+Every selected file is validated before the transaction is written to Google
+Sheets.
+
+Sheets creates the transaction first. Only after that write is confirmed does
+the application upload and link each receipt in the selected profile's Google
+Drive folder. Duplicate filenames are retained as separate files with numeric
+suffixes, such as `receipt (2).pdf`.
+
+The transaction remains saved if any receipt fails. The form shows one concise
+notice with the number of complete and unresolved receipts, reports available
+errors, and provides **Retry unresolved receipts**. A receipt that is already
+linked is not re-uploaded or re-linked during recovery. If a file was uploaded
+but linking failed, recovery retries the same Drive file or uses the transaction
+editor's **Unreferenced receipt** workflow.
+
 ## Receipts
 
 When Google Drive is configured for the selected profile, open a saved

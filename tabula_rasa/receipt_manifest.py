@@ -11,6 +11,7 @@ from typing import Any
 
 RECEIPT_MANIFEST_SCHEMA_VERSION = 1
 MAX_RECEIPT_MANIFEST_BYTES = 20 * 1024 * 1024
+MAX_RECEIPT_REFERENCES = 100
 PROFILE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,47}$")
 DRIVE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{10,}$")
 RECEIPT_ID_PATTERN = re.compile(r"^[a-f0-9]{32}$")
@@ -199,7 +200,7 @@ def decode_receipt_reference_list(value: object) -> list[dict[str, Any]]:
         raise ReceiptManifestError(
             "Transaction receipt references are unreadable"
         ) from exc
-    if not isinstance(parsed, list) or len(parsed) > 100:
+    if not isinstance(parsed, list) or len(parsed) > MAX_RECEIPT_REFERENCES:
         raise ReceiptManifestError("Transaction receipt references are invalid")
     references = [
         validate_receipt_reference(

@@ -236,6 +236,7 @@ def confirmed_write(
     success_message,
     *,
     on_success=None,
+    on_confirmed=None,
 ) -> None:
     profile_action = f"{st.session_state.get('business_profile', 'default')}:{action}"
     if is_recent_duplicate(st.session_state, profile_action, payload):
@@ -247,6 +248,8 @@ def confirmed_write(
         report_storage_error(error)
         return
     mark_completed(st.session_state, profile_action, payload)
+    if on_confirmed is not None:
+        on_confirmed(result)
     if on_success is not None:
         on_success()
     st.session_state["workbook_data_revision"] = (

@@ -1299,7 +1299,7 @@ Use:
 
 Stack fields vertically on narrow screens.
 
-### 19.2 Add-transaction entry structure — approved target
+### 19.2 Add-transaction entry structure — current behavior
 
 The Add transaction tab uses this structure:
 
@@ -1322,12 +1322,15 @@ Conditional rules:
 - Only active accounts are offered for new transactions.
 - The form is unavailable with a clear warning when no active account exists.
 - Income or Expense entry is unavailable with a clear warning when no matching category exists.
-- Receipt accepts the same file types as the existing post-creation receipt uploader.
+- Receipt accepts zero, one, or multiple files using the same file types as the
+  post-creation receipt uploader: PDF, PNG, JPG, JPEG, WEBP, or HEIC.
+- Each selected file must be non-empty and no larger than 20 MB. Filenames are
+  sanitized and duplicate names receive numeric suffixes without overwriting.
 - Receipt selection is optional and does not change accounting validation.
 
 Tags and advanced accounting fields are not implemented.
 
-### 19.3 Add-transaction submission and receipt sequence
+### 19.3 Add-transaction submission and receipt sequence — current behavior
 
 The primary action remains:
 
@@ -1342,21 +1345,27 @@ When no receipt is selected:
 3. Show confirmed success.
 4. Reset the form intentionally on the next rerun.
 
-When a receipt is selected:
+When one or more receipts are selected:
 
-1. Validate all transaction fields and the file type before any write.
+1. Validate all transaction fields and every selected file before any write.
 2. Create the transaction in Google Sheets.
-3. After Sheets confirms creation and returns the transaction ID, upload the receipt to the selected profile's receipt folder.
-4. Persist the receipt reference on the saved transaction.
-5. Show confirmed completion for both the transaction and receipt.
-6. Reset the form only after the complete sequence succeeds.
+3. After Sheets confirms creation and returns the transaction ID, upload each
+   receipt to the selected profile's receipt folder.
+4. Persist each receipt reference on the saved transaction independently.
+5. Show one concise saved-transaction notice with the number of complete and
+   unresolved receipts, any available unresolved errors, and one retry action.
+6. Reset the form only after every selected receipt is linked.
 
 Failure behavior:
 
 - If transaction validation fails, do not upload the receipt.
 - If the transaction save fails, do not upload the receipt.
-- If the transaction saves but receipt upload fails, retain the transaction, do not roll it back, and show a warning with a direct retry path into that transaction's receipt workflow.
-- If the file uploads but linking fails, identify that the transaction was saved and the file exists in Drive; make the file recoverable through the Unreferenced receipt workflow and do not upload a duplicate automatically.
+- If the transaction saves but one or more receipt uploads fail, retain the
+  transaction and every receipt already linked. Show a warning with a direct
+  retry path for only the unresolved receipts.
+- If a file uploads but linking fails, retain its exact Drive-file reference and
+  retry linking that file or use the Unreferenced receipt workflow. Do not upload
+  the same local file again as the primary recovery action.
 - Preserve form and file state after a non-write validation error where Streamlit permits.
 - Duplicate completed submissions must not create duplicate transactions or duplicate receipt files.
 
@@ -1733,27 +1742,32 @@ It must preserve:
 - Existing linked-receipt display and removal
 - Linking of eligible unreferenced receipts
 
-### 25.6 Receipt during transaction creation
+### 25.6 Receipt during transaction creation — current behavior
 
-The Add transaction form includes an optional receipt uploader.
+The Add transaction form includes an optional multi-file receipt uploader.
 
 The user experiences one submission workflow, while the system performs ordered operations:
 
-1. Validate the transaction and file.
+1. Validate the transaction and every selected file.
 2. Save the transaction and obtain its stable ID.
-3. Upload the receipt using that transaction ID.
-4. Link the resulting receipt reference.
+3. Upload each receipt using that transaction ID.
+4. Link each resulting receipt reference independently.
 
-Progress text should identify the current stage without exposing internal secrets or Drive metadata.
+The notice should identify the saved transaction, the complete and unresolved
+receipt counts, and the retry action without exposing internal secrets or Drive
+metadata. Do not expose a pending/uploaded/linked/failed state machine or add
+background progress stages.
 
-Recommended states:
-
-- `Saving transaction…`
-- `Uploading receipt…`
-- `Linking receipt…`
-- `Transaction saved and receipt linked.`
+The success notice is `Transaction saved and N receipt(s) linked.` when every
+selected receipt is complete. A partial result keeps the transaction saved and
+offers `Retry unresolved receipts`.
 
 Partial failure rules follow Section 19.3. A receipt failure never converts a confirmed transaction save into a reported total failure.
+
+The session retains only the saved transaction ID plus the minimum per-receipt
+recovery pointers needed to retry. Successful links are never retried solely
+because another selected receipt failed; an uploaded-but-unlinked file is
+retried by reference rather than re-uploaded.
 
 The post-creation editor remains available for later upload, retry, linking, opening, and unlinking.
 
