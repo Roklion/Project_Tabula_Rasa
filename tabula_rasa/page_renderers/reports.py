@@ -125,8 +125,34 @@ def _expense_category_chart(by_category: pd.DataFrame):
         tickprefix="$",
         tickformat=",.2f",
         rangemode="tozero",
+        automargin=True,
     )
-    chart.update_yaxes(autorange="reversed")
+    chart.update_yaxes(autorange="reversed", automargin=True)
+    return chart
+
+
+def _monthly_performance_chart(monthly: pd.DataFrame):
+    chart = px.bar(
+        monthly,
+        x="Month",
+        y=["Income", "Expenses"],
+        barmode="group",
+        color_discrete_sequence=["#3267D6", "#8EA5D5"],
+        labels={"value": "Amount", "variable": "Series"},
+    )
+    chart.update_layout(
+        height=300,
+        margin={"l": 12, "r": 12, "t": 28, "b": 12},
+        legend_title_text="",
+    )
+    chart.update_xaxes(automargin=True)
+    chart.update_yaxes(
+        title="Amount",
+        tickprefix="$",
+        tickformat=",.2f",
+        rangemode="tozero",
+        automargin=True,
+    )
     return chart
 
 
@@ -194,25 +220,7 @@ def render_reports(context: ReportsContext) -> None:
         with left:
             st.subheader("Monthly performance")
             if not monthly.empty:
-                monthly_chart = px.bar(
-                    monthly,
-                    x="Month",
-                    y=["Income", "Expenses"],
-                    barmode="group",
-                    color_discrete_sequence=["#3267D6", "#8EA5D5"],
-                    labels={"value": "Amount", "variable": "Series"},
-                )
-                monthly_chart.update_layout(
-                    height=300,
-                    margin={"l": 12, "r": 12, "t": 28, "b": 12},
-                    legend_title_text="",
-                )
-                monthly_chart.update_yaxes(
-                    title="Amount",
-                    tickprefix="$",
-                    tickformat=",.2f",
-                    rangemode="tozero",
-                )
+                monthly_chart = _monthly_performance_chart(monthly)
                 st.plotly_chart(
                     monthly_chart,
                     width="stretch",

@@ -83,6 +83,19 @@ def test_expense_category_chart_places_largest_sorted_category_first() -> None:
 
     assert list(chart.data[0].y) == ["Largest", "Smallest"]
     assert chart.layout.yaxis.autorange == "reversed"
+    assert chart.layout.xaxis.automargin is True
+    assert chart.layout.yaxis.automargin is True
+
+
+def test_monthly_chart_preserves_room_for_axis_labels() -> None:
+    chart = reports._monthly_performance_chart(
+        pd.DataFrame(
+            [{"Month": "2026-01", "Income": 100.0, "Expenses": 40.0}]
+        )
+    )
+
+    assert chart.layout.xaxis.automargin is True
+    assert chart.layout.yaxis.automargin is True
 
 
 def test_out_of_balance_message_uses_positive_difference_amount() -> None:
