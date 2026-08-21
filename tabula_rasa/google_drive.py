@@ -1086,43 +1086,13 @@ class GoogleDriveClient:
         base_filename = safe_receipt_filename(original_name)
         original_filename = safe_receipt_filename(original_name)
         content_sha256 = hashlib.sha256(content).hexdigest()
-        inventory_query = " and ".join(
-            [
-                f"'{_escape_query_value(folder_id)}' in parents",
-                "trashed = false",
-            ]
-        )
-        existing_names = {
-            str(item.get("name", "")).casefold()
-            for item in self._list(
-                inventory_query,
-                page_size=1000,
-                fetch_all=True,
-            )
-            if item.get("name")
-        }
-        filename = ""
-        for occurrence in range(1, 1001):
-            candidate = suffixed_receipt_filename(
-                base_filename,
-                occurrence,
-            )
-            if candidate.casefold() not in existing_names:
-                filename = candidate
-                break
-        if not filename:
-            raise GoogleDriveAccessError(
-                "Google Drive contains too many receipts with this filename. "
-                "Rename the local file and retry."
-            )
         receipt_id = str(receipt_id or secrets.token_hex(16))
         if not RECEIPT_ID_PATTERN.fullmatch(receipt_id):
             raise GoogleDriveAccessError("Receipt identity is invalid.")
-        committed_query = " and ".join(
+        identity_query = " and ".join(
             [
                 f"'{_escape_query_value(folder_id)}' in parents",
                 "trashed = false",
-                f"name = '{_escape_query_value(filename)}'",
                 (
                     "appProperties has { key='tabulaRasaKind' and "
                     "value='receipt' }"
@@ -1145,6 +1115,40 @@ class GoogleDriveClient:
                 ),
             ]
         )
+        existing_by_identity = self._list(identity_query, page_size=2)
+        if existing_by_identity:
+            uploaded = existing_by_identity[0]
+            filename = str(uploaded.get("name") or base_filename)
+        else:
+            inventory_query = " and ".join(
+                [
+                    f"'{_escape_query_value(folder_id)}' in parents",
+                    "trashed = false",
+                ]
+            )
+            existing_names = {
+                str(item.get("name", "")).casefold()
+                for item in self._list(
+                    inventory_query,
+                    page_size=1000,
+                    fetch_all=True,
+                )
+                if item.get("name")
+            }
+            filename = ""
+            for occurrence in range(1, 1001):
+                candidate = suffixed_receipt_filename(
+                    base_filename,
+                    occurrence,
+                )
+                if candidate.casefold() not in existing_names:
+                    filename = candidate
+                    break
+            if not filename:
+                raise GoogleDriveAccessError(
+                    "Google Drive contains too many receipts with this filename. "
+                    "Rename the local file and retry."
+                )
         metadata = {
             "name": filename,
             "parents": [folder_id],
@@ -1157,21 +1161,25 @@ class GoogleDriveClient:
                 "tabulaRasaSha256": content_sha256,
             },
         }
-        try:
-            uploaded = self._multipart_create(
-                metadata,
-                content,
-                mime_type or "application/octet-stream",
+        if not existing_by_identity:
+            committed_query = " and ".join(
+                [identity_query, f"name = '{_escape_query_value(filename)}'"]
             )
-        except GoogleDriveAccessError:
-            # A disconnected response after Google committed the upload is
-            # uncertain. Query by the deterministic name and app-properties
-            # before reporting failure so a retry cannot create a duplicate.
-            committed = self._list(committed_query, page_size=2)
-            if committed:
-                uploaded = committed[0]
-            else:
-                raise
+            try:
+                uploaded = self._multipart_create(
+                    metadata,
+                    content,
+                    mime_type or "application/octet-stream",
+                )
+            except GoogleDriveAccessError:
+                # A disconnected response after Google committed the upload is
+                # uncertain. Query by the deterministic identity and filename
+                # before reporting failure so a retry cannot create a duplicate.
+                committed = self._list(committed_query, page_size=2)
+                if committed:
+                    uploaded = committed[0]
+                else:
+                    raise
         uploaded.setdefault("name", filename)
         uploaded.setdefault("mimeType", mime_type or "application/octet-stream")
         uploaded.setdefault("size", str(len(content)))

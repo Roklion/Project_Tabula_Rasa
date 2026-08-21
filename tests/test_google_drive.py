@@ -877,6 +877,7 @@ class TestGoogleDriveFiles:
         session = DriveSession(
             [
                 FakeResponse(200, {"files": []}),
+                FakeResponse(200, {"files": []}),
                 FakeResponse(
                     200,
                     {
@@ -926,6 +927,7 @@ class TestGoogleDriveFiles:
     ) -> None:
         session = DriveSession(
             [
+                FakeResponse(200, {"files": []}),
                 FakeResponse(
                     200,
                     {
@@ -965,12 +967,14 @@ class TestGoogleDriveFiles:
         assert uploaded["name"] == "statement (2).pdf"
         assert [request[0] for request in session.requests] == [
             "GET",
+            "GET",
             "POST",
         ]
         assert "name =" not in session.requests[0][2]["params"]["q"]
-        assert session.requests[0][2]["params"]["pageSize"] == 1000
+        assert session.requests[0][2]["params"]["pageSize"] == 2
+        assert session.requests[1][2]["params"]["pageSize"] == 1000
         assert b'"name":"statement (2).pdf"' in (
-            session.requests[1][2]["data"]
+            session.requests[2][2]["data"]
         )
 
     def test_receipt_upload_recovers_an_uncertain_create_response(self) -> None:
@@ -980,6 +984,7 @@ class TestGoogleDriveFiles:
         }
         session = DriveSession(
             [
+                FakeResponse(200, {"files": []}),
                 FakeResponse(200, {"files": []}),
                 requests.ConnectionError("response lost"),
                 FakeResponse(200, {"files": [committed]}),
@@ -1018,10 +1023,29 @@ class TestGoogleDriveFiles:
         session = DriveSession(
             [
                 FakeResponse(200, {"files": []}),
+                FakeResponse(200, {"files": []}),
                 requests.ConnectionError("response lost"),
                 FakeResponse(200, {"files": []}),
-                FakeResponse(200, {"files": []}),
-                FakeResponse(200, {"id": "receipt123456", "name": "statement.pdf"}),
+                FakeResponse(
+                    200,
+                    {
+                        "files": [
+                            {
+                                "id": "receipt123456",
+                                "name": "statement.pdf",
+                                "appProperties": {
+                                    "tabulaRasaKind": "receipt",
+                                    "tabulaRasaProfile": "north",
+                                    "tabulaRasaTransaction": "txn-1",
+                                    "tabulaRasaReceiptId": receipt_id,
+                                    "tabulaRasaSha256": hashlib.sha256(
+                                        b"receipt"
+                                    ).hexdigest(),
+                                },
+                            }
+                        ]
+                    },
+                ),
             ]
         )
         client = GoogleDriveClient(
@@ -1057,11 +1081,13 @@ class TestGoogleDriveFiles:
             for request in session.requests
             if request[0] == "POST"
         ]
-        assert len(post_bodies) == 2
-        assert all(
-            f'"tabulaRasaReceiptId":"{receipt_id}"'.encode() in body
-            for body in post_bodies
+        assert len(post_bodies) == 1
+        assert (
+            f'"tabulaRasaReceiptId":"{receipt_id}"'.encode()
+            in post_bodies[0]
         )
+        retry_query = session.requests[-1][2]["params"]["q"]
+        assert f"value='{receipt_id}'" in retry_query
 
     def test_profile_receipt_listing_is_not_transaction_scoped(self) -> None:
         receipt = {
