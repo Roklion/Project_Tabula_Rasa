@@ -166,9 +166,11 @@ def finish_receipt_creation_if_complete(
     linked, _uploaded, _unresolved = receipt_creation_counts(workflow)
     st.session_state.pop(RECEIPT_CREATION_WORKFLOW_KEY, None)
     context.schedule_widget_reset("reset_add_transaction_form")
-    st.session_state["receipt_creation_success_notice"] = (
+    notice = (
         f"Transaction saved and {linked} receipt(s) linked."
     )
+    st.session_state["receipt_creation_success_notice"] = notice
+    st.session_state["write_success_notice"] = notice
     return True
 
 
@@ -207,7 +209,8 @@ def _render_receipt_workflow_status(workflow: Mapping[str, Any]) -> None:
         elif status == "uploaded":
             st.warning(
                 f"{name}: uploaded to Drive; linking is still unresolved. "
-                "Retry linking this existing file or use Unreferenced receipt."
+                "Retry linking this existing file or use Unreferenced receipt. "
+                f"{receipt.get('error', '')}"
             )
         else:
             st.warning(f"{name}: upload unresolved. {receipt.get('error', '')}")
