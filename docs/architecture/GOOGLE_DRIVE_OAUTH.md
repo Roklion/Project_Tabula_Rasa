@@ -298,7 +298,7 @@ powershell -ExecutionPolicy Bypass -File scripts\run_local_profile_admin.ps1
 
 Then:
 
-1. Sign in to Project Tabula Rasa and open **Business profiles**.
+1. Sign in to Project Tabula Rasa and open **Account settings**.
 2. Re-enter the application password.
 3. In the guided workflow, select the intended business profile and continue to
    its **Google Drive OAuth** step.
@@ -380,8 +380,9 @@ identity metadata; otherwise choose or provision new destinations.
 
 ### A folder changes
 
-Use the local Business profiles page to choose a new storage root and provision
-its managed children, then export hosted Secrets again after the change.
+Use the local Account settings page and its **Google Drive storage** section to
+choose a new storage root and provision its managed children, then export hosted
+Secrets again after the change.
 Changing the stored destination does not move existing Drive files.
 
 ### The OAuth client secret is rotated

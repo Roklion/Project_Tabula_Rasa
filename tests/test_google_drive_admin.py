@@ -18,6 +18,7 @@ from tabula_rasa.google_drive_admin import (
     _create_storage_root,
     _provision_storage_children,
     _revalidated_storage_settings,
+    process_google_drive_oauth_callback,
     validate_google_drive_profile,
 )
 
@@ -71,6 +72,58 @@ def test_readiness_rechecks_profile_root_isolation() -> None:
     client.validate_storage_configuration.assert_called_once_with(
         "north",
         root_folder=client.folder.return_value,
+    )
+
+
+def test_oauth_callback_returns_to_account_settings_and_persists_profile_grant(
+    tmp_path: Path,
+) -> None:
+    config = Mock()
+    drive_settings = {
+        "authorized_email": "owner@example.test",
+        "refresh_token": "refresh-token",
+    }
+    with (
+        patch.object(
+            google_drive_admin.st,
+            "query_params",
+            {"state": "signed-state", "code": "authorization-code"},
+        ),
+        patch.object(
+            google_drive_admin,
+            "load_oauth_config",
+            return_value=config,
+        ),
+        patch.object(
+            google_drive_admin,
+            "verify_oauth_state",
+            return_value={"profile": "north", "redirect_uri": "http://localhost"},
+        ),
+        patch.object(
+            google_drive_admin,
+            "load_local_profiles",
+            return_value={"north": {"name": "North Shop"}},
+        ),
+        patch.object(
+            google_drive_admin,
+            "exchange_authorization_code",
+            return_value=drive_settings,
+        ),
+        patch.object(google_drive_admin, "update_local_profile_google_drive") as update,
+        patch.object(google_drive_admin.st, "rerun"),
+    ):
+        assert process_google_drive_oauth_callback(
+            {"google_drive_oauth": {}},
+            store_path=tmp_path / "profiles.json",
+        )
+
+    update.assert_called_once_with(
+        "north",
+        drive_settings,
+        path=tmp_path / "profiles.json",
+    )
+    assert google_drive_admin.st.session_state["navigation_page"] == (
+        "Account settings"
     )
 
 

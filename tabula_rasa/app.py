@@ -191,6 +191,17 @@ def schedule_widget_reset(flag: str) -> None:
     st.session_state[flag] = True
 
 
+def _select_operational_page() -> None:
+    """Leave the shared route state aligned with the operational radio."""
+    st.session_state["active_page"] = st.session_state["navigation_page"]
+
+
+def _open_account_settings() -> None:
+    """Open settings with no operational route selected."""
+    st.session_state["active_page"] = "Account settings"
+    st.session_state["navigation_page"] = None
+
+
 def confirmed_write(
     action: str,
     payload: dict,
@@ -281,7 +292,7 @@ with st.sidebar:
     )
     st.session_state["previous_business_profile"] = selected_profile_key
 
-    pages = [
+    operational_pages = [
         "Dashboard",
         "Transactions",
         "Mileage",
@@ -290,13 +301,67 @@ with st.sidebar:
         "Reports",
         "Data & backup",
     ]
+    if profiles:
+        available_pages = [*operational_pages]
+    else:
+        available_pages = []
+    available_routes = [*available_pages]
     if profile_admin_enabled:
-        pages.append("Business profiles")
-    if not profiles:
-        pages = ["Business profiles"]
-    if st.session_state.get("navigation_page") not in pages:
-        st.session_state["navigation_page"] = pages[0]
-    page = st.radio("Navigate", pages, key="navigation_page")
+        available_routes.append("Account settings")
+
+    stored_page = st.session_state.get(
+        "active_page",
+        st.session_state.get("navigation_page"),
+    )
+    if stored_page == "Business profiles":
+        stored_page = "Account settings"
+    if stored_page not in available_routes:
+        stored_page = (
+            available_pages[0]
+            if available_pages
+            else available_routes[0]
+            if available_routes
+            else None
+        )
+    st.session_state["active_page"] = stored_page
+
+    if available_pages:
+        settings_active = st.session_state.get("active_page") == "Account settings"
+        if settings_active:
+            # Account settings is a separate utility destination. Keep the
+            # operational radio unselected so choosing the page the user came
+            # from still invokes its callback and returns to that page.
+            st.session_state["navigation_page"] = None
+        else:
+            operational_page = st.session_state.get("navigation_page")
+            if operational_page not in available_pages:
+                st.session_state["navigation_page"] = available_pages[0]
+        page = st.radio(
+            "Navigate",
+            available_pages,
+            key="navigation_page",
+            index=None if settings_active else 0,
+            on_change=_select_operational_page,
+        )
+    else:
+        page = None
+
+    if profile_admin_enabled:
+        st.divider()
+        settings_active = st.session_state.get("active_page") == "Account settings"
+        st.button(
+            "Account settings",
+            key="account_settings_navigation",
+            type="primary" if settings_active else "secondary",
+            on_click=_open_account_settings,
+        )
+        if settings_active:
+            page = "Account settings"
+
+    if page is None:
+        st.error("No application page is available in this environment.")
+        st.stop()
+
     previous_page = st.session_state.get("previous_navigation_page")
     if previous_page != page:
         table_generation_by_page = {
@@ -314,7 +379,7 @@ with st.sidebar:
     if st.button("Log out", width="stretch"):
         logout()
 
-if page == "Business profiles":
+if page == "Account settings":
     notice = st.session_state.pop("local_profile_admin_notice", None)
     if notice:
         st.success(notice)
@@ -351,7 +416,7 @@ else:
     with st.sidebar:
         st.caption(f"Workbook: {storage.workbook_title}")
 
-if page != "Business profiles":
+if page != "Account settings":
     notice = st.session_state.pop("write_success_notice", None)
     notice_placeholder = st.empty()
     if notice:
@@ -454,7 +519,7 @@ elif page == "Data & backup":
     if not isinstance(backup_folder, Mapping):
         st.info(
             "Connect Google Drive and select a backup folder from the local "
-            "Business profiles page to enable cloud-native backups."
+            "Account settings to enable cloud-native backups."
         )
     else:
         try:
@@ -570,7 +635,7 @@ elif page == "Data & backup":
         st.info(
             "No local Synology recovery record is available in this runtime. NAS "
             "settings are intentionally excluded from hosted Secrets; configure "
-            "or review them from the loopback-only Business profiles page and DSM."
+            "or review them from the loopback-only Account settings page and DSM."
         )
     else:
         try:
@@ -582,7 +647,7 @@ elif page == "Data & backup":
             synology_recovery = None
         if synology_recovery is None:
             st.caption(
-                "Repair this profile from the loopback-only Business profiles page."
+                "Repair this profile from the loopback-only Account settings page."
             )
         else:
             if not isinstance(backup_folder, Mapping):

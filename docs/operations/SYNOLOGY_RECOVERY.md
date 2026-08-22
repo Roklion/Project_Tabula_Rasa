@@ -156,8 +156,8 @@ Run the loopback-only profile administrator:
 powershell -ExecutionPolicy Bypass -File scripts\run_local_profile_admin.ps1
 ```
 
-Open **Business profiles**, unlock administration, and find **Synology recovery
-copy**. For each business:
+Open **Account settings**, unlock administration, and find **Recovery** >
+**Synology recovery copy**. For each business:
 
 1. Choose the business profile.
 2. Select **Maintain an optional Synology recovery copy for this business**.

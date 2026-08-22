@@ -16,11 +16,20 @@ from tabula_rasa.local_profile_store import (
     load_local_profiles,
     save_local_profile,
     update_local_profile_google_drive,
+    update_local_profile_synology_recovery,
 )
 from tabula_rasa.storage import GoogleSheetsStorage
 from tests.fakes import FakeWorkbook
 
 TEST_PASSWORD = "test-password-123"
+
+
+def select_account_settings(app: AppTest) -> None:
+    """Select the utility-area settings destination."""
+    settings_navigation = next(
+        button for button in app.button if button.label == "Account settings"
+    )
+    settings_navigation.click().run()
 
 
 def profile_settings(name: str, spreadsheet_id: str) -> dict:
@@ -143,8 +152,90 @@ class TestAppAuthentication:
                 app.button[0].click().run()
 
                 assert len(app.exception) == 0
-                assert app.radio[0].options == ["Business profiles"]
+                assert any(
+                    button.label == "Account settings" for button in app.button
+                )
+                assert not any(
+                    "No application page is available" in str(item.value)
+                    for item in app.error
+                )
+                assert any(
+                    field.label == "Application password" for field in app.text_input
+                )
                 from_secrets.assert_not_called()
+
+                next(
+                    field
+                    for field in app.text_input
+                    if field.label == "Application password"
+                ).input(TEST_PASSWORD)
+                next(
+                    button
+                    for button in app.button
+                    if button.label == "Unlock profile administration"
+                ).click().run()
+
+                assert app.file_uploader[0].label == "Google service-account JSON"
+                assert not app.tabs
+                assert not any(
+                    checkbox.label
+                    == "Maintain an optional Synology recovery copy for this business"
+                    for checkbox in app.checkbox
+                )
+
+    def test_stale_account_settings_route_fails_closed_when_local_admin_is_disabled(
+        self,
+    ) -> None:
+        st.cache_resource.clear()
+        fake_storage = GoogleSheetsStorage(FakeWorkbook())
+        with tempfile.TemporaryDirectory() as directory:
+            absent_local_store = Path(directory) / "business_profiles.json"
+            with (
+                patch.dict(os.environ, {LOCAL_PROFILE_ADMIN_ENV: ""}, clear=False),
+                patch(
+                    "tabula_rasa.local_profile_store.LOCAL_PROFILE_STORE_PATH",
+                    absent_local_store,
+                ),
+                patch.object(
+                    st,
+                    "get_option",
+                    side_effect=lambda name: (
+                        "0.0.0.0" if name == "server.address" else None
+                    ),
+                ),
+                patch.object(
+                    GoogleSheetsStorage,
+                    "from_secrets",
+                    return_value=fake_storage,
+                ),
+                patch.object(
+                    st,
+                    "session_state",
+                    {"navigation_page": "Account settings"},
+                ),
+            ):
+                app = AppTest.from_file(
+                    "tabula_rasa/app.py",
+                    default_timeout=30,
+                )
+                app.secrets["app_password_hash"] = hash_password(TEST_PASSWORD)
+                app.secrets["business_profiles"] = {
+                    "hosted": {
+                        "name": "Hosted Business",
+                        "spreadsheet_id": "hosted-sheet-id",
+                        "gcp_service_account": {"type": "service_account"},
+                    }
+                }
+
+                app.run()
+                app.text_input[0].input(TEST_PASSWORD)
+                app.button[0].click().run()
+
+                assert len(app.exception) == 0
+                assert app.radio[0].options[0] == "Dashboard"
+                assert not any(
+                    button.label == "Account settings" for button in app.button
+                )
 
     def test_hosted_missing_profile_configuration_fails_closed(self) -> None:
         st.cache_resource.clear()
@@ -306,9 +397,25 @@ class TestAppAuthentication:
                 app.run()
                 app.text_input[0].input(TEST_PASSWORD)
                 app.button[0].click().run()
-                assert "Business profiles" in app.radio[0].options
+                assert any(
+                    button.label == "Account settings" for button in app.button
+                )
+                assert "operational_navigation_page" not in app.session_state
 
-                app.radio[0].set_value("Business profiles").run()
+                select_account_settings(app)
+                assert app.session_state["active_page"] == "Account settings"
+                assert app.session_state["navigation_page"] is None
+                next(
+                    radio for radio in app.radio if radio.label == "Navigate"
+                ).set_value("Dashboard").run()
+                assert app.session_state["navigation_page"] == "Dashboard"
+                assert app.session_state["active_page"] == "Dashboard"
+                assert not any(
+                    field.label == "Application password" for field in app.text_input
+                )
+
+                select_account_settings(app)
+                assert app.session_state["navigation_page"] is None
                 assert any(
                     field.label == "Application password" for field in app.text_input
                 )
@@ -415,6 +522,39 @@ class TestAppAuthentication:
             south = profile_settings("South Shop", "south-spreadsheet-id")
             save_local_profile("north", north, path=local_store)
             save_local_profile("south", south, path=local_store)
+            update_local_profile_google_drive(
+                "south",
+                {
+                    "authorized_email": "south@example.test",
+                    "authorized_name": "South Owner",
+                    "refresh_token": "refresh-token",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "scopes": ["https://www.googleapis.com/auth/drive.file"],
+                    "storage_root": {
+                        "id": "southroot123",
+                        "name": "South Storage",
+                    },
+                    "backup_folder": {
+                        "id": "southbackup123",
+                        "name": "South Backups",
+                    },
+                    "receipt_folder": {
+                        "id": "southreceipt123",
+                        "name": "South Receipts",
+                    },
+                },
+                path=local_store,
+            )
+            update_local_profile_synology_recovery(
+                "south",
+                {
+                    "layout": "profile-root",
+                    "destination_path": "/volume1/Recovery/south",
+                    "schedule": "Weekly",
+                    "retention_policy": "Keep monthly versions.",
+                },
+                path=local_store,
+            )
             with (
                 patch.dict(
                     os.environ,
@@ -451,7 +591,7 @@ class TestAppAuthentication:
                 app.run()
                 app.text_input[0].input(TEST_PASSWORD)
                 app.button[0].click().run()
-                app.radio[0].set_value("Business profiles").run()
+                select_account_settings(app)
                 next(
                     field
                     for field in app.text_input
@@ -463,10 +603,27 @@ class TestAppAuthentication:
                     if button.label == "Unlock profile administration"
                 ).click().run()
 
+                assert [tab.label for tab in app.tabs] == [
+                    "Business profiles",
+                    "Google Drive storage",
+                    "Recovery",
+                    "Security & deployment information",
+                ]
                 assert len(app.exception) == 0
                 assert sum(
                     field.label == "Business name" for field in app.text_input
                 ) == 2
+                settings_profile = next(
+                    field
+                    for field in app.selectbox
+                    if field.label == "Business profile to configure"
+                )
+                settings_profile.set_value("south").run()
+                assert next(
+                    field
+                    for field in app.text_input
+                    if field.label == "NAS destination path"
+                ).value == "/volume1/Recovery/south"
 
     def test_local_admin_saves_optional_synology_choice_per_profile(self) -> None:
         st.cache_resource.clear()
@@ -538,7 +695,7 @@ class TestAppAuthentication:
                 app.run()
                 app.text_input[0].input(TEST_PASSWORD)
                 app.button[0].click().run()
-                app.radio[0].set_value("Business profiles").run()
+                select_account_settings(app)
                 next(
                     field
                     for field in app.text_input

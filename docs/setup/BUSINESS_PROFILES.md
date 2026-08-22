@@ -123,7 +123,7 @@ when receipts or cloud backups are required.
 
 ## 5. Start the loopback-only profile administrator
 
-The authenticated **Business profiles** page can add or replace profiles in
+The authenticated **Account settings** page can add or replace profiles in
 `.streamlit/business_profiles.json`. It fails closed and is not available
 unless:
 
@@ -142,7 +142,7 @@ ignored virtual environment using the root README's installation commands.
 
 ## 6. Follow the guided profile workflow
 
-The loopback-only **Business profiles** page is organized around one selected
+The loopback-only **Account settings** page is organized around one selected
 profile. When no local profiles exist, it leads with profile creation and does
 not show unrelated Drive or Synology controls. After the first save, select the
 profile being configured and proceed through Sheets, optional Drive, optional
@@ -153,7 +153,7 @@ Synology, and the single readiness result in that order.
 To add a profile:
 
 1. Sign in to Project Tabula Rasa normally.
-2. Open **Business profiles** and re-enter the application password.
+2. Open **Account settings** and re-enter the application password.
 3. Enter the business name and review the derived safe profile key. The key is
    editable before the first save and remains immutable afterward.
 4. Enter the Google spreadsheet URL or ID.
