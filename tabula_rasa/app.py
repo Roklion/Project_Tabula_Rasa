@@ -348,12 +348,14 @@ with st.sidebar:
 
     if profile_admin_enabled:
         st.divider()
+        settings_active = st.session_state.get("active_page") == "Account settings"
         st.button(
             "Account settings",
             key="account_settings_navigation",
+            type="primary" if settings_active else "secondary",
             on_click=_open_account_settings,
         )
-        if st.session_state.get("active_page") == "Account settings":
+        if settings_active:
             page = "Account settings"
 
     if page is None:
