@@ -516,7 +516,7 @@ current local ISO week.
 
 ### A cloud backup cannot refresh authorization
 
-Reconnect the profile through the local Business profiles page, select its
+Reconnect the profile through the local Account settings page, select its
 folders, export hosted Secrets again, and rerun the backup.
 
 ### Restore refuses the target

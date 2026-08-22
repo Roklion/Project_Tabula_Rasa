@@ -460,7 +460,7 @@ def render_receipts(
     if not isinstance(receipt_folder, Mapping):
         st.info(
             "Connect Google Drive and select a receipt folder from "
-            "the local Business profiles page. Until then, store the "
+            "the local Account settings page. Until then, store the "
             f"receipt manually as `{edit_id}-original-file-name`."
         )
     else:

@@ -65,7 +65,7 @@ The authenticated application currently exposes these operational pages, in this
 5. Categories
 6. Reports
 7. Data & backup
-8. Business profiles — only when the loopback-only local profile administrator is enabled
+8. Account settings — only when the loopback-only local profile administrator is enabled
 
 The approved target design preserves the seven operational pages and reframes the current `Business profiles` route as **Account settings**.
 
@@ -371,8 +371,8 @@ The active business and workbook context must remain discoverable. A redesign mu
 
 The current application display identity is **Project Tabula Rasa**. The sign-in
 surface, sidebar title, Streamlit page title, and shell-level documentation use
-that name. The operational route label **Business profiles** remains current
-until the separate #62 information-architecture change is implemented.
+that name. The operational route label **Account settings** is current after
+the #62 information-architecture change.
 
 When the selected business changes, the sidebar continues to show the selected
 business and workbook context. Page selections, table widget keys, edit-row
@@ -752,7 +752,7 @@ Target operational navigation:
 
 Target utility navigation:
 
-- Account settings — replaces the displayed `Business profiles` label when the redesign is implemented
+- Account settings — the displayed route label for local profile administration
 - Log out
 
 When no profiles exist and local administration is available, Account settings is the only available page.
@@ -1661,7 +1661,7 @@ Avoid decorative illustrations unless subtle and useful.
 
 When no profiles exist and local administration is available:
 
-1. Open Business profiles.
+1. Open Account settings.
 2. Re-enter the application password.
 3. Add and validate the first business profile.
 4. Allow workbook initialization and default account/category seeding.
@@ -2098,7 +2098,7 @@ Each page contract defines the current required function and any approved target
 - No ledger page is visible before authentication.
 - Selected business and workbook context is discoverable.
 - Logout remains available from every normal page.
-- Business profiles appears only under current local-administration safety conditions.
+- Account settings appears only under current local-administration safety conditions.
 
 ### 31.2 Dashboard
 
@@ -2449,7 +2449,7 @@ The page is an application-settings surface, not a bookkeeping workspace and not
 #### Navigation and availability
 
 - Display `Account settings` in the sidebar utility area, visually separated from operational pages.
-- The current route label `Business profiles` may remain until the redesign implementation changes it.
+- The current route label is `Account settings`.
 - The page remains available only when the local-administration environment flag and loopback binding permit it.
 - Require re-entry of the application password before configuration changes.
 - Do not expose writable profile configuration in hosted environments where the current safety checks disable it.
