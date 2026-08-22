@@ -154,6 +154,58 @@ class TestAppAuthentication:
                 assert app.radio[0].options == ["Account settings"]
                 from_secrets.assert_not_called()
 
+    def test_stale_account_settings_route_fails_closed_when_local_admin_is_disabled(
+        self,
+    ) -> None:
+        st.cache_resource.clear()
+        fake_storage = GoogleSheetsStorage(FakeWorkbook())
+        with tempfile.TemporaryDirectory() as directory:
+            absent_local_store = Path(directory) / "business_profiles.json"
+            with (
+                patch.dict(os.environ, {LOCAL_PROFILE_ADMIN_ENV: ""}, clear=False),
+                patch(
+                    "tabula_rasa.local_profile_store.LOCAL_PROFILE_STORE_PATH",
+                    absent_local_store,
+                ),
+                patch.object(
+                    st,
+                    "get_option",
+                    side_effect=lambda name: (
+                        "0.0.0.0" if name == "server.address" else None
+                    ),
+                ),
+                patch.object(
+                    GoogleSheetsStorage,
+                    "from_secrets",
+                    return_value=fake_storage,
+                ),
+                patch.object(
+                    st,
+                    "session_state",
+                    {"navigation_page": "Account settings"},
+                ),
+            ):
+                app = AppTest.from_file(
+                    "tabula_rasa/app.py",
+                    default_timeout=30,
+                )
+                app.secrets["app_password_hash"] = hash_password(TEST_PASSWORD)
+                app.secrets["business_profiles"] = {
+                    "hosted": {
+                        "name": "Hosted Business",
+                        "spreadsheet_id": "hosted-sheet-id",
+                        "gcp_service_account": {"type": "service_account"},
+                    }
+                }
+
+                app.run()
+                app.text_input[0].input(TEST_PASSWORD)
+                app.button[0].click().run()
+
+                assert len(app.exception) == 0
+                assert app.radio[0].options[0] == "Dashboard"
+                assert not any(radio.label == "Settings" for radio in app.radio)
+
     def test_hosted_missing_profile_configuration_fails_closed(self) -> None:
         st.cache_resource.clear()
         with tempfile.TemporaryDirectory() as directory:

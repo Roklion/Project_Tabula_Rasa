@@ -307,12 +307,15 @@ with st.sidebar:
         available_pages = [*operational_pages]
     else:
         available_pages = []
+    available_routes = [*available_pages]
+    if profile_admin_enabled:
+        available_routes.append("Account settings")
 
     stored_page = st.session_state.get("navigation_page")
     if stored_page == "Business profiles":
         stored_page = "Account settings"
-    if stored_page not in [*available_pages, "Account settings"]:
-        stored_page = available_pages[0] if available_pages else "Account settings"
+    if stored_page not in available_routes:
+        stored_page = available_pages[0] if available_pages else None
     st.session_state["navigation_page"] = stored_page
 
     if available_pages:
@@ -328,7 +331,7 @@ with st.sidebar:
             on_change=_select_operational_page,
         )
     else:
-        page = "Account settings"
+        page = None
 
     if profile_admin_enabled:
         st.divider()
@@ -342,6 +345,10 @@ with st.sidebar:
         if account_settings_navigation == "Account settings":
             page = "Account settings"
             st.session_state["navigation_page"] = page
+
+    if page is None:
+        st.error("No application page is available in this environment.")
+        st.stop()
 
     previous_page = st.session_state.get("previous_navigation_page")
     if previous_page != page:
