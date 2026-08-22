@@ -243,6 +243,31 @@ def _render_profile_readiness(
         st.rerun()
 
 
+def _render_security_deployment_info(
+) -> None:
+    """Explain local/hosted boundaries without adding administration controls."""
+    st.subheader("Security & deployment information")
+    st.write(
+        "Account settings is local administration for every configured business "
+        "profile. It is not per-user identity or permission management."
+    )
+    st.info(
+        "The application password currently unlocks every local profile. Profile "
+        "keys identify configuration and are not user accounts. Private keys are "
+        "never displayed after upload."
+    )
+    st.write(
+        "Local profile settings are stored in the ignored plaintext profile file "
+        "and depend on operating-system protections. Hosted changes require the "
+        "documented Streamlit Secrets export and replacement process. Local backup "
+        "paths and Synology metadata are excluded from that hosted projection."
+    )
+    st.markdown(
+        "See the [Account settings and profile setup guide](../docs/setup/"
+        "BUSINESS_PROFILES.md), [backup and recovery guide](../docs/operations/"
+        "BACKUP_AND_RECOVERY.md), and [Synology recovery guide](../docs/operations/"
+        "SYNOLOGY_RECOVERY.md) for operational procedures."
+    )
 def _initialize_candidate_storage(
     settings: Mapping[str, Any],
 ) -> GoogleSheetsStorage:
@@ -680,9 +705,9 @@ def render_local_profile_admin(
 ) -> None:
     """Render the reauthenticated local profile-administration page."""
     render_page_header(
-        "Business profiles",
-        "Profile onboarding. Private keys are written to the ignored "
-        "business profile JSON file and are never displayed after upload.",
+        "Account settings",
+        "Manage isolated business profiles, storage, recovery, and deployment "
+        "settings locally. Private keys are never displayed after upload.",
     )
 
     if not st.session_state.get("local_profile_admin_unlocked"):
@@ -721,6 +746,7 @@ def render_local_profile_admin(
         st.dataframe(rows, hide_index=True, width="stretch")
 
     if not local_profiles:
+        st.subheader("Business profiles")
         _render_add_profile_form(
             effective_secrets,
             store_path=store_path,
@@ -728,33 +754,55 @@ def render_local_profile_admin(
         )
         return
 
-    selected_profile_key = st.selectbox(
-        "Business profile to configure",
-        list(local_profiles),
-        format_func=lambda key: str(local_profiles[key].get("name", key)),
-        key="local_profile_selected",
+    (
+        business_profiles_tab,
+        google_drive_tab,
+        recovery_tab,
+        security_tab,
+    ) = st.tabs(
+        [
+            "Business profiles",
+            "Google Drive storage",
+            "Recovery",
+            "Security & deployment information",
+        ]
     )
-    _render_local_profile_edits(
-        effective_secrets,
-        local_profiles,
-        selected_profile_key=selected_profile_key,
-        store_path=store_path,
-    )
-    render_google_drive_admin(
-        base_secrets,
-        local_profiles,
-        current_url=current_url,
-        selected_profile_key=selected_profile_key,
-        store_path=store_path,
-    )
-    _render_synology_recovery_admin(
-        local_profiles,
-        app_secrets=base_secrets,
-        app_defaults=base_secrets.get("synology_recovery_defaults"),
-        selected_profile_key=selected_profile_key,
-        store_path=store_path,
-    )
-    if selected_profile_key in local_profiles:
+    with business_profiles_tab:
+        selected_profile_key = st.selectbox(
+            "Business profile to configure",
+            list(local_profiles),
+            format_func=lambda key: str(local_profiles[key].get("name", key)),
+            key="local_profile_selected",
+        )
+        _render_local_profile_edits(
+            effective_secrets,
+            local_profiles,
+            selected_profile_key=selected_profile_key,
+            store_path=store_path,
+        )
+        _render_add_profile_form(
+            effective_secrets,
+            store_path=store_path,
+            prominent=False,
+        )
+
+    with google_drive_tab:
+        render_google_drive_admin(
+            base_secrets,
+            local_profiles,
+            current_url=current_url,
+            selected_profile_key=selected_profile_key,
+            store_path=store_path,
+        )
+
+    with recovery_tab:
+        _render_synology_recovery_admin(
+            local_profiles,
+            app_secrets=base_secrets,
+            app_defaults=base_secrets.get("synology_recovery_defaults"),
+            selected_profile_key=selected_profile_key,
+            store_path=store_path,
+        )
         selected_settings = local_profiles[selected_profile_key]
         _render_profile_readiness(
             selected_profile_key,
@@ -762,9 +810,7 @@ def render_local_profile_admin(
             app_secrets=base_secrets,
             local_profiles=local_profiles,
         )
-    _render_add_profile_form(
-        effective_secrets,
-        store_path=store_path,
-        prominent=False,
-    )
+
+    with security_tab:
+        _render_security_deployment_info()
     return

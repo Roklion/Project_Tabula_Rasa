@@ -23,6 +23,14 @@ from tests.fakes import FakeWorkbook
 TEST_PASSWORD = "test-password-123"
 
 
+def select_account_settings(app: AppTest) -> None:
+    """Select the utility-area settings destination."""
+    settings_navigation = next(
+        radio for radio in app.radio if radio.label == "Settings"
+    )
+    settings_navigation.set_value("Account settings").run()
+
+
 def profile_settings(name: str, spreadsheet_id: str) -> dict:
     credential = {
         "type": "service_account",
@@ -143,7 +151,7 @@ class TestAppAuthentication:
                 app.button[0].click().run()
 
                 assert len(app.exception) == 0
-                assert app.radio[0].options == ["Business profiles"]
+                assert app.radio[0].options == ["Account settings"]
                 from_secrets.assert_not_called()
 
     def test_hosted_missing_profile_configuration_fails_closed(self) -> None:
@@ -306,9 +314,9 @@ class TestAppAuthentication:
                 app.run()
                 app.text_input[0].input(TEST_PASSWORD)
                 app.button[0].click().run()
-                assert "Business profiles" in app.radio[0].options
+                assert "Account settings" in app.radio[1].options
 
-                app.radio[0].set_value("Business profiles").run()
+                select_account_settings(app)
                 assert any(
                     field.label == "Application password" for field in app.text_input
                 )
@@ -451,7 +459,7 @@ class TestAppAuthentication:
                 app.run()
                 app.text_input[0].input(TEST_PASSWORD)
                 app.button[0].click().run()
-                app.radio[0].set_value("Business profiles").run()
+                select_account_settings(app)
                 next(
                     field
                     for field in app.text_input
@@ -463,6 +471,12 @@ class TestAppAuthentication:
                     if button.label == "Unlock profile administration"
                 ).click().run()
 
+                assert [tab.label for tab in app.tabs] == [
+                    "Business profiles",
+                    "Google Drive storage",
+                    "Recovery",
+                    "Security & deployment information",
+                ]
                 assert len(app.exception) == 0
                 assert sum(
                     field.label == "Business name" for field in app.text_input
@@ -538,7 +552,7 @@ class TestAppAuthentication:
                 app.run()
                 app.text_input[0].input(TEST_PASSWORD)
                 app.button[0].click().run()
-                app.radio[0].set_value("Business profiles").run()
+                select_account_settings(app)
                 next(
                     field
                     for field in app.text_input
