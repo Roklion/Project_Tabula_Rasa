@@ -757,6 +757,12 @@ def render_local_profile_admin(
         )
         return
 
+    selected_profile_key = st.selectbox(
+        "Business profile to configure",
+        list(local_profiles),
+        format_func=lambda key: str(local_profiles[key].get("name", key)),
+        key="local_profile_selected",
+    )
     (
         business_profiles_tab,
         google_drive_tab,
@@ -769,12 +775,6 @@ def render_local_profile_admin(
             "Recovery",
             "Security & deployment information",
         ]
-    )
-    selected_profile_key = st.selectbox(
-        "Business profile to configure",
-        list(local_profiles),
-        format_func=lambda key: str(local_profiles[key].get("name", key)),
-        key="local_profile_selected",
     )
     with business_profiles_tab:
         _render_local_profile_edits(
