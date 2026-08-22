@@ -16,6 +16,7 @@ from tabula_rasa.local_profile_store import (
     load_local_profiles,
     save_local_profile,
     update_local_profile_google_drive,
+    update_local_profile_synology_recovery,
 )
 from tabula_rasa.storage import GoogleSheetsStorage
 from tests.fakes import FakeWorkbook
@@ -403,16 +404,18 @@ class TestAppAuthentication:
 
                 select_account_settings(app)
                 assert app.session_state["active_page"] == "Account settings"
+                assert app.session_state["navigation_page"] is None
                 next(
                     radio for radio in app.radio if radio.label == "Navigate"
-                ).set_value("Transactions").run()
-                assert app.session_state["navigation_page"] == "Transactions"
-                assert app.session_state["active_page"] == "Transactions"
+                ).set_value("Dashboard").run()
+                assert app.session_state["navigation_page"] == "Dashboard"
+                assert app.session_state["active_page"] == "Dashboard"
                 assert not any(
                     field.label == "Application password" for field in app.text_input
                 )
 
                 select_account_settings(app)
+                assert app.session_state["navigation_page"] is None
                 assert any(
                     field.label == "Application password" for field in app.text_input
                 )
@@ -519,6 +522,39 @@ class TestAppAuthentication:
             south = profile_settings("South Shop", "south-spreadsheet-id")
             save_local_profile("north", north, path=local_store)
             save_local_profile("south", south, path=local_store)
+            update_local_profile_google_drive(
+                "south",
+                {
+                    "authorized_email": "south@example.test",
+                    "authorized_name": "South Owner",
+                    "refresh_token": "refresh-token",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "scopes": ["https://www.googleapis.com/auth/drive.file"],
+                    "storage_root": {
+                        "id": "southroot123",
+                        "name": "South Storage",
+                    },
+                    "backup_folder": {
+                        "id": "southbackup123",
+                        "name": "South Backups",
+                    },
+                    "receipt_folder": {
+                        "id": "southreceipt123",
+                        "name": "South Receipts",
+                    },
+                },
+                path=local_store,
+            )
+            update_local_profile_synology_recovery(
+                "south",
+                {
+                    "layout": "profile-root",
+                    "destination_path": "/volume1/Recovery/south",
+                    "schedule": "Weekly",
+                    "retention_policy": "Keep monthly versions.",
+                },
+                path=local_store,
+            )
             with (
                 patch.dict(
                     os.environ,
@@ -577,6 +613,17 @@ class TestAppAuthentication:
                 assert sum(
                     field.label == "Business name" for field in app.text_input
                 ) == 2
+                settings_profile = next(
+                    field
+                    for field in app.selectbox
+                    if field.label == "Business profile to configure"
+                )
+                settings_profile.set_value("south").run()
+                assert next(
+                    field
+                    for field in app.text_input
+                    if field.label == "NAS destination path"
+                ).value == "/volume1/Recovery/south"
 
     def test_local_admin_saves_optional_synology_choice_per_profile(self) -> None:
         st.cache_resource.clear()

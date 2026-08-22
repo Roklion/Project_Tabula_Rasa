@@ -196,6 +196,12 @@ def _select_operational_page() -> None:
     st.session_state["active_page"] = st.session_state["navigation_page"]
 
 
+def _open_account_settings() -> None:
+    """Open settings with no operational route selected."""
+    st.session_state["active_page"] = "Account settings"
+    st.session_state["navigation_page"] = None
+
+
 def confirmed_write(
     action: str,
     payload: dict,
@@ -320,13 +326,21 @@ with st.sidebar:
     st.session_state["active_page"] = stored_page
 
     if available_pages:
-        operational_page = st.session_state.get("navigation_page")
-        if operational_page not in available_pages:
-            st.session_state["navigation_page"] = available_pages[0]
+        settings_active = st.session_state.get("active_page") == "Account settings"
+        if settings_active:
+            # Account settings is a separate utility destination. Keep the
+            # operational radio unselected so choosing the page the user came
+            # from still invokes its callback and returns to that page.
+            st.session_state["navigation_page"] = None
+        else:
+            operational_page = st.session_state.get("navigation_page")
+            if operational_page not in available_pages:
+                st.session_state["navigation_page"] = available_pages[0]
         page = st.radio(
             "Navigate",
             available_pages,
             key="navigation_page",
+            index=None if settings_active else 0,
             on_change=_select_operational_page,
         )
     else:
@@ -334,8 +348,11 @@ with st.sidebar:
 
     if profile_admin_enabled:
         st.divider()
-        if st.button("Account settings", key="account_settings_navigation"):
-            st.session_state["active_page"] = "Account settings"
+        st.button(
+            "Account settings",
+            key="account_settings_navigation",
+            on_click=_open_account_settings,
+        )
         if st.session_state.get("active_page") == "Account settings":
             page = "Account settings"
 
