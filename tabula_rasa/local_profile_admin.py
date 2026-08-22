@@ -263,9 +263,12 @@ def _render_security_deployment_info(
         "paths and Synology metadata are excluded from that hosted projection."
     )
     st.markdown(
-        "See the [Account settings and profile setup guide](../docs/setup/"
-        "BUSINESS_PROFILES.md), [backup and recovery guide](../docs/operations/"
-        "BACKUP_AND_RECOVERY.md), and [Synology recovery guide](../docs/operations/"
+        "See the [Account settings and profile setup guide]("
+        "https://github.com/Roklion/Project_Tabula_Rasa/blob/main/docs/setup/"
+        "BUSINESS_PROFILES.md), [backup and recovery guide]("
+        "https://github.com/Roklion/Project_Tabula_Rasa/blob/main/docs/operations/"
+        "BACKUP_AND_RECOVERY.md), and [Synology recovery guide]("
+        "https://github.com/Roklion/Project_Tabula_Rasa/blob/main/docs/operations/"
         "SYNOLOGY_RECOVERY.md) for operational procedures."
     )
 def _initialize_candidate_storage(

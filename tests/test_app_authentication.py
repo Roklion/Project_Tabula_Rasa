@@ -26,9 +26,9 @@ TEST_PASSWORD = "test-password-123"
 def select_account_settings(app: AppTest) -> None:
     """Select the utility-area settings destination."""
     settings_navigation = next(
-        radio for radio in app.radio if radio.label == "Settings"
+        button for button in app.button if button.label == "Account settings"
     )
-    settings_navigation.set_value("Account settings").run()
+    settings_navigation.click().run()
 
 
 def profile_settings(name: str, spreadsheet_id: str) -> dict:
@@ -151,8 +151,36 @@ class TestAppAuthentication:
                 app.button[0].click().run()
 
                 assert len(app.exception) == 0
-                assert app.radio[0].options == ["Account settings"]
+                assert any(
+                    button.label == "Account settings" for button in app.button
+                )
+                assert not any(
+                    "No application page is available" in str(item.value)
+                    for item in app.error
+                )
+                assert any(
+                    field.label == "Application password" for field in app.text_input
+                )
                 from_secrets.assert_not_called()
+
+                next(
+                    field
+                    for field in app.text_input
+                    if field.label == "Application password"
+                ).input(TEST_PASSWORD)
+                next(
+                    button
+                    for button in app.button
+                    if button.label == "Unlock profile administration"
+                ).click().run()
+
+                assert app.file_uploader[0].label == "Google service-account JSON"
+                assert not app.tabs
+                assert not any(
+                    checkbox.label
+                    == "Maintain an optional Synology recovery copy for this business"
+                    for checkbox in app.checkbox
+                )
 
     def test_stale_account_settings_route_fails_closed_when_local_admin_is_disabled(
         self,
@@ -204,7 +232,9 @@ class TestAppAuthentication:
 
                 assert len(app.exception) == 0
                 assert app.radio[0].options[0] == "Dashboard"
-                assert not any(radio.label == "Settings" for radio in app.radio)
+                assert not any(
+                    button.label == "Account settings" for button in app.button
+                )
 
     def test_hosted_missing_profile_configuration_fails_closed(self) -> None:
         st.cache_resource.clear()
@@ -366,7 +396,21 @@ class TestAppAuthentication:
                 app.run()
                 app.text_input[0].input(TEST_PASSWORD)
                 app.button[0].click().run()
-                assert "Account settings" in app.radio[1].options
+                assert any(
+                    button.label == "Account settings" for button in app.button
+                )
+                assert "operational_navigation_page" not in app.session_state
+
+                select_account_settings(app)
+                assert app.session_state["active_page"] == "Account settings"
+                next(
+                    radio for radio in app.radio if radio.label == "Navigate"
+                ).set_value("Transactions").run()
+                assert app.session_state["navigation_page"] == "Transactions"
+                assert app.session_state["active_page"] == "Transactions"
+                assert not any(
+                    field.label == "Application password" for field in app.text_input
+                )
 
                 select_account_settings(app)
                 assert any(

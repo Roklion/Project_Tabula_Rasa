@@ -345,9 +345,11 @@ def process_google_drive_oauth_callback(
             "Choose or provision its profile storage folders next."
         )
         st.session_state["navigation_page"] = "Account settings"
+        st.session_state["active_page"] = "Account settings"
     except (GoogleDriveError, LocalProfileStoreError) as exc:
         st.session_state["google_drive_admin_error"] = str(exc)
         st.session_state["navigation_page"] = "Account settings"
+        st.session_state["active_page"] = "Account settings"
     finally:
         st.query_params.clear()
     st.cache_resource.clear()

@@ -192,16 +192,8 @@ def schedule_widget_reset(flag: str) -> None:
 
 
 def _select_operational_page() -> None:
-    """Keep the shared route state aligned with the operational radio."""
-    st.session_state["navigation_page"] = st.session_state[
-        "operational_navigation_page"
-    ]
-    st.session_state["account_settings_navigation"] = None
-
-
-def _select_account_settings_page() -> None:
-    """Navigate to local-only settings from the separated utility area."""
-    st.session_state["navigation_page"] = "Account settings"
+    """Leave the shared route state aligned with the operational radio."""
+    st.session_state["active_page"] = st.session_state["navigation_page"]
 
 
 def confirmed_write(
@@ -311,23 +303,30 @@ with st.sidebar:
     if profile_admin_enabled:
         available_routes.append("Account settings")
 
-    stored_page = st.session_state.get("navigation_page")
+    stored_page = st.session_state.get(
+        "active_page",
+        st.session_state.get("navigation_page"),
+    )
     if stored_page == "Business profiles":
         stored_page = "Account settings"
     if stored_page not in available_routes:
-        stored_page = available_pages[0] if available_pages else None
-    st.session_state["navigation_page"] = stored_page
+        stored_page = (
+            available_pages[0]
+            if available_pages
+            else available_routes[0]
+            if available_routes
+            else None
+        )
+    st.session_state["active_page"] = stored_page
 
     if available_pages:
-        operational_page = st.session_state.get("operational_navigation_page")
+        operational_page = st.session_state.get("navigation_page")
         if operational_page not in available_pages:
-            st.session_state["operational_navigation_page"] = (
-                stored_page if stored_page in available_pages else available_pages[0]
-            )
+            st.session_state["navigation_page"] = available_pages[0]
         page = st.radio(
             "Navigate",
             available_pages,
-            key="operational_navigation_page",
+            key="navigation_page",
             on_change=_select_operational_page,
         )
     else:
@@ -335,16 +334,10 @@ with st.sidebar:
 
     if profile_admin_enabled:
         st.divider()
-        account_settings_navigation = st.radio(
-            "Settings",
-            ["Account settings"],
-            index=0 if stored_page == "Account settings" else None,
-            key="account_settings_navigation",
-            on_change=_select_account_settings_page,
-        )
-        if account_settings_navigation == "Account settings":
+        if st.button("Account settings", key="account_settings_navigation"):
+            st.session_state["active_page"] = "Account settings"
+        if st.session_state.get("active_page") == "Account settings":
             page = "Account settings"
-            st.session_state["navigation_page"] = page
 
     if page is None:
         st.error("No application page is available in this environment.")
