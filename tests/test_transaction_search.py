@@ -76,7 +76,9 @@ def test_search_preserves_falsy_visible_values():
     assert filter_transaction_rows(rows, "0") == rows
 
 
-@pytest.mark.parametrize("missing_value", [float("nan"), Decimal("NaN")])
+@pytest.mark.parametrize(
+    "missing_value", [float("nan"), Decimal("NaN"), Decimal("sNaN")]
+)
 def test_search_ignores_nan_values(missing_value: object):
     rows = [{"Type": "Expense", "Reference": missing_value, "ID": 1}]
 
