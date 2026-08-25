@@ -76,6 +76,7 @@ def ensure_port_available(port: int) -> None:
         raise SmokeCheckFailure("Port must be between 1 and 65535.")
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             listener.bind(("127.0.0.1", port))
     except OSError as error:
         raise SmokeCheckFailure(
@@ -192,6 +193,7 @@ def capture_failure_screenshot(
             path=screenshots_dir
             / f"transactions-{viewport[0]}x{viewport[1]}.png",
             full_page=True,
+            timeout=5000,
         )
     except Exception as error:  # noqa: BLE001 - diagnostics must not mask failure
         return (
@@ -199,6 +201,28 @@ def capture_failure_screenshot(
             f"({type(error).__name__})"
         )
     return None
+
+
+def launch_browser(playwright: Any) -> Any:
+    """Convert missing-browser errors into an actionable smoke failure."""
+    try:
+        return playwright.chromium.launch()
+    except Exception as error:  # noqa: BLE001 - normalize external tool errors
+        raise SmokeCheckFailure(
+            "Failed to launch Chromium. Ensure you have run "
+            "`python -m playwright install chromium`."
+        ) from error
+
+
+def close_page(page: Page, viewport: tuple[int, int], failures: list[str]) -> None:
+    """Keep cleanup errors from replacing the viewport result."""
+    try:
+        page.close()
+    except Exception as error:  # noqa: BLE001 - cleanup must not abort the run
+        failures.append(
+            f"{viewport[0]}x{viewport[1]}: page cleanup failed "
+            f"({type(error).__name__})"
+        )
 
 
 def run_smoke_check(screenshots_dir: Path | None, port: int) -> list[str]:
@@ -230,7 +254,7 @@ def run_smoke_check(screenshots_dir: Path | None, port: int) -> list[str]:
         url = server_url(port)
         wait_for_server(url, process)
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch()
+            browser = launch_browser(playwright)
             try:
                 for viewport in VIEWPORTS:
                     page = browser.new_page(
@@ -248,7 +272,7 @@ def run_smoke_check(screenshots_dir: Path | None, port: int) -> list[str]:
                             if screenshot_failure is not None:
                                 failures.append(screenshot_failure)
                     finally:
-                        page.close()
+                        close_page(page, viewport, failures)
             finally:
                 browser.close()
     finally:

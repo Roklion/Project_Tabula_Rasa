@@ -97,12 +97,37 @@ def test_wait_for_server_retries_transient_protocol_errors(
 
 def test_screenshot_failure_does_not_mask_primary_failure(tmp_path: Path) -> None:
     class FailingPage:
+        screenshot_kwargs: dict[str, object] = {}
+
         def screenshot(self, **kwargs: object) -> None:
-            del kwargs
+            self.screenshot_kwargs = kwargs
             raise RuntimeError("browser disconnected")
 
-    failure = smoke_transactions.capture_failure_screenshot(
-        FailingPage(), tmp_path, (390, 844)  # type: ignore[arg-type]
-    )
+    page = FailingPage()
+    failure = smoke_transactions.capture_failure_screenshot(page, tmp_path, (390, 844))
 
     assert failure == "390x844: diagnostic screenshot failed (RuntimeError)"
+    assert page.screenshot_kwargs["timeout"] == 5000
+
+
+def test_browser_launch_failure_is_actionable() -> None:
+    class FailingChromium:
+        def launch(self) -> None:
+            raise RuntimeError("browser binary missing")
+
+    with pytest.raises(
+        smoke_transactions.SmokeCheckFailure,
+        match="Failed to launch Chromium",
+    ):
+        smoke_transactions.launch_browser(type("Playwright", (), {"chromium": FailingChromium()})())
+
+
+def test_page_cleanup_failure_is_recorded_without_raising() -> None:
+    class FailingPage:
+        def close(self) -> None:
+            raise RuntimeError("browser disconnected")
+
+    failures: list[str] = []
+    smoke_transactions.close_page(FailingPage(), (390, 844), failures)  # type: ignore[arg-type]
+
+    assert failures == ["390x844: page cleanup failed (RuntimeError)"]
