@@ -1,0 +1,28 @@
+from __future__ import annotations
+
+import runpy
+import sys
+from pathlib import Path
+
+
+REPOSITORY = Path(r"J:\myPrecious\Projects\Project Tabula Rasa")
+sys.path.insert(0, str(REPOSITORY))
+
+from tests.fakes import FakeWorkbook  # noqa: E402
+from tabula_rasa.storage import GoogleSheetsStorage  # noqa: E402
+import tabula_rasa.local_profile_store as local_profile_store  # noqa: E402
+
+
+local_profile_store.LOCAL_PROFILE_STORE_PATH = (
+    Path(__file__).resolve().parent / ".streamlit" / "business_profiles.json"
+)
+fake_storage = GoogleSheetsStorage(FakeWorkbook())
+
+
+def fake_from_secrets(cls, secrets):
+    del cls, secrets
+    return fake_storage
+
+
+GoogleSheetsStorage.from_secrets = classmethod(fake_from_secrets)
+runpy.run_path(str(REPOSITORY / "tabula_rasa" / "app.py"), run_name="__main__")
