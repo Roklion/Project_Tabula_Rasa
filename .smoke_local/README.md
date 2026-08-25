@@ -16,8 +16,10 @@ Transactions route after authentication, and uses
 Playwright-managed Chromium at 1440x1000, 1200x900, 900x900, and 390x844, and
 checks the Transactions > Add transaction renderer for its key controls and
 page-level horizontal overflow. It exits non-zero with the viewport and failed
-condition when a check fails. Optional diagnostic screenshots can be retained
-with:
+condition when a check fails. The requested loopback port must be unused, and
+the runner verifies that this fixture's checked-in Streamlit theme still
+matches the production `.streamlit/config.toml` before launch. Optional
+diagnostic screenshots can be retained with:
 
 ```powershell
 python scripts\smoke_transactions.py --screenshots-dir .smoke_local\artifacts

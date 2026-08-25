@@ -65,8 +65,11 @@ Add transaction renderer at 1440x1000, 1200x900, 900x900, and 390x844. The
 check asserts the key controls, including `Receipt (optional)`, and compares
 the document scroll width with the viewport to catch unintended page-level
 horizontal overflow. It is a developer smoke check rather than a CI gate; it
-does not create a transaction or duplicate receipt-recovery coverage. To keep
-failure screenshots for diagnosis, pass `--screenshots-dir`.
+does not create a transaction or duplicate receipt-recovery coverage. The
+selected loopback port must be unused. The runner also fails before launch if
+the fixture's checked-in theme has drifted from `.streamlit/config.toml`, so
+viewport results cannot silently use stale production styling. To keep failure
+screenshots for diagnosis, pass `--screenshots-dir`.
 
 Install the browser binary once after installing `requirements-dev.txt`:
 
