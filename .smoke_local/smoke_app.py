@@ -4,8 +4,10 @@ import runpy
 import sys
 from pathlib import Path
 
+import streamlit as st
 
-REPOSITORY = Path(r"J:\myPrecious\Projects\Project Tabula Rasa")
+
+REPOSITORY = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPOSITORY))
 
 from tests.fakes import FakeWorkbook  # noqa: E402
@@ -25,4 +27,6 @@ def fake_from_secrets(cls, secrets):
 
 
 GoogleSheetsStorage.from_secrets = classmethod(fake_from_secrets)
+st.session_state["active_page"] = "Transactions"
+st.session_state["navigation_page"] = "Transactions"
 runpy.run_path(str(REPOSITORY / "tabula_rasa" / "app.py"), run_name="__main__")

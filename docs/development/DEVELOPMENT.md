@@ -50,6 +50,30 @@ The automated UI tests use an in-memory Google workbook and a test-only
 password hash. They do not read the live ledger, application password, Google
 service-account credential, or OAuth token.
 
+## Opt-in browser smoke check
+
+The reusable `.smoke_local` fixture starts the real Streamlit entrypoint with a
+deterministic fake profile, fake credentials, and in-memory workbook. Run the
+Transactions viewport smoke check explicitly from the repository root:
+
+```powershell
+python scripts\smoke_transactions.py
+```
+
+It uses Playwright-managed Chromium to sign in and inspect the Transactions >
+Add transaction renderer at 1440x1000, 1200x900, 900x900, and 390x844. The
+check asserts the key controls, including `Receipt (optional)`, and compares
+the document scroll width with the viewport to catch unintended page-level
+horizontal overflow. It is a developer smoke check rather than a CI gate; it
+does not create a transaction or duplicate receipt-recovery coverage. To keep
+failure screenshots for diagnosis, pass `--screenshots-dir`.
+
+Install the browser binary once after installing `requirements-dev.txt`:
+
+```powershell
+python -m playwright install chromium
+```
+
 ## Pull requests and code review
 
 A change does not need a formal issue, but its pull request must provide enough
