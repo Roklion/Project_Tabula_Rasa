@@ -134,7 +134,7 @@ def require_role(page: Page, role: str, name: str) -> None:
 def assert_no_page_overflow(page: Page) -> None:
     metrics: dict[str, Any] = page.evaluate(
         """() => ({
-          viewportWidth: window.innerWidth,
+          viewportWidth: document.documentElement.clientWidth,
           documentScrollWidth: document.documentElement.scrollWidth,
           bodyScrollWidth: document.body.scrollWidth,
         })"""

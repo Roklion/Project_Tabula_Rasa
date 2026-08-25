@@ -9,6 +9,29 @@ import pytest
 from scripts import smoke_transactions
 
 
+def test_overflow_check_uses_scrollbar_independent_viewport_width() -> None:
+    class RecordingPage:
+        script = ""
+
+        def evaluate(self, script: str) -> dict[str, int]:
+            self.script = script
+            return {
+                "viewportWidth": 1000,
+                "documentScrollWidth": 1005,
+                "bodyScrollWidth": 1000,
+            }
+
+    page = RecordingPage()
+    with pytest.raises(
+        smoke_transactions.SmokeCheckFailure,
+        match="horizontal overflow",
+    ):
+        smoke_transactions.assert_no_page_overflow(page)  # type: ignore[arg-type]
+
+    assert "document.documentElement.clientWidth" in page.script
+    assert "window.innerWidth" not in page.script
+
+
 def test_ensure_port_available_rejects_an_existing_listener() -> None:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
         listener.bind(("127.0.0.1", 0))
