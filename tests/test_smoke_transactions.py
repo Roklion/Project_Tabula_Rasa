@@ -3,6 +3,8 @@ from __future__ import annotations
 import http.client
 import socket
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -257,5 +259,101 @@ def test_run_smoke_check_normalizes_playwright_context_failure(
     with pytest.raises(
         smoke_transactions.SmokeCheckFailure,
         match="Failed to initialize Playwright",
+    ):
+        smoke_transactions.run_smoke_check(None, 8501)
+
+
+class FakeProcess:
+    returncode = 0
+
+    def terminate(self) -> None:
+        pass
+
+    def wait(self, timeout: int | None = None) -> None:
+        del timeout
+
+
+class FakePage:
+    def close(self) -> None:
+        pass
+
+
+class FakeBrowser:
+    def __init__(self) -> None:
+        self.page = FakePage()
+
+    def new_page(self, **kwargs: object) -> FakePage:
+        del kwargs
+        return self.page
+
+    def close(self) -> None:
+        pass
+
+
+class FakePlaywrightContext:
+    def __init__(self, *, exit_error: Exception | None = None) -> None:
+        self.exit_error = exit_error
+        self.browser = FakeBrowser()
+
+    def __enter__(self) -> object:
+        return SimpleNamespace(
+            chromium=SimpleNamespace(launch=Mock(return_value=self.browser))
+        )
+
+    def __exit__(self, *exception_info: object) -> None:
+        del exception_info
+        if self.exit_error is not None:
+            raise self.exit_error
+
+
+def configure_shutdown_failure_smoke_runner(
+    monkeypatch: pytest.MonkeyPatch,
+    context: FakePlaywrightContext,
+) -> None:
+    monkeypatch.setattr(smoke_transactions, "ensure_port_available", lambda port: None)
+    monkeypatch.setattr(smoke_transactions, "ensure_fixture_theme_is_current", lambda: None)
+    monkeypatch.setattr(smoke_transactions, "wait_for_server", lambda url, process: None)
+    monkeypatch.setattr(
+        smoke_transactions.subprocess,
+        "Popen",
+        lambda *args, **kwargs: FakeProcess(),
+    )
+    monkeypatch.setattr(smoke_transactions, "sync_playwright", lambda: context)
+    monkeypatch.setattr(smoke_transactions, "VIEWPORTS", ((390, 844),))
+
+
+def test_run_smoke_check_preserves_viewport_failure_when_shutdown_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = FakePlaywrightContext(
+        exit_error=RuntimeError("browser stop failed"),
+    )
+    configure_shutdown_failure_smoke_runner(monkeypatch, context)
+    monkeypatch.setattr(
+        smoke_transactions,
+        "check_viewport",
+        Mock(side_effect=smoke_transactions.SmokeCheckFailure("viewport failed")),
+    )
+
+    failures = smoke_transactions.run_smoke_check(None, 8501)
+
+    assert failures == [
+        "390x844: viewport failed",
+        "Playwright shutdown failed (RuntimeError)",
+    ]
+
+
+def test_run_smoke_check_normalizes_shutdown_failure_without_viewport_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = FakePlaywrightContext(
+        exit_error=RuntimeError("browser stop failed"),
+    )
+    configure_shutdown_failure_smoke_runner(monkeypatch, context)
+    monkeypatch.setattr(smoke_transactions, "check_viewport", Mock())
+
+    with pytest.raises(
+        smoke_transactions.SmokeCheckFailure,
+        match=r"^Playwright shutdown failed \(RuntimeError\)$",
     ):
         smoke_transactions.run_smoke_check(None, 8501)

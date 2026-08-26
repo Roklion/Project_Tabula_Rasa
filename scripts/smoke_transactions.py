@@ -233,6 +233,21 @@ def close_browser(browser: Any, failures: list[str]) -> None:
         failures.append(f"Browser cleanup failed ({type(error).__name__})")
 
 
+def _exit_playwright_context(
+    playwright_context: Any,
+    failures: list[str],
+    exception_info: tuple[Any, Any, Any],
+) -> None:
+    try:
+        playwright_context.__exit__(*exception_info)
+    except Exception as error:  # noqa: BLE001 - normalize cleanup failures
+        failure = f"Playwright shutdown failed ({type(error).__name__})"
+        if failures:
+            failures.append(failure)
+            return
+        raise SmokeCheckFailure(failure) from error
+
+
 def run_smoke_check(screenshots_dir: Path | None, port: int) -> list[str]:
     ensure_port_available(port)
     ensure_fixture_theme_is_current()
@@ -260,38 +275,47 @@ def run_smoke_check(screenshots_dir: Path | None, port: int) -> list[str]:
     try:
         url = server_url(port)
         wait_for_server(url, process)
+        playwright_context = sync_playwright()
         try:
-            with sync_playwright() as playwright:
-                browser = launch_browser(playwright)
-                try:
-                    for viewport in VIEWPORTS:
-                        page: Page | None = None
-                        try:
-                            page = browser.new_page(
-                                viewport={"width": viewport[0], "height": viewport[1]}
-                            )
-                            check_viewport(page, url, viewport)
-                        except Exception as error:  # noqa: BLE001 - report every viewport
-                            failure = f"{viewport[0]}x{viewport[1]}: {error}"
-                            failures.append(failure)
-                            if screenshots_dir is not None and page is not None:
-                                screenshot_failure = capture_failure_screenshot(
-                                    page, screenshots_dir, viewport
-                                )
-                                if screenshot_failure is not None:
-                                    failures.append(screenshot_failure)
-                        finally:
-                            if page is not None:
-                                close_page(page, viewport, failures)
-                finally:
-                    close_browser(browser, failures)
-        except SmokeCheckFailure:
-            raise
-        except Exception as error:  # noqa: BLE001 - normalize Playwright startup/exit
+            playwright = playwright_context.__enter__()
+        except Exception as error:  # noqa: BLE001 - normalize startup failures
             raise SmokeCheckFailure(
                 "Failed to initialize Playwright. Ensure the Playwright "
                 "installation is available and healthy."
             ) from error
+        try:
+            browser = launch_browser(playwright)
+            try:
+                for viewport in VIEWPORTS:
+                    page: Page | None = None
+                    try:
+                        page = browser.new_page(
+                            viewport={"width": viewport[0], "height": viewport[1]}
+                        )
+                        check_viewport(page, url, viewport)
+                    except Exception as error:  # noqa: BLE001 - report every viewport
+                        failure = f"{viewport[0]}x{viewport[1]}: {error}"
+                        failures.append(failure)
+                        if screenshots_dir is not None and page is not None:
+                            screenshot_failure = capture_failure_screenshot(
+                                page, screenshots_dir, viewport
+                            )
+                            if screenshot_failure is not None:
+                                failures.append(screenshot_failure)
+                    finally:
+                        if page is not None:
+                            close_page(page, viewport, failures)
+            finally:
+                close_browser(browser, failures)
+        except SmokeCheckFailure:
+            raise
+        except Exception as error:  # noqa: BLE001 - normalize startup failures
+            raise SmokeCheckFailure(
+                "Failed to initialize Playwright. Ensure the Playwright "
+                "installation is available and healthy."
+            ) from error
+        finally:
+            _exit_playwright_context(playwright_context, failures, sys.exc_info())
     finally:
         process.terminate()
         try:
