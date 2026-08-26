@@ -64,14 +64,21 @@ function Get-Command {
     param(
         [Parameter(Position = 0)]
         [string]$Name,
-        [System.Management.Automation.CommandTypes]$CommandType
+        [System.Management.Automation.CommandTypes]$CommandType,
+        [switch]$All
     )
 
     if ($Name -eq "py.exe" -and -not [string]::IsNullOrEmpty($env:TEST_PY)) {
         return [pscustomobject]@{ Source = $env:TEST_PY; Path = $env:TEST_PY }
     }
     if ($Name -eq "python.exe" -and -not [string]::IsNullOrEmpty($env:TEST_PYTHON)) {
-        return [pscustomobject]@{ Source = $env:TEST_PYTHON; Path = $env:TEST_PYTHON }
+        $paths = @($env:TEST_PYTHON -split "\\|")
+        if (-not $All) {
+            $paths = @($paths[0])
+        }
+        foreach ($path in $paths) {
+            Write-Output ([pscustomobject]@{ Source = $path; Path = $path })
+        }
     }
 }
 
@@ -162,7 +169,8 @@ function Get-Command {
     param(
         [Parameter(Position = 0)]
         [string]$Name,
-        [System.Management.Automation.CommandTypes]$CommandType
+        [System.Management.Automation.CommandTypes]$CommandType,
+        [switch]$All
     )
 
     if ($Name -eq "py.exe") {
@@ -301,6 +309,20 @@ def test_setup_uses_py_when_both_shared_locations_are_absent(tmp_path: Path) -> 
 
     assert result.returncode == 0, result.stderr
     assert f"selected={py}" in result.stdout
+
+
+def test_setup_uses_later_python312_path_candidate(tmp_path: Path) -> None:
+    python313 = r"C:\CodexEnvironmentTest\Python313\python.exe"
+    python312 = r"C:\CodexEnvironmentTest\Python312\python.exe"
+
+    result = _run_discovery(
+        tmp_path,
+        python=f"{python313}|{python312}",
+        expected=python312,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert f"selected={python312}" in result.stdout
 
 
 def test_setup_fails_clearly_without_python312_candidate(tmp_path: Path) -> None:

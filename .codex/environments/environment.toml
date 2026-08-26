@@ -38,13 +38,13 @@ if (-not (Test-Path -LiteralPath $venvPython -PathType Leaf)) {
         $candidates += @{ Path = (Join-Path $env:PUBLIC "Python312\python.exe"); Args = @() }
     }
 
-    $launcher = Get-Command py.exe -CommandType Application -ErrorAction SilentlyContinue
-    if ($null -ne $launcher) {
+    $launchers = @(Get-Command py.exe -CommandType Application -All -ErrorAction SilentlyContinue)
+    foreach ($launcher in $launchers) {
         $candidates += @{ Path = $launcher.Source; Args = @("-3.12") }
     }
 
-    $python = Get-Command python.exe -CommandType Application -ErrorAction SilentlyContinue
-    if ($null -ne $python) {
+    $pythons = @(Get-Command python.exe -CommandType Application -All -ErrorAction SilentlyContinue)
+    foreach ($python in $pythons) {
         $candidates += @{ Path = $python.Source; Args = @() }
     }
 
