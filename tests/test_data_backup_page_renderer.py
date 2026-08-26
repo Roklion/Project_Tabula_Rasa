@@ -162,6 +162,8 @@ def test_import_workflows_keep_separate_profile_keys_and_explicit_writes() -> No
     assert "Import rows" in source
     assert "Import validated rows" in source
     assert "Import validated mileage" in source
+    assert "except ValueError as error:" in source
+    assert "st.error(str(error))" in source
 
 
 def test_action_spinners_cover_only_explicit_backup_export_and_import_actions() -> None:

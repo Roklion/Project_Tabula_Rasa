@@ -185,8 +185,9 @@ def render_imports(context: DataBackupContext) -> None:
                         )
         except StorageValidationError as error:
             context.report_storage_error(error)
+        except ValueError as error:
+            st.error(str(error))
         except (
-            ValueError,
             KeyError,
             zipfile.BadZipFile,
             pd.errors.ParserError,
