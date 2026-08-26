@@ -169,6 +169,14 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
         margin: 0;
     }}
 
+    /* Streamlit draws a second visual indicator beside each native radio.
+       Suppress that indicator only for the navigation options; the input
+       remains available to assistive technology and keyboard users. */
+    [data-testid="stSidebar"] label[data-testid="stRadioOption"]
+    > div > div > div:first-child:not(:has([data-testid="stMarkdownContainer"])) {{
+        display: none;
+    }}
+
     [data-testid="stSidebar"] [role="radiogroup"] label:has(input:focus-visible) {{
         outline: 2px solid var(--tr-interactive-focus);
         outline-offset: 1px;
@@ -232,6 +240,11 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
         font-variant-numeric: tabular-nums;
     }}
 
+    .st-key-dashboard_metrics [data-testid="stMetricValue"] {{
+        font-size: 1.25rem;
+        font-weight: 600;
+    }}
+
     .st-key-dashboard_total_balance [data-testid="stMetric"],
     .st-key-dashboard_net_month [data-testid="stMetric"] {{
         border-color: var(--tr-border-strong);
@@ -239,8 +252,8 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
 
     .st-key-dashboard_total_balance [data-testid="stMetricValue"],
     .st-key-dashboard_net_month [data-testid="stMetricValue"] {{
-        font-size: 1.35rem;
-        font-weight: 650;
+        font-size: clamp(1.625rem, 2vw, 1.875rem);
+        font-weight: 600;
     }}
 
     [data-testid="stDataFrame"] {{

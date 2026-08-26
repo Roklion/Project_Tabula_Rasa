@@ -52,11 +52,27 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
     assert '.st-key-sidebar_utility' in css
     assert 'label input[type="radio"]' in css
     assert 'label:has(input:focus-visible)' in css
+    assert 'label[data-testid="stRadioOption"]' in css
+    assert 'div:first-child:not(:has([data-testid="stMarkdownContainer"]))' in css
     assert '.st-key-login_surface [data-testid="stForm"]' in css
     assert '.st-key-data_backup_cloud_section' in css
     assert '.st-key-reports_statement_tables' in css
     assert '[data-testid="stTabs"] [role="tabpanel"]' in css
     assert '.st-key-reports_period_controls' in css
+    supporting = '.st-key-dashboard_metrics [data-testid="stMetricValue"]'
+    primary = '.st-key-dashboard_total_balance [data-testid="stMetricValue"]'
+    assert supporting in css
+    assert primary in css
+    supporting_rule = css[css.index(supporting) : css.index("}", css.index(supporting))]
+    primary_rule = css[css.index(primary) : css.index("}", css.index(primary))]
+    assert "font-size: 1.25rem;" in supporting_rule
+    assert "font-weight: 600;" in supporting_rule
+    assert "font-size: clamp(1.625rem, 2vw, 1.875rem);" in primary_rule
+    assert "font-size: 1.25rem;" not in primary_rule
+    radio_rule_start = css.index('label[data-testid="stRadioOption"]')
+    radio_rule = css[radio_rule_start : css.index("}", radio_rule_start)]
+    assert "display: none;" in radio_rule
+    assert "input[type=\"radio\"]" not in radio_rule
     assert '[data-testid="stTabs"] [role="tab"]:hover' in css
     assert '[aria-selected="true"]' in css
     assert "var(--tr-warning-background) !important" in css
