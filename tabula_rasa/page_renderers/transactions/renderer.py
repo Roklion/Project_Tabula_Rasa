@@ -14,7 +14,10 @@ from tabula_rasa.storage import StorageError
 
 def render_transactions(context: TransactionsContext) -> None:
     """Render transaction entry, ledger editing, and receipt workflows."""
-    render_page_header("Transactions")
+    render_page_header(
+        "Transactions",
+        "Record activity, manage the ledger, and keep receipt links with each row.",
+    )
     tab_add, tab_ledger = st.tabs(["Add transaction", "View & edit ledger"])
     try:
         context.storage.prefetch_worksheets(

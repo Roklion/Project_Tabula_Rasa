@@ -171,12 +171,13 @@ def render_reports(context: ReportsContext) -> None:
         "Analyze income and spending for a selected period, then review the balance sheet.",
     )
     st.markdown(_REPORTS_RESPONSIVE_CSS, unsafe_allow_html=True)
-    st.caption("Income and expense analytics")
-    c1, c2 = st.columns(2)
-    start = c1.date_input(
-        "From", date(date.today().year, 1, 1), key="report_start"
-    )
-    end = c2.date_input("To", date.today(), key="report_end")
+    with st.container(key="reports_period_controls"):
+        st.caption("Income and expense analytics")
+        c1, c2 = st.columns(2)
+        start = c1.date_input(
+            "From", date(date.today().year, 1, 1), key="report_start"
+        )
+        end = c2.date_input("To", date.today(), key="report_end")
     try:
         context.storage.prefetch_worksheets(
             "Accounts",

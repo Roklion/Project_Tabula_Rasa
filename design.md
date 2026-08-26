@@ -2050,6 +2050,17 @@ preserved when those hooks change in a future Streamlit release. The
 `test_global_styles_use_stable_shell_hooks_and_accessible_states` regression
 test is the compatibility guard for this CSS boundary.
 
+The current visual-polish pass also gives the shell, Dashboard, Reports, and
+Data & backup sections stable keyed-container hooks. These hooks provide
+compact spacing, bounded working surfaces, and narrow-viewport stacking while
+leaving native forms, expanders, tables, and tabs responsible for their own
+interaction. Dashboard activity and balance tables flatten their inner table
+borders inside one surrounding working surface; account and category
+expanders likewise use one workflow border rather than nested cards. The
+working area uses the stable `stMainBlockContainer` test ID for its responsive
+padding; generated Streamlit class names and broad DOM selectors remain out
+of scope.
+
 ### 30.3 Custom components
 
 A custom component requires explicit justification.

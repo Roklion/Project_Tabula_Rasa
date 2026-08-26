@@ -248,6 +248,7 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
     .st-key-dashboard_activity,
     .st-key-dashboard_balances,
     .st-key-reports_charts,
+    .st-key-reports_statement_tables,
     .st-key-data_backup_surface {{
         background: var(--tr-surface-primary);
         border: 1px solid var(--tr-border-default);
@@ -273,10 +274,25 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
     }}
 
     .st-key-dashboard_activity [data-testid="stDataFrame"],
-    .st-key-dashboard_balances [data-testid="stDataFrame"] {{
+    .st-key-dashboard_balances [data-testid="stDataFrame"],
+    .st-key-reports_statement_tables [data-testid="stDataFrame"] {{
         border: 0;
         border-radius: 0;
         box-shadow: none;
+    }}
+
+    .st-key-data_backup_cloud_section,
+    .st-key-data_backup_recovery_section,
+    .st-key-data_backup_exports_section,
+    .st-key-data_backup_imports_section {{
+        padding: 0.25rem 0 0.75rem;
+        border-bottom: 1px solid var(--tr-border-subtle);
+    }}
+
+    .st-key-data_backup_cloud_section + .st-key-data_backup_recovery_section,
+    .st-key-data_backup_recovery_section + .st-key-data_backup_exports_section,
+    .st-key-data_backup_exports_section + .st-key-data_backup_imports_section {{
+        margin-top: 0.5rem;
     }}
 
     [data-testid="stButton"] button,
