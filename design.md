@@ -2379,6 +2379,20 @@ status text remains meaningful without relying on success or warning color.
 
 Provide cloud backup controls, recovery-configuration visibility, live exports, and imports.
 
+#### Current page order and action hierarchy
+
+The current page groups its workflows in this order:
+
+1. **Cloud backup** — Google Drive destination status, upload, and read-only verification.
+2. **Recovery status** — local Synology metadata and its saved operational expectations.
+3. **Exports** — one explicit prepare/refresh action followed by the available downloads.
+4. **Imports** — three separate uploaders and previews, each with its own explicit write action.
+
+Each workflow keeps one dominant action visible while retaining its warnings,
+diagnostics, and secondary controls. The page-generated transaction, mileage,
+and manual complete-backup download filenames use `tabula-rasa`; cloud-managed
+backup naming and ZIP compatibility remain unchanged.
+
 #### Google Drive backup section
 
 Preserve:

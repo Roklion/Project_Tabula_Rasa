@@ -14,10 +14,10 @@ class DataBackupContext:
 
     profile_key: str
     storage: GoogleSheetsStorage
-    profile_secrets: Mapping[str, object]
+    drive_settings: Mapping[str, object] | None
+    synology_recovery_settings: object
     configuration_revision: str
     get_drive_client: Callable[[str, str], GoogleDriveClient]
     receipt_manifest_for_backup: Callable[..., dict[str, object]]
     confirmed_write: Callable[..., None]
     report_storage_error: Callable[[StorageError], None]
-    alert_list: Callable[[str, list[str]], str] | None = None

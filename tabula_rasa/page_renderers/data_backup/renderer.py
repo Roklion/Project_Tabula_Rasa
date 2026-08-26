@@ -46,13 +46,25 @@ def alert_list(title: str, messages: list[str]) -> str:
     return f"**{title}**\n\n- " + "\n- ".join(messages)
 
 
+def prepared_exports_key(
+    profile_key: str,
+    configuration_revision: str,
+    workbook_data_revision: int,
+) -> str:
+    """Return the session key for one confirmed workbook snapshot."""
+    return (
+        "prepared-live-exports:"
+        f"{profile_key}:{configuration_revision}:{workbook_data_revision}"
+    )
+
+
 def render_data_backup(context: DataBackupContext) -> None:
     """Render cloud backup, recovery, export, and import workflows."""
     render_page_header(
         "Data & backup",
         "Your live records are stored in the private Google Sheets workbook.",
     )
-    drive_settings = context.profile_secrets.get("google_drive")
+    drive_settings = context.drive_settings
     storage_root = (
         drive_settings.get("storage_root")
         if isinstance(drive_settings, Mapping)
@@ -70,7 +82,8 @@ def render_data_backup(context: DataBackupContext) -> None:
     )
     backup_drive = None
     latest_cloud = None
-    st.subheader("Google Drive backup")
+    st.subheader("Cloud backup")
+    st.caption("Google Drive backup")
     if not isinstance(backup_folder, Mapping):
         st.info(
             "Connect Google Drive and select a backup folder from the local "
@@ -113,7 +126,7 @@ def render_data_backup(context: DataBackupContext) -> None:
                     receipt_manifest = context.receipt_manifest_for_backup(
                         context.storage,
                         profile_key=context.profile_key,
-                        profile_secrets=context.profile_secrets,
+                        drive_settings=context.drive_settings,
                         configuration_revision=context.configuration_revision,
                     )
                     backup_zip = context.storage.export_backup_zip(receipt_manifest)
@@ -184,8 +197,9 @@ def render_data_backup(context: DataBackupContext) -> None:
                 # into the live Sheets reads and fresh backup generation below.
                 st.stop()
     
-    st.subheader("Synology recovery copy")
-    raw_synology_recovery = context.profile_secrets.get("synology_recovery")
+    st.subheader("Recovery status")
+    st.caption("Synology recovery copy")
+    raw_synology_recovery = context.synology_recovery_settings
     if raw_synology_recovery is None:
         st.info(
             "No local Synology recovery record is available in this runtime. NAS "
@@ -251,19 +265,20 @@ def render_data_backup(context: DataBackupContext) -> None:
                 "synchronized children with another recovery point."
             )
     
-    st.subheader("Live workbook exports")
-    prepared_exports_key = (
-        "prepared-live-exports:"
-        f"{context.profile_key}:{context.configuration_revision}:"
-        f"{st.session_state.get('workbook_data_revision', 0)}"
+    st.subheader("Exports")
+    st.caption("Live workbook exports")
+    export_key = prepared_exports_key(
+        context.profile_key,
+        context.configuration_revision,
+        int(st.session_state.get("workbook_data_revision", 0)),
     )
-    prepared_exports = st.session_state.get(prepared_exports_key)
+    prepared_exports = st.session_state.get(export_key)
     prepare_label = (
         "Refresh downloadable exports"
         if isinstance(prepared_exports, Mapping)
         else "Prepare downloadable exports"
     )
-    if st.button(prepare_label, width="stretch"):
+    if st.button(prepare_label, type="primary", width="stretch"):
         try:
             accounts = context.storage.list_accounts(active_only=False)
             categories = context.storage.list_categories()
@@ -290,7 +305,7 @@ def render_data_backup(context: DataBackupContext) -> None:
                 receipt_manifest = context.receipt_manifest_for_backup(
                     context.storage,
                     profile_key=context.profile_key,
-                    profile_secrets=context.profile_secrets,
+                    drive_settings=context.drive_settings,
                     configuration_revision=context.configuration_revision,
                 )
                 backup_zip = context.storage.export_backup_zip(receipt_manifest)
@@ -305,7 +320,7 @@ def render_data_backup(context: DataBackupContext) -> None:
             else:
                 prepared_exports["backup"] = backup_zip
                 prepared_exports["backup_time"] = str(manifest["backup_time"])
-            st.session_state[prepared_exports_key] = prepared_exports
+            st.session_state[export_key] = prepared_exports
             if "backup" in prepared_exports:
                 st.success("Fresh downloadable exports are ready.")
             else:
@@ -321,14 +336,14 @@ def render_data_backup(context: DataBackupContext) -> None:
         st.download_button(
             "Download transactions CSV",
             prepared_exports["transactions"],
-            f"tabula-rosa-{date.today()}.csv",
+            f"tabula-rasa-{date.today()}.csv",
             "text/csv",
             width="stretch",
         )
         st.download_button(
             "Download mileage CSV",
             prepared_exports["mileage"],
-            f"tabula-rosa-mileage-{date.today()}.csv",
+            f"tabula-rasa-mileage-{date.today()}.csv",
             "text/csv",
             width="stretch",
         )
@@ -337,10 +352,11 @@ def render_data_backup(context: DataBackupContext) -> None:
             st.download_button(
                 "Download complete workbook backup",
                 backup_export,
-                f"tabula-rosa-backup-{date.today()}.zip",
+                f"tabula-rasa-backup-{date.today()}.zip",
                 "application/zip",
                 width="stretch",
             )
+    st.subheader("Imports")
     with st.expander("Import Project Tabula Rasa CSV"):
         st.write(
             "Upload a CSV with: Date, Type, Amount, Account, Category, Payee, "
@@ -484,7 +500,7 @@ def render_data_backup(context: DataBackupContext) -> None:
     mileage_upload = st.file_uploader(
         "QuickBooks mileage CSV",
         type="csv",
-        key="quickbooks_mileage_upload",
+        key=f"quickbooks_mileage_upload_{context.profile_key}",
     )
     if mileage_upload:
         try:

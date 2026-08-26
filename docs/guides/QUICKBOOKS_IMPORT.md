@@ -19,6 +19,11 @@ In QuickBooks Online:
 5. Confirm the first CSV row contains the headers.
 6. Upload the file under **Data & backup > Import QuickBooks transactions**.
 
+Keep this uploader separate from the Tabula Rasa CSV and QuickBooks mileage
+uploaders. Review conversion diagnostics, duplicate summaries, validation
+results, and proposed auto-created references before selecting **Import
+validated rows**; previewing never writes to the workbook.
+
 The importer supports these English-language column names:
 
 ```text
@@ -123,6 +128,10 @@ In QuickBooks Online:
 3. Choose **Download Trips**.
 4. Upload the CSV under **Data & backup > Import QuickBooks mileage**.
 
+This uploader has its own staged file and preview state. Review the ready,
+duplicate, personal, and unreviewed counts before selecting **Import validated
+mileage**; only valid unique Business trips are written.
+
 The export may contain:
 
 - trip date;
@@ -186,4 +195,4 @@ trips are written to the `Mileage` worksheet in one batch.
 | Transaction CSV/XLSX normalization | [`tabula_rasa/quickbooks_import.py`](../../tabula_rasa/quickbooks_import.py) |
 | Mileage CSV normalization | [`tabula_rasa/quickbooks_mileage_import.py`](../../tabula_rasa/quickbooks_mileage_import.py) |
 | Import validation and batch persistence | [`tabula_rasa/storage/google_sheets.py`](../../tabula_rasa/storage/google_sheets.py) |
-| Upload and preview UI | [`tabula_rasa/app.py`](../../tabula_rasa/app.py) |
+| Upload and preview UI | [`tabula_rasa/page_renderers/data_backup/renderer.py`](../../tabula_rasa/page_renderers/data_backup/renderer.py) |

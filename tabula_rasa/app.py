@@ -125,11 +125,10 @@ def receipt_manifest_for_backup(
     storage: GoogleSheetsStorage,
     *,
     profile_key: str,
-    profile_secrets: Mapping[str, object],
+    drive_settings: Mapping[str, object] | None,
     configuration_revision: str,
 ) -> dict[str, object]:
     """Build a fresh profile-scoped receipt inventory for one ledger backup."""
-    drive_settings = profile_secrets.get("google_drive")
     receipt_folder = (
         drive_settings.get("receipt_folder")
         if isinstance(drive_settings, Mapping)
@@ -472,7 +471,17 @@ elif page == "Data & backup":
         DataBackupContext(
             profile_key=selected_profile_key,
             storage=storage,
-            profile_secrets=profile_by_key[selected_profile_key].secrets,
+            drive_settings=(
+                profile_by_key[selected_profile_key].secrets.get("google_drive")
+                if isinstance(
+                    profile_by_key[selected_profile_key].secrets.get("google_drive"),
+                    Mapping,
+                )
+                else None
+            ),
+            synology_recovery_settings=profile_by_key[
+                selected_profile_key
+            ].secrets.get("synology_recovery"),
             configuration_revision=revision,
             get_drive_client=get_drive_client,
             receipt_manifest_for_backup=receipt_manifest_for_backup,
