@@ -29,10 +29,13 @@ function Test-Python312 {
 }
 
 if (-not (Test-Path -LiteralPath $venvPython -PathType Leaf)) {
-    $candidates = @(
-        @{ Path = (Join-Path $env:ProgramFiles "Python312\python.exe"); Args = @() },
-        @{ Path = (Join-Path $env:PUBLIC "Python312\python.exe"); Args = @() }
-    )
+    $candidates = @()
+    if (-not [string]::IsNullOrEmpty($env:ProgramFiles)) {
+        $candidates += @{ Path = (Join-Path $env:ProgramFiles "Python312\python.exe"); Args = @() }
+    }
+    if (-not [string]::IsNullOrEmpty($env:PUBLIC)) {
+        $candidates += @{ Path = (Join-Path $env:PUBLIC "Python312\python.exe"); Args = @() }
+    }
 
     $launcher = Get-Command py.exe -ErrorAction SilentlyContinue
     if ($null -ne $launcher) {
