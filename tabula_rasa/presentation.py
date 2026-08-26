@@ -164,6 +164,17 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
         padding: 0.25rem 0 0.5rem;
     }}
 
+    .st-key-sidebar_navigation [data-testid="stWidgetLabel"] {{
+        margin-bottom: 0.25rem;
+    }}
+
+    .st-key-sidebar_navigation [data-testid="stWidgetLabel"] p {{
+        color: var(--tr-text-muted) !important;
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.025em;
+    }}
+
     .st-key-sidebar_utility {{
         margin-top: 0.25rem;
         padding-top: 0.75rem;
@@ -313,7 +324,7 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
     }}
 
     [data-testid="stForm"] {{
-        padding: 0.25rem 0.15rem 0.15rem;
+        padding: 0.75rem 1rem 1rem;
     }}
 
     .st-key-dashboard_activity,
@@ -462,6 +473,10 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
             padding-top: 1rem;
             padding-right: 0.75rem;
             padding-left: 0.75rem;
+        }}
+
+        [data-testid="stForm"] {{
+            padding: 0.625rem 0.75rem 0.75rem;
         }}
 
         .st-key-dashboard_metrics [data-testid="stColumn"],

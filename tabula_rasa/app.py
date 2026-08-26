@@ -315,7 +315,7 @@ with st.sidebar:
                 if operational_page not in available_pages:
                     st.session_state["navigation_page"] = available_pages[0]
             page = st.radio(
-                "Navigate",
+                "Workspace",
                 available_pages,
                 key="navigation_page",
                 index=None if settings_active else 0,

@@ -94,7 +94,7 @@ class TestAppAuthentication:
                 app.text_input[0].input(TEST_PASSWORD)
                 app.button[0].click().run()
                 assert len(app.exception) == 0
-                assert app.radio[0].label == "Navigate"
+                assert app.radio[0].label == "Workspace"
                 assert "Business profiles" not in app.radio[0].options
                 assert any(
                     item.value == "Project Tabula Rasa" for item in app.title
@@ -349,7 +349,7 @@ class TestAppAuthentication:
                 app.button[0].click().run()
 
                 assert len(app.exception) == 0
-                assert app.radio[0].label == "Navigate"
+                assert app.radio[0].label == "Workspace"
                 assert (
                     from_secrets.call_args.args[0]["spreadsheet_id"] == "local-sheet-id"
                 )
@@ -407,7 +407,7 @@ class TestAppAuthentication:
                 assert app.session_state["active_page"] == "Account settings"
                 assert app.session_state["navigation_page"] is None
                 next(
-                    radio for radio in app.radio if radio.label == "Navigate"
+                    radio for radio in app.radio if radio.label == "Workspace"
                 ).set_value("Dashboard").run()
                 assert app.session_state["navigation_page"] == "Dashboard"
                 assert app.session_state["active_page"] == "Dashboard"

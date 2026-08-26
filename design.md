@@ -740,6 +740,10 @@ The sidebar must preserve:
 7. Log out action
 8. Selected workbook title for normal application pages
 
+Operational destinations appear beneath a `Workspace` section label. The label
+uses smaller semibold muted text, slight letter spacing, and a distinct gap
+before the destinations so it reads as a group heading rather than a page.
+
 Target operational navigation:
 
 1. Dashboard

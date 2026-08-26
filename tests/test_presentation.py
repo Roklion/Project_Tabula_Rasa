@@ -50,6 +50,17 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
     assert '.st-key-dashboard_total_balance' in css
     assert '.st-key-dashboard_activity' in css
     assert '.st-key-sidebar_utility' in css
+    workspace_label_selector = (
+        '.st-key-sidebar_navigation [data-testid="stWidgetLabel"] p'
+    )
+    workspace_label_start = css.index(workspace_label_selector)
+    workspace_label_rule = css[
+        workspace_label_start : css.index("}", workspace_label_start)
+    ]
+    assert "color: var(--tr-text-muted) !important;" in workspace_label_rule
+    assert "font-size: 0.75rem;" in workspace_label_rule
+    assert "font-weight: 600;" in workspace_label_rule
+    assert "letter-spacing: 0.025em;" in workspace_label_rule
     settings_label_selector = (
         '.st-key-account_settings_navigation\n'
         '    [data-testid="stBaseButton-primary"] '
@@ -92,6 +103,16 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
     assert "font-weight: 650;" in selected_rule
     assert '[data-testid="stTabs"] [role="tab"]:focus-visible' in css
     assert "column-gap: 0.2rem;" in css[css.index("@media (max-width: 760px)") :]
+    form_selector = '[data-testid="stForm"] {'
+    form_rule_start = css.index(form_selector)
+    form_rule = css[form_rule_start : css.index("}", form_rule_start)]
+    assert "padding: 0.75rem 1rem 1rem;" in form_rule
+    mobile_css = css[css.index("@media (max-width: 760px)") :]
+    mobile_form_start = mobile_css.index(form_selector)
+    mobile_form_rule = mobile_css[
+        mobile_form_start : mobile_css.index("}", mobile_form_start)
+    ]
+    assert "padding: 0.625rem 0.75rem 0.75rem;" in mobile_form_rule
     supporting = '.st-key-dashboard_metrics [data-testid="stMetricValue"]'
     primary = '.st-key-dashboard_total_balance [data-testid="stMetricValue"]'
     assert supporting in css
