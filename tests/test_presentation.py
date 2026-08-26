@@ -59,6 +59,28 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
     assert '.st-key-reports_statement_tables' in css
     assert '[data-testid="stTabs"] [role="tabpanel"]' in css
     assert '.st-key-reports_period_controls' in css
+    tablist_start = css.index('[data-testid="stTabs"] [role="tablist"]')
+    tab_selector = '[data-testid="stTabs"] [role="tab"] {'
+    tab_rule_start = css.index(tab_selector, css.index(tab_selector) + 1)
+    tab_rule = css[tab_rule_start : css.index("}", tab_rule_start)]
+    selected_selector = (
+        '[data-testid="stTabs"] [role="tab"][aria-selected="true"]'
+    )
+    selected_rule_start = css.index(
+        selected_selector, css.index(selected_selector) + 1
+    )
+    selected_rule = css[
+        selected_rule_start : css.index("}", selected_rule_start)
+    ]
+    assert "column-gap: 0.5rem;" in css[
+        tablist_start : css.index("}", tablist_start)
+    ]
+    assert "padding: 0.55rem 0.75rem 0.5rem;" in tab_rule
+    assert "border-bottom: 2px solid transparent;" in tab_rule
+    assert "border-bottom-color: var(--tr-interactive-primary);" in selected_rule
+    assert "font-weight: 650;" in selected_rule
+    assert '[data-testid="stTabs"] [role="tab"]:focus-visible' in css
+    assert "column-gap: 0.2rem;" in css[css.index("@media (max-width: 760px)") :]
     supporting = '.st-key-dashboard_metrics [data-testid="stMetricValue"]'
     primary = '.st-key-dashboard_total_balance [data-testid="stMetricValue"]'
     assert supporting in css

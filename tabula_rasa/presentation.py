@@ -113,7 +113,33 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
 
     [data-testid="stTabs"] [role="tablist"] {{
         border-bottom: 1px solid var(--tr-border-default);
-        gap: 0.25rem;
+        display: flex;
+        align-items: flex-end;
+        column-gap: 0.5rem;
+        overflow-x: auto;
+        scrollbar-width: thin;
+    }}
+
+    [data-testid="stTabs"] [role="tab"] {{
+        flex: 0 0 auto;
+        min-height: 2.5rem;
+        padding: 0.55rem 0.75rem 0.5rem;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        border-radius: 4px 4px 0 0;
+        background: transparent;
+        white-space: nowrap;
+        font-weight: 500;
+    }}
+
+    [data-testid="stTabs"] [role="tab"][aria-selected="true"] {{
+        border-bottom-color: var(--tr-interactive-primary);
+        font-weight: 650;
+    }}
+
+    [data-testid="stTabs"] [role="tab"]:focus-visible {{
+        outline: 2px solid var(--tr-interactive-focus);
+        outline-offset: -2px;
     }}
 
     [data-testid="stTabs"] [role="tabpanel"] {{
@@ -448,6 +474,17 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
         .st-key-login_surface {{
             margin-top: 1.25rem;
             margin-bottom: 1.25rem;
+        }}
+
+        [data-testid="stTabs"] [role="tablist"] {{
+            column-gap: 0.2rem;
+        }}
+
+        [data-testid="stTabs"] [role="tab"] {{
+            min-height: 2.35rem;
+            padding-right: 0.55rem;
+            padding-left: 0.55rem;
+            font-size: 0.9rem;
         }}
     }}
     </style>
