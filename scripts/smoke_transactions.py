@@ -23,11 +23,19 @@ from typing import Any
 try:
     from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
     from playwright.sync_api import sync_playwright
-except ModuleNotFoundError as error:  # pragma: no cover - opt-in dependency
-    raise SystemExit(
-        "Playwright is required for the viewport smoke check. Install the "
-        "development dependencies and run `python -m playwright install chromium`."
-    ) from error
+except ModuleNotFoundError:  # pragma: no cover - opt-in dependency
+    HAS_PLAYWRIGHT = False
+
+    class Page:  # type: ignore[no-redef]
+        """Fallback type that keeps the optional smoke module importable."""
+
+    class PlaywrightTimeoutError(Exception):  # type: ignore[no-redef]
+        """Fallback timeout type used when Playwright is not installed."""
+
+    def sync_playwright() -> Any:  # type: ignore[no-redef]
+        raise RuntimeError("Playwright is not installed")
+else:
+    HAS_PLAYWRIGHT = True
 
 
 REPOSITORY = Path(__file__).resolve().parents[1]
@@ -85,7 +93,19 @@ def ensure_port_available(port: int) -> None:
 
 def ensure_fixture_theme_is_current() -> None:
     """Fail rather than exercise a stale copy of the production theme."""
-    if FIXTURE_THEME.read_bytes() != PRODUCTION_THEME.read_bytes():
+    try:
+        fixture_theme = FIXTURE_THEME.read_bytes()
+    except FileNotFoundError as error:
+        raise SmokeCheckFailure(
+            f"Smoke fixture theme configuration file is missing: {FIXTURE_THEME}"
+        ) from error
+    try:
+        production_theme = PRODUCTION_THEME.read_bytes()
+    except FileNotFoundError as error:
+        raise SmokeCheckFailure(
+            f"Production theme configuration file is missing: {PRODUCTION_THEME}"
+        ) from error
+    if fixture_theme != production_theme:
         raise SmokeCheckFailure(
             "The smoke fixture theme differs from .streamlit/config.toml; "
             "synchronize .smoke_local/.streamlit/config.toml before running."
@@ -245,10 +265,18 @@ def _exit_playwright_context(
         if failures:
             failures.append(failure)
             return
+        primary_error = exception_info[1]
+        if primary_error is not None:
+            raise SmokeCheckFailure(f"{primary_error}; {failure}") from primary_error
         raise SmokeCheckFailure(failure) from error
 
 
 def run_smoke_check(screenshots_dir: Path | None, port: int) -> list[str]:
+    if not HAS_PLAYWRIGHT:
+        raise SmokeCheckFailure(
+            "Playwright is required for the viewport smoke check. Install the "
+            "development dependencies and run `python -m playwright install chromium`."
+        )
     ensure_port_available(port)
     ensure_fixture_theme_is_current()
     environment = os.environ.copy()

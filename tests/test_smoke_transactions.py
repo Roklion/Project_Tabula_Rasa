@@ -64,6 +64,22 @@ def test_ensure_fixture_theme_is_current_rejects_drift(
         smoke_transactions.ensure_fixture_theme_is_current()
 
 
+
+def test_ensure_fixture_theme_is_current_reports_missing_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    production_theme = tmp_path / "production.toml"
+    production_theme.write_text("primaryColor = 'blue'", encoding="utf-8")
+    monkeypatch.setattr(smoke_transactions, "PRODUCTION_THEME", production_theme)
+    monkeypatch.setattr(smoke_transactions, "FIXTURE_THEME", tmp_path / "missing.toml")
+
+    with pytest.raises(
+        smoke_transactions.SmokeCheckFailure,
+        match="Smoke fixture theme configuration file is missing",
+    ):
+        smoke_transactions.ensure_fixture_theme_is_current()
+
+
 def test_wait_for_server_retries_transient_protocol_errors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -355,5 +371,60 @@ def test_run_smoke_check_normalizes_shutdown_failure_without_viewport_failures(
     with pytest.raises(
         smoke_transactions.SmokeCheckFailure,
         match=r"^Playwright shutdown failed \(RuntimeError\)$",
+    ):
+        smoke_transactions.run_smoke_check(None, 8501)
+
+
+
+def test_run_smoke_check_reports_missing_playwright_at_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(smoke_transactions, "HAS_PLAYWRIGHT", False)
+
+    with pytest.raises(
+        smoke_transactions.SmokeCheckFailure,
+        match="Playwright is required for the viewport smoke check",
+    ):
+        smoke_transactions.run_smoke_check(None, 8501)
+
+
+def test_run_smoke_check_preserves_launch_failure_when_shutdown_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class RunningProcess:
+        returncode = None
+
+        def terminate(self) -> None:
+            return None
+
+        def wait(self, timeout: int | None = None) -> None:
+            del timeout
+            return None
+
+    class FailingContext:
+        def __enter__(self) -> object:
+            return SimpleNamespace(
+                chromium=SimpleNamespace(
+                    launch=Mock(side_effect=RuntimeError("browser binary missing"))
+                )
+            )
+
+        def __exit__(self, *args: object) -> None:
+            del args
+            raise RuntimeError("driver shutdown failed")
+
+    monkeypatch.setattr(smoke_transactions, "ensure_port_available", lambda port: None)
+    monkeypatch.setattr(smoke_transactions, "ensure_fixture_theme_is_current", lambda: None)
+    monkeypatch.setattr(smoke_transactions, "wait_for_server", lambda url, process: None)
+    monkeypatch.setattr(
+        smoke_transactions.subprocess,
+        "Popen",
+        lambda *args, **kwargs: RunningProcess(),
+    )
+    monkeypatch.setattr(smoke_transactions, "sync_playwright", lambda: FailingContext())
+
+    with pytest.raises(
+        smoke_transactions.SmokeCheckFailure,
+        match="Failed to launch Chromium.*Playwright shutdown failed",
     ):
         smoke_transactions.run_smoke_check(None, 8501)
