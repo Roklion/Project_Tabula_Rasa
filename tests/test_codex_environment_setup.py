@@ -20,6 +20,10 @@ pytestmark = pytest.mark.skipif(
     os.name != "nt" or POWERSHELL is None,
     reason="Windows PowerShell is required for environment setup coverage",
 )
+requires_python312 = pytest.mark.skipif(
+    sys.version_info[:2] != (3, 12),
+    reason="The full setup harness requires a real Python 3.12 candidate",
+)
 
 
 def _setup_script() -> str:
@@ -312,6 +316,7 @@ def test_setup_reuses_python312_guard_for_existing_venv() -> None:
     assert "if (-not (Test-Python312 -Executable $venvPython))" in setup
 
 
+@requires_python312
 def test_setup_runs_the_full_success_path_without_downloads(tmp_path: Path) -> None:
     result, log_entries = _run_full_setup(tmp_path)
 
@@ -320,10 +325,18 @@ def test_setup_runs_the_full_success_path_without_downloads(tmp_path: Path) -> N
     assert (tmp_path / "workspace" / ".venv" / "Scripts" / "python.exe").is_file()
 
 
+def test_setup_reports_venv_creation_failure(tmp_path: Path) -> None:
+    result, log_entries = _run_full_setup(tmp_path, fail_stage="venv")
+
+    assert result.returncode != 0
+    assert "Failed to create .venv." in result.stderr
+    assert log_entries == []
+
+
+@requires_python312
 @pytest.mark.parametrize(
     ("fail_stage", "expected_error", "expected_log"),
     [
-        ("venv", "Failed to create .venv.", []),
         ("requirements", "Failed to install requirements-dev.txt.", ["requirements"]),
         (
             "playwright-package",
