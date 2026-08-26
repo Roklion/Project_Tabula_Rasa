@@ -195,4 +195,4 @@ trips are written to the `Mileage` worksheet in one batch.
 | Transaction CSV/XLSX normalization | [`tabula_rasa/quickbooks_import.py`](../../tabula_rasa/quickbooks_import.py) |
 | Mileage CSV normalization | [`tabula_rasa/quickbooks_mileage_import.py`](../../tabula_rasa/quickbooks_mileage_import.py) |
 | Import validation and batch persistence | [`tabula_rasa/storage/google_sheets.py`](../../tabula_rasa/storage/google_sheets.py) |
-| Upload and preview UI | [`tabula_rasa/page_renderers/data_backup/renderer.py`](../../tabula_rasa/page_renderers/data_backup/renderer.py) |
+| Upload and preview UI | [`tabula_rasa/page_renderers/data_backup/imports.py`](../../tabula_rasa/page_renderers/data_backup/imports.py) |

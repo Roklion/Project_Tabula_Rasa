@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 from dataclasses import fields
+import importlib
 from pathlib import Path
 from unittest.mock import patch
 
@@ -11,7 +12,7 @@ from streamlit.testing.v1 import AppTest
 
 from tabula_rasa.ledger_auth import hash_password
 from tabula_rasa.page_renderers.data_backup.context import DataBackupContext
-from tabula_rasa.page_renderers.data_backup.renderer import prepared_exports_key
+from tabula_rasa.page_renderers.data_backup.exports import prepared_exports_key
 from tabula_rasa.storage import GoogleSheetsStorage
 from tests.fakes import FakeWorkbook
 
@@ -55,6 +56,16 @@ def test_data_backup_import_is_side_effect_free_and_uses_explicit_context() -> N
             and isinstance(node.value, ast.Call)
             for node in tree.body
         )
+    for module_name in (
+        "cloud_recovery",
+        "exports",
+        "imports",
+        "renderer",
+    ):
+        module = importlib.import_module(
+            f"tabula_rasa.page_renderers.data_backup.{module_name}"
+        )
+        assert module is not None
 
     context_fields = {field.name for field in fields(DataBackupContext)}
     assert context_fields >= {
@@ -140,7 +151,7 @@ def test_import_workflows_keep_separate_profile_keys_and_explicit_writes() -> No
         / "tabula_rasa"
         / "page_renderers"
         / "data_backup"
-        / "renderer.py"
+        / "imports.py"
     ).read_text(encoding="utf-8")
     assert 'key=f"transaction_csv_upload_{context.profile_key}"' in source
     assert 'key=f"quickbooks_transaction_upload_{context.profile_key}"' in source
@@ -153,13 +164,25 @@ def test_import_workflows_keep_separate_profile_keys_and_explicit_writes() -> No
     assert "Import validated mileage" in source
 
 
+def test_action_spinners_cover_only_explicit_backup_export_and_import_actions() -> None:
+    package_path = PROJECT_ROOT / "tabula_rasa" / "page_renderers" / "data_backup"
+    cloud_source = (package_path / "cloud_recovery.py").read_text(encoding="utf-8")
+    export_source = (package_path / "exports.py").read_text(encoding="utf-8")
+    import_source = (package_path / "imports.py").read_text(encoding="utf-8")
+
+    assert cloud_source.count("with st.spinner(") == 2
+    assert export_source.count("with st.spinner(") == 1
+    assert import_source.count("with st.spinner(") == 3
+    assert import_source.count("context.confirmed_write(") == 3
+
+
 def test_page_export_filenames_are_tabula_rasa_without_changing_backup_compatibility() -> None:
     source = (
         PROJECT_ROOT
         / "tabula_rasa"
         / "page_renderers"
         / "data_backup"
-        / "renderer.py"
+        / "exports.py"
     ).read_text(encoding="utf-8")
     assert 'f"tabula-rasa-{date.today()}.csv"' in source
     assert 'f"tabula-rasa-mileage-{date.today()}.csv"' in source
