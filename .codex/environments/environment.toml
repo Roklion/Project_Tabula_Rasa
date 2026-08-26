@@ -52,7 +52,8 @@ if (-not (Test-Path -LiteralPath $venvPython -PathType Leaf)) {
         throw "A sandbox-readable Python 3.12 interpreter is required to create .venv."
     }
 
-    & $selected.Path @($selected.Args) -m venv .venv
+    $selectedArgs = $selected.Args
+    & $selected.Path @selectedArgs -m venv .venv
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to create .venv."
     }
@@ -73,7 +74,6 @@ if ($LASTEXITCODE -ne 0) {
     throw "Failed to install Playwright."
 }
 
-$env:PLAYWRIGHT_BROWSERS_PATH = Join-Path $env:PUBLIC "ms-playwright"
 & $venvPython -m playwright install chromium
 if ($LASTEXITCODE -ne 0) {
     throw "Failed to install Playwright Chromium."
