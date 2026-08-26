@@ -37,18 +37,20 @@ def render_transactions(context: TransactionsContext) -> None:
         if (account_id := str(account.get("id") or "").strip())
     }
     with tab_add:
-        render_add_transaction(
-            context,
-            account_map=account_map,
-            categories=categories,
-            category_paths=category_paths,
-        )
+        with st.container(key="transactions_add_surface"):
+            render_add_transaction(
+                context,
+                account_map=account_map,
+                categories=categories,
+                category_paths=category_paths,
+            )
 
     with tab_ledger:
-        render_ledger(
-            context,
-            accounts=accounts,
-            categories=categories,
-            account_paths=account_paths,
-            category_paths=category_paths,
-        )
+        with st.container(key="transactions_ledger_surface"):
+            render_ledger(
+                context,
+                accounts=accounts,
+                categories=categories,
+                account_paths=account_paths,
+                category_paths=category_paths,
+            )

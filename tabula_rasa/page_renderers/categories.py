@@ -135,7 +135,9 @@ def render_categories(context: CategoriesContext) -> None:
         prefixes=(f"new_category_parent_{context.profile_key}_",),
     )
     with st.expander("Add category", expanded=True):
-        with st.container(border=True, key="categories_add_form"):
+        # The expander supplies the workflow border; keep the keyed inner
+        # container as a spacing hook so the form does not become double-card.
+        with st.container(key="categories_add_form"):
             c1, c2, c3 = st.columns(3, gap="small")
             name = c1.text_input(
                 "Category name", key=f"new_category_name_{context.profile_key}"
@@ -182,7 +184,7 @@ def render_categories(context: CategoriesContext) -> None:
                 key="edit_category_id",
             )
             selected = category_by_id[category_id]
-            with st.container(border=True):
+            with st.container():
                 st.caption(
                     "Renaming, promotion, or reparenting keeps this category's "
                     "stable ID and existing transaction references."
