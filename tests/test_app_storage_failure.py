@@ -168,7 +168,7 @@ class TestAppStorageFailure:
         assert len(app.exception) == 0
         assert app.error[0].value == SAFE_MESSAGE
         assert len(app.success) == 0
-        assert app.radio[0].label == "Navigate"
+        assert app.radio[0].label == "Workspace"
         assert len(app.metric) == 0
 
     def test_cloud_verification_does_not_require_live_sheets_export(self) -> None:

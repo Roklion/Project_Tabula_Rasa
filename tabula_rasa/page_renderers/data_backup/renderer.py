@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import streamlit as st
+
 from tabula_rasa.page_renderers.data_backup.cloud_recovery import (
     render_cloud_backup,
     render_recovery_status,
@@ -18,7 +20,11 @@ def render_data_backup(context: DataBackupContext) -> None:
         "Data & backup",
         "Your live records are stored in the private Google Sheets workbook.",
     )
-    render_cloud_backup(context)
-    render_recovery_status(context)
-    render_exports(context)
-    render_imports(context)
+    with st.container(key="data_backup_cloud_section"):
+        render_cloud_backup(context)
+    with st.container(key="data_backup_recovery_section"):
+        render_recovery_status(context)
+    with st.container(key="data_backup_exports_section"):
+        render_exports(context)
+    with st.container(key="data_backup_imports_section"):
+        render_imports(context)

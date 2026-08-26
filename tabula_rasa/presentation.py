@@ -66,6 +66,17 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
         color: var(--tr-text-primary);
     }}
 
+    /* Keep the working area calm and bounded without introducing a second
+       layout system. Streamlit owns the block container; this only tunes its
+       breathing room at the supported desktop and narrow widths. */
+    [data-testid="stMainBlockContainer"] {{
+        max-width: 1440px;
+        padding-top: 1.75rem;
+        padding-right: clamp(1rem, 3vw, 3rem);
+        padding-bottom: 3rem;
+        padding-left: clamp(1rem, 3vw, 3rem);
+    }}
+
     [data-testid="stHeader"] {{
         background: transparent;
     }}
@@ -100,9 +111,81 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
         color: var(--tr-text-primary) !important;
     }}
 
+    [data-testid="stTabs"] [role="tablist"] {{
+        border-bottom: 1px solid var(--tr-border-default);
+        display: flex;
+        align-items: flex-end;
+        column-gap: 0.5rem;
+        overflow-x: auto;
+        scrollbar-width: thin;
+    }}
+
+    [data-testid="stTabs"] [role="tab"] {{
+        flex: 0 0 auto;
+        min-height: 2.5rem;
+        padding: 0.55rem 0.75rem 0.5rem;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        border-radius: 4px 4px 0 0;
+        background: transparent;
+        white-space: nowrap;
+        font-weight: 500;
+    }}
+
+    [data-testid="stTabs"] [role="tab"][aria-selected="true"] {{
+        border-bottom-color: var(--tr-interactive-primary);
+        font-weight: 650;
+    }}
+
+    [data-testid="stTabs"] [role="tab"]:focus-visible {{
+        outline: 2px solid var(--tr-interactive-focus);
+        outline-offset: -2px;
+    }}
+
+    [data-testid="stTabs"] [role="tabpanel"] {{
+        padding-top: 0.9rem;
+    }}
+
     [data-testid="stSidebar"] {{
         background: var(--tr-surface-secondary);
         border-right: 1px solid var(--tr-border-default);
+    }}
+
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{
+        gap: 0.5rem;
+    }}
+
+    .st-key-sidebar_brand {{
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid var(--tr-border-subtle);
+    }}
+
+    .st-key-sidebar_business_context {{
+        padding: 0.25rem 0 0.5rem;
+    }}
+
+    .st-key-sidebar_navigation [data-testid="stWidgetLabel"] {{
+        margin-bottom: 0.25rem;
+    }}
+
+    .st-key-sidebar_navigation [data-testid="stWidgetLabel"] p {{
+        color: var(--tr-text-muted) !important;
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.025em;
+    }}
+
+    .st-key-sidebar_utility {{
+        margin-top: 0.25rem;
+        padding-top: 0.75rem;
+        border-top: 1px solid var(--tr-border-default);
+    }}
+
+    .st-key-account_settings_navigation
+    [data-testid="stBaseButton-primary"] [data-testid="stMarkdownContainer"],
+    .st-key-account_settings_navigation
+    [data-testid="stBaseButton-primary"] [data-testid="stMarkdownContainer"] p {{
+        color: var(--tr-surface-primary) !important;
     }}
 
     [data-testid="stSidebar"] [data-testid="stMarkdownContainer"],
@@ -117,11 +200,38 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
     [data-testid="stSidebar"] [role="radiogroup"] label {{
         border-radius: 6px;
         padding: 6px 8px;
+        position: relative;
+    }}
+
+    /* Keep the native radio in the accessibility tree and tab order while
+       presenting the navigation as a compact full-row control. */
+    [data-testid="stSidebar"] [role="radiogroup"] label input[type="radio"] {{
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+        margin: 0;
+    }}
+
+    /* Streamlit draws a second visual indicator beside each native radio.
+       Suppress that indicator only for the navigation options. NOTE: The
+       `> div > div > div` selector below is fragile because it depends on
+       Streamlit's internal DOM structure and may break in future versions.
+       The input remains available to assistive technology and keyboard users. */
+    [data-testid="stSidebar"] label[data-testid="stRadioOption"]
+    > div > div > div:first-child:not(:has([data-testid="stMarkdownContainer"])) {{
+        display: none;
+    }}
+
+    [data-testid="stSidebar"] [role="radiogroup"] label:has(input:focus-visible) {{
+        outline: 2px solid var(--tr-interactive-focus);
+        outline-offset: 1px;
     }}
 
     [data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) {{
         background: var(--tr-surface-selected);
         color: var(--tr-text-primary);
+        box-shadow: inset 2px 0 0 var(--tr-interactive-primary);
     }}
 
     [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {{
@@ -137,11 +247,18 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
         font-size: 22px;
         font-weight: 600;
         margin-bottom: 4px;
+        line-height: 1.25;
     }}
 
     h2, h3 {{
         font-size: 16px;
         font-weight: 600;
+        line-height: 1.35;
+    }}
+
+    [data-testid="stSubheader"] {{
+        margin-top: 0.75rem;
+        margin-bottom: 0.35rem;
     }}
 
     [data-testid="stCaptionContainer"] {{
@@ -153,7 +270,36 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
         border: 1px solid var(--tr-border-default);
         border-radius: 8px;
         box-shadow: none;
-        padding: 12px 16px;
+        min-height: 82px;
+        padding: 12px 16px 10px;
+    }}
+
+    [data-testid="stMetricLabel"] {{
+        color: var(--tr-text-secondary);
+        font-size: 0.78rem;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+    }}
+
+    [data-testid="stMetricValue"] {{
+        color: var(--tr-text-primary);
+        font-variant-numeric: tabular-nums;
+    }}
+
+    .st-key-dashboard_metrics [data-testid="stMetricValue"] {{
+        font-size: 1.25rem;
+        font-weight: 600;
+    }}
+
+    .st-key-dashboard_total_balance [data-testid="stMetric"],
+    .st-key-dashboard_net_month [data-testid="stMetric"] {{
+        border-color: var(--tr-border-strong);
+    }}
+
+    .st-key-dashboard_total_balance [data-testid="stMetricValue"],
+    .st-key-dashboard_net_month [data-testid="stMetricValue"] {{
+        font-size: clamp(1.625rem, 2vw, 1.875rem);
+        font-weight: 600;
     }}
 
     [data-testid="stDataFrame"] {{
@@ -161,6 +307,14 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
         border: 1px solid var(--tr-border-default);
         border-radius: 8px;
         overflow: hidden;
+        box-shadow: 0 1px 1px rgb(32 33 36 / 3%);
+    }}
+
+    [data-testid="stDataFrame"] [role="columnheader"] {{
+        background: var(--tr-surface-secondary);
+        color: var(--tr-text-secondary);
+        font-size: 0.76rem;
+        font-weight: 650;
     }}
 
     [data-testid="stForm"],
@@ -169,6 +323,65 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
         background: var(--tr-surface-primary);
         border-color: var(--tr-border-default);
         border-radius: 8px;
+    }}
+
+    [data-testid="stForm"] {{
+        padding: 0.75rem 1rem 1rem;
+    }}
+
+    .st-key-dashboard_activity,
+    .st-key-dashboard_balances,
+    .st-key-reports_charts,
+    .st-key-reports_statement_tables,
+    .st-key-data_backup_surface {{
+        background: var(--tr-surface-primary);
+        border: 1px solid var(--tr-border-default);
+        border-radius: 8px;
+        padding: 0.75rem 1rem 1rem;
+    }}
+
+    .st-key-accounts_add_form,
+    .st-key-categories_add_form {{
+        padding: 0.15rem 0 0.2rem;
+    }}
+
+    .st-key-transactions_add_surface,
+    .st-key-transactions_ledger_surface,
+    .st-key-mileage_add_surface,
+    .st-key-mileage_log_surface {{
+        padding-top: 0.25rem;
+    }}
+
+    .st-key-reports_period_controls {{
+        padding: 0.2rem 0 0.65rem;
+        border-bottom: 1px solid var(--tr-border-subtle);
+    }}
+
+    .st-key-dashboard_activity,
+    .st-key-dashboard_balances {{
+        min-height: 100%;
+    }}
+
+    .st-key-dashboard_activity [data-testid="stDataFrame"],
+    .st-key-dashboard_balances [data-testid="stDataFrame"],
+    .st-key-reports_statement_tables [data-testid="stDataFrame"] {{
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+    }}
+
+    .st-key-data_backup_cloud_section,
+    .st-key-data_backup_recovery_section,
+    .st-key-data_backup_exports_section,
+    .st-key-data_backup_imports_section {{
+        padding: 0.25rem 0 0.75rem;
+        border-bottom: 1px solid var(--tr-border-subtle);
+    }}
+
+    .st-key-data_backup_cloud_section + .st-key-data_backup_recovery_section,
+    .st-key-data_backup_recovery_section + .st-key-data_backup_exports_section,
+    .st-key-data_backup_exports_section + .st-key-data_backup_imports_section {{
+        margin-top: 0.5rem;
     }}
 
     [data-testid="stButton"] button,
@@ -188,6 +401,25 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
 
     [data-testid="stAlert"] {{
         border-radius: 6px;
+        border-width: 1px;
+    }}
+
+    [data-testid="stAlert"]:has([data-testid="stAlertContentSuccess"])
+    [data-testid="stAlertContainer"] {{
+        background: var(--tr-positive-background) !important;
+        border-color: var(--tr-positive-border) !important;
+    }}
+
+    [data-testid="stAlert"]:has([data-testid="stAlertContentError"])
+    [data-testid="stAlertContainer"] {{
+        background: var(--tr-negative-background) !important;
+        border-color: var(--tr-negative-border) !important;
+    }}
+
+    [data-testid="stAlert"]:has([data-testid="stAlertContentInfo"])
+    [data-testid="stAlertContainer"] {{
+        background: var(--tr-informational-background) !important;
+        border-color: var(--tr-informational-border) !important;
     }}
 
     [data-testid="stAlert"]:has(
@@ -224,7 +456,60 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
 
     .st-key-login_surface {{
         max-width: 480px;
-        margin: 24px auto;
+        margin: 3rem auto;
+        padding: 1.25rem 1.35rem 1.35rem;
+        background: var(--tr-surface-primary);
+        border: 1px solid var(--tr-border-default);
+        border-radius: 10px;
+        box-shadow: 0 8px 24px rgb(32 33 36 / 5%);
+    }}
+
+    .st-key-login_surface [data-testid="stForm"] {{
+        border: 0;
+        background: transparent;
+        padding: 0;
+    }}
+
+    @media (max-width: 760px) {{
+        [data-testid="stMainBlockContainer"] {{
+            padding-top: 1rem;
+            padding-right: 0.75rem;
+            padding-left: 0.75rem;
+        }}
+
+        [data-testid="stForm"] {{
+            padding: 0.625rem 0.75rem 0.75rem;
+        }}
+
+        .st-key-dashboard_metrics [data-testid="stColumn"],
+        .st-key-reports_summary_metrics [data-testid="stColumn"],
+        .st-key-reports_statement_metrics [data-testid="stColumn"] {{
+            min-width: calc(50% - 0.5rem);
+            flex: 1 1 calc(50% - 0.5rem);
+        }}
+
+        .st-key-dashboard_activity,
+        .st-key-dashboard_balances,
+        .st-key-data_backup_surface {{
+            padding-right: 0.65rem;
+            padding-left: 0.65rem;
+        }}
+
+        .st-key-login_surface {{
+            margin-top: 1.25rem;
+            margin-bottom: 1.25rem;
+        }}
+
+        [data-testid="stTabs"] [role="tablist"] {{
+            column-gap: 0.2rem;
+        }}
+
+        [data-testid="stTabs"] [role="tab"] {{
+            min-height: 2.35rem;
+            padding-right: 0.55rem;
+            padding-left: 0.55rem;
+            font-size: 0.9rem;
+        }}
     }}
     </style>
     """

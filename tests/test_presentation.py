@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import tomllib
 from unittest.mock import patch
 
@@ -32,6 +33,7 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
         '[data-testid="stForm"]',
         '[data-testid="stExpander"]',
         '[data-testid="stAlert"]',
+        '[data-testid="stMainBlockContainer"]',
         ".st-key-login_surface",
         ":focus-visible",
     ):
@@ -45,6 +47,88 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
     assert '[data-testid="stFormSubmitButton"]:has(' in css
     assert '[data-testid="stWidgetLabel"] p' in css
     assert '[data-testid="stTabs"] [role="tab"]' in css
+    assert '[data-testid="stMainBlockContainer"]' in css
+    assert '.st-key-dashboard_total_balance' in css
+    assert '.st-key-dashboard_activity' in css
+    assert '.st-key-sidebar_utility' in css
+    workspace_label_selector = (
+        '.st-key-sidebar_navigation [data-testid="stWidgetLabel"] p'
+    )
+    workspace_label_start = css.index(workspace_label_selector)
+    workspace_label_rule = css[
+        workspace_label_start : css.index("}", workspace_label_start)
+    ]
+    assert "color: var(--tr-text-muted) !important;" in workspace_label_rule
+    assert "font-size: 0.75rem;" in workspace_label_rule
+    assert "font-weight: 600;" in workspace_label_rule
+    assert "letter-spacing: 0.025em;" in workspace_label_rule
+    settings_label_selector = re.compile(
+        r'\.st-key-account_settings_navigation\s+'
+        r'\[data-testid="stBaseButton-primary"\]\s+'
+        r'\[data-testid="stMarkdownContainer"\] p'
+    )
+    settings_label_match = settings_label_selector.search(css)
+    assert settings_label_match is not None
+    settings_label_rule_start = settings_label_match.start()
+    settings_label_rule = css[
+        settings_label_rule_start : css.index("}", settings_label_rule_start)
+    ]
+    assert "color: var(--tr-surface-primary) !important;" in settings_label_rule
+    assert 'label input[type="radio"]' in css
+    assert 'label:has(input:focus-visible)' in css
+    assert 'label[data-testid="stRadioOption"]' in css
+    assert 'div:first-child:not(:has([data-testid="stMarkdownContainer"]))' in css
+    assert '.st-key-login_surface [data-testid="stForm"]' in css
+    assert '.st-key-data_backup_cloud_section' in css
+    assert '.st-key-reports_statement_tables' in css
+    assert '[data-testid="stTabs"] [role="tabpanel"]' in css
+    assert '.st-key-reports_period_controls' in css
+    tablist_start = css.index('[data-testid="stTabs"] [role="tablist"]')
+    tab_selector = '[data-testid="stTabs"] [role="tab"] {'
+    tab_rule_start = css.index(tab_selector, css.index(tab_selector) + 1)
+    tab_rule = css[tab_rule_start : css.index("}", tab_rule_start)]
+    selected_selector = (
+        '[data-testid="stTabs"] [role="tab"][aria-selected="true"]'
+    )
+    selected_rule_start = css.index(
+        selected_selector, css.index(selected_selector) + 1
+    )
+    selected_rule = css[
+        selected_rule_start : css.index("}", selected_rule_start)
+    ]
+    assert "column-gap: 0.5rem;" in css[
+        tablist_start : css.index("}", tablist_start)
+    ]
+    assert "padding: 0.55rem 0.75rem 0.5rem;" in tab_rule
+    assert "border-bottom: 2px solid transparent;" in tab_rule
+    assert "border-bottom-color: var(--tr-interactive-primary);" in selected_rule
+    assert "font-weight: 650;" in selected_rule
+    assert '[data-testid="stTabs"] [role="tab"]:focus-visible' in css
+    assert "column-gap: 0.2rem;" in css[css.index("@media (max-width: 760px)") :]
+    form_selector = '[data-testid="stForm"] {'
+    form_rule_start = css.index(form_selector)
+    form_rule = css[form_rule_start : css.index("}", form_rule_start)]
+    assert "padding: 0.75rem 1rem 1rem;" in form_rule
+    mobile_css = css[css.index("@media (max-width: 760px)") :]
+    mobile_form_start = mobile_css.index(form_selector)
+    mobile_form_rule = mobile_css[
+        mobile_form_start : mobile_css.index("}", mobile_form_start)
+    ]
+    assert "padding: 0.625rem 0.75rem 0.75rem;" in mobile_form_rule
+    supporting = '.st-key-dashboard_metrics [data-testid="stMetricValue"]'
+    primary = '.st-key-dashboard_total_balance [data-testid="stMetricValue"]'
+    assert supporting in css
+    assert primary in css
+    supporting_rule = css[css.index(supporting) : css.index("}", css.index(supporting))]
+    primary_rule = css[css.index(primary) : css.index("}", css.index(primary))]
+    assert "font-size: 1.25rem;" in supporting_rule
+    assert "font-weight: 600;" in supporting_rule
+    assert "font-size: clamp(1.625rem, 2vw, 1.875rem);" in primary_rule
+    assert "font-size: 1.25rem;" not in primary_rule
+    radio_rule_start = css.index('label[data-testid="stRadioOption"]')
+    radio_rule = css[radio_rule_start : css.index("}", radio_rule_start)]
+    assert "display: none;" in radio_rule
+    assert "input[type=\"radio\"]" not in radio_rule
     assert '[data-testid="stTabs"] [role="tab"]:hover' in css
     assert '[aria-selected="true"]' in css
     assert "var(--tr-warning-background) !important" in css

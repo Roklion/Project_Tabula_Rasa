@@ -52,6 +52,43 @@ def profile_settings(name: str, spreadsheet_id: str) -> dict:
 
 
 class TestAppAuthentication:
+    def test_restored_route_keeps_sidebar_selection_aligned(self) -> None:
+        st.cache_resource.clear()
+        fake_storage = GoogleSheetsStorage(FakeWorkbook())
+        with tempfile.TemporaryDirectory() as directory:
+            absent_local_store = Path(directory) / "business_profiles.json"
+            with (
+                patch(
+                    "tabula_rasa.local_profile_store.LOCAL_PROFILE_STORE_PATH",
+                    absent_local_store,
+                ),
+                patch.object(
+                    GoogleSheetsStorage,
+                    "from_secrets",
+                    return_value=fake_storage,
+                ),
+            ):
+                app = AppTest.from_file("tabula_rasa/app.py", default_timeout=30)
+                app.secrets["app_password_hash"] = hash_password(TEST_PASSWORD)
+                app.secrets["business_profiles"] = {
+                    "test": {
+                        "name": "Test Business",
+                        "spreadsheet_id": "test-sheet",
+                        "gcp_service_account": {"type": "service_account"},
+                    }
+                }
+                app.session_state["active_page"] = "Transactions"
+                app.session_state["navigation_page"] = "Dashboard"
+
+                app.run()
+                app.text_input[0].input(TEST_PASSWORD)
+                app.button[0].click().run()
+
+                assert app.session_state["active_page"] == "Transactions"
+                assert app.session_state["navigation_page"] == "Transactions"
+                assert app.radio[0].value == "Transactions"
+                assert any(item.value == "Transactions" for item in app.title)
+
     def test_hosted_streamlit_secrets_work_without_local_profile_file(self) -> None:
         st.cache_resource.clear()
         fake_storage = GoogleSheetsStorage(FakeWorkbook())
@@ -94,7 +131,7 @@ class TestAppAuthentication:
                 app.text_input[0].input(TEST_PASSWORD)
                 app.button[0].click().run()
                 assert len(app.exception) == 0
-                assert app.radio[0].label == "Navigate"
+                assert app.radio[0].label == "Workspace"
                 assert "Business profiles" not in app.radio[0].options
                 assert any(
                     item.value == "Project Tabula Rasa" for item in app.title
@@ -110,6 +147,7 @@ class TestAppAuthentication:
                 assert any(
                     "No transactions yet" in str(item.value) for item in app.info
                 )
+                assert len(app.sidebar.divider) == 0
                 assert (
                     from_secrets.call_args.args[0]["spreadsheet_id"]
                     == "hosted-sheet-id"
@@ -348,7 +386,7 @@ class TestAppAuthentication:
                 app.button[0].click().run()
 
                 assert len(app.exception) == 0
-                assert app.radio[0].label == "Navigate"
+                assert app.radio[0].label == "Workspace"
                 assert (
                     from_secrets.call_args.args[0]["spreadsheet_id"] == "local-sheet-id"
                 )
@@ -406,7 +444,7 @@ class TestAppAuthentication:
                 assert app.session_state["active_page"] == "Account settings"
                 assert app.session_state["navigation_page"] is None
                 next(
-                    radio for radio in app.radio if radio.label == "Navigate"
+                    radio for radio in app.radio if radio.label == "Workspace"
                 ).set_value("Dashboard").run()
                 assert app.session_state["navigation_page"] == "Dashboard"
                 assert app.session_state["active_page"] == "Dashboard"

@@ -17,6 +17,17 @@ visible keyboard focus, and text-backed status messages. These presentation
 choices do not change route order, form fields, ledger columns, profile
 selection, or storage behavior.
 
+Operational pages use compact native Streamlit forms, tables, tabs, and
+expanders with consistent working-surface boundaries. The Dashboard gives its
+summary and recent activity the strongest hierarchy; Reports and Data & backup
+separate their independent sections with the same restrained spacing. At
+narrow widths, columns stack and tables retain intentional horizontal scrolling
+when all accounting fields need to remain available. Native component and
+browser chrome differences remain possible across Streamlit versions. On narrow
+screens, Streamlit's native navigation drawer may remain open after a route is
+selected; it can be closed with the drawer control without affecting the active
+route or page state.
+
 ## Select a business
 
 Choose the active business in the sidebar after signing in. Every workbook

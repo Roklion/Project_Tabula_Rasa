@@ -740,6 +740,10 @@ The sidebar must preserve:
 7. Log out action
 8. Selected workbook title for normal application pages
 
+Operational destinations appear beneath a `Workspace` section label. The label
+uses smaller semibold muted text, slight letter spacing, and a distinct gap
+before the destinations so it reads as a group heading rather than a page.
+
 Target operational navigation:
 
 1. Dashboard
@@ -2049,6 +2053,17 @@ widget-label and tooltip layout is part of the current behavior and must be
 preserved when those hooks change in a future Streamlit release. The
 `test_global_styles_use_stable_shell_hooks_and_accessible_states` regression
 test is the compatibility guard for this CSS boundary.
+
+The current visual-polish pass also gives the shell, Dashboard, Reports, and
+Data & backup sections stable keyed-container hooks. These hooks provide
+compact spacing, bounded working surfaces, and narrow-viewport stacking while
+leaving native forms, expanders, tables, and tabs responsible for their own
+interaction. Dashboard activity and balance tables flatten their inner table
+borders inside one surrounding working surface; account and category
+expanders likewise use one workflow border rather than nested cards. The
+working area uses the stable `stMainBlockContainer` test ID for its responsive
+padding; generated Streamlit class names and broad DOM selectors remain out
+of scope.
 
 ### 30.3 Custom components
 

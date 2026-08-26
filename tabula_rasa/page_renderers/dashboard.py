@@ -46,36 +46,47 @@ def render_dashboard(context: DashboardContext) -> None:
         st.error(str(error))
         st.stop()
 
-    c1, c2, c3, c4 = st.columns([1.25, 1, 1, 1], gap="small")
-    c1.metric("Total balance", money(float(balances["Balance"].sum())))
-    c2.metric("Income this month", money(monthly_totals["income"]))
-    c3.metric("Expenses this month", money(monthly_totals["expenses"]))
-    c4.metric("Net this month", money(monthly_totals["net"]))
+    with st.container(key="dashboard_metrics"):
+        c1, c2, c3, c4 = st.columns([1.25, 1, 1, 1], gap="small")
+        with c1:
+            with st.container(key="dashboard_total_balance"):
+                st.metric("Total balance", money(float(balances["Balance"].sum())))
+        with c2:
+            st.metric("Income this month", money(monthly_totals["income"]))
+        with c3:
+            st.metric("Expenses this month", money(monthly_totals["expenses"]))
+        with c4:
+            with st.container(key="dashboard_net_month"):
+                st.metric("Net this month", money(monthly_totals["net"]))
     left, right = st.columns([1.6, 1], gap="large")
     with left:
-        st.subheader("Recent activity")
-        recent = ledger_frame(transactions[:8], accounts, categories)
-        if recent.empty:
-            st.info("No transactions yet. Add your first one from Transactions.")
-        else:
-            display = recent[
-                ["Date", "Type", "Payee", "Category", "Account", "Amount"]
-            ].copy()
-            expense_rows = display["Type"] == "Expense"
-            display.loc[expense_rows, "Amount"] *= -1
+        with st.container(key="dashboard_activity"):
+            st.subheader("Recent activity")
+            st.caption("Latest eight transactions")
+            recent = ledger_frame(transactions[:8], accounts, categories)
+            if recent.empty:
+                st.info("No transactions yet. Add your first one from Transactions.")
+            else:
+                display = recent[
+                    ["Date", "Type", "Payee", "Category", "Account", "Amount"]
+                ].copy()
+                expense_rows = display["Type"] == "Expense"
+                display.loc[expense_rows, "Amount"] *= -1
+                st.dataframe(
+                    display,
+                    hide_index=True,
+                    width="stretch",
+                    column_config={
+                        "Amount": st.column_config.NumberColumn(format="$%.2f")
+                    },
+                )
+    with right:
+        with st.container(key="dashboard_balances"):
+            st.subheader("Account balances")
+            st.caption("Current balances by account")
             st.dataframe(
-                display,
+                balances[["Account", "Classification", "Type", "Balance"]],
                 hide_index=True,
                 width="stretch",
-                column_config={
-                    "Amount": st.column_config.NumberColumn(format="$%.2f")
-                },
+                column_config={"Balance": st.column_config.NumberColumn(format="$%.2f")},
             )
-    with right:
-        st.subheader("Account balances")
-        st.dataframe(
-            balances[["Account", "Classification", "Type", "Balance"]],
-            hide_index=True,
-            width="stretch",
-            column_config={"Balance": st.column_config.NumberColumn(format="$%.2f")},
-        )

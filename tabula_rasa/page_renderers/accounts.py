@@ -173,7 +173,9 @@ def render_accounts(context: AccountsContext) -> None:
         ),
     )
     with st.expander("Add account", expanded=True):
-        with st.container(border=True, key="accounts_add_form"):
+        # The expander supplies the workflow border; keep the keyed inner
+        # container as a spacing hook so the form does not become double-card.
+        with st.container(key="accounts_add_form"):
             st.caption("Add a Layer 1 account or choose a compatible Layer 1 parent.")
             c1, c2, c3, c4, c5 = st.columns(5, gap="small")
             name = c1.text_input(
@@ -256,7 +258,7 @@ def render_accounts(context: AccountsContext) -> None:
                 key="edit_account_id",
             )
             selected = account_by_id[account_id]
-            with st.container(border=True):
+            with st.container():
                 st.caption(
                     "Renaming, promotion, or reparenting keeps this account's "
                     "stable ID and transaction references."
