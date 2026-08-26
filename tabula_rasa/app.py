@@ -306,19 +306,18 @@ with st.sidebar:
     with st.container(key="sidebar_navigation"):
         if available_pages:
             settings_active = st.session_state.get("active_page") == "Account settings"
+            # Remove the prior widget value before supplying the matching
+            # default, avoiding Streamlit's session-state/default conflict.
+            st.session_state.pop("navigation_page", None)
             if settings_active:
                 # Account settings is a separate utility destination. Keep the
                 # operational radio unselected so choosing the page the user came
                 # from still invokes its callback and returns to that page.
-                st.session_state.pop("navigation_page", None)
                 navigation_index = None
             else:
                 # active_page is the canonical route state. Synchronize the
                 # widget value and index before rendering so a preselected or
                 # restored route cannot render with a different radio choice.
-                # Remove the prior widget value before supplying the matching
-                # default, avoiding Streamlit's session-state/default conflict.
-                st.session_state.pop("navigation_page", None)
                 navigation_index = available_pages.index(stored_page)
             page = st.radio(
                 "Workspace",
