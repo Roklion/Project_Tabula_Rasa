@@ -21,6 +21,7 @@ function Test-Python312 {
     }
 
     try {
+        $global:LASTEXITCODE = -1
         & $Executable @Arguments -c "import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 12) else 1)" 1>$null 2>$null
         return $LASTEXITCODE -eq 0
     } catch {
@@ -37,12 +38,12 @@ if (-not (Test-Path -LiteralPath $venvPython -PathType Leaf)) {
         $candidates += @{ Path = (Join-Path $env:PUBLIC "Python312\python.exe"); Args = @() }
     }
 
-    $launcher = Get-Command py.exe -ErrorAction SilentlyContinue
+    $launcher = Get-Command py.exe -CommandType Application -ErrorAction SilentlyContinue
     if ($null -ne $launcher) {
         $candidates += @{ Path = $launcher.Source; Args = @("-3.12") }
     }
 
-    $python = Get-Command python.exe -ErrorAction SilentlyContinue
+    $python = Get-Command python.exe -CommandType Application -ErrorAction SilentlyContinue
     if ($null -ne $python) {
         $candidates += @{ Path = $python.Source; Args = @() }
     }

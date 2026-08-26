@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tomllib
 
 import pytest
@@ -58,7 +59,8 @@ function Get-Command {
     [CmdletBinding()]
     param(
         [Parameter(Position = 0)]
-        [string]$Name
+        [string]$Name,
+        [System.Management.Automation.CommandTypes]$CommandType
     )
 
     if ($Name -eq "py.exe" -and -not [string]::IsNullOrEmpty($env:TEST_PY)) {
@@ -131,6 +133,118 @@ def _run_discovery(
     )
 
 
+def _installer_shim(module_name: str) -> str:
+    if module_name == "pip":
+        stage_expression = '"requirements" if "-r" in sys.argv else "playwright-package"'
+    else:
+        stage_expression = '"chromium"'
+
+    return f'''from pathlib import Path
+import os
+import sys
+
+stage = {stage_expression}
+with Path(os.environ["SETUP_TEST_LOG"]).open("a", encoding="utf-8") as log_file:
+    log_file.write(stage + "\\n")
+if os.environ.get("SETUP_TEST_FAIL") == stage:
+    raise SystemExit(17)
+'''
+
+
+def _full_setup_script() -> str:
+    return r'''
+function Get-Command {
+    [CmdletBinding()]
+    param(
+        [Parameter(Position = 0)]
+        [string]$Name,
+        [System.Management.Automation.CommandTypes]$CommandType
+    )
+
+    if ($Name -eq "py.exe") {
+        return $null
+    }
+    if ($Name -eq "python.exe") {
+        return [pscustomobject]@{
+            Source = $env:TEST_PYTHON
+            Path = $env:TEST_PYTHON
+        }
+    }
+}
+
+Remove-Item Env:ProgramFiles -ErrorAction SilentlyContinue
+Remove-Item Env:PUBLIC -ErrorAction SilentlyContinue
+
+''' + _setup_script()
+
+
+def _run_full_setup(
+    temporary_directory: Path,
+    *,
+    fail_stage: str | None = None,
+) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+    workspace = temporary_directory / "workspace"
+    workspace.mkdir()
+    (workspace / "requirements-dev.txt").write_text("", encoding="utf-8")
+
+    shim_root = temporary_directory / "shims"
+    for module_name in ("pip", "playwright"):
+        module_directory = shim_root / module_name
+        module_directory.mkdir(parents=True)
+        (module_directory / "__init__.py").write_text("", encoding="utf-8")
+        (module_directory / "__main__.py").write_text(
+            _installer_shim(module_name), encoding="utf-8"
+        )
+
+    candidate = sys.executable
+    if fail_stage == "venv":
+        candidate_file = temporary_directory / "python.cmd"
+        candidate_file.write_text(
+            "@echo off\n"
+            'if "%1"=="-c" exit /b 0\n'
+            'if "%1"=="-m" if "%2"=="venv" exit /b 17\n'
+            "exit /b 0\n",
+            encoding="ascii",
+        )
+        candidate = str(candidate_file)
+
+    log_path = temporary_directory / "setup.log"
+    environment = os.environ.copy()
+    environment["TEST_PYTHON"] = candidate
+    environment["SETUP_TEST_LOG"] = str(log_path)
+    environment["PYTHONPATH"] = str(shim_root)
+    if fail_stage is None:
+        environment.pop("SETUP_TEST_FAIL", None)
+    else:
+        environment["SETUP_TEST_FAIL"] = fail_stage
+
+    encoded_script = base64.b64encode(
+        _full_setup_script().encode("utf-16-le")
+    ).decode("ascii")
+    result = subprocess.run(
+        [
+            POWERSHELL,
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-EncodedCommand",
+            encoded_script,
+        ],
+        cwd=workspace,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+    log_entries = (
+        log_path.read_text(encoding="utf-8").splitlines()
+        if log_path.exists()
+        else []
+    )
+    return result, log_entries
+
+
 def test_setup_selects_existing_shared_python_candidate(tmp_path: Path) -> None:
     setup = _setup_script()
     assert "LocalAppData" not in setup
@@ -196,3 +310,41 @@ def test_setup_reuses_python312_guard_for_existing_venv() -> None:
     setup = _setup_script()
 
     assert "if (-not (Test-Python312 -Executable $venvPython))" in setup
+
+
+def test_setup_runs_the_full_success_path_without_downloads(tmp_path: Path) -> None:
+    result, log_entries = _run_full_setup(tmp_path)
+
+    assert result.returncode == 0, result.stderr
+    assert log_entries == ["requirements", "playwright-package", "chromium"]
+    assert (tmp_path / "workspace" / ".venv" / "Scripts" / "python.exe").is_file()
+
+
+@pytest.mark.parametrize(
+    ("fail_stage", "expected_error", "expected_log"),
+    [
+        ("venv", "Failed to create .venv.", []),
+        ("requirements", "Failed to install requirements-dev.txt.", ["requirements"]),
+        (
+            "playwright-package",
+            "Failed to install Playwright.",
+            ["requirements", "playwright-package"],
+        ),
+        (
+            "chromium",
+            "Failed to install Playwright Chromium.",
+            ["requirements", "playwright-package", "chromium"],
+        ),
+    ],
+)
+def test_setup_reports_installer_failures(
+    tmp_path: Path,
+    fail_stage: str,
+    expected_error: str,
+    expected_log: list[str],
+) -> None:
+    result, log_entries = _run_full_setup(tmp_path, fail_stage=fail_stage)
+
+    assert result.returncode != 0
+    assert expected_error in result.stderr
+    assert log_entries == expected_log
