@@ -150,3 +150,112 @@ def test_browser_cleanup_failure_is_recorded_without_raising() -> None:
     smoke_transactions.close_browser(FailingBrowser(), failures)
 
     assert failures == ["Browser cleanup failed (RuntimeError)"]
+
+
+def test_run_smoke_check_skips_screenshot_without_a_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class RunningProcess:
+        returncode = None
+
+        def poll(self) -> None:
+            return None
+
+        def terminate(self) -> None:
+            return None
+
+        def wait(self, timeout: int | None = None) -> None:
+            del timeout
+            return None
+
+    class FailingBrowser:
+        def new_page(self, **kwargs: object) -> None:
+            del kwargs
+            raise RuntimeError("browser disconnected")
+
+        def close(self) -> None:
+            return None
+
+    class PlaywrightContext:
+        def __enter__(self) -> object:
+            return type(
+                "Playwright",
+                (),
+                {"chromium": type("Chromium", (), {"launch": lambda self: FailingBrowser()})()},
+            )()
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+    monkeypatch.setattr(smoke_transactions, "ensure_port_available", lambda port: None)
+    monkeypatch.setattr(smoke_transactions, "ensure_fixture_theme_is_current", lambda: None)
+    monkeypatch.setattr(smoke_transactions, "wait_for_server", lambda url, process: None)
+    monkeypatch.setattr(
+        smoke_transactions.subprocess,
+        "Popen",
+        lambda *args, **kwargs: RunningProcess(),
+    )
+    monkeypatch.setattr(
+        smoke_transactions,
+        "sync_playwright",
+        lambda: PlaywrightContext(),
+    )
+
+    def unexpected_screenshot(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        pytest.fail("screenshot capture should not run without a page")
+
+    monkeypatch.setattr(
+        smoke_transactions,
+        "capture_failure_screenshot",
+        unexpected_screenshot,
+    )
+
+    failures = smoke_transactions.run_smoke_check(Path("screenshots"), 8501)
+
+    assert len(failures) == len(smoke_transactions.VIEWPORTS)
+    assert all("browser disconnected" in failure for failure in failures)
+
+
+def test_run_smoke_check_normalizes_playwright_context_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class RunningProcess:
+        returncode = None
+
+        def poll(self) -> None:
+            return None
+
+        def terminate(self) -> None:
+            return None
+
+        def wait(self, timeout: int | None = None) -> None:
+            del timeout
+            return None
+
+    class FailingPlaywrightContext:
+        def __enter__(self) -> None:
+            raise RuntimeError("driver unavailable")
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+    monkeypatch.setattr(smoke_transactions, "ensure_port_available", lambda port: None)
+    monkeypatch.setattr(smoke_transactions, "ensure_fixture_theme_is_current", lambda: None)
+    monkeypatch.setattr(smoke_transactions, "wait_for_server", lambda url, process: None)
+    monkeypatch.setattr(
+        smoke_transactions.subprocess,
+        "Popen",
+        lambda *args, **kwargs: RunningProcess(),
+    )
+    monkeypatch.setattr(
+        smoke_transactions,
+        "sync_playwright",
+        lambda: FailingPlaywrightContext(),
+    )
+
+    with pytest.raises(
+        smoke_transactions.SmokeCheckFailure,
+        match="Failed to initialize Playwright",
+    ):
+        smoke_transactions.run_smoke_check(None, 8501)
