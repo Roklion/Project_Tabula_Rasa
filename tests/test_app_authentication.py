@@ -110,6 +110,7 @@ class TestAppAuthentication:
                 assert any(
                     "No transactions yet" in str(item.value) for item in app.info
                 )
+                assert len(app.sidebar.divider) == 0
                 assert (
                     from_secrets.call_args.args[0]["spreadsheet_id"]
                     == "hosted-sheet-id"

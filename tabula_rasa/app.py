@@ -326,7 +326,6 @@ with st.sidebar:
 
     with st.container(key="sidebar_utility"):
         if profile_admin_enabled:
-            st.divider()
             settings_active = st.session_state.get("active_page") == "Account settings"
             st.button(
                 "Account settings",
