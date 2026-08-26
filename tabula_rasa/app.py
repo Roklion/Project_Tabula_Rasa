@@ -467,21 +467,23 @@ elif page == "Reports":
 
 
 elif page == "Data & backup":
+    selected_profile_secrets = profile_by_key[selected_profile_key].secrets
+    drive_settings_value = selected_profile_secrets.get("google_drive")
     render_data_backup(
         DataBackupContext(
             profile_key=selected_profile_key,
             storage=storage,
             drive_settings=(
-                profile_by_key[selected_profile_key].secrets.get("google_drive")
+                drive_settings_value
                 if isinstance(
-                    profile_by_key[selected_profile_key].secrets.get("google_drive"),
+                    drive_settings_value,
                     Mapping,
                 )
                 else None
             ),
-            synology_recovery_settings=profile_by_key[
-                selected_profile_key
-            ].secrets.get("synology_recovery"),
+            synology_recovery_settings=selected_profile_secrets.get(
+                "synology_recovery"
+            ),
             configuration_revision=revision,
             get_drive_client=get_drive_client,
             receipt_manifest_for_backup=receipt_manifest_for_backup,
