@@ -111,6 +111,15 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
         color: var(--tr-text-primary) !important;
     }}
 
+    [data-testid="stTabs"] [role="tablist"] {{
+        border-bottom: 1px solid var(--tr-border-default);
+        gap: 0.25rem;
+    }}
+
+    [data-testid="stTabs"] [role="tabpanel"] {{
+        padding-top: 0.9rem;
+    }}
+
     [data-testid="stSidebar"] {{
         background: var(--tr-surface-secondary);
         border-right: 1px solid var(--tr-border-default);
@@ -148,7 +157,6 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
         border-radius: 6px;
         padding: 6px 8px;
         position: relative;
-        transition: background 120ms ease;
     }}
 
     /* Keep the native radio in the accessibility tree and tab order while
@@ -283,6 +291,11 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
     .st-key-mileage_add_surface,
     .st-key-mileage_log_surface {{
         padding-top: 0.25rem;
+    }}
+
+    .st-key-reports_period_controls {{
+        padding: 0.2rem 0 0.65rem;
+        border-bottom: 1px solid var(--tr-border-subtle);
     }}
 
     .st-key-dashboard_activity,

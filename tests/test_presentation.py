@@ -55,6 +55,8 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
     assert '.st-key-login_surface [data-testid="stForm"]' in css
     assert '.st-key-data_backup_cloud_section' in css
     assert '.st-key-reports_statement_tables' in css
+    assert '[data-testid="stTabs"] [role="tabpanel"]' in css
+    assert '.st-key-reports_period_controls' in css
     assert '[data-testid="stTabs"] [role="tab"]:hover' in css
     assert '[aria-selected="true"]' in css
     assert "var(--tr-warning-background) !important" in css
