@@ -50,6 +50,17 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
     assert '.st-key-dashboard_total_balance' in css
     assert '.st-key-dashboard_activity' in css
     assert '.st-key-sidebar_utility' in css
+    settings_label_selector = (
+        '.st-key-account_settings_navigation\n'
+        '    [data-testid="stBaseButton-primary"] '
+        '[data-testid="stMarkdownContainer"] p'
+    )
+    assert settings_label_selector in css
+    settings_label_rule_start = css.index(settings_label_selector)
+    settings_label_rule = css[
+        settings_label_rule_start : css.index("}", settings_label_rule_start)
+    ]
+    assert "color: var(--tr-surface-primary) !important;" in settings_label_rule
     assert 'label input[type="radio"]' in css
     assert 'label:has(input:focus-visible)' in css
     assert 'label[data-testid="stRadioOption"]' in css

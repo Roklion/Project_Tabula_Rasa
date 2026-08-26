@@ -170,6 +170,13 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
         border-top: 1px solid var(--tr-border-default);
     }}
 
+    .st-key-account_settings_navigation
+    [data-testid="stBaseButton-primary"] [data-testid="stMarkdownContainer"],
+    .st-key-account_settings_navigation
+    [data-testid="stBaseButton-primary"] [data-testid="stMarkdownContainer"] p {{
+        color: var(--tr-surface-primary) !important;
+    }}
+
     [data-testid="stSidebar"] [data-testid="stMarkdownContainer"],
     [data-testid="stSidebar"] [data-testid="stWidgetLabel"] {{
         color: var(--tr-text-primary);
