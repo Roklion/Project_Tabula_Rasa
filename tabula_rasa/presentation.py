@@ -147,6 +147,23 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
     [data-testid="stSidebar"] [role="radiogroup"] label {{
         border-radius: 6px;
         padding: 6px 8px;
+        position: relative;
+        transition: background 120ms ease;
+    }}
+
+    /* Keep the native radio in the accessibility tree and tab order while
+       presenting the navigation as a compact full-row control. */
+    [data-testid="stSidebar"] [role="radiogroup"] label input[type="radio"] {{
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+        margin: 0;
+    }}
+
+    [data-testid="stSidebar"] [role="radiogroup"] label:has(input:focus-visible) {{
+        outline: 2px solid var(--tr-interactive-focus);
+        outline-offset: 1px;
     }}
 
     [data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) {{

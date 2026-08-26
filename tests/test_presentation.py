@@ -50,6 +50,8 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
     assert '.st-key-dashboard_total_balance' in css
     assert '.st-key-dashboard_activity' in css
     assert '.st-key-sidebar_utility' in css
+    assert 'label input[type="radio"]' in css
+    assert 'label:has(input:focus-visible)' in css
     assert '.st-key-login_surface [data-testid="stForm"]' in css
     assert '.st-key-data_backup_cloud_section' in css
     assert '.st-key-reports_statement_tables' in css

@@ -337,6 +337,9 @@ with st.sidebar:
             if settings_active:
                 page = "Account settings"
 
+        if st.button("Log out", width="stretch"):
+            logout()
+
     if page is None:
         st.error("No application page is available in this environment.")
         st.stop()
@@ -354,9 +357,6 @@ with st.sidebar:
                 int(st.session_state.get(table_generation, 0)) + 1
             )
     st.session_state["previous_navigation_page"] = page
-    if st.button("Log out", width="stretch"):
-        logout()
-
 if page == "Account settings":
     notice = st.session_state.pop("local_profile_admin_notice", None)
     if notice:
