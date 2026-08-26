@@ -218,8 +218,10 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
     }}
 
     /* Streamlit draws a second visual indicator beside each native radio.
-       Suppress that indicator only for the navigation options; the input
-       remains available to assistive technology and keyboard users. */
+       Suppress that indicator only for the navigation options. NOTE: The
+       `> div > div > div` selector below is fragile because it depends on
+       Streamlit's internal DOM structure and may break in future versions.
+       The input remains available to assistive technology and keyboard users. */
     [data-testid="stSidebar"] label[data-testid="stRadioOption"]
     > div > div > div:first-child:not(:has([data-testid="stMarkdownContainer"])) {{
         display: none;

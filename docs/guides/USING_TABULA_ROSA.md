@@ -23,7 +23,10 @@ summary and recent activity the strongest hierarchy; Reports and Data & backup
 separate their independent sections with the same restrained spacing. At
 narrow widths, columns stack and tables retain intentional horizontal scrolling
 when all accounting fields need to remain available. Native component and
-browser chrome differences remain possible across Streamlit versions.
+browser chrome differences remain possible across Streamlit versions. On narrow
+screens, Streamlit's native navigation drawer may remain open after a route is
+selected; it can be closed with the drawer control without affecting the active
+route or page state.
 
 ## Select a business
 
