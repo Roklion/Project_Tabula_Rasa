@@ -128,7 +128,7 @@ def render_cloud_backup(context: DataBackupContext) -> None:
                 verified_manifest = GoogleSheetsStorage.validate_backup_zip(
                     downloaded_backup
                 )
-                expected_sha256 = latest_cloud.get("appProperties", {}).get(
+                expected_sha256 = (latest_cloud.get("appProperties") or {}).get(
                     "tabulaRasaSha256",
                     "",
                 )
