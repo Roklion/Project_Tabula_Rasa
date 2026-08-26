@@ -12,6 +12,12 @@ pip install -r requirements.txt
 pip install -r requirements-dev.txt
 ```
 
+The Codex app-managed Windows worktree setup is intentionally narrower than
+the general development requirement: it requires exactly Python 3.12 so every
+Codex worktree uses the same interpreter series. If only Python 3.13 or newer
+is available, `.codex/environments/environment.toml` stops with a clear error
+instead of creating a mixed-version environment.
+
 ## Local main-branch push guard
 
 The tracked `.githooks/pre-push` hook blocks pushes that would update the
