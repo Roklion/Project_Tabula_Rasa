@@ -20,8 +20,12 @@ function Test-Python312 {
         return $false
     }
 
-    & $Executable @Arguments -c "import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 12) else 1)" 2>$null
-    return $LASTEXITCODE -eq 0
+    try {
+        & $Executable @Arguments -c "import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 12) else 1)" 1>$null 2>$null
+        return $LASTEXITCODE -eq 0
+    } catch {
+        return $false
+    }
 }
 
 if (-not (Test-Path -LiteralPath $venvPython -PathType Leaf)) {
