@@ -103,6 +103,14 @@ its parent relationships during restore.
 
 Open **Data & backup** for the selected business profile.
 
+The page order is **Cloud backup**, **Recovery status**, **Exports**, then
+**Imports**. The Exports section prepares one snapshot scoped to the selected
+profile, configuration revision, and confirmed workbook revision. If receipt
+preparation prevents a complete ZIP, transaction and mileage CSV downloads
+remain available. Manual page download filenames use `tabula-rasa`; this is a
+presentation change only and does not change the ZIP manifest, checksum, or
+restore compatibility.
+
 - **Download complete workbook backup** creates a validated ZIP for manual
   download.
 - **Upload fresh backup now** creates, validates, and uploads a ZIP to the

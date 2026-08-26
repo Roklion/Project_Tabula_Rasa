@@ -28,6 +28,8 @@ def main() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook())
     storage.ensure_defaults()
     upload_calls: list[str] = []
+    uploaded_transaction_ids: list[str] = []
+    created_transaction_ids: list[str] = []
     write_failure: dict[str, Exception | None] = {"error": None}
     original_create = GoogleSheetsStorage.create_transaction
 
@@ -37,16 +39,20 @@ def main() -> None:
     ) -> dict[str, str]:
         if write_failure["error"] is not None:
             raise write_failure["error"]
-        return original_create(storage_client, **payload)
+        transaction = original_create(storage_client, **payload)
+        created_transaction_ids.append(transaction["id"])
+        return transaction
 
     def upload_receipt(
         _client: GoogleDriveClient,
         *,
+        transaction_id: str,
         original_name: str,
         content: bytes,
         **_: object,
     ) -> dict[str, object]:
         upload_calls.append(original_name)
+        uploaded_transaction_ids.append(transaction_id)
         return {
             "id": "drive123456789",
             "name": original_name,
@@ -130,9 +136,29 @@ def main() -> None:
 
         write_failure["error"] = None
         by_label(app.button, "Save transaction").click().run()
-        assert len(storage.list_transactions()) == 2
+        transactions = {
+            transaction["id"]: transaction
+            for transaction in storage.list_transactions()
+        }
+        assert len(transactions) == 2
+        assert len(created_transaction_ids) == 2
         assert upload_calls == ["validation.pdf"]
-        assert storage.list_transactions()[0]["receipt_references"].count('"id"') == 1
+        assert len(uploaded_transaction_ids) == 1
+        uploaded_transaction_id = uploaded_transaction_ids[0]
+        assert uploaded_transaction_id in created_transaction_ids
+        assert (
+            transactions[uploaded_transaction_id]["receipt_references"].count(
+                '"id"'
+            )
+            == 1
+        )
+        assert (
+            sum(
+                transaction["receipt_references"].count('"id"')
+                for transaction in transactions.values()
+            )
+            == 1
+        )
 
 
 if __name__ == "__main__":

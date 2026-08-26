@@ -204,6 +204,14 @@ in the local profile administrator and actual task status in DSM. The hosted app
 states that no local record is available rather than presenting stale NAS
 expectations.
 
+On **Data & backup > Recovery status**, a hosted runtime or another runtime
+without a local record reports that absence explicitly and points the
+administrator to loopback-only **Account settings** and DSM. It does not infer
+NAS configuration or sync health. When a record exists, the page shows the
+canonical profile-root source, expected `Receipts` and `Ledger Backups`
+children, direction, destination-deletion policy, destination, schedule, and
+retention.
+
 Cloud Sync continues to operate directly between Google Drive and DSM even
 while the Streamlit app or the Windows development computer is turned off.
 

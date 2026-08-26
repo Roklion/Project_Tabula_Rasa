@@ -332,6 +332,14 @@ The **Data & backup** page provides:
 - a complete validated workbook backup ZIP; and
 - Google Drive cloud backup controls when configured.
 
+The page is organized as **Cloud backup**, **Recovery status**, **Exports**, and
+**Imports**. **Verify latest cloud backup** is read-only: it downloads and
+validates the selected Drive archive without reading or changing the live
+workbook. Export preparation creates a snapshot for the selected profile and
+current workbook revision; a confirmed write makes an older prepared snapshot
+ineligible for reuse. The manual page download names use `tabula-rasa` while
+the backup archive format and cloud-managed compatibility names remain stable.
+
 Transaction and mileage CSV exports remain available when Google Drive is not
 connected. The complete backup ZIP requires the selected profile's receipt
 folder so its receipt inventory cannot be mistaken for an empty folder.
@@ -341,8 +349,10 @@ name columns unchanged. Hierarchy paths are presentation labels in the app and
 do not replace those raw export values.
 
 CSV and QuickBooks imports validate all rows before writing and use batch
-appends. Follow [QuickBooks import](QUICKBOOKS_IMPORT.md) for supported formats
-and duplicate rules.
+appends. Each of the three import uploaders has separate staged state, and
+previewing—including proposed account/category creation—does not write until
+its explicit import button is selected. Follow [QuickBooks import](QUICKBOOKS_IMPORT.md)
+for supported formats and duplicate rules.
 
 Follow [Backup and recovery](../operations/BACKUP_AND_RECOVERY.md) for archive
 contents, verification, scheduling, retention, and restoration.
