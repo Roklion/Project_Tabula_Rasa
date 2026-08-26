@@ -34,6 +34,7 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
         '[data-testid="stAlert"]',
         '[data-testid="stMainBlockContainer"]',
         ".st-key-login_surface",
+        '[data-testid="InputInstructions"]',
         ":focus-visible",
     ):
         assert selector in css
@@ -128,6 +129,10 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
     assert "display: none;" in radio_rule
     assert "input[type=\"radio\"]" not in radio_rule
     assert '[data-testid="stTabs"] [role="tab"]:hover' in css
+    assert (
+        '.st-key-login_surface [data-testid="InputInstructions"] {\n'
+        '        right: 42px !important;'
+    ) in css
     assert '[aria-selected="true"]' in css
     assert "var(--tr-warning-background) !important" in css
     assert "var(--tr-warning-text) !important" in css

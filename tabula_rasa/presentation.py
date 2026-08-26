@@ -509,6 +509,12 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
             font-size: 0.9rem;
         }}
     }}
+
+    /* Streamlit overlays this hint on the input row. Keep it clear of the
+       password visibility toggle while preserving the Enter-to-submit cue. */
+    .st-key-login_surface [data-testid="InputInstructions"] {{
+        right: 42px !important;
+    }}
     </style>
     """
 
