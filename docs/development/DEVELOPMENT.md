@@ -50,6 +50,39 @@ The automated UI tests use an in-memory Google workbook and a test-only
 password hash. They do not read the live ledger, application password, Google
 service-account credential, or OAuth token.
 
+## Opt-in browser smoke check
+
+The reusable `.smoke_local` fixture starts the real Streamlit entrypoint with a
+deterministic fake profile, fake credentials, and in-memory workbook. Run the
+Transactions viewport smoke check explicitly from the repository root:
+
+```powershell
+python scripts\smoke_transactions.py
+```
+
+It uses Playwright-managed Chromium to sign in and inspect the Transactions >
+Add transaction renderer at 1440x1000, 1200x900, 900x900, and 390x844. The
+check asserts the key controls, including `Receipt (optional)`, and compares
+the document scroll width with the viewport to catch unintended page-level
+horizontal overflow. It is a developer smoke check rather than a CI gate; it
+does not create a transaction or duplicate receipt-recovery coverage. The
+selected loopback port must be unused. The runner also fails before launch if
+the fixture's checked-in theme has drifted from `.streamlit/config.toml`, so
+viewport results cannot silently use stale production styling. To keep failure
+screenshots for diagnosis, pass `--screenshots-dir`.
+
+The credential-shaped values checked into `.smoke_local/.streamlit/` are an
+explicit test-only fixture exception. They are synthetic, have no access to
+Google or deployment resources, and must never be replaced with real
+credentials or reused outside this isolated smoke fixture. The fixture
+password is intentionally public and must remain limited to this test setup.
+
+Install the browser binary once after installing `requirements-dev.txt`:
+
+```powershell
+python -m playwright install chromium
+```
+
 ## Pull requests and code review
 
 A change does not need a formal issue, but its pull request must provide enough
