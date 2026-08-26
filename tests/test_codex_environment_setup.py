@@ -131,17 +131,16 @@ def _run_discovery(
     )
 
 
-def test_setup_selects_existing_shared_python_candidate() -> None:
+def test_setup_selects_existing_shared_python_candidate(tmp_path: Path) -> None:
     setup = _setup_script()
     assert "LocalAppData" not in setup
     assert setup.index("$candidates = @()") < setup.index("Get-Command py.exe")
 
-    temporary_directory = PROJECT_ROOT
     program_files = r"C:\CodexEnvironmentTest\ProgramFiles"
     expected = os.path.join(program_files, "Python312", "python.exe")
 
     result = _run_discovery(
-        temporary_directory,
+        tmp_path,
         program_files=program_files,
         public=r"C:\CodexEnvironmentTest\Public",
         expected=expected,
@@ -151,42 +150,49 @@ def test_setup_selects_existing_shared_python_candidate() -> None:
     assert f"selected={expected}" in result.stdout
 
 
-def test_setup_skips_absent_programfiles_and_uses_public_candidate() -> None:
-    temporary_directory = PROJECT_ROOT
+def test_setup_skips_absent_programfiles_and_uses_public_candidate(
+    tmp_path: Path,
+) -> None:
     public = r"C:\CodexEnvironmentTest\Public"
     expected = os.path.join(public, "Python312", "python.exe")
 
-    result = _run_discovery(temporary_directory, public=public, expected=expected)
+    result = _run_discovery(tmp_path, public=public, expected=expected)
 
     assert result.returncode == 0, result.stderr
     assert f"selected={expected}" in result.stdout
 
 
-def test_setup_skips_absent_public_and_uses_programfiles_candidate() -> None:
-    temporary_directory = PROJECT_ROOT
+def test_setup_skips_absent_public_and_uses_programfiles_candidate(
+    tmp_path: Path,
+) -> None:
     program_files = r"C:\CodexEnvironmentTest\ProgramFiles"
     expected = os.path.join(program_files, "Python312", "python.exe")
 
     result = _run_discovery(
-        temporary_directory, program_files=program_files, expected=expected
+        tmp_path, program_files=program_files, expected=expected
     )
 
     assert result.returncode == 0, result.stderr
     assert f"selected={expected}" in result.stdout
 
 
-def test_setup_uses_py_when_both_shared_locations_are_absent() -> None:
-    temporary_directory = PROJECT_ROOT
+def test_setup_uses_py_when_both_shared_locations_are_absent(tmp_path: Path) -> None:
     py = r"C:\CodexEnvironmentTest\py.exe"
 
-    result = _run_discovery(temporary_directory, py=py, expected=py)
+    result = _run_discovery(tmp_path, py=py, expected=py)
 
     assert result.returncode == 0, result.stderr
     assert f"selected={py}" in result.stdout
 
 
-def test_setup_fails_clearly_without_python312_candidate() -> None:
-    result = _run_discovery(PROJECT_ROOT)
+def test_setup_fails_clearly_without_python312_candidate(tmp_path: Path) -> None:
+    result = _run_discovery(tmp_path)
 
     assert result.returncode != 0
     assert "A sandbox-readable Python 3.12 interpreter is required" in result.stderr
+
+
+def test_setup_reuses_python312_guard_for_existing_venv() -> None:
+    setup = _setup_script()
+
+    assert "if (-not (Test-Python312 -Executable $venvPython))" in setup

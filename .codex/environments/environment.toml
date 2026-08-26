@@ -66,8 +66,7 @@ if (-not (Test-Path -LiteralPath $venvPython -PathType Leaf)) {
     }
 }
 
-& $venvPython -c "import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 12) else 1)"
-if ($LASTEXITCODE -ne 0) {
+if (-not (Test-Python312 -Executable $venvPython)) {
     throw "The existing .venv must use Python 3.12. Remove or rename it, then run setup again."
 }
 
