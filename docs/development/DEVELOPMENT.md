@@ -71,6 +71,12 @@ the fixture's checked-in theme has drifted from `.streamlit/config.toml`, so
 viewport results cannot silently use stale production styling. To keep failure
 screenshots for diagnosis, pass `--screenshots-dir`.
 
+The credential-shaped values checked into `.smoke_local/.streamlit/` are an
+explicit test-only fixture exception. They are synthetic, have no access to
+Google or deployment resources, and must never be replaced with real
+credentials or reused outside this isolated smoke fixture. The fixture
+password is intentionally public and must remain limited to this test setup.
+
 Install the browser binary once after installing `requirements-dev.txt`:
 
 ```powershell

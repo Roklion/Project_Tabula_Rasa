@@ -5,6 +5,13 @@ and later shell/layout checks. It runs the real application against a fake
 workbook and a fake business profile, so it does not call Google Sheets or
 Google Drive and does not use the repository's real local profile data.
 
+The credential-shaped values in `.streamlit/secrets.toml` and
+`.streamlit/business_profiles.json` are an explicit test-only fixture
+exception. They are synthetic values with no access to any Google project,
+Drive account, ledger, or deployment; the documented fixture password is also
+intentionally public. Never replace these values with real credentials or
+reuse them outside this isolated fixture.
+
 From the repository root, run the explicitly invoked viewport smoke check with:
 
 ```powershell
