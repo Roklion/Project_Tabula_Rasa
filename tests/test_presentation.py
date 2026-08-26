@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import tomllib
 from unittest.mock import patch
 
@@ -61,13 +62,14 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
     assert "font-size: 0.75rem;" in workspace_label_rule
     assert "font-weight: 600;" in workspace_label_rule
     assert "letter-spacing: 0.025em;" in workspace_label_rule
-    settings_label_selector = (
-        '.st-key-account_settings_navigation\n'
-        '    [data-testid="stBaseButton-primary"] '
-        '[data-testid="stMarkdownContainer"] p'
+    settings_label_selector = re.compile(
+        r'\.st-key-account_settings_navigation\s+'
+        r'\[data-testid="stBaseButton-primary"\]\s+'
+        r'\[data-testid="stMarkdownContainer"\] p'
     )
-    assert settings_label_selector in css
-    settings_label_rule_start = css.index(settings_label_selector)
+    settings_label_match = settings_label_selector.search(css)
+    assert settings_label_match is not None
+    settings_label_rule_start = settings_label_match.start()
     settings_label_rule = css[
         settings_label_rule_start : css.index("}", settings_label_rule_start)
     ]
