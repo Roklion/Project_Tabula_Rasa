@@ -247,18 +247,20 @@ if profile_admin_enabled and (
 
 profile_by_key = {profile.key: profile for profile in profiles}
 with st.sidebar:
-    st.title("Project Tabula Rasa")
-    if profiles:
-        selected_profile_key = st.selectbox(
-            "Business",
-            list(profile_by_key),
-            key="business_profile",
-            format_func=lambda key: profile_by_key[key].name,
-        )
-        st.caption(profile_by_key[selected_profile_key].name)
-    else:
-        selected_profile_key = None
-        st.info("Add the first business profile to continue.")
+    with st.container(key="sidebar_brand"):
+        st.title("Project Tabula Rasa")
+    with st.container(key="sidebar_business_context"):
+        if profiles:
+            selected_profile_key = st.selectbox(
+                "Business",
+                list(profile_by_key),
+                key="business_profile",
+                format_func=lambda key: profile_by_key[key].name,
+            )
+            st.caption(profile_by_key[selected_profile_key].name)
+        else:
+            selected_profile_key = None
+            st.info("Add the first business profile to continue.")
 
     reset_profile_presentation_state(
         st.session_state,
@@ -300,38 +302,40 @@ with st.sidebar:
         )
     st.session_state["active_page"] = stored_page
 
-    if available_pages:
-        settings_active = st.session_state.get("active_page") == "Account settings"
-        if settings_active:
-            # Account settings is a separate utility destination. Keep the
-            # operational radio unselected so choosing the page the user came
-            # from still invokes its callback and returns to that page.
-            st.session_state["navigation_page"] = None
+    with st.container(key="sidebar_navigation"):
+        if available_pages:
+            settings_active = st.session_state.get("active_page") == "Account settings"
+            if settings_active:
+                # Account settings is a separate utility destination. Keep the
+                # operational radio unselected so choosing the page the user came
+                # from still invokes its callback and returns to that page.
+                st.session_state["navigation_page"] = None
+            else:
+                operational_page = st.session_state.get("navigation_page")
+                if operational_page not in available_pages:
+                    st.session_state["navigation_page"] = available_pages[0]
+            page = st.radio(
+                "Navigate",
+                available_pages,
+                key="navigation_page",
+                index=None if settings_active else 0,
+                on_change=_select_operational_page,
+            )
         else:
-            operational_page = st.session_state.get("navigation_page")
-            if operational_page not in available_pages:
-                st.session_state["navigation_page"] = available_pages[0]
-        page = st.radio(
-            "Navigate",
-            available_pages,
-            key="navigation_page",
-            index=None if settings_active else 0,
-            on_change=_select_operational_page,
-        )
-    else:
-        page = None
+            page = None
 
-    if profile_admin_enabled:
-        st.divider()
-        settings_active = st.session_state.get("active_page") == "Account settings"
-        st.button(
-            "Account settings",
-            key="account_settings_navigation",
-            type="primary" if settings_active else "secondary",
-            on_click=_open_account_settings,
-        )
-        if settings_active:
-            page = "Account settings"
+    with st.container(key="sidebar_utility"):
+        if profile_admin_enabled:
+            st.divider()
+            settings_active = st.session_state.get("active_page") == "Account settings"
+            st.button(
+                "Account settings",
+                key="account_settings_navigation",
+                type="primary" if settings_active else "secondary",
+                on_click=_open_account_settings,
+            )
+            if settings_active:
+                page = "Account settings"
 
     if page is None:
         st.error("No application page is available in this environment.")
@@ -350,7 +354,6 @@ with st.sidebar:
                 int(st.session_state.get(table_generation, 0)) + 1
             )
     st.session_state["previous_navigation_page"] = page
-    st.divider()
     if st.button("Log out", width="stretch"):
         logout()
 
@@ -389,7 +392,8 @@ else:
         st.stop()
 
     with st.sidebar:
-        st.caption(f"Workbook: {storage.workbook_title}")
+        with st.container(key="sidebar_workbook_context"):
+            st.caption(f"Workbook: {storage.workbook_title}")
 
 if page != "Account settings":
     notice = st.session_state.pop("write_success_notice", None)
