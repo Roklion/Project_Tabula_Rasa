@@ -122,6 +122,8 @@ def render_cloud_backup(context: DataBackupContext) -> None:
     ):
         try:
             with st.spinner("Downloading and validating latest cloud backup..."):
+                if latest_cloud is None:
+                    raise RuntimeError("No cloud backup is available to verify.")
                 downloaded_backup = backup_drive.download_file(
                     str(latest_cloud["id"])
                 )

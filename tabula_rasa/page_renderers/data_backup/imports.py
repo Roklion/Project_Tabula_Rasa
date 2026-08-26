@@ -39,9 +39,10 @@ def render_imports(context: DataBackupContext) -> None:
         )
         if plain_upload:
             try:
-                plain_incoming = pd.read_csv(plain_upload).where(
-                    lambda frame: frame.notna(), ""
-                )
+                plain_bytes = plain_upload.getvalue()
+                plain_incoming = pd.read_csv(
+                    io.BytesIO(plain_bytes), encoding="utf-8-sig"
+                ).fillna("")
                 plain_required = {"Date", "Type", "Amount", "Account", "Category"}
                 plain_missing = plain_required - set(plain_incoming.columns)
                 if plain_missing:
@@ -80,9 +81,9 @@ def render_imports(context: DataBackupContext) -> None:
             upload_name = upload.name.casefold()
             conversion_errors: list[str] = []
             if upload_name.endswith(".csv"):
-                incoming = pd.read_csv(io.BytesIO(upload_bytes)).where(
-                    lambda frame: frame.notna(), ""
-                )
+                incoming = pd.read_csv(
+                    io.BytesIO(upload_bytes), encoding="utf-8-sig"
+                ).fillna("")
             else:
                 if upload_name.endswith(".zip"):
                     with zipfile.ZipFile(io.BytesIO(upload_bytes)) as archive:
@@ -208,9 +209,10 @@ def render_imports(context: DataBackupContext) -> None:
     )
     if mileage_upload:
         try:
-            mileage_incoming = pd.read_csv(mileage_upload).where(
-                lambda frame: frame.notna(), ""
-            )
+            mileage_bytes = mileage_upload.getvalue()
+            mileage_incoming = pd.read_csv(
+                io.BytesIO(mileage_bytes), encoding="utf-8-sig"
+            ).fillna("")
             mileage_missing = missing_quickbooks_mileage_columns(
                 mileage_incoming.columns
             )

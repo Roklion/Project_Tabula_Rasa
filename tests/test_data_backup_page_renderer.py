@@ -158,6 +158,8 @@ def test_import_workflows_keep_separate_profile_keys_and_explicit_writes() -> No
     assert 'key=f"quickbooks_mileage_upload_{context.profile_key}"' in source
     assert "preview_quickbooks_transactions" in source
     assert "preview_quickbooks_mileage" in source
+    assert source.count('encoding="utf-8-sig"') == 3
+    assert source.count('.fillna("")') == 3
     assert source.count("context.confirmed_write(") == 3
     assert "Import rows" in source
     assert "Import validated rows" in source
