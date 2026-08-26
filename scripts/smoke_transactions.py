@@ -76,7 +76,6 @@ def ensure_port_available(port: int) -> None:
         raise SmokeCheckFailure("Port must be between 1 and 65535.")
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
-            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             listener.bind(("127.0.0.1", port))
     except OSError as error:
         raise SmokeCheckFailure(
@@ -95,13 +94,14 @@ def ensure_fixture_theme_is_current() -> None:
 
 def wait_for_server(url: str, process: subprocess.Popen[bytes]) -> None:
     deadline = time.monotonic() + 30
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     while time.monotonic() < deadline:
         if process.poll() is not None:
             raise SmokeCheckFailure(
                 f"Streamlit exited before becoming ready (code {process.returncode})."
             )
         try:
-            with urllib.request.urlopen(url, timeout=2):
+            with opener.open(url, timeout=2):
                 return
         except (OSError, http.client.HTTPException):
             time.sleep(0.25)
@@ -225,6 +225,14 @@ def close_page(page: Page, viewport: tuple[int, int], failures: list[str]) -> No
         )
 
 
+def close_browser(browser: Any, failures: list[str]) -> None:
+    """Keep browser cleanup errors from replacing viewport diagnostics."""
+    try:
+        browser.close()
+    except Exception as error:  # noqa: BLE001 - cleanup must not abort the run
+        failures.append(f"Browser cleanup failed ({type(error).__name__})")
+
+
 def run_smoke_check(screenshots_dir: Path | None, port: int) -> list[str]:
     ensure_port_available(port)
     ensure_fixture_theme_is_current()
@@ -257,10 +265,11 @@ def run_smoke_check(screenshots_dir: Path | None, port: int) -> list[str]:
             browser = launch_browser(playwright)
             try:
                 for viewport in VIEWPORTS:
-                    page = browser.new_page(
-                        viewport={"width": viewport[0], "height": viewport[1]}
-                    )
+                    page: Page | None = None
                     try:
+                        page = browser.new_page(
+                            viewport={"width": viewport[0], "height": viewport[1]}
+                        )
                         check_viewport(page, url, viewport)
                     except Exception as error:  # noqa: BLE001 - report every viewport
                         failure = f"{viewport[0]}x{viewport[1]}: {error}"
@@ -272,9 +281,10 @@ def run_smoke_check(screenshots_dir: Path | None, port: int) -> list[str]:
                             if screenshot_failure is not None:
                                 failures.append(screenshot_failure)
                     finally:
-                        close_page(page, viewport, failures)
+                        if page is not None:
+                            close_page(page, viewport, failures)
             finally:
-                browser.close()
+                close_browser(browser, failures)
     finally:
         process.terminate()
         try:

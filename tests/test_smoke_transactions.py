@@ -87,7 +87,15 @@ def test_wait_for_server_retries_transient_protocol_errors(
         def poll(self) -> None:
             return None
 
-    monkeypatch.setattr(smoke_transactions.urllib.request, "urlopen", fake_urlopen)
+    class FakeOpener:
+        def open(self, url: str, timeout: int) -> ReadyResponse:
+            return fake_urlopen(url, timeout)
+
+    monkeypatch.setattr(
+        smoke_transactions.urllib.request,
+        "build_opener",
+        lambda handler: FakeOpener(),
+    )
     monkeypatch.setattr(smoke_transactions.time, "sleep", lambda seconds: None)
 
     smoke_transactions.wait_for_server(
@@ -131,3 +139,14 @@ def test_page_cleanup_failure_is_recorded_without_raising() -> None:
     smoke_transactions.close_page(FailingPage(), (390, 844), failures)  # type: ignore[arg-type]
 
     assert failures == ["390x844: page cleanup failed (RuntimeError)"]
+
+
+def test_browser_cleanup_failure_is_recorded_without_raising() -> None:
+    class FailingBrowser:
+        def close(self) -> None:
+            raise RuntimeError("browser disconnected")
+
+    failures: list[str] = []
+    smoke_transactions.close_browser(FailingBrowser(), failures)
+
+    assert failures == ["Browser cleanup failed (RuntimeError)"]
