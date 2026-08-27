@@ -174,6 +174,20 @@ def assert_no_page_overflow(page: Page) -> None:
         raise SmokeCheckFailure(f"Unexpected page-level horizontal overflow: {details}")
 
 
+def open_sidebar_for_narrow_view(page: Page, width: int) -> None:
+    if width > 600:
+        return
+
+    sidebar_menu = page.get_by_role("button", name="Main menu", exact=True)
+    try:
+        sidebar_menu.wait_for(state="visible", timeout=10000)
+    except PlaywrightTimeoutError as error:
+        raise SmokeCheckFailure(
+            "Expected the collapsed-sidebar Main menu at narrow width."
+        ) from error
+    sidebar_menu.click()
+
+
 def check_viewport(page: Page, url: str, viewport: tuple[int, int]) -> None:
     width, height = viewport
     page.set_viewport_size({"width": width, "height": height})
@@ -185,6 +199,8 @@ def check_viewport(page: Page, url: str, viewport: tuple[int, int]) -> None:
         "heading", name="Your books at a glance", exact=True
     ).wait_for(state="visible")
 
+    open_sidebar_for_narrow_view(page, width)
+
     dashboard_route = page.get_by_role("radio", name="Dashboard", exact=True)
     try:
         dashboard_route.wait_for(state="visible", timeout=10000)
@@ -194,16 +210,6 @@ def check_viewport(page: Page, url: str, viewport: tuple[int, int]) -> None:
         raise SmokeCheckFailure(
             "Dashboard content is visible but the Dashboard route is not selected."
         )
-
-    if width <= 600:
-        sidebar_menu = page.get_by_role("button", name="Main menu", exact=True)
-        try:
-            sidebar_menu.wait_for(state="visible", timeout=10000)
-        except PlaywrightTimeoutError as error:
-            raise SmokeCheckFailure(
-                "Expected the collapsed-sidebar Main menu at narrow width."
-            ) from error
-        sidebar_menu.click()
 
     transactions_route = page.get_by_role("radio", name="Transactions", exact=True)
     try:
