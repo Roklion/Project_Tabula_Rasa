@@ -361,6 +361,7 @@ def render_ledger(
                         st.caption(
                             f"Review: change category for {len(selected_ids)} {common_kind.lower()} transaction(s)."
                         )
+                        category_error = st.empty()
                         category_requested = st.form_submit_button(
                             "Change category",
                             type="primary",
@@ -380,6 +381,7 @@ def render_ledger(
                                 category_id=target_category_id,
                             ),
                             lambda result: f"Category updated for {result['count']} transactions.",
+                            report_error=category_error.error,
                         )
 
             total_amount = sum(abs(float(item["amount"])) for item in expected_selected)
@@ -425,6 +427,7 @@ def render_ledger(
                             "linked Drive files were retained."
                         ),
                         on_success=clear_recovery,
+                        report_error=delete_error.error,
                     )
         else:
             st.info("Select one or more visible transactions to use Bulk actions.")
@@ -592,6 +595,7 @@ def render_ledger(
                                 description=edited_description,
                             ),
                             "Transaction updated.",
+                            report_error=edit_error.error,
                         )
                 if delete_requested:
                     if not confirm_delete:
@@ -609,6 +613,7 @@ def render_ledger(
                                 context,
                                 edit_id,
                             ),
+                            report_error=edit_error.error,
                         )
             render_receipts(
                 context,

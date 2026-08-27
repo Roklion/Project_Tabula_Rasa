@@ -70,6 +70,8 @@ def render_cloud_backup(context: DataBackupContext) -> None:
         "Verification downloads the latest backup into the app only to "
         "check its integrity. It does not restore or change the live workbook."
     )
+    upload_error = st.empty()
+    verify_error = st.empty()
     upload_column, verify_column = st.columns(2)
     if upload_column.button(
         "Upload fresh backup now",
@@ -106,9 +108,9 @@ def render_cloud_backup(context: DataBackupContext) -> None:
             RuntimeError,
         ) as error:
             if isinstance(error, StorageError):
-                context.report_storage_error(error)
+                upload_error.error(str(error))
             else:
-                st.error(str(error))
+                upload_error.error(str(error))
         else:
             st.success(
                 "Verified backup uploaded to Google Drive: "
@@ -143,7 +145,7 @@ def render_cloud_backup(context: DataBackupContext) -> None:
                         "The downloaded cloud backup hash does not match."
                     )
         except (GoogleDriveError, RuntimeError, KeyError) as error:
-            st.error(str(error))
+            verify_error.error(str(error))
         else:
             st.success(
                 "Latest cloud backup downloaded and verified: "

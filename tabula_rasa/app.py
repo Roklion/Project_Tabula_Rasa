@@ -185,6 +185,7 @@ def confirmed_write(
     *,
     on_success=None,
     on_confirmed=None,
+    report_error=None,
 ) -> None:
     profile_action = f"{st.session_state.get('business_profile', 'default')}:{action}"
     if is_recent_duplicate(st.session_state, profile_action, payload):
@@ -193,7 +194,7 @@ def confirmed_write(
     try:
         result = operation()
     except StorageError as error:
-        report_storage_error(error)
+        (report_error or report_storage_error)(error)
         return
     mark_completed(st.session_state, profile_action, payload)
     if on_confirmed is not None:

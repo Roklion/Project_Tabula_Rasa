@@ -389,6 +389,7 @@ def render_receipt_creation_recovery(context: TransactionsContext) -> bool:
     if workflow.get("configuration_error"):
         st.error(str(workflow["configuration_error"]))
     _render_receipt_workflow_status(workflow)
+    retry_error = st.empty()
     if not _workflow_complete(workflow) and st.button(
         "Retry unresolved receipts",
         type="primary",
@@ -396,7 +397,7 @@ def render_receipt_creation_recovery(context: TransactionsContext) -> bool:
     ):
         receipt_folder = _receipt_folder(context)
         if receipt_folder is None:
-            st.error(
+            retry_error.error(
                 "Connect Google Drive and configure the profile's receipt "
                 "folder before retrying."
             )
@@ -518,6 +519,7 @@ def render_receipts(
                             "Retry linking the existing file before uploading another copy. "
                             f"{link_recovery.get('error', '')}"
                         )
+                    link_retry_error = st.empty()
                     if recovery_configuration_matches and st.button(
                         "Retry linking uploaded receipt",
                         type="primary",
@@ -532,7 +534,7 @@ def render_receipts(
                                 reference=recovery_reference,
                             )
                         except StorageError as error:
-                            st.error(
+                            link_retry_error.error(
                                 "The existing receipt could not be linked. "
                                 f"{error}"
                             )
@@ -636,6 +638,7 @@ def render_receipts(
                             f"Remove `{name}` from this transaction? "
                             "The file will remain in Google Drive."
                         )
+                        unlink_error = st.empty()
                         cancel_column, confirm_column = st.columns(2)
                         if cancel_column.button(
                             "Cancel",
@@ -665,7 +668,7 @@ def render_receipts(
                                     file_id=receipt_id,
                                 )
                             except StorageError as error:
-                                st.error(
+                                unlink_error.error(
                                     "Receipt reference was not "
                                     "removed. "
                                     f"{error}"
@@ -793,6 +796,7 @@ def render_receipts(
                                 "not linked to another transaction."
                             ),
                         )
+                        link_error = st.empty()
                         if st.button(
                             "Link selected receipt",
                             key=(
@@ -811,7 +815,7 @@ def render_receipts(
                                     reference=existing_receipt,
                                 )
                             except StorageError as error:
-                                st.error(
+                                link_error.error(
                                     "The receipt could not be "
                                     f"linked. {error}"
                                 )
@@ -848,6 +852,7 @@ def render_receipts(
                         "that name already exists, a numeric "
                         "suffix will be added."
                     )
+                    upload_error = st.empty()
                     if st.button(
                         "Upload receipt to Google Drive",
                         type="primary",
@@ -874,7 +879,7 @@ def render_receipts(
                                 )
                             )
                         except GoogleDriveError as error:
-                            st.error(str(error))
+                            upload_error.error(str(error))
                         else:
                             uploaded_reference: Mapping[str, Any] | None = None
                             try:
@@ -907,7 +912,7 @@ def render_receipts(
                                         ),
                                     }
                                     st.rerun()
-                                st.error(
+                                upload_error.error(
                                     "The receipt was uploaded to Google Drive "
                                     "but its integrity metadata could not be "
                                     "linked. Use the Unreferenced receipt "

@@ -422,6 +422,7 @@ def _render_synology_recovery_admin(
                 "administrator may manually remove old NAS generations."
             ),
         )
+        save_error = st.empty()
         save = st.form_submit_button("Save Synology recovery choice")
 
     st.caption(
@@ -454,7 +455,7 @@ def _render_synology_recovery_admin(
             path=store_path,
         )
     except LocalProfileStoreError as error:
-        st.error(str(error))
+        save_error.error(str(error))
         return
 
     st.cache_resource.clear()
@@ -515,6 +516,7 @@ def _render_local_profile_edits(
                     accept_multiple_files=False,
                     key=f"local_profile_edit_credential_{profile_key}",
                 )
+                edit_error = st.empty()
                 save_settings = st.form_submit_button(
                     "Validate and save settings",
                     key=f"local_profile_edit_save_{profile_key}",
@@ -565,10 +567,10 @@ def _render_local_profile_edits(
                     path=store_path,
                 )
             except LocalProfileStoreError as error:
-                st.error(str(error))
+                edit_error.error(str(error))
                 continue
             except StorageError as error:
-                st.error(_profile_setup_error_message(error, settings))
+                edit_error.error(_profile_setup_error_message(error, settings))
                 continue
 
             st.cache_resource.clear()
@@ -644,6 +646,7 @@ def _render_add_profile_form(
                 accept_multiple_files=False,
                 key="local_profile_credential",
             )
+            save_error = st.empty()
             submitted = st.form_submit_button("Validate and save", type="primary")
 
         if not submitted:
@@ -685,10 +688,10 @@ def _render_add_profile_form(
                 path=store_path,
             )
         except LocalProfileStoreError as error:
-            st.error(str(error))
+            save_error.error(str(error))
             return
         except StorageError as error:
-            st.error(_profile_setup_error_message(error, settings))
+            save_error.error(_profile_setup_error_message(error, settings))
             return
 
         st.cache_resource.clear()
@@ -723,13 +726,14 @@ def render_local_profile_admin(
                 type="password",
                 autocomplete="current-password",
             )
+            unlock_error = st.empty()
             unlock = st.form_submit_button("Unlock profile administration")
         if unlock:
             encoded_hash = base_secrets.get("app_password_hash")
             if encoded_hash and verify_password(password, str(encoded_hash)):
                 st.session_state["local_profile_admin_unlocked"] = True
                 st.rerun()
-            st.error("Incorrect password.")
+            unlock_error.error("Incorrect password.")
         return
 
     try:

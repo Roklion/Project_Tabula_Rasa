@@ -43,6 +43,7 @@ def render_exports(context: DataBackupContext) -> None:
         if isinstance(prepared_exports, Mapping)
         else "Prepare downloadable exports"
     )
+    prepare_error = st.empty()
     if st.button(prepare_label, type="primary", width="stretch"):
         with st.spinner("Preparing exports and validating workbook backup..."):
             try:
@@ -58,7 +59,7 @@ def render_exports(context: DataBackupContext) -> None:
                 )
                 all_mileage = mileage_frame(mileage_trips)
             except StorageError as error:
-                context.report_storage_error(error)
+                prepare_error.error(str(error))
             else:
                 prepared_exports = {
                     "backup_time": datetime.now(timezone.utc).isoformat(),

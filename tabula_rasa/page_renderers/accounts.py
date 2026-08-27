@@ -221,6 +221,7 @@ def render_accounts(context: AccountsContext) -> None:
                 ),
                 format_func=lambda value: hierarchy_option_label(value, account_paths),
             )
+            add_error = st.empty()
             if st.button("Add account", type="primary"):
                 payload = {
                     "name": name,
@@ -243,6 +244,7 @@ def render_accounts(context: AccountsContext) -> None:
                     on_success=lambda: context.schedule_widget_reset(
                         "reset_add_account_form"
                     ),
+                    report_error=add_error.error,
                 )
 
     if accounts:
@@ -334,6 +336,7 @@ def render_accounts(context: AccountsContext) -> None:
                         "This Layer 1 account has children. Promote or reparent "
                         "those children before moving this account under a parent."
                     )
+                save_error = st.empty()
                 if st.button(
                     "Save account changes",
                     type="primary",
@@ -361,6 +364,7 @@ def render_accounts(context: AccountsContext) -> None:
                             parent_id=edited_parent_id,
                         ),
                         "Account updated.",
+                        report_error=save_error.error,
                     )
             st.caption(
                 "Accounts are deactivated rather than deleted so transaction "

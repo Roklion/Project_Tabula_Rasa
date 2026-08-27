@@ -214,4 +214,5 @@ def render_add_transaction(
                                 if prepared_receipts
                                 else None
                             ),
+                            report_error=save_error.error,
                         )

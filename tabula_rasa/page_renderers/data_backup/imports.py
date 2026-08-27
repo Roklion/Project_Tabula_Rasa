@@ -49,6 +49,7 @@ def render_imports(context: DataBackupContext) -> None:
                     st.error(f"Missing columns: {', '.join(sorted(plain_missing))}")
                 else:
                     st.dataframe(plain_incoming.head(20), hide_index=True, width="stretch")
+                    import_error = st.empty()
                     if st.button("Import rows", type="primary"):
                         plain_records = plain_incoming.to_dict(orient="records")
                         with st.spinner("Importing Tabula Rasa transactions..."):
@@ -59,6 +60,7 @@ def render_imports(context: DataBackupContext) -> None:
                                     plain_records
                                 ),
                                 lambda imported: f"Imported {len(imported)} transactions.",
+                                report_error=import_error.error,
                             )
             except StorageValidationError as error:
                 context.report_storage_error(error)
@@ -168,6 +170,7 @@ def render_imports(context: DataBackupContext) -> None:
                         + ", ".join(map(str, preview["duplicate_rows"]))
                     )
                 st.dataframe(incoming.head(50), hide_index=True, width="stretch")
+                import_error = st.empty()
                 if st.button(
                     "Import validated rows",
                     type="primary",
@@ -183,6 +186,7 @@ def render_imports(context: DataBackupContext) -> None:
                                 auto_create=auto_create,
                             ),
                             lambda imported: f"Imported {len(imported)} transactions.",
+                            report_error=import_error.error,
                         )
         except StorageValidationError as error:
             context.report_storage_error(error)
@@ -265,6 +269,7 @@ def render_imports(context: DataBackupContext) -> None:
                     hide_index=True,
                     width="stretch",
                 )
+                import_error = st.empty()
                 if st.button(
                     "Import validated mileage",
                     type="primary",
@@ -279,6 +284,7 @@ def render_imports(context: DataBackupContext) -> None:
                                 mileage_records
                             ),
                             lambda imported: f"Imported {len(imported)} mileage trips.",
+                            report_error=import_error.error,
                         )
         except StorageValidationError as error:
             context.report_storage_error(error)
