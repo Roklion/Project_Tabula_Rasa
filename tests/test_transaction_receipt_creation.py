@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 import streamlit as st
@@ -272,6 +272,55 @@ def test_receipt_recovery_uses_selected_profile_clients() -> None:
     assert session_state[receipt_creation_workflow_key("south")]["transaction_id"] == (
         "south-txn"
     )
+
+
+def test_confirmed_receipt_link_invalidates_prepared_export_revision() -> None:
+    revision_changes = Mock()
+    linked: list[str] = []
+
+    class DriveClient:
+        def upload_receipt(self, **_kwargs: object) -> Mapping[str, object]:
+            return _drive_file("a", "receipt.pdf")
+
+    class StorageClient:
+        def link_transaction_receipt(
+            self,
+            transaction_id: str,
+            *,
+            reference: Mapping[str, object],
+        ) -> None:
+            linked.append(f"{transaction_id}:{reference['id']}")
+
+    context = SimpleNamespace(
+        profile_key="north",
+        storage=StorageClient(),
+        profile_secrets={
+            "spreadsheet_id": "north-sheet",
+            "google_drive": {"receipt_folder": {"id": "north-folder"}},
+        },
+        configuration_revision="revision",
+        get_drive_client=lambda *_args: DriveClient(),
+        schedule_widget_reset=lambda _flag: None,
+        mark_workbook_data_changed=revision_changes,
+    )
+    receipt = {
+        "key": "receipt",
+        "original_name": "receipt.pdf",
+        "content": b"receipt",
+        "mime_type": "application/pdf",
+        "receipt_id": "a" * 32,
+        "linked": False,
+    }
+
+    with patch.object(st, "session_state", {}):
+        handle_confirmed_transaction_receipts(
+            context,
+            {"id": "north-txn"},
+            [receipt],
+        )
+
+    assert linked == ["north-txn:drive-a123456"]
+    revision_changes.assert_called_once_with()
 
 
 def test_deleted_transaction_clears_only_matching_recovery() -> None:

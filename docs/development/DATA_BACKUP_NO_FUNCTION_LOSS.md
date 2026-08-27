@@ -51,14 +51,17 @@ checklist for the extraction and regrouping.
   attempts a fresh receipt-complete validated workbook ZIP.
 - Prepared artifacts are stored under a key containing selected profile,
   profile/configuration revision, and confirmed `workbook_data_revision`.
+- Confirmed transaction and receipt-reference writes advance
+  `workbook_data_revision`, so a prepared export cannot be presented as current
+  after the live ledger changes.
 - Complete-backup failure is reported while transaction and mileage CSV
   downloads remain available.
 - Existing prepared snapshots are surfaced only under their current key and
   include their preparation timestamp.
 - Download controls remain available for transactions CSV, mileage CSV, and a
-  complete workbook ZIP when present. Page-specific `Tabula Rosa` filenames are
-  to be corrected to `Tabula Rasa`; CSV schemas and backup compatibility remain
-  unchanged.
+  complete workbook ZIP when present. Page-specific download filenames use
+  `tabula-rasa`; CSV schemas and the historical cloud-backup filename contract
+  remain unchanged.
 
 ## Imports
 

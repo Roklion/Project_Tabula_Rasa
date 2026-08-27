@@ -318,7 +318,7 @@ def render_ledger(
             st.download_button(
                 "Export selected",
                 selected_frame.to_csv(index=False).encode("utf-8"),
-                file_name=f"tabula-rosa-selected-{date.today()}.csv",
+                file_name=f"tabula-rasa-selected-{date.today()}.csv",
                 mime="text/csv",
                 width="stretch",
                 key=(

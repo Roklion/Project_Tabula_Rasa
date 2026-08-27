@@ -200,7 +200,7 @@ def render_mileage(context: MileageContext) -> None:
         st.download_button(
             "Download filtered mileage CSV",
             trip_frame.to_csv(index=False).encode("utf-8"),
-            f"tabula-rosa-mileage-{start}-to-{end}.csv",
+            f"tabula-rasa-mileage-{start}-to-{end}.csv",
             "text/csv",
         )
 

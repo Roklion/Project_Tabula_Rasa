@@ -21,3 +21,4 @@ class TransactionsContext:
     report_storage_error: Callable[[StorageError], None]
     reset_widget_state_if_requested: Callable[..., None]
     schedule_widget_reset: Callable[[str], None]
+    mark_workbook_data_changed: Callable[[], None] | None = None
