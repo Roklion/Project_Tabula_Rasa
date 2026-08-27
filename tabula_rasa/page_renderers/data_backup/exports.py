@@ -46,6 +46,7 @@ def render_exports(context: DataBackupContext) -> None:
     prepare_error = st.empty()
     if st.button(prepare_label, type="primary", width="stretch"):
         with st.spinner("Preparing exports and validating workbook backup..."):
+            backup_error = None
             try:
                 receipt_manifest = context.receipt_manifest_for_backup(
                     context.storage,
@@ -75,6 +76,7 @@ def render_exports(context: DataBackupContext) -> None:
                 all_mileage = mileage_frame(mileage_trips)
             except StorageError as error:
                 prepare_error.error(str(error))
+                prepared_exports = None
             else:
                 prepared_exports = {
                     "backup_time": datetime.now(timezone.utc).isoformat(),
