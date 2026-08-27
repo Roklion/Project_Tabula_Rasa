@@ -66,9 +66,6 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
         color: var(--tr-text-primary);
     }}
 
-    /* Keep the working area calm and bounded without introducing a second
-       layout system. Streamlit owns the block container; this only tunes its
-       breathing room at the supported desktop and narrow widths. */
     [data-testid="stMainBlockContainer"] {{
         max-width: 1440px;
         padding-top: 1.75rem;
