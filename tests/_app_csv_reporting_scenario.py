@@ -130,6 +130,19 @@ def main() -> None:
             item.value for item in app.success
         }
 
+        by_label(app.date_input, "From").set_value(date(2026, 8, 1))
+        by_label(app.date_input, "To").set_value(date(2026, 7, 1)).run()
+        assert any(
+            "From date must be on or before To date" in message
+            for message in error_values(app)
+        )
+        invalid_period_metrics = {
+            metric.label: metric.value for metric in app.metric
+        }
+        assert invalid_period_metrics["Income"] == "$0.00"
+        assert invalid_period_metrics["Expenses"] == "$0.00"
+        assert invalid_period_metrics["Net"] == "$0.00"
+
         app.radio[0].set_value("Dashboard").run()
         dashboard_metrics = {metric.label: metric.value for metric in app.metric}
         assert dashboard_metrics["Income this month"] == "$100.00"

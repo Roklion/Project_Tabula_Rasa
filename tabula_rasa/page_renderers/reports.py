@@ -178,6 +178,11 @@ def render_reports(context: ReportsContext) -> None:
             "From", date(date.today().year, 1, 1), key="report_start"
         )
         end = c2.date_input("To", date.today(), key="report_end")
+    if start > end:
+        st.error(
+            "From date must be on or before To date. "
+            "No transactions are included for this period."
+        )
     try:
         context.storage.prefetch_worksheets(
             "Accounts",
