@@ -33,10 +33,10 @@ def mileage_frame(trips: list[dict]) -> pd.DataFrame:
                 "ID": trip["id"],
                 "Date": trip["trip_date"],
                 "Miles": float(trip["miles"]),
-                "Vehicle": trip.get("vehicle", ""),
                 "From": trip.get("start_location", ""),
                 "Destination": trip.get("destination", ""),
                 "Business purpose": trip.get("business_purpose", ""),
+                "Vehicle": trip.get("vehicle", ""),
                 "Notes": trip.get("notes", ""),
             }
             for trip in trips
@@ -45,10 +45,10 @@ def mileage_frame(trips: list[dict]) -> pd.DataFrame:
             "ID",
             "Date",
             "Miles",
-            "Vehicle",
             "From",
             "Destination",
             "Business purpose",
+            "Vehicle",
             "Notes",
         ],
     )

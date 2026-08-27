@@ -321,10 +321,10 @@ def main() -> None:
             "ID",
             "Date",
             "Miles",
-            "Vehicle",
             "From",
             "Destination",
             "Business purpose",
+            "Vehicle",
             "Notes",
         ]
         assert {metric.label for metric in app.metric} == {

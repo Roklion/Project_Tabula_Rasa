@@ -1143,10 +1143,10 @@ Mileage table:
 1. ID
 2. Date
 3. Miles
-4. Vehicle
-5. From
-6. Destination
-7. Business purpose
+4. From
+5. Destination
+6. Business purpose
+7. Vehicle
 8. Notes
 
 Accounts table:
