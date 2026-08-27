@@ -96,7 +96,7 @@ class TestAppAuthentication:
                 assert len(app.exception) == 0
                 assert app.session_state["active_page"] == "Dashboard"
                 assert app.session_state["navigation_page"] == "Dashboard"
-                assert app.radio[0].label == "Navigate"
+                assert app.radio[0].label == "Workspace"
                 assert "Business profiles" not in app.radio[0].options
                 assert any(
                     item.value == "Project Tabula Rasa" for item in app.title
