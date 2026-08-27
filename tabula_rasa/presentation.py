@@ -96,6 +96,13 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
         color: var(--tr-text-primary) !important;
     }}
 
+    /* Keep the optional Round trip label before its checkbox. */
+    .st-key-add_mileage_round_trip[data-testid="stCheckbox"] label,
+    .st-key-add_mileage_round_trip [data-testid="stCheckbox"] label {{
+        flex-direction: row-reverse;
+        justify-content: flex-end;
+    }}
+
     [data-testid="stTabs"] [role="tab"] {{
         color: var(--tr-text-secondary) !important;
     }}

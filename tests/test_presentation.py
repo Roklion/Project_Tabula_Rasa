@@ -34,6 +34,7 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
         '[data-testid="stAlert"]',
         '[data-testid="stMainBlockContainer"]',
         ".st-key-login_surface",
+        ".st-key-add_mileage_round_trip",
         '[data-testid="InputInstructions"]',
         ":focus-visible",
     ):
@@ -46,6 +47,10 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
     assert '[data-testid="stAlertContentWarning"]' in css
     assert '[data-testid="stFormSubmitButton"]:has(' in css
     assert '[data-testid="stWidgetLabel"] p' in css
+    assert (
+        '.st-key-add_mileage_round_trip[data-testid="stCheckbox"] label' in css
+    )
+    assert "flex-direction: row-reverse" in css
     assert '[data-testid="stTabs"] [role="tab"]' in css
     assert '[data-testid="stMainBlockContainer"]' in css
     assert '.st-key-dashboard_total_balance' in css
