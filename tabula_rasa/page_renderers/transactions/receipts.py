@@ -834,6 +834,7 @@ def render_receipts(
                                     f"linked. {error}"
                                 )
                             else:
+                                _mark_workbook_data_changed(context)
                                 if isinstance(recovery_reference, Mapping):
                                     st.session_state.pop(
                                         receipt_link_recovery_key,
