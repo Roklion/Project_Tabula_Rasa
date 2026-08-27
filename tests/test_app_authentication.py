@@ -131,6 +131,8 @@ class TestAppAuthentication:
                 app.text_input[0].input(TEST_PASSWORD)
                 app.button[0].click().run()
                 assert len(app.exception) == 0
+                assert app.session_state["active_page"] == "Dashboard"
+                assert app.session_state["navigation_page"] == "Dashboard"
                 assert app.radio[0].label == "Workspace"
                 assert "Business profiles" not in app.radio[0].options
                 assert any(

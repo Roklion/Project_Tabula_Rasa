@@ -33,10 +33,10 @@ def mileage_frame(trips: list[dict]) -> pd.DataFrame:
                 "ID": trip["id"],
                 "Date": trip["trip_date"],
                 "Miles": float(trip["miles"]),
-                "Vehicle": trip.get("vehicle", ""),
                 "From": trip.get("start_location", ""),
                 "Destination": trip.get("destination", ""),
                 "Business purpose": trip.get("business_purpose", ""),
+                "Vehicle": trip.get("vehicle", ""),
                 "Notes": trip.get("notes", ""),
             }
             for trip in trips
@@ -45,10 +45,10 @@ def mileage_frame(trips: list[dict]) -> pd.DataFrame:
             "ID",
             "Date",
             "Miles",
-            "Vehicle",
             "From",
             "Destination",
             "Business purpose",
+            "Vehicle",
             "Notes",
         ],
     )
@@ -125,6 +125,7 @@ def render_mileage(context: MileageContext) -> None:
                 "Notes (optional)",
                 key="add_mileage_notes",
             )
+            save_error = st.empty()
             submitted = st.form_submit_button(
                 "Save mileage trip", type="primary", width="stretch"
             )
@@ -173,6 +174,7 @@ def render_mileage(context: MileageContext) -> None:
                     on_success=lambda: context.schedule_widget_reset(
                         "reset_add_mileage_form"
                     ),
+                    report_error=save_error.error,
                 )
 
     with tab_log:
@@ -300,6 +302,7 @@ def render_mileage(context: MileageContext) -> None:
                         "I understand this mileage trip will be permanently deleted",
                         key=f"edit_mileage_trip_confirm_delete_{edit_widget_scope}",
                     )
+                    edit_error = st.empty()
                     save_column, delete_column = st.columns(2, gap="small")
                     save_requested = save_column.form_submit_button(
                         "Save mileage changes",
@@ -338,10 +341,11 @@ def render_mileage(context: MileageContext) -> None:
                                 notes=edited_notes,
                             ),
                             "Mileage trip updated.",
+                            report_error=edit_error.error,
                         )
                     if delete_requested:
                         if not confirm_delete:
-                            st.error(
+                            edit_error.error(
                                 "Confirm that you understand deletion is permanent."
                             )
                         else:
@@ -350,4 +354,5 @@ def render_mileage(context: MileageContext) -> None:
                                 {"id": edit_id},
                                 lambda: context.storage.delete_mileage_trip(edit_id),
                                 "Mileage trip deleted.",
+                                report_error=edit_error.error,
                             )

@@ -156,6 +156,7 @@ def render_categories(context: CategoriesContext) -> None:
                 key=f"new_category_parent_{context.profile_key}_{kind}",
                 format_func=lambda value: hierarchy_option_label(value, category_paths),
             )
+            add_error = st.empty()
             if st.button("Add category", type="primary"):
                 payload = {"name": name, "kind": kind, "parent_id": parent_id}
                 context.confirmed_write(
@@ -168,6 +169,7 @@ def render_categories(context: CategoriesContext) -> None:
                     on_success=lambda: context.schedule_widget_reset(
                         "reset_add_category_form"
                     ),
+                    report_error=add_error.error,
                 )
     if categories:
         selected_rows = category_event.selection.rows
@@ -230,6 +232,7 @@ def render_categories(context: CategoriesContext) -> None:
                         "This Layer 1 category has children. Promote or reparent "
                         "those children before moving this category under a parent."
                     )
+                save_error = st.empty()
                 if st.button(
                     "Save category changes",
                     type="primary",
@@ -251,6 +254,7 @@ def render_categories(context: CategoriesContext) -> None:
                             parent_id=edited_parent_id,
                         ),
                         "Category updated.",
+                        report_error=save_error.error,
                     )
                 st.warning(
                     "Permanent deletion removes this category record only. "
@@ -260,13 +264,14 @@ def render_categories(context: CategoriesContext) -> None:
                     "I understand this category will be permanently deleted",
                     key=f"confirm_delete_category_{category_id}",
                 )
+                delete_error = st.empty()
                 if st.button(
                     "Permanently delete category",
                     icon=":material/delete_forever:",
                     key=f"delete_category_{category_id}",
                 ):
                     if not confirm_delete:
-                        st.error(
+                        delete_error.error(
                             "Confirm that you understand deletion is permanent. "
                             "No data changed."
                         )
@@ -276,4 +281,5 @@ def render_categories(context: CategoriesContext) -> None:
                             {"id": category_id},
                             lambda: context.storage.delete_category(category_id),
                             "Category deleted.",
+                            report_error=delete_error.error,
                         )

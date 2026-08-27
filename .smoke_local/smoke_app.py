@@ -27,6 +27,6 @@ def fake_from_secrets(cls, secrets):
 
 
 GoogleSheetsStorage.from_secrets = classmethod(fake_from_secrets)
-st.session_state.setdefault("active_page", "Transactions")
-st.session_state.setdefault("navigation_page", "Transactions")
+st.session_state.setdefault("active_page", "Dashboard")
+st.session_state.setdefault("navigation_page", "Dashboard")
 runpy.run_path(str(REPOSITORY / "tabula_rasa" / "app.py"), run_name="__main__")

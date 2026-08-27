@@ -11,6 +11,51 @@ import pytest
 from scripts import smoke_transactions
 
 
+@pytest.mark.parametrize("width, should_open", [(600, True), (601, False)])
+def test_open_sidebar_for_narrow_view_handles_drawer_before_route_checks(
+    width: int, should_open: bool
+) -> None:
+    events: list[str] = []
+
+    class FakeLocator:
+        def wait_for(self, **kwargs: object) -> None:
+            events.append(f"wait:{kwargs['state']}")
+
+        def click(self) -> None:
+            events.append("click")
+
+    class FakePage:
+        def get_by_role(self, role: str, **kwargs: object) -> FakeLocator:
+            events.append(f"locate:{role}:{kwargs['name']}")
+            return FakeLocator()
+
+    smoke_transactions.open_sidebar_for_narrow_view(FakePage(), width)  # type: ignore[arg-type]
+
+    assert events == (
+        ["locate:button:Main menu", "wait:visible", "click"]
+        if should_open
+        else []
+    )
+
+
+def test_open_sidebar_for_narrow_view_reports_missing_drawer() -> None:
+    class TimeoutLocator:
+        def wait_for(self, **kwargs: object) -> None:
+            del kwargs
+            raise smoke_transactions.PlaywrightTimeoutError("drawer did not open")
+
+    class TimeoutPage:
+        def get_by_role(self, role: str, **kwargs: object) -> TimeoutLocator:
+            del role, kwargs
+            return TimeoutLocator()
+
+    with pytest.raises(
+        smoke_transactions.SmokeCheckFailure,
+        match="collapsed-sidebar Main menu",
+    ):
+        smoke_transactions.open_sidebar_for_narrow_view(TimeoutPage(), 390)  # type: ignore[arg-type]
+
+
 def test_overflow_check_uses_scrollbar_independent_viewport_width() -> None:
     class RecordingPage:
         script = ""

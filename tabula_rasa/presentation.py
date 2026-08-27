@@ -66,9 +66,6 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
         color: var(--tr-text-primary);
     }}
 
-    /* Keep the working area calm and bounded without introducing a second
-       layout system. Streamlit owns the block container; this only tunes its
-       breathing room at the supported desktop and narrow widths. */
     [data-testid="stMainBlockContainer"] {{
         max-width: 1440px;
         padding-top: 1.75rem;
@@ -97,6 +94,13 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
     [data-testid="stWidgetLabel"] [data-testid="stTooltipIcon"] {{
         flex: 0 0 auto;
         color: var(--tr-text-primary) !important;
+    }}
+
+    /* Keep the optional Round trip label before its checkbox. */
+    .st-key-add_mileage_round_trip[data-testid="stCheckbox"] label,
+    .st-key-add_mileage_round_trip [data-testid="stCheckbox"] label {{
+        flex-direction: row-reverse;
+        justify-content: flex-end;
     }}
 
     [data-testid="stTabs"] [role="tab"] {{
@@ -217,7 +221,9 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
        Suppress that indicator only for the navigation options. NOTE: The
        `> div > div > div` selector below is fragile because it depends on
        Streamlit's internal DOM structure and may break in future versions.
-       The input remains available to assistive technology and keyboard users. */
+       The child layout selector also depends on that DOM and may need
+       adjustment after a Streamlit upgrade. The input remains available to
+       assistive technology and keyboard users. */
     [data-testid="stSidebar"] label[data-testid="stRadioOption"]
     > div > div > div:first-child:not(:has([data-testid="stMarkdownContainer"])) {{
         display: none;
@@ -510,6 +516,12 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
             padding-left: 0.55rem;
             font-size: 0.9rem;
         }}
+    }}
+
+    /* Streamlit overlays this hint on the input row. Keep it clear of the
+       password visibility toggle while preserving the Enter-to-submit cue. */
+    .st-key-login_surface [data-testid="InputInstructions"] {{
+        right: 42px !important;
     }}
     </style>
     """

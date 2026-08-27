@@ -121,6 +121,11 @@ def _account_frame(
     )
 
 
+def _sync_edit_account_selection(account_selector_key: str) -> None:
+    """Keep table and editor selection state aligned when the selector changes."""
+    st.session_state["edit_account_id"] = st.session_state[account_selector_key]
+
+
 def render_accounts(context: AccountsContext) -> None:
     """Render account creation, hierarchy management, and balances."""
     render_hierarchy_responsive_css()
@@ -221,6 +226,7 @@ def render_accounts(context: AccountsContext) -> None:
                 ),
                 format_func=lambda value: hierarchy_option_label(value, account_paths),
             )
+            add_error = st.empty()
             if st.button("Add account", type="primary"):
                 payload = {
                     "name": name,
@@ -243,6 +249,7 @@ def render_accounts(context: AccountsContext) -> None:
                     on_success=lambda: context.schedule_widget_reset(
                         "reset_add_account_form"
                     ),
+                    report_error=add_error.error,
                 )
 
     if accounts:
@@ -251,12 +258,27 @@ def render_accounts(context: AccountsContext) -> None:
             st.session_state["edit_account_id"] = account_ids[0]
         st.caption("Select an account row (or double-click it) to edit it.")
         with st.expander("Edit or deactivate account", expanded=bool(selected_rows)):
+            account_selector_key = (
+                f"edit_account_id_{context.profile_key}_"
+                f"{st.session_state.get('workbook_data_revision', 0)}"
+            )
+            if (
+                account_selector_key not in st.session_state
+                or st.session_state[account_selector_key]
+                != st.session_state["edit_account_id"]
+            ):
+                st.session_state[account_selector_key] = st.session_state[
+                    "edit_account_id"
+                ]
             account_id = st.selectbox(
                 "Account to manage",
                 account_ids,
                 format_func=account_paths.get,
-                key="edit_account_id",
+                key=account_selector_key,
+                on_change=_sync_edit_account_selection,
+                args=(account_selector_key,),
             )
+            st.session_state["edit_account_id"] = account_id
             selected = account_by_id[account_id]
             with st.container():
                 st.caption(
@@ -334,6 +356,7 @@ def render_accounts(context: AccountsContext) -> None:
                         "This Layer 1 account has children. Promote or reparent "
                         "those children before moving this account under a parent."
                     )
+                save_error = st.empty()
                 if st.button(
                     "Save account changes",
                     type="primary",
@@ -361,6 +384,7 @@ def render_accounts(context: AccountsContext) -> None:
                             parent_id=edited_parent_id,
                         ),
                         "Account updated.",
+                        report_error=save_error.error,
                     )
             st.caption(
                 "Accounts are deactivated rather than deleted so transaction "

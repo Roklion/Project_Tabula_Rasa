@@ -598,6 +598,7 @@ def render_google_drive_admin(
             "Remove the saved invalid Google Drive connection",
             key=f"remove-invalid-google-drive-{profile_key}",
         )
+        remove_connection_error = st.empty()
         if st.button(
             "Remove saved connection",
             disabled=not remove_invalid,
@@ -606,7 +607,7 @@ def render_google_drive_admin(
             try:
                 update_local_profile_google_drive(profile_key, None, path=store_path)
             except LocalProfileStoreError as remove_error:
-                st.error(str(remove_error))
+                remove_connection_error.error(str(remove_error))
             else:
                 st.cache_resource.clear()
                 st.session_state["google_drive_admin_notice"] = (
@@ -627,6 +628,7 @@ def render_google_drive_admin(
         st.markdown("**Profile storage root**")
         if isinstance(storage_root, Mapping):
             st.caption(_folder_display_name(storage_root))
+        storage_root_error = st.empty()
         selected_root = folder_picker(
             access_token=access_token,
             api_key=config.picker_api_key,
@@ -651,8 +653,9 @@ def render_google_drive_admin(
                     store_path=store_path,
                 )
             except (GoogleDriveError, LocalProfileStoreError) as exc:
-                st.error(str(exc))
+                storage_root_error.error(str(exc))
         if not isinstance(storage_root, Mapping):
+            create_root_error = st.empty()
             if st.button(
                 "Create storage root",
                 key=f"create-storage-root-{profile_key}",
@@ -666,7 +669,7 @@ def render_google_drive_admin(
                         store_path=store_path,
                     )
                 except (GoogleDriveError, LocalProfileStoreError) as exc:
-                    st.error(str(exc))
+                    create_root_error.error(str(exc))
         if isinstance(storage_root, Mapping):
             if isinstance(receipt_folder, Mapping):
                 st.caption(
@@ -677,6 +680,7 @@ def render_google_drive_admin(
                     "Ledger backups: "
                     f"{_folder_display_name(backup_folder, 'Provisioned')}"
                 )
+            provision_error = st.empty()
             if st.button(
                 "Provision storage folders",
                 type="primary",
@@ -690,7 +694,7 @@ def render_google_drive_admin(
                         store_path=store_path,
                     )
                 except (GoogleDriveError, LocalProfileStoreError) as exc:
-                    st.error(str(exc))
+                    provision_error.error(str(exc))
 
     st.divider()
     reconnect_url = authorization_url(
@@ -704,6 +708,7 @@ def render_google_drive_admin(
         "Remove this profile's Google Drive authorization and folder selections",
         key=f"disconnect-google-drive-{profile_key}",
     )
+    disconnect_error = st.empty()
     if st.button(
         "Disconnect Google Drive",
         disabled=not confirm_disconnect,
@@ -714,7 +719,7 @@ def render_google_drive_admin(
             client.revoke()
             update_local_profile_google_drive(profile_key, None, path=store_path)
         except (GoogleDriveError, LocalProfileStoreError) as exc:
-            st.error(str(exc))
+            disconnect_error.error(str(exc))
         else:
             st.cache_resource.clear()
             st.session_state["google_drive_admin_notice"] = (

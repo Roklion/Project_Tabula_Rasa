@@ -75,21 +75,31 @@ def require_authentication() -> None:
         st.error("Application authentication is not configured.")
         st.stop()
 
+    show_authentication_error = bool(
+        st.session_state.get("authentication_error", False)
+    )
     with st.container(border=True, key="login_surface"):
         render_page_header(
             "Project Tabula Rasa", "Enter the application password to continue."
         )
+        authentication_error = st.container()
+        if show_authentication_error:
+            authentication_error.error("Incorrect password.")
         with st.form("login_form", clear_on_submit=True):
             password = st.text_input("Password", type="password")
             submitted = st.form_submit_button(
                 "Sign in", type="primary", width="stretch"
             )
 
-    if submitted:
-        if verify_password(password, encoded_hash):
-            st.session_state["authenticated"] = True
-            st.rerun()
-        st.error("Incorrect password.")
+        if submitted:
+            if verify_password(password, encoded_hash):
+                st.session_state["authenticated"] = True
+                st.session_state.pop("authentication_error", None)
+                st.rerun()
+            st.session_state["authentication_error"] = True
+            if not show_authentication_error:
+                st.rerun()
+
     st.stop()
 
 

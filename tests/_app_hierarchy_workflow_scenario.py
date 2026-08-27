@@ -126,20 +126,30 @@ def main() -> None:
             "Select an account row" in str(caption.value)
             for caption in app.caption
         )
-        app.session_state["edit_account_id"] = petty_cash["id"]
-        app.run()
-        assert by_label(app.selectbox, "Account to manage").value == petty_cash["id"]
-        by_label(app.selectbox, "Parent account (optional)").set_value(
-            operations["id"]
+        refresh_child = add_account(
+            app,
+            alpha,
+            "ZZ Refresh child",
+            account_type="Cash",
+            parent_id=operations["id"],
         )
-        by_label(app.selectbox, "Type").set_value("Credit card").run()
-        assert by_label(app.selectbox, "Parent account (optional)").value == ""
-        by_label(app.selectbox, "Type").set_value("Bank").run()
+        app.session_state["edit_account_id"] = refresh_child["id"]
+        app.run()
+        assert (
+            by_label(app.selectbox, "Account to manage").value
+            == refresh_child["id"]
+        )
+        by_label(app.selectbox, "Edit account type").set_value("Credit card").run()
+        assert by_label(app.selectbox, "Edit parent account").value == ""
+        by_label(app.button, "Save account changes").click().run()
+        account_selector = by_label(app.selectbox, "Account to manage")
+        assert "ZZ Refresh child" in account_selector.options
+        assert "Operations › ZZ Refresh child" not in account_selector.options
 
         by_label(app.selectbox, "Account to manage").set_value(
             petty_cash["id"]
         ).run()
-        by_label(app.selectbox, "Edit parent account").set_value("")
+        by_label(app.selectbox, "Edit parent account").set_value("").run()
         by_label(app.button, "Save account changes").click().run()
         promoted_account = next(
             account
@@ -151,7 +161,9 @@ def main() -> None:
         by_label(app.selectbox, "Account to manage").set_value(
             petty_cash["id"]
         ).run()
-        by_label(app.selectbox, "Edit parent account").set_value(operations["id"])
+        by_label(app.selectbox, "Edit parent account").set_value(
+            operations["id"]
+        ).run()
         by_label(app.button, "Save account changes").click().run()
 
         app.radio[0].set_value("Categories").run()
