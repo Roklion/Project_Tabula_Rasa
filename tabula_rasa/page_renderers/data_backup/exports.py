@@ -47,6 +47,21 @@ def render_exports(context: DataBackupContext) -> None:
     if st.button(prepare_label, type="primary", width="stretch"):
         with st.spinner("Preparing exports and validating workbook backup..."):
             try:
+                receipt_manifest = context.receipt_manifest_for_backup(
+                    context.storage,
+                    profile_key=context.profile_key,
+                    drive_settings=context.drive_settings,
+                    configuration_revision=context.configuration_revision,
+                )
+            except (
+                StorageError,
+                GoogleDriveError,
+                ReceiptManifestError,
+                ReceiptPreparationError,
+            ) as error:
+                backup_error = str(error)
+                receipt_manifest = None
+            try:
                 accounts = context.storage.list_accounts(active_only=False)
                 categories = context.storage.list_categories()
                 transactions = context.storage.list_transactions()
@@ -68,25 +83,27 @@ def render_exports(context: DataBackupContext) -> None:
                     ),
                     "mileage": all_mileage.to_csv(index=False).encode("utf-8"),
                 }
-                try:
-                    receipt_manifest = context.receipt_manifest_for_backup(
-                        context.storage,
-                        profile_key=context.profile_key,
-                        drive_settings=context.drive_settings,
-                        configuration_revision=context.configuration_revision,
-                    )
-                    backup_zip = context.storage.export_backup_zip(receipt_manifest)
-                    manifest = context.storage.validate_backup_zip(backup_zip)
-                except (
-                    StorageError,
-                    GoogleDriveError,
-                    ReceiptManifestError,
-                    ReceiptPreparationError,
-                ) as error:
-                    prepared_exports["backup_error"] = str(error)
+                if receipt_manifest is None:
+                    prepared_exports["backup_error"] = backup_error
                 else:
-                    prepared_exports["backup"] = backup_zip
-                    prepared_exports["backup_time"] = str(manifest["backup_time"])
+                    try:
+                        backup_zip = context.storage.export_backup_zip(receipt_manifest)
+                        manifest = context.storage.validate_backup_zip(backup_zip)
+                    except (
+                        StorageError,
+                        GoogleDriveError,
+                        ReceiptManifestError,
+                        ReceiptPreparationError,
+                    ) as error:
+                        prepared_exports["backup_error"] = str(error)
+                    else:
+                        prepared_exports["backup"] = backup_zip
+                        prepared_exports["backup_time"] = str(manifest["backup_time"])
+                export_key = prepared_exports_key(
+                    context.profile_key,
+                    context.configuration_revision,
+                    int(st.session_state.get("workbook_data_revision", 0)),
+                )
                 st.session_state[export_key] = prepared_exports
                 if "backup" in prepared_exports:
                     st.success("Fresh downloadable exports are ready.")

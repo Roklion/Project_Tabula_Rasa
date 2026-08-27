@@ -145,6 +145,7 @@ def receipt_manifest_for_backup(
         drive,
         profile_key=profile_key,
         folder_id=str(receipt_folder["id"]),
+        on_data_changed=mark_workbook_data_changed,
     )
 
 
