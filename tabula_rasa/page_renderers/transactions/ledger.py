@@ -397,6 +397,7 @@ def render_ledger(
                 ),
             )
             with st.form("transaction_bulk_delete", clear_on_submit=False):
+                delete_error = st.empty()
                 delete_requested = st.form_submit_button(
                     "Permanently delete selected",
                     type="primary",
@@ -404,7 +405,9 @@ def render_ledger(
                 )
             if delete_requested:
                 if not confirm_delete:
-                    st.error("Confirm the permanent deletion before continuing.")
+                    delete_error.error(
+                        "Confirm the permanent deletion before continuing."
+                    )
                 else:
                     def clear_recovery() -> None:
                         for item in selected_ids:
@@ -541,6 +544,7 @@ def render_ledger(
                     "I understand this transaction will be permanently deleted",
                     key=f"edit_transaction_confirm_delete_{edit_widget_scope}",
                 )
+                edit_error = st.empty()
                 save_column, delete_column = st.columns(2)
                 save_requested = save_column.form_submit_button(
                     "Save changes",
@@ -571,7 +575,7 @@ def render_ledger(
                         selected["kind"] == "Transfer"
                         and edited_account_id == edited_to_account_id
                     ):
-                        st.error("Transfer accounts must be different.")
+                        edit_error.error("Transfer accounts must be different.")
                     else:
                         context.confirmed_write(
                             "edit_transaction",
@@ -591,7 +595,7 @@ def render_ledger(
                         )
                 if delete_requested:
                     if not confirm_delete:
-                        st.error(
+                        edit_error.error(
                             "Confirm that you understand deletion is permanent."
                         )
                     else:

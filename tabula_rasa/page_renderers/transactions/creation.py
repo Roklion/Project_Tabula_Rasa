@@ -139,12 +139,15 @@ def render_add_transaction(
                 "files. Each file must be non-empty and no larger than 20 MB."
             ),
         )
+        save_error = st.empty()
         submitted = st.form_submit_button(
             "Save transaction", type="primary", width="stretch"
         )
         if submitted:
             if kind == "Transfer" and not to_account:
-                st.error("Create a second active account before recording a transfer.")
+                save_error.error(
+                    "Create a second active account before recording a transfer."
+                )
             else:
                 payload = {
                     "txn_date": transaction_date,
@@ -162,7 +165,7 @@ def render_add_transaction(
                         receipt_uploads or []
                     )
                 except Exception as error:  # noqa: BLE001 - show safe validation
-                    st.error(f"Receipt validation failed: {error}")
+                    save_error.error(f"Receipt validation failed: {error}")
                 else:
                     receipt_folder = None
                     drive_settings = context.profile_secrets.get("google_drive")
@@ -172,7 +175,7 @@ def render_add_transaction(
                         isinstance(receipt_folder, Mapping)
                         and receipt_folder.get("id")
                     ):
-                        st.error(
+                        save_error.error(
                             "Configure a Google Drive receipt folder for this "
                             "profile before saving a transaction with receipts."
                         )
