@@ -378,8 +378,8 @@ profile. Its Sheets service-account access remains unaffected.
 
 Disconnect the existing profile grant, reconnect using the intended account, and
 export hosted Secrets again. Root and child selections are preserved only when
-the newly authorized account can confirm their availability, parent, and managed
-identity metadata; otherwise choose or provision new destinations.
+the newly authorized account can confirm their availability, direct parent IDs,
+and managed identity metadata; otherwise choose or provision new destinations.
 
 ### A folder changes
 

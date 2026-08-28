@@ -159,7 +159,6 @@ def _fresh_profile_readiness(
                 profile_key,
                 drive,
                 local_profiles=profiles_for_isolation,
-                enforce_root_isolation=False,
             )
         except (GoogleDriveError, LocalProfileStoreError) as error:
             validation_errors.append(_safe_readiness_error("Drive", error))
@@ -446,9 +445,8 @@ def _render_synology_recovery_admin(
     try:
         # The Drive root and its managed children are validated when the
         # profile's Drive settings are selected or provisioned. Saving this
-        # record only changes local NAS metadata; do not re-walk Drive
-        # ancestry here, because the narrow drive.file grant may not expose
-        # unrelated parent folders.
+        # record only changes local NAS metadata; do not query unrelated Drive
+        # parent folders because the narrow drive.file grant may not expose them.
         update_local_profile_synology_recovery(
             profile_key,
             settings,

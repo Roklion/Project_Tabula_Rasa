@@ -10,7 +10,6 @@ from typing import Any
 import streamlit as st
 
 from tabula_rasa.google_drive import (
-    GoogleDriveAccessError,
     GoogleDriveAuthorizationError,
     GoogleDriveClient,
     GoogleDriveConfigurationError,
@@ -30,14 +29,6 @@ from tabula_rasa.local_profile_store import (
     load_local_profiles,
     update_local_profile_google_drive,
 )
-
-
-class _IncompleteDriveAncestry(GoogleDriveError):
-    """Carry known IDs when a narrow Drive grant hides an ancestor."""
-
-    def __init__(self, ancestry: set[str]) -> None:
-        super().__init__("Google Drive folder ancestry could not be fully read.")
-        self.ancestry = ancestry
 
 
 @st.cache_resource
@@ -64,144 +55,12 @@ def _folder_display_name(
     return str(folder.get("name") or fallback)
 
 
-def _folder_ancestry(
-    client: GoogleDriveClient,
-    folder: Mapping[str, Any],
-) -> set[str]:
-    """Return a folder ID plus all of its reachable Drive ancestors."""
-    ancestry: set[str] = set()
-    visited: set[str] = set()
-    incomplete = False
-    pending = [dict(folder)]
-    while pending:
-        current = pending.pop()
-        folder_id = str(current.get("id", ""))
-        if not folder_id or folder_id in visited:
-            continue
-        visited.add(folder_id)
-        ancestry.add(folder_id)
-        parents = current.get("parents")
-        if not isinstance(parents, list):
-            continue
-        for parent_id in parents:
-            normalized_parent_id = str(parent_id)
-            if (
-                len(normalized_parent_id) >= 10
-                and normalized_parent_id not in ancestry
-            ):
-                # The parent ID is useful for direct root-isolation checks even
-                # when the narrow drive.file grant cannot open that parent.
-                ancestry.add(normalized_parent_id)
-                try:
-                    pending.append(client.folder(normalized_parent_id))
-                except GoogleDriveAuthorizationError:
-                    incomplete = True
-                except GoogleDriveAccessError as exc:
-                    if exc.retryable:
-                        raise
-                    incomplete = True
-    if incomplete:
-        raise _IncompleteDriveAncestry(ancestry)
-    return ancestry
-
-
-def _ensure_storage_root_is_profile_isolated(
-    client: GoogleDriveClient,
-    profile_key: str,
-    selected_root: Mapping[str, Any],
-    local_profiles: Mapping[str, Mapping[str, Any]],
-    *,
-    selected_drive_settings: Mapping[str, Any] | None = None,
-) -> None:
-    """Reject Drive storage roots nested under another profile's root."""
-    selected_id = str(selected_root.get("id", ""))
-    selected_ancestry_incomplete = False
-    try:
-        selected_ancestry = _folder_ancestry(client, selected_root)
-    except _IncompleteDriveAncestry as exc:
-        selected_ancestry = exc.ancestry
-        selected_ancestry_incomplete = True
-    ancestry_cache = {selected_id: selected_ancestry}
-    selected_profile = local_profiles.get(profile_key)
-    selected_drive = selected_drive_settings
-    if not isinstance(selected_drive, Mapping):
-        selected_drive = (
-            selected_profile.get("google_drive")
-            if isinstance(selected_profile, Mapping)
-            else None
-        )
-    selected_email = (
-        str(selected_drive.get("authorized_email", "")).strip().casefold()
-        if isinstance(selected_drive, Mapping)
-        else ""
-    )
-    for other_key, profile in local_profiles.items():
-        if other_key == profile_key:
-            continue
-        drive = profile.get("google_drive")
-        other_root = drive.get("storage_root") if isinstance(drive, Mapping) else None
-        if not isinstance(other_root, Mapping):
-            continue
-        other_id = str(other_root.get("id", ""))
-        if not other_id:
-            continue
-        if other_id in selected_ancestry:
-            raise GoogleDriveConfigurationError(
-                "Google Drive storage roots cannot be nested between business "
-                "profiles."
-            )
-        if selected_ancestry_incomplete:
-            raise GoogleDriveConfigurationError(
-                "Google Drive storage-root ancestry could not be verified while "
-                "another profile root is configured."
-            )
-        other_email = str(drive.get("authorized_email", "")).strip().casefold()
-        other_ancestry = ancestry_cache.get(other_id)
-        if other_ancestry is None:
-            try:
-                other_ancestry = _folder_ancestry(client, client.folder(other_id))
-            except _IncompleteDriveAncestry as exc:
-                other_ancestry = exc.ancestry
-                if selected_id in other_ancestry or other_id in selected_ancestry:
-                    raise GoogleDriveConfigurationError(
-                        "Google Drive storage roots cannot be nested between "
-                        "business profiles."
-                    )
-                raise GoogleDriveConfigurationError(
-                    "Google Drive storage-root ancestry could not be verified "
-                    "for another profile."
-                )
-            except GoogleDriveAuthorizationError:
-                if not (
-                    selected_email
-                    and other_email
-                    and selected_email != other_email
-                ):
-                    raise
-                continue
-            except GoogleDriveAccessError as exc:
-                if not (
-                    selected_email
-                    and other_email
-                    and selected_email != other_email
-                    and not exc.retryable
-                ):
-                    raise
-                continue
-            ancestry_cache[other_id] = other_ancestry
-        if other_id in selected_ancestry or selected_id in other_ancestry:
-            raise GoogleDriveConfigurationError(
-                "Google Drive storage roots cannot be nested between business "
-                "profiles."
-            )
-
-
 def _ensure_storage_root_is_not_directly_nested(
     profile_key: str,
     selected_root: Mapping[str, Any],
     local_profiles: Mapping[str, Mapping[str, Any]],
 ) -> None:
-    """Reject known root reuse or direct nesting without opening parent folders."""
+    """Reject known root reuse or direct nesting using visible folder IDs only."""
     selected_id = str(selected_root.get("id", ""))
     parents = selected_root.get("parents")
     parent_ids = (
@@ -323,16 +182,14 @@ def process_google_drive_oauth_callback(
             )
             storage_root = drive_settings.get("storage_root")
             if isinstance(storage_root, Mapping):
-                # Re-fetch the root after revalidation so ancestry includes
-                # parent metadata; persisted settings intentionally retain
-                # only the validated ID and display name.
+                # Re-fetch the root after revalidation so direct-parent metadata
+                # is available for the minimal cross-profile check; persisted
+                # settings intentionally retain only the validated ID and name.
                 storage_root = client.folder(str(storage_root.get("id", "")))
-                _ensure_storage_root_is_profile_isolated(
-                    client,
+                _ensure_storage_root_is_not_directly_nested(
                     profile_key,
                     storage_root,
                     local_profiles,
-                    selected_drive_settings=drive_settings,
                 )
         update_local_profile_google_drive(
             profile_key,
@@ -363,7 +220,6 @@ def validate_google_drive_profile(
     drive_settings: Mapping[str, Any],
     *,
     local_profiles: Mapping[str, Mapping[str, Any]],
-    enforce_root_isolation: bool = True,
 ) -> None:
     """Re-read one profile's Drive grant and configured destinations."""
     storage_root = drive_settings.get("storage_root")
@@ -385,14 +241,6 @@ def validate_google_drive_profile(
         root,
         local_profiles,
     )
-    if enforce_root_isolation:
-        _ensure_storage_root_is_profile_isolated(
-            client,
-            profile_key,
-            root,
-            local_profiles,
-            selected_drive_settings=drive_settings,
-        )
 
 
 def _save_storage_root(
@@ -439,8 +287,7 @@ def _create_storage_root(
     )
     local_profiles = load_local_profiles(store_path)
     full_root = client.folder(str(root.get("id", "")))
-    _ensure_storage_root_is_profile_isolated(
-        client,
+    _ensure_storage_root_is_not_directly_nested(
         profile_key,
         full_root,
         local_profiles,
@@ -639,8 +486,7 @@ def render_google_drive_admin(
             try:
                 local_profiles = load_local_profiles(store_path)
                 folder = client.folder(str(selected_root.get("id", "")))
-                _ensure_storage_root_is_profile_isolated(
-                    client,
+                _ensure_storage_root_is_not_directly_nested(
                     profile_key,
                     folder,
                     local_profiles,

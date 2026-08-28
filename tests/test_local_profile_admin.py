@@ -164,7 +164,7 @@ def test_fresh_readiness_skips_drive_validation_without_a_storage_root() -> None
     validate_drive.assert_not_called()
 
 
-def test_fresh_readiness_does_not_walk_drive_parent_ancestry() -> None:
+def test_fresh_readiness_uses_visible_drive_parent_ids_only() -> None:
     drive = {
         "storage_root": {"id": "northroot123", "name": "North Storage"},
         "receipt_folder": {"id": "receipts123", "name": "Receipts"},
@@ -201,7 +201,6 @@ def test_fresh_readiness_does_not_walk_drive_parent_ancestry() -> None:
         "north",
         drive,
         local_profiles=local_profiles,
-        enforce_root_isolation=False,
     )
 
 

@@ -173,10 +173,9 @@ readiness action re-reads the selected workbook and any configured Drive root
 and managed children. It reports missing optional setup steps without showing
 credentials, refresh tokens, private ledger data, or receipt contents.
 Readiness does not walk ordinary Drive parent folders. Cross-profile root
-ancestry remains enforced when a root is selected, created, or reconnected
-before recursive profile-root recovery is configured. Readiness still compares
-the selected root's returned direct parent IDs with known profile root IDs, so
-known root reuse or direct nesting remains an incomplete configuration.
+checks use only the selected root ID and the direct parent IDs returned with
+that folder. Known root reuse or direct nesting reported by those visible IDs
+remains an incomplete configuration; inaccessible ancestors are not queried.
 
 To edit a locally managed profile, use its **Edit local profile settings**
 section. The profile key is immutable. Business name, spreadsheet, and optional
