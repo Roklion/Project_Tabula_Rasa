@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
@@ -7,12 +8,14 @@ import streamlit as st
 
 from tabula_rasa.local_profile_admin import (
     _initialize_candidate_storage,
+    _export_hosted_secrets_file,
     _profile_rows,
     _profile_setup_error_message,
     _fresh_profile_readiness,
     _readiness_for_display,
     _validate_profile_edit_action,
 )
+from scripts.export_streamlit_secrets import SecretsExportError
 from tabula_rasa.profile_readiness import ProfileReadiness, profile_settings_fingerprint
 from tabula_rasa.local_profile_store import LocalProfileStoreError
 from tabula_rasa.storage import (
@@ -224,3 +227,95 @@ def test_readiness_cache_is_ignored_after_profile_settings_change() -> None:
     assert report.missing_steps == (
         "Run the readiness check to verify current Sheets and Drive settings.",
     )
+
+
+def test_hosted_export_reloads_and_includes_every_local_profile() -> None:
+    local_profiles = {
+        "north": {"name": "North", "spreadsheet_id": "north-sheet"},
+        "south": {"name": "South", "spreadsheet_id": "south-sheet"},
+    }
+    generated = "app_password_hash = \"hash\"\n"
+    destination = Path(".streamlit/tabula-rasa-streamlit-secrets-test.toml")
+    with patch(
+        "tabula_rasa.local_profile_admin.load_local_profiles",
+        return_value=local_profiles,
+    ) as load_profiles, patch(
+        "tabula_rasa.local_profile_admin.build_streamlit_secrets_toml",
+        return_value=generated,
+    ) as build_document, patch(
+        "tabula_rasa.local_profile_admin.write_secure_export",
+        return_value=destination,
+    ) as write_export:
+        result = _export_hosted_secrets_file(
+            {"app_password_hash": "hash"},
+            store_path=Path("profile-store.json"),
+        )
+
+    assert result == destination
+    load_profiles.assert_called_once_with(Path("profile-store.json"))
+    build_document.assert_called_once_with(
+        {"app_password_hash": "hash"},
+        local_profiles,
+    )
+    write_export.assert_called_once_with(generated)
+
+
+def test_hosted_export_refuses_empty_included_profile_set() -> None:
+    with patch(
+        "tabula_rasa.local_profile_admin.load_local_profiles",
+        return_value={},
+    ), patch(
+        "tabula_rasa.local_profile_admin.build_streamlit_secrets_toml"
+    ) as build_document:
+        with pytest.raises(LocalProfileStoreError, match="local business profile"):
+            _export_hosted_secrets_file({}, store_path=Path("profile-store.json"))
+
+    build_document.assert_not_called()
+
+
+def test_hosted_export_failure_ui_does_not_echo_secret_values() -> None:
+    secret = "-----BEGIN PRIVATE KEY-----do-not-display"
+    with patch.object(st, "subheader"), patch.object(st, "write"), patch.object(
+        st, "info"
+    ), patch.object(st, "markdown"), patch.object(
+        st, "button", return_value=True
+    ), patch.object(st, "error") as render_error, patch(
+        "tabula_rasa.local_profile_admin._export_hosted_secrets_file",
+        side_effect=SecretsExportError(secret),
+    ):
+        from tabula_rasa.local_profile_admin import _render_security_deployment_info
+
+        _render_security_deployment_info({"app_password_hash": secret})
+
+    message = str(render_error.call_args.args[0])
+    assert "failed" in message.casefold()
+    assert secret not in message
+
+
+def test_hosted_export_success_ui_shows_only_path_and_complete_handoff() -> None:
+    secret = "refresh-token-do-not-display"
+    destination = Path(".streamlit/tabula-rasa-streamlit-secrets-safe.toml")
+    with patch.object(st, "subheader"), patch.object(st, "write") as render_write, patch.object(
+        st, "info"
+    ) as render_info, patch.object(st, "markdown"), patch.object(
+        st, "button", return_value=True
+    ), patch.object(st, "success") as render_success, patch(
+        "tabula_rasa.local_profile_admin._export_hosted_secrets_file",
+        return_value=destination,
+    ):
+        from tabula_rasa.local_profile_admin import _render_security_deployment_info
+
+        _render_security_deployment_info({"refresh_token": secret})
+
+    rendered = " ".join(
+        str(call.args[0])
+        for mock in (render_write, render_info, render_success)
+        for call in mock.call_args_list
+        if call.args
+    )
+    assert str(destination) in rendered
+    assert "Streamlit App settings > Secrets" in rendered
+    assert "delete the generated local file" in rendered
+    assert "Re-run profile readiness" in rendered
+    assert "cannot verify hosted Secrets acceptance" in rendered
+    assert secret not in rendered
