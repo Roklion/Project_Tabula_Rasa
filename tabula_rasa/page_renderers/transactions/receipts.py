@@ -43,6 +43,11 @@ def receipt_editor_workflow_key(profile_key: str, transaction_id: str) -> str:
     return f"{RECEIPT_EDITOR_WORKFLOW_KEY}:{profile_key}:{transaction_id}"
 
 
+def receipt_editor_notice_key(profile_key: str, transaction_id: str) -> str:
+    """Return the session key for one profile's editor notice."""
+    return f"receipt-editor-notice-{profile_key}-{transaction_id}"
+
+
 def receipt_editor_upload_reset_key(profile_key: str, transaction_id: str) -> str:
     """Return the one-shot reset flag for a completed editor upload."""
     return f"reset-receipt-editor:{profile_key}:{transaction_id}"
@@ -307,9 +312,12 @@ def _finish_editor_receipt_workflow(
         receipt_editor_workflow_key(context.profile_key, transaction_id),
         None,
     )
-    st.session_state[
-        f"receipt-editor-notice-{context.profile_key}-{transaction_id}"
-    ] = f"{linked} receipt(s) uploaded and linked; 0 unresolved."
+    st.session_state[receipt_editor_notice_key(context.profile_key, transaction_id)] = (
+        _new_editor_receipt_notice(
+            context,
+            f"{linked} receipt(s) uploaded and linked; 0 unresolved.",
+        )
+    )
     schedule_reset = getattr(context, "schedule_widget_reset", None)
     if callable(schedule_reset):
         schedule_reset(
@@ -321,6 +329,44 @@ def _finish_editor_receipt_workflow(
     return True
 
 
+def _new_editor_receipt_notice(
+    context: TransactionsContext,
+    message: str,
+    receipt_folder: Mapping[str, object] | None = None,
+) -> dict[str, str]:
+    """Bind an editor notice to the profile storage it describes."""
+    profile_secrets = getattr(context, "profile_secrets", {})
+    if not isinstance(profile_secrets, Mapping):
+        profile_secrets = {}
+    selected_receipt_folder = receipt_folder
+    if selected_receipt_folder is None:
+        drive_settings = profile_secrets.get("google_drive")
+        configured_folder = (
+            drive_settings.get("receipt_folder")
+            if isinstance(drive_settings, Mapping)
+            else None
+        )
+        selected_receipt_folder = (
+            configured_folder if isinstance(configured_folder, Mapping) else None
+        )
+    return {
+        "message": message,
+        "spreadsheet_id": str(profile_secrets.get("spreadsheet_id", "")),
+        "receipt_folder_id": str(
+            selected_receipt_folder.get("id", "")
+            if selected_receipt_folder is not None
+            else ""
+        ),
+    }
+
+
+def _editor_receipt_notice_message(notice: object) -> str:
+    """Read a current or legacy editor notice from session state."""
+    if isinstance(notice, Mapping):
+        return str(notice.get("message", "") or "")
+    return str(notice or "")
+
+
 def _cancel_editor_receipt_recovery(
     context: TransactionsContext,
     transaction_id: str,
@@ -330,11 +376,12 @@ def _cancel_editor_receipt_recovery(
         receipt_editor_workflow_key(context.profile_key, transaction_id),
         None,
     )
-    st.session_state[
-        f"receipt-editor-notice-{context.profile_key}-{transaction_id}"
-    ] = (
-        "Receipt recovery canceled. Files already uploaded remain in Google "
-        "Drive and can be linked from the Unreferenced receipt workflow."
+    st.session_state[receipt_editor_notice_key(context.profile_key, transaction_id)] = (
+        _new_editor_receipt_notice(
+            context,
+            "Receipt recovery canceled. Files already uploaded remain in Google "
+            "Drive and can be linked from the Unreferenced receipt workflow.",
+        )
     )
 
 
@@ -469,6 +516,8 @@ def _render_editor_receipt_recovery(
         if reference_only_retry
         else "Retry unresolved receipts"
     )
+    if not unresolved and workflow.get("configuration_error"):
+        retry_label = "Retry recovery check"
     if unresolved:
         st.warning(
             f"{linked} receipt(s) complete and {unresolved} receipt(s) "
@@ -492,7 +541,7 @@ def _render_editor_receipt_recovery(
         )
     if workflow.get("configuration_error"):
         st.error(str(workflow["configuration_error"]))
-    retry_requested = unresolved and st.button(
+    retry_requested = (unresolved or bool(workflow.get("configuration_error"))) and st.button(
         retry_label,
         type="primary",
         key=f"retry-editor-receipts-{context.profile_key}-{transaction_id}",
@@ -537,7 +586,11 @@ def _render_editor_receipt_recovery(
                     "Remove an existing receipt reference or retry with fewer "
                     "unresolved receipts."
                 )
-            _process_editor_receipts(context, workflow, receipt_folder)
+            if any(
+                receipt.get("linked") is not True
+                for receipt in workflow.get("receipts", [])
+            ):
+                _process_editor_receipts(context, workflow, receipt_folder)
             _finish_editor_receipt_workflow(context, transaction_id, workflow)
         except GoogleDriveError as error:
             workflow["configuration_error"] = str(error)
@@ -548,8 +601,15 @@ def _render_editor_receipt_recovery(
                     None,
                 )
                 st.session_state[
-                    f"receipt-editor-notice-{context.profile_key}-{transaction_id}"
-                ] = EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE
+                    receipt_editor_notice_key(
+                        context.profile_key,
+                        transaction_id,
+                    )
+                ] = _new_editor_receipt_notice(
+                    context,
+                    EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE,
+                    receipt_folder,
+                )
             else:
                 workflow["configuration_error"] = (
                     "The transaction could not be rechecked or linked. "
@@ -652,12 +712,18 @@ def clear_missing_editor_receipt_recoveries(
         st.session_state.pop(key, None)
         notice = EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE
         st.session_state[
-            f"receipt-editor-notice-{context.profile_key}-{transaction_id}"
-        ] = notice
+            receipt_editor_notice_key(
+                context.profile_key,
+                transaction_id,
+            )
+        ] = _new_editor_receipt_notice(context, notice)
         notices.append(notice)
         processed_transaction_ids.add(transaction_id)
 
     notice_prefix = f"receipt-editor-notice-{context.profile_key}-"
+    current_spreadsheet = str(
+        context.profile_secrets.get("spreadsheet_id", "")
+    )
     for key in list(st.session_state):
         if not isinstance(key, str) or not key.startswith(notice_prefix):
             continue
@@ -668,8 +734,17 @@ def clear_missing_editor_receipt_recoveries(
             or transaction_id in processed_transaction_ids
         ):
             continue
+        notice = st.session_state.get(key)
+        if isinstance(notice, Mapping):
+            notice_spreadsheet = str(notice.get("spreadsheet_id", ""))
+            notice_folder = str(notice.get("receipt_folder_id", ""))
+            if (
+                notice_spreadsheet
+                and notice_spreadsheet != current_spreadsheet
+            ) or (notice_folder and notice_folder != current_folder_id):
+                continue
         notice = st.session_state.pop(key, None)
-        if isinstance(notice, str) and notice:
+        if _editor_receipt_notice_message(notice):
             notices.append(EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE)
     return notices
 
@@ -729,7 +804,7 @@ def clear_receipt_creation_recovery(
         None,
     )
     st.session_state.pop(
-        f"receipt-editor-notice-{context.profile_key}-{transaction_id}",
+        receipt_editor_notice_key(context.profile_key, transaction_id),
         None,
     )
 
@@ -942,8 +1017,9 @@ def render_receipts(
             receipt_link_recovery_key = (
                 f"receipt-link-recovery-{receipt_action_scope}"
             )
-            editor_receipt_notice_key = (
-                f"receipt-editor-notice-{receipt_action_scope}"
+            editor_receipt_notice_key = receipt_editor_notice_key(
+                context.profile_key,
+                edit_id,
             )
             reset_editor_upload = getattr(
                 context,
@@ -967,8 +1043,11 @@ def render_receipts(
                 editor_receipt_notice_key,
                 None,
             )
-            if editor_receipt_notice:
-                st.success(str(editor_receipt_notice))
+            editor_receipt_notice_message = _editor_receipt_notice_message(
+                editor_receipt_notice
+            )
+            if editor_receipt_notice_message:
+                st.success(editor_receipt_notice_message)
             receipt_notice = st.session_state.pop(
                 receipt_notice_key,
                 None,

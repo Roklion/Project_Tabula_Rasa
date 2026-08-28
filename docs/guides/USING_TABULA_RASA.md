@@ -225,7 +225,9 @@ local file contents without deleting files already uploaded to Google Drive;
 those files remain available through the **Unreferenced receipt** workflow. If
 a file was uploaded but its ledger link failed, retry uses that existing Drive
 file rather than uploading it again. Duplicate filenames remain separate files
-with numeric suffixes.
+with numeric suffixes. If confirmation of a manual link temporarily fails,
+**Retry recovery check** rechecks the saved transaction before the upload
+surface is restored.
 
 Receipt behavior:
 

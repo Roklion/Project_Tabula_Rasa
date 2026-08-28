@@ -1769,6 +1769,9 @@ It must preserve:
 - An explicit **Cancel recovery** action for an unresolved upload. Canceling
   discards unresolved local file contents; files already uploaded remain in
   Google Drive and can be linked from the **Unreferenced receipt** workflow.
+- If a Sheets confirmation read fails after a manual link, keep the recovery
+  state visible and provide **Retry recovery check** before hiding the upload
+  surface.
 - Retry-safe handling of uncertain Drive responses
 - Existing linked-receipt display and removal
 - Linking of eligible unreferenced receipts

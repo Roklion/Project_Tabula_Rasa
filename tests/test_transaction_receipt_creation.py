@@ -20,6 +20,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     process_receipt_recovery,
     receipt_creation_counts,
     receipt_creation_workflow_key,
+    receipt_editor_notice_key,
     render_receipt_creation_recovery,
     _workflow_configuration_matches,
     _link_recovery_configuration_matches,
@@ -38,6 +39,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     receipt_editor_workflow_key,
 )
 from tabula_rasa.receipt_manifest import receipt_reference_from_drive_file
+from tabula_rasa.storage import StorageError
 
 
 class UploadedFile:
@@ -579,9 +581,11 @@ def test_editor_retry_persists_deleted_transaction_notice() -> None:
             _render_editor_receipt_recovery(context, "txn-1", {"id": "folder"})
 
     assert receipt_editor_workflow_key("north", "txn-1") not in session_state
-    assert session_state["receipt-editor-notice-north-txn-1"] == (
-        EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE
-    )
+    assert session_state[receipt_editor_notice_key("north", "txn-1")] == {
+        "message": EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE,
+        "spreadsheet_id": "sheet",
+        "receipt_folder_id": "folder",
+    }
 
 
 def test_transaction_recovery_detects_uploaded_receipt_pointer() -> None:
@@ -626,10 +630,14 @@ def test_editor_receipt_recovery_cancel_discards_workflow() -> None:
             _render_editor_receipt_recovery(context, "txn-1", {"id": "folder"})
 
     assert receipt_editor_workflow_key("north", "txn-1") not in session_state
-    assert session_state["receipt-editor-notice-north-txn-1"] == (
-        "Receipt recovery canceled. Files already uploaded remain in Google "
-        "Drive and can be linked from the Unreferenced receipt workflow."
-    )
+    assert session_state[receipt_editor_notice_key("north", "txn-1")] == {
+        "message": (
+            "Receipt recovery canceled. Files already uploaded remain in Google "
+            "Drive and can be linked from the Unreferenced receipt workflow."
+        ),
+        "spreadsheet_id": "",
+        "receipt_folder_id": "",
+    }
 
 
 def test_cancel_editor_receipt_recovery_is_profile_scoped() -> None:
@@ -942,9 +950,11 @@ def test_editor_receipt_recovery_retries_only_unresolved_without_reupload() -> N
         assert _finish_editor_receipt_workflow(context, "txn-1", workflow)
 
     assert receipt_editor_workflow_key("north", "txn-1") not in session_state
-    assert session_state[
-        "receipt-editor-notice-north-txn-1"
-    ] == "2 receipt(s) uploaded and linked; 0 unresolved."
+    assert session_state[receipt_editor_notice_key("north", "txn-1")] == {
+        "message": "2 receipt(s) uploaded and linked; 0 unresolved.",
+        "spreadsheet_id": "north-sheet",
+        "receipt_folder_id": "north-folder",
+    }
 
 
 def test_editor_receipt_recovery_forgets_receipt_after_manual_unlink() -> None:
@@ -988,6 +998,61 @@ def test_editor_receipt_workflow_persists_drive_configuration_error() -> None:
 
     assert result["configuration_error"] == "Drive is unavailable"
     assert session_state[receipt_editor_workflow_key("north", "txn-1")] is result
+
+
+def test_editor_manual_link_recovery_check_can_finish_after_read_failure() -> None:
+    reference = {"id": "drive-receipt", "name": "receipt.pdf"}
+    read_count = 0
+
+    def list_transactions(**_kwargs: object) -> list[dict[str, object]]:
+        nonlocal read_count
+        read_count += 1
+        if read_count == 1:
+            raise StorageError("temporary Sheets read failure")
+        return [{"id": "txn-1", "receipt_references": json.dumps([reference])}]
+
+    context = SimpleNamespace(
+        profile_key="north",
+        storage=SimpleNamespace(list_transactions=list_transactions),
+        profile_secrets={
+            "spreadsheet_id": "north-sheet",
+            "google_drive": {"receipt_folder": {"id": "north-folder"}},
+        },
+        configuration_revision="revision",
+        get_drive_client=Mock(
+            side_effect=AssertionError("No Drive work is needed after linking")
+        ),
+    )
+    workflow = new_receipt_creation_workflow(
+        "txn-1",
+        [{"linked": False, "reference": reference, "content": b""}],
+        profile_key="north",
+        spreadsheet_id="north-sheet",
+        receipt_folder_id="north-folder",
+    )
+    session_state = {receipt_editor_workflow_key("north", "txn-1"): workflow}
+
+    with patch.object(st, "session_state", session_state):
+        assert not _record_editor_receipt_linked(context, "txn-1", reference)
+        with (
+            patch.object(st, "error"),
+            patch.object(st, "button", return_value=True),
+            patch.object(st, "rerun", side_effect=RuntimeError("rerun")),
+        ):
+            with pytest.raises(RuntimeError, match="rerun"):
+                _render_editor_receipt_recovery(
+                    context,
+                    "txn-1",
+                    {"id": "north-folder"},
+                )
+
+    assert read_count == 2
+    assert receipt_editor_workflow_key("north", "txn-1") not in session_state
+    assert session_state[receipt_editor_notice_key("north", "txn-1")] == {
+        "message": "1 receipt(s) uploaded and linked; 0 unresolved.",
+        "spreadsheet_id": "north-sheet",
+        "receipt_folder_id": "north-folder",
+    }
 
 
 def test_editor_receipt_recovery_isolated_by_profile() -> None:
@@ -1103,9 +1168,11 @@ def test_unreferenced_link_resolves_matching_editor_recovery() -> None:
         )
 
     assert receipt_editor_workflow_key("north", "txn-1") not in session_state
-    assert session_state[
-        "receipt-editor-notice-north-txn-1"
-    ] == "2 receipt(s) uploaded and linked; 0 unresolved."
+    assert session_state[receipt_editor_notice_key("north", "txn-1")] == {
+        "message": "2 receipt(s) uploaded and linked; 0 unresolved.",
+        "spreadsheet_id": "",
+        "receipt_folder_id": "",
+    }
 
 
 def test_missing_editor_recovery_cleanup_is_profile_scoped() -> None:
@@ -1132,11 +1199,12 @@ def test_missing_editor_recovery_cleanup_is_profile_scoped() -> None:
     assert receipt_editor_workflow_key("north", "north-gone") not in session_state
     assert receipt_editor_workflow_key("south", "south-gone") in session_state
     assert session_state[
-        "receipt-editor-notice-north-north-gone"
-    ] == (
-        "The transaction no longer exists. Uploaded files remain in Google "
-        "Drive and can be linked from the Unreferenced receipt workflow."
-    )
+        receipt_editor_notice_key("north", "north-gone")
+    ] == {
+        "message": EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE,
+        "spreadsheet_id": "",
+        "receipt_folder_id": "",
+    }
 
 
 def test_editor_receipt_recovery_active_is_profile_scoped() -> None:
@@ -1208,6 +1276,31 @@ def test_missing_editor_recovery_replaces_orphaned_success_notice() -> None:
 
     assert notices == [EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE]
     assert key not in session_state
+
+
+def test_missing_editor_recovery_preserves_notice_after_profile_reconfiguration() -> None:
+    key = receipt_editor_notice_key("north", "old-txn")
+    session_state: dict[str, object] = {
+        key: {
+            "message": "2 receipt(s) uploaded and linked; 0 unresolved.",
+            "spreadsheet_id": "old-sheet",
+            "receipt_folder_id": "old-folder",
+        }
+    }
+
+    with patch.object(st, "session_state", session_state):
+        notices = clear_missing_editor_receipt_recoveries(
+            SimpleNamespace(
+                profile_key="north",
+                profile_secrets={"spreadsheet_id": "new-sheet"},
+            ),
+            [],
+        )
+
+    assert notices == []
+    notice = session_state[key]
+    assert isinstance(notice, Mapping)
+    assert notice["message"] == "2 receipt(s) uploaded and linked; 0 unresolved."
 
 
 def test_missing_editor_recovery_is_preserved_after_receipt_folder_change() -> None:
