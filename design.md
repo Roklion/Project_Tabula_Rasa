@@ -2501,9 +2501,10 @@ leads with profile creation and does not render unrelated Drive or Synology
 configuration. The administrator reviews an editable safe key derived from the
 business name before the first save. After saving, one selected profile drives
 the Sheets, local-backup, Drive, Synology, and readiness sections in dependency
-order. Readiness reports incomplete, ready-local, or ready-hosted status and
-uses fresh workbook and configured Drive destination reads without displaying
-credential, token, ledger, or receipt contents.
+order. Readiness reports incomplete or ready-local status and uses fresh
+workbook and configured Drive destination reads without displaying credential,
+token, ledger, or receipt contents. The local administrator cannot inspect or
+verify the separate Streamlit Community Cloud Secrets store.
 
 Preserve the summary table fields:
 

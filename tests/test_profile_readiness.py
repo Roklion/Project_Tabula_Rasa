@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from unittest.mock import patch
-
 import pytest
 
 from tabula_rasa.profile_readiness import (
@@ -41,7 +39,6 @@ def test_sheets_only_profile_is_ready_locally_without_optional_destinations() ->
 
     assert report.status == "ready-local"
     assert report.missing_steps == ()
-    assert report.hosted_export_needed
 
 
 def test_partial_drive_configuration_is_incomplete() -> None:
@@ -109,50 +106,11 @@ def test_drive_folder_mappings_require_ids(
     assert expected_step in report.missing_steps
 
 
-def test_matching_hosted_projection_is_ready_hosted() -> None:
-    settings = _settings(google_drive=_drive_settings())
-    from scripts.export_streamlit_secrets import project_hosted_profiles
-
-    hosted = project_hosted_profiles({"north": settings})
-    report = profile_configuration_readiness(
-        "north",
-        settings,
-        hosted_profiles=hosted,
-    )
-
-    assert report.status == "ready-hosted"
-    assert not report.hosted_export_needed
-
-
-def test_hosted_projection_matching_is_scoped_to_the_selected_profile() -> None:
-    north = _settings()
-    south = _settings(name="South Shop", spreadsheet_id="south-sheet")
-    from scripts.export_streamlit_secrets import project_hosted_profiles
-
-    hosted_north = project_hosted_profiles({"north": north})
-    report = profile_configuration_readiness(
-        "south",
-        south,
-        hosted_profiles=hosted_north,
-    )
+def test_ready_local_does_not_claim_to_verify_hosted_secrets() -> None:
+    report = profile_configuration_readiness("north", _settings())
 
     assert report.status == "ready-local"
-    assert report.hosted_export_needed
-
-
-def test_failed_hosted_projection_requires_export_when_profile_is_absent() -> None:
-    with patch(
-        "tabula_rasa.profile_readiness.project_hosted_profiles",
-        side_effect=ValueError("invalid profile"),
-    ):
-        report = profile_configuration_readiness(
-            "north",
-            _settings(),
-            hosted_profiles={},
-        )
-
-    assert report.status == "ready-local"
-    assert report.hosted_export_needed
+    assert not hasattr(report, "hosted_export_needed")
 
 
 def test_local_only_validation_failure_is_sanitized_and_actionable() -> None:

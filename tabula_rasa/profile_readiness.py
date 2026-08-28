@@ -8,11 +8,7 @@ import hashlib
 import json
 from typing import Any, Literal
 
-from tabula_rasa.google_drive import GoogleDriveConfigurationError
-from tabula_rasa.local_profile_store import project_hosted_profiles
-
-
-ReadinessStatus = Literal["incomplete", "ready-local", "ready-hosted"]
+ReadinessStatus = Literal["incomplete", "ready-local"]
 
 
 @dataclass(frozen=True)
@@ -22,7 +18,6 @@ class ProfileReadiness:
     status: ReadinessStatus
     missing_steps: tuple[str, ...] = ()
     validation_errors: tuple[str, ...] = ()
-    hosted_export_needed: bool = False
 
 
 def profile_settings_fingerprint(settings: Mapping[str, Any]) -> str:
@@ -35,7 +30,6 @@ def profile_configuration_readiness(
     profile_key: str,
     settings: Mapping[str, Any],
     *,
-    hosted_profiles: Mapping[str, Any] | None = None,
     validation_errors: tuple[str, ...] = (),
 ) -> ProfileReadiness:
     """Return a secret-free readiness report for one validated local profile."""
@@ -67,15 +61,4 @@ def profile_configuration_readiness(
             validation_errors=errors,
         )
 
-    hosted_export_needed = True
-    if hosted_profiles is not None:
-        try:
-            projected = project_hosted_profiles({profile_key: settings}).get(profile_key)
-        except (ValueError, GoogleDriveConfigurationError):
-            projected = None
-        current = hosted_profiles.get(profile_key)
-        hosted_export_needed = projected is None or projected != current
-    return ProfileReadiness(
-        status="ready-local" if hosted_export_needed else "ready-hosted",
-        hosted_export_needed=hosted_export_needed,
-    )
+    return ProfileReadiness(status="ready-local")

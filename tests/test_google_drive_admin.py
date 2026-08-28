@@ -9,15 +9,15 @@ import pytest
 import tabula_rasa.google_drive_admin as google_drive_admin
 from tabula_rasa.google_drive import (
     GoogleDriveAccessError,
-    GoogleDriveAuthorizationError,
     GoogleDriveConfigurationError,
 )
 from tabula_rasa.google_drive_admin import (
     _folder_display_name,
-    _ensure_storage_root_is_profile_isolated,
+    _ensure_storage_root_is_not_directly_nested,
     _create_storage_root,
     _provision_storage_children,
     _revalidated_storage_settings,
+    _save_storage_root,
     process_google_drive_oauth_callback,
     validate_google_drive_profile,
 )
@@ -33,7 +33,7 @@ class FolderClient:
         return self.folders[folder_id]
 
 
-def test_readiness_rechecks_profile_root_isolation() -> None:
+def test_readiness_rechecks_direct_profile_root_conflict() -> None:
     client = Mock()
     client.validate_storage_configuration.return_value = {
         "storage_root": {"id": "northroot123", "name": "North Storage"}
@@ -53,8 +53,8 @@ def test_readiness_rechecks_profile_root_isolation() -> None:
         "tabula_rasa.google_drive_admin._cached_drive_client",
         return_value=client,
     ), patch(
-        "tabula_rasa.google_drive_admin._ensure_storage_root_is_profile_isolated"
-    ) as ensure_isolated:
+        "tabula_rasa.google_drive_admin._ensure_storage_root_is_not_directly_nested"
+    ) as ensure_direct:
         validate_google_drive_profile(
             {},
             "north",
@@ -62,12 +62,10 @@ def test_readiness_rechecks_profile_root_isolation() -> None:
             local_profiles=profiles,
         )
 
-    ensure_isolated.assert_called_once_with(
-        client,
+    ensure_direct.assert_called_once_with(
         "north",
         client.folder.return_value,
         profiles,
-        selected_drive_settings=drive_settings,
     )
     client.validate_storage_configuration.assert_called_once_with(
         "north",
@@ -127,7 +125,7 @@ def test_oauth_callback_returns_to_account_settings_and_persists_profile_grant(
     )
 
 
-def test_drive_validation_can_skip_profile_root_ancestry() -> None:
+def test_drive_validation_uses_only_visible_parent_ids() -> None:
     client = Mock()
     client.folder.return_value = {
         "id": "northroot123",
@@ -149,24 +147,27 @@ def test_drive_validation_can_skip_profile_root_ancestry() -> None:
         "tabula_rasa.google_drive_admin._cached_drive_client",
         return_value=client,
     ), patch(
-        "tabula_rasa.google_drive_admin._ensure_storage_root_is_profile_isolated"
-    ) as ensure_isolated:
+        "tabula_rasa.google_drive_admin._ensure_storage_root_is_not_directly_nested"
+    ) as ensure_direct:
         validate_google_drive_profile(
             {},
             "north",
             drive_settings,
             local_profiles=profiles,
-            enforce_root_isolation=False,
         )
 
-    ensure_isolated.assert_not_called()
+    ensure_direct.assert_called_once_with(
+        "north",
+        client.folder.return_value,
+        profiles,
+    )
     client.validate_storage_configuration.assert_called_once_with(
         "north",
         root_folder=client.folder.return_value,
     )
 
 
-def test_drive_validation_without_ancestry_rejects_direct_known_root_parent() -> None:
+def test_drive_validation_rejects_direct_known_root_parent() -> None:
     client = Mock()
     client.folder.return_value = {
         "id": "northroot123",
@@ -193,7 +194,6 @@ def test_drive_validation_without_ancestry_rejects_direct_known_root_parent() ->
             "north",
             drive_settings,
             local_profiles=profiles,
-            enforce_root_isolation=False,
         )
 
 
@@ -299,248 +299,117 @@ def test_reconnect_drops_managed_child_with_missing_parents_safely() -> None:
     }
 
 
-@pytest.mark.parametrize("selected_key", ("north", "south"))
-def test_storage_roots_cannot_be_nested_between_profiles(selected_key: str) -> None:
-    north_root = managed_folder("northroot123", "North Storage", kind="storage-root")
-    south_root = managed_folder(
-        "southroot123",
-        "South Storage",
-        kind="storage-root",
-        root_id="northroot123",
-    )
+def test_save_storage_root_refreshes_name_when_id_is_unchanged(tmp_path: Path) -> None:
+    root_id = "rootfolder123"
     client = FolderClient(
-        {
-            "northroot123": north_root,
-            "southroot123": south_root,
-        }
+        {root_id: managed_folder(root_id, "Tabula Rasa Data", kind="storage-root")}
     )
-    profiles = {
-        "north": {
-            "google_drive": {
-                "authorized_email": "north@example.com",
-                "storage_root": {"id": "northroot123"},
-            }
-        },
-        "south": {
-            "google_drive": {
-                "authorized_email": "south@example.com",
-                "storage_root": {"id": "southroot123"},
-            }
-        },
+    drive_settings = {
+        "storage_root": {"id": root_id, "name": "Tabula Rosa Data"},
+        "receipt_folder": {"id": "receiptchild123", "name": "Receipts"},
+        "backup_folder": {"id": "backupchild123", "name": "Ledger Backups"},
     }
-    selected_root = (
-        north_root if selected_key == "north" else south_root
+
+    with (
+        patch.object(google_drive_admin, "update_local_profile_google_drive") as update,
+        patch.object(google_drive_admin.st.cache_resource, "clear"),
+        patch.object(google_drive_admin.st, "rerun"),
+    ):
+        assert _save_storage_root(
+            "north",
+            drive_settings,
+            {"id": root_id, "name": "Tabula Rasa Data"},
+            client=client,
+            store_path=tmp_path / "profiles.json",
+        )
+
+    update.assert_called_once_with(
+        "north",
+        {
+            "storage_root": {"id": root_id, "name": "Tabula Rasa Data"},
+            "receipt_folder": {"id": "receiptchild123", "name": "Receipts"},
+            "backup_folder": {"id": "backupchild123", "name": "Ledger Backups"},
+        },
+        path=tmp_path / "profiles.json",
     )
+    assert "name refreshed" in google_drive_admin.st.session_state[
+        "google_drive_admin_notice"
+    ]
+
+
+def test_save_storage_root_handles_missing_folder_name_without_key_error(
+    tmp_path: Path,
+) -> None:
+    root_id = "rootfolder123"
+    client = FolderClient({root_id: {"id": root_id}})
+
+    with patch.object(google_drive_admin, "update_local_profile_google_drive") as update:
+        with pytest.raises(GoogleDriveAccessError, match="folder details"):
+            _save_storage_root(
+                "north",
+                {},
+                {"id": root_id},
+                client=client,
+                store_path=tmp_path / "profiles.json",
+            )
+
+    update.assert_not_called()
+
+
+def test_save_storage_root_handles_non_mapping_folder_response(
+    tmp_path: Path,
+) -> None:
+    root_id = "rootfolder123"
+    client = FolderClient({root_id: [root_id]})
+
+    with patch.object(google_drive_admin, "update_local_profile_google_drive") as update:
+        with pytest.raises(GoogleDriveAccessError, match="folder details"):
+            _save_storage_root(
+                "north",
+                {},
+                {"id": root_id},
+                client=client,
+                store_path=tmp_path / "profiles.json",
+            )
+
+    update.assert_not_called()
+
+
+def test_storage_root_rejects_exact_profile_root_reuse() -> None:
+    selected_root = {"id": "northroot123", "parents": []}
+    profiles = {
+        "north": {"google_drive": {"storage_root": {"id": "northroot123"}}},
+        "south": {"google_drive": {"storage_root": {"id": "northroot123"}}},
+    }
 
     with pytest.raises(GoogleDriveConfigurationError, match="cannot be nested"):
-        _ensure_storage_root_is_profile_isolated(
-            client,
-            selected_key,
-            selected_root,
-            profiles,
-        )
+        _ensure_storage_root_is_not_directly_nested("south", selected_root, profiles)
 
 
-def test_storage_root_isolation_skips_inaccessible_other_account_root() -> None:
-    selected_root = managed_folder(
-        "northroot123",
-        "North Storage",
-        kind="storage-root",
-    )
-    class DifferentAccountClient(FolderClient):
-        def folder(self, folder_id: str) -> dict[str, Any]:
-            if folder_id == "southroot123":
-                raise GoogleDriveAccessError("folder not found")
-            return super().folder(folder_id)
+def test_storage_root_rejects_non_mapping_folder_response() -> None:
+    with pytest.raises(GoogleDriveConfigurationError, match="folder details"):
+        _ensure_storage_root_is_not_directly_nested("north", [], {})  # type: ignore[arg-type]
 
-    client = DifferentAccountClient({"northroot123": selected_root})
+
+def test_storage_root_rejects_known_direct_parent_only() -> None:
+    selected_root = {"id": "southroot123", "parents": ["northroot123"]}
     profiles = {
-        "north": {
-            "google_drive": {
-                "authorized_email": "north@example.com",
-                "storage_root": {"id": "northroot123"},
-            }
-        },
-        "south": {
-            "google_drive": {
-                "authorized_email": "south@example.com",
-                "storage_root": {"id": "southroot123"},
-            }
-        },
+        "north": {"google_drive": {"storage_root": {"id": "northroot123"}}},
+        "south": {"google_drive": {"storage_root": {"id": "southroot123"}}},
     }
 
-    _ensure_storage_root_is_profile_isolated(
-        client,
-        "north",
-        selected_root,
-        profiles,
-    )
+    with pytest.raises(GoogleDriveConfigurationError, match="cannot be nested"):
+        _ensure_storage_root_is_not_directly_nested("south", selected_root, profiles)
 
 
-def test_storage_root_isolation_allows_unreadable_unrelated_parent() -> None:
-    selected_root = managed_folder(
-        "northroot123",
-        "North Storage",
-        kind="storage-root",
-    )
-    selected_root["parents"] = ["ordinaryparent123"]
-
-    class ParentRestrictedClient(FolderClient):
-        def folder(self, folder_id: str) -> dict[str, Any]:
-            if folder_id == "ordinaryparent123":
-                raise GoogleDriveAuthorizationError("parent is outside drive.file scope")
-            return super().folder(folder_id)
-
-    _ensure_storage_root_is_profile_isolated(
-        ParentRestrictedClient({"northroot123": selected_root}),
-        "north",
-        selected_root,
-        {"north": {"google_drive": {"storage_root": {"id": "northroot123"}}}},
-    )
-
-
-def test_storage_root_isolation_allows_unreadable_parent_404() -> None:
-    selected_root = managed_folder(
-        "northroot123",
-        "North Storage",
-        kind="storage-root",
-    )
-    selected_root["parents"] = ["ordinaryparent123"]
-
-    class ParentNotFoundClient(FolderClient):
-        def folder(self, folder_id: str) -> dict[str, Any]:
-            if folder_id == "ordinaryparent123":
-                raise GoogleDriveAccessError("folder not found")
-            return super().folder(folder_id)
-
-    _ensure_storage_root_is_profile_isolated(
-        ParentNotFoundClient({"northroot123": selected_root}),
-        "north",
-        selected_root,
-        {"north": {"google_drive": {"storage_root": {"id": "northroot123"}}}},
-    )
-
-
-def test_storage_root_isolation_rejects_unverified_same_account_ancestry() -> None:
-    selected_root = managed_folder(
-        "northroot123",
-        "North Storage",
-        kind="storage-root",
-    )
-    selected_root["parents"] = ["ordinaryparent123"]
-
-    class ParentRestrictedClient(FolderClient):
-        def folder(self, folder_id: str) -> dict[str, Any]:
-            if folder_id == "ordinaryparent123":
-                raise GoogleDriveAuthorizationError("parent is outside drive.file scope")
-            return super().folder(folder_id)
-
+def test_storage_root_check_does_not_read_parent_folders() -> None:
+    selected_root = {"id": "northroot123", "parents": ["unreadableparent123"]}
     profiles = {
-        "north": {
-            "google_drive": {
-                "authorized_email": "same@example.com",
-                "storage_root": {"id": "northroot123"},
-            }
-        },
-        "south": {
-            "google_drive": {
-                "authorized_email": "same@example.com",
-                "storage_root": {"id": "southroot123"},
-            }
-        },
+        "north": {"google_drive": {"storage_root": {"id": "northroot123"}}},
+        "south": {"google_drive": {"storage_root": {"id": "southroot123"}}},
     }
 
-    with pytest.raises(GoogleDriveConfigurationError, match="could not be verified"):
-        _ensure_storage_root_is_profile_isolated(
-            ParentRestrictedClient(
-                {
-                    "northroot123": selected_root,
-                    "southroot123": managed_folder(
-                        "southroot123",
-                        "South Storage",
-                        kind="storage-root",
-                    ),
-                }
-            ),
-            "north",
-            selected_root,
-            profiles,
-        )
-
-
-def test_storage_root_isolation_does_not_skip_transient_other_root_failure() -> None:
-    selected_root = managed_folder(
-        "northroot123",
-        "North Storage",
-        kind="storage-root",
-    )
-
-    class TransientClient(FolderClient):
-        def folder(self, folder_id: str) -> dict[str, Any]:
-            if folder_id == "southroot123":
-                raise GoogleDriveAccessError("temporary failure", retryable=True)
-            return super().folder(folder_id)
-
-    client = TransientClient({"northroot123": selected_root})
-    profiles = {
-        "north": {
-            "google_drive": {
-                "authorized_email": "north@example.com",
-                "storage_root": {"id": "northroot123"},
-            }
-        },
-        "south": {
-            "google_drive": {
-                "authorized_email": "south@example.com",
-                "storage_root": {"id": "southroot123"},
-            }
-        },
-    }
-
-    with pytest.raises(GoogleDriveAccessError, match="temporary"):
-        _ensure_storage_root_is_profile_isolated(
-            client,
-            "north",
-            selected_root,
-            profiles,
-        )
-
-
-def test_reconnect_uses_new_authorized_identity_for_root_isolation() -> None:
-    selected_root = managed_folder(
-        "northroot123",
-        "North Storage",
-        kind="storage-root",
-    )
-
-    class DifferentAccountClient(FolderClient):
-        def folder(self, folder_id: str) -> dict[str, Any]:
-            if folder_id == "southroot123":
-                raise GoogleDriveAccessError("folder not found")
-            return super().folder(folder_id)
-
-    profiles = {
-        "north": {
-            "google_drive": {
-                "authorized_email": "old@example.com",
-                "storage_root": {"id": "northroot123"},
-            }
-        },
-        "south": {
-            "google_drive": {
-                "authorized_email": "old@example.com",
-                "storage_root": {"id": "southroot123"},
-            }
-        },
-    }
-
-    _ensure_storage_root_is_profile_isolated(
-        DifferentAccountClient({"northroot123": selected_root}),
-        "north",
-        selected_root,
-        profiles,
-        selected_drive_settings={"authorized_email": "new@example.com"},
-    )
+    _ensure_storage_root_is_not_directly_nested("north", selected_root, profiles)
 
 
 def test_create_storage_root_checks_drive_root_isolation(

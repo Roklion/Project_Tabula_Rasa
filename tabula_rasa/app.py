@@ -176,13 +176,16 @@ def mark_workbook_data_changed() -> None:
 
 def _select_operational_page() -> None:
     """Leave the shared route state aligned with the operational radio."""
-    st.session_state["active_page"] = st.session_state["navigation_page"]
+    selected_page = st.session_state.get("navigation_page")
+    if selected_page is not None:
+        st.session_state["active_page"] = selected_page
 
 
 def _open_account_settings() -> None:
     """Open settings with no operational route selected."""
     st.session_state["active_page"] = "Account settings"
     st.session_state["navigation_page"] = None
+    st.session_state.pop("account_settings_navigation_page", None)
 
 
 def confirmed_write(
@@ -296,6 +299,7 @@ with st.sidebar:
     if st.session_state.pop("account_settings_route_pending", False):
         st.session_state["active_page"] = "Account settings"
         st.session_state.pop("navigation_page", None)
+        st.session_state.pop("account_settings_navigation_page", None)
 
     stored_page = st.session_state.get(
         "active_page",
@@ -316,26 +320,35 @@ with st.sidebar:
     with st.container(key="sidebar_navigation"):
         if available_pages:
             settings_active = st.session_state.get("active_page") == "Account settings"
-            # Remove the prior widget value before supplying the matching
-            # default, avoiding Streamlit's session-state/default conflict.
-            st.session_state.pop("navigation_page", None)
             if settings_active:
-                # Account settings is a separate utility destination. Keep the
-                # operational radio unselected so choosing the page the user came
-                # from still invokes its callback and returns to that page.
-                navigation_index = None
+                # Account settings uses an independent widget key. Reusing the
+                # operational radio here lets its prior Dashboard value leak
+                # into the rerun that unlocks settings and reset the route.
+                page = st.radio(
+                    "Workspace",
+                    available_pages,
+                    key="account_settings_navigation_page",
+                    index=None,
+                )
+                if page is not None:
+                    st.session_state["active_page"] = page
+                    st.session_state["navigation_page"] = page
             else:
+                st.session_state.pop("account_settings_navigation_page", None)
+                # Remove the prior widget value before supplying the matching
+                # default, avoiding Streamlit's session-state/default conflict.
+                st.session_state.pop("navigation_page", None)
                 # active_page is the canonical route state. Synchronize the
                 # widget value and index before rendering so a preselected or
                 # restored route cannot render with a different radio choice.
                 navigation_index = available_pages.index(stored_page)
-            page = st.radio(
-                "Workspace",
-                available_pages,
-                key="navigation_page",
-                index=navigation_index,
-                on_change=_select_operational_page,
-            )
+                page = st.radio(
+                    "Workspace",
+                    available_pages,
+                    key="navigation_page",
+                    index=navigation_index,
+                    on_change=_select_operational_page,
+                )
         else:
             page = None
 

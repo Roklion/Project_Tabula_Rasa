@@ -135,7 +135,6 @@ def _fresh_profile_readiness(
     settings: Mapping[str, Any],
     *,
     app_secrets: Mapping[str, Any],
-    hosted_profiles: Mapping[str, Any] | None,
     local_profiles: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> ProfileReadiness:
     """Run fresh Sheets and configured Drive checks for one profile."""
@@ -159,7 +158,6 @@ def _fresh_profile_readiness(
                 profile_key,
                 drive,
                 local_profiles=profiles_for_isolation,
-                enforce_root_isolation=False,
             )
         except (GoogleDriveError, LocalProfileStoreError) as error:
             validation_errors.append(_safe_readiness_error("Drive", error))
@@ -167,7 +165,6 @@ def _fresh_profile_readiness(
     return profile_configuration_readiness(
         profile_key,
         settings,
-        hosted_profiles=hosted_profiles,
         validation_errors=tuple(validation_errors),
     )
 
@@ -200,8 +197,6 @@ def _render_profile_readiness(
     local_profiles: Mapping[str, Mapping[str, Any]],
 ) -> None:
     st.subheader("Profile readiness")
-    hosted_profiles = app_secrets.get("business_profiles")
-    hosted_profiles = hosted_profiles if isinstance(hosted_profiles, Mapping) else None
     report = _readiness_for_display(
         profile_key,
         settings,
@@ -209,21 +204,24 @@ def _render_profile_readiness(
     labels = {
         "incomplete": "Incomplete",
         "ready-local": "Ready locally",
-        "ready-hosted": "Ready for hosted Secrets",
     }
-    st.metric("Status", labels[report.status])
+    status_key = f"profile_readiness_status_{report.status.replace('-', '_')}"
+    with st.container(key=status_key):
+        st.metric("Status", labels[report.status])
     for step in report.missing_steps:
         st.warning(step)
     for error in report.validation_errors:
         st.error(error)
-    if report.status == "ready-local" and report.hosted_export_needed:
+    if report.status == "ready-local":
         st.info(
-            "Local profile settings are ready. Export hosted Secrets once after "
-            "all hosted-runtime settings are complete; local backup and Synology "
-            "changes do not require a new export."
+            "Local profile settings are ready. To publish them to Streamlit "
+            "Community Cloud, run `python scripts/export_streamlit_secrets.py` "
+            "from the repository root, paste the complete generated TOML into "
+            "Streamlit App settings > Secrets, and save it. This local page "
+            "cannot verify the separate hosted Secrets store; confirm the "
+            "deployed app after saving. Local backup and Synology changes do not "
+            "require a new export."
         )
-    elif report.status == "ready-hosted":
-        st.success("The current hosted profile projection matches this local profile.")
     if st.button(
         "Run readiness check",
         type="primary",
@@ -233,7 +231,6 @@ def _render_profile_readiness(
             profile_key,
             settings,
             app_secrets=app_secrets,
-            hosted_profiles=hosted_profiles,
             local_profiles=local_profiles,
         )
         st.session_state[f"profile-readiness:{profile_key}"] = (
@@ -446,9 +443,8 @@ def _render_synology_recovery_admin(
     try:
         # The Drive root and its managed children are validated when the
         # profile's Drive settings are selected or provisioned. Saving this
-        # record only changes local NAS metadata; do not re-walk Drive
-        # ancestry here, because the narrow drive.file grant may not expose
-        # unrelated parent folders.
+        # record only changes local NAS metadata; do not query unrelated Drive
+        # parent folders because the narrow drive.file grant may not expose them.
         update_local_profile_synology_recovery(
             profile_key,
             settings,
