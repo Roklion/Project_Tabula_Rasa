@@ -156,7 +156,12 @@ def render_ledger(
             if editor_receipt_recovery_active(context)
             else all_transactions
         )
-        clear_missing_editor_receipt_recoveries(context, recovery_transactions)
+        recovery_notices = clear_missing_editor_receipt_recoveries(
+            context,
+            recovery_transactions,
+        )
+        for notice in recovery_notices:
+            st.warning(notice)
         structured_transactions = context.storage.list_transactions(
             start=start,
             end=end,

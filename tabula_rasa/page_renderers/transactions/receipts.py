@@ -561,8 +561,9 @@ def _fresh_transaction_receipt_references(
 def clear_missing_editor_receipt_recoveries(
     context: TransactionsContext,
     transactions: Sequence[Mapping[str, Any]],
-) -> None:
+) -> list[str]:
     """Discard editor recovery whose transaction disappeared from fresh Sheets data."""
+    notices: list[str] = []
     existing_transaction_ids = {
         str(transaction.get("id", ""))
         for transaction in transactions
@@ -575,17 +576,26 @@ def clear_missing_editor_receipt_recoveries(
         workflow = st.session_state.get(key)
         if not isinstance(workflow, Mapping):
             continue
+        workflow_spreadsheet = str(workflow.get("spreadsheet_id", ""))
+        current_spreadsheet = str(
+            context.profile_secrets.get("spreadsheet_id", "")
+        )
+        if workflow_spreadsheet and workflow_spreadsheet != current_spreadsheet:
+            continue
         transaction_id = str(workflow.get("transaction_id", ""))
         if not transaction_id or transaction_id in existing_transaction_ids:
             continue
         st.session_state.pop(key, None)
-        st.session_state[
-            f"receipt-editor-notice-{context.profile_key}-{transaction_id}"
-        ] = (
+        notice = (
             "The transaction no longer exists. Uploaded files remain in "
             "Google Drive and can be linked from the Unreferenced receipt "
             "workflow."
         )
+        st.session_state[
+            f"receipt-editor-notice-{context.profile_key}-{transaction_id}"
+        ] = notice
+        notices.append(notice)
+    return notices
 
 
 def editor_receipt_recovery_active(context: TransactionsContext) -> bool:

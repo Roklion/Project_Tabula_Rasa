@@ -1013,11 +1013,15 @@ def test_missing_editor_recovery_cleanup_is_profile_scoped() -> None:
         receipt_editor_workflow_key("south", "south-gone"): south_workflow,
     }
     with patch.object(st, "session_state", session_state):
-        clear_missing_editor_receipt_recoveries(
-            SimpleNamespace(profile_key="north"),
+        notices = clear_missing_editor_receipt_recoveries(
+            SimpleNamespace(profile_key="north", profile_secrets={}),
             [{"id": "north-still-present"}],
         )
 
+    assert notices == [
+        "The transaction no longer exists. Uploaded files remain in Google "
+        "Drive and can be linked from the Unreferenced receipt workflow."
+    ]
     assert receipt_editor_workflow_key("north", "north-gone") not in session_state
     assert receipt_editor_workflow_key("south", "south-gone") in session_state
     assert session_state[
@@ -1037,3 +1041,26 @@ def test_editor_receipt_recovery_active_is_profile_scoped() -> None:
         assert editor_receipt_recovery_active(SimpleNamespace(profile_key="north"))
         assert editor_receipt_recovery_active(SimpleNamespace(profile_key="south"))
         assert not editor_receipt_recovery_active(SimpleNamespace(profile_key="west"))
+
+
+def test_missing_editor_recovery_is_preserved_after_profile_reconfiguration() -> None:
+    workflow = new_receipt_creation_workflow(
+        "old-txn",
+        [],
+        profile_key="north",
+        spreadsheet_id="old-sheet",
+    )
+    session_state: dict[str, object] = {
+        receipt_editor_workflow_key("north", "old-txn"): workflow,
+    }
+    with patch.object(st, "session_state", session_state):
+        notices = clear_missing_editor_receipt_recoveries(
+            SimpleNamespace(
+                profile_key="north",
+                profile_secrets={"spreadsheet_id": "new-sheet"},
+            ),
+            [],
+        )
+
+    assert notices == []
+    assert receipt_editor_workflow_key("north", "old-txn") in session_state
