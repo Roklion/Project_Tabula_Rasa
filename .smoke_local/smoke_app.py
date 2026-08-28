@@ -11,6 +11,7 @@ REPOSITORY = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPOSITORY))
 
 from tests.fakes import FakeWorkbook  # noqa: E402
+from tabula_rasa.google_drive import GoogleDriveClient  # noqa: E402
 from tabula_rasa.storage import GoogleSheetsStorage  # noqa: E402
 import tabula_rasa.local_profile_store as local_profile_store  # noqa: E402
 
