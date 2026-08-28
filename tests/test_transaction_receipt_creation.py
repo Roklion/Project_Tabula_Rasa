@@ -31,11 +31,13 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     _reconcile_editor_workflow_references,
     _discard_editor_workflow_receipt,
     _cancel_editor_receipt_recovery,
+    _editor_receipt_notice_requires_attention,
     _finish_editor_receipt_workflow,
     _mark_editor_receipt_notice_validated,
     _render_editor_receipt_recovery,
     _process_editor_receipts,
     _record_editor_receipt_linked,
+    render_receipts,
     _start_editor_receipt_workflow,
     receipt_editor_workflow_key,
 )
@@ -379,7 +381,9 @@ def test_deleted_transaction_clears_only_matching_recovery() -> None:
     session_state[receipt_editor_workflow_key("north", "north-txn")] = (
         new_receipt_creation_workflow("north-txn", [], profile_key="north")
     )
-    session_state["receipt-editor-notice:north:north-txn"] = "stale notice"
+    session_state[receipt_editor_notice_key("north", "north-txn")] = (
+        "stale notice"
+    )
     with patch.object(st, "session_state", session_state):
         clear_receipt_creation_recovery(north_context, "other-txn")
         assert receipt_creation_workflow_key("north") in session_state
@@ -387,7 +391,7 @@ def test_deleted_transaction_clears_only_matching_recovery() -> None:
 
     assert receipt_creation_workflow_key("north") not in session_state
     assert receipt_editor_workflow_key("north", "north-txn") not in session_state
-    assert "receipt-editor-notice:north:north-txn" not in session_state
+    assert receipt_editor_notice_key("north", "north-txn") not in session_state
 
 
 def test_receipt_recovery_refuses_changed_profile_configuration() -> None:
@@ -646,6 +650,61 @@ def test_editor_receipt_recovery_cancel_discards_workflow() -> None:
         "validated_configuration": "",
     }
     schedule_reset.assert_called_once_with("reset-receipt-editor:north:txn-1")
+
+
+def test_editor_receipt_recovery_can_be_canceled_when_drive_is_unavailable() -> None:
+    context = SimpleNamespace(
+        profile_key="north",
+        profile_secrets={
+            "spreadsheet_id": "sheet",
+            "google_drive": {"receipt_folder": {"id": "folder"}},
+        },
+        configuration_revision="revision",
+        get_drive_client=lambda *_args: (_ for _ in ()).throw(
+            GoogleDriveError("Drive is unavailable")
+        ),
+    )
+    workflow = new_receipt_creation_workflow(
+        "txn-1",
+        [{"key": "receipt", "original_name": "receipt.pdf", "content": b"receipt"}],
+        profile_key="north",
+    )
+    session_state = {receipt_editor_workflow_key("north", "txn-1"): workflow}
+
+    with (
+        patch.object(st, "session_state", session_state),
+        patch.object(st, "divider"),
+        patch.object(st, "subheader"),
+        patch.object(st, "warning"),
+        patch.object(st, "caption"),
+        patch.object(st, "info"),
+        patch.object(st, "error"),
+        patch.object(st, "button", return_value=True),
+        patch.object(st, "rerun", side_effect=RuntimeError("rerun")),
+    ):
+        with pytest.raises(RuntimeError, match="rerun"):
+            render_receipts(
+                context,
+                selected={"receipt_references": "[]"},
+                all_transactions=[],
+                edit_id="txn-1",
+            )
+
+    assert receipt_editor_workflow_key("north", "txn-1") not in session_state
+    assert receipt_editor_notice_key("north", "txn-1") in session_state
+
+
+def test_editor_receipt_notice_attention_states_use_warning_semantics() -> None:
+    assert _editor_receipt_notice_requires_attention(
+        EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE
+    )
+    assert _editor_receipt_notice_requires_attention(
+        "Receipt recovery canceled. Files already uploaded remain in Google Drive "
+        "and can be linked from the Unreferenced receipt workflow."
+    )
+    assert not _editor_receipt_notice_requires_attention(
+        "2 receipt(s) uploaded and linked; 0 unresolved."
+    )
 
 
 def test_cancel_editor_receipt_recovery_is_profile_scoped() -> None:
@@ -1223,7 +1282,7 @@ def test_editor_receipt_recovery_active_is_profile_scoped() -> None:
     session_state: dict[str, object] = {
         receipt_editor_workflow_key("north", "txn-1"): {},
         receipt_editor_workflow_key("south", "txn-2"): {},
-        "receipt-editor-notice:north:deleted": "notice",
+        receipt_editor_notice_key("north", "deleted"): "notice",
     }
     with patch.object(st, "session_state", session_state):
         assert editor_receipt_recovery_active(SimpleNamespace(profile_key="north"))
@@ -1240,6 +1299,19 @@ def test_editor_receipt_recovery_active_does_not_match_profile_prefix() -> None:
         assert not editor_receipt_recovery_active(SimpleNamespace(profile_key="north"))
         assert editor_receipt_recovery_active(
             SimpleNamespace(profile_key="north-east")
+        )
+
+
+def test_editor_receipt_recovery_active_does_not_match_colon_profile_prefix() -> None:
+    session_state: dict[str, object] = {
+        receipt_editor_workflow_key("north:shop", "txn-1"): {},
+        receipt_editor_notice_key("north:shop", "txn-2"): "notice",
+    }
+
+    with patch.object(st, "session_state", session_state):
+        assert not editor_receipt_recovery_active(SimpleNamespace(profile_key="north"))
+        assert editor_receipt_recovery_active(
+            SimpleNamespace(profile_key="north:shop")
         )
 
 
@@ -1328,8 +1400,8 @@ def test_missing_editor_recovery_is_preserved_after_profile_reconfiguration() ->
 def test_missing_editor_recovery_cleanup_pops_orphaned_notice() -> None:
     notice = "The transaction no longer exists. Uploaded files remain in Drive."
     session_state: dict[str, object] = {
-        "receipt-editor-notice:north:north-gone": notice,
-        "receipt-editor-notice:south:south-gone": "Keep south notice",
+        receipt_editor_notice_key("north", "north-gone"): notice,
+        receipt_editor_notice_key("south", "south-gone"): "Keep south notice",
     }
 
     with patch.object(st, "session_state", session_state):
@@ -1339,8 +1411,8 @@ def test_missing_editor_recovery_cleanup_pops_orphaned_notice() -> None:
         )
 
     assert notices == [EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE]
-    assert "receipt-editor-notice:north:north-gone" not in session_state
-    assert session_state["receipt-editor-notice:south:south-gone"] == (
+    assert receipt_editor_notice_key("north", "north-gone") not in session_state
+    assert session_state[receipt_editor_notice_key("south", "south-gone")] == (
         "Keep south notice"
     )
 
@@ -1359,8 +1431,22 @@ def test_missing_editor_recovery_cleanup_does_not_cross_match_profile_prefix() -
     assert session_state[key] == "Keep north-east notice"
 
 
+def test_missing_editor_recovery_cleanup_does_not_cross_match_colon_profile() -> None:
+    key = receipt_editor_notice_key("north:shop", "north-shop-gone")
+    session_state: dict[str, object] = {key: "Keep north:shop notice"}
+
+    with patch.object(st, "session_state", session_state):
+        notices = clear_missing_editor_receipt_recoveries(
+            SimpleNamespace(profile_key="north", profile_secrets={}),
+            [],
+        )
+
+    assert notices == []
+    assert session_state[key] == "Keep north:shop notice"
+
+
 def test_missing_editor_recovery_replaces_orphaned_success_notice() -> None:
-    key = "receipt-editor-notice:north:north-gone"
+    key = receipt_editor_notice_key("north", "north-gone")
     session_state: dict[str, object] = {
         key: "2 receipt(s) uploaded and linked; 0 unresolved."
     }

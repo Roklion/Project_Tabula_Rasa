@@ -31,6 +31,10 @@ EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE = (
     "The transaction no longer exists. Uploaded files remain in Google Drive "
     "and can be linked from the Unreferenced receipt workflow."
 )
+EDITOR_RECEIPT_RECOVERY_CANCELED_NOTICE = (
+    "Receipt recovery canceled. Files already uploaded remain in Google Drive "
+    "and can be linked from the Unreferenced receipt workflow."
+)
 
 
 def receipt_creation_workflow_key(profile_key: str) -> str:
@@ -40,17 +44,22 @@ def receipt_creation_workflow_key(profile_key: str) -> str:
 
 def receipt_editor_workflow_key(profile_key: str, transaction_id: str) -> str:
     """Return the session key for one profile's editor recovery."""
-    return f"{RECEIPT_EDITOR_WORKFLOW_KEY}:{profile_key}:{transaction_id}"
+    return f"{RECEIPT_EDITOR_WORKFLOW_KEY}:{len(profile_key)}:{profile_key}:{transaction_id}"
+
+
+def receipt_editor_workflow_key_prefix(profile_key: str) -> str:
+    """Return the unambiguous session-key prefix for one profile's recovery."""
+    return f"{RECEIPT_EDITOR_WORKFLOW_KEY}:{len(profile_key)}:{profile_key}:"
 
 
 def receipt_editor_notice_key(profile_key: str, transaction_id: str) -> str:
     """Return the session key for one profile's editor notice."""
-    return f"receipt-editor-notice:{profile_key}:{transaction_id}"
+    return f"receipt-editor-notice:{len(profile_key)}:{profile_key}:{transaction_id}"
 
 
 def receipt_editor_notice_key_prefix(profile_key: str) -> str:
     """Return the unambiguous session-key prefix for one profile's notices."""
-    return f"receipt-editor-notice:{profile_key}:"
+    return f"receipt-editor-notice:{len(profile_key)}:{profile_key}:"
 
 
 def receipt_editor_upload_reset_key(profile_key: str, transaction_id: str) -> str:
@@ -408,6 +417,14 @@ def _editor_receipt_notice_message(notice: object) -> str:
     return str(notice or "")
 
 
+def _editor_receipt_notice_requires_attention(message: str) -> bool:
+    """Return whether a receipt notice represents an attention state."""
+    return message in {
+        EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE,
+        EDITOR_RECEIPT_RECOVERY_CANCELED_NOTICE,
+    }
+
+
 def _editor_receipt_notice_matches_configuration(
     context: TransactionsContext,
     notice: object,
@@ -446,8 +463,7 @@ def _cancel_editor_receipt_recovery(
     st.session_state[receipt_editor_notice_key(context.profile_key, transaction_id)] = (
         _new_editor_receipt_notice(
             context,
-            "Receipt recovery canceled. Files already uploaded remain in Google "
-            "Drive and can be linked from the Unreferenced receipt workflow.",
+            EDITOR_RECEIPT_RECOVERY_CANCELED_NOTICE,
         )
     )
 
@@ -562,7 +578,9 @@ def _record_editor_receipt_linked(
 def _render_editor_receipt_recovery(
     context: TransactionsContext,
     transaction_id: str,
-    receipt_folder: Mapping[str, object],
+    receipt_folder: Mapping[str, object] | None,
+    *,
+    retry_available: bool = True,
 ) -> bool:
     """Render editor receipt recovery and return whether a workflow is active."""
     workflow = _editor_workflow(context, transaction_id)
@@ -608,11 +626,18 @@ def _render_editor_receipt_recovery(
         )
     if workflow.get("configuration_error"):
         st.error(str(workflow["configuration_error"]))
-    retry_requested = (unresolved or bool(workflow.get("configuration_error"))) and st.button(
-        retry_label,
-        type="primary",
-        key=f"retry-editor-receipts-{context.profile_key}-{transaction_id}",
-    )
+    retry_requested = False
+    if retry_available and (unresolved or workflow.get("configuration_error")):
+        retry_requested = st.button(
+            retry_label,
+            type="primary",
+            key=f"retry-editor-receipts-{context.profile_key}-{transaction_id}",
+        )
+    elif unresolved or workflow.get("configuration_error"):
+        st.info(
+            "Connect Google Drive and select a receipt folder before retrying "
+            "receipt recovery."
+        )
     cancel_requested = unresolved and st.button(
         "Cancel recovery",
         key=f"cancel-editor-receipts-{context.profile_key}-{transaction_id}",
@@ -751,7 +776,7 @@ def clear_missing_editor_receipt_recoveries(
         if str(transaction.get("id", ""))
     }
     processed_transaction_ids: set[str] = set()
-    key_prefix = f"{RECEIPT_EDITOR_WORKFLOW_KEY}:{context.profile_key}:"
+    key_prefix = receipt_editor_workflow_key_prefix(context.profile_key)
     current_receipt_folder = _receipt_folder(context)
     current_folder_id = str(
         current_receipt_folder.get("id", "")
@@ -835,7 +860,7 @@ def clear_missing_editor_receipt_recoveries(
 
 def editor_receipt_recovery_active(context: TransactionsContext) -> bool:
     """Return whether this profile has editor recovery state to reconcile."""
-    workflow_key_prefix = f"{RECEIPT_EDITOR_WORKFLOW_KEY}:{context.profile_key}:"
+    workflow_key_prefix = receipt_editor_workflow_key_prefix(context.profile_key)
     notice_key_prefix = receipt_editor_notice_key_prefix(context.profile_key)
     current_configuration_key = _editor_receipt_configuration_key(context)
     for key in st.session_state:
@@ -1095,6 +1120,12 @@ def render_receipts(
         else None
     )
     if not isinstance(receipt_folder, Mapping):
+        _render_editor_receipt_recovery(
+            context,
+            edit_id,
+            None,
+            retry_available=False,
+        )
         st.info(
             "Connect Google Drive and select a receipt folder from "
             "the local Account settings page. Until then, store the "
@@ -1107,6 +1138,12 @@ def render_receipts(
                 context.configuration_revision,
             )
         except GoogleDriveError as error:
+            _render_editor_receipt_recovery(
+                context,
+                edit_id,
+                receipt_folder,
+                retry_available=False,
+            )
             st.error(str(error))
         else:
             receipt_action_scope = (
@@ -1142,6 +1179,7 @@ def render_receipts(
                 context,
                 edit_id,
                 receipt_folder,
+                retry_available=True,
             )
             editor_receipt_notice = st.session_state.get(
                 editor_receipt_notice_key
@@ -1161,7 +1199,12 @@ def render_receipts(
                 editor_receipt_notice
             )
             if editor_receipt_notice_message:
-                st.success(editor_receipt_notice_message)
+                if _editor_receipt_notice_requires_attention(
+                    editor_receipt_notice_message
+                ):
+                    st.warning(editor_receipt_notice_message)
+                else:
+                    st.success(editor_receipt_notice_message)
             receipt_notice = st.session_state.pop(
                 receipt_notice_key,
                 None,
@@ -1596,8 +1639,6 @@ def render_receipts(
                                     prepared_receipts,
                                     receipt_folder,
                                 )
-                            except GoogleDriveError as error:
-                                upload_error.error(str(error))
                             except StorageError as error:
                                 upload_error.error(
                                     "The selected transaction could not be "
