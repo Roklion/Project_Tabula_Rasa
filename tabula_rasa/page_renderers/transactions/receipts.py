@@ -333,6 +333,8 @@ def _new_editor_receipt_notice(
     context: TransactionsContext,
     message: str,
     receipt_folder: Mapping[str, object] | None = None,
+    *,
+    validated: bool = False,
 ) -> dict[str, str]:
     """Bind an editor notice to the profile storage it describes."""
     profile_secrets = getattr(context, "profile_secrets", {})
@@ -357,7 +359,43 @@ def _new_editor_receipt_notice(
             if selected_receipt_folder is not None
             else ""
         ),
+        "validated_configuration": (
+            _editor_receipt_configuration_key(context) if validated else ""
+        ),
     }
+
+
+def _editor_receipt_configuration_key(context: TransactionsContext) -> str:
+    """Return the current profile storage identity used for notice validation."""
+    profile_secrets = getattr(context, "profile_secrets", {})
+    if not isinstance(profile_secrets, Mapping):
+        profile_secrets = {}
+    drive_settings = profile_secrets.get("google_drive")
+    receipt_folder = (
+        drive_settings.get("receipt_folder")
+        if isinstance(drive_settings, Mapping)
+        else None
+    )
+    folder_id = (
+        str(receipt_folder.get("id", ""))
+        if isinstance(receipt_folder, Mapping)
+        else ""
+    )
+    return f"{profile_secrets.get('spreadsheet_id', '')}\x00{folder_id}"
+
+
+def _mark_editor_receipt_notice_validated(
+    key: str,
+    notice: object,
+    configuration_key: str,
+) -> None:
+    """Bound a notice to the configuration under which it was checked."""
+    if isinstance(notice, MutableMapping):
+        notice["validated_configuration"] = configuration_key
+    elif isinstance(notice, Mapping):
+        updated_notice = dict(notice)
+        updated_notice["validated_configuration"] = configuration_key
+        st.session_state[key] = updated_notice
 
 
 def _editor_receipt_notice_message(notice: object) -> str:
@@ -365,6 +403,24 @@ def _editor_receipt_notice_message(notice: object) -> str:
     if isinstance(notice, Mapping):
         return str(notice.get("message", "") or "")
     return str(notice or "")
+
+
+def _editor_receipt_notice_matches_configuration(
+    context: TransactionsContext,
+    notice: object,
+    receipt_folder: Mapping[str, object],
+) -> bool:
+    """Return whether an editor notice belongs to the active profile storage."""
+    if not isinstance(notice, Mapping):
+        return True
+    expected_spreadsheet = str(notice.get("spreadsheet_id", ""))
+    expected_folder = str(notice.get("receipt_folder_id", ""))
+    current_spreadsheet = str(context.profile_secrets.get("spreadsheet_id", ""))
+    current_folder = str(receipt_folder.get("id", ""))
+    return not (
+        (expected_spreadsheet and expected_spreadsheet != current_spreadsheet)
+        or (expected_folder and expected_folder != current_folder)
+    )
 
 
 def _cancel_editor_receipt_recovery(
@@ -609,6 +665,7 @@ def _render_editor_receipt_recovery(
                     context,
                     EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE,
                     receipt_folder,
+                    validated=True,
                 )
             else:
                 workflow["configuration_error"] = (
@@ -690,6 +747,7 @@ def clear_missing_editor_receipt_recoveries(
         if current_receipt_folder is not None
         else ""
     )
+    current_configuration_key = _editor_receipt_configuration_key(context)
     for key in list(st.session_state):
         if not isinstance(key, str) or not key.startswith(key_prefix):
             continue
@@ -716,7 +774,7 @@ def clear_missing_editor_receipt_recoveries(
                 context.profile_key,
                 transaction_id,
             )
-        ] = _new_editor_receipt_notice(context, notice)
+        ] = _new_editor_receipt_notice(context, notice, validated=True)
         notices.append(notice)
         processed_transaction_ids.add(transaction_id)
 
@@ -728,11 +786,7 @@ def clear_missing_editor_receipt_recoveries(
         if not isinstance(key, str) or not key.startswith(notice_prefix):
             continue
         transaction_id = key[len(notice_prefix) :]
-        if (
-            not transaction_id
-            or transaction_id in existing_transaction_ids
-            or transaction_id in processed_transaction_ids
-        ):
+        if not transaction_id or transaction_id in processed_transaction_ids:
             continue
         notice = st.session_state.get(key)
         if isinstance(notice, Mapping):
@@ -742,7 +796,26 @@ def clear_missing_editor_receipt_recoveries(
                 notice_spreadsheet
                 and notice_spreadsheet != current_spreadsheet
             ) or (notice_folder and notice_folder != current_folder_id):
+                _mark_editor_receipt_notice_validated(
+                    key,
+                    notice,
+                    current_configuration_key,
+                )
                 continue
+        if transaction_id in existing_transaction_ids:
+            if isinstance(notice, Mapping):
+                _mark_editor_receipt_notice_validated(
+                    key,
+                    notice,
+                    current_configuration_key,
+                )
+            elif _editor_receipt_notice_message(notice):
+                st.session_state[key] = _new_editor_receipt_notice(
+                    context,
+                    _editor_receipt_notice_message(notice),
+                    validated=True,
+                )
+            continue
         notice = st.session_state.pop(key, None)
         if _editor_receipt_notice_message(notice):
             notices.append(EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE)
@@ -753,14 +826,22 @@ def editor_receipt_recovery_active(context: TransactionsContext) -> bool:
     """Return whether this profile has editor recovery state to reconcile."""
     workflow_key_prefix = f"{RECEIPT_EDITOR_WORKFLOW_KEY}:{context.profile_key}:"
     notice_key_prefix = f"receipt-editor-notice-{context.profile_key}-"
-    return any(
-        isinstance(key, str)
-        and (
-            key.startswith(workflow_key_prefix)
-            or key.startswith(notice_key_prefix)
-        )
-        for key in st.session_state
-    )
+    current_configuration_key = _editor_receipt_configuration_key(context)
+    for key in st.session_state:
+        if not isinstance(key, str):
+            continue
+        if key.startswith(workflow_key_prefix):
+            return True
+        if key.startswith(notice_key_prefix):
+            notice = st.session_state.get(key)
+            if not isinstance(notice, Mapping):
+                return True
+            if (
+                str(notice.get("validated_configuration", ""))
+                != current_configuration_key
+            ):
+                return True
+    return False
 
 
 def finish_receipt_creation_if_complete(
@@ -1039,10 +1120,20 @@ def render_receipts(
                 edit_id,
                 receipt_folder,
             )
-            editor_receipt_notice = st.session_state.pop(
-                editor_receipt_notice_key,
-                None,
+            editor_receipt_notice = st.session_state.get(
+                editor_receipt_notice_key
             )
+            if _editor_receipt_notice_matches_configuration(
+                context,
+                editor_receipt_notice,
+                receipt_folder,
+            ):
+                editor_receipt_notice = st.session_state.pop(
+                    editor_receipt_notice_key,
+                    None,
+                )
+            else:
+                editor_receipt_notice = None
             editor_receipt_notice_message = _editor_receipt_notice_message(
                 editor_receipt_notice
             )

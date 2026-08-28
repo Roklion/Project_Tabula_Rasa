@@ -585,6 +585,7 @@ def test_editor_retry_persists_deleted_transaction_notice() -> None:
         "message": EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE,
         "spreadsheet_id": "sheet",
         "receipt_folder_id": "folder",
+        "validated_configuration": "sheet\x00",
     }
 
 
@@ -637,6 +638,7 @@ def test_editor_receipt_recovery_cancel_discards_workflow() -> None:
         ),
         "spreadsheet_id": "",
         "receipt_folder_id": "",
+        "validated_configuration": "",
     }
 
 
@@ -954,6 +956,7 @@ def test_editor_receipt_recovery_retries_only_unresolved_without_reupload() -> N
         "message": "2 receipt(s) uploaded and linked; 0 unresolved.",
         "spreadsheet_id": "north-sheet",
         "receipt_folder_id": "north-folder",
+        "validated_configuration": "",
     }
 
 
@@ -1052,6 +1055,7 @@ def test_editor_manual_link_recovery_check_can_finish_after_read_failure() -> No
         "message": "1 receipt(s) uploaded and linked; 0 unresolved.",
         "spreadsheet_id": "north-sheet",
         "receipt_folder_id": "north-folder",
+        "validated_configuration": "",
     }
 
 
@@ -1172,6 +1176,7 @@ def test_unreferenced_link_resolves_matching_editor_recovery() -> None:
         "message": "2 receipt(s) uploaded and linked; 0 unresolved.",
         "spreadsheet_id": "",
         "receipt_folder_id": "",
+        "validated_configuration": "",
     }
 
 
@@ -1204,6 +1209,7 @@ def test_missing_editor_recovery_cleanup_is_profile_scoped() -> None:
         "message": EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE,
         "spreadsheet_id": "",
         "receipt_folder_id": "",
+        "validated_configuration": "\x00",
     }
 
 
@@ -1217,6 +1223,22 @@ def test_editor_receipt_recovery_active_is_profile_scoped() -> None:
         assert editor_receipt_recovery_active(SimpleNamespace(profile_key="north"))
         assert editor_receipt_recovery_active(SimpleNamespace(profile_key="south"))
         assert not editor_receipt_recovery_active(SimpleNamespace(profile_key="west"))
+
+
+def test_editor_receipt_recovery_active_ignores_validated_notice() -> None:
+    session_state: dict[str, object] = {
+        receipt_editor_notice_key("north", "txn-1"): {
+            "message": "Receipt recovery complete.",
+            "spreadsheet_id": "",
+            "receipt_folder_id": "",
+            "validated_configuration": "\x00",
+        }
+    }
+
+    with patch.object(st, "session_state", session_state):
+        assert not editor_receipt_recovery_active(
+            SimpleNamespace(profile_key="north", profile_secrets={})
+        )
 
 
 def test_missing_editor_recovery_is_preserved_after_profile_reconfiguration() -> None:
@@ -1285,6 +1307,7 @@ def test_missing_editor_recovery_preserves_notice_after_profile_reconfiguration(
             "message": "2 receipt(s) uploaded and linked; 0 unresolved.",
             "spreadsheet_id": "old-sheet",
             "receipt_folder_id": "old-folder",
+            "validated_configuration": "",
         }
     }
 
