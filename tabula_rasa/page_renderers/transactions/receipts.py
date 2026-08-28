@@ -328,6 +328,23 @@ def _new_unresolved_receipt_count(
     )
 
 
+def _reconcile_editor_workflow_references(
+    workflow: MutableMapping[str, Any],
+    fresh_receipt_references: Sequence[Mapping[str, Any]],
+) -> None:
+    """Drop linked workflow entries removed from the transaction in Sheets."""
+    fresh_receipt_ids = {
+        str(reference.get("id") or "")
+        for reference in fresh_receipt_references
+    }
+    workflow["receipts"] = [
+        receipt
+        for receipt in workflow.get("receipts", [])
+        if receipt.get("linked") is not True
+        or _receipt_recovery_file_id(receipt) in fresh_receipt_ids
+    ]
+
+
 def _record_editor_receipt_linked(
     context: TransactionsContext,
     transaction_id: str,
@@ -426,6 +443,16 @@ def _render_editor_receipt_recovery(
                 str(reference["id"])
                 for reference in fresh_receipt_references
             }
+            _reconcile_editor_workflow_references(
+                workflow,
+                fresh_receipt_references,
+            )
+            unresolved_receipts = [
+                receipt
+                for receipt in workflow.get("receipts", [])
+                if receipt.get("linked") is not True
+            ]
+            unresolved = len(unresolved_receipts)
             new_unresolved_count = _new_unresolved_receipt_count(
                 unresolved_receipts,
                 fresh_receipt_ids,
@@ -550,6 +577,10 @@ def clear_receipt_creation_recovery(
             receipt_creation_workflow_key(context.profile_key),
             None,
         )
+    st.session_state.pop(
+        receipt_editor_workflow_key(context.profile_key, transaction_id),
+        None,
+    )
 
 
 def _workflow_configuration_matches(

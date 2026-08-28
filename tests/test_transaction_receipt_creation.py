@@ -24,6 +24,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     _transaction_still_exists,
     _fresh_transaction_receipt_count,
     _new_unresolved_receipt_count,
+    _reconcile_editor_workflow_references,
     _finish_editor_receipt_workflow,
     _render_editor_receipt_recovery,
     _process_editor_receipts,
@@ -352,12 +353,16 @@ def test_deleted_transaction_clears_only_matching_recovery() -> None:
             profile_key="north",
         )
     )
+    session_state[receipt_editor_workflow_key("north", "north-txn")] = (
+        new_receipt_creation_workflow("north-txn", [], profile_key="north")
+    )
     with patch.object(st, "session_state", session_state):
         clear_receipt_creation_recovery(north_context, "other-txn")
         assert receipt_creation_workflow_key("north") in session_state
         clear_receipt_creation_recovery(north_context, "north-txn")
 
     assert receipt_creation_workflow_key("north") not in session_state
+    assert receipt_editor_workflow_key("north", "north-txn") not in session_state
 
 
 def test_receipt_recovery_refuses_changed_profile_configuration() -> None:
@@ -495,6 +500,27 @@ def test_editor_retry_does_not_count_a_reference_already_in_sheets() -> None:
         ],
         {existing_file_id},
     ) == 2
+
+
+def test_editor_retry_reconciles_receipts_removed_from_sheets() -> None:
+    workflow = new_receipt_creation_workflow(
+        "txn-1",
+        [
+            {"linked": True, "reference": {"id": "drive-removed"}},
+            {"linked": True, "reference": {"id": "drive-kept"}},
+            {"linked": False, "reference": {"id": "drive-pending"}},
+        ],
+    )
+
+    _reconcile_editor_workflow_references(
+        workflow,
+        [{"id": "drive-kept"}, {"id": "drive-pending"}],
+    )
+
+    assert [
+        receipt["reference"]["id"]
+        for receipt in workflow["receipts"]
+    ] == ["drive-kept", "drive-pending"]
 
 
 def test_editor_retry_persists_deleted_transaction_notice() -> None:
