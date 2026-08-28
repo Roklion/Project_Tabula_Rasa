@@ -168,10 +168,11 @@ checks or initializes its required worksheets, and seeds defaults before
 storing the profile.
 
 After saving, use **Profile readiness** for the selected profile. It reports
-**Incomplete**, **Ready locally**, or **Ready for hosted Secrets**. The
-readiness action re-reads the selected workbook and any configured Drive root
-and managed children. It reports missing optional setup steps without showing
-credentials, refresh tokens, private ledger data, or receipt contents.
+**Incomplete** or **Ready locally**. The readiness action re-reads the selected
+workbook and any configured Drive root and managed children. It reports missing
+optional setup steps without showing credentials, refresh tokens, private
+ledger data, or receipt contents. The loopback-only local administrator cannot
+inspect or verify the separate Streamlit Community Cloud Secrets store.
 Readiness does not walk ordinary Drive parent folders. Cross-profile root
 checks use only the selected root ID and the direct parent IDs returned with
 that folder. Known root reuse or direct nesting reported by those visible IDs
@@ -252,8 +253,8 @@ When readiness reports **Ready locally**, complete the hosted export once after
 all hosted-runtime settings, including any Drive root and managed children, are
 ready. Local backup paths and Synology metadata are excluded from the hosted
 projection, so changing only those local settings does not require a new
-export. When readiness reports **Ready for hosted Secrets**, the current hosted
-projection already matches the local profile.
+export. The local administrator cannot verify whether Streamlit Community Cloud
+accepted the uploaded Secrets document; confirm the deployed app after saving.
 
 Local development uses split files, while the hosted app expects one combined
 Streamlit Secrets document. Generate it with:

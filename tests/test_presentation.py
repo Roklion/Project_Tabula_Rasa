@@ -57,10 +57,10 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
     assert '.st-key-dashboard_total_balance' in css
     assert '.st-key-dashboard_activity' in css
     assert '.st-key-sidebar_utility' in css
-    assert '.st-key-profile_readiness_status_ready_hosted' in css
+    assert '.st-key-profile_readiness_status_ready_local' in css
     assert (
         '.st-key-profile_readiness_status_ready_local [data-testid="stMetricValue"]'
-        not in css
+        in css
     )
     assert 'var(--tr-positive-text);' in css
     workspace_label_selector = (

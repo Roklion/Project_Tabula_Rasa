@@ -128,7 +128,6 @@ def test_fresh_readiness_reports_sheets_failure_without_secret_values() -> None:
                 "name": "North Shop",
             },
             app_secrets={},
-            hosted_profiles=None,
         )
 
     assert report.status == "incomplete"
@@ -152,7 +151,6 @@ def test_fresh_readiness_skips_drive_validation_without_a_storage_root() -> None
                 "google_drive": {"authorized_email": "owner@example.test"},
             },
             app_secrets={},
-            hosted_profiles=None,
         )
 
     assert report.status == "incomplete"
@@ -191,7 +189,6 @@ def test_fresh_readiness_uses_visible_drive_parent_ids_only() -> None:
             "north",
             settings,
             app_secrets={},
-            hosted_profiles=None,
             local_profiles=local_profiles,
         )
 
@@ -207,7 +204,7 @@ def test_fresh_readiness_uses_visible_drive_parent_ids_only() -> None:
 def test_readiness_cache_is_ignored_after_profile_settings_change() -> None:
     original = {"name": "North Shop", **SETTINGS}
     changed = {**original, "backup_folder_path": r"G:\\Backups\\north"}
-    cached = ProfileReadiness(status="ready-hosted")
+    cached = ProfileReadiness(status="ready-local")
     with patch.object(
         st,
         "session_state",

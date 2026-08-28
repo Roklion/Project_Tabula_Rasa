@@ -292,7 +292,7 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
         font-variant-numeric: tabular-nums;
     }}
 
-    .st-key-profile_readiness_status_ready_hosted [data-testid="stMetricValue"] {{
+    .st-key-profile_readiness_status_ready_local [data-testid="stMetricValue"] {{
         color: var(--tr-positive-text);
     }}
 
