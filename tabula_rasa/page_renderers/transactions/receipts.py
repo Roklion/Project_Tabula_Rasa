@@ -45,7 +45,12 @@ def receipt_editor_workflow_key(profile_key: str, transaction_id: str) -> str:
 
 def receipt_editor_notice_key(profile_key: str, transaction_id: str) -> str:
     """Return the session key for one profile's editor notice."""
-    return f"receipt-editor-notice-{profile_key}-{transaction_id}"
+    return f"receipt-editor-notice:{profile_key}:{transaction_id}"
+
+
+def receipt_editor_notice_key_prefix(profile_key: str) -> str:
+    """Return the unambiguous session-key prefix for one profile's notices."""
+    return f"receipt-editor-notice:{profile_key}:"
 
 
 def receipt_editor_upload_reset_key(profile_key: str, transaction_id: str) -> str:
@@ -786,7 +791,7 @@ def clear_missing_editor_receipt_recoveries(
         notices.append(notice)
         processed_transaction_ids.add(transaction_id)
 
-    notice_prefix = f"receipt-editor-notice-{context.profile_key}-"
+    notice_prefix = receipt_editor_notice_key_prefix(context.profile_key)
     current_spreadsheet = str(
         context.profile_secrets.get("spreadsheet_id", "")
     )
@@ -833,7 +838,7 @@ def clear_missing_editor_receipt_recoveries(
 def editor_receipt_recovery_active(context: TransactionsContext) -> bool:
     """Return whether this profile has editor recovery state to reconcile."""
     workflow_key_prefix = f"{RECEIPT_EDITOR_WORKFLOW_KEY}:{context.profile_key}:"
-    notice_key_prefix = f"receipt-editor-notice-{context.profile_key}-"
+    notice_key_prefix = receipt_editor_notice_key_prefix(context.profile_key)
     current_configuration_key = _editor_receipt_configuration_key(context)
     for key in st.session_state:
         if not isinstance(key, str):
