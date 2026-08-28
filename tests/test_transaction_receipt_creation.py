@@ -23,6 +23,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     _workflow_has_uploaded_receipt,
     _transaction_still_exists,
     _fresh_transaction_receipt_count,
+    _new_unresolved_receipt_count,
     _finish_editor_receipt_workflow,
     _render_editor_receipt_recovery,
     _process_editor_receipts,
@@ -481,6 +482,19 @@ def test_editor_retry_rejects_batch_over_fresh_capacity() -> None:
 
     assert workflow["configuration_error"]
     assert "no more than 100" in workflow["configuration_error"]
+
+
+def test_editor_retry_does_not_count_a_reference_already_in_sheets() -> None:
+    existing_file_id = "drive-existing"
+
+    assert _new_unresolved_receipt_count(
+        [
+            {"reference": {"id": existing_file_id}},
+            {"drive_file": {"id": "drive-new"}},
+            {"content": b"not-uploaded"},
+        ],
+        {existing_file_id},
+    ) == 2
 
 
 def test_editor_retry_persists_deleted_transaction_notice() -> None:

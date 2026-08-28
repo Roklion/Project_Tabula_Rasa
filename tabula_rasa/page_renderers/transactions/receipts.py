@@ -306,6 +306,28 @@ def _finish_editor_receipt_workflow(
     return True
 
 
+def _receipt_recovery_file_id(receipt: Mapping[str, Any]) -> str:
+    """Return a recovered receipt's known Drive ID, if one is available."""
+    for key in ("reference", "drive_file"):
+        value = receipt.get(key)
+        if isinstance(value, Mapping):
+            file_id = str(value.get("id") or "")
+            if file_id:
+                return file_id
+    return ""
+
+
+def _new_unresolved_receipt_count(
+    unresolved_receipts: Sequence[Mapping[str, Any]],
+    existing_receipt_ids: set[str],
+) -> int:
+    """Count unresolved receipts that would add a new transaction reference."""
+    return sum(
+        _receipt_recovery_file_id(receipt) not in existing_receipt_ids
+        for receipt in unresolved_receipts
+    )
+
+
 def _record_editor_receipt_linked(
     context: TransactionsContext,
     transaction_id: str,
@@ -396,11 +418,19 @@ def _render_editor_receipt_recovery(
         if not _workflow_configuration_matches(context, workflow, receipt_folder):
             st.rerun()
         try:
-            fresh_receipt_count = _fresh_transaction_receipt_count(
+            fresh_receipt_references = _fresh_transaction_receipt_references(
                 context,
                 transaction_id,
             )
-            if fresh_receipt_count + unresolved > MAX_RECEIPT_REFERENCES:
+            fresh_receipt_ids = {
+                str(reference["id"])
+                for reference in fresh_receipt_references
+            }
+            new_unresolved_count = _new_unresolved_receipt_count(
+                unresolved_receipts,
+                fresh_receipt_ids,
+            )
+            if len(fresh_receipt_references) + new_unresolved_count > MAX_RECEIPT_REFERENCES:
                 raise GoogleDriveAccessError(
                     "A transaction can reference no more than 100 receipts. "
                     "Remove an existing receipt reference or retry with fewer "
@@ -465,12 +495,18 @@ def _fresh_transaction_receipt_count(
     transaction_id: str,
 ) -> int:
     """Return the selected transaction's receipt count from fresh Sheets data."""
+    return len(_fresh_transaction_receipt_references(context, transaction_id))
+
+
+def _fresh_transaction_receipt_references(
+    context: TransactionsContext,
+    transaction_id: str,
+) -> list[dict[str, Any]]:
+    """Return the selected transaction's references from fresh Sheets data."""
     for transaction in context.storage.list_transactions(_force_refresh=True):
         if str(transaction.get("id", "")) == transaction_id:
-            return len(
-                decode_receipt_references(
-                    transaction.get("receipt_references", "")
-                )
+            return decode_receipt_references(
+                transaction.get("receipt_references", "")
             )
     raise StorageError(
         "The selected transaction no longer exists. Refresh the ledger before "
@@ -1161,23 +1197,27 @@ def render_receipts(
                             )
                         else:
                             try:
-                                if not _transaction_still_exists(
-                                    context,
-                                    edit_id,
-                                ):
-                                    upload_error.error(
-                                        "The selected transaction no longer "
-                                        "exists. Refresh the ledger before "
-                                        "uploading receipts."
-                                    )
-                                    workflow = None
-                                else:
-                                    workflow = _start_editor_receipt_workflow(
+                                final_receipt_count = (
+                                    _fresh_transaction_receipt_count(
                                         context,
                                         edit_id,
-                                        prepared_receipts,
-                                        receipt_folder,
                                     )
+                                )
+                                if (
+                                    final_receipt_count + len(prepared_receipts)
+                                    > MAX_RECEIPT_REFERENCES
+                                ):
+                                    raise GoogleDriveAccessError(
+                                        "A transaction can reference no more than "
+                                        "100 receipts. Remove an existing receipt "
+                                        "reference or select fewer files."
+                                    )
+                                workflow = _start_editor_receipt_workflow(
+                                    context,
+                                    edit_id,
+                                    prepared_receipts,
+                                    receipt_folder,
+                                )
                             except GoogleDriveError as error:
                                 upload_error.error(str(error))
                             except StorageError as error:
