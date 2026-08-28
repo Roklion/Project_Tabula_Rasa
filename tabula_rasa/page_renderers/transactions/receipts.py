@@ -588,6 +588,15 @@ def clear_missing_editor_receipt_recoveries(
         )
 
 
+def editor_receipt_recovery_active(context: TransactionsContext) -> bool:
+    """Return whether this profile has an editor recovery to reconcile."""
+    key_prefix = f"{RECEIPT_EDITOR_WORKFLOW_KEY}:{context.profile_key}:"
+    return any(
+        isinstance(key, str) and key.startswith(key_prefix)
+        for key in st.session_state
+    )
+
+
 def finish_receipt_creation_if_complete(
     context: TransactionsContext,
     workflow: MutableMapping[str, Any],

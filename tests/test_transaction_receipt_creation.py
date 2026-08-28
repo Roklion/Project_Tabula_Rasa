@@ -13,6 +13,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     handle_confirmed_transaction_receipts,
     clear_receipt_creation_recovery,
     clear_missing_editor_receipt_recoveries,
+    editor_receipt_recovery_active,
     new_receipt_creation_workflow,
     prepare_receipt_uploads,
     process_receipt_recovery,
@@ -1025,3 +1026,14 @@ def test_missing_editor_recovery_cleanup_is_profile_scoped() -> None:
         "The transaction no longer exists. Uploaded files remain in Google "
         "Drive and can be linked from the Unreferenced receipt workflow."
     )
+
+
+def test_editor_receipt_recovery_active_is_profile_scoped() -> None:
+    session_state: dict[str, object] = {
+        receipt_editor_workflow_key("north", "txn-1"): {},
+        receipt_editor_workflow_key("south", "txn-2"): {},
+    }
+    with patch.object(st, "session_state", session_state):
+        assert editor_receipt_recovery_active(SimpleNamespace(profile_key="north"))
+        assert editor_receipt_recovery_active(SimpleNamespace(profile_key="south"))
+        assert not editor_receipt_recovery_active(SimpleNamespace(profile_key="west"))
