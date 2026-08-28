@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 import pytest
 import streamlit as st
 
-from tabula_rasa.google_drive import GoogleDriveAccessError
+from tabula_rasa.google_drive import GoogleDriveAccessError, GoogleDriveError
 from tabula_rasa.page_renderers.transactions.receipts import (
     handle_confirmed_transaction_receipts,
     clear_receipt_creation_recovery,
@@ -27,6 +27,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     _fresh_transaction_receipt_count,
     _new_unresolved_receipt_count,
     _reconcile_editor_workflow_references,
+    _discard_editor_workflow_receipt,
     _finish_editor_receipt_workflow,
     _render_editor_receipt_recovery,
     _process_editor_receipts,
@@ -881,6 +882,49 @@ def test_editor_receipt_recovery_retries_only_unresolved_without_reupload() -> N
     assert session_state[
         "receipt-editor-notice-north-txn-1"
     ] == "2 receipt(s) uploaded and linked; 0 unresolved."
+
+
+def test_editor_receipt_recovery_forgets_receipt_after_manual_unlink() -> None:
+    workflow = new_receipt_creation_workflow(
+        "txn-1",
+        [
+            {"linked": True, "reference": {"id": "drive-removed"}},
+            {"linked": False, "reference": {"id": "drive-pending"}},
+        ],
+    )
+
+    _discard_editor_workflow_receipt(workflow, "drive-removed")
+
+    assert workflow["receipts"] == [
+        {"linked": False, "reference": {"id": "drive-pending"}}
+    ]
+
+
+def test_editor_receipt_workflow_persists_drive_configuration_error() -> None:
+    context = SimpleNamespace(
+        profile_key="north",
+        configuration_revision="revision",
+        profile_secrets={"spreadsheet_id": "north-sheet"},
+        get_drive_client=Mock(
+            side_effect=GoogleDriveError("Drive is unavailable")
+        ),
+    )
+    workflow = new_receipt_creation_workflow(
+        "txn-1",
+        [{"linked": False, "content": b"receipt"}],
+    )
+    session_state: dict[str, object] = {}
+
+    with patch.object(st, "session_state", session_state):
+        result = _start_editor_receipt_workflow(
+            context,
+            "txn-1",
+            workflow["receipts"],
+            {"id": "north-folder"},
+        )
+
+    assert result["configuration_error"] == "Drive is unavailable"
+    assert session_state[receipt_editor_workflow_key("north", "txn-1")] is result
 
 
 def test_editor_receipt_recovery_isolated_by_profile() -> None:

@@ -276,7 +276,10 @@ def _start_editor_receipt_workflow(
     st.session_state[
         receipt_editor_workflow_key(context.profile_key, transaction_id)
     ] = workflow
-    _process_editor_receipts(context, workflow, receipt_folder)
+    try:
+        _process_editor_receipts(context, workflow, receipt_folder)
+    except GoogleDriveError as error:
+        workflow["configuration_error"] = str(error)
     return workflow
 
 
@@ -342,6 +345,18 @@ def _reconcile_editor_workflow_references(
         for receipt in workflow.get("receipts", [])
         if receipt.get("linked") is not True
         or _receipt_recovery_file_id(receipt) in fresh_receipt_ids
+    ]
+
+
+def _discard_editor_workflow_receipt(
+    workflow: MutableMapping[str, Any],
+    file_id: str,
+) -> None:
+    """Forget recovery for a receipt the user explicitly unlinked."""
+    workflow["receipts"] = [
+        receipt
+        for receipt in workflow.get("receipts", [])
+        if _receipt_recovery_file_id(receipt) != file_id
     ]
 
 
@@ -1076,6 +1091,17 @@ def render_receipts(
                                 )
                             else:
                                 _mark_workbook_data_changed(context)
+                                workflow = _editor_workflow(context, edit_id)
+                                if workflow is not None:
+                                    _discard_editor_workflow_receipt(
+                                        workflow,
+                                        receipt_id,
+                                    )
+                                    _finish_editor_receipt_workflow(
+                                        context,
+                                        edit_id,
+                                        workflow,
+                                    )
                                 st.session_state.pop(
                                     receipt_candidate_key,
                                     None,
