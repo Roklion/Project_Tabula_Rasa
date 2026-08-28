@@ -17,6 +17,7 @@ from tabula_rasa.google_drive_admin import (
     _create_storage_root,
     _provision_storage_children,
     _revalidated_storage_settings,
+    _save_storage_root,
     process_google_drive_oauth_callback,
     validate_google_drive_profile,
 )
@@ -296,6 +297,44 @@ def test_reconnect_drops_managed_child_with_missing_parents_safely() -> None:
     assert preserved == {
         "storage_root": {"id": root_id, "name": "North Storage"}
     }
+
+
+def test_save_storage_root_refreshes_name_when_id_is_unchanged(tmp_path: Path) -> None:
+    root_id = "rootfolder123"
+    client = FolderClient(
+        {root_id: managed_folder(root_id, "Tabula Rasa Data", kind="storage-root")}
+    )
+    drive_settings = {
+        "storage_root": {"id": root_id, "name": "Tabula Rosa Data"},
+        "receipt_folder": {"id": "receiptchild123", "name": "Receipts"},
+        "backup_folder": {"id": "backupchild123", "name": "Ledger Backups"},
+    }
+
+    with (
+        patch.object(google_drive_admin, "update_local_profile_google_drive") as update,
+        patch.object(google_drive_admin.st.cache_resource, "clear"),
+        patch.object(google_drive_admin.st, "rerun"),
+    ):
+        assert _save_storage_root(
+            "north",
+            drive_settings,
+            {"id": root_id, "name": "Tabula Rasa Data"},
+            client=client,
+            store_path=tmp_path / "profiles.json",
+        )
+
+    update.assert_called_once_with(
+        "north",
+        {
+            "storage_root": {"id": root_id, "name": "Tabula Rasa Data"},
+            "receipt_folder": {"id": "receiptchild123", "name": "Receipts"},
+            "backup_folder": {"id": "backupchild123", "name": "Ledger Backups"},
+        },
+        path=tmp_path / "profiles.json",
+    )
+    assert "name refreshed" in google_drive_admin.st.session_state[
+        "google_drive_admin_notice"
+    ]
 
 
 def test_storage_root_rejects_exact_profile_root_reuse() -> None:

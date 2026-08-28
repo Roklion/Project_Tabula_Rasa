@@ -253,20 +253,29 @@ def _save_storage_root(
 ) -> bool:
     selected_id = str(selected.get("id", ""))
     existing = drive_settings.get("storage_root")
-    if isinstance(existing, Mapping) and existing.get("id") == selected_id:
-        return False
     folder = client.folder(selected_id)
+    folder_name = str(folder["name"])
     updated = dict(drive_settings)
     updated["storage_root"] = {
         "id": str(folder["id"]),
-        "name": str(folder["name"]),
+        "name": folder_name,
     }
-    updated.pop("receipt_folder", None)
-    updated.pop("backup_folder", None)
+    same_root = isinstance(existing, Mapping) and existing.get("id") == selected_id
+    if same_root and existing.get("name") == folder_name:
+        return False
+    if not same_root:
+        updated.pop("receipt_folder", None)
+        updated.pop("backup_folder", None)
     update_local_profile_google_drive(profile_key, updated, path=store_path)
     st.session_state["google_drive_admin_notice"] = (
-        f"Google Drive storage root saved for profile '{profile_key}'. "
-        "Provision its receipt and ledger-backup folders next."
+        (
+            f"Google Drive storage root name refreshed for profile '{profile_key}'."
+            if same_root
+            else (
+                f"Google Drive storage root saved for profile '{profile_key}'. "
+                "Provision its receipt and ledger-backup folders next."
+            )
+        )
     )
     st.cache_resource.clear()
     st.rerun()
