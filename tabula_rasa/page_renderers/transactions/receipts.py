@@ -584,7 +584,14 @@ def clear_missing_editor_receipt_recoveries(
         for transaction in transactions
         if str(transaction.get("id", ""))
     }
+    processed_transaction_ids: set[str] = set()
     key_prefix = f"{RECEIPT_EDITOR_WORKFLOW_KEY}:{context.profile_key}:"
+    current_receipt_folder = _receipt_folder(context)
+    current_folder_id = str(
+        current_receipt_folder.get("id", "")
+        if current_receipt_folder is not None
+        else ""
+    )
     for key in list(st.session_state):
         if not isinstance(key, str) or not key.startswith(key_prefix):
             continue
@@ -595,7 +602,11 @@ def clear_missing_editor_receipt_recoveries(
         current_spreadsheet = str(
             context.profile_secrets.get("spreadsheet_id", "")
         )
-        if workflow_spreadsheet and workflow_spreadsheet != current_spreadsheet:
+        workflow_folder = str(workflow.get("receipt_folder_id", ""))
+        if (
+            workflow_spreadsheet
+            and workflow_spreadsheet != current_spreadsheet
+        ) or (workflow_folder and workflow_folder != current_folder_id):
             continue
         transaction_id = str(workflow.get("transaction_id", ""))
         if not transaction_id or transaction_id in existing_transaction_ids:
@@ -610,14 +621,35 @@ def clear_missing_editor_receipt_recoveries(
             f"receipt-editor-notice-{context.profile_key}-{transaction_id}"
         ] = notice
         notices.append(notice)
+        processed_transaction_ids.add(transaction_id)
+
+    notice_prefix = f"receipt-editor-notice-{context.profile_key}-"
+    for key in list(st.session_state):
+        if not isinstance(key, str) or not key.startswith(notice_prefix):
+            continue
+        transaction_id = key[len(notice_prefix) :]
+        if (
+            not transaction_id
+            or transaction_id in existing_transaction_ids
+            or transaction_id in processed_transaction_ids
+        ):
+            continue
+        notice = st.session_state.pop(key, None)
+        if isinstance(notice, str) and notice:
+            notices.append(notice)
     return notices
 
 
 def editor_receipt_recovery_active(context: TransactionsContext) -> bool:
-    """Return whether this profile has an editor recovery to reconcile."""
-    key_prefix = f"{RECEIPT_EDITOR_WORKFLOW_KEY}:{context.profile_key}:"
+    """Return whether this profile has editor recovery state to reconcile."""
+    workflow_key_prefix = f"{RECEIPT_EDITOR_WORKFLOW_KEY}:{context.profile_key}:"
+    notice_key_prefix = f"receipt-editor-notice-{context.profile_key}-"
     return any(
-        isinstance(key, str) and key.startswith(key_prefix)
+        isinstance(key, str)
+        and (
+            key.startswith(workflow_key_prefix)
+            or key.startswith(notice_key_prefix)
+        )
         for key in st.session_state
     )
 
@@ -660,6 +692,10 @@ def clear_receipt_creation_recovery(
         )
     st.session_state.pop(
         receipt_editor_workflow_key(context.profile_key, transaction_id),
+        None,
+    )
+    st.session_state.pop(
+        f"receipt-editor-notice-{context.profile_key}-{transaction_id}",
         None,
     )
 

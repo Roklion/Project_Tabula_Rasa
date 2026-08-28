@@ -360,6 +360,7 @@ def test_deleted_transaction_clears_only_matching_recovery() -> None:
     session_state[receipt_editor_workflow_key("north", "north-txn")] = (
         new_receipt_creation_workflow("north-txn", [], profile_key="north")
     )
+    session_state["receipt-editor-notice-north-north-txn"] = "stale notice"
     with patch.object(st, "session_state", session_state):
         clear_receipt_creation_recovery(north_context, "other-txn")
         assert receipt_creation_workflow_key("north") in session_state
@@ -367,6 +368,7 @@ def test_deleted_transaction_clears_only_matching_recovery() -> None:
 
     assert receipt_creation_workflow_key("north") not in session_state
     assert receipt_editor_workflow_key("north", "north-txn") not in session_state
+    assert "receipt-editor-notice-north-north-txn" not in session_state
 
 
 def test_receipt_recovery_refuses_changed_profile_configuration() -> None:
@@ -1080,6 +1082,7 @@ def test_editor_receipt_recovery_active_is_profile_scoped() -> None:
     session_state: dict[str, object] = {
         receipt_editor_workflow_key("north", "txn-1"): {},
         receipt_editor_workflow_key("south", "txn-2"): {},
+        "receipt-editor-notice-north-deleted": "notice",
     }
     with patch.object(st, "session_state", session_state):
         assert editor_receipt_recovery_active(SimpleNamespace(profile_key="north"))
@@ -1102,6 +1105,56 @@ def test_missing_editor_recovery_is_preserved_after_profile_reconfiguration() ->
             SimpleNamespace(
                 profile_key="north",
                 profile_secrets={"spreadsheet_id": "new-sheet"},
+            ),
+            [],
+        )
+
+    assert notices == []
+    assert receipt_editor_workflow_key("north", "old-txn") in session_state
+
+
+def test_missing_editor_recovery_cleanup_pops_orphaned_notice() -> None:
+    notice = "The transaction no longer exists. Uploaded files remain in Drive."
+    session_state: dict[str, object] = {
+        "receipt-editor-notice-north-north-gone": notice,
+        "receipt-editor-notice-south-south-gone": "Keep south notice",
+    }
+
+    with patch.object(st, "session_state", session_state):
+        notices = clear_missing_editor_receipt_recoveries(
+            SimpleNamespace(profile_key="north", profile_secrets={}),
+            [{"id": "north-still-present"}],
+        )
+
+    assert notices == [notice]
+    assert "receipt-editor-notice-north-north-gone" not in session_state
+    assert session_state["receipt-editor-notice-south-south-gone"] == (
+        "Keep south notice"
+    )
+
+
+def test_missing_editor_recovery_is_preserved_after_receipt_folder_change() -> None:
+    workflow = new_receipt_creation_workflow(
+        "old-txn",
+        [],
+        profile_key="north",
+        spreadsheet_id="north-sheet",
+        receipt_folder_id="old-folder",
+    )
+    session_state: dict[str, object] = {
+        receipt_editor_workflow_key("north", "old-txn"): workflow,
+    }
+
+    with patch.object(st, "session_state", session_state):
+        notices = clear_missing_editor_receipt_recoveries(
+            SimpleNamespace(
+                profile_key="north",
+                profile_secrets={
+                    "spreadsheet_id": "north-sheet",
+                    "google_drive": {
+                        "receipt_folder": {"id": "new-folder"}
+                    },
+                },
             ),
             [],
         )
