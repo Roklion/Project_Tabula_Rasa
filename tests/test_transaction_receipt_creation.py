@@ -697,6 +697,46 @@ def test_editor_receipt_recovery_can_be_canceled_when_drive_is_unavailable() -> 
     assert receipt_editor_notice_key("north", "txn-1") in session_state
 
 
+def test_editor_receipt_recovery_cannot_cancel_after_storage_switch() -> None:
+    context = SimpleNamespace(
+        profile_key="north",
+        profile_secrets={
+            "spreadsheet_id": "new-sheet",
+            "google_drive": {"receipt_folder": {"id": "new-folder"}},
+        },
+        configuration_revision="new-revision",
+    )
+    workflow = new_receipt_creation_workflow(
+        "txn-1",
+        [{"linked": False, "content": b"receipt"}],
+        profile_key="north",
+        configuration_revision="old-revision",
+        spreadsheet_id="old-sheet",
+        receipt_folder_id="old-folder",
+    )
+    session_state = {receipt_editor_workflow_key("north", "txn-1"): workflow}
+
+    with (
+        patch.object(st, "session_state", session_state),
+        patch.object(st, "warning"),
+        patch.object(st, "caption"),
+        patch.object(st, "error"),
+        patch.object(st, "info") as info,
+        patch.object(st, "button") as button,
+    ):
+        assert _render_editor_receipt_recovery(
+            context,
+            "txn-1",
+            {"id": "new-folder"},
+            retry_available=True,
+        )
+
+    button.assert_not_called()
+    info.assert_called_once()
+    assert receipt_editor_workflow_key("north", "txn-1") in session_state
+    assert receipt_editor_notice_key("north", "txn-1") not in session_state
+
+
 def test_editor_receipt_recovery_confirmation_retry_works_without_drive() -> None:
     context = SimpleNamespace(
         profile_key="north",

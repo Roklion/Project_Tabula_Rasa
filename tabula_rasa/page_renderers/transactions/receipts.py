@@ -296,12 +296,15 @@ def _start_editor_receipt_workflow(
     receipts: Sequence[Mapping[str, Any]],
     receipt_folder: Mapping[str, object],
 ) -> MutableMapping[str, Any]:
+    profile_secrets = getattr(context, "profile_secrets", {})
+    if not isinstance(profile_secrets, Mapping):
+        profile_secrets = {}
     workflow = new_receipt_creation_workflow(
         transaction_id,
         receipts,
         profile_key=context.profile_key,
         configuration_revision=context.configuration_revision,
-        spreadsheet_id=str(context.profile_secrets.get("spreadsheet_id", "")),
+        spreadsheet_id=str(profile_secrets.get("spreadsheet_id", "")),
         receipt_folder_id=str(receipt_folder.get("id", "")),
     )
     st.session_state[
@@ -590,6 +593,24 @@ def _render_editor_receipt_recovery(
     workflow = _editor_workflow(context, transaction_id)
     if workflow is None:
         return False
+    if configuration_matches:
+        expected_spreadsheet = str(workflow.get("spreadsheet_id", ""))
+        expected_folder = str(workflow.get("receipt_folder_id", ""))
+        if expected_folder and receipt_folder is None:
+            workflow["configuration_error"] = (
+                "The profile's Google Sheets or Drive receipt configuration "
+                "changed while this receipt was waiting for recovery. Restore "
+                "the previous profile configuration before retrying."
+            )
+            configuration_matches = False
+        elif receipt_folder is not None and (
+            expected_spreadsheet or expected_folder
+        ):
+            configuration_matches = _workflow_configuration_matches(
+                context,
+                workflow,
+                receipt_folder,
+            )
     linked, unresolved = receipt_creation_counts(workflow)
     unresolved_receipts = [
         receipt
@@ -647,7 +668,12 @@ def _render_editor_receipt_recovery(
             "Connect Google Drive and select a receipt folder before retrying "
             "receipt recovery."
         )
-    cancel_requested = unresolved and st.button(
+    if unresolved and not configuration_matches:
+        st.info(
+            "Cancel recovery is unavailable until the profile's original "
+            "Google Sheets and Drive receipt configuration is restored."
+        )
+    cancel_requested = unresolved and configuration_matches and st.button(
         "Cancel recovery",
         key=f"cancel-editor-receipts-{context.profile_key}-{transaction_id}",
     )
