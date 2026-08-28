@@ -448,6 +448,24 @@ def _transaction_still_exists(
     )
 
 
+def _fresh_transaction_receipt_count(
+    context: TransactionsContext,
+    transaction_id: str,
+) -> int:
+    """Return the selected transaction's receipt count from fresh Sheets data."""
+    for transaction in context.storage.list_transactions(_force_refresh=True):
+        if str(transaction.get("id", "")) == transaction_id:
+            return len(
+                decode_receipt_references(
+                    transaction.get("receipt_references", "")
+                )
+            )
+    raise StorageError(
+        "The selected transaction no longer exists. Refresh the ledger before "
+        "uploading receipts."
+    )
+
+
 def finish_receipt_creation_if_complete(
     context: TransactionsContext,
     workflow: MutableMapping[str, Any],
@@ -1114,12 +1132,21 @@ def render_receipts(
                         key=f"receipt-upload-button-{edit_id}",
                     ):
                         try:
+                            fresh_receipt_count = _fresh_transaction_receipt_count(
+                                context,
+                                edit_id,
+                            )
                             prepared_receipts = prepare_receipt_uploads(
                                 receipt_uploads,
-                                existing_reference_count=len(receipt_references),
+                                existing_reference_count=fresh_receipt_count,
                             )
                         except (ValueError, GoogleDriveAccessError) as error:
                             upload_error.error(f"Receipt validation failed: {error}")
+                        except StorageError as error:
+                            upload_error.error(
+                                "The selected transaction could not be rechecked "
+                                f"before upload. {error}"
+                            )
                         else:
                             try:
                                 if not _transaction_still_exists(

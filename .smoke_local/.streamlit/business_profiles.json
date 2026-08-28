@@ -10,6 +10,23 @@
         "private_key": "-----BEGIN PRIVATE KEY-----\nsmoke-private-key\n-----END PRIVATE KEY-----\n",
         "client_email": "smoke@smoke-project.iam.gserviceaccount.com",
         "token_uri": "https://oauth2.googleapis.com/token"
+      },
+      "google_drive": {
+        "authorized_email": "smoke@example.test",
+        "authorized_name": "Smoke Test User",
+        "refresh_token": "smoke-refresh-token",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "scopes": [
+          "https://www.googleapis.com/auth/drive.file"
+        ],
+        "storage_root": {
+          "id": "smoke-storage-root",
+          "name": "Smoke Storage"
+        },
+        "receipt_folder": {
+          "id": "smoke-receipts",
+          "name": "Smoke Receipts"
+        }
       }
     }
   }

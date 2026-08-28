@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import json
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -21,6 +22,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     _link_recovery_configuration_matches,
     _workflow_has_uploaded_receipt,
     _transaction_still_exists,
+    _fresh_transaction_receipt_count,
     _finish_editor_receipt_workflow,
     _process_editor_receipts,
     _record_editor_receipt_linked,
@@ -410,6 +412,30 @@ def test_transaction_recovery_rechecks_fresh_sheets_data() -> None:
     context = SimpleNamespace(storage=storage)
 
     assert _transaction_still_exists(context, "txn-1")
+
+
+def test_editor_capacity_rechecks_fresh_sheets_data() -> None:
+    references = [
+        {
+            "id": f"drive-receipt-{index:02d}",
+            "name": f"receipt-{index}.pdf",
+            "receipt_id": f"{index:032d}",
+            "original_filename": f"receipt-{index}.pdf",
+            "mime_type": "application/pdf",
+            "byte_size": 7,
+            "sha256": "a" * 64,
+        }
+        for index in range(99)
+    ]
+    storage = SimpleNamespace(
+        list_transactions=lambda **kwargs: (
+            assert_force_refresh(kwargs),
+            [{"id": "txn-1", "receipt_references": json.dumps(references)}],
+        )[1]
+    )
+    context = SimpleNamespace(storage=storage)
+
+    assert _fresh_transaction_receipt_count(context, "txn-1") == 99
 
 
 def test_transaction_recovery_detects_uploaded_receipt_pointer() -> None:
