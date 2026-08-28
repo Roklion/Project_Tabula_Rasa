@@ -226,6 +226,9 @@ dedicated to one business's Sheets service account.
 
 1. Enable the **Google Drive API** and **Google Picker API**.
 2. Open **Google Auth Platform** and configure Branding.
+   Set **App name** to **Project Tabula Rasa**. This is the name Google shows
+   on the consent screen; it comes from the Cloud project's OAuth branding,
+   not from the Streamlit application code or its client-secret settings.
 3. Choose **External** audience when profiles may use personal accounts or
    accounts outside one Workspace organization.
 4. During initial Testing, add each human Drive-owning Google account as a test
