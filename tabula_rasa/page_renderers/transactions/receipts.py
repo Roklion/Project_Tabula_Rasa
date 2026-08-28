@@ -1180,13 +1180,8 @@ def render_receipts(
                         key=f"receipt-upload-button-{edit_id}",
                     ):
                         try:
-                            fresh_receipt_count = _fresh_transaction_receipt_count(
-                                context,
-                                edit_id,
-                            )
                             prepared_receipts = prepare_receipt_uploads(
                                 receipt_uploads,
-                                existing_reference_count=fresh_receipt_count,
                             )
                         except (ValueError, GoogleDriveAccessError) as error:
                             upload_error.error(f"Receipt validation failed: {error}")
@@ -1197,11 +1192,9 @@ def render_receipts(
                             )
                         else:
                             try:
-                                final_receipt_count = (
-                                    _fresh_transaction_receipt_count(
-                                        context,
-                                        edit_id,
-                                    )
+                                final_receipt_count = _fresh_transaction_receipt_count(
+                                    context,
+                                    edit_id,
                                 )
                                 if (
                                     final_receipt_count + len(prepared_receipts)
