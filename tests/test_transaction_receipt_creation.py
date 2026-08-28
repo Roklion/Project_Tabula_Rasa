@@ -612,7 +612,11 @@ def test_transaction_recovery_detects_uploaded_receipt_pointer() -> None:
 
 
 def test_editor_receipt_recovery_cancel_discards_workflow() -> None:
-    context = SimpleNamespace(profile_key="north")
+    schedule_reset = Mock()
+    context = SimpleNamespace(
+        profile_key="north",
+        schedule_widget_reset=schedule_reset,
+    )
     workflow = new_receipt_creation_workflow(
         "txn-1",
         [{"key": "receipt", "original_name": "receipt.pdf", "content": b"receipt"}],
@@ -640,6 +644,7 @@ def test_editor_receipt_recovery_cancel_discards_workflow() -> None:
         "receipt_folder_id": "",
         "validated_configuration": "",
     }
+    schedule_reset.assert_called_once_with("reset-receipt-editor:north:txn-1")
 
 
 def test_cancel_editor_receipt_recovery_is_profile_scoped() -> None:

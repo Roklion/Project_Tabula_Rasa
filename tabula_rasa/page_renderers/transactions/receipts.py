@@ -432,6 +432,14 @@ def _cancel_editor_receipt_recovery(
         receipt_editor_workflow_key(context.profile_key, transaction_id),
         None,
     )
+    schedule_reset = getattr(context, "schedule_widget_reset", None)
+    if callable(schedule_reset):
+        schedule_reset(
+            receipt_editor_upload_reset_key(
+                context.profile_key,
+                transaction_id,
+            )
+        )
     st.session_state[receipt_editor_notice_key(context.profile_key, transaction_id)] = (
         _new_editor_receipt_notice(
             context,
