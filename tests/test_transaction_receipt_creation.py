@@ -10,6 +10,7 @@ import streamlit as st
 
 from tabula_rasa.google_drive import GoogleDriveAccessError, GoogleDriveError
 from tabula_rasa.page_renderers.transactions.receipts import (
+    EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE,
     handle_confirmed_transaction_receipts,
     clear_receipt_creation_recovery,
     clear_missing_editor_receipt_recoveries,
@@ -28,6 +29,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     _new_unresolved_receipt_count,
     _reconcile_editor_workflow_references,
     _discard_editor_workflow_receipt,
+    _cancel_editor_receipt_recovery,
     _finish_editor_receipt_workflow,
     _render_editor_receipt_recovery,
     _process_editor_receipts,
@@ -102,6 +104,20 @@ def test_prepare_receipts_rejects_more_than_manifest_limit_before_sheets_write()
 
     with pytest.raises(GoogleDriveAccessError, match="no more than 100"):
         prepare_receipt_uploads([uploaded] * 101)
+
+
+def test_prepare_receipts_rejects_batches_over_aggregate_memory_limit() -> None:
+    with patch(
+        "tabula_rasa.page_renderers.transactions.receipts.MAX_RECEIPT_UPLOAD_TOTAL_BYTES",
+        5,
+    ):
+        with pytest.raises(GoogleDriveAccessError, match="200 MB total"):
+            prepare_receipt_uploads(
+                [
+                    UploadedFile("first.pdf", b"123", "application/pdf"),
+                    UploadedFile("second.pdf", b"456", "application/pdf"),
+                ]
+            )
 
 
 def test_editor_receipt_selection_respects_existing_manifest_capacity() -> None:
@@ -485,7 +501,7 @@ def test_editor_retry_rejects_batch_over_fresh_capacity() -> None:
         patch.object(st, "warning"),
         patch.object(st, "caption"),
         patch.object(st, "empty", return_value=Mock()),
-        patch.object(st, "button", return_value=True),
+        patch.object(st, "button", side_effect=[True, False]),
         patch.object(st, "rerun", side_effect=RuntimeError("rerun")),
     ):
         with pytest.raises(RuntimeError, match="rerun"):
@@ -556,18 +572,15 @@ def test_editor_retry_persists_deleted_transaction_notice() -> None:
         patch.object(st, "warning"),
         patch.object(st, "caption"),
         patch.object(st, "empty", return_value=Mock()),
-        patch.object(st, "button", return_value=True),
+        patch.object(st, "button", side_effect=[True, False]),
         patch.object(st, "rerun", side_effect=RuntimeError("rerun")),
     ):
         with pytest.raises(RuntimeError, match="rerun"):
             _render_editor_receipt_recovery(context, "txn-1", {"id": "folder"})
 
     assert receipt_editor_workflow_key("north", "txn-1") not in session_state
-    assert session_state[
-        "receipt-editor-notice-north-txn-1"
-    ] == (
-        "The transaction no longer exists. Uploaded files remain in Google Drive "
-        "and can be linked from the Unreferenced receipt workflow."
+    assert session_state["receipt-editor-notice-north-txn-1"] == (
+        EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE
     )
 
 
@@ -591,6 +604,54 @@ def test_transaction_recovery_detects_uploaded_receipt_pointer() -> None:
         [{"linked": False, "upload_uncertain": True}],
     )
     assert _workflow_has_uploaded_receipt(uncertain_workflow)
+
+
+def test_editor_receipt_recovery_cancel_discards_workflow() -> None:
+    context = SimpleNamespace(profile_key="north")
+    workflow = new_receipt_creation_workflow(
+        "txn-1",
+        [{"key": "receipt", "original_name": "receipt.pdf", "content": b"receipt"}],
+        profile_key="north",
+    )
+    session_state = {receipt_editor_workflow_key("north", "txn-1"): workflow}
+
+    with (
+        patch.object(st, "session_state", session_state),
+        patch.object(st, "warning"),
+        patch.object(st, "caption"),
+        patch.object(st, "button", side_effect=[False, True]),
+        patch.object(st, "rerun", side_effect=RuntimeError("rerun")),
+    ):
+        with pytest.raises(RuntimeError, match="rerun"):
+            _render_editor_receipt_recovery(context, "txn-1", {"id": "folder"})
+
+    assert receipt_editor_workflow_key("north", "txn-1") not in session_state
+    assert session_state["receipt-editor-notice-north-txn-1"] == (
+        "Receipt recovery canceled. Files already uploaded remain in Google "
+        "Drive and can be linked from the Unreferenced receipt workflow."
+    )
+
+
+def test_cancel_editor_receipt_recovery_is_profile_scoped() -> None:
+    north_workflow = new_receipt_creation_workflow(
+        "txn-1", [], profile_key="north"
+    )
+    south_workflow = new_receipt_creation_workflow(
+        "txn-1", [], profile_key="south"
+    )
+    session_state = {
+        receipt_editor_workflow_key("north", "txn-1"): north_workflow,
+        receipt_editor_workflow_key("south", "txn-1"): south_workflow,
+    }
+
+    with patch.object(st, "session_state", session_state):
+        _cancel_editor_receipt_recovery(
+            SimpleNamespace(profile_key="north"),
+            "txn-1",
+        )
+
+    assert receipt_editor_workflow_key("north", "txn-1") not in session_state
+    assert receipt_editor_workflow_key("south", "txn-1") in session_state
 
 
 def test_transaction_recovery_does_not_upload_after_cross_session_deletion() -> None:
@@ -1126,11 +1187,27 @@ def test_missing_editor_recovery_cleanup_pops_orphaned_notice() -> None:
             [{"id": "north-still-present"}],
         )
 
-    assert notices == [notice]
+    assert notices == [EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE]
     assert "receipt-editor-notice-north-north-gone" not in session_state
     assert session_state["receipt-editor-notice-south-south-gone"] == (
         "Keep south notice"
     )
+
+
+def test_missing_editor_recovery_replaces_orphaned_success_notice() -> None:
+    key = "receipt-editor-notice-north-north-gone"
+    session_state: dict[str, object] = {
+        key: "2 receipt(s) uploaded and linked; 0 unresolved."
+    }
+
+    with patch.object(st, "session_state", session_state):
+        notices = clear_missing_editor_receipt_recoveries(
+            SimpleNamespace(profile_key="north", profile_secrets={}),
+            [],
+        )
+
+    assert notices == [EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE]
+    assert key not in session_state
 
 
 def test_missing_editor_recovery_is_preserved_after_receipt_folder_change() -> None:

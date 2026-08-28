@@ -136,7 +136,8 @@ def render_add_transaction(
             key="add_transaction_receipts",
             help=(
                 "Select zero or more PDF, PNG, JPG, JPEG, WEBP, or HEIC "
-                "files. Each file must be non-empty and no larger than 20 MB."
+                "files. Each file must be non-empty and no larger than 20 MB; "
+                "the selected batch must not exceed 200 MB total."
             ),
         )
         save_error = st.empty()

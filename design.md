@@ -1346,8 +1346,9 @@ Conditional rules:
 - Income or Expense entry is unavailable with a clear warning when no matching category exists.
 - Receipt accepts zero, one, or multiple files using the same file types as the
   post-creation receipt uploader: PDF, PNG, JPG, JPEG, WEBP, or HEIC.
-- Each selected file must be non-empty and no larger than 20 MB. Filenames are
-  sanitized and duplicate names receive numeric suffixes without overwriting.
+- Each selected file must be non-empty and no larger than 20 MB. The selected
+  batch must not exceed 200 MB in total. Filenames are sanitized and duplicate
+  names receive numeric suffixes without overwriting.
 - Receipt selection is optional and does not change accounting validation.
 
 Tags and advanced accounting fields are not implemented.
@@ -1765,6 +1766,9 @@ It must preserve:
 - Upload and link confirmation
 - A concise complete/unresolved count when a multi-file upload is partial, with
   retry limited to unresolved files
+- An explicit **Cancel recovery** action for an unresolved upload. Canceling
+  discards unresolved local file contents; files already uploaded remain in
+  Google Drive and can be linked from the **Unreferenced receipt** workflow.
 - Retry-safe handling of uncertain Drive responses
 - Existing linked-receipt display and removal
 - Linking of eligible unreferenced receipts

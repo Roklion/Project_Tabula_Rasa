@@ -195,7 +195,8 @@ Google Sheets confirms the operation.
 
 The **Add transaction** form accepts zero, one, or multiple optional receipt
 files for income, expense, and transfer entries. Select PDF, PNG, JPG, JPEG,
-WEBP, or HEIC files; each file must be non-empty and no larger than 20 MB.
+WEBP, or HEIC files; each file must be non-empty and no larger than 20 MB, and
+the selected batch must not exceed 200 MB in total.
 Every selected file is validated before the transaction is written to Google
 Sheets.
 
@@ -219,9 +220,12 @@ transaction under **Transactions > View & edit ledger > Receipt**.
 The transaction editor accepts one or more receipt files in a single upload.
 All selected files are validated before any upload begins. A partial result
 keeps successful links, reports concise complete and unresolved counts, and
-offers **Retry unresolved receipts**. If a file was uploaded but its ledger
-link failed, retry uses that existing Drive file rather than uploading it
-again. Duplicate filenames remain separate files with numeric suffixes.
+offers **Retry unresolved receipts**. **Cancel recovery** discards unresolved
+local file contents without deleting files already uploaded to Google Drive;
+those files remain available through the **Unreferenced receipt** workflow. If
+a file was uploaded but its ledger link failed, retry uses that existing Drive
+file rather than uploading it again. Duplicate filenames remain separate files
+with numeric suffixes.
 
 Receipt behavior:
 

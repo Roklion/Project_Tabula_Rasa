@@ -26,6 +26,11 @@ from tabula_rasa.storage import StorageError, decode_receipt_references
 RECEIPT_UPLOAD_TYPES = ["pdf", "png", "jpg", "jpeg", "webp", "heic"]
 RECEIPT_CREATION_WORKFLOW_KEY = "transaction_receipt_creation_workflow"
 RECEIPT_EDITOR_WORKFLOW_KEY = "transaction_receipt_editor_workflow"
+MAX_RECEIPT_UPLOAD_TOTAL_BYTES = 200 * 1024 * 1024
+EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE = (
+    "The transaction no longer exists. Uploaded files remain in Google Drive "
+    "and can be linked from the Unreferenced receipt workflow."
+)
 
 
 def receipt_creation_workflow_key(profile_key: str) -> str:
@@ -57,9 +62,16 @@ def prepare_receipt_uploads(
             "Remove an existing receipt reference or select fewer files."
         )
     prepared: list[dict[str, Any]] = []
+    total_bytes = 0
     for index, uploaded_file in enumerate(uploaded_files):
         name = str(getattr(uploaded_file, "name", "") or "")
         content = uploaded_file.getvalue()
+        total_bytes += len(content)
+        if total_bytes > MAX_RECEIPT_UPLOAD_TOTAL_BYTES:
+            raise GoogleDriveAccessError(
+                "Selected receipt files cannot exceed 200 MB total. "
+                "Select fewer or smaller files."
+            )
         validate_receipt_upload(name, content)
         prepared.append(
             {
@@ -309,6 +321,23 @@ def _finish_editor_receipt_workflow(
     return True
 
 
+def _cancel_editor_receipt_recovery(
+    context: TransactionsContext,
+    transaction_id: str,
+) -> None:
+    """Discard unresolved editor uploads without deleting Drive files."""
+    st.session_state.pop(
+        receipt_editor_workflow_key(context.profile_key, transaction_id),
+        None,
+    )
+    st.session_state[
+        f"receipt-editor-notice-{context.profile_key}-{transaction_id}"
+    ] = (
+        "Receipt recovery canceled. Files already uploaded remain in Google "
+        "Drive and can be linked from the Unreferenced receipt workflow."
+    )
+
+
 def _receipt_recovery_file_id(receipt: Mapping[str, Any]) -> str:
     """Return a recovered receipt's known Drive ID, if one is available."""
     for key in ("reference", "drive_file"):
@@ -456,13 +485,26 @@ def _render_editor_receipt_recovery(
                     f"{receipt.get('original_name', 'Receipt')}: "
                     f"{receipt['error']}"
                 )
+        st.caption(
+            "Canceling discards unresolved local files. Files already uploaded "
+            "remain in Google Drive and can be linked from the Unreferenced "
+            "receipt workflow."
+        )
     if workflow.get("configuration_error"):
         st.error(str(workflow["configuration_error"]))
-    if unresolved and st.button(
+    retry_requested = unresolved and st.button(
         retry_label,
         type="primary",
         key=f"retry-editor-receipts-{context.profile_key}-{transaction_id}",
-    ):
+    )
+    cancel_requested = unresolved and st.button(
+        "Cancel recovery",
+        key=f"cancel-editor-receipts-{context.profile_key}-{transaction_id}",
+    )
+    if cancel_requested:
+        _cancel_editor_receipt_recovery(context, transaction_id)
+        st.rerun()
+    if retry_requested:
         workflow.pop("configuration_error", None)
         if not _workflow_configuration_matches(context, workflow, receipt_folder):
             st.rerun()
@@ -507,11 +549,7 @@ def _render_editor_receipt_recovery(
                 )
                 st.session_state[
                     f"receipt-editor-notice-{context.profile_key}-{transaction_id}"
-                ] = (
-                    "The transaction no longer exists. Uploaded files remain in "
-                    "Google Drive and can be linked from the Unreferenced receipt "
-                    "workflow."
-                )
+                ] = EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE
             else:
                 workflow["configuration_error"] = (
                     "The transaction could not be rechecked or linked. "
@@ -612,11 +650,7 @@ def clear_missing_editor_receipt_recoveries(
         if not transaction_id or transaction_id in existing_transaction_ids:
             continue
         st.session_state.pop(key, None)
-        notice = (
-            "The transaction no longer exists. Uploaded files remain in "
-            "Google Drive and can be linked from the Unreferenced receipt "
-            "workflow."
-        )
+        notice = EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE
         st.session_state[
             f"receipt-editor-notice-{context.profile_key}-{transaction_id}"
         ] = notice
@@ -636,7 +670,7 @@ def clear_missing_editor_receipt_recoveries(
             continue
         notice = st.session_state.pop(key, None)
         if isinstance(notice, str) and notice:
-            notices.append(notice)
+            notices.append(EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE)
     return notices
 
 
@@ -1323,7 +1357,8 @@ def render_receipts(
                         help=(
                             "Select one or more PDF, PNG, JPG, JPEG, WEBP, "
                             "or HEIC files. Each file must be non-empty and "
-                            "no larger than 20 MB."
+                            "no larger than 20 MB; the selected batch must "
+                            "not exceed 200 MB total."
                         ),
                     )
                 if receipt_uploads:
