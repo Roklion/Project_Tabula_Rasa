@@ -255,6 +255,10 @@ def _save_storage_root(
     selected_id = str(selected.get("id", ""))
     existing = drive_settings.get("storage_root")
     folder = client.folder(selected_id)
+    if not isinstance(folder, Mapping):
+        raise GoogleDriveAccessError(
+            "Google Drive could not return the selected folder details. Retry."
+        )
     folder_id = str(folder.get("id") or "")
     folder_name = str(folder.get("name") or "").strip()
     if not folder_id or not folder_name:

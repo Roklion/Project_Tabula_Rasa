@@ -356,6 +356,25 @@ def test_save_storage_root_handles_missing_folder_name_without_key_error(
     update.assert_not_called()
 
 
+def test_save_storage_root_handles_non_mapping_folder_response(
+    tmp_path: Path,
+) -> None:
+    root_id = "rootfolder123"
+    client = FolderClient({root_id: [root_id]})
+
+    with patch.object(google_drive_admin, "update_local_profile_google_drive") as update:
+        with pytest.raises(GoogleDriveAccessError, match="folder details"):
+            _save_storage_root(
+                "north",
+                {},
+                {"id": root_id},
+                client=client,
+                store_path=tmp_path / "profiles.json",
+            )
+
+    update.assert_not_called()
+
+
 def test_storage_root_rejects_exact_profile_root_reuse() -> None:
     selected_root = {"id": "northroot123", "parents": []}
     profiles = {
