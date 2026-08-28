@@ -210,16 +210,21 @@ def _render_profile_readiness(
         "ready-local": "Ready locally",
         "ready-hosted": "Ready for hosted Secrets",
     }
-    st.metric("Status", labels[report.status])
+    status_key = f"profile_readiness_status_{report.status.replace('-', '_')}"
+    with st.container(key=status_key):
+        st.metric("Status", labels[report.status])
     for step in report.missing_steps:
         st.warning(step)
     for error in report.validation_errors:
         st.error(error)
     if report.status == "ready-local" and report.hosted_export_needed:
         st.info(
-            "Local profile settings are ready. Export hosted Secrets once after "
-            "all hosted-runtime settings are complete; local backup and Synology "
-            "changes do not require a new export."
+            "Local profile settings are ready. To sync this profile to Streamlit "
+            "Community Cloud, run `python scripts\\export_streamlit_secrets.py` "
+            "from the repository root, paste the complete generated TOML into "
+            "Streamlit App settings > Secrets, save it, then return here and "
+            "run the readiness check again. Local backup and Synology changes do "
+            "not require a new export."
         )
     elif report.status == "ready-hosted":
         st.success("The current hosted profile projection matches this local profile.")
