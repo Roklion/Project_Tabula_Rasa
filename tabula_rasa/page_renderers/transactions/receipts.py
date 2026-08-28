@@ -377,7 +377,24 @@ def _record_editor_receipt_linked(
         receipt["linked"] = True
         receipt["error"] = ""
         matched = True
-    return matched and _finish_editor_receipt_workflow(
+    if not matched:
+        return False
+    try:
+        fresh_receipt_references = _fresh_transaction_receipt_references(
+            context,
+            transaction_id,
+        )
+    except StorageError as error:
+        workflow["configuration_error"] = (
+            "The transaction could not be rechecked after linking the receipt. "
+            f"Retry the remaining receipts again: {error}"
+        )
+        return False
+    _reconcile_editor_workflow_references(
+        workflow,
+        fresh_receipt_references,
+    )
+    return _finish_editor_receipt_workflow(
         context,
         transaction_id,
         workflow,
@@ -539,6 +556,36 @@ def _fresh_transaction_receipt_references(
         "The selected transaction no longer exists. Refresh the ledger before "
         "uploading receipts."
     )
+
+
+def clear_missing_editor_receipt_recoveries(
+    context: TransactionsContext,
+    transactions: Sequence[Mapping[str, Any]],
+) -> None:
+    """Discard editor recovery whose transaction disappeared from fresh Sheets data."""
+    existing_transaction_ids = {
+        str(transaction.get("id", ""))
+        for transaction in transactions
+        if str(transaction.get("id", ""))
+    }
+    key_prefix = f"{RECEIPT_EDITOR_WORKFLOW_KEY}:{context.profile_key}:"
+    for key in list(st.session_state):
+        if not isinstance(key, str) or not key.startswith(key_prefix):
+            continue
+        workflow = st.session_state.get(key)
+        if not isinstance(workflow, Mapping):
+            continue
+        transaction_id = str(workflow.get("transaction_id", ""))
+        if not transaction_id or transaction_id in existing_transaction_ids:
+            continue
+        st.session_state.pop(key, None)
+        st.session_state[
+            f"receipt-editor-notice-{context.profile_key}-{transaction_id}"
+        ] = (
+            "The transaction no longer exists. Uploaded files remain in "
+            "Google Drive and can be linked from the Unreferenced receipt "
+            "workflow."
+        )
 
 
 def finish_receipt_creation_if_complete(

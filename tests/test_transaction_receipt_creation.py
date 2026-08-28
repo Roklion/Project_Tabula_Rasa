@@ -12,6 +12,7 @@ from tabula_rasa.google_drive import GoogleDriveAccessError
 from tabula_rasa.page_renderers.transactions.receipts import (
     handle_confirmed_transaction_receipts,
     clear_receipt_creation_recovery,
+    clear_missing_editor_receipt_recoveries,
     new_receipt_creation_workflow,
     prepare_receipt_uploads,
     process_receipt_recovery,
@@ -32,6 +33,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     _start_editor_receipt_workflow,
     receipt_editor_workflow_key,
 )
+from tabula_rasa.receipt_manifest import receipt_reference_from_drive_file
 
 
 class UploadedFile:
@@ -943,12 +945,20 @@ def test_editor_receipt_recovery_isolated_by_profile() -> None:
 
 
 def test_unreferenced_link_resolves_matching_editor_recovery() -> None:
+    first_reference = receipt_reference_from_drive_file(_drive_file("a", "first.pdf"))
+    second_reference = receipt_reference_from_drive_file(_drive_file("b", "second.pdf"))
     context = SimpleNamespace(
         profile_key="north",
         schedule_widget_reset=Mock(),
+        storage=SimpleNamespace(
+            list_transactions=lambda **_kwargs: [
+                {
+                    "id": "txn-1",
+                    "receipt_references": [first_reference, second_reference],
+                }
+            ]
+        ),
     )
-    first_reference = _drive_file("a", "first.pdf")
-    second_reference = _drive_file("b", "second.pdf")
     workflow = new_receipt_creation_workflow(
         "txn-1",
         [
@@ -988,3 +998,30 @@ def test_unreferenced_link_resolves_matching_editor_recovery() -> None:
     assert session_state[
         "receipt-editor-notice-north-txn-1"
     ] == "2 receipt(s) uploaded and linked; 0 unresolved."
+
+
+def test_missing_editor_recovery_cleanup_is_profile_scoped() -> None:
+    north_workflow = new_receipt_creation_workflow(
+        "north-gone", [], profile_key="north"
+    )
+    south_workflow = new_receipt_creation_workflow(
+        "south-gone", [], profile_key="south"
+    )
+    session_state: dict[str, object] = {
+        receipt_editor_workflow_key("north", "north-gone"): north_workflow,
+        receipt_editor_workflow_key("south", "south-gone"): south_workflow,
+    }
+    with patch.object(st, "session_state", session_state):
+        clear_missing_editor_receipt_recoveries(
+            SimpleNamespace(profile_key="north"),
+            [{"id": "north-still-present"}],
+        )
+
+    assert receipt_editor_workflow_key("north", "north-gone") not in session_state
+    assert receipt_editor_workflow_key("south", "south-gone") in session_state
+    assert session_state[
+        "receipt-editor-notice-north-north-gone"
+    ] == (
+        "The transaction no longer exists. Uploaded files remain in Google "
+        "Drive and can be linked from the Unreferenced receipt workflow."
+    )

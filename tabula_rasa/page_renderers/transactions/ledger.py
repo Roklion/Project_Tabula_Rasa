@@ -13,6 +13,7 @@ from tabula_rasa.ledger_presentation import ledger_frame, money
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
 from tabula_rasa.page_renderers.transactions.receipts import (
     clear_receipt_creation_recovery,
+    clear_missing_editor_receipt_recoveries,
     render_receipts,
 )
 from tabula_rasa.page_renderers.transactions.search import filter_transaction_rows
@@ -148,7 +149,8 @@ def render_ledger(
             on_click=clear_search,
         )
     try:
-        all_transactions = context.storage.list_transactions()
+        all_transactions = context.storage.list_transactions(_force_refresh=True)
+        clear_missing_editor_receipt_recoveries(context, all_transactions)
         structured_transactions = context.storage.list_transactions(
             start=start,
             end=end,
