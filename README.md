@@ -59,7 +59,7 @@ Start with the [documentation index](docs/README.md), or go directly to:
 | Understand the system and data boundaries | [Architecture overview](docs/architecture/OVERVIEW.md) |
 | Add or replace a business | [Business profile setup](docs/setup/BUSINESS_PROFILES.md) |
 | Configure Drive, Picker, receipts, and cloud backups | [Google Drive OAuth](docs/architecture/GOOGLE_DRIVE_OAUTH.md) |
-| Use ledgers, receipts, mileage, and reports | [Using Project Tabula Rasa](docs/guides/USING_TABULA_ROSA.md) |
+| Use ledgers, receipts, mileage, and reports | [Using Project Tabula Rasa](docs/guides/USING_TABULA_RASA.md) |
 | Back up, validate, and restore ledger data | [Backup and recovery](docs/operations/BACKUP_AND_RECOVERY.md) |
 | Maintain a Synology recovery copy | [Synology recovery](docs/operations/SYNOLOGY_RECOVERY.md) |
 | Import QuickBooks data | [QuickBooks import](docs/guides/QUICKBOOKS_IMPORT.md) |

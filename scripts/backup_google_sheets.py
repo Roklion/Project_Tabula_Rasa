@@ -31,7 +31,7 @@ from tabula_rasa.storage import GoogleSheetsStorage
 from tabula_rasa.storage.google_sheets import BACKUP_FORMAT_VERSION
 
 
-BACKUP_NAME = re.compile(r"^tabula-rosa-backup-\d{8}T\d{6}Z\.zip$")
+BACKUP_NAME = re.compile(r"^tabula-rasa-backup-\d{8}T\d{6}Z\.zip$")
 _PROFILE_CONFIG = object()
 
 
@@ -49,7 +49,7 @@ def verified_backup_for_week(
     for path in sorted(output_dir.iterdir(), reverse=True):
         if not path.is_file() or not BACKUP_NAME.fullmatch(path.name):
             continue
-        timestamp = path.name.removeprefix("tabula-rosa-backup-").removesuffix(
+        timestamp = path.name.removeprefix("tabula-rasa-backup-").removesuffix(
             ".zip"
         )
         backup_local_date = (
@@ -119,7 +119,7 @@ def write_versioned_backup(
     manifest = storage.validate_backup_zip(backup)
     timestamp = str(manifest["backup_time"]).replace("-", "").replace(":", "")
     timestamp = timestamp.replace("+0000", "Z")
-    destination = output_dir / f"tabula-rosa-backup-{timestamp}.zip"
+    destination = output_dir / f"tabula-rasa-backup-{timestamp}.zip"
     with destination.open("xb") as backup_file:
         backup_file.write(backup)
 

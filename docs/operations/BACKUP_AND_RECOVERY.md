@@ -267,7 +267,7 @@ Desktop.
 Validate any copied or downloaded archive before relying on it:
 
 ```powershell
-python scripts\validate_google_sheets_backup.py "C:\Safe-Recovery\tabula-rosa-backup-YYYYMMDDTHHMMSSZ.zip"
+python scripts\validate_google_sheets_backup.py "C:\Safe-Recovery\tabula-rasa-backup-YYYYMMDDTHHMMSSZ.zip"
 ```
 
 Successful validation confirms:
@@ -300,7 +300,7 @@ Never restore into the configured live workbook.
 
    ```powershell
    python scripts\restore_google_sheets_backup.py `
-     "C:\Safe-Recovery\tabula-rosa-backup-YYYYMMDDTHHMMSSZ.zip" `
+     "C:\Safe-Recovery\tabula-rasa-backup-YYYYMMDDTHHMMSSZ.zip" `
      --profile PROFILE_KEY `
      --target-spreadsheet-id NEW_SPREADSHEET_ID `
      --initialize
@@ -341,7 +341,7 @@ restored, non-live workbook:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\recover_synology_receipts.py `
-  "C:\Safe-Recovery\tabula-rosa-backup-YYYYMMDDTHHMMSSZ.zip" `
+  "C:\Safe-Recovery\tabula-rasa-backup-YYYYMMDDTHHMMSSZ.zip" `
   "C:\Safe-Recovery\Receipts" `
   --profile PROFILE_KEY `
   --target-spreadsheet-id NEW_SPREADSHEET_ID
@@ -412,7 +412,7 @@ Convert a historical format-1 archive offline:
 
 ```powershell
 python scripts\convert_backup_v1_to_v2.py `
-  "C:\Safe-Recovery\tabula-rosa-backup-YYYYMMDDTHHMMSSZ.zip"
+  "C:\Safe-Recovery\tabula-rasa-backup-YYYYMMDDTHHMMSSZ.zip"
 ```
 
 The converter:

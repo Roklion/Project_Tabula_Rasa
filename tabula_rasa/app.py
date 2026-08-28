@@ -293,6 +293,10 @@ with st.sidebar:
     if profile_admin_enabled:
         available_routes.append("Account settings")
 
+    if st.session_state.pop("account_settings_route_pending", False):
+        st.session_state["active_page"] = "Account settings"
+        st.session_state.pop("navigation_page", None)
+
     stored_page = st.session_state.get(
         "active_page",
         st.session_state.get("navigation_page"),

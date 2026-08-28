@@ -438,7 +438,7 @@ class TestBackupScripts:
             )
 
             timestamp = north_backup.name.removeprefix(
-                "tabula-rosa-backup-"
+                "tabula-rasa-backup-"
             ).removesuffix(".zip")
             local_date = datetime.strptime(timestamp, "%Y%m%dT%H%M%SZ").date()
             assert verified_backup_for_week(north_dir, local_date=local_date)
@@ -455,7 +455,7 @@ class TestBackupScripts:
                 keep=2,
             )
             timestamp = north_backup.name.removeprefix(
-                "tabula-rosa-backup-"
+                "tabula-rasa-backup-"
             ).removesuffix(".zip")
             local_date = datetime.strptime(timestamp, "%Y%m%dT%H%M%SZ").date()
 
@@ -486,10 +486,10 @@ class TestBackupScripts:
         )
         with tempfile.TemporaryDirectory() as temporary_directory:
             output_dir = Path(temporary_directory)
-            (output_dir / "tabula-rosa-backup-20200101T120000Z.zip").write_bytes(
+            (output_dir / "tabula-rasa-backup-20200101T120000Z.zip").write_bytes(
                 north_backup
             )
-            (output_dir / "tabula-rosa-backup-20200102T120000Z.zip").write_bytes(
+            (output_dir / "tabula-rasa-backup-20200102T120000Z.zip").write_bytes(
                 south_backup
             )
 
@@ -503,10 +503,10 @@ class TestBackupScripts:
 
             assert created.exists()
             assert (
-                output_dir / "tabula-rosa-backup-20200101T120000Z.zip"
+                output_dir / "tabula-rasa-backup-20200101T120000Z.zip"
             ).exists()
             assert (
-                output_dir / "tabula-rosa-backup-20200102T120000Z.zip"
+                output_dir / "tabula-rasa-backup-20200102T120000Z.zip"
             ).exists()
 
     def test_drive_mode_is_default_and_does_not_require_local_destination(self) -> None:
@@ -626,9 +626,9 @@ class TestBackupScripts:
         with tempfile.TemporaryDirectory() as temporary_directory:
             output_dir = Path(temporary_directory)
             old_names = (
-                "tabula-rosa-backup-20260716T120000Z.zip",
-                "tabula-rosa-backup-20260717T120000Z.zip",
-                "tabula-rosa-backup-20260718T120000Z.zip",
+                "tabula-rasa-backup-20260716T120000Z.zip",
+                "tabula-rasa-backup-20260717T120000Z.zip",
+                "tabula-rasa-backup-20260718T120000Z.zip",
             )
             for name in old_names:
                 (output_dir / name).write_bytes(b"old")
@@ -650,7 +650,7 @@ class TestBackupScripts:
                 "Transactions": 0,
                 "Mileage": 0,
             }
-            timestamp = created.name.removeprefix("tabula-rosa-backup-").removesuffix(
+            timestamp = created.name.removeprefix("tabula-rasa-backup-").removesuffix(
                 ".zip"
             )
             created_local_date = (
@@ -682,7 +682,7 @@ class TestBackupScripts:
         )
         with tempfile.TemporaryDirectory() as temporary_directory:
             output_dir = Path(temporary_directory)
-            legacy = output_dir / "tabula-rosa-backup-20260728T120000Z.zip"
+            legacy = output_dir / "tabula-rasa-backup-20260728T120000Z.zip"
             legacy.write_bytes(_ledger_only_backup(storage))
 
             assert (
@@ -694,7 +694,7 @@ class TestBackupScripts:
             )
 
             current_path = (
-                output_dir / "tabula-rosa-backup-20260729T120000Z.zip"
+                output_dir / "tabula-rasa-backup-20260729T120000Z.zip"
             )
             current_path.write_bytes(current)
             assert (
@@ -715,11 +715,11 @@ class TestBackupScripts:
         )
         legacy = {
             "id": "backup123456",
-            "name": "tabula-rosa-backup-20260728T120000Z.zip",
+            "name": "tabula-rasa-backup-20260728T120000Z.zip",
         }
         current = {
             "id": "backup234567",
-            "name": "tabula-rosa-backup-20260729T120000Z.zip",
+            "name": "tabula-rasa-backup-20260729T120000Z.zip",
         }
         client = Mock()
         client.list_backups.return_value = [legacy, current]

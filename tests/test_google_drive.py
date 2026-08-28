@@ -19,6 +19,7 @@ from tabula_rasa.google_drive import (
     GoogleDriveConflictError,
     GoogleDriveOAuthConfig,
     authorization_url,
+    backup_filename_and_hash,
     backup_is_in_local_week,
     create_oauth_state,
     exchange_authorization_code,
@@ -1803,7 +1804,7 @@ class TestGoogleDriveFiles:
     def test_backup_retry_reuses_existing_file_and_applies_retention(self) -> None:
         existing = {
             "id": "backup123456",
-            "name": "tabula-rosa-backup-20260728T120000Z.zip",
+            "name": "tabula-rasa-backup-20260728T120000Z.zip",
         }
         session = DriveSession(
             [
@@ -1847,7 +1848,7 @@ class TestGoogleDriveFiles:
     def test_uncertain_backup_create_queries_before_reporting_failure(self) -> None:
         committed = {
             "id": "backup123456",
-            "name": "tabula-rosa-backup-20260728T120000Z.zip",
+            "name": "tabula-rasa-backup-20260728T120000Z.zip",
         }
         session = DriveSession(
             [
@@ -1980,8 +1981,15 @@ class TestGoogleDriveFiles:
         assert session.token_refreshes == 2
 
     def test_week_detection_uses_canonical_utc_filename(self) -> None:
+        filename, sha256 = backup_filename_and_hash(
+            b"backup",
+            {"backup_time": "2026-07-28T12:00:00+0000"},
+        )
+
+        assert filename == "tabula-rasa-backup-20260728T120000Z.zip"
+        assert sha256 == hashlib.sha256(b"backup").hexdigest()
         assert backup_is_in_local_week(
-            "tabula-rosa-backup-20260728T120000Z.zip",
+            "tabula-rasa-backup-20260728T120000Z.zip",
             local_date=datetime(2026, 7, 29),
         )
         assert not backup_is_in_local_week(

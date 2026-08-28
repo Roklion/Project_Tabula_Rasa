@@ -232,7 +232,7 @@ root. Put reviewable app-wide defaults in `.streamlit/secrets.toml`:
 
 ```toml
 [synology_recovery_defaults]
-base_path = "/volume1/Tabula_Rosa_Backups"
+base_path = "/volume1/Tabula_Rasa_Backups"
 schedule = "Continuous"
 retention_policy = "Retain all synchronized generations until quarterly manual review."
 ```

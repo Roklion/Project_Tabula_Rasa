@@ -200,7 +200,7 @@ def test_action_spinners_cover_only_explicit_backup_export_and_import_actions() 
     assert import_source.count("context.confirmed_write(") == 3
 
 
-def test_page_export_filenames_are_tabula_rasa_without_changing_backup_compatibility() -> None:
+def test_page_export_filenames_use_tabula_rasa() -> None:
     source = (
         PROJECT_ROOT
         / "tabula_rasa"
@@ -211,16 +211,13 @@ def test_page_export_filenames_are_tabula_rasa_without_changing_backup_compatibi
     assert 'f"tabula-rasa-{date.today()}.csv"' in source
     assert 'f"tabula-rasa-mileage-{date.today()}.csv"' in source
     assert 'f"tabula-rasa-backup-{date.today()}.zip"' in source
-    assert 'f"tabula-rosa-backup-' not in source
 
     mileage_source = (
         PROJECT_ROOT / "tabula_rasa" / "page_renderers" / "mileage.py"
     ).read_text(encoding="utf-8")
     assert 'f"tabula-rasa-mileage-{start}-to-{end}.csv"' in mileage_source
-    assert "tabula-rosa-mileage-" not in mileage_source
 
     ledger_source = (
         PROJECT_ROOT / "tabula_rasa" / "page_renderers" / "transactions" / "ledger.py"
     ).read_text(encoding="utf-8")
     assert 'f"tabula-rasa-selected-{date.today()}.csv"' in ledger_source
-    assert "tabula-rosa-selected-" not in ledger_source
