@@ -1260,6 +1260,9 @@ def render_receipts(
                         try:
                             prepared_receipts = prepare_receipt_uploads(
                                 receipt_uploads,
+                                existing_reference_count=len(
+                                    receipt_references
+                                ),
                             )
                         except (ValueError, GoogleDriveAccessError) as error:
                             upload_error.error(f"Receipt validation failed: {error}")
