@@ -37,7 +37,9 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     _render_editor_receipt_recovery,
     _process_editor_receipts,
     _record_editor_receipt_linked,
+    editor_receipt_notice_transaction_ids,
     editor_receipt_recovery_transaction_ids,
+    render_editor_receipt_notice,
     render_receipts,
     _start_editor_receipt_workflow,
     receipt_editor_workflow_key,
@@ -775,6 +777,32 @@ def test_editor_receipt_recovery_transaction_ids_are_profile_scoped() -> None:
         assert editor_receipt_recovery_transaction_ids(
             SimpleNamespace(profile_key="north", profile_secrets={})
         ) == ["north-txn"]
+
+
+def test_editor_receipt_notice_can_render_outside_a_transaction_row() -> None:
+    key = receipt_editor_notice_key("north", "hidden-txn")
+    session_state: dict[str, object] = {
+        key: {
+            "message": "1 receipt(s) uploaded and linked; 0 unresolved.",
+            "spreadsheet_id": "",
+            "receipt_folder_id": "",
+        }
+    }
+
+    with (
+        patch.object(st, "session_state", session_state),
+        patch.object(st, "success") as success,
+    ):
+        assert editor_receipt_notice_transaction_ids(
+            SimpleNamespace(profile_key="north")
+        ) == ["hidden-txn"]
+        assert render_editor_receipt_notice(
+            SimpleNamespace(profile_key="north", profile_secrets={}),
+            "hidden-txn",
+        )
+
+    success.assert_called_once_with("1 receipt(s) uploaded and linked; 0 unresolved.")
+    assert key not in session_state
 
 
 def test_editor_receipt_notice_attention_states_use_warning_semantics() -> None:

@@ -435,7 +435,10 @@ def _editor_receipt_notice_matches_configuration(
         return True
     expected_spreadsheet = str(notice.get("spreadsheet_id", ""))
     expected_folder = str(notice.get("receipt_folder_id", ""))
-    current_spreadsheet = str(context.profile_secrets.get("spreadsheet_id", ""))
+    profile_secrets = getattr(context, "profile_secrets", {})
+    if not isinstance(profile_secrets, Mapping):
+        profile_secrets = {}
+    current_spreadsheet = str(profile_secrets.get("spreadsheet_id", ""))
     current_folder = str(receipt_folder.get("id", ""))
     return not (
         (expected_spreadsheet and expected_spreadsheet != current_spreadsheet)
@@ -581,6 +584,7 @@ def _render_editor_receipt_recovery(
     receipt_folder: Mapping[str, object] | None,
     *,
     retry_available: bool = True,
+    configuration_matches: bool = True,
 ) -> bool:
     """Render editor receipt recovery and return whether a workflow is active."""
     workflow = _editor_workflow(context, transaction_id)
@@ -630,7 +634,7 @@ def _render_editor_receipt_recovery(
     confirmation_only_retry = not unresolved and bool(
         workflow.get("configuration_error")
     )
-    if (unresolved or workflow.get("configuration_error")) and (
+    if (unresolved or workflow.get("configuration_error")) and configuration_matches and (
         retry_available or confirmation_only_retry
     ):
         retry_requested = st.button(
@@ -638,7 +642,7 @@ def _render_editor_receipt_recovery(
             type="primary",
             key=f"retry-editor-receipts-{context.profile_key}-{transaction_id}",
         )
-    elif unresolved or workflow.get("configuration_error"):
+    elif configuration_matches and (unresolved or workflow.get("configuration_error")):
         st.info(
             "Connect Google Drive and select a receipt folder before retrying "
             "receipt recovery."
@@ -788,6 +792,10 @@ def clear_missing_editor_receipt_recoveries(
         if str(transaction.get("id", ""))
     }
     processed_transaction_ids: set[str] = set()
+    profile_secrets = getattr(context, "profile_secrets", {})
+    if not isinstance(profile_secrets, Mapping):
+        profile_secrets = {}
+    current_spreadsheet = str(profile_secrets.get("spreadsheet_id", ""))
     key_prefix = receipt_editor_workflow_key_prefix(context.profile_key)
     current_receipt_folder = _receipt_folder(context)
     current_folder_id = str(
@@ -803,9 +811,6 @@ def clear_missing_editor_receipt_recoveries(
         if not isinstance(workflow, Mapping):
             continue
         workflow_spreadsheet = str(workflow.get("spreadsheet_id", ""))
-        current_spreadsheet = str(
-            context.profile_secrets.get("spreadsheet_id", "")
-        )
         workflow_folder = str(workflow.get("receipt_folder_id", ""))
         if (
             workflow_spreadsheet
@@ -827,9 +832,6 @@ def clear_missing_editor_receipt_recoveries(
         processed_transaction_ids.add(transaction_id)
 
     notice_prefix = receipt_editor_notice_key_prefix(context.profile_key)
-    current_spreadsheet = str(
-        context.profile_secrets.get("spreadsheet_id", "")
-    )
     for key in list(st.session_state):
         if not isinstance(key, str) or not key.startswith(notice_prefix):
             continue
@@ -911,7 +913,6 @@ def editor_receipt_recovery_transaction_ids(
 ) -> list[str]:
     """Return this profile's editor recovery targets for independent rendering."""
     workflow_key_prefix = receipt_editor_workflow_key_prefix(context.profile_key)
-    current_configuration_key = _editor_receipt_configuration_key(context)
     transaction_ids: set[str] = set()
     for key in list(st.session_state):
         if not isinstance(key, str) or not key.startswith(workflow_key_prefix):
@@ -919,18 +920,57 @@ def editor_receipt_recovery_transaction_ids(
         workflow = st.session_state.get(key)
         if not isinstance(workflow, Mapping):
             continue
-        workflow_spreadsheet = str(workflow.get("spreadsheet_id", ""))
-        workflow_folder = str(workflow.get("receipt_folder_id", ""))
-        if (
-            any((workflow_spreadsheet, workflow_folder))
-            and f"{workflow_spreadsheet}\x00{workflow_folder}"
-            != current_configuration_key
-        ):
-            continue
         transaction_id = str(workflow.get("transaction_id", ""))
         if transaction_id:
             transaction_ids.add(transaction_id)
     return sorted(transaction_ids)
+
+
+def editor_receipt_notice_transaction_ids(
+    context: TransactionsContext,
+) -> list[str]:
+    """Return this profile's editor notice targets for independent rendering."""
+    notice_key_prefix = receipt_editor_notice_key_prefix(context.profile_key)
+    transaction_ids: set[str] = set()
+    for key in list(st.session_state):
+        if isinstance(key, str) and key.startswith(notice_key_prefix):
+            transaction_id = key[len(notice_key_prefix) :]
+            if transaction_id:
+                transaction_ids.add(transaction_id)
+    return sorted(transaction_ids)
+
+
+def render_editor_receipt_notice(
+    context: TransactionsContext,
+    transaction_id: str,
+) -> bool:
+    """Render and consume a matching editor notice outside a transaction row."""
+    key = receipt_editor_notice_key(context.profile_key, transaction_id)
+    notice = st.session_state.get(key)
+    receipt_folder = _receipt_folder(context)
+    if isinstance(notice, Mapping):
+        profile_secrets = getattr(context, "profile_secrets", {})
+        if not isinstance(profile_secrets, Mapping):
+            profile_secrets = {}
+        expected_spreadsheet = str(notice.get("spreadsheet_id", ""))
+        expected_folder = str(notice.get("receipt_folder_id", ""))
+        current_spreadsheet = str(profile_secrets.get("spreadsheet_id", ""))
+        current_folder = str(
+            receipt_folder.get("id", "") if receipt_folder is not None else ""
+        )
+        if (
+            expected_spreadsheet
+            and expected_spreadsheet != current_spreadsheet
+        ) or (expected_folder and expected_folder != current_folder):
+            return False
+    message = _editor_receipt_notice_message(st.session_state.pop(key, None))
+    if not message:
+        return False
+    if _editor_receipt_notice_requires_attention(message):
+        st.warning(message)
+    else:
+        st.success(message)
+    return True
 
 
 def render_filtered_editor_receipt_recovery(
@@ -939,8 +979,27 @@ def render_filtered_editor_receipt_recovery(
 ) -> bool:
     """Render recovery for a transaction hidden by the active ledger filters."""
     receipt_folder = _receipt_folder(context)
+    workflow = _editor_workflow(context, transaction_id)
+    configuration_matches = True
+    if workflow is not None:
+        expected_spreadsheet = str(workflow.get("spreadsheet_id", ""))
+        expected_folder = str(workflow.get("receipt_folder_id", ""))
+        if expected_spreadsheet or expected_folder:
+            if receipt_folder is None:
+                workflow["configuration_error"] = (
+                    "The profile's Google Sheets or Drive receipt configuration "
+                    "changed while this receipt was waiting for recovery. Restore "
+                    "the previous profile configuration before retrying."
+                )
+                configuration_matches = False
+            else:
+                configuration_matches = _workflow_configuration_matches(
+                    context,
+                    workflow,
+                    receipt_folder,
+                )
     retry_available = False
-    if receipt_folder is not None:
+    if receipt_folder is not None and configuration_matches:
         try:
             context.get_drive_client(
                 context.profile_key,
@@ -955,6 +1014,7 @@ def render_filtered_editor_receipt_recovery(
         transaction_id,
         receipt_folder,
         retry_available=retry_available,
+        configuration_matches=configuration_matches,
     )
 
 
@@ -1012,7 +1072,10 @@ def _workflow_configuration_matches(
     expected_revision = str(workflow.get("configuration_revision", ""))
     expected_spreadsheet = str(workflow.get("spreadsheet_id", ""))
     expected_folder = str(workflow.get("receipt_folder_id", ""))
-    current_spreadsheet = str(context.profile_secrets.get("spreadsheet_id", ""))
+    profile_secrets = getattr(context, "profile_secrets", {})
+    if not isinstance(profile_secrets, Mapping):
+        profile_secrets = {}
+    current_spreadsheet = str(profile_secrets.get("spreadsheet_id", ""))
     current_folder = str(receipt_folder.get("id", ""))
     if not any((expected_spreadsheet, expected_folder)):
         return (
@@ -1678,9 +1741,6 @@ def render_receipts(
                         try:
                             prepared_receipts = prepare_receipt_uploads(
                                 receipt_uploads,
-                                existing_reference_count=len(
-                                    receipt_references
-                                ),
                             )
                         except (ValueError, GoogleDriveAccessError) as error:
                             upload_error.error(f"Receipt validation failed: {error}")
@@ -1705,7 +1765,7 @@ def render_receipts(
                                     prepared_receipts,
                                     receipt_folder,
                                 )
-                            except StorageError as error:
+                            except (StorageError, GoogleDriveAccessError) as error:
                                 upload_error.error(
                                     "The selected transaction could not be "
                                     f"rechecked before upload. {error}"
