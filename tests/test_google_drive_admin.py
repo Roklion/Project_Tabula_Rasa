@@ -386,6 +386,11 @@ def test_storage_root_rejects_exact_profile_root_reuse() -> None:
         _ensure_storage_root_is_not_directly_nested("south", selected_root, profiles)
 
 
+def test_storage_root_rejects_non_mapping_folder_response() -> None:
+    with pytest.raises(GoogleDriveConfigurationError, match="folder details"):
+        _ensure_storage_root_is_not_directly_nested("north", [], {})  # type: ignore[arg-type]
+
+
 def test_storage_root_rejects_known_direct_parent_only() -> None:
     selected_root = {"id": "southroot123", "parents": ["northroot123"]}
     profiles = {

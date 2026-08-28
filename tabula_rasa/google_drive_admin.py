@@ -62,6 +62,10 @@ def _ensure_storage_root_is_not_directly_nested(
     local_profiles: Mapping[str, Mapping[str, Any]],
 ) -> None:
     """Reject known root reuse or direct nesting using visible folder IDs only."""
+    if not isinstance(selected_root, Mapping):
+        raise GoogleDriveConfigurationError(
+            "Google Drive could not return the selected folder details. Retry."
+        )
     selected_id = str(selected_root.get("id", ""))
     parents = selected_root.get("parents")
     parent_ids = (
