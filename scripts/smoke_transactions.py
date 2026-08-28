@@ -243,6 +243,36 @@ def check_viewport(page: Page, url: str, viewport: tuple[int, int]) -> None:
         raise SmokeCheckFailure("Expected visible control: Save transaction") from error
     assert_no_page_overflow(page)
 
+    ledger_tab = page.get_by_role(
+        "tab", name="View & edit ledger", exact=True
+    ).first
+    try:
+        ledger_tab.wait_for(state="visible", timeout=10000)
+    except PlaywrightTimeoutError as error:
+        raise SmokeCheckFailure("Expected the View & edit ledger tab.") from error
+    ledger_tab.click()
+    require_visible_text(page, "View & edit ledger")
+    edit_expander = page.get_by_text("Edit transaction", exact=True).first
+    try:
+        edit_expander.wait_for(state="visible", timeout=10000)
+    except PlaywrightTimeoutError as error:
+        raise SmokeCheckFailure("Expected the Edit transaction expander.") from error
+    edit_expander.click()
+    require_input(page, "Transaction to edit")
+    require_input(page, "Upload receipt")
+    receipt_upload = page.locator('input[type="file"]').last
+    try:
+        receipt_upload.wait_for(state="attached", timeout=10000)
+    except PlaywrightTimeoutError as error:
+        raise SmokeCheckFailure(
+            "Expected the saved-transaction receipt file input."
+        ) from error
+    if not receipt_upload.evaluate("element => element.multiple === true"):
+        raise SmokeCheckFailure(
+            "Expected the saved-transaction receipt uploader to accept multiple files."
+        )
+    assert_no_page_overflow(page)
+
 
 def capture_failure_screenshot(
     page: Page, screenshots_dir: Path, viewport: tuple[int, int]

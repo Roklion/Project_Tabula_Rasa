@@ -1753,11 +1753,15 @@ The existing transaction editor remains the full receipt-management surface.
 
 It must preserve:
 
+- A multi-file receipt uploader for adding one or more files to the selected
+  transaction. Every selected file is validated before any upload begins.
 - Supported file types: PDF, PNG, JPG, JPEG, WEBP, and HEIC
 - Original filename preservation with safe sanitization
 - Numeric suffixing for filename conflicts
 - SHA-256 and integrity metadata behavior
 - Upload and link confirmation
+- A concise complete/unresolved count when a multi-file upload is partial, with
+  retry limited to unresolved files
 - Retry-safe handling of uncertain Drive responses
 - Existing linked-receipt display and removal
 - Linking of eligible unreferenced receipts
@@ -2492,7 +2496,9 @@ Use compact settings navigation or tabs:
 3. **Recovery**
 4. **Security & deployment information**
 
-The last section is informational unless an implementation task adds supported controls.
+The last section explains the local/hosted security boundary and provides the
+current local hosted-Secrets export action. It does not inspect or modify the
+separate hosted Secrets store.
 
 #### Business profiles section
 
@@ -2607,6 +2613,17 @@ local backup paths, Synology metadata, and unknown future local-operation
 fields. Existing hosted documents with older extra fields remain readable, but
 new exports omit them.
 
+**Current export behavior:** The loopback-only Account settings page can create
+the combined hosted Streamlit Secrets document directly. The action reloads and
+validates the complete local profile set, uses the same allowlist and secure
+writer as `scripts/export_streamlit_secrets.py`, and creates a new randomly
+named, ignored, owner-only TOML file under `.streamlit/` without overwriting an
+existing file. The UI identifies the generated path but never displays or logs
+the document's credential values. It instructs the administrator to paste the
+complete file into **Streamlit App settings > Secrets**, save it, delete the
+local generated file, and rerun Profile readiness. Readiness remains
+**Ready locally** because the local application cannot verify hosted acceptance.
+
 #### Acceptance criteria
 
 - Every current Business profiles function remains available under Account settings.
@@ -2615,7 +2632,9 @@ new exports omit them.
 - Hosted/Secrets-sourced profiles remain visibly read-only in local administration where applicable.
 - Profile keys remain immutable.
 - Drive and Synology settings are preserved unless their dedicated controls change them.
-- Successful changes to hosted-runtime fields remain followed by the documented hosted-Secrets export step outside this UI.
+- Successful changes to hosted-runtime fields remain followed by the documented
+  hosted-Secrets export and replacement step, using the Account settings action
+  or the equivalent command-line exporter.
 - Local-only backup and Synology changes leave the hosted projection unchanged.
 - The page does not imply per-profile user permissions, DSM monitoring, or in-app restore.
 

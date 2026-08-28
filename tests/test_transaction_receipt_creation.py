@@ -21,6 +21,11 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     _link_recovery_configuration_matches,
     _workflow_has_uploaded_receipt,
     _transaction_still_exists,
+    _finish_editor_receipt_workflow,
+    _process_editor_receipts,
+    _record_editor_receipt_linked,
+    _start_editor_receipt_workflow,
+    receipt_editor_workflow_key,
 )
 
 
@@ -88,6 +93,16 @@ def test_prepare_receipts_rejects_more_than_manifest_limit_before_sheets_write()
 
     with pytest.raises(GoogleDriveAccessError, match="no more than 100"):
         prepare_receipt_uploads([uploaded] * 101)
+
+
+def test_editor_receipt_selection_respects_existing_manifest_capacity() -> None:
+    uploaded = UploadedFile("receipt.pdf", b"receipt", "application/pdf")
+
+    with pytest.raises(GoogleDriveAccessError, match="no more than 100"):
+        prepare_receipt_uploads(
+            [uploaded, uploaded],
+            existing_reference_count=99,
+        )
 
 
 def test_partial_link_failure_retries_only_unresolved_receipt() -> None:
@@ -632,3 +647,191 @@ def test_uncertain_upload_reconciles_without_a_second_create() -> None:
     assert upload_calls == 1
     assert reconcile_calls == 2
     assert receipt_creation_counts(workflow) == (1, 0)
+
+
+def test_editor_receipt_recovery_retries_only_unresolved_without_reupload() -> None:
+    upload_calls: list[str] = []
+    link_calls: list[str] = []
+    fail_upload = {"value": True}
+    fail_link = {"value": True}
+
+    class DriveClient:
+        def upload_receipt(self, **kwargs: object) -> Mapping[str, object]:
+            name = str(kwargs["original_name"])
+            upload_calls.append(name)
+            content = bytes(kwargs["content"])
+            if content == b"second" and fail_upload["value"]:
+                raise RuntimeError("second upload failed")
+            return _drive_file(
+                "a" if content == b"first" else "c",
+                name,
+            )
+
+    class StorageClient:
+        def link_transaction_receipt(
+            self,
+            _transaction_id: str,
+            *,
+            reference: Mapping[str, object],
+        ) -> None:
+            receipt_id = str(reference["receipt_id"])
+            link_calls.append(receipt_id)
+            if receipt_id.startswith("c") and fail_link["value"]:
+                raise RuntimeError("second link failed")
+
+    context = SimpleNamespace(
+        profile_key="north",
+        storage=StorageClient(),
+        profile_secrets={
+            "spreadsheet_id": "north-sheet",
+            "google_drive": {"receipt_folder": {"id": "north-folder"}},
+        },
+        configuration_revision="revision",
+        get_drive_client=lambda *_args: DriveClient(),
+        mark_workbook_data_changed=Mock(),
+    )
+    receipts = prepare_receipt_uploads(
+        [
+            UploadedFile("receipt.pdf", b"first", "application/pdf"),
+            UploadedFile("receipt.pdf", b"second", "application/pdf"),
+        ]
+    )
+    session_state: dict[str, object] = {}
+
+    with patch.object(st, "session_state", session_state):
+        workflow = _start_editor_receipt_workflow(
+            context,
+            "txn-1",
+            receipts,
+            {"id": "north-folder"},
+        )
+        assert receipt_creation_counts(workflow) == (1, 1)
+        assert upload_calls == ["receipt.pdf", "receipt.pdf"]
+
+        fail_upload["value"] = False
+        _process_editor_receipts(context, workflow, {"id": "north-folder"})
+        assert receipt_creation_counts(workflow) == (1, 1)
+        assert upload_calls == ["receipt.pdf", "receipt.pdf", "receipt.pdf"]
+        assert isinstance(workflow["receipts"][1]["reference"], Mapping)
+
+        fail_link["value"] = False
+        _process_editor_receipts(context, workflow, {"id": "north-folder"})
+        assert receipt_creation_counts(workflow) == (2, 0)
+        assert upload_calls == ["receipt.pdf", "receipt.pdf", "receipt.pdf"]
+        assert len(link_calls) == 3
+        assert _finish_editor_receipt_workflow(context, "txn-1", workflow)
+
+    assert receipt_editor_workflow_key("north", "txn-1") not in session_state
+    assert session_state[
+        "receipt-editor-notice-north-txn-1"
+    ] == "2 receipt(s) uploaded and linked; 0 unresolved."
+
+
+def test_editor_receipt_recovery_isolated_by_profile() -> None:
+    drive_profiles: list[str] = []
+
+    class DriveClient:
+        def upload_receipt(self, **kwargs: object) -> Mapping[str, object]:
+            drive_profiles.append(str(kwargs["profile_key"]))
+            return _drive_file("a", f"{kwargs['profile_key']}.pdf")
+
+    class StorageClient:
+        def link_transaction_receipt(
+            self,
+            _transaction_id: str,
+            *,
+            reference: Mapping[str, object],
+        ) -> None:
+            del reference
+
+    def context_for(profile_key: str) -> SimpleNamespace:
+        return SimpleNamespace(
+            profile_key=profile_key,
+            storage=StorageClient(),
+            profile_secrets={
+                "spreadsheet_id": f"{profile_key}-sheet",
+                "google_drive": {
+                    "receipt_folder": {"id": f"{profile_key}-folder"}
+                },
+            },
+            configuration_revision="revision",
+            get_drive_client=lambda *_args: DriveClient(),
+            mark_workbook_data_changed=Mock(),
+        )
+
+    session_state: dict[str, object] = {}
+    with patch.object(st, "session_state", session_state):
+        for profile_key in ("north", "south"):
+            context = context_for(profile_key)
+            receipt = prepare_receipt_uploads(
+                [UploadedFile("receipt.pdf", b"receipt", "application/pdf")]
+            )
+            workflow = _start_editor_receipt_workflow(
+                context,
+                "shared-transaction-id",
+                receipt,
+                {"id": f"{profile_key}-folder"},
+            )
+            assert receipt_creation_counts(workflow) == (1, 0)
+
+    assert drive_profiles == ["north", "south"]
+    assert (
+        session_state[
+            receipt_editor_workflow_key("north", "shared-transaction-id")
+        ]["profile_key"]
+        == "north"
+    )
+    assert (
+        session_state[
+            receipt_editor_workflow_key("south", "shared-transaction-id")
+        ]["profile_key"]
+        == "south"
+    )
+
+
+def test_unreferenced_link_resolves_matching_editor_recovery() -> None:
+    context = SimpleNamespace(
+        profile_key="north",
+        schedule_widget_reset=Mock(),
+    )
+    first_reference = _drive_file("a", "first.pdf")
+    second_reference = _drive_file("b", "second.pdf")
+    workflow = new_receipt_creation_workflow(
+        "txn-1",
+        [
+            {
+                "linked": False,
+                "reference": first_reference,
+                "content": b"",
+                "error": "link failed",
+            },
+            {
+                "linked": False,
+                "reference": second_reference,
+                "content": b"",
+                "error": "link failed",
+            },
+        ],
+        profile_key="north",
+    )
+    session_state: dict[str, object] = {
+        receipt_editor_workflow_key("north", "txn-1"): workflow,
+    }
+
+    with patch.object(st, "session_state", session_state):
+        assert not _record_editor_receipt_linked(
+            context,
+            "txn-1",
+            first_reference,
+        )
+        assert receipt_creation_counts(workflow) == (1, 1)
+        assert _record_editor_receipt_linked(
+            context,
+            "txn-1",
+            second_reference,
+        )
+
+    assert receipt_editor_workflow_key("north", "txn-1") not in session_state
+    assert session_state[
+        "receipt-editor-notice-north-txn-1"
+    ] == "2 receipt(s) uploaded and linked; 0 unresolved."

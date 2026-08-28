@@ -191,6 +191,20 @@ def main() -> None:
             for transaction in storage.list_transactions()
         ) == 3
 
+        by_label(app.file_uploader, "Upload receipt").set_value(
+            [
+                ("receipt.pdf", b"editor first", "application/pdf"),
+                ("receipt.pdf", b"editor second", "application/pdf"),
+            ]
+        ).run()
+        by_label(app.button, "Upload receipt to Google Drive").click().run()
+        assert len(upload_calls) == 6
+        assert len(link_calls) == 5
+        assert sum(
+            transaction["receipt_references"].count('"id"')
+            for transaction in storage.list_transactions()
+        ) == 5
+
         fail_second_upload["value"] = False
         by_label(app.number_input, "Amount").set_value(40)
         by_label(app.file_uploader, "Receipt (optional)").set_value(
@@ -202,17 +216,17 @@ def main() -> None:
         )
         by_label(app.button, "Save transaction").click().run()
         assert len(storage.list_transactions()) == 3
-        assert len(upload_calls) == 7
-        assert len(link_calls) == 6
+        assert len(upload_calls) == 9
+        assert len(link_calls) == 8
         assert sum(
             transaction["receipt_references"].count('"id"')
             for transaction in storage.list_transactions()
-        ) == 6
+        ) == 8
 
         by_label(app.number_input, "Amount").set_value(41)
         by_label(app.button, "Save transaction").click().run()
         assert len(storage.list_transactions()) == 4
-        assert len(upload_calls) == 7
+        assert len(upload_calls) == 9
         assert any(str(success.value) == "Transaction saved." for success in app.success)
         assert not any(
             "2 receipt(s) linked" in str(success.value) for success in app.success

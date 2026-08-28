@@ -19,6 +19,17 @@ local_profile_store.LOCAL_PROFILE_STORE_PATH = (
     Path(__file__).resolve().parent / ".streamlit" / "business_profiles.json"
 )
 fake_storage = GoogleSheetsStorage(FakeWorkbook())
+fake_storage.ensure_defaults()
+smoke_account = fake_storage.list_accounts()[0]
+smoke_category = fake_storage.list_categories(kind="Expense")[0]
+fake_storage.create_transaction(
+    txn_date="2026-08-28",
+    kind="Expense",
+    amount="25.00",
+    account_id=smoke_account["id"],
+    category_id=smoke_category["id"],
+    payee="Viewport smoke vendor",
+)
 
 
 def fake_from_secrets(cls, secrets):
@@ -27,6 +38,8 @@ def fake_from_secrets(cls, secrets):
 
 
 GoogleSheetsStorage.from_secrets = classmethod(fake_from_secrets)
+GoogleDriveClient.list_receipts = lambda self, **kwargs: []
+GoogleDriveClient.list_profile_receipts = lambda self, **kwargs: []
 st.session_state.setdefault("active_page", "Dashboard")
 st.session_state.setdefault("navigation_page", "Dashboard")
 runpy.run_path(str(REPOSITORY / "tabula_rasa" / "app.py"), run_name="__main__")

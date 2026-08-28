@@ -216,6 +216,13 @@ editor's **Unreferenced receipt** workflow.
 When Google Drive is configured for the selected profile, open a saved
 transaction under **Transactions > View & edit ledger > Receipt**.
 
+The transaction editor accepts one or more receipt files in a single upload.
+All selected files are validated before any upload begins. A partial result
+keeps successful links, reports concise complete and unresolved counts, and
+offers **Retry unresolved receipts**. If a file was uploaded but its ledger
+link failed, retry uses that existing Drive file rather than uploading it
+again. Duplicate filenames remain separate files with numeric suffixes.
+
 Receipt behavior:
 
 - supported files are PDFs and images accepted by the application;
