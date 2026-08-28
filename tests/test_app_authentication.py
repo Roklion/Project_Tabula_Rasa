@@ -400,6 +400,18 @@ class TestAppAuthentication:
     def test_local_admin_page_requires_flag_and_reauthentication(self) -> None:
         st.cache_resource.clear()
         fake_storage = GoogleSheetsStorage(FakeWorkbook())
+        original_radio = st.radio
+
+        def simulate_cleared_radio_callback(*args: object, **kwargs: object):
+            result = original_radio(*args, **kwargs)
+            if kwargs.get("index") is None and kwargs.get("on_change"):
+                # A browser rerun can report the operational radio's cleared
+                # value while Account settings is active. Reproduce that
+                # callback so the route guard is covered independently of the
+                # AppTest widget-state implementation.
+                kwargs["on_change"]()
+            return result
+
         with tempfile.TemporaryDirectory() as directory:
             local_store = Path(directory) / "local_business_profiles.json"
             with (
@@ -423,6 +435,11 @@ class TestAppAuthentication:
                     GoogleSheetsStorage,
                     "from_secrets",
                     return_value=fake_storage,
+                ),
+                patch.object(
+                    st,
+                    "radio",
+                    side_effect=simulate_cleared_radio_callback,
                 ),
             ):
                 app = AppTest.from_file(
@@ -449,6 +466,7 @@ class TestAppAuthentication:
                 select_account_settings(app)
                 assert app.session_state["active_page"] == "Account settings"
                 assert app.session_state["navigation_page"] is None
+                assert app.session_state["account_settings_navigation_page"] is None
                 next(
                     radio for radio in app.radio if radio.label == "Workspace"
                 ).set_value("Dashboard").run()
@@ -460,6 +478,7 @@ class TestAppAuthentication:
 
                 select_account_settings(app)
                 assert app.session_state["navigation_page"] is None
+                assert app.session_state["account_settings_navigation_page"] is None
                 assert any(
                     field.label == "Application password" for field in app.text_input
                 )
