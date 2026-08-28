@@ -32,6 +32,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     _discard_editor_workflow_receipt,
     _cancel_editor_receipt_recovery,
     _finish_editor_receipt_workflow,
+    _mark_editor_receipt_notice_validated,
     _render_editor_receipt_recovery,
     _process_editor_receipts,
     _record_editor_receipt_linked,
@@ -1256,6 +1257,25 @@ def test_editor_receipt_recovery_active_ignores_validated_notice() -> None:
         assert not editor_receipt_recovery_active(
             SimpleNamespace(profile_key="north", profile_secrets={})
         )
+
+
+def test_mark_editor_receipt_notice_validated_reassigns_a_copy() -> None:
+    notice = {"message": "Receipt recovery complete."}
+    session_state: dict[str, object] = {"notice-key": notice}
+
+    with patch.object(st, "session_state", session_state):
+        _mark_editor_receipt_notice_validated(
+            "notice-key",
+            notice,
+            "sheet-id\x00folder-id",
+        )
+
+    assert notice == {"message": "Receipt recovery complete."}
+    assert session_state["notice-key"] == {
+        "message": "Receipt recovery complete.",
+        "validated_configuration": "sheet-id\x00folder-id",
+    }
+    assert session_state["notice-key"] is not notice
 
 
 def test_editor_receipt_recovery_active_ignores_mismatched_workflow() -> None:

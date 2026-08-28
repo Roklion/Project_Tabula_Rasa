@@ -395,9 +395,7 @@ def _mark_editor_receipt_notice_validated(
     configuration_key: str,
 ) -> None:
     """Bound a notice to the configuration under which it was checked."""
-    if isinstance(notice, MutableMapping):
-        notice["validated_configuration"] = configuration_key
-    elif isinstance(notice, Mapping):
+    if isinstance(notice, Mapping):
         updated_notice = dict(notice)
         updated_notice["validated_configuration"] = configuration_key
         st.session_state[key] = updated_notice
@@ -1577,11 +1575,6 @@ def render_receipts(
                             )
                         except (ValueError, GoogleDriveAccessError) as error:
                             upload_error.error(f"Receipt validation failed: {error}")
-                        except StorageError as error:
-                            upload_error.error(
-                                "The selected transaction could not be rechecked "
-                                f"before upload. {error}"
-                            )
                         else:
                             try:
                                 final_receipt_count = _fresh_transaction_receipt_count(
