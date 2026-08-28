@@ -251,10 +251,12 @@ def _save_storage_root(
     *,
     client: GoogleDriveClient,
     store_path: Path,
+    folder: Mapping[str, Any] | None = None,
 ) -> bool:
     selected_id = str(selected.get("id", ""))
     existing = drive_settings.get("storage_root")
-    folder = client.folder(selected_id)
+    if folder is None:
+        folder = client.folder(selected_id)
     if not isinstance(folder, Mapping):
         raise GoogleDriveAccessError(
             "Google Drive could not return the selected folder details. Retry."
@@ -516,6 +518,7 @@ def render_google_drive_admin(
                     selected_root,
                     client=client,
                     store_path=store_path,
+                    folder=folder,
                 )
             except (GoogleDriveError, LocalProfileStoreError) as exc:
                 storage_root_error.error(str(exc))
