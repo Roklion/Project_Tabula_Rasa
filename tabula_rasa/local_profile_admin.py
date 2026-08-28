@@ -8,6 +8,11 @@ from typing import Any
 
 import streamlit as st
 
+from scripts.export_streamlit_secrets import (
+    SecretsExportError,
+    build_streamlit_secrets_toml,
+    write_secure_export,
+)
 from tabula_rasa.business_profiles import load_business_profiles
 from tabula_rasa.google_drive import GoogleDriveError
 from tabula_rasa.google_drive_admin import (
@@ -241,6 +246,9 @@ def _render_profile_readiness(
 
 
 def _render_security_deployment_info(
+    app_secrets: Mapping[str, Any] | None = None,
+    *,
+    store_path: Path = LOCAL_PROFILE_STORE_PATH,
 ) -> None:
     """Explain local/hosted boundaries without adding administration controls."""
     st.subheader("Security & deployment information")
@@ -259,6 +267,44 @@ def _render_security_deployment_info(
         "documented Streamlit Secrets export and replacement process. Local backup "
         "paths and Synology metadata are excluded from that hosted projection."
     )
+    st.subheader("Hosted Streamlit Secrets export")
+    st.write(
+        "Generate one combined Secrets document from every included local profile "
+        "after its hosted settings are ready. The generated file is written only "
+        "to the ignored local .streamlit directory and is never shown in this UI."
+    )
+    if app_secrets is not None and st.button(
+        "Generate hosted Secrets file",
+        key="generate-hosted-secrets-file",
+    ):
+        try:
+            destination = _export_hosted_secrets_file(
+                app_secrets,
+                store_path=store_path,
+            )
+        except (LocalProfileStoreError, SecretsExportError, OSError):
+            st.error(
+                "Hosted Streamlit Secrets export failed. Review every included "
+                "local profile's Sheets and Google Drive settings, verify that "
+                ".streamlit is writable, and retry. No hosted deployment was "
+                "changed."
+            )
+        except Exception:
+            # Keep an unexpected exporter failure from rendering a traceback that
+            # could contain a credential supplied by a third-party dependency.
+            st.error(
+                "Hosted Streamlit Secrets export failed unexpectedly. Verify the "
+                "local profile configuration and retry; no hosted deployment was "
+                "changed."
+            )
+        else:
+            st.success(f"Generated hosted Secrets file: {destination}")
+            st.info(
+                "Paste the complete file into Streamlit App settings > Secrets, "
+                "save it, then delete the generated local file. Re-run profile "
+                "readiness locally afterward; this page cannot verify hosted "
+                "Secrets acceptance."
+            )
     st.markdown(
         "See the [Account settings and profile setup guide]("
         "https://github.com/Roklion/Project_Tabula_Rasa/blob/main/docs/setup/"
@@ -268,6 +314,30 @@ def _render_security_deployment_info(
         "https://github.com/Roklion/Project_Tabula_Rasa/blob/main/docs/operations/"
         "SYNOLOGY_RECOVERY.md) for operational procedures."
     )
+
+
+def _export_hosted_secrets_file(
+    app_secrets: Mapping[str, Any],
+    *,
+    store_path: Path = LOCAL_PROFILE_STORE_PATH,
+) -> Path:
+    """Validate all local profiles and create a new hosted Secrets file.
+
+    The exporter deliberately reloads the canonical store at action time so a
+    stale Account settings page cannot export an outdated or partial profile
+    set. ``build_streamlit_secrets_toml`` owns the hosted allowlist and Drive
+    validation; ``write_secure_export`` owns the ignored owner-only file and
+    no-overwrite safety boundary.
+    """
+    local_profiles = load_local_profiles(store_path)
+    if not local_profiles:
+        raise LocalProfileStoreError(
+            "At least one local business profile is required for hosted export."
+        )
+    document = build_streamlit_secrets_toml(app_secrets, local_profiles)
+    return write_secure_export(document)
+
+
 def _initialize_candidate_storage(
     settings: Mapping[str, Any],
 ) -> GoogleSheetsStorage:
@@ -816,5 +886,8 @@ def render_local_profile_admin(
         )
 
     with security_tab:
-        _render_security_deployment_info()
+        _render_security_deployment_info(
+            base_secrets,
+            store_path=store_path,
+        )
     return

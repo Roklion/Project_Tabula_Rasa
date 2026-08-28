@@ -257,13 +257,19 @@ export. The local administrator cannot verify whether Streamlit Community Cloud
 accepted the uploaded Secrets document; confirm the deployed app after saving.
 
 Local development uses split files, while the hosted app expects one combined
-Streamlit Secrets document. Generate it with:
+Streamlit Secrets document. In **Account settings > Security & deployment
+information**, select **Generate hosted Secrets file**. The action reloads and
+validates every included local profile, creates a new ignored owner-only TOML
+file under `.streamlit/`, and identifies its path without displaying its
+contents or any credential values.
+
+The equivalent command-line fallback uses the same exporter implementation:
 
 ```powershell
 python scripts\export_streamlit_secrets.py
 ```
 
-The command:
+Both paths:
 
 - validates every included profile and its hosted Drive settings;
 - projects an explicit hosted-runtime allowlist instead of copying whole local
@@ -275,7 +281,10 @@ The command:
 
 Paste the complete generated document into
 **Streamlit App settings > Secrets**, save it, and immediately delete the
-generated local file.
+generated local file. Then run **Profile readiness** again. Its terminal result
+remains **Ready locally**: the loopback-only application cannot inspect the
+separate hosted Secrets store or claim that Streamlit accepted the replacement,
+so confirm the deployed application after saving.
 
 Repeat the export after any:
 
