@@ -627,7 +627,12 @@ def _render_editor_receipt_recovery(
     if workflow.get("configuration_error"):
         st.error(str(workflow["configuration_error"]))
     retry_requested = False
-    if retry_available and (unresolved or workflow.get("configuration_error")):
+    confirmation_only_retry = not unresolved and bool(
+        workflow.get("configuration_error")
+    )
+    if (unresolved or workflow.get("configuration_error")) and (
+        retry_available or confirmation_only_retry
+    ):
         retry_requested = st.button(
             retry_label,
             type="primary",
@@ -647,7 +652,14 @@ def _render_editor_receipt_recovery(
         st.rerun()
     if retry_requested:
         workflow.pop("configuration_error", None)
-        if not _workflow_configuration_matches(context, workflow, receipt_folder):
+        if unresolved and (
+            receipt_folder is None
+            or not _workflow_configuration_matches(
+                context,
+                workflow,
+                receipt_folder,
+            )
+        ):
             st.rerun()
         try:
             fresh_receipt_references = _fresh_transaction_receipt_references(
@@ -851,6 +863,8 @@ def clear_missing_editor_receipt_recoveries(
                     _editor_receipt_notice_message(notice),
                     validated=True,
                 )
+            else:
+                st.session_state.pop(key, None)
             continue
         notice = st.session_state.pop(key, None)
         if _editor_receipt_notice_message(notice):
@@ -890,6 +904,58 @@ def editor_receipt_recovery_active(context: TransactionsContext) -> bool:
             ):
                 return True
     return False
+
+
+def editor_receipt_recovery_transaction_ids(
+    context: TransactionsContext,
+) -> list[str]:
+    """Return this profile's editor recovery targets for independent rendering."""
+    workflow_key_prefix = receipt_editor_workflow_key_prefix(context.profile_key)
+    current_configuration_key = _editor_receipt_configuration_key(context)
+    transaction_ids: set[str] = set()
+    for key in list(st.session_state):
+        if not isinstance(key, str) or not key.startswith(workflow_key_prefix):
+            continue
+        workflow = st.session_state.get(key)
+        if not isinstance(workflow, Mapping):
+            continue
+        workflow_spreadsheet = str(workflow.get("spreadsheet_id", ""))
+        workflow_folder = str(workflow.get("receipt_folder_id", ""))
+        if (
+            any((workflow_spreadsheet, workflow_folder))
+            and f"{workflow_spreadsheet}\x00{workflow_folder}"
+            != current_configuration_key
+        ):
+            continue
+        transaction_id = str(workflow.get("transaction_id", ""))
+        if transaction_id:
+            transaction_ids.add(transaction_id)
+    return sorted(transaction_ids)
+
+
+def render_filtered_editor_receipt_recovery(
+    context: TransactionsContext,
+    transaction_id: str,
+) -> bool:
+    """Render recovery for a transaction hidden by the active ledger filters."""
+    receipt_folder = _receipt_folder(context)
+    retry_available = False
+    if receipt_folder is not None:
+        try:
+            context.get_drive_client(
+                context.profile_key,
+                context.configuration_revision,
+            )
+        except GoogleDriveError as error:
+            st.error(str(error))
+        else:
+            retry_available = True
+    return _render_editor_receipt_recovery(
+        context,
+        transaction_id,
+        receipt_folder,
+        retry_available=retry_available,
+    )
 
 
 def finish_receipt_creation_if_complete(

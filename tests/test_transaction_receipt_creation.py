@@ -37,6 +37,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     _render_editor_receipt_recovery,
     _process_editor_receipts,
     _record_editor_receipt_linked,
+    editor_receipt_recovery_transaction_ids,
     render_receipts,
     _start_editor_receipt_workflow,
     receipt_editor_workflow_key,
@@ -692,6 +693,88 @@ def test_editor_receipt_recovery_can_be_canceled_when_drive_is_unavailable() -> 
 
     assert receipt_editor_workflow_key("north", "txn-1") not in session_state
     assert receipt_editor_notice_key("north", "txn-1") in session_state
+
+
+def test_editor_receipt_recovery_confirmation_retry_works_without_drive() -> None:
+    context = SimpleNamespace(
+        profile_key="north",
+        profile_secrets={"spreadsheet_id": "sheet"},
+        storage=SimpleNamespace(
+            list_transactions=lambda **_kwargs: [
+                {"id": "txn-1", "receipt_references": "[]"}
+            ]
+        ),
+    )
+    workflow = new_receipt_creation_workflow(
+        "txn-1",
+        [{"linked": True, "reference": {"id": "drive-receipt"}}],
+        profile_key="north",
+        spreadsheet_id="sheet",
+    )
+    workflow["configuration_error"] = "The transaction could not be confirmed."
+    session_state = {receipt_editor_workflow_key("north", "txn-1"): workflow}
+
+    with (
+        patch.object(st, "session_state", session_state),
+        patch.object(st, "error"),
+        patch.object(st, "info"),
+        patch.object(st, "button", return_value=True),
+        patch.object(st, "rerun", side_effect=RuntimeError("rerun")),
+    ):
+        with pytest.raises(RuntimeError, match="rerun"):
+            _render_editor_receipt_recovery(
+                context,
+                "txn-1",
+                None,
+                retry_available=False,
+            )
+
+    assert receipt_editor_workflow_key("north", "txn-1") not in session_state
+    assert receipt_editor_notice_key("north", "txn-1") in session_state
+
+
+def test_editor_receipt_recovery_rejects_retry_without_receipt_folder() -> None:
+    context = SimpleNamespace(profile_key="north", profile_secrets={})
+    workflow = new_receipt_creation_workflow(
+        "txn-1",
+        [{"key": "receipt", "original_name": "receipt.pdf", "content": b"receipt"}],
+        profile_key="north",
+    )
+    session_state = {receipt_editor_workflow_key("north", "txn-1"): workflow}
+
+    with (
+        patch.object(st, "session_state", session_state),
+        patch.object(st, "warning"),
+        patch.object(st, "caption"),
+        patch.object(st, "info"),
+        patch.object(st, "button", return_value=True),
+        patch.object(st, "rerun", side_effect=RuntimeError("rerun")),
+    ):
+        with pytest.raises(RuntimeError, match="rerun"):
+            _render_editor_receipt_recovery(
+                context,
+                "txn-1",
+                None,
+                retry_available=True,
+            )
+
+
+def test_editor_receipt_recovery_transaction_ids_are_profile_scoped() -> None:
+    session_state = {
+        receipt_editor_workflow_key("north", "north-txn"): (
+            new_receipt_creation_workflow("north-txn", [], profile_key="north")
+        ),
+        receipt_editor_workflow_key("north:shop", "shop-txn"): (
+            new_receipt_creation_workflow(
+                "shop-txn", [], profile_key="north:shop"
+            )
+        ),
+    }
+
+    with patch.object(st, "session_state", session_state):
+        assert editor_receipt_recovery_transaction_ids(
+            SimpleNamespace(profile_key="north", profile_secrets={})
+        ) == ["north-txn"]
 
 
 def test_editor_receipt_notice_attention_states_use_warning_semantics() -> None:
@@ -1443,6 +1526,20 @@ def test_missing_editor_recovery_cleanup_does_not_cross_match_colon_profile() ->
 
     assert notices == []
     assert session_state[key] == "Keep north:shop notice"
+
+
+def test_missing_editor_recovery_cleanup_removes_empty_notice() -> None:
+    key = receipt_editor_notice_key("north", "empty-notice")
+    session_state: dict[str, object] = {key: ""}
+
+    with patch.object(st, "session_state", session_state):
+        notices = clear_missing_editor_receipt_recoveries(
+            SimpleNamespace(profile_key="north", profile_secrets={}),
+            [{"id": "empty-notice"}],
+        )
+
+    assert notices == []
+    assert key not in session_state
 
 
 def test_missing_editor_recovery_replaces_orphaned_success_notice() -> None:

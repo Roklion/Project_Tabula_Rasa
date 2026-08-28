@@ -15,6 +15,8 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     clear_receipt_creation_recovery,
     clear_missing_editor_receipt_recoveries,
     editor_receipt_recovery_active,
+    editor_receipt_recovery_transaction_ids,
+    render_filtered_editor_receipt_recovery,
     render_receipts,
 )
 from tabula_rasa.page_renderers.transactions.search import filter_transaction_rows
@@ -297,6 +299,21 @@ def render_ledger(
         },
     )
     selected_rows = ledger_event.selection.rows
+    filtered_recovery_ids = set(editor_receipt_recovery_transaction_ids(context)) - set(
+        transaction_ids
+    )
+    if filtered_recovery_ids:
+        with st.expander(
+            "Receipt recovery for filtered transactions",
+            expanded=True,
+        ):
+            st.warning(
+                "Receipt recovery remains available below even when its transaction "
+                "is hidden by the active ledger filters."
+            )
+            for recovery_id in sorted(filtered_recovery_ids):
+                st.caption(f"Transaction recovery: {recovery_id}")
+                render_filtered_editor_receipt_recovery(context, recovery_id)
     if mode == "Bulk":
         selected_ids = tuple(
             str(transaction_id)
