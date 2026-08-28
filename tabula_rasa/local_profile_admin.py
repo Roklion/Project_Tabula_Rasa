@@ -215,7 +215,7 @@ def _render_profile_readiness(
     if report.status == "ready-local":
         st.info(
             "Local profile settings are ready. To publish them to Streamlit "
-            "Community Cloud, run `python scripts\\export_streamlit_secrets.py` "
+            "Community Cloud, run `python scripts/export_streamlit_secrets.py` "
             "from the repository root, paste the complete generated TOML into "
             "Streamlit App settings > Secrets, and save it. This local page "
             "cannot verify the separate hosted Secrets store; confirm the "
