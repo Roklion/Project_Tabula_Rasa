@@ -215,6 +215,10 @@ class TestAppAuthentication:
                     if button.label == "Unlock profile administration"
                 ).click().run()
 
+                assert app.session_state["active_page"] == "Account settings"
+                assert any(
+                    item.value == "Account settings" for item in app.title
+                )
                 assert app.file_uploader[0].label == "Google service-account JSON"
                 assert not app.tabs
                 assert not any(
@@ -465,6 +469,19 @@ class TestAppAuthentication:
                     field
                     for field in app.text_input
                     if field.label == "Application password"
+                ).input("incorrect-password")
+                next(
+                    button
+                    for button in app.button
+                    if button.label == "Unlock profile administration"
+                ).click().run()
+                assert any(item.value == "Incorrect password." for item in app.error)
+                assert app.session_state["active_page"] == "Account settings"
+
+                next(
+                    field
+                    for field in app.text_input
+                    if field.label == "Application password"
                 ).input(TEST_PASSWORD)
                 next(
                     button
@@ -472,6 +489,10 @@ class TestAppAuthentication:
                     if button.label == "Unlock profile administration"
                 ).click().run()
 
+                assert app.session_state["active_page"] == "Account settings"
+                assert any(
+                    item.value == "Account settings" for item in app.title
+                )
                 assert app.file_uploader[0].label == "Google service-account JSON"
 
                 next(

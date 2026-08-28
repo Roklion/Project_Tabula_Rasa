@@ -732,9 +732,10 @@ def render_local_profile_admin(
             encoded_hash = base_secrets.get("app_password_hash")
             if encoded_hash and verify_password(password, str(encoded_hash)):
                 st.session_state["local_profile_admin_unlocked"] = True
-                st.rerun()
-            unlock_error.error("Incorrect password.")
-        return
+            else:
+                unlock_error.error("Incorrect password.")
+        if not st.session_state.get("local_profile_admin_unlocked"):
+            return
 
     try:
         local_profiles = load_local_profiles(store_path)
