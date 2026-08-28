@@ -387,7 +387,6 @@ def _render_editor_receipt_recovery(
                 )
     if workflow.get("configuration_error"):
         st.error(str(workflow["configuration_error"]))
-    retry_error = st.empty()
     if unresolved and st.button(
         retry_label,
         type="primary",
@@ -397,25 +396,38 @@ def _render_editor_receipt_recovery(
         if not _workflow_configuration_matches(context, workflow, receipt_folder):
             st.rerun()
         try:
-            if not _transaction_still_exists(context, transaction_id):
+            fresh_receipt_count = _fresh_transaction_receipt_count(
+                context,
+                transaction_id,
+            )
+            if fresh_receipt_count + unresolved > MAX_RECEIPT_REFERENCES:
+                raise GoogleDriveAccessError(
+                    "A transaction can reference no more than 100 receipts. "
+                    "Remove an existing receipt reference or retry with fewer "
+                    "unresolved receipts."
+                )
+            _process_editor_receipts(context, workflow, receipt_folder)
+            _finish_editor_receipt_workflow(context, transaction_id, workflow)
+        except GoogleDriveError as error:
+            workflow["configuration_error"] = str(error)
+        except StorageError as error:
+            if "no longer exists" in str(error).casefold():
                 st.session_state.pop(
                     receipt_editor_workflow_key(context.profile_key, transaction_id),
                     None,
                 )
-                retry_error.error(
+                st.session_state[
+                    f"receipt-editor-notice-{context.profile_key}-{transaction_id}"
+                ] = (
                     "The transaction no longer exists. Uploaded files remain in "
-                    "Google Drive and can be linked from the Unreferenced receipt workflow."
+                    "Google Drive and can be linked from the Unreferenced receipt "
+                    "workflow."
                 )
             else:
-                _process_editor_receipts(context, workflow, receipt_folder)
-                _finish_editor_receipt_workflow(context, transaction_id, workflow)
-        except GoogleDriveError as error:
-            workflow["configuration_error"] = str(error)
-        except StorageError as error:
-            workflow["configuration_error"] = (
-                "The transaction could not be rechecked or linked. "
-                f"Retry unresolved receipts again: {error}"
-            )
+                workflow["configuration_error"] = (
+                    "The transaction could not be rechecked or linked. "
+                    f"Retry unresolved receipts again: {error}"
+                )
         st.rerun()
     return True
 

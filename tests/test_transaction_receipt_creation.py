@@ -24,6 +24,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     _transaction_still_exists,
     _fresh_transaction_receipt_count,
     _finish_editor_receipt_workflow,
+    _render_editor_receipt_recovery,
     _process_editor_receipts,
     _record_editor_receipt_linked,
     _start_editor_receipt_workflow,
@@ -436,6 +437,92 @@ def test_editor_capacity_rechecks_fresh_sheets_data() -> None:
     context = SimpleNamespace(storage=storage)
 
     assert _fresh_transaction_receipt_count(context, "txn-1") == 99
+
+
+def test_editor_retry_rejects_batch_over_fresh_capacity() -> None:
+    references = [
+        {"id": f"drive-{index:08d}", "name": f"receipt-{index}.pdf"}
+        for index in range(100)
+    ]
+    storage = SimpleNamespace(
+        list_transactions=lambda **kwargs: (
+            assert_force_refresh(kwargs),
+            [{"id": "txn-1", "receipt_references": json.dumps(references)}],
+        )[1]
+    )
+    context = SimpleNamespace(
+        profile_key="north",
+        storage=storage,
+        profile_secrets={"spreadsheet_id": "sheet"},
+        configuration_revision="revision",
+        get_drive_client=lambda *_args: (_ for _ in ()).throw(
+            AssertionError("Drive processing must not start at capacity")
+        ),
+    )
+    workflow = new_receipt_creation_workflow(
+        "txn-1",
+        [{"key": "receipt", "original_name": "receipt.pdf", "content": b"receipt"}],
+        profile_key="north",
+        spreadsheet_id="sheet",
+        receipt_folder_id="folder",
+    )
+    session_state = {receipt_editor_workflow_key("north", "txn-1"): workflow}
+
+    with (
+        patch.object(st, "session_state", session_state),
+        patch.object(st, "warning"),
+        patch.object(st, "caption"),
+        patch.object(st, "empty", return_value=Mock()),
+        patch.object(st, "button", return_value=True),
+        patch.object(st, "rerun", side_effect=RuntimeError("rerun")),
+    ):
+        with pytest.raises(RuntimeError, match="rerun"):
+            _render_editor_receipt_recovery(context, "txn-1", {"id": "folder"})
+
+    assert workflow["configuration_error"]
+    assert "no more than 100" in workflow["configuration_error"]
+
+
+def test_editor_retry_persists_deleted_transaction_notice() -> None:
+    storage = SimpleNamespace(
+        list_transactions=lambda **kwargs: (
+            assert_force_refresh(kwargs),
+            [],
+        )[1]
+    )
+    context = SimpleNamespace(
+        profile_key="north",
+        storage=storage,
+        profile_secrets={"spreadsheet_id": "sheet"},
+        configuration_revision="revision",
+    )
+    workflow = new_receipt_creation_workflow(
+        "txn-1",
+        [{"key": "receipt", "original_name": "receipt.pdf", "content": b"receipt"}],
+        profile_key="north",
+        spreadsheet_id="sheet",
+        receipt_folder_id="folder",
+    )
+    session_state = {receipt_editor_workflow_key("north", "txn-1"): workflow}
+
+    with (
+        patch.object(st, "session_state", session_state),
+        patch.object(st, "warning"),
+        patch.object(st, "caption"),
+        patch.object(st, "empty", return_value=Mock()),
+        patch.object(st, "button", return_value=True),
+        patch.object(st, "rerun", side_effect=RuntimeError("rerun")),
+    ):
+        with pytest.raises(RuntimeError, match="rerun"):
+            _render_editor_receipt_recovery(context, "txn-1", {"id": "folder"})
+
+    assert receipt_editor_workflow_key("north", "txn-1") not in session_state
+    assert session_state[
+        "receipt-editor-notice-north-txn-1"
+    ] == (
+        "The transaction no longer exists. Uploaded files remain in Google Drive "
+        "and can be linked from the Unreferenced receipt workflow."
+    )
 
 
 def test_transaction_recovery_detects_uploaded_receipt_pointer() -> None:
