@@ -186,12 +186,14 @@ def process_google_drive_oauth_callback(
                 # Re-fetch the root after revalidation so direct-parent metadata
                 # is available for the minimal cross-profile check; persisted
                 # settings intentionally retain only the validated ID and name.
-                storage_root = client.folder(str(storage_root.get("id", "")))
-                _ensure_storage_root_is_not_directly_nested(
-                    profile_key,
-                    storage_root,
-                    local_profiles,
-                )
+                storage_root_id = str(storage_root.get("id") or "").strip()
+                if storage_root_id:
+                    storage_root = client.folder(storage_root_id)
+                    _ensure_storage_root_is_not_directly_nested(
+                        profile_key,
+                        storage_root,
+                        local_profiles,
+                    )
         update_local_profile_google_drive(
             profile_key,
             drive_settings,
