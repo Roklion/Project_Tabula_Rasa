@@ -1128,6 +1128,10 @@ selection state; the design does not promise that an interactive dataframe sort
 survives an Edit/Bulk mode switch. Navigating away and back resets the table to
 the latest-date-first default.
 
+The Transactions tabs share the ledger table instance, so a user-applied
+interactive sort remains when switching between Add transaction and View & edit
+ledger. This cross-tab persistence does not extend to Edit/Bulk mode switches.
+
 Changing any filter or search scope clears bulk selection before another bulk action can run.
 
 ### 17.6 Other required table schemas
@@ -1439,7 +1443,7 @@ A success message appears only after the Google Sheets operation is confirmed.
 ├──────────────────────────────┴───────────────────────────────┤
 │ Description / memo                                           │
 ├──────────────────────────────────────────────────────────────┤
-│ Receipt files (optional)                                     │
+│ Receipt (optional)                                           │
 │ [Choose files]                                               │
 │ PDF, PNG, JPG, JPEG, WEBP, or HEIC                          │
 ├──────────────────────────────────────────────────────────────┤
@@ -2177,6 +2181,9 @@ Follow Sections 19.2, 19.3, and 25.6.
   selector defaults to the first visible transaction, but no dataframe row is
   visibly preselected by default.
 - Selecting a visible ledger row targets that row in the edit workflow.
+- Preserve user-applied interactive sorting when switching between the two
+  Transactions tabs; mode changes may recreate the table widget and reset that
+  client-side sort state.
 - Keep the latest-date-first default when the ledger table is recreated after
   navigating away and returning; mode changes may also recreate the table.
 - Provide an explicit Bulk mode with multi-row selection.
