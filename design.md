@@ -127,6 +127,18 @@ The following remain out of scope unless separately approved:
 - Cash-flow or reconciliation reports
 - Per-profile user authorization
 
+#### Related existing issues and untracked future ideas
+
+Some separately scoped future work already has an existing issue:
+
+- [Issue #8](https://github.com/Roklion/Project_Tabula_Rasa/issues/8) covers mileage address autocomplete and route-based mileage suggestions.
+- [Issue #91](https://github.com/Roklion/Project_Tabula_Rasa/issues/91) covers multi-file selection in the post-creation receipt editor.
+- [Issue #112](https://github.com/Roklion/Project_Tabula_Rasa/issues/112) records the Transactions contract reconciliation and explicitly keeps reconciliation, tags, cash-flow reporting, receipt-content search, and per-profile authorization out of that cleanup.
+
+No dedicated issue currently tracks the future filter examples in Section 18.5
+or the future analytics examples in Section 14.3. They remain design-level
+ideas only, not implementation commitments.
+
 ---
 
 ## 3. Product Character
