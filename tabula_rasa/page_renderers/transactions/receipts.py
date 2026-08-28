@@ -839,7 +839,19 @@ def editor_receipt_recovery_active(context: TransactionsContext) -> bool:
         if not isinstance(key, str):
             continue
         if key.startswith(workflow_key_prefix):
-            return True
+            workflow = st.session_state.get(key)
+            if not isinstance(workflow, Mapping):
+                return True
+            workflow_spreadsheet = str(workflow.get("spreadsheet_id", ""))
+            workflow_folder = str(workflow.get("receipt_folder_id", ""))
+            if not any((workflow_spreadsheet, workflow_folder)):
+                return True
+            if (
+                f"{workflow_spreadsheet}\x00{workflow_folder}"
+                == current_configuration_key
+            ):
+                return True
+            continue
         if key.startswith(notice_key_prefix):
             notice = st.session_state.get(key)
             if not isinstance(notice, Mapping):

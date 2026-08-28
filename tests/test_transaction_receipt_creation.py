@@ -1246,6 +1246,30 @@ def test_editor_receipt_recovery_active_ignores_validated_notice() -> None:
         )
 
 
+def test_editor_receipt_recovery_active_ignores_mismatched_workflow() -> None:
+    workflow = new_receipt_creation_workflow(
+        "old-txn",
+        [],
+        profile_key="north",
+        spreadsheet_id="old-sheet",
+        receipt_folder_id="old-folder",
+    )
+    session_state: dict[str, object] = {
+        receipt_editor_workflow_key("north", "old-txn"): workflow
+    }
+
+    with patch.object(st, "session_state", session_state):
+        assert not editor_receipt_recovery_active(
+            SimpleNamespace(
+                profile_key="north",
+                profile_secrets={
+                    "spreadsheet_id": "new-sheet",
+                    "google_drive": {"receipt_folder": {"id": "new-folder"}},
+                },
+            )
+        )
+
+
 def test_missing_editor_recovery_is_preserved_after_profile_reconfiguration() -> None:
     workflow = new_receipt_creation_workflow(
         "old-txn",
