@@ -15,8 +15,7 @@ tabula-rasa-streamlit-secrets-*.toml
 *service-account*.json
 *service_account*.json
 google-credentials*.json
-# Cover current and previously downloaded profile service-account filenames.
-tabula-*-heathcote-advisory-*.json
+tabula-rasa-heathcote-advisory-*.json
 
 # Ledger data and exports
 ledger.db
