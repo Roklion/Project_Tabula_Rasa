@@ -175,11 +175,19 @@ def _receipt_folder(context: TransactionsContext) -> Mapping[str, object] | None
     return receipt_folder if isinstance(receipt_folder, Mapping) else None
 
 
+def _mark_workbook_data_changed(context: TransactionsContext) -> None:
+    """Invalidate prepared exports after a confirmed receipt-reference write."""
+    callback = getattr(context, "mark_workbook_data_changed", None)
+    if callable(callback):
+        callback()
+
+
 def _process_context_receipts(
     context: TransactionsContext,
     workflow: MutableMapping[str, Any],
     receipt_folder: Mapping[str, object],
 ) -> None:
+    linked_before, _unresolved_before = receipt_creation_counts(workflow)
     receipt_drive = context.get_drive_client(
         context.profile_key,
         context.configuration_revision,
@@ -209,6 +217,9 @@ def _process_context_receipts(
             reference=reference,
         ),
     )
+    linked_after, _unresolved_after = receipt_creation_counts(workflow)
+    if linked_after > linked_before:
+        _mark_workbook_data_changed(context)
 
 
 def _workflow_complete(workflow: Mapping[str, Any]) -> bool:
@@ -539,6 +550,7 @@ def render_receipts(
                                 f"{error}"
                             )
                         else:
+                            _mark_workbook_data_changed(context)
                             st.session_state.pop(
                                 receipt_link_recovery_key,
                                 None,
@@ -578,6 +590,7 @@ def render_receipts(
                         edit_id,
                         receipt_references,
                     )
+                    _mark_workbook_data_changed(context)
                 except (
                     GoogleDriveError,
                     ReceiptManifestError,
@@ -674,6 +687,7 @@ def render_receipts(
                                     f"{error}"
                                 )
                             else:
+                                _mark_workbook_data_changed(context)
                                 st.session_state.pop(
                                     receipt_candidate_key,
                                     None,
@@ -820,6 +834,7 @@ def render_receipts(
                                     f"linked. {error}"
                                 )
                             else:
+                                _mark_workbook_data_changed(context)
                                 if isinstance(recovery_reference, Mapping):
                                     st.session_state.pop(
                                         receipt_link_recovery_key,
@@ -892,6 +907,7 @@ def render_receipts(
                                     edit_id,
                                     reference=uploaded_reference,
                                 )
+                                _mark_workbook_data_changed(context)
                             except (
                                 KeyError,
                                 ReceiptManifestError,

@@ -145,6 +145,7 @@ def receipt_manifest_for_backup(
         drive,
         profile_key=profile_key,
         folder_id=str(receipt_folder["id"]),
+        on_data_changed=mark_workbook_data_changed,
     )
 
 
@@ -164,6 +165,13 @@ def reset_widget_state_if_requested(
 
 def schedule_widget_reset(flag: str) -> None:
     st.session_state[flag] = True
+
+
+def mark_workbook_data_changed() -> None:
+    """Advance the revision used to scope prepared workbook exports."""
+    st.session_state["workbook_data_revision"] = (
+        int(st.session_state.get("workbook_data_revision", 0)) + 1
+    )
 
 
 def _select_operational_page() -> None:
@@ -201,9 +209,7 @@ def confirmed_write(
         on_confirmed(result)
     if on_success is not None:
         on_success()
-    st.session_state["workbook_data_revision"] = (
-        int(st.session_state.get("workbook_data_revision", 0)) + 1
-    )
+    mark_workbook_data_changed()
     st.session_state["write_success_notice"] = (
         success_message(result) if callable(success_message) else success_message
     )
@@ -422,6 +428,7 @@ elif page == "Transactions":
             report_storage_error=report_storage_error,
             reset_widget_state_if_requested=reset_widget_state_if_requested,
             schedule_widget_reset=schedule_widget_reset,
+            mark_workbook_data_changed=mark_workbook_data_changed,
         )
     )
 

@@ -308,6 +308,7 @@ def main() -> None:
             "Receipt linked" in str(success.value)
             for success in app.success
         )
+        assert app.session_state["workbook_data_revision"] == 2
 
 
 if __name__ == "__main__":

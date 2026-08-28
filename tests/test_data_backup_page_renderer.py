@@ -82,6 +82,26 @@ def test_data_backup_import_is_side_effect_free_and_uses_explicit_context() -> N
     assert "profile_secrets" not in context_fields
 
 
+def test_extracted_page_imports_are_bootstrap_free_and_one_way() -> None:
+    """Page modules may be imported by tests/tools without starting Streamlit."""
+    package_root = PROJECT_ROOT / "tabula_rasa" / "page_renderers"
+    module_names: list[str] = []
+    for path in package_root.rglob("*.py"):
+        relative = path.relative_to(PROJECT_ROOT).with_suffix("")
+        module_name = ".".join(relative.parts)
+        module_names.append(module_name)
+        source = path.read_text(encoding="utf-8")
+        assert "tabula_rasa.app" not in source
+        tree = ast.parse(source)
+        assert not any(
+            isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)
+            for node in tree.body
+        ), f"{module_name} executes a call while importing"
+
+    for module_name in sorted(module_names):
+        assert importlib.import_module(module_name) is not None
+
+
 def test_prepared_exports_key_isolated_by_profile_configuration_and_data_revision() -> None:
     assert prepared_exports_key("north", "config-1", 0) == (
         "prepared-live-exports:north:config-1:0"
@@ -192,3 +212,15 @@ def test_page_export_filenames_are_tabula_rasa_without_changing_backup_compatibi
     assert 'f"tabula-rasa-mileage-{date.today()}.csv"' in source
     assert 'f"tabula-rasa-backup-{date.today()}.zip"' in source
     assert 'f"tabula-rosa-backup-' not in source
+
+    mileage_source = (
+        PROJECT_ROOT / "tabula_rasa" / "page_renderers" / "mileage.py"
+    ).read_text(encoding="utf-8")
+    assert 'f"tabula-rasa-mileage-{start}-to-{end}.csv"' in mileage_source
+    assert "tabula-rosa-mileage-" not in mileage_source
+
+    ledger_source = (
+        PROJECT_ROOT / "tabula_rasa" / "page_renderers" / "transactions" / "ledger.py"
+    ).read_text(encoding="utf-8")
+    assert 'f"tabula-rasa-selected-{date.today()}.csv"' in ledger_source
+    assert "tabula-rosa-selected-" not in ledger_source

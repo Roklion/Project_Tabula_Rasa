@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from tabula_rasa.google_drive import GoogleDriveClient
@@ -142,6 +143,7 @@ def prepare_backup_receipt_manifest(
     *,
     profile_key: str,
     folder_id: str,
+    on_data_changed: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
     """Prepare receipts and return a newly read, validated backup inventory.
 
@@ -155,6 +157,8 @@ def prepare_backup_receipt_manifest(
         profile_key=profile_key,
         folder_id=folder_id,
     )
+    if report["references_updated"] and on_data_changed is not None:
+        on_data_changed()
     if report["errors"]:
         raise ReceiptPreparationError(
             "Receipt preparation is incomplete; no backup was created. "
