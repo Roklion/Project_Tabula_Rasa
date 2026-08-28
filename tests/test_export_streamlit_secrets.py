@@ -103,7 +103,7 @@ class TestExportStreamlitSecrets:
                     "project_number": "123456789",
                 },
                 "synology_recovery_defaults": {
-                    "base_path": "/volume1/Tabula_Rosa_Backups",
+                    "base_path": "/volume1/Tabula_Rasa_Backups",
                     "schedule": "Continuous",
                     "retention_policy": "Quarterly manual review.",
                 },

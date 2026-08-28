@@ -175,7 +175,7 @@ class TestAppStorageFailure:
         st.cache_resource.clear()
         storage = GoogleSheetsStorage(FakeWorkbook())
         backup = storage.export_backup_zip(build_receipt_manifest("test", [], []))
-        backup_name = "tabula-rosa-backup-20260728T120000Z.zip"
+        backup_name = "tabula-rasa-backup-20260728T120000Z.zip"
         unavailable_export = Mock(
             side_effect=StorageUnavailableError(SAFE_MESSAGE)
         )

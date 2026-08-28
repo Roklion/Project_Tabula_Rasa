@@ -11,7 +11,7 @@ from typing import Any
 SYNC_DIRECTION = "Download remote changes only"
 DESTINATION_DELETIONS = "Disabled"
 PROFILE_ROOT_LAYOUT = "profile-root"
-DEFAULT_BASE_PATH = "/volume1/Tabula_Rosa_Backups"
+DEFAULT_BASE_PATH = "/volume1/Tabula_Rasa_Backups"
 DEFAULT_SCHEDULE = "Continuous"
 DEFAULT_RETENTION_POLICY = (
     "Retain all synchronized generations until quarterly manual review."
@@ -51,14 +51,14 @@ def _absolute_dsm_path(value: str, label: str) -> str:
     if not value.startswith("/"):
         raise SynologyRecoveryConfigurationError(
             f"{label} must be an absolute DSM path, such as "
-            "/volume1/Tabula_Rosa_Backups."
+            "/volume1/Tabula_Rasa_Backups."
         )
     normalized = posixpath.normpath(value)
     segments = normalized.strip("/").split("/")
     if len(segments) < 2 or not DSM_VOLUME_PATTERN.fullmatch(segments[0]):
         raise SynologyRecoveryConfigurationError(
             f"{label} must include a Synology volume and shared folder, such as "
-            "/volume1/Tabula_Rosa_Backups."
+            "/volume1/Tabula_Rasa_Backups."
         )
     return "/" + normalized.lstrip("/")
 

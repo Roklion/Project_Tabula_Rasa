@@ -30,7 +30,7 @@ points here for durable setup, architecture, and recovery guidance.
 
 ### Use and develop
 
-- [Using Project Tabula Rasa](guides/USING_TABULA_ROSA.md) covers profile selection,
+- [Using Project Tabula Rasa](guides/USING_TABULA_RASA.md) covers profile selection,
   ledger behavior, receipts, mileage, reports, and exports.
 - [QuickBooks import](guides/QUICKBOOKS_IMPORT.md) covers transaction and
   mileage import formats, validation, and duplicate handling.
@@ -54,7 +54,7 @@ docs/
 |   `-- SYNOLOGY_RECOVERY.md
 |-- guides/
 |   |-- QUICKBOOKS_IMPORT.md
-|   `-- USING_TABULA_ROSA.md
+|   `-- USING_TABULA_RASA.md
 `-- development/
     |-- DEVELOPMENT.md
     `-- PULL_REQUEST_REVIEW.md

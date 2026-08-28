@@ -87,7 +87,7 @@ shortcut, the **Computers** area, or a Google Workspace Shared Drive.
 In DSM, open **Control Panel → Shared Folder**, select **Create**, and use these
 initial settings:
 
-1. Name the shared folder `Tabula_Rosa_Backups`.
+1. Name the shared folder `Tabula_Rasa_Backups`.
 2. Select the intended storage volume. The initial DS220j setup uses
    **Volume 1 (ext4)**.
 3. Leave the two hide options cleared unless an organization-specific policy
@@ -131,13 +131,13 @@ After the shared folder is created, open File Station and add a distinct
 subfolder for each business that opts in:
 
 ```text
-/volume1/Tabula_Rosa_Backups/heathcote-advisory
-/volume1/Tabula_Rosa_Backups/rok-collectibles
+/volume1/Tabula_Rasa_Backups/heathcote-advisory
+/volume1/Tabula_Rasa_Backups/rok-collectibles
 ```
 
 The recursive task creates or maintains separate `Ledger Backups` and
 `Receipts` children below each profile root. Do not point a task at the shared
-`Tabula_Rosa_Backups` parent.
+`Tabula_Rasa_Backups` parent.
 
 The exact `/volume1/...` path may differ if the shared folder lives on another
 volume. Record the path DSM actually uses instead of copying the example
@@ -162,7 +162,7 @@ Open **Account settings**, unlock administration, and find **Recovery** >
 1. Choose the business profile.
 2. Select **Maintain an optional Synology recovery copy for this business**.
 3. Review its derived absolute DSM destination, for example
-   `/volume1/Tabula_Rosa_Backups/heathcote-advisory`. Destinations must include
+   `/volume1/Tabula_Rasa_Backups/heathcote-advisory`. Destinations must include
    both a Synology volume and shared folder; filesystem and volume roots are
    rejected.
 4. Review or override the Cloud Sync schedule and NAS retention policy.
@@ -181,7 +181,7 @@ profile key.
 
 ```toml
 [synology_recovery_defaults]
-base_path = "/volume1/Tabula_Rosa_Backups"
+base_path = "/volume1/Tabula_Rasa_Backups"
 schedule = "Continuous"
 retention_policy = "Retain all synchronized generations until quarterly manual review."
 ```
@@ -249,7 +249,7 @@ because it also verifies the archive's internal manifest and ledger structure.
 The `Ledger Backups` child should contain only names in this form:
 
 ```text
-tabula-rosa-backup-YYYYMMDDTHHMMSSZ.zip
+tabula-rasa-backup-YYYYMMDDTHHMMSSZ.zip
 ```
 
 The manifest is stored inside the ZIP. Never place service-account JSON,
@@ -303,7 +303,7 @@ Do not validate or restore directly from a partially synchronized file.
 Validate the copied archive:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\validate_google_sheets_backup.py "C:\Safe-Recovery\tabula-rosa-backup-YYYYMMDDTHHMMSSZ.zip"
+.\.venv\Scripts\python.exe scripts\validate_google_sheets_backup.py "C:\Safe-Recovery\tabula-rasa-backup-YYYYMMDDTHHMMSSZ.zip"
 ```
 
 Successful validation confirms the supported format, ZIP structure, ledger and
@@ -334,7 +334,7 @@ the live workbook as the restore target.
 Restore the validated local copy:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\restore_google_sheets_backup.py "C:\Safe-Recovery\tabula-rosa-backup-YYYYMMDDTHHMMSSZ.zip" --profile heathcote-advisory --target-spreadsheet-id NEW_ID --initialize
+.\.venv\Scripts\python.exe scripts\restore_google_sheets_backup.py "C:\Safe-Recovery\tabula-rasa-backup-YYYYMMDDTHHMMSSZ.zip" --profile heathcote-advisory --target-spreadsheet-id NEW_ID --initialize
 ```
 
 The command validates before writing, refuses every configured live workbook,
@@ -348,7 +348,7 @@ workbook:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\recover_synology_receipts.py `
-  "C:\Safe-Recovery\tabula-rosa-backup-YYYYMMDDTHHMMSSZ.zip" `
+  "C:\Safe-Recovery\tabula-rasa-backup-YYYYMMDDTHHMMSSZ.zip" `
   "C:\Safe-Recovery\Receipts" `
   --profile heathcote-advisory `
   --target-spreadsheet-id NEW_ID

@@ -2405,8 +2405,8 @@ The current page groups its workflows in this order:
 
 Each workflow keeps one dominant action visible while retaining its warnings,
 diagnostics, and secondary controls. The page-generated transaction, mileage,
-and manual complete-backup download filenames use `tabula-rasa`; cloud-managed
-backup naming and ZIP compatibility remain unchanged.
+manual complete-backup downloads, and cloud-managed backups all use the
+canonical `tabula-rasa` filename prefix.
 
 #### Google Drive backup section
 

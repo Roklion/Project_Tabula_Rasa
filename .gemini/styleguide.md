@@ -1,4 +1,4 @@
-# Tabula Rosa Gemini pull-request review instructions
+# Tabula Rasa Gemini pull-request review instructions
 
 These instructions apply only to advisory pull-request review. They supplement
 and must never weaken or contradict the repository rules in `AGENTS.md`.

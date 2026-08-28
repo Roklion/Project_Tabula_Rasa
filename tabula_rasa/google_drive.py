@@ -1770,7 +1770,7 @@ def backup_filename_and_hash(
     timestamp = str(manifest["backup_time"]).replace("-", "").replace(":", "")
     timestamp = timestamp.replace("+0000", "Z")
     return (
-        f"tabula-rosa-backup-{timestamp}.zip",
+        f"tabula-rasa-backup-{timestamp}.zip",
         hashlib.sha256(backup).hexdigest(),
     )
 
@@ -1781,7 +1781,7 @@ def backup_is_in_local_week(
     local_date: datetime | None = None,
 ) -> bool:
     """Return whether a canonical UTC backup filename falls in the local week."""
-    match = re.fullmatch(r"tabula-rosa-backup-(\d{8}T\d{6}Z)\.zip", filename)
+    match = re.fullmatch(r"tabula-rasa-backup-(\d{8}T\d{6}Z)\.zip", filename)
     if not match:
         return False
     backup_date = (

@@ -221,7 +221,7 @@ Shared Drive folders are not supported in this release.
 
 ## Configure the shared Google Cloud project
 
-Use a separate project such as `tabula-rosa-oauth-client`, rather than a project
+Use a separate project such as `tabula-rasa-oauth-client`, rather than a project
 dedicated to one business's Sheets service account.
 
 1. Enable the **Google Drive API** and **Google Picker API**.
