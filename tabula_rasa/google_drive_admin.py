@@ -10,6 +10,7 @@ from typing import Any
 import streamlit as st
 
 from tabula_rasa.google_drive import (
+    GoogleDriveAccessError,
     GoogleDriveAuthorizationError,
     GoogleDriveClient,
     GoogleDriveConfigurationError,
@@ -254,10 +255,15 @@ def _save_storage_root(
     selected_id = str(selected.get("id", ""))
     existing = drive_settings.get("storage_root")
     folder = client.folder(selected_id)
-    folder_name = str(folder["name"])
+    folder_id = str(folder.get("id") or "")
+    folder_name = str(folder.get("name") or "").strip()
+    if not folder_id or not folder_name:
+        raise GoogleDriveAccessError(
+            "Google Drive could not return the selected folder details. Retry."
+        )
     updated = dict(drive_settings)
     updated["storage_root"] = {
-        "id": str(folder["id"]),
+        "id": folder_id,
         "name": folder_name,
     }
     same_root = isinstance(existing, Mapping) and existing.get("id") == selected_id
