@@ -1118,7 +1118,7 @@ def render_receipts(
                                 receipt_uploads,
                                 existing_reference_count=len(receipt_references),
                             )
-                        except Exception as error:  # noqa: BLE001 - safe validation output
+                        except (ValueError, GoogleDriveAccessError) as error:
                             upload_error.error(f"Receipt validation failed: {error}")
                         else:
                             try:
