@@ -21,7 +21,7 @@ It defines:
 
 This specification is intentionally **text-first**. Screenshots are not required for implementation or review. When visual references are consulted, they are research inputs only; the written rules in this document remain authoritative.
 
-The current functional baseline was reconciled on 2026-08-06 against the application entry point, delegated profile-administration UI, and maintained guides for ordinary use, QuickBooks imports, business profiles, Google Drive, and backup/recovery.
+The current functional baseline reflects the application entry point, delegated profile-administration UI, and maintained guides for ordinary use, QuickBooks imports, business profiles, Google Drive, and backup/recovery.
 
 ---
 
@@ -36,8 +36,9 @@ The primary users are the owner and, potentially, the owner's spouse. The reposi
 The current application supports:
 
 - Selecting among isolated business profiles
-- Recording income, expense, and transfer transactions
-- Reviewing, filtering, editing, and permanently deleting transactions
+- Recording income, expense, and transfer transactions, with optional receipt upload during creation
+- Reviewing, searching, filtering, editing, and permanently deleting transactions
+- Using explicit Edit and Bulk ledger modes, including the current approved bulk actions
 - Linking, uploading, opening, and unlinking transaction receipts through Google Drive
 - Maintaining two-layer account and category hierarchies
 - Recording, filtering, exporting, editing, and deleting business mileage
@@ -54,22 +55,10 @@ The current application supports:
 - Connecting each profile to a human-owned Google Drive and provisioning receipt and backup folders
 - Recording per-profile Synology recovery metadata
 
-### 2.2 Current and target navigation surface
+### 2.2 Current navigation surface
 
-The authenticated application currently exposes these operational pages, in this order:
-
-1. Dashboard
-2. Transactions
-3. Mileage
-4. Accounts
-5. Categories
-6. Reports
-7. Data & backup
-8. Account settings — only when the loopback-only local profile administrator is enabled
-
-The approved target design preserves the seven operational pages and reframes the current `Business profiles` route as **Account settings**.
-
-Target sidebar structure:
+The authenticated application currently exposes these routes and actions in
+sidebar order:
 
 1. Dashboard
 2. Transactions
@@ -78,8 +67,8 @@ Target sidebar structure:
 5. Categories
 6. Reports
 7. Data & backup
-8. Account settings — visually separated from operational navigation and available only under the current local-administration safety conditions
-9. Log out
+8. Account settings — conditionally available for loopback-only local administration and visually separated from operational navigation
+9. Log out — in the utility area
 
 `Account settings` is the familiar settings destination for business-profile setup, Google Drive connection, storage destinations, credential rotation, and recovery configuration. It is not a per-user identity or permission-management page.
 
@@ -119,31 +108,15 @@ supported control for that workflow. The design must not add misleading in-app
 Restore, NAS health, or scheduler controls unless the underlying capability is
 implemented in the same task.
 
-### 2.5 Approved proposed behavior
+### 2.5 Current additive behavior and out of scope
 
-This design approves the following additive features for implementation:
+The current application includes additive transaction and administration behavior
+alongside the original bookkeeping workflows:
 
-1. **Receipt upload during transaction creation**
-   - The optional receipt is selected in the Add transaction form.
-   - The transaction is validated and confirmed in Google Sheets before Drive upload begins.
-   - The saved transaction, receipt upload, and reference-link result are presented as one user workflow.
-   - Existing post-creation receipt management remains available.
-
-2. **Transaction ledger search (current behavior)**
-   - Search is additive to the existing date, type, and account filters.
-   - Search is case-insensitive and covers the visible transaction text fields specified in Section 18.
-   - Search does not replace existing filters.
-
-3. **Explicit bulk-selection mode for the transaction ledger**
-   - Default mode remains single-row selection for editing.
-   - Bulk mode permits multi-row selection without weakening the existing edit workflow.
-   - The initial approved bulk actions are: export selected rows, change category for a compatible selection, and permanently delete selected transactions.
-
-4. **Account settings information architecture**
-   - The current local-only Business profiles functionality is retained and presented as an Account settings page.
-   - All current profile, Drive, credential, and Synology controls remain available.
-
-These are target behaviors, not claims about the current implementation. Until code and tests implement a target behavior, the current workflow remains the functional baseline.
+- Receipt upload during transaction creation, with ordered partial-failure handling
+- Case-insensitive transaction ledger search alongside the structured filters
+- Explicit Edit and Bulk ledger modes with the current approved export, compatible category-change, and permanent-delete actions
+- Account settings as the local-only home for business-profile, Drive, credential, storage, and recovery configuration
 
 The following remain out of scope unless separately approved:
 
@@ -153,6 +126,18 @@ The following remain out of scope unless separately approved:
 - Receipt-content search
 - Cash-flow or reconciliation reports
 - Per-profile user authorization
+
+#### Related existing issues and untracked future ideas
+
+Some separately scoped future work already has an existing issue:
+
+- [Issue #8](https://github.com/Roklion/Project_Tabula_Rasa/issues/8) covers mileage address autocomplete and route-based mileage suggestions.
+- [Issue #91](https://github.com/Roklion/Project_Tabula_Rasa/issues/91) covers multi-file selection in the post-creation receipt editor.
+- [Issue #112](https://github.com/Roklion/Project_Tabula_Rasa/issues/112) records the Transactions contract reconciliation and explicitly keeps reconciliation, tags, cash-flow reporting, receipt-content search, and per-profile authorization out of that cleanup.
+
+No dedicated issue currently tracks the future filter examples in Section 18.5
+or the future analytics examples in Section 14.3. They remain design-level
+ideas only, not implementation commitments.
 
 ---
 
@@ -374,8 +359,8 @@ The active business and workbook context must remain discoverable. A redesign mu
 
 The current application display identity is **Project Tabula Rasa**. The sign-in
 surface, sidebar title, Streamlit page title, and shell-level documentation use
-that name. The operational route label **Account settings** is current after
-the #62 information-architecture change.
+that name. The local-only profile-administration route is labeled **Account
+settings**.
 
 When the selected business changes, the sidebar continues to show the selected
 business and workbook context. Page selections, table widget keys, edit-row
@@ -747,7 +732,7 @@ Operational destinations appear beneath a `Workspace` section label. The label
 uses smaller semibold muted text, slight letter spacing, and a distinct gap
 before the destinations so it reads as a group heading rather than a page.
 
-Target operational navigation:
+Current operational navigation:
 
 1. Dashboard
 2. Transactions
@@ -757,7 +742,7 @@ Target operational navigation:
 6. Reports
 7. Data & backup
 
-Target utility navigation:
+Current utility navigation:
 
 - Account settings — the displayed route label for local profile administration
 - Log out
@@ -790,7 +775,10 @@ Changing business must:
 
 The selected workbook title should remain visible in the sidebar on ordinary pages.
 
-The current `Business profiles` functionality becomes the target **Account settings** page. Its configuration controls remain local-administration functions and must not be presented as writable in hosted or non-loopback environments when the current safety checks disable them.
+The current `Business profiles` functionality is presented in the **Account
+settings** page. Its configuration controls remain local-administration
+functions and must not be presented as writable in hosted or non-loopback
+environments when the current safety checks disable them.
 
 Account settings must make the boundary explicit:
 
@@ -1113,7 +1101,7 @@ The redesign may adjust responsive presentation and column widths, but must not 
 The ledger has two explicit modes.
 
 Bulk mode implements the following behavior: it is entered explicitly, selects
-only visible rows, and exposes only the approved actions below.
+only visible rows, and exposes only the current actions below.
 
 #### Edit mode — default
 
@@ -1129,14 +1117,23 @@ only visible rows, and exposes only the approved actions below.
 - The edit expander is disabled or visually de-emphasized while bulk mode is active.
 - A bulk-action bar appears only after one or more rows are selected.
 - The selection count is always visible.
-- Switching between Edit and Bulk modes clears incompatible row selections and safely resets the table to latest-date-first because `st.dataframe` user-applied sorting is client-side and cannot reliably be captured and restored across widget recreation. Filters and search persist.
+- Switching between Edit and Bulk modes clears incompatible row selections but
+  preserves filters and search. Because `st.dataframe` user-applied sorting is
+  client-side and cannot reliably be captured and restored across the widget
+  recreation, the table safely resets to latest-date-first.
 
 Both modes must preserve:
 
 - A clear selected-row state
 - Latest-date-first default ordering
-- User-applied interactive table sorting while the same table widget remains mounted, including while switching between the Add transaction and View & edit ledger tabs
-- Reset to latest-date-first after navigating away and back
+Changing mode recreates the ledger table widget and clears incompatible
+selection state; the design does not promise that an interactive dataframe sort
+survives an Edit/Bulk mode switch. Navigating away and back resets the table to
+the latest-date-first default.
+
+The Transactions tabs share the ledger table instance, so a user-applied
+interactive sort remains when switching between Add transaction and View & edit
+ledger. This cross-tab persistence does not extend to Edit/Bulk mode switches.
 
 Changing any filter or search scope clears bulk selection before another bulk action can run.
 
@@ -1178,7 +1175,7 @@ Report and profile tables must preserve the fields specified in their page contr
 
 Bulk actions are available only in explicit Bulk mode.
 
-Initial approved actions:
+Current actions:
 
 1. **Export selected**
    - Downloads the selected ledger rows as CSV.
@@ -1200,7 +1197,7 @@ Initial approved actions:
 
 Bulk actions must not partially apply silently. The implementation must validate the entire selection before writing and report the exact outcome.
 
-Not approved as initial bulk actions:
+Not supported as bulk actions:
 
 - Change date or amount
 - Change payee, reference, or description
@@ -1355,8 +1352,9 @@ Conditional rules:
 - Income or Expense entry is unavailable with a clear warning when no matching category exists.
 - Receipt accepts zero, one, or multiple files using the same file types as the
   post-creation receipt uploader: PDF, PNG, JPG, JPEG, WEBP, or HEIC.
-- Each selected file must be non-empty and no larger than 20 MB. Filenames are
-  sanitized and duplicate names receive numeric suffixes without overwriting.
+- Each selected file must be non-empty and no larger than 20 MB. The selected
+  batch must not exceed 200 MB in total. Filenames are sanitized and duplicate
+  names receive numeric suffixes without overwriting.
 - Receipt selection is optional and does not change accounting validation.
 
 Tags and advanced accounting fields are not implemented.
@@ -1438,7 +1436,7 @@ Failed saves preserve entered values where Streamlit permits.
 
 A success message appears only after the Google Sheets operation is confirmed.
 
-### 19.6 Add-transaction target wireframe
+### 19.6 Add-transaction current-state wireframe
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
@@ -1458,7 +1456,7 @@ A success message appears only after the Google Sheets operation is confirmed.
 │ Description / memo                                           │
 ├──────────────────────────────────────────────────────────────┤
 │ Receipt (optional)                                           │
-│ [Choose file]                                                │
+│ [Choose files]                                               │
 │ PDF, PNG, JPG, JPEG, WEBP, or HEIC                          │
 ├──────────────────────────────────────────────────────────────┤
 │ [Save transaction]                                           │
@@ -1765,11 +1763,21 @@ The existing transaction editor remains the full receipt-management surface.
 
 It must preserve:
 
+- A multi-file receipt uploader for adding one or more files to the selected
+  transaction. Every selected file is validated before any upload begins.
 - Supported file types: PDF, PNG, JPG, JPEG, WEBP, and HEIC
 - Original filename preservation with safe sanitization
 - Numeric suffixing for filename conflicts
 - SHA-256 and integrity metadata behavior
 - Upload and link confirmation
+- A concise complete/unresolved count when a multi-file upload is partial, with
+  retry limited to unresolved files
+- An explicit **Cancel recovery** action for an unresolved upload. Canceling
+  discards unresolved local file contents; files already uploaded remain in
+  Google Drive and can be linked from the **Unreferenced receipt** workflow.
+- If a Sheets confirmation read fails after a manual link, keep the recovery
+  state visible and provide **Retry recovery check** before hiding the upload
+  surface.
 - Retry-safe handling of uncertain Drive responses
 - Existing linked-receipt display and removal
 - Linking of eligible unreferenced receipts
@@ -1859,7 +1867,7 @@ The preview must preserve:
 - Duplicate row numbers
 - Preview of up to 50 source rows
 - Optional Automatically create missing accounts and categories control
-- Explicit proposed account and category additions
+- Explicit account and category additions shown for review before import
 - Import validated rows action disabled when blocking errors exist or no rows are ready
 
 Duplicates are skipped. Valid rows are written in one batch after references are validated again.
@@ -2107,7 +2115,9 @@ UI state should be predictable.
 
 ## 31. Page Contracts
 
-Each page contract defines the current required function and any approved target behavior, together with hierarchy, states, and acceptance criteria.
+Each page contract describes the current required function, hierarchy, states,
+and acceptance criteria. Explicitly labeled future behavior remains a proposal
+and must not be mistaken for an implemented contract.
 
 ### 31.1 Authentication and global shell
 
@@ -2169,7 +2179,8 @@ Create income, expense, and transfer entries; optionally attach a receipt during
 ├──────────────────────────────────────────────────────────────────┤
 │ Add tab: conditional transaction form + optional receipt          │
 ├──────────────────────────────────────────────────────────────────┤
-│ Ledger tab: [From] [To] [Type]                                   │
+│ Ledger tab: [Edit mode | Bulk mode]                              │
+│             [From] [To] [Type]                                   │
 │             [Accounts multiselect] [Search transactions]          │
 │             [Clear search when text is present]                  │
 │             [Edit mode | Bulk mode]                              │
@@ -2197,8 +2208,15 @@ Follow Sections 19.2, 19.3, and 25.6.
   sorting is client-side and cannot reliably be captured and restored when
   Edit/Bulk mode changes recreate the widget.
 - Reset to latest-date-first after navigating away and returning.
-- Default to Edit mode with the first visible transaction as the default edit
-  target; this is not a preselected table row.
+- Default to Edit mode. The edit expander starts collapsed; when opened, its
+  selector defaults to the first visible transaction, but no dataframe row is
+  visibly preselected by default.
+- Selecting a visible ledger row targets that row in the edit workflow.
+- Preserve user-applied interactive sorting when switching between the two
+  Transactions tabs; mode changes may recreate the table widget and reset that
+  client-side sort state.
+- Keep the latest-date-first default when the ledger table is recreated after
+  navigating away and returning; mode changes may also recreate the table.
 - Provide an explicit Bulk mode with multi-row selection.
 
 #### Bulk behavior
@@ -2631,6 +2649,17 @@ local backup paths, Synology metadata, and unknown future local-operation
 fields. Existing hosted documents with older extra fields remain readable, but
 new exports omit them.
 
+**Current export behavior:** The loopback-only Account settings page can create
+the combined hosted Streamlit Secrets document directly. The action reloads and
+validates the complete local profile set, uses the same allowlist and secure
+writer as `scripts/export_streamlit_secrets.py`, and creates a new randomly
+named, ignored, owner-only TOML file under `.streamlit/` without overwriting an
+existing file. The UI identifies the generated path but never displays or logs
+the document's credential values. It instructs the administrator to paste the
+complete file into **Streamlit App settings > Secrets**, save it, delete the
+local generated file, and rerun Profile readiness. Readiness remains
+**Ready locally** because the local application cannot verify hosted acceptance.
+
 #### Acceptance criteria
 
 - Every current Business profiles function remains available under Account settings.
@@ -2966,23 +2995,16 @@ This includes:
 
 When a cleaner design requires moving a function, Codex must identify its new location and verify discoverability.
 
-### 35.2 Current-versus-target feature rule
+### 35.2 Current-and-future feature rule
 
-This document contains both current baseline requirements and approved target behavior.
+This document primarily describes the application as it exists now. Future
+proposals, such as the additional filters in Section 18.5, must be labeled as
+future behavior and kept separate from current page contracts.
 
-Codex must not present a target behavior as completed until its code, storage operation, error handling, and tests are implemented together.
-
-Approved target behavior includes:
-
-- Receipt upload during transaction creation
-- Explicit bulk ledger mode and the approved bulk actions
-- Account settings information architecture and route label
-
-Transaction search is now current behavior: its implementation, state boundary,
-selection repair, failure/empty states, tests, and user documentation are part of
-the functional baseline.
-
-Until each target is fully implemented, preserve the current workflow and identify the feature as incomplete rather than removing the current path.
+Future proposed behavior must not be described as current until its code,
+persistence or storage behavior, error handling, and tests are complete
+together. A partial implementation must not leave dead controls, fictional
+success states, or a design path that excludes the current function.
 
 Still unsupported and prohibited unless separately approved:
 
@@ -2992,8 +3014,6 @@ Still unsupported and prohibited unless separately approved:
 - Receipt-content search
 - Cash-flow or reconciliation reports
 - Per-profile user authorization
-
-A partial implementation must not leave dead controls, fictional success states, or a design path that excludes the current function.
 
 ### 35.3 Required implementation summary
 
@@ -3033,7 +3053,7 @@ Do not introduce:
 
 ---
 
-## 37. Initial Design Direction Summary
+## 37. Design Direction Summary
 
 Project Tabula Rasa uses:
 
@@ -3051,10 +3071,10 @@ Project Tabula Rasa uses:
 - Tables as primary work surfaces
 - Charts as restrained analytical support
 - Native Streamlit components wherever practical
-- Optional receipt upload as part of transaction creation, with ordered partial-failure handling
-- Additive transaction search over existing structured filters
+- Receipt upload as part of transaction creation, with ordered partial-failure handling
+- Transaction search over existing structured filters
 - Explicit Edit and Bulk ledger modes
-- Conservative bulk actions: export selected, compatible category change, and confirmed permanent deletion
+- Current bulk actions: export selected, compatible category change, and confirmed permanent deletion
 - Account settings as the familiar home for business-profile, Google Drive, credential, and recovery configuration
 - No reconciliation workflow
 
