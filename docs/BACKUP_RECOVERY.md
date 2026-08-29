@@ -161,11 +161,16 @@ script intentionally does not rename or remove existing tasks, so leaving both
 identities enabled creates duplicate weekly backup attempts.
 
 Omitting both Profile and AllProfiles uses all-profile behavior. A single
-profile task remains available with Profile and GoogleDrive or Local. An
-explicit BackupDirectory is rejected in all-profile mode so profiles cannot
-share a destination. Tasks use MultipleInstances IgnoreNew. The local task is
-for an interactive deployment; cloud-native mode uses Google APIs directly.
-The task does not perform a missed-run catch-up.
+profile task remains available with Profile and GoogleDrive or Local. In a
+multi-profile installation, when using BackupDirectory, also supply Profile;
+the registration script does not add a profile selector, and the task otherwise
+exits without creating a backup. An explicit BackupDirectory is rejected in
+all-profile mode so profiles cannot share a destination. Tasks use
+MultipleInstances IgnoreNew. Both local and cloud-native tasks use Windows
+Task Scheduler's Interactive logon type under the registering Windows account,
+so the task does not run while that account is logged out. Cloud-native mode
+uses Google APIs directly and does not require Google Drive Desktop. The task
+does not perform a missed-run catch-up.
 
 ## Validate an archive
 
