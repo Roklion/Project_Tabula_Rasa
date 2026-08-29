@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from pathlib import Path
-import shutil
-from tempfile import mkdtemp
+from tempfile import TemporaryDirectory
 from typing import Any, Iterator
 from unittest.mock import patch
 
@@ -14,7 +13,6 @@ from streamlit.testing.v1 import AppTest
 from tabula_rasa.ledger_auth import hash_password
 from tabula_rasa.storage import GoogleSheetsStorage
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 TEST_PASSWORD = "test-password-123"
 SCENARIO_ENVIRONMENT = {
     "OPENBLAS_NUM_THREADS": "1",
@@ -76,9 +74,9 @@ def build_app_test(
 
     app = AppTest.from_file("tabula_rasa/app.py", default_timeout=30)
     app.secrets["app_password_hash"] = hash_password(TEST_PASSWORD)
-    app.secrets["business_profiles"] = profiles or {
-        "test": profile_config()
-    }
+    app.secrets["business_profiles"] = (
+        profiles if profiles is not None else {"test": profile_config()}
+    )
     if extra_secrets:
         app.secrets.update(extra_secrets)
     return app
@@ -110,9 +108,10 @@ def authenticated_app(
     else:
         from_secrets = None
 
-    temp_dir = Path(mkdtemp(prefix=".test-profiles-", dir=PROJECT_ROOT))
-    profile_store = temp_dir / "profiles.json"
-    try:
+    with TemporaryDirectory(
+        prefix="test-profiles-", ignore_cleanup_errors=True
+    ) as temp_dir:
+        profile_store = Path(temp_dir) / "profiles.json"
         profile_patch = patch(
             "tabula_rasa.local_profile_store.LOCAL_PROFILE_STORE_PATH",
             profile_store,
@@ -131,8 +130,6 @@ def authenticated_app(
             app.text_input[0].input(TEST_PASSWORD)
             app.button[0].click().run()
             yield app
-    finally:
-        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def navigate_to(app: AppTest, page: str) -> None:
@@ -154,7 +151,9 @@ def account_named(storage: GoogleSheetsStorage, name: str) -> dict[str, Any]:
         raise ValueError(f"Account named '{name}' not found in storage") from None
 
 
-def category_named(storage: GoogleSheetsStorage, name: str) -> dict[str, Any]:
+def category_named(
+    storage: GoogleSheetsStorage, name: str, kind: str | None = None
+) -> dict[str, Any]:
     """Find a category by display name in the selected profile."""
 
     try:
@@ -162,6 +161,10 @@ def category_named(storage: GoogleSheetsStorage, name: str) -> dict[str, Any]:
             category
             for category in storage.list_categories()
             if category["name"] == name
+            and (kind is None or category["kind"] == kind)
         )
     except StopIteration:
-        raise ValueError(f"Category named '{name}' not found in storage") from None
+        suffix = f" with kind '{kind}'" if kind else ""
+        raise ValueError(
+            f"Category named '{name}'{suffix} not found in storage"
+        ) from None
