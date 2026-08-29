@@ -153,24 +153,24 @@ Register a local or synchronized-folder task:
 powershell -ExecutionPolicy Bypass -File scripts\register_weekly_backup_task.ps1 -AllProfiles -Local -TaskName "Project Tabula Rasa Weekly Local Backup"
 ```
 
-Existing installations may still have a legacy task named `Tabula Rosa Weekly
-Backup` or another earlier Project Tabula Rasa task identity. Before registering
-the current task, manually rename or remove each legacy task in Windows Task
-Scheduler and verify that only the intended task remains. The registration
-script intentionally does not rename or remove existing tasks, so leaving both
-identities enabled creates duplicate weekly backup attempts.
+Existing installations may still have the historical task named `Tabula Rosa
+Weekly Backup` or another earlier Project Tabula Rasa task identity. Before
+registering the current task, manually rename or remove each legacy task in
+Windows Task Scheduler and verify that only the intended task remains. The
+registration script intentionally does not rename or remove existing tasks, so
+leaving both identities enabled creates duplicate weekly backup attempts.
 
-Omitting both Profile and AllProfiles uses all-profile behavior. A single
-profile task remains available with Profile and GoogleDrive or Local. In a
-multi-profile installation, when using BackupDirectory, also supply Profile;
-the registration script does not add a profile selector, and the task otherwise
-exits without creating a backup. An explicit BackupDirectory is rejected in
-all-profile mode so profiles cannot share a destination. Tasks use
-MultipleInstances IgnoreNew. Both local and cloud-native tasks use Windows
-Task Scheduler's Interactive logon type under the registering Windows account,
-so the task does not run while that account is logged out. Cloud-native mode
-uses Google APIs directly and does not require Google Drive Desktop. The task
-does not perform a missed-run catch-up.
+Omitting both `-Profile` and `-AllProfiles` uses all-profile behavior. A single
+profile task remains available with `-Profile` and `-GoogleDrive` or `-Local`. In
+a multi-profile installation, when using `-BackupDirectory`, also supply
+`-Profile`; the registration script does not add a profile selector, and the
+task otherwise exits without creating a backup. An explicit `-BackupDirectory`
+is rejected in all-profile mode so profiles cannot share a destination. Tasks
+use `MultipleInstances IgnoreNew`. Both local and cloud-native tasks use
+Windows Task Scheduler's `Interactive` logon type under the registering
+Windows account, so the task does not run while that account is logged out.
+Cloud-native mode uses Google APIs directly and does not require Google Drive
+Desktop. The task does not perform a missed-run catch-up.
 
 ## Validate an archive
 
@@ -416,7 +416,7 @@ hosted Secrets, and retry.
 
 Create a new blank workbook, share it with the selected profile's Sheets
 service account, verify the target is not any configured live workbook, and
-use initialize.
+use `--initialize`.
 
 ### An archive fails validation
 

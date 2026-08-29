@@ -203,7 +203,7 @@ worksheet. For a recovery workbook, use a read-only spreadsheet override:
 python scripts\validate_google_sheets.py --profile PROFILE_KEY --spreadsheet-id RECOVERY_WORKBOOK_ID
 ```
 
-The override cannot be combined with write-test. After validation, start the
+The override cannot be combined with `--write-test`. After validation, start the
 application, sign in, select the business, and confirm its workbook title.
 
 ## Troubleshooting
