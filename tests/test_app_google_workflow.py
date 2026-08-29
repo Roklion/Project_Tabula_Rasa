@@ -31,7 +31,12 @@ class TestAppGoogleWorkflow:
     def _run_scenario(self, scenario: Path, case_name: str) -> None:
         scenario_environment = os.environ.copy()
         scenario_environment.update(SCENARIO_ENVIRONMENT)
-        scenario_environment["PYTHONPATH"] = str(PROJECT_ROOT)
+        existing_pythonpath = scenario_environment.get("PYTHONPATH")
+        scenario_environment["PYTHONPATH"] = (
+            f"{PROJECT_ROOT}{os.pathsep}{existing_pythonpath}"
+            if existing_pythonpath
+            else str(PROJECT_ROOT)
+        )
         result = subprocess.run(
             [sys.executable, str(scenario)],
             cwd=PROJECT_ROOT,
