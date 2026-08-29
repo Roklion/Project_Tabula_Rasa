@@ -25,6 +25,27 @@ def by_label(elements: object, label: str):
     return next(element for element in elements if element.label == label)
 
 
+def ledger_controls(app: AppTest) -> list[tuple[str, str | None]]:
+    ledger_tab = next(
+        tab for tab in app.tabs if tab.label == "View & edit ledger"
+    )
+    controls: list[tuple[str, str | None]] = []
+    for node in ledger_tab:
+        if node.type == "dataframe":
+            controls.append((node.type, None))
+            break
+        if node.type in {
+            "date_input",
+            "selectbox",
+            "multiselect",
+            "text_input",
+            "button",
+            "button_group",
+        }:
+            controls.append((node.type, getattr(node, "label", None)))
+    return controls
+
+
 def success_values(app: AppTest) -> list[str]:
     return [str(element.value) for element in app.success]
 
@@ -147,6 +168,16 @@ def main() -> None:
         )
 
         app.radio[0].set_value("Transactions").run()
+        assert ledger_controls(app) == [
+            ("date_input", "From"),
+            ("date_input", "To"),
+            ("selectbox", "Type"),
+            ("multiselect", "Accounts"),
+            ("text_input", "Search transactions"),
+            ("button_group", "Ledger mode"),
+            ("dataframe", None),
+        ]
+        assert by_label(app.segmented_control, "Ledger mode").value == "Edit"
         initial_ledger_key = app.dataframe[0].key
         assert initial_ledger_key == "transaction_ledger_test_1"
         by_label(app.segmented_control, "Transaction type").set_value("Expense").run()
@@ -245,6 +276,16 @@ def main() -> None:
         ).run()
         search = by_label(app.text_input, "Search transactions")
         search.input("  test VENDOR  ").run()
+        assert ledger_controls(app) == [
+            ("date_input", "From"),
+            ("date_input", "To"),
+            ("selectbox", "Type"),
+            ("multiselect", "Accounts"),
+            ("text_input", "Search transactions"),
+            ("button", "Clear search"),
+            ("button_group", "Ledger mode"),
+            ("dataframe", None),
+        ]
         assert app.dataframe[0].value["Payee"].tolist() == ["Test vendor"]
         assert app.dataframe[0].value["Type"].tolist() == ["Expense"]
         matching_transaction = next(
@@ -252,6 +293,36 @@ def main() -> None:
             for item in storage.list_transactions()
             if item.get("payee") == "Test vendor"
         )
+        assert app.session_state["edit_transaction_id"] == matching_transaction[
+            "id"
+        ]
+
+        mode_key_before_switch = app.dataframe[0].key
+        app.session_state["transaction_bulk_selected_ids_test"] = (
+            matching_transaction["id"],
+        )
+        by_label(app.segmented_control, "Ledger mode").set_value("Bulk").run()
+        assert by_label(app.segmented_control, "Ledger mode").value == "Bulk"
+        assert by_label(app.selectbox, "Type").value == "Expense"
+        assert by_label(app.multiselect, "Accounts").value == [
+            "Owner-paid expenses"
+        ]
+        assert by_label(app.text_input, "Search transactions").value == (
+            "  test VENDOR  "
+        )
+        assert app.session_state["transaction_bulk_selected_ids_test"] == ()
+        assert app.dataframe[0].key != mode_key_before_switch
+        assert app.dataframe[0].value["Date"].tolist() == sorted(
+            app.dataframe[0].value["Date"].tolist(), reverse=True
+        )
+
+        bulk_ledger_key = app.dataframe[0].key
+        by_label(app.segmented_control, "Ledger mode").set_value("Edit").run()
+        assert by_label(app.segmented_control, "Ledger mode").value == "Edit"
+        assert by_label(app.text_input, "Search transactions").value == (
+            "  test VENDOR  "
+        )
+        assert app.dataframe[0].key != bulk_ledger_key
         assert app.session_state["edit_transaction_id"] == matching_transaction[
             "id"
         ]
@@ -312,7 +383,7 @@ def main() -> None:
 
         app.radio[0].set_value("Accounts").run()
         app.radio[0].set_value("Transactions").run()
-        assert app.dataframe[0].key == "transaction_ledger_test_2"
+        assert app.dataframe[0].key.startswith("transaction_ledger_test_2")
         assert app.dataframe[0].key != initial_ledger_key
 
         app.radio[0].set_value("Mileage").run()
