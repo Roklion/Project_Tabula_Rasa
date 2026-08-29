@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-import os
 from pathlib import Path
+import shutil
+from tempfile import mkdtemp
 from typing import Any, Iterator
 from unittest.mock import patch
 
@@ -22,10 +23,13 @@ SCENARIO_ENVIRONMENT = {
 }
 
 
-def by_label(elements: object, label: str):
+def by_label(elements: Any, label: str) -> Any:
     """Return the first Streamlit test element with *label*."""
 
-    return next(element for element in elements if element.label == label)
+    try:
+        return next(element for element in elements if element.label == label)
+    except StopIteration:
+        raise ValueError(f"Element with label '{label}' not found") from None
 
 
 def message_values(app: AppTest, message_type: str) -> list[str]:
@@ -106,7 +110,8 @@ def authenticated_app(
     else:
         from_secrets = None
 
-    profile_store = PROJECT_ROOT / f".test-profiles-{os.getpid()}.json"
+    temp_dir = Path(mkdtemp(prefix=".test-profiles-", dir=PROJECT_ROOT))
+    profile_store = temp_dir / "profiles.json"
     try:
         profile_patch = patch(
             "tabula_rasa.local_profile_store.LOCAL_PROFILE_STORE_PATH",
@@ -127,7 +132,7 @@ def authenticated_app(
             app.button[0].click().run()
             yield app
     finally:
-        profile_store.unlink(missing_ok=True)
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def navigate_to(app: AppTest, page: str) -> None:
@@ -139,18 +144,24 @@ def navigate_to(app: AppTest, page: str) -> None:
 def account_named(storage: GoogleSheetsStorage, name: str) -> dict[str, Any]:
     """Find an account by display name in the selected profile."""
 
-    return next(
-        account
-        for account in storage.list_accounts(active_only=False)
-        if account["name"] == name
-    )
+    try:
+        return next(
+            account
+            for account in storage.list_accounts(active_only=False)
+            if account["name"] == name
+        )
+    except StopIteration:
+        raise ValueError(f"Account named '{name}' not found in storage") from None
 
 
 def category_named(storage: GoogleSheetsStorage, name: str) -> dict[str, Any]:
     """Find a category by display name in the selected profile."""
 
-    return next(
-        category
-        for category in storage.list_categories()
-        if category["name"] == name
-    )
+    try:
+        return next(
+            category
+            for category in storage.list_categories()
+            if category["name"] == name
+        )
+    except StopIteration:
+        raise ValueError(f"Category named '{name}' not found in storage") from None
