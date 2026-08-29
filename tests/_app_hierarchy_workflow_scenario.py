@@ -1,27 +1,18 @@
 from __future__ import annotations
 
 from datetime import date
-from pathlib import Path
-import sys
-from tempfile import TemporaryDirectory
-from unittest.mock import patch
-
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT_ROOT))
-
 from streamlit.testing.v1 import AppTest
 
-from tabula_rasa.ledger_auth import hash_password
 from tabula_rasa.storage import GoogleSheetsStorage
+from tests.app_support import (
+    account_named,
+    authenticated_app,
+    by_label,
+    category_named,
+    navigate_to,
+    profile_config,
+)
 from tests.fakes import FakeWorkbook
-
-
-TEST_PASSWORD = "test-password-123"
-
-
-def by_label(elements: object, label: str):
-    return next(element for element in elements if element.label == label)
 
 
 def add_account(
@@ -37,11 +28,7 @@ def add_account(
     if parent_id:
         by_label(app.selectbox, "Parent account (optional)").set_value(parent_id)
     by_label(app.button, "Add account").click().run()
-    return next(
-        account
-        for account in storage.list_accounts(active_only=False)
-        if account["name"] == name
-    )
+    return account_named(storage, name)
 
 
 def add_category(
@@ -56,51 +43,21 @@ def add_category(
     if parent_id:
         by_label(app.selectbox, "Parent category (optional)").set_value(parent_id)
     by_label(app.button, "Add category").click().run()
-    return next(
-        category
-        for category in storage.list_categories()
-        if category["name"] == name
-    )
+    return category_named(storage, name)
 
 
 def main() -> None:
-    local_profiles = TemporaryDirectory()
-    patch(
-        "tabula_rasa.local_profile_store.LOCAL_PROFILE_STORE_PATH",
-        Path(local_profiles.name) / "business_profiles.json",
-    ).start()
     storages = {
         "alpha-sheet": GoogleSheetsStorage(FakeWorkbook()),
         "beta-sheet": GoogleSheetsStorage(FakeWorkbook()),
     }
 
-    def storage_from_secrets(secrets: dict) -> GoogleSheetsStorage:
-        return storages[secrets["spreadsheet_id"]]
-
-    app = AppTest.from_file("tabula_rasa/app.py", default_timeout=30)
-    app.secrets["app_password_hash"] = hash_password(TEST_PASSWORD)
-    app.secrets["business_profiles"] = {
-        "alpha": {
-            "name": "Alpha Business",
-            "spreadsheet_id": "alpha-sheet",
-            "gcp_service_account": {"type": "service_account"},
-        },
-        "beta": {
-            "name": "Beta Business",
-            "spreadsheet_id": "beta-sheet",
-            "gcp_service_account": {"type": "service_account"},
-        },
+    profiles = {
+        "alpha": profile_config(name="Alpha Business", spreadsheet_id="alpha-sheet"),
+        "beta": profile_config(name="Beta Business", spreadsheet_id="beta-sheet"),
     }
-
-    with patch.object(
-        GoogleSheetsStorage,
-        "from_secrets",
-        side_effect=storage_from_secrets,
-    ):
-        app.run()
-        app.text_input[0].input(TEST_PASSWORD)
-        app.button[0].click().run()
-        app.radio[0].set_value("Accounts").run()
+    with authenticated_app(storages=storages, profiles=profiles) as app:
+        navigate_to(app, "Accounts")
 
         alpha = storages["alpha-sheet"]
         beta = storages["beta-sheet"]
@@ -166,7 +123,7 @@ def main() -> None:
         ).run()
         by_label(app.button, "Save account changes").click().run()
 
-        app.radio[0].set_value("Categories").run()
+        navigate_to(app, "Categories")
         travel = add_category(app, alpha, "Travel")
         flights = add_category(app, alpha, "Flights", parent_id=travel["id"])
         assert "Travel" in app.dataframe[0].value["Parent"].tolist()
@@ -230,20 +187,20 @@ def main() -> None:
         by_label(app.selectbox, "Edit category type").set_value("Expense").run()
 
         by_label(app.selectbox, "Business").set_value("beta").run()
-        app.radio[0].set_value("Categories").run()
+        navigate_to(app, "Categories")
         beta_only = add_category(app, beta, "Beta only")
         app.session_state["edit_category_id"] = beta_only["id"]
         app.run()
         assert "Beta only" in app.dataframe[0].value["Category"].tolist()
         by_label(app.selectbox, "Business").set_value("alpha").run()
-        app.radio[0].set_value("Categories").run()
+        navigate_to(app, "Categories")
         assert "Beta only" not in app.dataframe[0].value["Category"].tolist()
         assert (
             "edit_category_id" not in app.session_state
             or app.session_state["edit_category_id"] != beta_only["id"]
         )
 
-        app.radio[0].set_value("Transactions").run()
+        navigate_to(app, "Transactions")
         by_label(app.segmented_control, "Transaction type").set_value(
             "Expense"
         ).run()
@@ -297,7 +254,7 @@ def main() -> None:
         by_label(app.selectbox, "Category").set_value("Sales")
         by_label(app.button, "Save transaction").click().run()
 
-        app.radio[0].set_value("Accounts").run()
+        navigate_to(app, "Accounts")
         account_table = app.dataframe[0].value
         operations_account_row = account_table.loc[
             account_table["Account"] == "Operations"
@@ -326,7 +283,7 @@ def main() -> None:
         ].iloc[0]
         assert inactive_row["Active"] == "Inactive"
 
-        app.radio[0].set_value("Categories").run()
+        navigate_to(app, "Categories")
         category_table = app.dataframe[0].value
         travel_category_row = category_table.loc[
             category_table["Category"] == "Travel"
@@ -367,7 +324,7 @@ def main() -> None:
             if category["id"] == flights["id"]
         )["parent_id"] == travel["id"]
 
-        app.radio[0].set_value("Reports").run()
+        navigate_to(app, "Reports")
         category_report = next(
             frame.value
             for frame in app.dataframe
@@ -397,13 +354,13 @@ def main() -> None:
         assert operations_row["Balance"] == 5.0
         assert direct_row["Balance"] == 20.0
 
-        app.radio[0].set_value("Accounts").run()
+        navigate_to(app, "Accounts")
         by_label(app.text_input, "Account name").input("Alpha draft")
         by_label(app.selectbox, "Parent account (optional)").set_value(
             operations["id"]
         )
         by_label(app.selectbox, "Business").set_value("beta").run()
-        app.radio[0].set_value("Accounts").run()
+        navigate_to(app, "Accounts")
         beta = storages["beta-sheet"]
         assert by_label(app.text_input, "Account name").value == ""
         assert by_label(app.selectbox, "Parent account (optional)").value == ""
@@ -413,7 +370,7 @@ def main() -> None:
 
         add_account(app, beta, "Shared account")
         by_label(app.selectbox, "Business").set_value("alpha").run()
-        app.radio[0].set_value("Accounts").run()
+        navigate_to(app, "Accounts")
         add_account(app, alpha, "Shared account")
         assert any(
             account["name"] == "Shared account"
@@ -430,11 +387,11 @@ def main() -> None:
         assert unchanged_transaction["account_id"] == petty_cash["id"]
         assert unchanged_transaction["category_id"] == flights["id"]
 
-        app.radio[0].set_value("Transactions").run()
+        navigate_to(app, "Transactions")
         by_label(app.text_input, "Search transactions").input("Flights").run()
         assert not app.dataframe[0].value.empty
         by_label(app.selectbox, "Business").set_value("beta").run()
-        app.radio[0].set_value("Transactions").run()
+        navigate_to(app, "Transactions")
         assert by_label(app.text_input, "Search transactions").value == ""
         assert app.dataframe[0].value.empty
 

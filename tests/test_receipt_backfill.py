@@ -77,8 +77,9 @@ def _backfilled_drive_receipt(
     return receipt
 
 
-def test_preparation_updates_drive_and_active_transaction_reference() -> None:
-    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
+def test_preparation_updates_drive_and_active_transaction_reference(
+    storage: GoogleSheetsStorage,
+) -> None:
     account = storage.create_account("Checking", "Bank")
     transaction = storage.create_transaction(
         txn_date="2026-07-31",

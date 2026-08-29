@@ -30,6 +30,7 @@ from tabula_rasa.google_drive import (
     validate_drive_profile_settings,
     verify_oauth_state,
 )
+from tests.drive_fixtures import drive_folder
 
 
 class FakeResponse:
@@ -223,37 +224,23 @@ class TestGoogleDriveOAuth:
 
 class TestGoogleDriveFiles:
     def test_freshly_validates_profile_root_and_managed_children(self) -> None:
-        root = {
-            "id": "rootfolder123",
-            "name": "North Storage",
-            "mimeType": "application/vnd.google-apps.folder",
-            "trashed": False,
-            "parents": [],
-        }
-        receipt = {
-            "id": "receiptfolder123",
-            "name": "Receipts",
-            "mimeType": "application/vnd.google-apps.folder",
-            "trashed": False,
-            "parents": ["rootfolder123"],
-            "appProperties": {
-                "tabulaRasaKind": "receipts",
-                "tabulaRasaProfile": "north",
-                "tabulaRasaStorageRoot": "rootfolder123",
-            },
-        }
-        backup = {
-            "id": "backupfolder123",
-            "name": "Ledger Backups",
-            "mimeType": "application/vnd.google-apps.folder",
-            "trashed": False,
-            "parents": ["rootfolder123"],
-            "appProperties": {
-                "tabulaRasaKind": "ledger-backups",
-                "tabulaRasaProfile": "north",
-                "tabulaRasaStorageRoot": "rootfolder123",
-            },
-        }
+        root = drive_folder("rootfolder123", "North Storage")
+        receipt = drive_folder(
+            "receiptfolder123",
+            "Receipts",
+            parent_id="rootfolder123",
+            profile_key="north",
+            kind="receipts",
+            storage_root_id="rootfolder123",
+        )
+        backup = drive_folder(
+            "backupfolder123",
+            "Ledger Backups",
+            parent_id="rootfolder123",
+            profile_key="north",
+            kind="ledger-backups",
+            storage_root_id="rootfolder123",
+        )
         settings = {
             **drive_settings(),
             "storage_root": {"id": root["id"], "name": root["name"]},
@@ -275,25 +262,15 @@ class TestGoogleDriveFiles:
         assert validated["backup_folder"]["id"] == "backupfolder123"
 
     def test_fresh_storage_validation_rejects_a_child_outside_the_root(self) -> None:
-        root = {
-            "id": "rootfolder123",
-            "name": "North Storage",
-            "mimeType": "application/vnd.google-apps.folder",
-            "trashed": False,
-            "parents": [],
-        }
-        outside = {
-            "id": "receiptfolder123",
-            "name": "Receipts",
-            "mimeType": "application/vnd.google-apps.folder",
-            "trashed": False,
-            "parents": ["different-root"],
-            "appProperties": {
-                "tabulaRasaKind": "receipts",
-                "tabulaRasaProfile": "north",
-                "tabulaRasaStorageRoot": "rootfolder123",
-            },
-        }
+        root = drive_folder("rootfolder123", "North Storage")
+        outside = drive_folder(
+            "receiptfolder123",
+            "Receipts",
+            parent_id="different-root",
+            profile_key="north",
+            kind="receipts",
+            storage_root_id="rootfolder123",
+        )
         settings = {
             **drive_settings(),
             "storage_root": {"id": root["id"], "name": root["name"]},
