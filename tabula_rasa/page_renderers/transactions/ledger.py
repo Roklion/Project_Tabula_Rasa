@@ -69,16 +69,6 @@ def render_ledger(
     """Render structured filters, the ledger, and single-row editing."""
     st.subheader("View & edit ledger")
     st.caption("Filter the ledger, then choose Edit or Bulk mode explicitly.")
-    mode = st.segmented_control(
-        "Ledger mode",
-        ["Edit", "Bulk"],
-        default="Edit",
-        key=f"transaction_ledger_mode_{context.profile_key}",
-        help="Edit manages one row. Bulk enables only the approved multi-row actions.",
-        on_change=_change_ledger_mode,
-        args=(context.profile_key,),
-    )
-    mode = mode or "Edit"
     c1, c2, c3 = st.columns(3)
     start = c1.date_input(
         "From",
@@ -147,6 +137,16 @@ def render_ledger(
             key=f"ledger_search_clear_{context.profile_key}_{table_generation}",
             on_click=clear_search,
         )
+    mode = st.segmented_control(
+        "Ledger mode",
+        ["Edit", "Bulk"],
+        default="Edit",
+        key=f"transaction_ledger_mode_{context.profile_key}",
+        help="Edit manages one row. Bulk enables only the approved multi-row actions.",
+        on_change=_change_ledger_mode,
+        args=(context.profile_key,),
+    )
+    mode = mode or "Edit"
     try:
         all_transactions = context.storage.list_transactions()
         structured_transactions = context.storage.list_transactions(
