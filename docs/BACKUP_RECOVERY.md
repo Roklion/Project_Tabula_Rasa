@@ -96,11 +96,13 @@ Create a protected local archive:
 python scripts\backup_google_sheets.py --profile PROFILE_KEY --local-dir backups\PROFILE_KEY --keep 30
 ```
 
-When local-dir is supplied, local mode is selected. Without it, the command
-uses the profile's configured backup_folder_path or the ignored fallback
-backups/PROFILE_KEY/. Single-profile commands use a configured path exactly.
-The command validates before success, uses a new timestamped filename, never
-overwrites an archive, and retains the newest requested generations.
+The `--local-dir` switch selects local mode. Use it without a path to select the
+profile's configured `backup_folder_path` or the ignored fallback
+`backups/PROFILE_KEY/`; provide a path after the switch to override that
+location. Without `--local-dir`, the command uses Google Drive. Single-profile
+commands use a configured path exactly. The command validates before success,
+uses a new timestamped filename, never overwrites an archive, and retains the
+newest requested generations.
 
 Create a Google Drive backup after the profile has a valid Drive grant and
 Ledger Backups folder:
