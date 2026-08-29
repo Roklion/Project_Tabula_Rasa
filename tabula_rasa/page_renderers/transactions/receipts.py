@@ -905,7 +905,7 @@ def editor_receipt_recovery_active(context: TransactionsContext) -> bool:
     workflow_key_prefix = receipt_editor_workflow_key_prefix(context.profile_key)
     notice_key_prefix = receipt_editor_notice_key_prefix(context.profile_key)
     current_configuration_key = _editor_receipt_configuration_key(context)
-    for key in st.session_state:
+    for key in list(st.session_state):
         if not isinstance(key, str):
             continue
         if key.startswith(workflow_key_prefix):
