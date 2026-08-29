@@ -37,10 +37,10 @@ The application supports:
    `.streamlit/secrets.toml`; business settings and per-profile credentials
    live in `.streamlit/business_profiles.json`.
 
-4. Follow [Business profile setup](docs/setup/BUSINESS_PROFILES.md) to create
+4. Follow [Setup](docs/SETUP.md) to create
    the first Google Sheets-backed profile.
 5. If receipts or cloud backups are needed, complete
-   [Google Drive OAuth and per-business access](docs/architecture/GOOGLE_DRIVE_OAUTH.md).
+   [Google Drive setup](docs/GOOGLE_DRIVE.md).
 6. Start the application:
 
    ```powershell
@@ -52,26 +52,24 @@ SQLite database for ledger storage.
 
 ## Documentation
 
-Start with the [documentation index](docs/README.md), or go directly to:
+The documentation index is this section of the root README. Go directly to:
 
 | Goal | Guide |
 | --- | --- |
-| Understand the system and data boundaries | [Architecture overview](docs/architecture/OVERVIEW.md) |
-| Add or replace a business | [Business profile setup](docs/setup/BUSINESS_PROFILES.md) |
-| Configure Drive, Picker, receipts, and cloud backups | [Google Drive OAuth](docs/architecture/GOOGLE_DRIVE_OAUTH.md) |
-| Use ledgers, receipts, mileage, and reports | [Using Project Tabula Rasa](docs/guides/USING_TABULA_RASA.md) |
-| Back up, validate, and restore ledger data | [Backup and recovery](docs/operations/BACKUP_AND_RECOVERY.md) |
-| Maintain a Synology recovery copy | [Synology recovery](docs/operations/SYNOLOGY_RECOVERY.md) |
-| Import QuickBooks data | [QuickBooks import](docs/guides/QUICKBOOKS_IMPORT.md) |
-| Run development checks and tests | [Development guide](docs/development/DEVELOPMENT.md) |
+| Understand the system and data boundaries | [Architecture](docs/ARCHITECTURE.md) |
+| Configure the application and business profiles | [Setup](docs/SETUP.md) |
+| Configure Drive, Picker, receipts, and cloud backups | [Google Drive](docs/GOOGLE_DRIVE.md) |
+| Use ledgers, receipts, mileage, reports, and imports | [Using Tabula Rasa](docs/USING_TABULA_RASA.md) |
+| Back up, validate, restore, and recover receipts | [Backup and recovery](docs/BACKUP_RECOVERY.md) |
+| Run development checks and tests | [Development](docs/DEVELOPMENT.md) |
 
 ## Repository layout
 
 - `tabula_rasa/` contains the Streamlit entry point and application modules.
 - `scripts/` contains setup, validation, backup, and recovery utilities.
 - `tests/` contains the automated test suite and UI workflow scenarios.
-- `docs/` contains architecture, setup, operational, user, and development
-  documentation.
+- `docs/` contains the six canonical architecture, setup, Drive, user,
+  recovery, and development guides.
 
 ## Security
 
@@ -95,7 +93,7 @@ ruff check .
 python -m pytest
 ```
 
-See the [development guide](docs/development/DEVELOPMENT.md) for test isolation
+See the [development guide](docs/DEVELOPMENT.md) for test isolation
 and live validation commands.
 
 ## Authors
