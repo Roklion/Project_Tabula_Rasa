@@ -106,7 +106,9 @@ def authenticated_app(
         def from_secrets(_secrets: dict[str, object]) -> GoogleSheetsStorage:
             return storage
     else:
-        from_secrets = None
+        raise ValueError(
+            "Either 'storage' or 'storages' must be provided to authenticated_app"
+        )
 
     with TemporaryDirectory(
         prefix="test-profiles-", ignore_cleanup_errors=True
@@ -116,14 +118,10 @@ def authenticated_app(
             "tabula_rasa.local_profile_store.LOCAL_PROFILE_STORE_PATH",
             profile_store,
         )
-        storage_patch = (
-            patch.object(
-                GoogleSheetsStorage,
-                "from_secrets",
-                side_effect=from_secrets,
-            )
-            if from_secrets is not None
-            else patch.object(GoogleSheetsStorage, "from_secrets")
+        storage_patch = patch.object(
+            GoogleSheetsStorage,
+            "from_secrets",
+            side_effect=from_secrets,
         )
         with profile_patch, storage_patch:
             app.run()
