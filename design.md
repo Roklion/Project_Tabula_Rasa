@@ -1341,8 +1341,9 @@ Conditional rules:
 - Income or Expense entry is unavailable with a clear warning when no matching category exists.
 - Receipt accepts zero, one, or multiple files using the same file types as the
   post-creation receipt uploader: PDF, PNG, JPG, JPEG, WEBP, or HEIC.
-- Each selected file must be non-empty and no larger than 20 MB. Filenames are
-  sanitized and duplicate names receive numeric suffixes without overwriting.
+- Each selected file must be non-empty and no larger than 20 MB. The selected
+  batch must not exceed 200 MB in total. Filenames are sanitized and duplicate
+  names receive numeric suffixes without overwriting.
 - Receipt selection is optional and does not change accounting validation.
 
 Tags and advanced accounting fields are not implemented.
@@ -1751,11 +1752,21 @@ The existing transaction editor remains the full receipt-management surface.
 
 It must preserve:
 
+- A multi-file receipt uploader for adding one or more files to the selected
+  transaction. Every selected file is validated before any upload begins.
 - Supported file types: PDF, PNG, JPG, JPEG, WEBP, and HEIC
 - Original filename preservation with safe sanitization
 - Numeric suffixing for filename conflicts
 - SHA-256 and integrity metadata behavior
 - Upload and link confirmation
+- A concise complete/unresolved count when a multi-file upload is partial, with
+  retry limited to unresolved files
+- An explicit **Cancel recovery** action for an unresolved upload. Canceling
+  discards unresolved local file contents; files already uploaded remain in
+  Google Drive and can be linked from the **Unreferenced receipt** workflow.
+- If a Sheets confirmation read fails after a manual link, keep the recovery
+  state visible and provide **Retry recovery check** before hiding the upload
+  surface.
 - Retry-safe handling of uncertain Drive responses
 - Existing linked-receipt display and removal
 - Linking of eligible unreferenced receipts
@@ -2616,6 +2627,17 @@ authorization with its storage root and receipt/backup children. It excludes
 local backup paths, Synology metadata, and unknown future local-operation
 fields. Existing hosted documents with older extra fields remain readable, but
 new exports omit them.
+
+**Current export behavior:** The loopback-only Account settings page can create
+the combined hosted Streamlit Secrets document directly. The action reloads and
+validates the complete local profile set, uses the same allowlist and secure
+writer as `scripts/export_streamlit_secrets.py`, and creates a new randomly
+named, ignored, owner-only TOML file under `.streamlit/` without overwriting an
+existing file. The UI identifies the generated path but never displays or logs
+the document's credential values. It instructs the administrator to paste the
+complete file into **Streamlit App settings > Secrets**, save it, delete the
+local generated file, and rerun Profile readiness. Readiness remains
+**Ready locally** because the local application cannot verify hosted acceptance.
 
 #### Acceptance criteria
 

@@ -13,6 +13,12 @@ from tabula_rasa.ledger_presentation import ledger_frame, money
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
 from tabula_rasa.page_renderers.transactions.receipts import (
     clear_receipt_creation_recovery,
+    clear_missing_editor_receipt_recoveries,
+    editor_receipt_recovery_active,
+    editor_receipt_recovery_transaction_ids,
+    editor_receipt_notice_transaction_ids,
+    render_editor_receipt_notice,
+    render_filtered_editor_receipt_recovery,
     render_receipts,
 )
 from tabula_rasa.page_renderers.transactions.search import filter_transaction_rows
@@ -148,7 +154,17 @@ def render_ledger(
             on_click=clear_search,
         )
     try:
-        all_transactions = context.storage.list_transactions()
+        all_transactions = (
+            context.storage.list_transactions(_force_refresh=True)
+            if editor_receipt_recovery_active(context)
+            else context.storage.list_transactions()
+        )
+        recovery_notices = clear_missing_editor_receipt_recoveries(
+            context,
+            all_transactions,
+        )
+        for notice in recovery_notices:
+            st.warning(notice)
         structured_transactions = context.storage.list_transactions(
             start=start,
             end=end,
@@ -285,6 +301,27 @@ def render_ledger(
         },
     )
     selected_rows = ledger_event.selection.rows
+    filtered_recovery_ids = set(editor_receipt_recovery_transaction_ids(context)) - set(
+        transaction_ids
+    )
+    filtered_notice_ids = set(editor_receipt_notice_transaction_ids(context)) - set(
+        transaction_ids
+    )
+    if filtered_recovery_ids or filtered_notice_ids:
+        with st.expander(
+            "Receipt recovery for filtered transactions",
+            expanded=True,
+        ):
+            if filtered_recovery_ids:
+                st.warning(
+                    "Receipt recovery remains available below even when its "
+                    "transaction is hidden by the active ledger filters."
+                )
+                for recovery_id in sorted(filtered_recovery_ids):
+                    st.caption(f"Transaction recovery: {recovery_id}")
+                    render_filtered_editor_receipt_recovery(context, recovery_id)
+            for notice_id in sorted(filtered_notice_ids):
+                render_editor_receipt_notice(context, notice_id)
     if mode == "Bulk":
         selected_ids = tuple(
             str(transaction_id)
