@@ -2179,8 +2179,7 @@ Create income, expense, and transfer entries; optionally attach a receipt during
 ├──────────────────────────────────────────────────────────────────┤
 │ Add tab: conditional transaction form + optional receipt          │
 ├──────────────────────────────────────────────────────────────────┤
-│ Ledger tab: [Edit mode | Bulk mode]                              │
-│             [From] [To] [Type]                                   │
+│ Ledger tab: [From] [To] [Type]                                   │
 │             [Accounts multiselect] [Search transactions]          │
 │             [Clear search when text is present]                  │
 │             [Edit mode | Bulk mode]                              │
