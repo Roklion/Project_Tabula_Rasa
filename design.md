@@ -114,7 +114,10 @@ A UI redesign must not disrupt or imply replacement of the current command-line 
 - Hosted Streamlit Secrets export
 - Synology Cloud Sync and retention procedures performed outside the application
 
-These workflows may remain outside the Streamlit interface. The design must not add misleading in-app Restore, NAS health, or scheduler controls unless the underlying capability is implemented in the same task.
+These workflows may remain outside the Streamlit interface unless a task adds a
+supported control for that workflow. The design must not add misleading in-app
+Restore, NAS health, or scheduler controls unless the underlying capability is
+implemented in the same task.
 
 ### 2.5 Approved proposed behavior
 
@@ -2509,7 +2512,11 @@ Use compact settings navigation or tabs:
 3. **Recovery**
 4. **Security & deployment information**
 
-The last section is informational unless an implementation task adds supported controls.
+The last section is informational except for supported controls explicitly
+implemented by the current application. The current local-administration
+workflow includes a **Generate hosted Secrets file** control there; it creates
+the documented local export handoff but cannot write to or verify hosted
+Streamlit Secrets.
 
 #### Business profiles section
 
@@ -2613,7 +2620,7 @@ Explain clearly:
 - The application password currently grants access to every configured business profile.
 - Profile keys are configuration identifiers, not user accounts.
 - Local profile configuration is stored in the ignored plaintext profile file and depends on operating-system protections.
-- Hosted-runtime configuration changes require the documented Streamlit Secrets export and replacement process.
+- Hosted-runtime configuration changes require the documented Streamlit Secrets export and replacement process. Local administrators can use **Generate hosted Secrets file** to create that handoff after all included profiles are reloaded and validated; the action reports only the generated path and never displays credentials.
 - Local backup paths and Synology operational settings do not require a hosted export.
 - Private keys are never displayed after upload.
 
@@ -2632,7 +2639,7 @@ new exports omit them.
 - Hosted/Secrets-sourced profiles remain visibly read-only in local administration where applicable.
 - Profile keys remain immutable.
 - Drive and Synology settings are preserved unless their dedicated controls change them.
-- Successful changes to hosted-runtime fields remain followed by the documented hosted-Secrets export step outside this UI.
+- Successful changes to hosted-runtime fields remain followed by the documented hosted-Secrets export and replacement step. The Security & deployment information control can create the local handoff, but hosted Streamlit Secrets replacement and acceptance remain outside this UI.
 - Local-only backup and Synology changes leave the hosted projection unchanged.
 - The page does not imply per-profile user permissions, DSM monitoring, or in-app restore.
 
