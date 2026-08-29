@@ -1,25 +1,8 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-from tempfile import TemporaryDirectory
-from unittest.mock import patch
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT_ROOT))
-
-from streamlit.testing.v1 import AppTest
-
-from tabula_rasa.ledger_auth import hash_password
 from tabula_rasa.storage import GoogleSheetsStorage
+from tests.app_support import authenticated_app, by_label, navigate_to, profile_config
 from tests.fakes import FakeWorkbook
-
-
-TEST_PASSWORD = "test-password-123"
-
-
-def by_label(elements: object, label: str):
-    return next(element for element in elements if element.label == label)
 
 
 def seed(storage: GoogleSheetsStorage, amount_offset: int) -> list[dict[str, str]]:
@@ -45,37 +28,12 @@ def main() -> None:
     south_transactions = seed(south, 10)
     storages = {"north-sheet": north, "south-sheet": south}
 
-    app = AppTest.from_file("tabula_rasa/app.py", default_timeout=30)
-    app.secrets["app_password_hash"] = hash_password(TEST_PASSWORD)
-    app.secrets["business_profiles"] = {
-        "north": {
-            "name": "North Business",
-            "spreadsheet_id": "north-sheet",
-            "gcp_service_account": {"type": "service_account"},
-        },
-        "south": {
-            "name": "South Business",
-            "spreadsheet_id": "south-sheet",
-            "gcp_service_account": {"type": "service_account"},
-        },
+    profiles = {
+        "north": profile_config(name="North Business", spreadsheet_id="north-sheet"),
+        "south": profile_config(name="South Business", spreadsheet_id="south-sheet"),
     }
-
-    with (
-        TemporaryDirectory() as temp_dir,
-        patch(
-            "tabula_rasa.local_profile_store.LOCAL_PROFILE_STORE_PATH",
-            Path(temp_dir) / "profiles.json",
-        ),
-        patch.object(
-            GoogleSheetsStorage,
-            "from_secrets",
-            side_effect=lambda secrets: storages[secrets["spreadsheet_id"]],
-        ),
-    ):
-        app.run()
-        app.text_input[0].input(TEST_PASSWORD)
-        app.button[0].click().run()
-        app.radio[0].set_value("Transactions").run()
+    with authenticated_app(storages=storages, profiles=profiles) as app:
+        navigate_to(app, "Transactions")
 
         assert by_label(app.segmented_control, "Ledger mode").value == "Edit"
         by_label(app.segmented_control, "Ledger mode").set_value("Bulk").run()

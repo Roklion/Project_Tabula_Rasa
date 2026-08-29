@@ -5,6 +5,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+from tests.app_support import SCENARIO_ENVIRONMENT
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SCENARIO = Path(__file__).with_name("_app_google_workflow_scenario.py")
 CSV_REPORTING_SCENARIO = Path(__file__).with_name("_app_csv_reporting_scenario.py")
@@ -24,15 +28,10 @@ BULK_SCENARIO = Path(__file__).with_name("_app_transaction_bulk_scenario.py")
 
 
 class TestAppGoogleWorkflow:
-    def _run_scenario(self, scenario: Path) -> None:
+    def _run_scenario(self, scenario: Path, case_name: str) -> None:
         scenario_environment = os.environ.copy()
-        scenario_environment.update(
-            {
-                "OPENBLAS_NUM_THREADS": "1",
-                "OMP_NUM_THREADS": "1",
-                "MKL_NUM_THREADS": "1",
-            }
-        )
+        scenario_environment.update(SCENARIO_ENVIRONMENT)
+        scenario_environment["PYTHONPATH"] = str(PROJECT_ROOT)
         result = subprocess.run(
             [sys.executable, str(scenario)],
             cwd=PROJECT_ROOT,
@@ -44,25 +43,31 @@ class TestAppGoogleWorkflow:
         )
         assert (
             result.returncode == 0
-        ), f"Scenario failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+        ), (
+            f"Scenario {case_name} failed:\n"
+            f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+        )
 
-    def test_account_category_transaction_edit_and_delete_workflow(self) -> None:
-        self._run_scenario(SCENARIO)
-
-    def test_csv_duplicate_validation_and_report_totals(self) -> None:
-        self._run_scenario(CSV_REPORTING_SCENARIO)
-
-    def test_receipt_unlink_confirmation_failure_and_success(self) -> None:
-        self._run_scenario(RECEIPT_UNLINK_SCENARIO)
-
-    def test_receipt_create_partial_recovery_without_reupload(self) -> None:
-        self._run_scenario(RECEIPT_CREATE_SCENARIO)
-
-    def test_receipt_create_prewrite_guards_and_single_success(self) -> None:
-        self._run_scenario(RECEIPT_CREATE_GUARDS_SCENARIO)
-
-    def test_hierarchy_workflows_and_profile_isolation(self) -> None:
-        self._run_scenario(HIERARCHY_SCENARIO)
-
-    def test_transaction_bulk_actions_and_profile_isolation(self) -> None:
-        self._run_scenario(BULK_SCENARIO)
+    @pytest.mark.parametrize(
+        ("scenario", "case_name"),
+        [
+            (SCENARIO, "account_category_transaction_edit_delete"),
+            (CSV_REPORTING_SCENARIO, "csv_duplicate_validation_reporting"),
+            (RECEIPT_UNLINK_SCENARIO, "receipt_unlink_guards"),
+            (RECEIPT_CREATE_SCENARIO, "receipt_create_recovery"),
+            (RECEIPT_CREATE_GUARDS_SCENARIO, "receipt_create_prewrite_guards"),
+            (HIERARCHY_SCENARIO, "hierarchy_profile_isolation"),
+            (BULK_SCENARIO, "transaction_bulk_profile_isolation"),
+        ],
+        ids=[
+            "account_category_transaction_edit_delete",
+            "csv_duplicate_validation_reporting",
+            "receipt_unlink_guards",
+            "receipt_create_recovery",
+            "receipt_create_prewrite_guards",
+            "hierarchy_profile_isolation",
+            "transaction_bulk_profile_isolation",
+        ],
+    )
+    def test_app_scenario(self, scenario: Path, case_name: str) -> None:
+        self._run_scenario(scenario, case_name)

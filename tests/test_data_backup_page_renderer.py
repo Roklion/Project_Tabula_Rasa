@@ -14,18 +14,19 @@ from tabula_rasa.ledger_auth import hash_password
 from tabula_rasa.page_renderers.data_backup.context import DataBackupContext
 from tabula_rasa.page_renderers.data_backup.exports import prepared_exports_key
 from tabula_rasa.storage import GoogleSheetsStorage
+from tests.app_support import TEST_PASSWORD
 from tests.fakes import FakeWorkbook
 
-
-TEST_PASSWORD = "test-password-123"
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture(autouse=True)
-def isolate_local_profiles(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def isolate_local_profiles(
+    profile_store_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(
         "tabula_rasa.local_profile_store.LOCAL_PROFILE_STORE_PATH",
-        tmp_path / "business_profiles.json",
+        profile_store_path,
     )
 
 
