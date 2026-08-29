@@ -153,6 +153,13 @@ Register a local or synchronized-folder task:
 powershell -ExecutionPolicy Bypass -File scripts\register_weekly_backup_task.ps1 -AllProfiles -Local -TaskName "Project Tabula Rasa Weekly Local Backup"
 ```
 
+Existing installations may still have a legacy task named `Tabula Rosa Weekly
+Backup` or another earlier Project Tabula Rasa task identity. Before registering
+the current task, manually rename or remove each legacy task in Windows Task
+Scheduler and verify that only the intended task remains. The registration
+script intentionally does not rename or remove existing tasks, so leaving both
+identities enabled creates duplicate weekly backup attempts.
+
 Omitting both Profile and AllProfiles uses all-profile behavior. A single
 profile task remains available with Profile and GoogleDrive or Local. An
 explicit BackupDirectory is rejected in all-profile mode so profiles cannot

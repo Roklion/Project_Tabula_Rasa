@@ -152,13 +152,12 @@ guide](BACKUP_RECOVERY.md) for the required download-only task and validation.
 ## Hosted Streamlit Secrets
 
 Local development uses split app and profile files. Hosted Streamlit uses one
-combined Secrets document containing only:
+combined Secrets document containing:
 
-- profile name;
-- spreadsheet ID;
-- Sheets service-account credential; and
-- validated Drive authorization with its storage root and Receipts and Ledger
-  Backups children.
+- app-wide `app_password_hash` and shared `google_drive_oauth` configuration; and
+- one `business_profiles` entry per profile containing its name, spreadsheet ID,
+  Sheets service-account credential, and validated Drive authorization with its
+  storage root and Receipts and Ledger Backups children.
 
 Local backup paths, Synology metadata, and unknown local-only fields are
 excluded. In Account settings > Security & deployment information, choose
