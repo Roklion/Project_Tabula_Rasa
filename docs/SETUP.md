@@ -241,6 +241,13 @@ password, run:
 python scripts\set_app_password.py
 ```
 
+This changes the local hash only; it does not update a hosted deployment. After
+the command succeeds, follow the [hosted Streamlit Secrets handoff](#hosted-streamlit-secrets)
+to generate and replace the complete hosted Secrets document, save it, delete
+the generated local file, and confirm that the deployed application accepts the
+new password. If the hosted document is edited manually, replace only
+`app_password_hash` with the new hash and never copy the plaintext password.
+
 Keep any retained service-account JSON in protected storage outside the
 repository. Never place credentials in backups, issues, logs, screenshots, or
 documentation.
