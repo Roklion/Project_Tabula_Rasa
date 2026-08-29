@@ -1117,6 +1117,7 @@ only visible rows, and exposes only the approved actions below.
 - Uses single-row selection.
 - Selecting or double-clicking a row sets the transaction used by the Edit transaction expander.
 - A separate transaction selector remains available inside that expander.
+- The edit selector defaults to the first visible transaction as the default edit target.
 - The user can choose any transaction in the current filtered and searched result set.
 
 #### Bulk mode — current
@@ -1125,13 +1126,13 @@ only visible rows, and exposes only the approved actions below.
 - The edit expander is disabled or visually de-emphasized while bulk mode is active.
 - A bulk-action bar appears only after one or more rows are selected.
 - The selection count is always visible.
-- Switching between Edit and Bulk modes clears incompatible row selections but preserves filters, search, and interactive sort.
+- Switching between Edit and Bulk modes clears incompatible row selections and safely resets the table to latest-date-first because `st.dataframe` user-applied sorting is client-side and cannot reliably be captured and restored across widget recreation. Filters and search persist.
 
 Both modes must preserve:
 
 - A clear selected-row state
 - Latest-date-first default ordering
-- User-applied interactive table sorting while remaining on Transactions
+- User-applied interactive table sorting while the same table widget remains mounted, including while switching between the Add transaction and View & edit ledger tabs
 - Reset to latest-date-first after navigating away and back
 
 Changing any filter or search scope clears bulk selection before another bulk action can run.
@@ -1258,7 +1259,10 @@ Search behavior:
 - Empty or whitespace-only search text is treated as no search and restores the structured-filter result set.
 - A completely empty ledger has a distinct empty state from a ledger with no rows matching the active filters or search.
 
-The date, type, account, and search controls must remain visible above the ledger. Search must not replace the structured filters.
+The controls must remain visible above the ledger in this order: From, To, Type,
+Accounts, Search transactions, and (when search text is present) Clear search.
+The Ledger mode control follows these controls immediately before the ledger
+table. Search must not replace the structured filters.
 
 ### 18.2 Current mileage filters
 
@@ -1289,7 +1293,12 @@ The balance sheet uses the As of date.
 - Transaction account paths should remain hierarchical.
 - Search and filters combine using AND semantics.
 - Changing the result scope clears bulk selection.
-- Clearing search restores the structured-filter result set and preserves date, type, account, and sort choices.
+- Clearing search restores the structured-filter result set and preserves date,
+  type, and account choices. Interactive table sorting remains only
+  while the same table widget remains mounted; it cannot reliably be captured
+  and restored when a mode change recreates the widget.
+- Switching between Edit and Bulk modes preserves filters and search, clears
+  incompatible selections, and safely resets the table to latest-date-first.
 - Single-row edit selection is repaired to a visible row when a search changes the result set, and cleared when no rows remain.
 - Search text may persist while switching between Add transaction and View & edit ledger, but should reset after leaving Transactions if that matches the existing table-generation reset behavior.
 
@@ -2159,9 +2168,10 @@ Create income, expense, and transfer entries; optionally attach a receipt during
 ├──────────────────────────────────────────────────────────────────┤
 │ Ledger tab: [From] [To] [Type]                                   │
 │             [Accounts multiselect] [Search transactions]          │
+│             [Clear search when text is present]                  │
 │             [Edit mode | Bulk mode]                              │
-│             [Bulk action bar when rows selected]                 │
 │ Date | Type | Account | To account | Category | Payee | ...      │
+│ Bulk action bar when rows selected                               │
 │ Edit transaction expander                                        │
 │ Receipt management                                                │
 └──────────────────────────────────────────────────────────────────┘
@@ -2175,18 +2185,25 @@ Follow Sections 19.2, 19.3, and 25.6.
 
 - Preserve From, To, Type, and Accounts filters.
 - Provide the current Search transactions control according to Section 18.1.
+- Render controls in the order From, To, Type, Accounts, Search transactions,
+  conditional Clear search, then Ledger mode immediately before the table.
 - Preserve the exact current headers in Section 17.4.
 - Default to latest dates first.
-- Preserve interactive sorting across the two Transactions tabs.
+- Preserve interactive sorting while the same table widget remains mounted,
+  including across the two Transactions tabs. User-applied `st.dataframe`
+  sorting is client-side and cannot reliably be captured and restored when
+  Edit/Bulk mode changes recreate the widget.
 - Reset to latest-date-first after navigating away and returning.
-- Default to Edit mode with one selected row targeting the edit workflow.
+- Default to Edit mode with the first visible transaction as the default edit
+  target; this is not a preselected table row.
 - Provide an explicit Bulk mode with multi-row selection.
 
 #### Bulk behavior
 
 - Follow Section 17.7.
 - Show selection count and only valid actions.
-- Clear selection when filters, search, or mode changes.
+- Clear selection when filters, search, or mode changes. Mode changes preserve
+  filters and search and reset the recreated table to latest-date-first.
 - Revalidate the complete selection immediately before a write.
 - Do not silently partially apply a bulk mutation.
 

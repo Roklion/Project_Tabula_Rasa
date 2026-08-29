@@ -141,9 +141,12 @@ Transfers move value between two accounts. They change account balances but do
 not affect income or expenses.
 
 The transaction ledger opens with the latest transaction dates first. Any
-interactive table sort remains in place while moving between **Add transaction**
-and **View & edit ledger**, and resets to latest-first after navigating away and
-back to **Transactions**.
+interactive table sort remains in place while the same table widget remains
+mounted, including while moving between **Add transaction** and **View & edit
+ledger**. `st.dataframe` sorting is client-side and cannot reliably be captured
+and restored when switching between Edit and Bulk recreates the table widget;
+those mode changes safely reset the table to latest-date-first. Sorting also
+resets to latest-first after navigating away and back to **Transactions**.
 
 The **View & edit ledger** tab includes a **Search transactions** field in
 addition to the From, To, Type, and Accounts filters. Search is a trimmed,
@@ -155,17 +158,24 @@ cleared search. Search does not inspect dates, amounts, receipt contents or
 filenames, or hidden Google Drive metadata. The ledger reports the number of
 visible rows and shows a separate no-results message when a search/filter
 combination matches nothing; an entirely empty ledger has its own empty state.
-Search persists while switching between the two Transactions tabs and resets
-after leaving Transactions and returning. If the current edit row is filtered
-out, selection moves to the first visible row; if none remain, the stale edit
-selection is cleared.
+Search persists while switching between the two Transactions tabs and across
+Edit/Bulk mode changes, and resets after leaving Transactions and returning. The
+ledger controls appear in this order: From, To, Type, Accounts, Search
+transactions, conditional Clear search, then Ledger mode immediately before
+the table. If the current edit target is filtered out, the default edit target
+moves to the first visible row; if none remain, the stale edit target is
+cleared. The Edit mode table does not begin with a preselected row.
 
 ### Bulk transaction actions
 
-The ledger defaults to **Edit** mode, where the table selects one row and the
-existing transaction editor remains available. Choose **Bulk** mode explicitly
-to select multiple rows from the currently visible result set. Changing the
-business, filters, search, mode, or navigation clears the bulk selection.
+The ledger defaults to **Edit** mode, where the table supports single-row
+selection and the existing transaction editor remains available. The edit
+selector initially targets the first visible transaction; the table does not
+begin with a preselected row. Choose **Bulk** mode explicitly to select
+multiple rows from the currently visible result set. Changing the business,
+filters, search, mode, or navigation clears the bulk selection. Filters and
+search persist across an Edit/Bulk change, while the recreated table safely
+returns to latest-date-first.
 
 Bulk mode provides only these actions:
 
