@@ -142,9 +142,10 @@ not affect income or expenses.
 
 The transaction ledger opens with the latest transaction dates first. Any
 interactive table sort remains in place while the same table widget remains
-mounted, including while moving between **Add transaction** and **View & edit
-ledger**. `st.dataframe` sorting is client-side and cannot reliably be captured
-and restored when switching between Edit and Bulk recreates the table widget;
+mounted, including while moving between **Add transaction** and
+**View & edit ledger**. `st.dataframe` sorting is client-side and cannot reliably
+be captured and restored when switching between Edit and Bulk recreates the
+table widget;
 those mode changes safely reset the table to latest-date-first. Sorting also
 resets to latest-first after navigating away and back to **Transactions**.
 
