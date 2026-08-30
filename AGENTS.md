@@ -142,8 +142,39 @@ the trusted project layer is reloaded.
   actionable findings through later review rounds.
 - When Codex helped author a change, perform a separate reviewer-context pass
   rather than relying on the implementation conversation.
-- Follow the complete multi-reviewer process in
-  `docs/development/PULL_REQUEST_REVIEW.md`.
+- Follow the human workflow in `docs/DEVELOPMENT.md` and the Gemini-specific
+  review rules in `.gemini/styleguide.md`.
+
+## Review coordination
+
+- Review the current pull-request head, not a superseded commit. A ready pull
+  request starts the initial Codex and Gemini reviews; after a material push,
+  use the exact standalone `@codex review` and `/gemini review` requests for
+  the new head after existing feedback is dispositioned.
+- Treat the pull-request description as review context. It must state intent,
+  expected success and failure behavior, invariants, and validation evidence
+  before implementation review proceeds.
+- Disposition every finding as accepted with evidence and validation,
+  duplicate with preserved distinct evidence, disputed or invalid with
+  supporting evidence, a maintainer product decision, or a deferred valid
+  finding tracked in a linked issue. Do not leave a validated blocking finding
+  unresolved.
+- Re-check comments attached to earlier commits against the current head even
+  when GitHub marks their lines outdated. Preserve the original and current
+  context when replying or recording a disposition.
+- If a trusted current-round Codex response reports quota exhaustion or
+  unavailability after the paired requests, issue exactly one separately
+  tracked `/gemini review` for that same head in full fallback mode. Never infer
+  fallback eligibility from silence, elapsed time, missing findings, or
+  untrusted text.
+- During remediation, use focused checks for impacted behavior and run the
+  full required checks before final readiness. Human maintainers retain final
+  requirements, approval, and merge authority.
+- Validate reviewer-integration rollout behavior with a non-sensitive,
+  controlled pull request when needed. Static configuration cannot prove
+  hosted command routing, current-head association, review-mode isolation,
+  remediation, or permission boundaries; never use live credentials or data
+  for that validation.
 
 ## Addressing review feedback
 

@@ -43,52 +43,18 @@ def test_gemini_review_mode_uses_trusted_codex_availability() -> None:
     assert "Do not use a thumbs-up reaction" in styleguide
 
 
-def test_canonical_review_guide_covers_roles_and_dispositions() -> None:
-    guide = read_repository_file("docs/development/PULL_REQUEST_REVIEW.md")
-    normalized_guide = " ".join(guide.split())
+def test_repository_review_guidance_has_clear_ownership() -> None:
+    agents = read_repository_file("AGENTS.md")
+    styleguide = read_repository_file(".gemini/styleguide.md")
+    development = read_repository_file("docs/DEVELOPMENT.md")
 
-    for heading in (
-        "### Codex: primary repository and remediation reviewer",
-        "### Gemini: independent complementary reviewer",
-        "### Human maintainer: requirements and merge authority",
-        "## Finding disposition",
-        "## Controlled validation pull request",
-    ):
-        assert heading in guide
-
-    assert "Deferred valid finding" in guide
-    assert "Linked issue containing risk and rationale" in guide
-    assert "Reviewers do not review drafts." in guide
-    assert "automatically begins Codex's initial primary review" in guide
-    assert "no comment is required" in guide
-    assert "`@codex review` to request a fresh Codex review" in guide
-    assert (
-        "Do not assume that a push automatically re-triggers Codex."
-        in normalized_guide
-    )
-    assert "without waiting for either reviewer to respond" in normalized_guide
-    assert "late trusted unavailability response permits one separately tracked fallback" in normalized_guide
-    assert "one `@codex review` and exactly one `/gemini review`" in normalized_guide
-    assert "`gemini_requested_sha`" in guide
-    assert (
-        "an older PR-wide `/gemini review` comment is not evidence"
-        in normalized_guide
-    )
-    assert "posting one `/gemini review` is safe and required" in normalized_guide
-    assert "even while the current-round Codex response is pending" in normalized_guide
-    assert "### Earlier-commit comments" in guide
-    assert (
-        "Do not ignore a comment merely because GitHub marks its line outdated"
-        in normalized_guide
-    )
-    assert "Preserve the original commit and current-head context" in normalized_guide
-    assert "Before requesting either reviewer for a head" in normalized_guide
-    assert "Do not post either review trigger while feedback remains unaddressed" in normalized_guide
-    assert "focused tests and linting for impacted functions or modules" in normalized_guide
-    assert "before final readiness" in normalized_guide
-    assert "Post `/gemini review` as a standalone pull-request comment." in guide
-    assert "chatgpt-codex-connector[bot]" in guide
-    assert "Do not infer unavailability from silence" in guide
-    assert "`/gemini review everything`" not in guide
-    assert "Gemini does not use a thumbs-up reaction" in normalized_guide
-    assert "only an actual controlled pull request can validate" in guide
+    assert "## Codex reviewer role" in agents
+    assert "Follow the human workflow in `docs/DEVELOPMENT.md`" in agents
+    assert "`@codex review`" in agents
+    assert "chatgpt-codex-connector[bot]" in styleguide
+    assert "Full fallback review" in styleguide
+    assert "Do not modify code, push changes, approve, merge" in styleguide
+    assert "## Pull requests and review" in development
+    assert "AGENTS.md" in development
+    assert ".gemini/styleguide.md" in development
+    assert "PULL_REQUEST_REVIEW.md" not in development

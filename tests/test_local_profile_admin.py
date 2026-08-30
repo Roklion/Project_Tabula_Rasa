@@ -319,3 +319,23 @@ def test_hosted_export_success_ui_shows_only_path_and_complete_handoff() -> None
     assert "Re-run profile readiness" in rendered
     assert "cannot verify hosted Secrets acceptance" in rendered
     assert secret not in rendered
+
+
+def test_security_deployment_info_links_use_canonical_guides() -> None:
+    with patch.object(st, "subheader"), patch.object(st, "write"), patch.object(
+        st, "info"
+    ), patch.object(st, "markdown") as render_markdown, patch.object(
+        st, "button", return_value=False
+    ):
+        from tabula_rasa.local_profile_admin import _render_security_deployment_info
+
+        _render_security_deployment_info({})
+
+    rendered = " ".join(
+        str(call.args[0]) for call in render_markdown.call_args_list if call.args
+    )
+    assert "/docs/SETUP.md" in rendered
+    assert "/docs/BACKUP_RECOVERY.md)" in rendered
+    assert "/docs/BACKUP_RECOVERY.md#optional-synology-recovery-copy" in rendered
+    assert "/docs/setup/" not in rendered
+    assert "/docs/operations/" not in rendered
