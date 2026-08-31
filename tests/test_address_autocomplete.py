@@ -30,3 +30,5 @@ def test_manual_fallback_persists_without_rerunning_per_keystroke() -> None:
     assert "if (manualMode) { showManual('Enter an address manually.'); return; }" in _JS
     assert "manualInput.onchange = () => emit('manual', manualInput.value.trim());" in _JS
     assert "manualInput.oninput" not in _JS
+    assert "element.addEventListener('input'" not in _JS
+    assert "setTriggerValue('failed', true)" not in _JS

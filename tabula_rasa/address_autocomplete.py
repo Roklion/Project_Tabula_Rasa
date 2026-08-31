@@ -151,13 +151,6 @@ export default function(component) {
       status.textContent = 'Start typing to choose a Google-verified address.';
       // PlaceAutocompleteElement owns the Google session lifecycle. Do not
       // create a parallel token here (that can result in duplicate billing).
-      element.addEventListener('input', () => {
-        if (suppressInput) return;
-        version += 1;
-        setTriggerValue('changed', {
-          display_text: element.value || '', place_id: '', version: version
-        });
-      });
       element.addEventListener('change', () => {
         if (suppressInput) return;
         version += 1;
@@ -198,7 +191,8 @@ export default function(component) {
       };
     } catch (error) {
       showManual('Google address suggestions are unavailable.');
-      setTriggerValue('failed', true);
+      manualMode = true;
+      setStateValue('manual_mode', true);
     }
   }
   // Keep manual entry available during script loading as well as after a
