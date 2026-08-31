@@ -132,6 +132,12 @@ export default function(component) {
     });
     return window.__tabulaRasaPlacesPromise;
   }
+  function clearFailedMapsLoad() {
+    if (window.google && window.google.maps && window.google.maps.places) return;
+    const failedScript = document.querySelector('script[data-tabula-rasa-places]');
+    if (failedScript) failedScript.remove();
+    window.__tabulaRasaPlacesPromise = null;
+  }
   async function setup() {
     if (manualMode) { showManual('Enter an address manually.'); return; }
     if (!data.apiKey) { showManual('Enter an address manually.'); return; }
@@ -191,6 +197,7 @@ export default function(component) {
         else selectGoogleMode();
       };
     } catch (error) {
+      clearFailedMapsLoad();
       showManual('Google address suggestions are unavailable.');
       manualMode = true;
       setStateValue('manual_mode', true);

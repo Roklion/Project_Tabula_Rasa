@@ -9,6 +9,7 @@ from tabula_rasa.address_autocomplete import AddressSelection
 from tabula_rasa.page_renderers.mileage import (
     PartialRouteError,
     _calculate_routes,
+    _same_selected_place,
     _save_round_trip,
 )
 
@@ -53,6 +54,17 @@ def test_calculation_rejects_missing_or_identical_place_ids() -> None:
             route,
             round_trip=False,
         )
+
+
+def test_save_guard_rejects_same_place_id_but_allows_manual_loop() -> None:
+    assert _same_selected_place(
+        AddressSelection("Office", "same"),
+        AddressSelection("Office rear entrance", "same"),
+    )
+    assert not _same_selected_place(
+        AddressSelection("Office"),
+        AddressSelection("Office"),
+    )
 
 
 def test_round_trip_preserves_outbound_when_return_lookup_fails() -> None:

@@ -72,10 +72,14 @@ def _route_ready(
     )
 
 
-def _same_manual_address(start: str, destination: str) -> bool:
-    return (
-        bool(start.strip())
-        and start.strip().casefold() == destination.strip().casefold()
+def _same_selected_place(
+    start: AddressSelection, destination: AddressSelection
+) -> bool:
+    """Identify an invalid Google route without rejecting manual loop trips."""
+    return bool(
+        start.place_id
+        and destination.place_id
+        and start.place_id == destination.place_id
     )
 
 
@@ -324,7 +328,7 @@ def render_mileage(context: MileageContext) -> None:
             submitted = st.form_submit_button(
                 "Save mileage trip", type="primary", width="stretch"
             )
-            if calculate_requested:
+            if calculate_requested and context.route_mileage is not None:
                 with st.spinner("Calculating mileage…"):
                     try:
                         known_outbound = (
@@ -335,7 +339,7 @@ def render_mileage(context: MileageContext) -> None:
                         outbound, returned = _calculate_routes(
                             start,
                             destination_value,
-                            context.route_mileage,  # type: ignore[arg-type]
+                            context.route_mileage,
                             round_trip=round_trip,
                             known_outbound=known_outbound,
                         )
@@ -364,13 +368,7 @@ def render_mileage(context: MileageContext) -> None:
                     except Exception as error:  # routing clients vary by provider
                         route_error.error(_safe_route_error(error))
             if submitted:
-                if (
-                    start.place_id
-                    and destination_value.place_id
-                    and start.place_id == destination_value.place_id
-                ) or _same_manual_address(
-                    start.display_text, destination_value.display_text
-                ):
+                if _same_selected_place(start, destination_value):
                     save_error.error(
                         "Starting location and destination must be different."
                     )
@@ -606,13 +604,16 @@ def render_mileage(context: MileageContext) -> None:
                         width="stretch",
                         key=f"edit_mileage_trip_delete_{edit_widget_scope}",
                     )
-                    if calculate_edit_requested:
+                    if (
+                        calculate_edit_requested
+                        and context.route_mileage is not None
+                    ):
                         with st.spinner("Calculating mileage…"):
                             try:
                                 outbound, _ = _calculate_routes(
                                     edit_start,
                                     edit_destination,
-                                    context.route_mileage,  # type: ignore[arg-type]
+                                    context.route_mileage,
                                     round_trip=False,
                                 )
                                 st.session_state[edit_route_key] = {
@@ -626,7 +627,7 @@ def render_mileage(context: MileageContext) -> None:
                             except Exception as error:
                                 edit_error.error(_safe_route_error(error))
                     if save_requested:
-                        if _same_manual_address(edited_start, edited_destination):
+                        if _same_selected_place(edit_start, edit_destination):
                             edit_error.error(
                                 "Starting location and destination must be different."
                             )
