@@ -53,7 +53,8 @@ def _change_ledger_mode(profile_key: str) -> None:
     st.session_state["transaction_ledger_mode_generation"] = int(
         st.session_state.get("transaction_ledger_mode_generation", 0)
     ) + 1
-    st.session_state.pop("edit_transaction_id", None)
+    if not st.session_state.get(_copy_source_key(profile_key)):
+        st.session_state.pop("edit_transaction_id", None)
 
 
 def _selection_ids(transaction_ids: Sequence[str], rows: Sequence[int]) -> tuple[str, ...]:

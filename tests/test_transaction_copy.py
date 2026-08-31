@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from unittest.mock import patch
 
 from tests.app_support import (
     authenticated_app,
@@ -10,6 +11,7 @@ from tests.app_support import (
 )
 from tests.fakes import FakeWorkbook
 from tabula_rasa.page_renderers.transactions.ledger import (
+    _change_ledger_mode,
     _editable_account_ids,
     copied_transaction_description,
 )
@@ -59,6 +61,22 @@ def test_copy_account_choices_exclude_inactive_source_account() -> None:
     assert _editable_account_ids(
         accounts, ["inactive"], copy_mode=False
     ) == ["active", "inactive"]
+
+
+def test_switching_ledger_mode_preserves_copy_editor_target() -> None:
+    state = {
+        "transaction_bulk_selection_generation": 0,
+        "transaction_ledger_mode_generation": 0,
+        "transaction_copy_source_test": "source-id",
+        "edit_transaction_id": "source-id",
+    }
+
+    with patch(
+        "tabula_rasa.page_renderers.transactions.ledger.st.session_state", state
+    ):
+        _change_ledger_mode("test")
+
+    assert state["edit_transaction_id"] == "source-id"
 
 
 def test_copy_form_can_be_canceled_without_creating_or_mutating_transaction() -> None:
