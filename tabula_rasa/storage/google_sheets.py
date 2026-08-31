@@ -2197,9 +2197,17 @@ class GoogleSheetsStorage:
         return record
 
     def create_mileage_round_trip(
-        self, **data: Any
+        self,
+        *,
+        return_miles: Any | None = None,
+        **data: Any,
     ) -> list[dict[str, str]]:
-        """Create outbound and reversed return entries in one batch write."""
+        """Create outbound and reversed return entries in one batch write.
+
+        ``return_miles`` is optional for compatibility with callers that use
+        one distance for both legs.  When supplied, it is validated and used
+        only for the reversed return entry.
+        """
         created_at = _utc_now()
         outbound = self._prepare_mileage_trip(data, created_at=created_at)
         return_data = dict(data)
@@ -2209,6 +2217,8 @@ class GoogleSheetsStorage:
                 "destination": data.get("start_location"),
             }
         )
+        if return_miles is not None:
+            return_data["miles"] = return_miles
         return_trip = self._prepare_mileage_trip(
             return_data,
             created_at=created_at,
