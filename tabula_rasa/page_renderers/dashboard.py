@@ -31,14 +31,15 @@ def _sorted_dashboard_balances(balances):
         balances.assign(
             _classification_rank=classification_rank.fillna(
                 len(_CLASSIFICATION_ORDER)
-            )
+            ),
+            _account_sort_key=balances["Account"].astype(str).str.casefold(),
         )
         .sort_values(
-            ["_classification_rank", "Account"],
+            ["_classification_rank", "_account_sort_key"],
             kind="stable",
             ignore_index=True,
         )
-        .drop(columns="_classification_rank")
+        .drop(columns=["_classification_rank", "_account_sort_key"])
     )
 
 
@@ -98,13 +99,13 @@ def render_dashboard(context: DashboardContext) -> None:
                     hide_index=True,
                     width="stretch",
                     column_config={
-                        "Date": st.column_config.TextColumn(width=90),
-                        "Type": st.column_config.TextColumn(width=70),
-                        "Payee": st.column_config.TextColumn(width=80),
-                        "Category": st.column_config.TextColumn(width=160),
-                        "Account": st.column_config.TextColumn(width=170),
+                        "Date": st.column_config.TextColumn(width=80),
+                        "Type": st.column_config.TextColumn(width=65),
+                        "Payee": st.column_config.TextColumn(width=75),
+                        "Category": st.column_config.TextColumn(width=145),
+                        "Account": st.column_config.TextColumn(width=150),
                         "Amount": st.column_config.NumberColumn(
-                            format="$%.2f", width=90
+                            format="$%.2f", width=80
                         ),
                     },
                 )
@@ -120,9 +121,9 @@ def render_dashboard(context: DashboardContext) -> None:
                 hide_index=True,
                 width="stretch",
                 column_config={
-                    "Account": st.column_config.TextColumn(width=210),
-                    "Classification": st.column_config.TextColumn(width=105),
-                    "Type": st.column_config.TextColumn(width=95),
+                    "Account": st.column_config.TextColumn(width=170),
+                    "Classification": st.column_config.TextColumn(width=90),
+                    "Type": st.column_config.TextColumn(width=75),
                     "Balance": st.column_config.NumberColumn(
                         format="$%.2f", width=90
                     ),

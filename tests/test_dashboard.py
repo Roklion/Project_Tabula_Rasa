@@ -113,7 +113,7 @@ def test_dashboard_balances_sort_by_classification_then_account() -> None:
             },
             {
                 "id": "savings",
-                "name": "Savings",
+                "name": "Apple",
                 "type": "Bank",
                 "classification": "Asset",
                 "active": True,
@@ -121,7 +121,7 @@ def test_dashboard_balances_sort_by_classification_then_account() -> None:
             },
             {
                 "id": "checking",
-                "name": "Checking",
+                "name": "zebra",
                 "type": "Bank",
                 "classification": "Asset",
                 "active": True,
@@ -140,8 +140,8 @@ def test_dashboard_balances_sort_by_classification_then_account() -> None:
         "Equity",
     ]
     assert list(sorted_balances["Account"]) == [
-        "Checking",
-        "Savings",
+        "Apple",
+        "zebra",
         "Payable",
         "Capital",
     ]
