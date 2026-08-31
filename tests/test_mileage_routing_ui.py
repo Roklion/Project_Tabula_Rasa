@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -102,3 +103,9 @@ def test_round_trip_save_passes_independent_return_miles() -> None:
 
     assert storage.kwargs["miles"] == 12.4
     assert storage.kwargs["return_miles"] == 13.1
+
+
+def test_add_mileage_reset_clears_calculated_route_state() -> None:
+    source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
+
+    assert '            _route_key(context, "add"),' in source
