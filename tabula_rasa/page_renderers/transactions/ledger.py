@@ -113,6 +113,37 @@ def _pending_edit_transaction_key(profile_key: str) -> str:
     return f"transaction_pending_edit_{profile_key}"
 
 
+def _make_created_copy_visible(
+    profile_key: str,
+    transaction: Mapping[str, object],
+) -> None:
+    """Adjust ledger filters so the newly created copy stays selectable."""
+    transaction_id = str(transaction.get("id") or "").strip()
+    transaction_date = transaction.get("txn_date")
+    if not transaction_id or not transaction_date:
+        return
+    try:
+        created_date = date.fromisoformat(str(transaction_date))
+    except ValueError:
+        return
+    start = st.session_state.get("ledger_start")
+    end = st.session_state.get("ledger_end")
+    if isinstance(start, date):
+        st.session_state["ledger_start"] = min(start, created_date)
+    else:
+        st.session_state["ledger_start"] = created_date
+    if isinstance(end, date):
+        st.session_state["ledger_end"] = max(end, created_date)
+    else:
+        st.session_state["ledger_end"] = created_date
+    st.session_state[f"ledger_filter_type_{profile_key}"] = "All"
+    st.session_state[f"ledger_filter_accounts_{profile_key}"] = []
+    for key in tuple(st.session_state):
+        if key.startswith(f"ledger_search_{profile_key}_"):
+            st.session_state[key] = ""
+    st.session_state["edit_transaction_id"] = transaction_id
+
+
 def render_ledger(
     context: TransactionsContext,
     *,
@@ -124,12 +155,12 @@ def render_ledger(
     """Render structured filters, the ledger, and single-row editing."""
     st.subheader("View & edit ledger")
     st.caption("Filter the ledger, then choose Edit or Bulk mode explicitly.")
-    pending_edit_id = st.session_state.pop(
+    pending_edit_transaction = st.session_state.pop(
         _pending_edit_transaction_key(context.profile_key), None
     )
-    if pending_edit_id:
+    if isinstance(pending_edit_transaction, Mapping):
         # Apply the newly created copy before the edit selectbox is instantiated.
-        st.session_state["edit_transaction_id"] = pending_edit_id
+        _make_created_copy_visible(context.profile_key, pending_edit_transaction)
     copy_source_id = str(
         st.session_state.get(_copy_source_key(context.profile_key), "") or ""
     )
@@ -365,8 +396,12 @@ def render_ledger(
         hide_index=True,
         width="stretch",
         key=transaction_ledger_key,
-        on_select=select_ledger_transaction,
-        selection_mode="multi-row" if mode == "Bulk" else "single-row",
+        on_select=("ignore" if copy_source_id else select_ledger_transaction),
+        selection_mode=(
+            []
+            if copy_source_id
+            else ("multi-row" if mode == "Bulk" else "single-row")
+        ),
         column_config={
             "Amount": st.column_config.NumberColumn(format="$%.2f"),
             "Receipt": st.column_config.TextColumn(
@@ -375,7 +410,7 @@ def render_ledger(
             ),
         },
     )
-    selected_rows = ledger_event.selection.rows
+    selected_rows = [] if copy_source_id else ledger_event.selection.rows
     selected_for_copy = (
         tuple(
             str(transaction_id)
@@ -803,7 +838,7 @@ def render_ledger(
                             "Transaction copied.",
                             on_confirmed=lambda result: st.session_state.__setitem__(
                                 _pending_edit_transaction_key(context.profile_key),
-                                result["id"],
+                                result,
                             ),
                             on_success=lambda: _clear_copy_state(
                                 context.profile_key
