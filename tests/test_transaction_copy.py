@@ -226,10 +226,10 @@ def test_copy_save_adjusts_filters_to_keep_new_transaction_selected() -> None:
         )
         assert copied["txn_date"] == created_date.isoformat()
         assert app.session_state["edit_transaction_id"] == copied["id"]
-    assert copied["id"] in [
+        assert copied["id"] in [
             str(transaction_id)
             for transaction_id in app.dataframe[0].value["ID"]
-    ]
+        ]
 
 
 def test_copy_save_normalizes_user_edited_description_provenance() -> None:
