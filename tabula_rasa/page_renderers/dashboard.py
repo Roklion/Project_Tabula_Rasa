@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import date
 
 import streamlit as st
+import pandas as pd
 
 from tabula_rasa.ledger_presentation import balances_frame, ledger_frame, money
 from tabula_rasa.ledger_reporting import profit_and_loss
@@ -24,15 +25,27 @@ class DashboardContext:
     storage: GoogleSheetsStorage
 
 
-def _sorted_dashboard_balances(balances):
+def _sorted_dashboard_balances(
+    balances: pd.DataFrame, accounts: list[dict]
+) -> pd.DataFrame:
     """Order dashboard balances by accounting classification, then account."""
     classification_rank = balances["Classification"].map(_CLASSIFICATION_ORDER)
+    account_names = {
+        str(account.get("id") or ""): str(account.get("name") or "")
+        for account in accounts
+    }
     return (
         balances.assign(
             _classification_rank=classification_rank.fillna(
                 len(_CLASSIFICATION_ORDER)
             ),
-            _account_sort_key=balances["Account"].astype(str).str.casefold(),
+            _account_sort_key=(
+                balances["ID"]
+                .map(account_names)
+                .fillna(balances["Account"])
+                .astype(str)
+                .str.casefold()
+            ),
         )
         .sort_values(
             ["_classification_rank", "_account_sort_key"],
@@ -113,7 +126,7 @@ def render_dashboard(context: DashboardContext) -> None:
         with st.container(key="dashboard_balances"):
             st.subheader("Account balances")
             st.caption("Current balances by account")
-            dashboard_balances = _sorted_dashboard_balances(balances)
+            dashboard_balances = _sorted_dashboard_balances(balances, accounts)
             st.dataframe(
                 dashboard_balances[
                     ["Account", "Classification", "Type", "Balance"]
