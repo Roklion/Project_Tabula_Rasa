@@ -35,14 +35,20 @@ configured clone and is not a substitute for server-side branch protection.
 
 ## Required validation
 
-Run these commands from the repository root before treating a coding change as
-complete or ready to commit:
+Run these commands from the repository root before initially publishing a
+coding branch or creating/marking its pull request Ready for Review, and run
+them again before declaring the completed review loop fully terminal:
 
 ```powershell
 ruff check .
 python -m pytest
 git diff --check
 ```
+
+For implementation commits and review-remediation rounds between those two
+gates, run `git diff --check` plus linting and tests scoped to the affected
+files and behavior. Intermediate commits do not require a full-suite rerun when
+their affected checks pass.
 
 Tests use fake or in-memory services and must not read live ledger data,
 application credentials, service-account keys, or OAuth tokens.
