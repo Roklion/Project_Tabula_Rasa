@@ -18,7 +18,7 @@ _CLASSIFICATION_ORDER = {"Asset": 0, "Liability": 1, "Equity": 2}
 
 _DASHBOARD_RESPONSIVE_CSS = """
 <style>
-@media (max-width: 1350px) {
+@media (max-width: 1450px) {
     .st-key-dashboard_detail [data-testid="stHorizontalBlock"] {
         flex-wrap: wrap;
     }
