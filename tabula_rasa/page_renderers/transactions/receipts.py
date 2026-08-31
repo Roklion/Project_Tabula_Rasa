@@ -62,6 +62,11 @@ def receipt_editor_notice_key_prefix(profile_key: str) -> str:
     return f"receipt-editor-notice:{len(profile_key)}:{profile_key}:"
 
 
+def editor_receipt_link_recovery_key(profile_key: str, transaction_id: str) -> str:
+    """Return the session key for one editor's uploaded-file link recovery."""
+    return f"receipt-link-recovery-{profile_key}-{transaction_id}"
+
+
 def receipt_editor_upload_reset_key(profile_key: str, transaction_id: str) -> str:
     """Return the one-shot reset flag for a completed editor upload."""
     return f"reset-receipt-editor:{profile_key}:{transaction_id}"
@@ -806,6 +811,81 @@ def _fresh_transaction_receipt_references(
     )
 
 
+def render_editor_receipt_uploader(
+    context: TransactionsContext,
+    transaction_id: str,
+) -> Sequence[Any] | None:
+    """Render the editor's optional multi-file picker before its save action."""
+    receipt_folder = _receipt_folder(context)
+    if receipt_folder is None or not receipt_folder.get("id"):
+        return None
+    if _editor_workflow(context, transaction_id) is not None:
+        return None
+    if isinstance(
+        st.session_state.get(
+            editor_receipt_link_recovery_key(context.profile_key, transaction_id)
+        ),
+        Mapping,
+    ):
+        return None
+    reset_editor_upload = getattr(
+        context,
+        "reset_widget_state_if_requested",
+        None,
+    )
+    if callable(reset_editor_upload):
+        reset_editor_upload(
+            receipt_editor_upload_reset_key(
+                context.profile_key,
+                transaction_id,
+            ),
+            keys=(f"receipt-upload-{transaction_id}",),
+        )
+    return st.file_uploader(
+        "Upload receipt",
+        type=RECEIPT_UPLOAD_TYPES,
+        accept_multiple_files=True,
+        key=f"receipt-upload-{transaction_id}",
+        help=(
+            "Select one or more PDF, PNG, JPG, JPEG, WEBP, or HEIC files. "
+            "Each file must be non-empty and no larger than 20 MB; the "
+            "selected batch must not exceed 200 MB total."
+        ),
+    )
+
+
+def prepare_editor_receipt_uploads(
+    context: TransactionsContext,
+    transaction_id: str,
+    uploaded_files: Sequence[Any],
+) -> list[dict[str, Any]]:
+    """Validate editor files against a fresh receipt-reference count."""
+    existing_reference_count = _fresh_transaction_receipt_count(
+        context,
+        transaction_id,
+    )
+    return prepare_receipt_uploads(
+        uploaded_files,
+        existing_reference_count=existing_reference_count,
+    )
+
+
+def process_editor_receipt_uploads(
+    context: TransactionsContext,
+    transaction_id: str,
+    receipts: Sequence[Mapping[str, Any]],
+    receipt_folder: Mapping[str, object],
+) -> None:
+    """Start and finish the editor's retry-safe receipt workflow."""
+    workflow = _start_editor_receipt_workflow(
+        context,
+        transaction_id,
+        receipts,
+        receipt_folder,
+    )
+    _finish_editor_receipt_workflow(context, transaction_id, workflow)
+
+
 def clear_missing_editor_receipt_recoveries(
     context: TransactionsContext,
     transactions: Sequence[Mapping[str, Any]],
@@ -1310,27 +1390,15 @@ def render_receipts(
             receipt_notice_key = (
                 f"receipt-unlink-notice-{receipt_action_scope}"
             )
-            receipt_link_recovery_key = (
-                f"receipt-link-recovery-{receipt_action_scope}"
+            receipt_link_recovery_key = editor_receipt_link_recovery_key(
+                context.profile_key,
+                edit_id,
             )
             editor_receipt_notice_key = receipt_editor_notice_key(
                 context.profile_key,
                 edit_id,
             )
-            reset_editor_upload = getattr(
-                context,
-                "reset_widget_state_if_requested",
-                None,
-            )
-            if callable(reset_editor_upload):
-                reset_editor_upload(
-                    receipt_editor_upload_reset_key(
-                        context.profile_key,
-                        edit_id,
-                    ),
-                    keys=(f"receipt-upload-{edit_id}",),
-                )
-            editor_receipt_workflow_active = _render_editor_receipt_recovery(
+            _render_editor_receipt_recovery(
                 context,
                 edit_id,
                 receipt_folder,
@@ -1735,72 +1803,3 @@ def render_receipts(
                             "No unreferenced receipts are "
                             "available in Google Drive."
                         )
-                receipt_uploads = None
-                if (
-                    not isinstance(recovery_reference, Mapping)
-                    and not editor_receipt_workflow_active
-                ):
-                    receipt_uploads = st.file_uploader(
-                        "Upload receipt",
-                        type=RECEIPT_UPLOAD_TYPES,
-                        accept_multiple_files=True,
-                        key=f"receipt-upload-{edit_id}",
-                        help=(
-                            "Select one or more PDF, PNG, JPG, JPEG, WEBP, "
-                            "or HEIC files. Each file must be non-empty and "
-                            "no larger than 20 MB; the selected batch must "
-                            "not exceed 200 MB total."
-                        ),
-                    )
-                if receipt_uploads:
-                    st.caption(
-                        "Original filenames are kept safely. If a name already "
-                        "exists, a numeric suffix will be added. All selected "
-                        "files are validated before any upload begins."
-                    )
-                    upload_error = st.empty()
-                    if st.button(
-                        "Upload receipt to Google Drive",
-                        type="primary",
-                        key=f"receipt-upload-button-{edit_id}",
-                    ):
-                        try:
-                            prepared_receipts = prepare_receipt_uploads(
-                                receipt_uploads,
-                            )
-                        except (ValueError, GoogleDriveAccessError) as error:
-                            upload_error.error(f"Receipt validation failed: {error}")
-                        else:
-                            try:
-                                final_receipt_count = _fresh_transaction_receipt_count(
-                                    context,
-                                    edit_id,
-                                )
-                                if (
-                                    final_receipt_count + len(prepared_receipts)
-                                    > MAX_RECEIPT_REFERENCES
-                                ):
-                                    raise GoogleDriveAccessError(
-                                        "A transaction can reference no more than "
-                                        "100 receipts. Remove an existing receipt "
-                                        "reference or select fewer files."
-                                    )
-                                workflow = _start_editor_receipt_workflow(
-                                    context,
-                                    edit_id,
-                                    prepared_receipts,
-                                    receipt_folder,
-                                )
-                            except (StorageError, GoogleDriveAccessError) as error:
-                                upload_error.error(
-                                    "The selected transaction could not be "
-                                    f"rechecked before upload. {error}"
-                                )
-                            else:
-                                if workflow is not None:
-                                    _finish_editor_receipt_workflow(
-                                        context,
-                                        edit_id,
-                                        workflow,
-                                    )
-                                    st.rerun()

@@ -11,6 +11,7 @@ import streamlit as st
 
 from tabula_rasa.hierarchy import ordered_hierarchy
 from tabula_rasa.ledger_presentation import ledger_frame, money
+from tabula_rasa.google_drive import GoogleDriveAccessError
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
 from tabula_rasa.page_renderers.transactions.receipts import (
     clear_receipt_creation_recovery,
@@ -18,9 +19,13 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     editor_receipt_recovery_active,
     editor_receipt_recovery_transaction_ids,
     editor_receipt_notice_transaction_ids,
+    prepare_editor_receipt_uploads,
+    process_editor_receipt_uploads,
     render_editor_receipt_notice,
+    render_editor_receipt_uploader,
     render_filtered_editor_receipt_recovery,
     render_receipts,
+    _receipt_folder,
 )
 from tabula_rasa.page_renderers.transactions.search import filter_transaction_rows
 from tabula_rasa.storage import StorageError, decode_receipt_references
@@ -770,6 +775,8 @@ def render_ledger(
                     ),
                     key=f"edit_transaction_description_{edit_widget_scope}",
                 )
+                receipt_uploads = None
+                receipt_folder = None
                 edit_error = st.empty()
                 copy_accounts_valid = bool(edited_account_id) and (
                     selected["kind"] != "Transfer" or bool(edited_to_account_id)
@@ -802,6 +809,18 @@ def render_ledger(
                         "I understand this transaction will be permanently deleted",
                         key=f"edit_transaction_confirm_delete_{edit_widget_scope}",
                     )
+                    receipt_folder = _receipt_folder(context)
+                    receipt_uploads = render_editor_receipt_uploader(
+                        context,
+                        edit_id,
+                    )
+                    if receipt_uploads:
+                        st.caption(
+                            "Original filenames are kept safely. If a name "
+                            "already exists, a numeric suffix will be added. "
+                            "All selected files are validated before any "
+                            "upload begins."
+                        )
                     save_column, delete_column = st.columns(2)
                     save_requested = save_column.form_submit_button(
                         "Save changes",
@@ -871,23 +890,61 @@ def render_ledger(
                             report_error=edit_error.error,
                         )
                     else:
-                        context.confirmed_write(
-                            "edit_transaction",
-                            payload,
-                            lambda: context.storage.edit_transaction(
-                                edit_id,
-                                txn_date=edited_date,
-                                amount=edited_amount,
-                                account_id=edited_account_id,
-                                to_account_id=edited_to_account_id,
-                                category_id=edited_category_id,
-                                payee=edited_payee,
-                                reference=edited_reference,
-                                description=edited_description,
-                            ),
-                            "Transaction updated.",
-                            report_error=edit_error.error,
-                        )
+                        prepared_receipts: list[dict[str, object]] = []
+                        receipt_preparation_failed = False
+                        if receipt_uploads:
+                            try:
+                                prepared_receipts = prepare_editor_receipt_uploads(
+                                    context,
+                                    edit_id,
+                                    receipt_uploads,
+                                )
+                            except (ValueError, GoogleDriveAccessError) as error:
+                                receipt_preparation_failed = True
+                                edit_error.error(
+                                    "Receipt validation failed: "
+                                    f"{error}"
+                                )
+                            except StorageError as error:
+                                receipt_preparation_failed = True
+                                edit_error.error(
+                                    "The selected transaction could not be "
+                                    f"rechecked before upload. {error}"
+                                )
+                        if not receipt_preparation_failed:
+                            edit_payload = dict(payload)
+                            if prepared_receipts:
+                                edit_payload["receipt_upload_keys"] = [
+                                    receipt["key"]
+                                    for receipt in prepared_receipts
+                                ]
+                            context.confirmed_write(
+                                "edit_transaction",
+                                edit_payload,
+                                lambda: context.storage.edit_transaction(
+                                    edit_id,
+                                    txn_date=edited_date,
+                                    amount=edited_amount,
+                                    account_id=edited_account_id,
+                                    to_account_id=edited_to_account_id,
+                                    category_id=edited_category_id,
+                                    payee=edited_payee,
+                                    reference=edited_reference,
+                                    description=edited_description,
+                                ),
+                                "Transaction updated.",
+                                on_confirmed=(
+                                    lambda _result: process_editor_receipt_uploads(
+                                        context,
+                                        edit_id,
+                                        prepared_receipts,
+                                        receipt_folder,
+                                    )
+                                    if prepared_receipts and receipt_folder
+                                    else None
+                                ),
+                                report_error=edit_error.error,
+                            )
                 if cancel_requested:
                     _clear_copy_state(context.profile_key)
                     st.rerun()

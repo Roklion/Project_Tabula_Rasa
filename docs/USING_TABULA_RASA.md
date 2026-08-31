@@ -223,6 +223,10 @@ deleting files already in Drive; those files remain available in
 **Unreferenced receipt**. **Retry recovery check** is shown when a saved
 transaction must be rechecked before the upload surface is restored.
 
+In the edit form, choose receipts in the optional uploader immediately above
+**Save changes**. Saving the edit starts receipt processing; no separate upload
+button is used.
+
 The unreferenced workflow lists eligible app-managed files in the selected
 profile's receipt folder and links a chosen file without renaming or
 rewriting it. Files needing integrity metadata are called out before linking.

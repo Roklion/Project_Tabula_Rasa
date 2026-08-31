@@ -574,6 +574,11 @@ The page must retain linked receipt opening, reference removal without file
 deletion, multi-file editor upload, unresolved retry, cancel recovery,
 recovery check, and unreferenced receipt linking.
 
+In the edit form, the optional multi-file receipt picker appears immediately
+before the Save changes controls. Saving the edit validates and processes any
+selected receipts through the same ordered, retry-safe workflow; there is no
+separate receipt upload button.
+
 #### Acceptance criteria
 
 Create, edit, single delete, search, bulk actions, table columns, and receipt
