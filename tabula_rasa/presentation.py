@@ -596,6 +596,8 @@ def reset_profile_presentation_state(
         "ledger_search_",
         "transaction_bulk_selected_ids_",
         "transaction_ledger_mode_",
+        "transaction_copy_source_",
+        "transaction_copy_generation_",
     )
     for key in list(session_state):
         if key in keys or key.startswith(prefixes):

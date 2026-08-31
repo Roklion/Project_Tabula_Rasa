@@ -520,11 +520,20 @@ sorting may persist while the same widget remains mounted, including across
 the two Transactions tabs. Navigation away and back resets the table
 generation and latest-date-first ordering.
 
+In Edit or Bulk mode, **Copy transaction** is enabled only when exactly one
+visible transaction is selected. It opens the existing editor as a clearly
+labeled new-transaction copy workflow. The copy preserves the source date and
+eligible fields, prefixes the description with the source transaction ID, and
+starts with no receipt references. Save creates a new transaction; Cancel
+discards the copy state without changing the source row.
+
 #### Bulk behavior
 
 Bulk mode is explicit and selects only visible rows. It shows the selection
 count and only these actions:
 
+- **Copy transaction:** available for exactly one selected row and opens the
+  new-transaction copy editor.
 - **Export selected:** downloads selected visible ledger columns without a
   workbook change.
 - **Change category:** available only for a homogeneous Income or Expense
