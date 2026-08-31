@@ -76,6 +76,27 @@ def test_inline_attribution_is_hidden_for_manual_mode() -> None:
     ) in _JS
 
 
+def test_google_selection_cannot_be_overwritten_by_followup_change_event() -> None:
+    assert "let selectedDisplay = '';" in _JS
+    assert (
+        "if (suppressInput || (selectedDisplay && element.value === selectedDisplay))"
+        in _JS
+    )
+    assert "selectedDisplay = display;" in _JS
+    assert "finally {\n          suppressInput = false;\n        }" in _JS
+
+
+def test_address_controls_use_streamlit_visual_tokens() -> None:
+    from tabula_rasa.address_autocomplete import _CSS
+
+    assert "var(--st-secondary-background-color)" in _CSS
+    assert "var(--st-widget-border-color" in _CSS
+    assert ".tr-address-host > gmp-place-autocomplete" in _CSS
+    assert ".tr-address button:focus-visible" in _CSS
+    assert ".tr-address button:disabled" in _CSS
+    assert "font-weight: 600;" in _CSS
+
+
 def test_browser_key_fails_closed_when_routes_key_is_reused() -> None:
     assert browser_api_key_from_secrets(
         {

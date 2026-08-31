@@ -349,12 +349,24 @@ def render_mileage(context: MileageContext) -> None:
             )
             notes = st.text_area("Notes (optional)", key="add_mileage_notes")
             route_error = st.empty()
+            route_ready = _route_ready(
+                start, destination_value, context.route_mileage
+            )
             calculate_requested = st.button(
                 "Recalculate mileage" if route_state else "Calculate mileage",
-                disabled=not _route_ready(
-                    start, destination_value, context.route_mileage
+                disabled=not route_ready,
+                help=(
+                    "Choose a Google suggestion for both endpoints to calculate "
+                    "mileage. Manual entries can still be saved with entered miles."
+                    if not route_ready
+                    else None
                 ),
             )
+            if not route_ready and context.route_mileage is not None:
+                st.caption(
+                    "Choose a Google suggestion for both endpoints to enable "
+                    "mileage calculation."
+                )
             save_error = st.empty()
             submitted = st.button(
                 "Save mileage trip", type="primary", width="stretch"

@@ -60,11 +60,64 @@ _HTML = """
 """
 
 _CSS = """
-.tr-address { display: flex; flex-direction: column; gap: .25rem; }
+.tr-address {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  color: var(--st-text-color);
+  font: inherit;
+  width: 100%;
+}
 .tr-address label { font-weight: 500; }
 .tr-address small { color: var(--st-text-color); opacity: .75; }
-.tr-address button { align-self: flex-start; }
-.tr-address input { width: 100%; box-sizing: border-box; }
+.tr-address button {
+  align-self: flex-start;
+  background: var(--st-secondary-background-color);
+  border: 1px solid var(--st-widget-border-color, rgba(49, 51, 63, .2));
+  border-radius: .375rem;
+  color: var(--st-text-color);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  padding: .25rem .5rem;
+}
+.tr-address button:hover { border-color: var(--st-primary-color); }
+.tr-address button:focus-visible {
+  border-color: var(--st-primary-color);
+  box-shadow: 0 0 0 1px var(--st-primary-color);
+  outline: none;
+}
+.tr-address button:disabled { cursor: wait; opacity: .65; }
+.tr-address input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--st-background-color);
+  border: 1px solid var(--st-widget-border-color, rgba(49, 51, 63, .2));
+  border-radius: .375rem;
+  color: var(--st-text-color);
+  font: inherit;
+  min-height: 2.5rem;
+  padding: .5rem .75rem;
+}
+.tr-address input:focus {
+  border-color: var(--st-primary-color);
+  box-shadow: 0 0 0 1px var(--st-primary-color);
+  outline: none;
+}
+.tr-address-host,
+.tr-address-host > gmp-place-autocomplete {
+  box-sizing: border-box;
+  width: 100%;
+}
+.tr-address-host > gmp-place-autocomplete {
+  background: var(--st-background-color);
+  border: 1px solid var(--st-widget-border-color, rgba(49, 51, 63, .2));
+  border-radius: .375rem;
+  color: var(--st-text-color);
+  display: block;
+  font: inherit;
+  min-height: 2.5rem;
+}
 """
 
 _JS = """
@@ -82,6 +135,7 @@ export default function(component) {
   let version = Number(data.version || 0);
   let manualMode = data.manualMode === true;
   let suppressInput = false;
+  let selectedDisplay = '';
 
   function showAttribution() {
     attribution.hidden = false;
@@ -169,18 +223,28 @@ export default function(component) {
       const element = new google.maps.places.PlaceAutocompleteElement(options);
       element.setAttribute('aria-label', data.label || 'Address');
       element.value = data.value || '';
+      element.style.width = '100%';
+      element.style.boxSizing = 'border-box';
+      element.style.fontFamily = 'inherit';
       host.replaceChildren(element);
       status.textContent = 'Start typing to choose a Google-verified address.';
       // PlaceAutocompleteElement owns the Google session lifecycle. Do not
       // create a parallel token here (that can result in duplicate billing).
       element.addEventListener('change', () => {
-        if (suppressInput) return;
+        // PlaceAutocompleteElement can dispatch a generic change immediately
+        // after gmp-select. Do not let that follow-up event erase the Place ID
+        // that the selected event just produced.
+        if (suppressInput || (selectedDisplay && element.value === selectedDisplay)) {
+          return;
+        }
+        selectedDisplay = '';
         version += 1;
         setTriggerValue('changed', {
           display_text: element.value || '', place_id: '', version: version
         });
       });
       element.addEventListener('gmp-select', async (event) => {
+        suppressInput = true;
         status.textContent = 'Loading selected address…';
         try {
           const prediction = event.placePrediction;
@@ -190,17 +254,19 @@ export default function(component) {
           await place.fetchFields({fields: ['id', 'displayName', 'formattedAddress']});
           const display = place.formattedAddress ||
             (place.displayName && place.displayName.text) || element.value || '';
-          suppressInput = true;
+          selectedDisplay = display;
           version += 1;
           setTriggerValue('selected', {
             display_text: display, place_id: place.id || '', version: version
           });
-          suppressInput = false;
           status.textContent = 'Address selected.';
         } catch (error) {
           // Keep the browser error useful without exposing API details.
           status.textContent = 'The address could not be selected. Try again or enter it manually.';
+          selectedDisplay = '';
           manualButton.hidden = false;
+        } finally {
+          suppressInput = false;
         }
       });
       element.addEventListener('gmp-error', () => {

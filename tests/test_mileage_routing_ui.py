@@ -195,3 +195,11 @@ def test_mileage_drafts_are_not_buffered_in_forms() -> None:
     assert 'with st.form("add_mileage_trip"' not in source
     assert 'with st.form("edit_mileage_trip")' not in source
     assert "st.form_submit_button" not in source
+
+
+def test_manual_fallback_explains_why_calculation_is_disabled() -> None:
+    source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
+
+    assert "Choose a Google suggestion for both endpoints to calculate " in source
+    assert "mileage. Manual entries can still be saved" in source
+    assert "disabled=not route_ready" in source
