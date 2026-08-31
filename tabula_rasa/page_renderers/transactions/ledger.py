@@ -706,7 +706,6 @@ def render_ledger(
                         "Save copied transaction",
                         type="primary",
                         width="stretch",
-                        disabled=not copy_accounts_valid,
                         key=f"edit_transaction_copy_save_{edit_widget_scope}",
                     )
                     cancel_requested = cancel_column.form_submit_button(
@@ -767,12 +766,11 @@ def render_ledger(
                                 "copy_generation": copy_generation,
                             }
                         )
-                    else:
-                        payload = {
-                            "id": edit_id,
-                            **transaction_data,
-                        }
-                    if (
+                    if copy_mode and not copy_accounts_valid:
+                        edit_error.error(
+                            "Choose active account(s) before saving this copied transaction."
+                        )
+                    elif (
                         selected["kind"] == "Transfer"
                         and edited_account_id == edited_to_account_id
                     ):

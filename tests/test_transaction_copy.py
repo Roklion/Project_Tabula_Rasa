@@ -110,6 +110,32 @@ def test_copy_form_can_be_canceled_without_creating_or_mutating_transaction() ->
     )
 
 
+def test_copy_with_inactive_source_allows_active_account_replacement() -> None:
+    storage, source = _transaction_fixture()
+    replacement = storage.create_account("Replacement", "Bank")
+    storage.deactivate_account(source["account_id"])
+
+    with authenticated_app(storage) as app:
+        navigate_to(app, "Transactions")
+        by_label(app.segmented_control, "Ledger mode").set_value("Bulk").run()
+        app.session_state["transaction_bulk_selected_ids_test"] = (source["id"],)
+        app.run()
+        by_label(app.button, "Copy transaction").click().run()
+
+        account_selector = by_label(app.selectbox, "Edit account")
+        assert source["account_id"] not in account_selector.options
+        assert "Replacement" in account_selector.options
+        assert by_label(app.button, "Save copied transaction").disabled is False
+
+        account_selector.set_value(replacement["id"]).run()
+        by_label(app.button, "Save copied transaction").click().run()
+
+    transactions = storage.list_transactions()
+    assert len(transactions) == 2
+    copied = next(item for item in transactions if item["id"] != source["id"])
+    assert copied["account_id"] == replacement["id"]
+
+
 def test_copy_state_is_cleared_when_switching_profiles() -> None:
     storages = {
         "alpha-sheet": GoogleSheetsStorage(FakeWorkbook()),
