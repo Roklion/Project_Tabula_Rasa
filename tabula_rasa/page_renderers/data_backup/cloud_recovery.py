@@ -10,6 +10,7 @@ import streamlit as st
 from tabula_rasa.google_drive import GoogleDriveError, backup_filename_and_hash
 from tabula_rasa.page_renderers.data_backup.context import DataBackupContext
 from tabula_rasa.receipt_manifest import ReceiptManifestError
+from tabula_rasa.presentation import render_global_footer
 from tabula_rasa.storage import GoogleSheetsStorage, StorageError
 from tabula_rasa.synology_recovery import (
     DESTINATION_DELETIONS,
@@ -153,6 +154,7 @@ def render_cloud_backup(context: DataBackupContext) -> None:
             )
         # Verification is deliberately Drive-only. Do not continue into the
         # live Sheets reads and fresh backup generation below.
+        render_global_footer()
         st.stop()
 
 

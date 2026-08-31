@@ -1517,6 +1517,36 @@ class TestGoogleSheetsStorage:
         assert {record["business_purpose"] for record in records} == {"Project meeting"}
         assert len(self.storage.list_mileage_trips()) == 2
 
+    def test_mileage_round_trip_supports_different_return_miles(self) -> None:
+        worksheet = self.workbook.sheets["Mileage"]
+        original_append_many = worksheet.append_rows
+        worksheet.append_rows = Mock(wraps=original_append_many)
+
+        records = self.storage.create_mileage_round_trip(
+            trip_date="2026-07-20",
+            miles=12.6,
+            return_miles=13.1,
+            vehicle="Blue car",
+            start_location="Office",
+            destination="Client site",
+            business_purpose="Project meeting",
+        )
+
+        assert worksheet.append_rows.call_count == 1
+        assert records[0]["id"] != records[1]["id"]
+        assert records[0]["miles"] == "12.6"
+        assert records[1]["miles"] == "13.1"
+        assert records[0]["start_location"] == "Office"
+        assert records[0]["destination"] == "Client site"
+        assert records[1]["start_location"] == "Client site"
+        assert records[1]["destination"] == "Office"
+        assert all("round_trip" not in record for record in records)
+        listed = self.storage.list_mileage_trips()
+        assert {record["id"] for record in listed} == {
+            record["id"] for record in records
+        }
+        assert {record["miles"] for record in listed} == {"12.6", "13.1"}
+
     def test_quickbooks_mileage_preview_import_and_duplicates(self) -> None:
         business = {
             "Date": "07/20/2026",

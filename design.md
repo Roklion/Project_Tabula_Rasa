@@ -231,6 +231,11 @@ It is a settings surface, not a user-identity or permission-management page.
 The login surface uses the keyed native login_surface container so its readable
 desktop width does not depend on an undocumented Streamlit test ID.
 
+A compact global footer exposes **Terms of Use | Privacy Policy** on the login
+surface and every authenticated page. Each link opens a static public legal
+document without requiring the application password or loading profiles,
+credentials, workbooks, OAuth state, or ledger data.
+
 When the profile changes, keep the new business and workbook visible and clear
 or rebuild page-local filters, selections, edit targets, widget generations,
 and pending notices. Never initialize or access another profile's storage
@@ -418,6 +423,8 @@ above define reusable rules and do not repeat these details.
 - Preserve Log out on every normal page.
 - Expose Account settings only under current local-administration safety
   conditions.
+- Keep Terms of Use and Privacy Policy available before and after
+  authentication without exposing application data.
 
 #### Acceptance criteria
 
@@ -589,14 +596,31 @@ download, and the complete table with ID, Date, Miles, From, Destination,
 Business purpose, Vehicle, and Notes. It provides single-row selection and an
 Edit mileage trip section with all fields, save, and permanent delete.
 
-Round trip creates two entries in one confirmed write using the entered
-one-direction mileage and reversed locations. The filters, metrics, table,
-and CSV use the same date scope.
+When app-wide Google Maps configuration is available, Starting location and
+Destination use a narrowly scoped address-autocomplete component with an
+explicit manual-entry path. After two Google suggestions are selected, an
+explicit Calculate mileage action requests the primary driving route and
+populates an editable one-decimal suggestion. Changing either endpoint clears
+the corresponding calculated state. Calculation errors preserve manual entry.
+When either current endpoint was selected with Google autocomplete or the
+current mileage suggestion was calculated by Google Routes, a Google Maps note
+appears directly below the mileage control. Stored rows do not claim Google
+provenance after reload because that metadata is intentionally not persisted.
+
+Round trip performs separate outbound and reversed return calculations and
+shows independently editable mileage values. Saving creates the same two
+independent records in one confirmed write, with each row receiving its own
+confirmed mileage and a separate ID; there is no durable pairing. Recalculating
+a saved row affects only that row. The filters, metrics, table, and CSV use the
+same date scope. Without Maps configuration, the current manual workflow
+remains available.
 
 #### Acceptance criteria
 
 Round-trip help remains visible. Create, edit, delete, filtering, totals, and
-export remain available. Mileage remains separate from financial transactions.
+export remain available. Autocomplete remains keyboard and narrow-layout
+usable, manual entry is always available, and ordinary reruns do not trigger
+paid route requests. Mileage remains separate from financial transactions.
 
 ### Accounts
 

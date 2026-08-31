@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import date
 import hashlib
 
@@ -151,6 +151,7 @@ def render_ledger(
     categories: Sequence[Mapping[str, object]],
     account_paths: Mapping[str, str],
     category_paths: Mapping[str, str],
+    render_error_footer: Callable[[], None],
 ) -> None:
     """Render structured filters, the ledger, and single-row editing."""
     st.subheader("View & edit ledger")
@@ -274,6 +275,7 @@ def render_ledger(
         )
     except StorageError as error:
         context.report_storage_error(error)
+        render_error_footer()
         st.stop()
     transaction_frame = ledger_frame(
         structured_transactions,

@@ -102,6 +102,12 @@ class TestExportStreamlitSecrets:
                     "picker_api_key": "picker-key",
                     "project_number": "123456789",
                 },
+                "google_maps": {
+                    "browser_api_key": "browser-key",
+                    "routes_api_key": "routes-key",
+                    "routes_timeout_seconds": 15,
+                    "autocomplete_region_code": "us",
+                },
                 "synology_recovery_defaults": {
                     "base_path": "/volume1/Tabula_Rasa_Backups",
                     "schedule": "Continuous",
@@ -133,6 +139,12 @@ class TestExportStreamlitSecrets:
         assert (
             parsed["google_drive_oauth"]["client_secret"] == "oauth-secret"
         )
+        assert parsed["google_maps"] == {
+            "browser_api_key": "browser-key",
+            "routes_api_key": "routes-key",
+            "routes_timeout_seconds": 15,
+            "autocomplete_region_code": "us",
+        }
         assert hosted_north["google_drive"]["refresh_token"] == (
             "north-refresh-token"
         )

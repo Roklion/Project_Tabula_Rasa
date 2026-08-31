@@ -38,6 +38,8 @@ DESIGN_TOKENS: Mapping[str, str] = {
     "neutral-border": "#D5D7D4",
 }
 
+GLOBAL_FOOTER_RENDERED_KEY = "_global_footer_rendered"
+
 
 def _css_variables(tokens: Mapping[str, str]) -> str:
     return "\n".join(
@@ -480,6 +482,18 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
         padding: 0;
     }}
 
+    .st-key-global_footer {{
+        margin-top: 2rem;
+        padding-top: 0.75rem;
+        border-top: 1px solid var(--tr-border-subtle);
+        text-align: center;
+    }}
+
+    .st-key-global_footer [data-testid="stMarkdownContainer"] p {{
+        color: var(--tr-text-muted);
+        font-size: 0.8rem;
+    }}
+
     @media (max-width: 760px) {{
         [data-testid="stMainBlockContainer"] {{
             padding-top: 1rem;
@@ -534,6 +548,16 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
 def apply_global_styles() -> None:
     """Install the shared presentation layer before any page is rendered."""
     st.markdown(global_styles(), unsafe_allow_html=True)
+
+
+def render_global_footer() -> None:
+    """Render public legal links on authenticated and pre-auth surfaces."""
+    st.session_state[GLOBAL_FOOTER_RENDERED_KEY] = True
+    with st.container(key="global_footer"):
+        st.markdown(
+            "[Terms of Use](?legal=terms) | "
+            "[Privacy Policy](?legal=privacy)"
+        )
 
 
 def reset_profile_presentation_state(

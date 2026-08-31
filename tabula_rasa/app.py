@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 import sys
 
@@ -12,6 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import streamlit as st
 
+from tabula_rasa.address_autocomplete import browser_api_key_from_secrets
 from tabula_rasa.business_profiles import (
     BusinessProfileConfigurationError,
     load_business_profiles,
@@ -24,6 +25,7 @@ from tabula_rasa.google_drive import (
     load_oauth_config,
 )
 from tabula_rasa.google_drive_admin import process_google_drive_oauth_callback
+from tabula_rasa.legal import render_public_legal_page
 from tabula_rasa.local_profile_admin import render_local_profile_admin
 from tabula_rasa.local_profile_store import (
     LOCAL_PROFILE_STORE_PATH,
@@ -31,6 +33,11 @@ from tabula_rasa.local_profile_store import (
     local_profile_admin_available,
     local_profile_revision,
     merged_profile_secrets,
+)
+from tabula_rasa.maps_routing import (
+    GoogleRoutesClient,
+    GoogleRoutesConfigurationError,
+    load_routes_config,
 )
 from tabula_rasa.page_renderers.accounts import AccountsContext, render_accounts
 from tabula_rasa.page_renderers.categories import (
@@ -52,7 +59,9 @@ from tabula_rasa.page_renderers.transactions import (
     render_transactions,
 )
 from tabula_rasa.presentation import (
+    GLOBAL_FOOTER_RENDERED_KEY,
     apply_global_styles,
+    render_global_footer,
     reset_profile_presentation_state,
 )
 from tabula_rasa.storage import (
@@ -65,7 +74,39 @@ from tabula_rasa.receipt_backfill import (
 )
 
 
-STORAGE_IMPLEMENTATION_VERSION = 11
+STORAGE_IMPLEMENTATION_VERSION = 12
+
+
+def _google_maps_browser_key(secrets: Mapping[str, object]) -> str | None:
+    """Read the safe app-wide browser key used by the Places component."""
+    return browser_api_key_from_secrets(secrets)
+
+
+def _google_maps_region_code(secrets: Mapping[str, object]) -> str | None:
+    config = secrets.get("google_maps")
+    if not isinstance(config, Mapping):
+        return None
+    value = config.get("autocomplete_region_code")
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _route_mileage_callable(
+    secrets: Mapping[str, object],
+) -> Callable[[str, str], float] | None:
+    """Load the app-wide Routes client, or leave manual entry available."""
+    try:
+        config = load_routes_config(secrets)
+    except GoogleRoutesConfigurationError:
+        return None
+    client = GoogleRoutesClient(config)
+
+    def compute(start_place_id: str, destination_place_id: str) -> float:
+        result = client.compute_route(start_place_id, destination_place_id)
+        return float(result.suggested_miles)
+
+    return compute
+
+
 def alert_list(title: str, messages: list[str]) -> str:
     """Format multiple alert messages as a readable Markdown list."""
     return f"**{title}**\n\n- " + "\n- ".join(messages)
@@ -222,6 +263,10 @@ def confirmed_write(
 st.set_page_config(page_title="Project Tabula Rasa", page_icon="📒", layout="wide")
 apply_global_styles()
 
+if render_public_legal_page():
+    render_global_footer()
+    st.stop()
+
 require_authentication()
 
 profile_admin_enabled = local_profile_admin_available(
@@ -238,10 +283,12 @@ except LocalProfileStoreError:
         "The local business-profile file is malformed or unavailable. "
         "Repair or move .streamlit/business_profiles.json and restart."
     )
+    render_global_footer()
     st.stop()
 except BusinessProfileConfigurationError as error:
     if not profile_admin_enabled:
         st.error(str(error))
+        render_global_footer()
         st.stop()
     profiles = []
 
@@ -369,6 +416,7 @@ with st.sidebar:
 
     if page is None:
         st.error("No application page is available in this environment.")
+        render_global_footer()
         st.stop()
 
     previous_page = st.session_state.get("previous_navigation_page")
@@ -416,6 +464,7 @@ else:
             report_storage_error(error)
         else:
             st.error("The local business-profile file could not be read safely.")
+        render_global_footer()
         st.stop()
 
     with st.sidebar:
@@ -429,97 +478,102 @@ if page != "Account settings":
         notice_placeholder.success(str(notice))
 
 
-if page == "Dashboard":
-    render_dashboard(DashboardContext(selected_profile_key, storage))
+st.session_state[GLOBAL_FOOTER_RENDERED_KEY] = False
+try:
+    if page == "Dashboard":
+        render_dashboard(DashboardContext(selected_profile_key, storage))
 
-
-elif page == "Transactions":
-    render_transactions(
-        TransactionsContext(
-            profile_key=selected_profile_key,
-            storage=storage,
-            profile_secrets=profile_by_key[selected_profile_key].secrets,
-            configuration_revision=revision,
-            get_drive_client=get_drive_client,
-            confirmed_write=confirmed_write,
-            report_storage_error=report_storage_error,
-            reset_widget_state_if_requested=reset_widget_state_if_requested,
-            schedule_widget_reset=schedule_widget_reset,
-            mark_workbook_data_changed=mark_workbook_data_changed,
+    elif page == "Transactions":
+        render_transactions(
+            TransactionsContext(
+                profile_key=selected_profile_key,
+                storage=storage,
+                profile_secrets=profile_by_key[selected_profile_key].secrets,
+                configuration_revision=revision,
+                get_drive_client=get_drive_client,
+                confirmed_write=confirmed_write,
+                report_storage_error=report_storage_error,
+                reset_widget_state_if_requested=reset_widget_state_if_requested,
+                schedule_widget_reset=schedule_widget_reset,
+                mark_workbook_data_changed=mark_workbook_data_changed,
+            )
         )
-    )
 
-
-elif page == "Mileage":
-    render_mileage(
-        MileageContext(
-            profile_key=selected_profile_key,
-            storage=storage,
-            confirmed_write=confirmed_write,
-            report_storage_error=report_storage_error,
-            reset_widget_state_if_requested=reset_widget_state_if_requested,
-            schedule_widget_reset=schedule_widget_reset,
+    elif page == "Mileage":
+        render_mileage(
+            MileageContext(
+                profile_key=selected_profile_key,
+                storage=storage,
+                confirmed_write=confirmed_write,
+                report_storage_error=report_storage_error,
+                reset_widget_state_if_requested=reset_widget_state_if_requested,
+                schedule_widget_reset=schedule_widget_reset,
+                maps_api_key=_google_maps_browser_key(effective_secrets),
+                route_mileage=_route_mileage_callable(effective_secrets),
+                autocomplete_region_code=_google_maps_region_code(effective_secrets),
+            )
         )
-    )
 
-
-
-elif page == "Accounts":
-    render_accounts(
-        AccountsContext(
-            profile_key=selected_profile_key,
-            storage=storage,
-            confirmed_write=confirmed_write,
-            report_storage_error=report_storage_error,
-            reset_widget_state_if_requested=reset_widget_state_if_requested,
-            schedule_widget_reset=schedule_widget_reset,
+    elif page == "Accounts":
+        render_accounts(
+            AccountsContext(
+                profile_key=selected_profile_key,
+                storage=storage,
+                confirmed_write=confirmed_write,
+                report_storage_error=report_storage_error,
+                reset_widget_state_if_requested=reset_widget_state_if_requested,
+                schedule_widget_reset=schedule_widget_reset,
+            )
         )
-    )
 
-
-elif page == "Categories":
-    render_categories(
-        CategoriesContext(
-            profile_key=selected_profile_key,
-            storage=storage,
-            confirmed_write=confirmed_write,
-            report_storage_error=report_storage_error,
-            reset_widget_state_if_requested=reset_widget_state_if_requested,
-            schedule_widget_reset=schedule_widget_reset,
+    elif page == "Categories":
+        render_categories(
+            CategoriesContext(
+                profile_key=selected_profile_key,
+                storage=storage,
+                confirmed_write=confirmed_write,
+                report_storage_error=report_storage_error,
+                reset_widget_state_if_requested=reset_widget_state_if_requested,
+                schedule_widget_reset=schedule_widget_reset,
+            )
         )
-    )
-elif page == "Reports":
-    render_reports(
-        ReportsContext(
-            profile_key=selected_profile_key,
-            storage=storage,
-            report_storage_error=report_storage_error,
+    elif page == "Reports":
+        render_reports(
+            ReportsContext(
+                profile_key=selected_profile_key,
+                storage=storage,
+                report_storage_error=report_storage_error,
+            )
         )
-    )
 
-
-elif page == "Data & backup":
-    selected_profile_secrets = profile_by_key[selected_profile_key].secrets
-    drive_settings_value = selected_profile_secrets.get("google_drive")
-    render_data_backup(
-        DataBackupContext(
-            profile_key=selected_profile_key,
-            storage=storage,
-            drive_settings=(
-                drive_settings_value
-                if isinstance(
-                    drive_settings_value,
-                    Mapping,
-                )
-                else None
-            ),
-            synology_recovery_settings=selected_profile_secrets.get(
-                "synology_recovery"
-            ),
-            configuration_revision=revision,
-            get_drive_client=get_drive_client,
-            receipt_manifest_for_backup=receipt_manifest_for_backup,
-            confirmed_write=confirmed_write,
-            report_storage_error=report_storage_error,
+    elif page == "Data & backup":
+        selected_profile_secrets = profile_by_key[selected_profile_key].secrets
+        drive_settings_value = selected_profile_secrets.get("google_drive")
+        render_data_backup(
+            DataBackupContext(
+                profile_key=selected_profile_key,
+                storage=storage,
+                drive_settings=(
+                    drive_settings_value
+                    if isinstance(
+                        drive_settings_value,
+                        Mapping,
+                    )
+                    else None
+                ),
+                synology_recovery_settings=selected_profile_secrets.get(
+                    "synology_recovery"
+                ),
+                configuration_revision=revision,
+                get_drive_client=get_drive_client,
+                receipt_manifest_for_backup=receipt_manifest_for_backup,
+                confirmed_write=confirmed_write,
+                report_storage_error=report_storage_error,
+            )
         )
-    )
+finally:
+    # Streamlit stops suppress later output, so stop paths render through their
+    # page-scope placeholders before stopping. This remains the normal footer
+    # path and a fallback for ordinary Python exceptions.
+    if not st.session_state.get(GLOBAL_FOOTER_RENDERED_KEY):
+        render_global_footer()

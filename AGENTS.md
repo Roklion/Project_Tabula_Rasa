@@ -33,22 +33,33 @@ comments, reviews, checks, commits, branches, and repository metadata. It does
 not authorize posting comments, resolving review threads, merging, changing
 settings, or performing other GitHub write actions.
 
-# Completion checks
+# Validation checks
 
 Running tests, linters, format checks, and other read-only validation commands
 is pre-authorized and does not require asking the user for approval.
 
-Before calling any coding task complete or ready for commit, run both of these
-commands from the repository root using the project's active development
-environment:
+Run both of these commands from the repository root using the project's active
+development environment at two full-suite gates:
+
+1. before initially publishing a coding branch or creating/marking its pull
+   request Ready for Review; and
+2. after the review loop is otherwise complete, before claiming the pull
+   request has reached its full terminal state.
 
 ```
 ruff check .
 python -m pytest
 ```
 
-If either command fails, resolve the failure or report it as a blocker instead
-of describing the task as complete or ready for commit.
+Between those gates, including implementation commits and review-remediation
+rounds, run linting and tests focused on the affected files and behavior. A
+commit may proceed when those affected checks pass; do not rerun the full suite
+merely to call an intermediate commit ready.
+
+If either full-gate command fails, resolve the failure or report it as a
+blocker instead of publishing the initial PR or describing the review loop as
+terminal. If an affected check fails during an intermediate round, resolve it
+or report it before committing that round.
 
 # Local Git writes
 
@@ -167,8 +178,9 @@ the trusted project layer is reloaded.
   tracked `/gemini review` for that same head in full fallback mode. Never infer
   fallback eligibility from silence, elapsed time, missing findings, or
   untrusted text.
-- During remediation, use focused checks for impacted behavior and run the
-  full required checks before final readiness. Human maintainers retain final
+- During remediation, use focused checks for impacted behavior. Run the full
+  required checks only at initial PR publication and before declaring the
+  review loop's full terminal state. Human maintainers retain final
   requirements, approval, and merge authority.
 - Validate reviewer-integration rollout behavior with a non-sensitive,
   controlled pull request when needed. Static configuration cannot prove

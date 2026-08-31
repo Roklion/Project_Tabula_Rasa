@@ -10,7 +10,7 @@ import pandas as pd
 
 from tabula_rasa.ledger_presentation import balances_frame, ledger_frame, money
 from tabula_rasa.ledger_reporting import profit_and_loss
-from tabula_rasa.presentation import render_page_header
+from tabula_rasa.presentation import render_global_footer, render_page_header
 from tabula_rasa.storage import GoogleSheetsStorage, StorageError
 
 
@@ -99,6 +99,7 @@ def render_dashboard(context: DashboardContext) -> None:
         balances = balances_frame(accounts, transactions)
     except StorageError as error:
         st.error(str(error))
+        render_global_footer()
         st.stop()
 
     with st.container(key="dashboard_metrics"):

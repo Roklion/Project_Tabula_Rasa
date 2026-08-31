@@ -18,7 +18,7 @@ from tabula_rasa.ledger_reporting import (
     monthly_performance,
     profit_and_loss,
 )
-from tabula_rasa.presentation import render_page_header
+from tabula_rasa.presentation import render_global_footer, render_page_header
 from tabula_rasa.storage import GoogleSheetsStorage, StorageError
 
 
@@ -194,6 +194,7 @@ def render_reports(context: ReportsContext) -> None:
         accounts = context.storage.list_accounts(active_only=False)
     except StorageError as error:
         context.report_storage_error(error)
+        render_global_footer()
         st.stop()
     category_paths = hierarchy_paths(categories)
     summary = profit_and_loss(transactions, start=start, end=end)

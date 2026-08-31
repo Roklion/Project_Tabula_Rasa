@@ -8,7 +8,7 @@ import secrets
 
 import streamlit as st
 
-from tabula_rasa.presentation import render_page_header
+from tabula_rasa.presentation import render_global_footer, render_page_header
 
 
 SCHEME = "scrypt"
@@ -73,6 +73,7 @@ def require_authentication() -> None:
     encoded_hash = st.secrets.get("app_password_hash")
     if not encoded_hash:
         st.error("Application authentication is not configured.")
+        render_global_footer()
         st.stop()
 
     show_authentication_error = bool(
@@ -100,6 +101,7 @@ def require_authentication() -> None:
             if not show_authentication_error:
                 st.rerun()
 
+    render_global_footer()
     st.stop()
 
 
