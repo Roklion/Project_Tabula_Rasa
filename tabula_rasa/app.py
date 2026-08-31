@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 import sys
 
@@ -31,6 +31,11 @@ from tabula_rasa.local_profile_store import (
     local_profile_admin_available,
     local_profile_revision,
     merged_profile_secrets,
+)
+from tabula_rasa.maps_routing import (
+    GoogleRoutesClient,
+    GoogleRoutesConfigurationError,
+    load_routes_config,
 )
 from tabula_rasa.page_renderers.accounts import AccountsContext, render_accounts
 from tabula_rasa.page_renderers.categories import (
@@ -65,7 +70,48 @@ from tabula_rasa.receipt_backfill import (
 )
 
 
-STORAGE_IMPLEMENTATION_VERSION = 11
+STORAGE_IMPLEMENTATION_VERSION = 12
+
+
+def _google_maps_browser_key(secrets: Mapping[str, object]) -> str | None:
+    """Read only the app-wide browser key used by the Places component."""
+    config = secrets.get("google_maps")
+    if not isinstance(config, Mapping):
+        return None
+    value = config.get("browser_api_key")
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if not value or len(value) > 256 or any(ord(char) < 32 for char in value):
+        return None
+    return value
+
+
+def _google_maps_region_code(secrets: Mapping[str, object]) -> str | None:
+    config = secrets.get("google_maps")
+    if not isinstance(config, Mapping):
+        return None
+    value = config.get("autocomplete_region_code")
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _route_mileage_callable(
+    secrets: Mapping[str, object],
+) -> Callable[[str, str], float] | None:
+    """Load the app-wide Routes client, or leave manual entry available."""
+    try:
+        config = load_routes_config(secrets)
+    except GoogleRoutesConfigurationError:
+        return None
+    client = GoogleRoutesClient(config)
+
+    def compute(start_place_id: str, destination_place_id: str) -> float:
+        result = client.compute_route(start_place_id, destination_place_id)
+        return float(result.suggested_miles)
+
+    return compute
+
+
 def alert_list(title: str, messages: list[str]) -> str:
     """Format multiple alert messages as a readable Markdown list."""
     return f"**{title}**\n\n- " + "\n- ".join(messages)
@@ -459,6 +505,9 @@ elif page == "Mileage":
             report_storage_error=report_storage_error,
             reset_widget_state_if_requested=reset_widget_state_if_requested,
             schedule_widget_reset=schedule_widget_reset,
+            maps_api_key=_google_maps_browser_key(effective_secrets),
+            route_mileage=_route_mileage_callable(effective_secrets),
+            autocomplete_region_code=_google_maps_region_code(effective_secrets),
         )
     )
 
