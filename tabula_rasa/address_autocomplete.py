@@ -212,6 +212,7 @@ export default function(component) {
       showManual('Google address suggestions are unavailable.');
       manualMode = true;
       setStateValue('manual_mode', true);
+      manualButton.onclick = selectGoogleMode;
     }
   }
   // Keep manual entry available during script loading as well as after a

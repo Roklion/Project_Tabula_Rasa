@@ -42,6 +42,15 @@ def test_switching_back_to_google_mode_unhides_the_autocomplete_host() -> None:
     assert "manual.hidden = true;\n    host.hidden = false;" in _JS
 
 
+def test_failed_maps_load_button_retries_google_mode() -> None:
+    assert (
+        "showManual('Google address suggestions are unavailable.');\n"
+        "      manualMode = true;\n"
+        "      setStateValue('manual_mode', true);\n"
+        "      manualButton.onclick = selectGoogleMode;"
+    ) in _JS
+
+
 def test_inline_attribution_is_hidden_for_manual_mode() -> None:
     assert '<small id="tr-address-attribution" hidden>Google Maps</small>' in _HTML
     assert "const attribution = parentElement.querySelector('#tr-address-attribution');" in _JS
