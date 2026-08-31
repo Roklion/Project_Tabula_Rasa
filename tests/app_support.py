@@ -8,6 +8,7 @@ from tempfile import TemporaryDirectory
 from typing import Any, Iterator
 from unittest.mock import patch
 
+import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 from tabula_rasa.ledger_auth import hash_password
@@ -98,6 +99,11 @@ def authenticated_app(
     site.
     """
 
+    # ``get_storage`` is a global Streamlit resource. AppTest scenarios reuse
+    # the same profile key, so isolate the cache before constructing a fresh
+    # fake storage boundary and again when the scenario exits.
+    st.cache_resource.clear()
+
     app = build_app_test(profiles=profiles, extra_secrets=extra_secrets)
     if storages is not None:
         def from_secrets(secrets: dict[str, object]) -> GoogleSheetsStorage:
@@ -123,11 +129,14 @@ def authenticated_app(
             "from_secrets",
             side_effect=from_secrets,
         )
-        with profile_patch, storage_patch:
-            app.run()
-            app.text_input[0].input(TEST_PASSWORD)
-            app.button[0].click().run()
-            yield app
+        try:
+            with profile_patch, storage_patch:
+                app.run()
+                app.text_input[0].input(TEST_PASSWORD)
+                app.button[0].click().run()
+                yield app
+        finally:
+            st.cache_resource.clear()
 
 
 def navigate_to(app: AppTest, page: str) -> None:
