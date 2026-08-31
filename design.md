@@ -433,14 +433,19 @@ Show Total balance, Income this month, Expenses this month, Net this month,
 recent activity, and account balances using the latest confirmed Sheets state.
 Recent activity retains Date, Type, Payee, Category, Account, and Amount and
 the current recent-activity limit. Account balances retain Account,
-Classification, Type, and Balance.
+Classification, Type, and Balance. By default, account balances are grouped in
+Asset, Liability, then Equity order and sorted by account name within each
+classification.
 
 #### Acceptance criteria
 
 All four metrics and both tables remain present. Empty ledgers direct the user
 to Transactions. Expense signs preserve current display semantics. Account
 balances sit beside recent activity on wide screens and stack by priority on
-narrow screens.
+narrow screens. At constrained desktop widths with the expanded sidebar, the
+cards stack to preserve readable tables. On wide screens, both tables fit their
+cards without requiring horizontal scrolling at the standard application
+content width.
 
 ### Transactions
 

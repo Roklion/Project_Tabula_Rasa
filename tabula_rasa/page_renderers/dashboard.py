@@ -6,11 +6,35 @@ from dataclasses import dataclass
 from datetime import date
 
 import streamlit as st
+import pandas as pd
 
 from tabula_rasa.ledger_presentation import balances_frame, ledger_frame, money
 from tabula_rasa.ledger_reporting import profit_and_loss
 from tabula_rasa.presentation import render_page_header
 from tabula_rasa.storage import GoogleSheetsStorage, StorageError
+
+
+_CLASSIFICATION_ORDER = {"Asset": 0, "Liability": 1, "Equity": 2}
+
+_DASHBOARD_RESPONSIVE_CSS = """
+<style>
+/* Container queries follow the available content width, including sidebar state. */
+.st-key-dashboard_detail {
+    container-type: inline-size;
+}
+
+@container (max-width: 1020px) {
+    .st-key-dashboard_detail [data-testid="stHorizontalBlock"] {
+        flex-wrap: wrap;
+    }
+
+    .st-key-dashboard_detail [data-testid="stColumn"] {
+        flex: 1 1 100%;
+        min-width: 100%;
+    }
+}
+</style>
+"""
 
 
 @dataclass(frozen=True)
@@ -19,6 +43,37 @@ class DashboardContext:
 
     profile_key: str
     storage: GoogleSheetsStorage
+
+
+def _sorted_dashboard_balances(
+    balances: pd.DataFrame, accounts: list[dict]
+) -> pd.DataFrame:
+    """Order dashboard balances by accounting classification, then account."""
+    classification_rank = balances["Classification"].map(_CLASSIFICATION_ORDER)
+    account_names = {
+        str(account.get("id") or ""): str(account.get("name") or "")
+        for account in accounts
+    }
+    return (
+        balances.assign(
+            _classification_rank=classification_rank.fillna(
+                len(_CLASSIFICATION_ORDER)
+            ),
+            _account_sort_key=(
+                balances["ID"]
+                .map(account_names)
+                .fillna(balances["Account"])
+                .astype(str)
+                .str.casefold()
+            ),
+        )
+        .sort_values(
+            ["_classification_rank", "_account_sort_key"],
+            kind="stable",
+            ignore_index=True,
+        )
+        .drop(columns=["_classification_rank", "_account_sort_key"])
+    )
 
 
 def render_dashboard(context: DashboardContext) -> None:
@@ -58,35 +113,54 @@ def render_dashboard(context: DashboardContext) -> None:
         with c4:
             with st.container(key="dashboard_net_month"):
                 st.metric("Net this month", money(monthly_totals["net"]))
-    left, right = st.columns([1.6, 1], gap="large")
-    with left:
-        with st.container(key="dashboard_activity"):
-            st.subheader("Recent activity")
-            st.caption("Latest eight transactions")
-            recent = ledger_frame(transactions[:8], accounts, categories)
-            if recent.empty:
-                st.info("No transactions yet. Add your first one from Transactions.")
-            else:
-                display = recent[
-                    ["Date", "Type", "Payee", "Category", "Account", "Amount"]
-                ].copy()
-                expense_rows = display["Type"] == "Expense"
-                display.loc[expense_rows, "Amount"] *= -1
+    st.markdown(_DASHBOARD_RESPONSIVE_CSS, unsafe_allow_html=True)
+    with st.container(key="dashboard_detail"):
+        left, right = st.columns([1.35, 1], gap="small")
+        with left:
+            with st.container(key="dashboard_activity"):
+                st.subheader("Recent activity")
+                st.caption("Latest eight transactions")
+                recent = ledger_frame(transactions[:8], accounts, categories)
+                if recent.empty:
+                    st.info("No transactions yet. Add your first one from Transactions.")
+                else:
+                    display = recent[
+                        ["Date", "Type", "Payee", "Category", "Account", "Amount"]
+                    ].copy()
+                    expense_rows = display["Type"] == "Expense"
+                    display.loc[expense_rows, "Amount"] *= -1
+                    st.dataframe(
+                        display,
+                        hide_index=True,
+                        width="stretch",
+                        column_config={
+                            "Date": st.column_config.TextColumn(width=70),
+                            "Type": st.column_config.TextColumn(width=55),
+                            "Payee": st.column_config.TextColumn(width=65),
+                            "Category": st.column_config.TextColumn(width=125),
+                            "Account": st.column_config.TextColumn(width=130),
+                            "Amount": st.column_config.NumberColumn(
+                                format="$%.2f", width=75
+                            ),
+                        },
+                    )
+        with right:
+            with st.container(key="dashboard_balances"):
+                st.subheader("Account balances")
+                st.caption("Current balances by account")
+                dashboard_balances = _sorted_dashboard_balances(balances, accounts)
                 st.dataframe(
-                    display,
+                    dashboard_balances[
+                        ["Account", "Classification", "Type", "Balance"]
+                    ],
                     hide_index=True,
                     width="stretch",
                     column_config={
-                        "Amount": st.column_config.NumberColumn(format="$%.2f")
+                        "Account": st.column_config.TextColumn(width=160),
+                        "Classification": st.column_config.TextColumn(width=80),
+                        "Type": st.column_config.TextColumn(width=70),
+                        "Balance": st.column_config.NumberColumn(
+                            format="$%.2f", width=80
+                        ),
                     },
                 )
-    with right:
-        with st.container(key="dashboard_balances"):
-            st.subheader("Account balances")
-            st.caption("Current balances by account")
-            st.dataframe(
-                balances[["Account", "Classification", "Type", "Balance"]],
-                hide_index=True,
-                width="stretch",
-                column_config={"Balance": st.column_config.NumberColumn(format="$%.2f")},
-            )

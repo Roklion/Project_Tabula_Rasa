@@ -29,7 +29,10 @@ The Dashboard shows:
 - Expenses this month;
 - Net this month;
 - recent activity, up to the current application limit; and
-- account balances.
+- account balances, ordered by Asset, Liability, then Equity and account name.
+
+On wide screens the two tables sit side by side. At constrained desktop widths
+with the expanded sidebar, they stack so each table remains readable.
 
 It uses the latest confirmed Sheets state. When there are no transactions,
 the page explains that the first entry can be added from Transactions.

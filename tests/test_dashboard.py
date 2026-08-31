@@ -90,3 +90,61 @@ def test_empty_balances_frame_preserves_dashboard_columns() -> None:
         "Active",
         "Balance",
     ]
+
+
+def test_dashboard_balances_sort_by_classification_then_account() -> None:
+    accounts = [
+            {
+                "id": "capital",
+                "name": "Capital",
+                "type": "Equity",
+                "classification": "Equity",
+                "active": True,
+                "opening_balance": "0.00",
+            },
+            {
+                "id": "payable",
+                "name": "Payable",
+                "type": "Credit card",
+                "classification": "Liability",
+                "active": True,
+                "opening_balance": "0.00",
+            },
+            {
+                "id": "savings",
+                "name": "Apple",
+                "parent_id": "checking",
+                "type": "Bank",
+                "classification": "Asset",
+                "active": True,
+                "opening_balance": "0.00",
+            },
+            {
+                "id": "checking",
+                "name": "zebra",
+                "type": "Bank",
+                "classification": "Asset",
+                "active": True,
+                "opening_balance": "0.00",
+            },
+    ]
+    balances = balances_frame(accounts, [])
+
+    sorted_balances = dashboard._sorted_dashboard_balances(balances, accounts)
+
+    assert list(sorted_balances["Classification"]) == [
+        "Asset",
+        "Asset",
+        "Liability",
+        "Equity",
+    ]
+    assert list(sorted_balances["Account"]) == [
+        "zebra › Apple",
+        "zebra",
+        "Payable",
+        "Capital",
+    ]
+
+
+def test_dashboard_responsive_css_includes_card_padding_threshold() -> None:
+    assert "@container (max-width: 1020px)" in dashboard._DASHBOARD_RESPONSIVE_CSS
