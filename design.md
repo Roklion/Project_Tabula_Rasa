@@ -433,14 +433,19 @@ Show Total balance, Income this month, Expenses this month, Net this month,
 recent activity, and account balances using the latest confirmed Sheets state.
 Recent activity retains Date, Type, Payee, Category, Account, and Amount and
 the current recent-activity limit. Account balances retain Account,
-Classification, Type, and Balance.
+Classification, Type, and Balance. By default, account balances are grouped in
+Asset, Liability, then Equity order and sorted by account name within each
+classification.
 
 #### Acceptance criteria
 
 All four metrics and both tables remain present. Empty ledgers direct the user
 to Transactions. Expense signs preserve current display semantics. Account
 balances sit beside recent activity on wide screens and stack by priority on
-narrow screens.
+narrow screens. At constrained desktop widths with the expanded sidebar, the
+cards stack to preserve readable tables. On wide screens, both tables fit their
+cards without requiring horizontal scrolling at the standard application
+content width.
 
 ### Transactions
 
@@ -515,11 +520,20 @@ sorting may persist while the same widget remains mounted, including across
 the two Transactions tabs. Navigation away and back resets the table
 generation and latest-date-first ordering.
 
+In Edit or Bulk mode, **Copy transaction** is enabled only when exactly one
+visible transaction is selected. It opens the existing editor as a clearly
+labeled new-transaction copy workflow. The copy preserves the source date and
+eligible fields, prefixes the description with the source transaction ID, and
+starts with no receipt references. Save creates a new transaction; Cancel
+discards the copy state without changing the source row.
+
 #### Bulk behavior
 
 Bulk mode is explicit and selects only visible rows. It shows the selection
 count and only these actions:
 
+- **Copy transaction:** available for exactly one selected row and opens the
+  new-transaction copy editor.
 - **Export selected:** downloads selected visible ledger columns without a
   workbook change.
 - **Change category:** available only for a homogeneous Income or Expense

@@ -29,7 +29,10 @@ The Dashboard shows:
 - Expenses this month;
 - Net this month;
 - recent activity, up to the current application limit; and
-- account balances.
+- account balances, ordered by Asset, Liability, then Equity and account name.
+
+On wide screens the two tables sit side by side. At constrained desktop widths
+with the expanded sidebar, they stack so each table remains readable.
 
 It uses the latest confirmed Sheets state. When there are no transactions,
 the page explains that the first entry can be added from Transactions.
@@ -155,6 +158,8 @@ Choose **Bulk** explicitly to select multiple rows from the visible result
 set. Changing the business, filters, search, mode, or navigation clears the
 bulk selection. Bulk mode provides only:
 
+- **Copy transaction**, available for exactly one selected row and opening the
+  new-transaction copy editor;
 - **Export selected**, which downloads the selected visible ledger columns
   without changing the workbook;
 - **Change category**, only for an all-Income or all-Expense selection, using
@@ -182,6 +187,16 @@ available when editing that historical record.
 
 Single and bulk deletion are permanent. The acknowledgement explains the
 consequence and explicitly says linked Drive files remain.
+
+### Copying a transaction
+
+In **View & edit ledger**, select exactly one visible transaction and choose
+**Copy transaction**. The editor opens in a clearly labeled copy mode with the
+source date and other eligible fields prefilled. The description identifies the
+source transaction while retaining its original memo. Receipts and receipt
+references are never copied; save the new transaction first, then attach any
+receipts from its editor. **Save copied transaction** creates a new ID, while
+**Cancel copy** leaves the source unchanged and creates nothing.
 
 ## Receipts
 
