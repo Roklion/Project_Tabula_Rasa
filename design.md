@@ -442,8 +442,10 @@ classification.
 All four metrics and both tables remain present. Empty ledgers direct the user
 to Transactions. Expense signs preserve current display semantics. Account
 balances sit beside recent activity on wide screens and stack by priority on
-narrow screens. On wide screens, both tables fit their cards without requiring
-horizontal scrolling at the standard application content width.
+narrow screens. At constrained desktop widths with the expanded sidebar, the
+cards stack to preserve readable tables. On wide screens, both tables fit their
+cards without requiring horizontal scrolling at the standard application
+content width.
 
 ### Transactions
 

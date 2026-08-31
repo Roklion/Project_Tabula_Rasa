@@ -16,6 +16,21 @@ from tabula_rasa.storage import GoogleSheetsStorage, StorageError
 
 _CLASSIFICATION_ORDER = {"Asset": 0, "Liability": 1, "Equity": 2}
 
+_DASHBOARD_RESPONSIVE_CSS = """
+<style>
+@media (max-width: 1350px) {
+    .st-key-dashboard_detail [data-testid="stHorizontalBlock"] {
+        flex-wrap: wrap;
+    }
+
+    .st-key-dashboard_detail [data-testid="stColumn"] {
+        flex: 1 1 100%;
+        min-width: 100%;
+    }
+}
+</style>
+"""
+
 
 @dataclass(frozen=True)
 class DashboardContext:
@@ -93,52 +108,54 @@ def render_dashboard(context: DashboardContext) -> None:
         with c4:
             with st.container(key="dashboard_net_month"):
                 st.metric("Net this month", money(monthly_totals["net"]))
-    left, right = st.columns([1.35, 1], gap="small")
-    with left:
-        with st.container(key="dashboard_activity"):
-            st.subheader("Recent activity")
-            st.caption("Latest eight transactions")
-            recent = ledger_frame(transactions[:8], accounts, categories)
-            if recent.empty:
-                st.info("No transactions yet. Add your first one from Transactions.")
-            else:
-                display = recent[
-                    ["Date", "Type", "Payee", "Category", "Account", "Amount"]
-                ].copy()
-                expense_rows = display["Type"] == "Expense"
-                display.loc[expense_rows, "Amount"] *= -1
+    st.markdown(_DASHBOARD_RESPONSIVE_CSS, unsafe_allow_html=True)
+    with st.container(key="dashboard_detail"):
+        left, right = st.columns([1.35, 1], gap="small")
+        with left:
+            with st.container(key="dashboard_activity"):
+                st.subheader("Recent activity")
+                st.caption("Latest eight transactions")
+                recent = ledger_frame(transactions[:8], accounts, categories)
+                if recent.empty:
+                    st.info("No transactions yet. Add your first one from Transactions.")
+                else:
+                    display = recent[
+                        ["Date", "Type", "Payee", "Category", "Account", "Amount"]
+                    ].copy()
+                    expense_rows = display["Type"] == "Expense"
+                    display.loc[expense_rows, "Amount"] *= -1
+                    st.dataframe(
+                        display,
+                        hide_index=True,
+                        width="stretch",
+                        column_config={
+                            "Date": st.column_config.TextColumn(width=80),
+                            "Type": st.column_config.TextColumn(width=65),
+                            "Payee": st.column_config.TextColumn(width=75),
+                            "Category": st.column_config.TextColumn(width=145),
+                            "Account": st.column_config.TextColumn(width=150),
+                            "Amount": st.column_config.NumberColumn(
+                                format="$%.2f", width=80
+                            ),
+                        },
+                    )
+        with right:
+            with st.container(key="dashboard_balances"):
+                st.subheader("Account balances")
+                st.caption("Current balances by account")
+                dashboard_balances = _sorted_dashboard_balances(balances, accounts)
                 st.dataframe(
-                    display,
+                    dashboard_balances[
+                        ["Account", "Classification", "Type", "Balance"]
+                    ],
                     hide_index=True,
                     width="stretch",
                     column_config={
-                        "Date": st.column_config.TextColumn(width=80),
-                        "Type": st.column_config.TextColumn(width=65),
-                        "Payee": st.column_config.TextColumn(width=75),
-                        "Category": st.column_config.TextColumn(width=145),
-                        "Account": st.column_config.TextColumn(width=150),
-                        "Amount": st.column_config.NumberColumn(
-                            format="$%.2f", width=80
+                        "Account": st.column_config.TextColumn(width=170),
+                        "Classification": st.column_config.TextColumn(width=90),
+                        "Type": st.column_config.TextColumn(width=75),
+                        "Balance": st.column_config.NumberColumn(
+                            format="$%.2f", width=90
                         ),
                     },
                 )
-    with right:
-        with st.container(key="dashboard_balances"):
-            st.subheader("Account balances")
-            st.caption("Current balances by account")
-            dashboard_balances = _sorted_dashboard_balances(balances, accounts)
-            st.dataframe(
-                dashboard_balances[
-                    ["Account", "Classification", "Type", "Balance"]
-                ],
-                hide_index=True,
-                width="stretch",
-                column_config={
-                    "Account": st.column_config.TextColumn(width=170),
-                    "Classification": st.column_config.TextColumn(width=90),
-                    "Type": st.column_config.TextColumn(width=75),
-                    "Balance": st.column_config.NumberColumn(
-                        format="$%.2f", width=90
-                    ),
-                },
-            )
