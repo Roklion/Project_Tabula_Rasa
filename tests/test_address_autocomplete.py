@@ -38,6 +38,10 @@ def test_manual_fallback_persists_without_rerunning_per_keystroke() -> None:
     assert "if (failedScript) failedScript.remove();" in _JS
 
 
+def test_switching_back_to_google_mode_unhides_the_autocomplete_host() -> None:
+    assert "manual.hidden = true;\n    host.hidden = false;" in _JS
+
+
 def test_inline_attribution_is_hidden_for_manual_mode() -> None:
     assert '<small id="tr-address-attribution" hidden>Google Maps</small>' in _HTML
     assert "const attribution = parentElement.querySelector('#tr-address-attribution');" in _JS

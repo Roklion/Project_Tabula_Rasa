@@ -151,6 +151,7 @@ export default function(component) {
     if (manualMode) { showManual('Enter an address manually.'); return; }
     if (!data.apiKey) { showManual('Enter an address manually.'); return; }
     manual.hidden = true;
+    host.hidden = false;
     manualButton.hidden = false;
     manualButton.textContent = 'Enter address manually';
     status.textContent = 'Loading Google address suggestions…';
