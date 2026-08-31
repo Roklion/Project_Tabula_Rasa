@@ -312,7 +312,9 @@ def render_mileage(context: MileageContext) -> None:
             if len(suggestion) > 1 and suggestion[1] is not None:
                 st.session_state["add_mileage_return_miles"] = suggestion[1]
 
-        with st.form("add_mileage_trip", clear_on_submit=False):
+        # Keep draft widgets in page state so address-component reruns cannot
+        # discard unsubmitted edits.
+        with st.container():
             c1, c2 = st.columns(2, gap="small")
             trip_date = c1.date_input(
                 "Trip date", date.today(), key="add_mileage_trip_date"
@@ -347,14 +349,14 @@ def render_mileage(context: MileageContext) -> None:
             )
             notes = st.text_area("Notes (optional)", key="add_mileage_notes")
             route_error = st.empty()
-            calculate_requested = st.form_submit_button(
+            calculate_requested = st.button(
                 "Recalculate mileage" if route_state else "Calculate mileage",
                 disabled=not _route_ready(
                     start, destination_value, context.route_mileage
                 ),
             )
             save_error = st.empty()
-            submitted = st.form_submit_button(
+            submitted = st.button(
                 "Save mileage trip", type="primary", width="stretch"
             )
             if calculate_requested and context.route_mileage is not None:
@@ -570,7 +572,9 @@ def render_mileage(context: MileageContext) -> None:
                     st.session_state[
                         f"edit_mileage_trip_miles_{edit_widget_scope}"
                     ] = edit_suggestion
-                with st.form("edit_mileage_trip"):
+                # Address autocomplete can rerun this page before save; a
+                # container keeps the rest of the draft synchronized in state.
+                with st.container():
                     st.caption("Update this saved mileage row.")
                     c1, c2 = st.columns(2, gap="small")
                     edited_date = c1.date_input(
@@ -616,7 +620,7 @@ def render_mileage(context: MileageContext) -> None:
                         key=f"edit_mileage_trip_confirm_delete_{edit_widget_scope}",
                     )
                     edit_error = st.empty()
-                    calculate_edit_requested = st.form_submit_button(
+                    calculate_edit_requested = st.button(
                         "Recalculate mileage"
                         if edit_route_state
                         else "Calculate mileage",
@@ -628,13 +632,13 @@ def render_mileage(context: MileageContext) -> None:
                         key=f"edit_mileage_trip_calculate_{edit_widget_scope}",
                     )
                     save_column, delete_column = st.columns(2, gap="small")
-                    save_requested = save_column.form_submit_button(
+                    save_requested = save_column.button(
                         "Save mileage changes",
                         type="primary",
                         width="stretch",
                         key=f"edit_mileage_trip_save_{edit_widget_scope}",
                     )
-                    delete_requested = delete_column.form_submit_button(
+                    delete_requested = delete_column.button(
                         "Permanently delete mileage trip",
                         icon=":material/delete_forever:",
                         width="stretch",

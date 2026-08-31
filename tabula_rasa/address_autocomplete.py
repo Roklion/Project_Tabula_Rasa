@@ -246,6 +246,8 @@ def browser_api_key_from_secrets(
     Streamlit component boundary. The Routes client can remain available, but
     autocomplete falls back to manual entry until two separate keys are set.
     """
+    if not isinstance(secrets_mapping, Mapping):
+        return None
     raw = secrets_mapping.get("google_maps")
     if not isinstance(raw, Mapping):
         return None

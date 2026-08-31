@@ -187,3 +187,11 @@ def test_add_mileage_reset_clears_calculated_route_state() -> None:
     source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
 
     assert '            _route_key(context, "add"),' in source
+
+
+def test_mileage_drafts_are_not_buffered_in_forms() -> None:
+    source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
+
+    assert 'with st.form("add_mileage_trip"' not in source
+    assert 'with st.form("edit_mileage_trip")' not in source
+    assert "st.form_submit_button" not in source

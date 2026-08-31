@@ -110,3 +110,7 @@ def test_browser_key_rejects_non_ascii_key_material() -> None:
         )
         is None
     )
+
+
+def test_browser_key_fails_closed_for_non_mapping_secrets() -> None:
+    assert browser_api_key_from_secrets(None) is None  # type: ignore[arg-type]
