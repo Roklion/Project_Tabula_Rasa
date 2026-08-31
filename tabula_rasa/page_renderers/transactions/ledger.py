@@ -841,6 +841,13 @@ def render_ledger(
                         "Choose active account(s) before saving this copied transaction."
                     )
                 if save_requested:
+                    copy_description = (
+                        copied_transaction_description(
+                            {"id": edit_id, "description": edited_description}
+                        )
+                        if copy_mode
+                        else edited_description
+                    )
                     transaction_data = {
                         "txn_date": edited_date,
                         "kind": selected["kind"],
@@ -850,7 +857,7 @@ def render_ledger(
                         "category_id": edited_category_id,
                         "payee": edited_payee,
                         "reference": edited_reference,
-                        "description": edited_description,
+                        "description": copy_description,
                     }
                     payload = {
                         **transaction_data,

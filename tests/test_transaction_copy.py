@@ -226,10 +226,30 @@ def test_copy_save_adjusts_filters_to_keep_new_transaction_selected() -> None:
         )
         assert copied["txn_date"] == created_date.isoformat()
         assert app.session_state["edit_transaction_id"] == copied["id"]
-        assert copied["id"] in [
+    assert copied["id"] in [
             str(transaction_id)
             for transaction_id in app.dataframe[0].value["ID"]
-        ]
+    ]
+
+
+def test_copy_save_normalizes_user_edited_description_provenance() -> None:
+    storage, source = _transaction_fixture()
+
+    with authenticated_app(storage) as app:
+        navigate_to(app, "Transactions")
+        by_label(app.segmented_control, "Ledger mode").set_value("Bulk").run()
+        app.session_state["transaction_bulk_selected_ids_test"] = (source["id"],)
+        app.run()
+        by_label(app.button, "Copy transaction").click().run()
+        by_label(app.text_input, "Edit description").set_value(
+            "Updated memo. Copy From stale-1. Copy From stale-2"
+        )
+        by_label(app.button, "Save copied transaction").click().run()
+
+    copied = next(
+        item for item in storage.list_transactions() if item["id"] != source["id"]
+    )
+    assert copied["description"] == f"Updated memo. Copy From {source['id']}"
 
 
 def test_copy_state_is_cleared_when_switching_profiles() -> None:
