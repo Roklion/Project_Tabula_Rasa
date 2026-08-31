@@ -5,6 +5,7 @@ from datetime import date
 from tests.app_support import authenticated_app, by_label, navigate_to
 from tests.fakes import FakeWorkbook
 from tabula_rasa.page_renderers.transactions.ledger import (
+    _editable_account_ids,
     copied_transaction_description,
 )
 from tabula_rasa.storage import GoogleSheetsStorage
@@ -36,6 +37,23 @@ def test_copied_transaction_description_retains_source_memo() -> None:
     assert copied_transaction_description({"id": "source-123"}) == (
         "Copied from transaction source-123"
     )
+    assert copied_transaction_description({"id": None}) == (
+        "Copied from transaction"
+    )
+
+
+def test_copy_account_choices_exclude_inactive_source_account() -> None:
+    accounts = [
+        {"id": "inactive", "name": "Old account", "active": False},
+        {"id": "active", "name": "Current account", "active": True},
+    ]
+
+    assert _editable_account_ids(
+        accounts, ["inactive"], copy_mode=True
+    ) == ["active"]
+    assert _editable_account_ids(
+        accounts, ["inactive"], copy_mode=False
+    ) == ["active", "inactive"]
 
 
 def test_copy_form_can_be_canceled_without_creating_or_mutating_transaction() -> None:

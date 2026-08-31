@@ -76,10 +76,31 @@ def _copy_generation_key(profile_key: str) -> str:
 
 def copied_transaction_description(transaction: Mapping[str, object]) -> str:
     """Build a clear copy provenance note while retaining the source memo."""
-    source_id = str(transaction.get("id", "")).strip()
+    source_id = str(transaction.get("id") or "").strip()
     source_description = str(transaction.get("description", "") or "").strip()
-    provenance = f"Copied from transaction {source_id}"
+    provenance = (
+        f"Copied from transaction {source_id}"
+        if source_id
+        else "Copied from transaction"
+    )
     return f"{provenance}: {source_description}" if source_description else provenance
+
+
+def _editable_account_ids(
+    accounts: Sequence[Mapping[str, object]],
+    current_account_ids: Sequence[str],
+    *,
+    copy_mode: bool,
+) -> list[str]:
+    """Return accounts that can be selected by this editor mode."""
+
+    current_ids = set(current_account_ids)
+    return [
+        str(account["id"])
+        for account in ordered_hierarchy(accounts)
+        if account["active"]
+        or (not copy_mode and str(account["id"]) in current_ids)
+    ]
 
 
 def _clear_copy_state(profile_key: str) -> None:
@@ -584,12 +605,9 @@ def render_ledger(
                     selected["account_id"],
                     selected.get("to_account_id", ""),
                 ]
-                editable_account_ids = [
-                    account["id"]
-                    for account in ordered_hierarchy(accounts)
-                    if account["active"]
-                    or account["id"] in current_account_ids
-                ]
+                editable_account_ids = _editable_account_ids(
+                    accounts, current_account_ids, copy_mode=copy_mode
+                )
                 edited_account_id = st.selectbox(
                     (
                         "Edit from account"
@@ -672,6 +690,9 @@ def render_ledger(
                     key=f"edit_transaction_description_{edit_widget_scope}",
                 )
                 edit_error = st.empty()
+                copy_accounts_valid = bool(edited_account_id) and (
+                    selected["kind"] != "Transfer" or bool(edited_to_account_id)
+                )
                 if copy_mode:
                     st.caption(
                         "Receipts are not copied. Save this transaction first, "
@@ -682,6 +703,7 @@ def render_ledger(
                         "Save copied transaction",
                         type="primary",
                         width="stretch",
+                        disabled=not copy_accounts_valid,
                         key=f"edit_transaction_copy_save_{edit_widget_scope}",
                     )
                     cancel_requested = cancel_column.form_submit_button(
@@ -715,6 +737,10 @@ def render_ledger(
                         key=f"edit_transaction_delete_{edit_widget_scope}",
                     )
                     cancel_requested = False
+                if copy_mode and not copy_accounts_valid:
+                    st.warning(
+                        "Choose active account(s) before saving this copied transaction."
+                    )
                 if save_requested:
                     transaction_data = {
                         "txn_date": edited_date,
