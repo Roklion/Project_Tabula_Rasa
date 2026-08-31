@@ -25,6 +25,7 @@ from tabula_rasa.google_drive import (
     load_oauth_config,
 )
 from tabula_rasa.google_drive_admin import process_google_drive_oauth_callback
+from tabula_rasa.legal import render_public_legal_page
 from tabula_rasa.local_profile_admin import render_local_profile_admin
 from tabula_rasa.local_profile_store import (
     LOCAL_PROFILE_STORE_PATH,
@@ -59,6 +60,7 @@ from tabula_rasa.page_renderers.transactions import (
 )
 from tabula_rasa.presentation import (
     apply_global_styles,
+    render_global_footer,
     reset_profile_presentation_state,
 )
 from tabula_rasa.storage import (
@@ -260,6 +262,10 @@ def confirmed_write(
 st.set_page_config(page_title="Project Tabula Rasa", page_icon="📒", layout="wide")
 apply_global_styles()
 
+if render_public_legal_page():
+    render_global_footer()
+    st.stop()
+
 require_authentication()
 
 profile_admin_enabled = local_profile_admin_available(
@@ -276,10 +282,12 @@ except LocalProfileStoreError:
         "The local business-profile file is malformed or unavailable. "
         "Repair or move .streamlit/business_profiles.json and restart."
     )
+    render_global_footer()
     st.stop()
 except BusinessProfileConfigurationError as error:
     if not profile_admin_enabled:
         st.error(str(error))
+        render_global_footer()
         st.stop()
     profiles = []
 
@@ -407,6 +415,7 @@ with st.sidebar:
 
     if page is None:
         st.error("No application page is available in this environment.")
+        render_global_footer()
         st.stop()
 
     previous_page = st.session_state.get("previous_navigation_page")
@@ -454,6 +463,7 @@ else:
             report_storage_error(error)
         else:
             st.error("The local business-profile file could not be read safely.")
+        render_global_footer()
         st.stop()
 
     with st.sidebar:
@@ -564,3 +574,6 @@ elif page == "Data & backup":
             report_storage_error=report_storage_error,
         )
     )
+
+
+render_global_footer()

@@ -53,10 +53,12 @@ this repository.
    review its current supported-services behavior before relying on it.
 9. Add the two deployment-specific keys to ignored Streamlit Secrets, restart
    local Streamlit, and separately update the hosted Secrets store.
-10. Before public deployment, provide publicly accessible Terms of Use and a
-    Privacy Policy that satisfy the current Routes API policy and reference
-    Google's terms and privacy policy as required. Keep the visible Google Maps
-    attribution beside Google-derived suggestions and route mileage.
+10. Before public deployment, review the checked-in [Terms of Use](TERMS_OF_USE.md)
+    and [Privacy Policy](PRIVACY_POLICY.md). The application footer exposes both
+    documents without requiring the application password. Confirm they still
+    satisfy the current Routes API policy and reference Google's terms and
+    privacy policy as required. Keep the visible Google Maps attribution beside
+    Google-derived suggestions and route mileage.
 11. Perform one controlled live validation, then inspect key usage, API metrics,
     quota consumption, and billing. Rotate or disable any unused test key.
 

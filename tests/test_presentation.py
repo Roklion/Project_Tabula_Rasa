@@ -35,6 +35,7 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
         '[data-testid="stAlert"]',
         '[data-testid="stMainBlockContainer"]',
         ".st-key-login_surface",
+        ".st-key-global_footer",
         ".st-key-add_mileage_round_trip",
         '[data-testid="InputInstructions"]',
         ":focus-visible",

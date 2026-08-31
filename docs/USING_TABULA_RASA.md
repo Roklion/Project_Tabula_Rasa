@@ -11,6 +11,11 @@ Enter the application password before any ledger page or workbook data is
 shown. After signing in, select the business in the sidebar. The selected
 business and workbook title remain visible while working.
 
+The global footer makes the [Terms of Use](TERMS_OF_USE.md) and
+[Privacy Policy](PRIVACY_POLICY.md) available before sign-in and on every
+authenticated page. Opening either public document does not load a business
+profile, workbook, or ledger data.
+
 Every workbook operation, cache, duplicate-submission check, import, export,
 report, receipt operation, and backup uses the selected profile. Changing
 business clears or rebuilds page-local selections and pending notices; it does
@@ -244,8 +249,10 @@ that selected row. The log's From and To filters control its metrics, table,
 and CSV together.
 
 Google-derived address suggestions and route mileage retain visible Google Maps
-attribution. See [Google Maps mileage setup](GOOGLE_MAPS.md) for operator,
-privacy, quota, billing, and credential requirements.
+attribution, including a note below the current mileage control after an
+autocomplete selection or route calculation. See
+[Google Maps mileage setup](GOOGLE_MAPS.md) for operator, privacy, quota,
+billing, and credential requirements.
 
 ## Reports
 

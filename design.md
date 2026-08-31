@@ -231,6 +231,11 @@ It is a settings surface, not a user-identity or permission-management page.
 The login surface uses the keyed native login_surface container so its readable
 desktop width does not depend on an undocumented Streamlit test ID.
 
+A compact global footer exposes **Terms of Use | Privacy Policy** on the login
+surface and every authenticated page. Each link opens a static public legal
+document without requiring the application password or loading profiles,
+credentials, workbooks, OAuth state, or ledger data.
+
 When the profile changes, keep the new business and workbook visible and clear
 or rebuild page-local filters, selections, edit targets, widget generations,
 and pending notices. Never initialize or access another profile's storage
@@ -418,6 +423,8 @@ above define reusable rules and do not repeat these details.
 - Preserve Log out on every normal page.
 - Expose Account settings only under current local-administration safety
   conditions.
+- Keep Terms of Use and Privacy Policy available before and after
+  authentication without exposing application data.
 
 #### Acceptance criteria
 
@@ -594,8 +601,11 @@ Destination use a narrowly scoped address-autocomplete component with an
 explicit manual-entry path. After two Google suggestions are selected, an
 explicit Calculate mileage action requests the primary driving route and
 populates an editable one-decimal suggestion. Changing either endpoint clears
-the corresponding calculated state. Calculation errors preserve manual entry,
-and Google-derived content keeps visible Google Maps attribution.
+the corresponding calculated state. Calculation errors preserve manual entry.
+When either current endpoint was selected with Google autocomplete or the
+current mileage suggestion was calculated by Google Routes, a Google Maps note
+appears directly below the mileage control. Stored rows do not claim Google
+provenance after reload because that metadata is intentionally not persisted.
 
 Round trip performs separate outbound and reversed return calculations and
 shows independently editable mileage values. Saving creates the same two
