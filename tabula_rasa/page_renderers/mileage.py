@@ -289,9 +289,9 @@ def render_mileage(context: MileageContext) -> None:
             # Clear only a calculated suggestion; leave a user's manual value
             # alone when no route had been calculated in this workflow.
             if "add_mileage_miles" in st.session_state:
-                st.session_state["add_mileage_miles"] = 0.1
+                st.session_state["add_mileage_miles"] = 0.0
             if "add_mileage_return_miles" in st.session_state:
-                st.session_state["add_mileage_return_miles"] = 0.1
+                st.session_state["add_mileage_return_miles"] = 0.0
             route_state = None
             address_changed = True
         if address_changed:
