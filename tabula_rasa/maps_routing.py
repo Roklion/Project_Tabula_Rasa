@@ -181,14 +181,14 @@ class GoogleRoutesClient:
                 json=payload,
                 timeout=self.config.timeout_seconds,
             )
-        except requests.Timeout as error:
+        except requests.Timeout:
             raise GoogleRoutesTimeoutError(
                 "Google Maps routing timed out. Try again."
-            ) from error
-        except requests.RequestException as error:
+            ) from None
+        except requests.RequestException:
             raise GoogleRoutesTemporaryError(
                 "Google Maps routing is temporarily unavailable. Try again."
-            ) from error
+            ) from None
 
         body = _response_json(response)
         if response.status_code < 200 or response.status_code >= 300:

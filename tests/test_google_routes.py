@@ -163,6 +163,7 @@ def test_compute_route_maps_request_timeout_without_raw_error() -> None:
         route_client.compute_route("origin", "destination")
 
     assert "secret" not in str(raised.value)
+    assert raised.value.__cause__ is None
 
 
 def test_compute_route_maps_request_outage_without_raw_error() -> None:
@@ -176,6 +177,7 @@ def test_compute_route_maps_request_outage_without_raw_error() -> None:
         route_client.compute_route("origin", "destination")
 
     assert "private" not in str(raised.value)
+    assert raised.value.__cause__ is None
 
 
 @pytest.mark.parametrize(
