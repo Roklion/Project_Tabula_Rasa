@@ -215,7 +215,12 @@ def _clean_secret(value: object, *, maximum: int) -> str:
     if not isinstance(value, str):
         return ""
     value = value.strip()
-    if not value or len(value) > maximum or any(ord(char) < 32 for char in value):
+    if (
+        not value
+        or len(value) > maximum
+        or not value.isascii()
+        or any(ord(char) < 32 for char in value)
+    ):
         return ""
     return value
 

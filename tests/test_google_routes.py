@@ -77,6 +77,8 @@ def test_direct_config_construction_applies_secret_validation() -> None:
     config = GoogleRoutesConfig(api_key=" key ", timeout_seconds="4")
     assert config.api_key == "key"
     assert config.timeout_seconds == 4.0
+    with pytest.raises(GoogleRoutesConfigurationError):
+        GoogleRoutesConfig(api_key="kéy")
 
 
 def test_compute_route_sends_place_ids_drive_and_narrow_field_mask() -> None:

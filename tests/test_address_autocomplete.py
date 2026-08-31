@@ -66,3 +66,17 @@ def test_browser_key_fails_closed_when_routes_key_is_reused() -> None:
         )
         is None
     )
+
+
+def test_browser_key_rejects_non_ascii_key_material() -> None:
+    assert (
+        browser_api_key_from_secrets(
+            {
+                "google_maps": {
+                    "browser_api_key": "browser-kéy",
+                    "routes_api_key": "routes-key",
+                }
+            }
+        )
+        is None
+    )
