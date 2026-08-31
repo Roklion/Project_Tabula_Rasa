@@ -144,3 +144,7 @@ def test_dashboard_balances_sort_by_classification_then_account() -> None:
         "Payable",
         "Capital",
     ]
+
+
+def test_dashboard_responsive_css_includes_card_padding_threshold() -> None:
+    assert "@container (max-width: 1020px)" in dashboard._DASHBOARD_RESPONSIVE_CSS

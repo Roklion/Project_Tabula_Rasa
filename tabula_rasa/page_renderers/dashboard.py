@@ -23,7 +23,7 @@ _DASHBOARD_RESPONSIVE_CSS = """
     container-type: inline-size;
 }
 
-@container (max-width: 1000px) {
+@container (max-width: 1020px) {
     .st-key-dashboard_detail [data-testid="stHorizontalBlock"] {
         flex-wrap: wrap;
     }
