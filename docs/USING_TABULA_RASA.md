@@ -212,10 +212,25 @@ destination, business purpose, optional vehicle, and optional notes. It
 supports date filtering, trip and mile totals, filtered CSV export, editing,
 and permanent deletion.
 
-**Round trip** creates two entries in one confirmed write: the outbound trip
-and a return trip with the locations reversed. Enter one-direction distance;
-the value is used for each row. The log's From and To filters control its
-metrics, table, and CSV together.
+When Google Maps is configured, Starting location and Destination offer Google
+address suggestions. Select both suggestions, then choose **Calculate mileage**
+to request the primary driving distance. The one-decimal suggestion is editable
+before save. Changing an endpoint invalidates the old suggestion; choose
+**Recalculate** or enter mileage manually. Autocomplete and calculation remain
+optional, and manual address/mileage entry continues to work when Google is not
+configured or is temporarily unavailable.
+
+**Round trip** calculates the outbound and reversed return directions
+separately and exposes independently editable mileage values. Saving still
+creates two independent entries in one confirmed write: one outbound row and
+one return row with reversed locations. The rows have separate IDs and can be
+edited or deleted independently later. Recalculating a saved row changes only
+that selected row. The log's From and To filters control its metrics, table,
+and CSV together.
+
+Google-derived address suggestions and route mileage retain visible Google Maps
+attribution. See [Google Maps mileage setup](GOOGLE_MAPS.md) for operator,
+privacy, quota, billing, and credential requirements.
 
 ## Reports
 

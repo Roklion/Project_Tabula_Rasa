@@ -136,13 +136,20 @@ keys are never returned to the browser or displayed in the profile table.
 All storage clients, workbook initialization, caches, prepared exports, and
 duplicate-submission protection are scoped to the selected profile.
 
-## Optional Google Drive and recovery settings
+## Optional Google Drive, Maps, and recovery settings
 
 For receipts and cloud-native backups, connect the selected profile to a human
 Google account and provision its Drive storage root, Receipts child, and
 Ledger Backups child. The Sheets service account and human Drive grant remain
 separate. Follow [Google Drive](GOOGLE_DRIVE.md) for the complete OAuth and
 Picker procedure.
+
+Google address suggestions and automatic route mileage require paid,
+app-wide Maps Platform configuration, two separately restricted API keys,
+quotas, budget alerts, attribution, and deployment policy surfaces. Complete
+the operator checklist in [Google Maps mileage setup](GOOGLE_MAPS.md) before
+making a live request. Maps is not profile-scoped and must not reuse the Sheets
+service account or Drive OAuth identity.
 
 For an optional Synology recovery copy, Account settings records a profile-root
 Cloud Sync destination, schedule, and retention policy. The application does
@@ -154,7 +161,8 @@ guide](BACKUP_RECOVERY.md) for the required download-only task and validation.
 Local development uses split app and profile files. Hosted Streamlit uses one
 combined Secrets document containing:
 
-- app-wide `app_password_hash` and shared `google_drive_oauth` configuration; and
+- app-wide `app_password_hash`, shared `google_drive_oauth`, and optional
+  `google_maps` configuration; and
 - one `business_profiles` entry per profile containing its name, spreadsheet ID,
   Sheets service-account credential, and validated Drive authorization with its
   storage root and Receipts and Ledger Backups children.

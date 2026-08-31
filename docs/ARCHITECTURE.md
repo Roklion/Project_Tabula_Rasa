@@ -4,7 +4,8 @@ Project Tabula Rasa is one Streamlit application serving one or more isolated
 business profiles. A profile selects its own Google Sheets workbook,
 service-account credential, optional Google Drive authorization, and recovery
 destinations. The application password and OAuth client are intentionally
-deployment-wide.
+deployment-wide. The optional Google Maps browser and Routes credentials are
+also app-wide; they are never profile identities.
 
 ## System context
 
@@ -17,16 +18,18 @@ flowchart LR
         Profile["Selected business profile"]
         Ledger["Ledger and reporting services"]
         DriveClient["Google Drive client"]
+        MapsClient["Maps autocomplete and routing"]
     end
 
     subgraph Config["Configuration boundary"]
-        AppSecrets["App-wide secrets<br/>password hash and OAuth client"]
+        AppSecrets["App-wide secrets<br/>password hash, OAuth client,<br/>and Maps keys"]
         ProfileSecrets["Per-profile secrets<br/>spreadsheet, service account,<br/>refresh token, root and child IDs"]
     end
 
     subgraph Google["Google services"]
         Sheets["Business Google Sheet"]
         Drive["Profile storage root<br/>Receipts and Ledger Backups"]
+        Maps["Places and Routes APIs"]
     end
 
     NAS["Optional Synology recovery folder"]
@@ -37,9 +40,11 @@ flowchart LR
     Profile --> DriveClient
     AppSecrets --> Auth
     AppSecrets --> DriveClient
+    AppSecrets --> MapsClient
     ProfileSecrets --> Profile
     Ledger -->|"Profile service account"| Sheets
     DriveClient -->|"Profile OAuth grant"| Drive
+    MapsClient -->|"Restricted app-wide keys"| Maps
     Drive -->|"Cloud Sync download only"| NAS
 ```
 
@@ -56,6 +61,7 @@ authorization.
 | Application sign-in | Application password hash | App-wide secrets | Entire deployment |
 | Ledger reads and writes | Profile Sheets service account | Profile Google workbook | One profile |
 | Receipts and cloud backups | Shared OAuth client plus profile refresh token | Profile Drive root and managed children | One profile |
+| Address suggestions and route mileage | Restricted browser and server Maps keys | Google Places and Routes APIs | Entire deployment |
 | Local configuration | Operating-system file permissions | .streamlit/secrets.toml and business_profiles.json | Local deployment |
 | Hosted configuration | Streamlit Secrets | Hosted deployment | Hosted projection of each profile |
 | NAS recovery copy | DSM account and separate Cloud Sync authorization | Profile-specific NAS root | One profile |
@@ -64,6 +70,13 @@ The Sheets service account edits the ledger workbook. A human Google account
 authorizes the Drive files used for receipts and cloud backups. Neither
 credential automatically grants the permissions of the other. Google Drive
 folders do not need to be shared with the Sheets service account.
+
+The browser Maps key is sent only to the autocomplete component and depends on
+website plus API restrictions. The Routes key remains server-side and is sent
+only to the Routes API. Neither key is sourced from or grants access to a
+business profile, workbook, service account, or Drive authorization. The
+ledger persists only the existing visible address and user-confirmed mileage;
+it does not retain complete Google responses or polylines.
 
 Local profile configuration is plaintext and must remain on a protected,
 non-synchronized filesystem. The hosted representation is an explicit allowlist
@@ -192,6 +205,7 @@ local-only recovery metadata.
 | Sheets storage, backup format, and restore validation | tabula_rasa/storage/google_sheets.py |
 | Drive OAuth and file operations | tabula_rasa/google_drive.py |
 | Drive administration and Picker | tabula_rasa/google_drive_admin.py and tabula_rasa/google_drive_picker.py |
+| Maps autocomplete and route distance | tabula_rasa/address_autocomplete.py and tabula_rasa/maps_routing.py |
 | Receipts and recovery metadata | tabula_rasa/receipt_manifest.py and tabula_rasa/receipt_recovery.py |
 | Synology settings | tabula_rasa/synology_recovery.py |
 

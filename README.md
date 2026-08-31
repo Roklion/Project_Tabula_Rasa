@@ -59,6 +59,7 @@ The documentation index is this section of the root README. Go directly to:
 | Understand the system and data boundaries | [Architecture](docs/ARCHITECTURE.md) |
 | Configure the application and business profiles | [Setup](docs/SETUP.md) |
 | Configure Drive, Picker, receipts, and cloud backups | [Google Drive](docs/GOOGLE_DRIVE.md) |
+| Configure Maps autocomplete, routing, quotas, and billing | [Google Maps mileage](docs/GOOGLE_MAPS.md) |
 | Use ledgers, receipts, mileage, reports, and imports | [Using Tabula Rasa](docs/USING_TABULA_RASA.md) |
 | Back up, validate, restore, and recover receipts | [Backup and recovery](docs/BACKUP_RECOVERY.md) |
 | Run development checks and tests | [Development](docs/DEVELOPMENT.md) |
@@ -68,7 +69,7 @@ The documentation index is this section of the root README. Go directly to:
 - `tabula_rasa/` contains the Streamlit entry point and application modules.
 - `scripts/` contains setup, validation, backup, and recovery utilities.
 - `tests/` contains the automated test suite and UI workflow scenarios.
-- `docs/` contains the six canonical architecture, setup, Drive, user,
+- `docs/` contains the canonical architecture, setup, Google integration, user,
   recovery, and development guides.
 
 ## Security

@@ -575,14 +575,28 @@ download, and the complete table with ID, Date, Miles, From, Destination,
 Business purpose, Vehicle, and Notes. It provides single-row selection and an
 Edit mileage trip section with all fields, save, and permanent delete.
 
-Round trip creates two entries in one confirmed write using the entered
-one-direction mileage and reversed locations. The filters, metrics, table,
-and CSV use the same date scope.
+When app-wide Google Maps configuration is available, Starting location and
+Destination use a narrowly scoped address-autocomplete component with an
+explicit manual-entry path. After two Google suggestions are selected, an
+explicit Calculate mileage action requests the primary driving route and
+populates an editable one-decimal suggestion. Changing either endpoint clears
+the corresponding calculated state. Calculation errors preserve manual entry,
+and Google-derived content keeps visible Google Maps attribution.
+
+Round trip performs separate outbound and reversed return calculations and
+shows independently editable mileage values. Saving creates the same two
+independent records in one confirmed write, with each row receiving its own
+confirmed mileage and a separate ID; there is no durable pairing. Recalculating
+a saved row affects only that row. The filters, metrics, table, and CSV use the
+same date scope. Without Maps configuration, the current manual workflow
+remains available.
 
 #### Acceptance criteria
 
 Round-trip help remains visible. Create, edit, delete, filtering, totals, and
-export remain available. Mileage remains separate from financial transactions.
+export remain available. Autocomplete remains keyboard and narrow-layout
+usable, manual entry is always available, and ordinary reruns do not trigger
+paid route requests. Mileage remains separate from financial transactions.
 
 ### Accounts
 
