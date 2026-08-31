@@ -18,7 +18,12 @@ _CLASSIFICATION_ORDER = {"Asset": 0, "Liability": 1, "Equity": 2}
 
 _DASHBOARD_RESPONSIVE_CSS = """
 <style>
-@media (max-width: 1450px) {
+/* Container queries follow the available content width, including sidebar state. */
+.st-key-dashboard_detail {
+    container-type: inline-size;
+}
+
+@container (max-width: 1000px) {
     .st-key-dashboard_detail [data-testid="stHorizontalBlock"] {
         flex-wrap: wrap;
     }
