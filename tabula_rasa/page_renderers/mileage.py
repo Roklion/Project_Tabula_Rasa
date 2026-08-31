@@ -289,9 +289,9 @@ def render_mileage(context: MileageContext) -> None:
             # Clear only a calculated suggestion; leave a user's manual value
             # alone when no route had been calculated in this workflow.
             if "add_mileage_miles" in st.session_state:
-                st.session_state["add_mileage_miles"] = 0.1
+                st.session_state["add_mileage_miles"] = 0.0
             if "add_mileage_return_miles" in st.session_state:
-                st.session_state["add_mileage_return_miles"] = 0.1
+                st.session_state["add_mileage_return_miles"] = 0.0
             route_state = None
             address_changed = True
         if address_changed:
@@ -326,14 +326,15 @@ def render_mileage(context: MileageContext) -> None:
             )
             c1, c2 = st.columns(2, gap="small")
             miles = c1.number_input(
-                "Business miles", min_value=0.1, step=0.1, format="%.1f",
+                "Business miles", min_value=0.0, step=0.1, value=0.0,
+                format="%.1f",
                 key="add_mileage_miles",
             )
             return_miles = miles
             if round_trip:
                 return_miles = st.number_input(
                     "Return business miles",
-                    min_value=0.1,
+                    min_value=0.0,
                     step=0.1,
                     value=float(miles),
                     format="%.1f",

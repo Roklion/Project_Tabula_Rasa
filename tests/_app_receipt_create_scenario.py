@@ -152,7 +152,15 @@ def main() -> None:
         by_label(app.file_uploader, "Upload receipt").set_value(
             ("later.pdf", b"later receipt", "application/pdf")
         ).run()
-        by_label(app.button, "Upload receipt to Google Drive").click().run()
+        main_nodes = list(app._tree.main)
+        assert main_nodes.index(
+            by_label(app.file_uploader, "Upload receipt")
+        ) < main_nodes.index(by_label(app.button, "Save changes"))
+        assert not any(
+            "Upload receipt" in button.label or "Uploading" in button.label
+            for button in app.button
+        )
+        by_label(app.button, "Save changes").click().run()
         assert len(upload_calls) == 4
         assert len(link_calls) == 2
         assert by_label(app.button, "Retry linking uploaded receipt")
@@ -171,7 +179,11 @@ def main() -> None:
                 ("receipt.pdf", b"editor second", "application/pdf"),
             ]
         ).run()
-        by_label(app.button, "Upload receipt to Google Drive").click().run()
+        assert not any(
+            "Upload receipt" in button.label or "Uploading" in button.label
+            for button in app.button
+        )
+        by_label(app.button, "Save changes").click().run()
         assert len(upload_calls) == 6
         assert len(link_calls) == 5
         assert sum(

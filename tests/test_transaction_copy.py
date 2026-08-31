@@ -35,18 +35,61 @@ def _transaction_fixture() -> tuple[GoogleSheetsStorage, dict[str, str]]:
     return storage, transaction
 
 
-def test_copied_transaction_description_retains_source_memo() -> None:
-    transaction = {"id": "source-123", "description": "Original memo"}
+def test_copied_transaction_description_adds_current_provenance() -> None:
+    assert copied_transaction_description(
+        {"id": "source-123", "description": "Original memo"}
+    ) == "Original memo. Copy From source-123"
 
-    assert copied_transaction_description(transaction) == (
-        "Copied from transaction source-123: Original memo"
-    )
-    assert copied_transaction_description({"id": "source-123"}) == (
-        "Copied from transaction source-123"
-    )
-    assert copied_transaction_description({"id": None}) == (
-        "Copied from transaction"
-    )
+
+def test_copied_transaction_description_does_not_double_period() -> None:
+    assert copied_transaction_description(
+        {"id": "source-123", "description": "Original memo."}
+    ) == "Original memo. Copy From source-123"
+
+
+def test_copied_transaction_description_strips_legacy_provenance() -> None:
+    assert copied_transaction_description(
+        {
+            "id": "source-123",
+            "description": "Copied from transaction old-1: Original memo",
+        }
+    ) == "Original memo. Copy From source-123"
+
+
+def test_copied_transaction_description_strips_multiple_stale_provenance_notes() -> None:
+    assert copied_transaction_description(
+        {
+            "id": "source-123",
+            "description": (
+                "Copied from transaction old-2: "
+                "Copied from transaction old-1: Original memo. Copy From old-0"
+            ),
+        }
+    ) == "Original memo. Copy From source-123"
+
+
+def test_copied_transaction_description_preserves_non_provenance_text() -> None:
+    assert copied_transaction_description(
+        {
+            "id": "source-123",
+            "description": "Copied from the vendor: Original memo",
+        }
+    ) == "Copied from the vendor: Original memo. Copy From source-123"
+
+
+def test_copied_transaction_description_preserves_user_copy_text_at_end() -> None:
+    assert copied_transaction_description(
+        {
+            "id": "source-123",
+            "description": "Reminder: Copy From project-123",
+        }
+    ) == "Reminder: Copy From project-123. Copy From source-123"
+
+
+def test_copied_transaction_description_has_no_separator_for_blank_memo() -> None:
+    assert copied_transaction_description(
+        {"id": "source-123", "description": "  Copy From old-1  "}
+    ) == "Copy From source-123"
 
 
 def test_copy_account_choices_exclude_inactive_source_account() -> None:
@@ -99,8 +142,8 @@ def test_copy_form_can_be_canceled_without_creating_or_mutating_transaction() ->
             source["txn_date"]
         )
         assert by_label(app.text_input, "Edit description").value == (
-            "Copied from transaction "
-            f"{source['id']}: Original memo"
+            "Original memo. "
+            f"Copy From {source['id']}"
         )
         assert by_label(app.date_input, "From").disabled is True
         assert by_label(app.date_input, "To").disabled is True
@@ -130,8 +173,8 @@ def test_copy_form_can_be_canceled_without_creating_or_mutating_transaction() ->
     assert copied["txn_date"] == original_source["txn_date"]
     assert copied["payee"] == "New vendor"
     assert copied["description"] == (
-        "Copied from transaction "
-        f"{source['id']}: Original memo"
+        "Original memo. "
+        f"Copy From {source['id']}"
     )
     assert copied["receipt_references"] == "[]"
     assert next(item for item in transactions if item["id"] == source["id"]) == (
@@ -187,6 +230,26 @@ def test_copy_save_adjusts_filters_to_keep_new_transaction_selected() -> None:
             str(transaction_id)
             for transaction_id in app.dataframe[0].value["ID"]
         ]
+
+
+def test_copy_save_normalizes_user_edited_description_provenance() -> None:
+    storage, source = _transaction_fixture()
+
+    with authenticated_app(storage) as app:
+        navigate_to(app, "Transactions")
+        by_label(app.segmented_control, "Ledger mode").set_value("Bulk").run()
+        app.session_state["transaction_bulk_selected_ids_test"] = (source["id"],)
+        app.run()
+        by_label(app.button, "Copy transaction").click().run()
+        by_label(app.text_input, "Edit description").set_value(
+            "Updated memo. Copy From stale-1. Copy From stale-2"
+        )
+        by_label(app.button, "Save copied transaction").click().run()
+
+    copied = next(
+        item for item in storage.list_transactions() if item["id"] != source["id"]
+    )
+    assert copied["description"] == f"Updated memo. Copy From {source['id']}"
 
 
 def test_copy_state_is_cleared_when_switching_profiles() -> None:

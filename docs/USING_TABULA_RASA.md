@@ -102,7 +102,8 @@ not affect income or expenses.
 Choose **Income**, **Expense**, or **Transfer**, then enter the date, amount,
 account information, and optional payee, reference, and description. Income
 and Expense require a same-kind category. Transfer requires two different
-active accounts and has no category.
+active accounts and has no category. New transaction amounts start at **0.00**;
+the amount must be greater than zero when you save.
 
 The optional receipt uploader accepts PDF, PNG, JPG, JPEG, WEBP, or HEIC.
 Each file must be non-empty and no larger than 20 MB; one selected batch may
@@ -197,8 +198,11 @@ consequence and explicitly says linked Drive files remain.
 
 In **View & edit ledger**, select exactly one visible transaction and choose
 **Copy transaction**. The editor opens in a clearly labeled copy mode with the
-source date and other eligible fields prefilled. The description identifies the
-source transaction while retaining its original memo. Receipts and receipt
+source date and other eligible fields prefilled. The description retains the
+user's memo, adds a period when needed, and ends with exactly one `Copy From
+<source ID>` suffix. Recopying a transaction removes stale generated `Copy From
+<id>` or `Copied from transaction <id>` notes before adding the current source.
+Receipts and receipt
 references are never copied; save the new transaction first, then attach any
 receipts from its editor. **Save copied transaction** creates a new ID, while
 **Cancel copy** leaves the source unchanged and creates nothing.
@@ -219,6 +223,10 @@ deleting files already in Drive; those files remain available in
 **Unreferenced receipt**. **Retry recovery check** is shown when a saved
 transaction must be rechecked before the upload surface is restored.
 
+In the edit form, choose receipts in the optional uploader immediately above
+**Save changes**. Saving the edit starts receipt processing; no separate upload
+button is used.
+
 The unreferenced workflow lists eligible app-managed files in the selected
 profile's receipt folder and links a chosen file without renaming or
 rewriting it. Files needing integrity metadata are called out before linking.
@@ -230,7 +238,8 @@ independent protected copy described in [Backup and recovery](BACKUP_RECOVERY.md
 The Mileage page records trip date, business miles, starting location,
 destination, business purpose, optional vehicle, and optional notes. It
 supports date filtering, trip and mile totals, filtered CSV export, editing,
-and permanent deletion.
+and permanent deletion. New mileage entries start at zero miles; a positive
+distance is required when saving.
 
 When Google Maps is configured, Starting location and Destination offer Google
 address suggestions. Select both suggestions, then choose **Calculate mileage**

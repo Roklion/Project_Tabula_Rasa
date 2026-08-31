@@ -530,7 +530,8 @@ generation and latest-date-first ordering.
 In Edit or Bulk mode, **Copy transaction** is enabled only when exactly one
 visible transaction is selected. It opens the existing editor as a clearly
 labeled new-transaction copy workflow. The copy preserves the source date and
-eligible fields, prefixes the description with the source transaction ID, and
+eligible fields, retains the user memo, and appends exactly one `Copy From
+<source ID>` suffix, removing stale generated copy notes when recopying. It
 starts with no receipt references. Save creates a new transaction; Cancel
 discards the copy state without changing the source row.
 
@@ -572,6 +573,11 @@ the same permanent warning and acknowledgement strength as bulk deletion.
 The page must retain linked receipt opening, reference removal without file
 deletion, multi-file editor upload, unresolved retry, cancel recovery,
 recovery check, and unreferenced receipt linking.
+
+In the edit form, the optional multi-file receipt picker appears immediately
+before the Save changes controls. Saving the edit validates and processes any
+selected receipts through the same ordered, retry-safe workflow; there is no
+separate receipt upload button.
 
 #### Acceptance criteria
 
@@ -815,9 +821,9 @@ from the source.
 
 ### Currency input and output
 
-Use two decimal places, a minimum of 0.01 for current transaction entry,
-right-aligned displayed values, and the existing opening-balance sign
-conventions.
+Use two decimal places for currency, default new transaction amounts to 0.00,
+require a positive amount before saving, right-align displayed values, and
+preserve the existing opening-balance sign conventions.
 
 ### Selectable table
 

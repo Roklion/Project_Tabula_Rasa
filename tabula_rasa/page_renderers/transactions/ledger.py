@@ -5,11 +5,13 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from datetime import date
 import hashlib
+import re
 
 import streamlit as st
 
 from tabula_rasa.hierarchy import ordered_hierarchy
 from tabula_rasa.ledger_presentation import ledger_frame, money
+from tabula_rasa.google_drive import GoogleDriveAccessError
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
 from tabula_rasa.page_renderers.transactions.receipts import (
     clear_receipt_creation_recovery,
@@ -17,9 +19,13 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     editor_receipt_recovery_active,
     editor_receipt_recovery_transaction_ids,
     editor_receipt_notice_transaction_ids,
+    prepare_editor_receipt_uploads,
+    process_editor_receipt_uploads,
     render_editor_receipt_notice,
+    render_editor_receipt_uploader,
     render_filtered_editor_receipt_recovery,
     render_receipts,
+    _receipt_folder,
 )
 from tabula_rasa.page_renderers.transactions.search import filter_transaction_rows
 from tabula_rasa.storage import StorageError, decode_receipt_references
@@ -76,15 +82,37 @@ def _copy_generation_key(profile_key: str) -> str:
 
 
 def copied_transaction_description(transaction: Mapping[str, object]) -> str:
-    """Build a clear copy provenance note while retaining the source memo."""
+    """Build copy provenance while retaining the user's current memo."""
     source_id = str(transaction.get("id") or "").strip()
-    source_description = str(transaction.get("description", "") or "").strip()
-    provenance = (
-        f"Copied from transaction {source_id}"
-        if source_id
-        else "Copied from transaction"
+    description = str(transaction.get("description", "") or "").strip()
+
+    # Copies created by earlier versions put provenance before the memo, while
+    # the current format puts it after the memo. Remove either form repeatedly
+    # so copying an already-copied transaction does not accumulate stale notes.
+    provenance_prefix = re.compile(
+        r"^(?:Copy From|Copied from transaction)\s+[^\s:.]+"
+        r"(?:\s*:\s*|\.\s+|$)"
     )
-    return f"{provenance}: {source_description}" if source_description else provenance
+    provenance_suffix = re.compile(
+        r"(?:^|\.\s+)(?:Copy From|Copied from transaction)\s+"
+        r"[^\s:.]+$"
+    )
+    while description:
+        stripped = provenance_prefix.sub("", description, count=1).strip()
+        if stripped != description:
+            description = stripped
+            continue
+        match = provenance_suffix.search(description)
+        if match is None:
+            break
+        description = description[: match.start()].rstrip(" .:")
+
+    provenance = f"Copy From {source_id}" if source_id else "Copy From"
+    if not description:
+        return provenance
+    if not description.endswith("."):
+        description += "."
+    return f"{description} {provenance}"
 
 
 def _editable_account_ids(
@@ -747,6 +775,8 @@ def render_ledger(
                     ),
                     key=f"edit_transaction_description_{edit_widget_scope}",
                 )
+                receipt_uploads = None
+                receipt_folder = None
                 edit_error = st.empty()
                 copy_accounts_valid = bool(edited_account_id) and (
                     selected["kind"] != "Transfer" or bool(edited_to_account_id)
@@ -779,6 +809,18 @@ def render_ledger(
                         "I understand this transaction will be permanently deleted",
                         key=f"edit_transaction_confirm_delete_{edit_widget_scope}",
                     )
+                    receipt_folder = _receipt_folder(context)
+                    receipt_uploads = render_editor_receipt_uploader(
+                        context,
+                        edit_id,
+                    )
+                    if receipt_uploads:
+                        st.caption(
+                            "Original filenames are kept safely. If a name "
+                            "already exists, a numeric suffix will be added. "
+                            "All selected files are validated before any "
+                            "upload begins."
+                        )
                     save_column, delete_column = st.columns(2)
                     save_requested = save_column.form_submit_button(
                         "Save changes",
@@ -799,6 +841,13 @@ def render_ledger(
                         "Choose active account(s) before saving this copied transaction."
                     )
                 if save_requested:
+                    copy_description = (
+                        copied_transaction_description(
+                            {"id": edit_id, "description": edited_description}
+                        )
+                        if copy_mode
+                        else edited_description
+                    )
                     transaction_data = {
                         "txn_date": edited_date,
                         "kind": selected["kind"],
@@ -808,7 +857,7 @@ def render_ledger(
                         "category_id": edited_category_id,
                         "payee": edited_payee,
                         "reference": edited_reference,
-                        "description": edited_description,
+                        "description": copy_description,
                     }
                     payload = {
                         **transaction_data,
@@ -848,23 +897,61 @@ def render_ledger(
                             report_error=edit_error.error,
                         )
                     else:
-                        context.confirmed_write(
-                            "edit_transaction",
-                            payload,
-                            lambda: context.storage.edit_transaction(
-                                edit_id,
-                                txn_date=edited_date,
-                                amount=edited_amount,
-                                account_id=edited_account_id,
-                                to_account_id=edited_to_account_id,
-                                category_id=edited_category_id,
-                                payee=edited_payee,
-                                reference=edited_reference,
-                                description=edited_description,
-                            ),
-                            "Transaction updated.",
-                            report_error=edit_error.error,
-                        )
+                        prepared_receipts: list[dict[str, object]] = []
+                        receipt_preparation_failed = False
+                        if receipt_uploads:
+                            try:
+                                prepared_receipts = prepare_editor_receipt_uploads(
+                                    context,
+                                    edit_id,
+                                    receipt_uploads,
+                                )
+                            except (ValueError, GoogleDriveAccessError) as error:
+                                receipt_preparation_failed = True
+                                edit_error.error(
+                                    "Receipt validation failed: "
+                                    f"{error}"
+                                )
+                            except StorageError as error:
+                                receipt_preparation_failed = True
+                                edit_error.error(
+                                    "The selected transaction could not be "
+                                    f"rechecked before upload. {error}"
+                                )
+                        if not receipt_preparation_failed:
+                            edit_payload = dict(payload)
+                            if prepared_receipts:
+                                edit_payload["receipt_upload_keys"] = [
+                                    receipt["key"]
+                                    for receipt in prepared_receipts
+                                ]
+                            context.confirmed_write(
+                                "edit_transaction",
+                                edit_payload,
+                                lambda: context.storage.edit_transaction(
+                                    edit_id,
+                                    txn_date=edited_date,
+                                    amount=edited_amount,
+                                    account_id=edited_account_id,
+                                    to_account_id=edited_to_account_id,
+                                    category_id=edited_category_id,
+                                    payee=edited_payee,
+                                    reference=edited_reference,
+                                    description=edited_description,
+                                ),
+                                "Transaction updated.",
+                                on_confirmed=(
+                                    lambda _result: process_editor_receipt_uploads(
+                                        context,
+                                        edit_id,
+                                        prepared_receipts,
+                                        receipt_folder,
+                                    )
+                                    if prepared_receipts and receipt_folder
+                                    else None
+                                ),
+                                report_error=edit_error.error,
+                            )
                 if cancel_requested:
                     _clear_copy_state(context.profile_key)
                     st.rerun()
