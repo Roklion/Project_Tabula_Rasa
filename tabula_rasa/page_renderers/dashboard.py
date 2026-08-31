@@ -129,13 +129,13 @@ def render_dashboard(context: DashboardContext) -> None:
                         hide_index=True,
                         width="stretch",
                         column_config={
-                            "Date": st.column_config.TextColumn(width=80),
-                            "Type": st.column_config.TextColumn(width=65),
-                            "Payee": st.column_config.TextColumn(width=75),
-                            "Category": st.column_config.TextColumn(width=145),
-                            "Account": st.column_config.TextColumn(width=150),
+                            "Date": st.column_config.TextColumn(width=70),
+                            "Type": st.column_config.TextColumn(width=55),
+                            "Payee": st.column_config.TextColumn(width=65),
+                            "Category": st.column_config.TextColumn(width=125),
+                            "Account": st.column_config.TextColumn(width=130),
                             "Amount": st.column_config.NumberColumn(
-                                format="$%.2f", width=80
+                                format="$%.2f", width=75
                             ),
                         },
                     )
@@ -151,11 +151,11 @@ def render_dashboard(context: DashboardContext) -> None:
                     hide_index=True,
                     width="stretch",
                     column_config={
-                        "Account": st.column_config.TextColumn(width=170),
-                        "Classification": st.column_config.TextColumn(width=90),
-                        "Type": st.column_config.TextColumn(width=75),
+                        "Account": st.column_config.TextColumn(width=160),
+                        "Classification": st.column_config.TextColumn(width=80),
+                        "Type": st.column_config.TextColumn(width=70),
                         "Balance": st.column_config.NumberColumn(
-                            format="$%.2f", width=90
+                            format="$%.2f", width=80
                         ),
                     },
                 )
