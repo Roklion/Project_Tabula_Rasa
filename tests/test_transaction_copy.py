@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from datetime import date
 
-from tests.app_support import authenticated_app, by_label, navigate_to
+from tests.app_support import (
+    authenticated_app,
+    by_label,
+    navigate_to,
+    profile_config,
+)
 from tests.fakes import FakeWorkbook
 from tabula_rasa.page_renderers.transactions.ledger import (
     _editable_account_ids,
@@ -103,3 +108,57 @@ def test_copy_form_can_be_canceled_without_creating_or_mutating_transaction() ->
     assert next(item for item in transactions if item["id"] == source["id"]) == (
         original_source
     )
+
+
+def test_copy_state_is_cleared_when_switching_profiles() -> None:
+    storages = {
+        "alpha-sheet": GoogleSheetsStorage(FakeWorkbook()),
+        "beta-sheet": GoogleSheetsStorage(FakeWorkbook()),
+    }
+    profiles = {
+        "alpha": profile_config(
+            name="Alpha Business", spreadsheet_id="alpha-sheet"
+        ),
+        "beta": profile_config(name="Beta Business", spreadsheet_id="beta-sheet"),
+    }
+    alpha = storages["alpha-sheet"]
+    alpha_account = alpha.create_account("Alpha Checking", "Bank")
+    alpha_category = alpha.create_category("Alpha Office", "Expense")
+    alpha_transaction = alpha.create_transaction(
+        txn_date="2026-07-19",
+        kind="Expense",
+        amount=12.5,
+        account_id=alpha_account["id"],
+        category_id=alpha_category["id"],
+        description="Alpha memo",
+    )
+    beta = storages["beta-sheet"]
+    beta_account = beta.create_account("Beta Checking", "Bank")
+    beta_category = beta.create_category("Beta Office", "Expense")
+    beta.create_transaction(
+        txn_date="2026-07-20",
+        kind="Expense",
+        amount=20.0,
+        account_id=beta_account["id"],
+        category_id=beta_category["id"],
+        description="Beta memo",
+    )
+
+    with authenticated_app(storages=storages, profiles=profiles) as app:
+        navigate_to(app, "Transactions")
+        by_label(app.segmented_control, "Ledger mode").set_value("Bulk").run()
+        app.session_state["transaction_bulk_selected_ids_alpha"] = (
+            alpha_transaction["id"],
+        )
+        app.run()
+        by_label(app.button, "Copy transaction").click().run()
+        assert "transaction_copy_source_alpha" in app.session_state
+        assert by_label(app.button, "Save copied transaction")
+
+        by_label(app.selectbox, "Business").set_value("beta").run()
+
+        assert "transaction_copy_source_alpha" not in app.session_state
+        assert not any(
+            item.label == "Save copied transaction" for item in app.button
+        )
+        assert not any(item.label == "Copy transaction" for item in app.expander)

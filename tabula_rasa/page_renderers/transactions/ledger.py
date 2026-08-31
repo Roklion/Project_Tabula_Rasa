@@ -579,6 +579,9 @@ def render_ledger(
                 key="edit_transaction_id",
                 disabled=bool(copy_source_id),
             )
+            if copy_source_id and copy_source_id != edit_id:
+                _clear_copy_state(context.profile_key)
+                st.rerun()
             selected = next(
                 transaction for transaction in transactions if transaction["id"] == edit_id
             )
