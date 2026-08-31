@@ -109,6 +109,10 @@ def _clear_copy_state(profile_key: str) -> None:
     st.session_state.pop(_copy_source_key(profile_key), None)
 
 
+def _pending_edit_transaction_key(profile_key: str) -> str:
+    return f"transaction_pending_edit_{profile_key}"
+
+
 def render_ledger(
     context: TransactionsContext,
     *,
@@ -120,11 +124,22 @@ def render_ledger(
     """Render structured filters, the ledger, and single-row editing."""
     st.subheader("View & edit ledger")
     st.caption("Filter the ledger, then choose Edit or Bulk mode explicitly.")
+    pending_edit_id = st.session_state.pop(
+        _pending_edit_transaction_key(context.profile_key), None
+    )
+    if pending_edit_id:
+        # Apply the newly created copy before the edit selectbox is instantiated.
+        st.session_state["edit_transaction_id"] = pending_edit_id
+    copy_source_id = str(
+        st.session_state.get(_copy_source_key(context.profile_key), "") or ""
+    )
+    copy_filters_locked = bool(copy_source_id)
     c1, c2, c3 = st.columns(3)
     start = c1.date_input(
         "From",
         date(date.today().year, 1, 1),
         key="ledger_start",
+        disabled=copy_filters_locked,
         on_change=_clear_bulk_selection,
         args=(context.profile_key,),
     )
@@ -132,6 +147,7 @@ def render_ledger(
         "To",
         date.today(),
         key="ledger_end",
+        disabled=copy_filters_locked,
         on_change=_clear_bulk_selection,
         args=(context.profile_key,),
     )
@@ -139,6 +155,7 @@ def render_ledger(
         "Type",
         ["All", "Income", "Expense", "Transfer"],
         key=f"ledger_filter_type_{context.profile_key}",
+        disabled=copy_filters_locked,
         on_change=_clear_bulk_selection,
         args=(context.profile_key,),
     )
@@ -152,6 +169,7 @@ def render_ledger(
         list(ledger_account_map),
         key=f"ledger_filter_accounts_{context.profile_key}",
         placeholder="All accounts",
+        disabled=copy_filters_locked,
         help=(
             "Includes transactions where a selected account is either side "
             "of a transfer."
@@ -175,6 +193,7 @@ def render_ledger(
         "Search transactions",
         key=search_state_key,
         placeholder="Type, account, payee, description, reference, or ID",
+        disabled=copy_filters_locked,
         help=(
             "Searches Type, Account, To account, Category, Payee, "
             "Description, Reference, and ID."
@@ -186,11 +205,9 @@ def render_ledger(
         st.button(
             "Clear search",
             key=f"ledger_search_clear_{context.profile_key}_{table_generation}",
+            disabled=copy_filters_locked,
             on_click=clear_search,
         )
-    copy_source_id = str(
-        st.session_state.get(_copy_source_key(context.profile_key), "") or ""
-    )
     mode_key = f"transaction_ledger_mode_{context.profile_key}"
     if copy_source_id:
         # A copy always opens the existing single-row editor, even when the
@@ -784,6 +801,10 @@ def render_ledger(
                                 **transaction_data
                             ),
                             "Transaction copied.",
+                            on_confirmed=lambda result: st.session_state.__setitem__(
+                                _pending_edit_transaction_key(context.profile_key),
+                                result["id"],
+                            ),
                             on_success=lambda: _clear_copy_state(
                                 context.profile_key
                             ),

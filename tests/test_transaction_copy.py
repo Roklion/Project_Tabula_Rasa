@@ -102,6 +102,11 @@ def test_copy_form_can_be_canceled_without_creating_or_mutating_transaction() ->
             "Copied from transaction "
             f"{source['id']}: Original memo"
         )
+        assert by_label(app.date_input, "From").disabled is True
+        assert by_label(app.date_input, "To").disabled is True
+        assert by_label(app.selectbox, "Type").disabled is True
+        assert by_label(app.multiselect, "Accounts").disabled is True
+        assert by_label(app.text_input, "Search transactions").disabled is True
 
         by_label(app.button, "Cancel copy").click().run()
 
@@ -112,6 +117,11 @@ def test_copy_form_can_be_canceled_without_creating_or_mutating_transaction() ->
         by_label(app.button, "Copy transaction").click().run()
         by_label(app.text_input, "Edit payee / customer").set_value("New vendor")
         by_label(app.button, "Save copied transaction").click().run()
+        copied = next(
+            item for item in storage.list_transactions() if item["id"] != source["id"]
+        )
+        assert app.session_state["edit_transaction_id"] == copied["id"]
+        assert "transaction_copy_source_test" not in app.session_state
 
     transactions = storage.list_transactions()
     assert len(transactions) == 2
