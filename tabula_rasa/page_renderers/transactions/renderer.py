@@ -12,6 +12,13 @@ from tabula_rasa.presentation import render_global_footer, render_page_header
 from tabula_rasa.storage import StorageError
 
 
+def _ordered_active_accounts(accounts: list[dict]) -> list[dict]:
+    """Return active accounts in the Accounts table's hierarchy order."""
+    return [
+        account for account in ordered_hierarchy(accounts) if account["active"]
+    ]
+
+
 def render_transactions(context: TransactionsContext) -> None:
     """Render transaction entry, ledger editing, and receipt workflows."""
     render_page_header(
@@ -32,7 +39,7 @@ def render_transactions(context: TransactionsContext) -> None:
             "Transactions",
         )
         accounts = context.storage.list_accounts(active_only=False)
-        active_accounts = [account for account in accounts if account["active"]]
+        active_accounts = _ordered_active_accounts(accounts)
         categories = context.storage.list_categories()
     except StorageError as error:
         context.report_storage_error(error)
@@ -43,7 +50,7 @@ def render_transactions(context: TransactionsContext) -> None:
     category_paths = hierarchy_paths(categories)
     account_map = {
         account_paths[account_id]: account_id
-        for account in ordered_hierarchy(active_accounts)
+        for account in active_accounts
         if (account_id := str(account.get("id") or "").strip())
     }
     with tab_add:
