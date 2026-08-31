@@ -13,12 +13,33 @@ from tabula_rasa.presentation import render_page_header
 from tabula_rasa.storage import GoogleSheetsStorage, StorageError
 
 
+_CLASSIFICATION_ORDER = {"Asset": 0, "Liability": 1, "Equity": 2}
+
+
 @dataclass(frozen=True)
 class DashboardContext:
     """Dependencies explicitly provided by the application shell."""
 
     profile_key: str
     storage: GoogleSheetsStorage
+
+
+def _sorted_dashboard_balances(balances):
+    """Order dashboard balances by accounting classification, then account."""
+    classification_rank = balances["Classification"].map(_CLASSIFICATION_ORDER)
+    return (
+        balances.assign(
+            _classification_rank=classification_rank.fillna(
+                len(_CLASSIFICATION_ORDER)
+            )
+        )
+        .sort_values(
+            ["_classification_rank", "Account"],
+            kind="stable",
+            ignore_index=True,
+        )
+        .drop(columns="_classification_rank")
+    )
 
 
 def render_dashboard(context: DashboardContext) -> None:
@@ -58,7 +79,7 @@ def render_dashboard(context: DashboardContext) -> None:
         with c4:
             with st.container(key="dashboard_net_month"):
                 st.metric("Net this month", money(monthly_totals["net"]))
-    left, right = st.columns([1.6, 1], gap="large")
+    left, right = st.columns([1.35, 1], gap="small")
     with left:
         with st.container(key="dashboard_activity"):
             st.subheader("Recent activity")
@@ -77,16 +98,33 @@ def render_dashboard(context: DashboardContext) -> None:
                     hide_index=True,
                     width="stretch",
                     column_config={
-                        "Amount": st.column_config.NumberColumn(format="$%.2f")
+                        "Date": st.column_config.TextColumn(width=90),
+                        "Type": st.column_config.TextColumn(width=70),
+                        "Payee": st.column_config.TextColumn(width=80),
+                        "Category": st.column_config.TextColumn(width=160),
+                        "Account": st.column_config.TextColumn(width=170),
+                        "Amount": st.column_config.NumberColumn(
+                            format="$%.2f", width=90
+                        ),
                     },
                 )
     with right:
         with st.container(key="dashboard_balances"):
             st.subheader("Account balances")
             st.caption("Current balances by account")
+            dashboard_balances = _sorted_dashboard_balances(balances)
             st.dataframe(
-                balances[["Account", "Classification", "Type", "Balance"]],
+                dashboard_balances[
+                    ["Account", "Classification", "Type", "Balance"]
+                ],
                 hide_index=True,
                 width="stretch",
-                column_config={"Balance": st.column_config.NumberColumn(format="$%.2f")},
+                column_config={
+                    "Account": st.column_config.TextColumn(width=210),
+                    "Classification": st.column_config.TextColumn(width=105),
+                    "Type": st.column_config.TextColumn(width=95),
+                    "Balance": st.column_config.NumberColumn(
+                        format="$%.2f", width=90
+                    ),
+                },
             )

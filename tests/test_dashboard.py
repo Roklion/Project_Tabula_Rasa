@@ -90,3 +90,58 @@ def test_empty_balances_frame_preserves_dashboard_columns() -> None:
         "Active",
         "Balance",
     ]
+
+
+def test_dashboard_balances_sort_by_classification_then_account() -> None:
+    balances = balances_frame(
+        [
+            {
+                "id": "capital",
+                "name": "Capital",
+                "type": "Equity",
+                "classification": "Equity",
+                "active": True,
+                "opening_balance": "0.00",
+            },
+            {
+                "id": "payable",
+                "name": "Payable",
+                "type": "Credit card",
+                "classification": "Liability",
+                "active": True,
+                "opening_balance": "0.00",
+            },
+            {
+                "id": "savings",
+                "name": "Savings",
+                "type": "Bank",
+                "classification": "Asset",
+                "active": True,
+                "opening_balance": "0.00",
+            },
+            {
+                "id": "checking",
+                "name": "Checking",
+                "type": "Bank",
+                "classification": "Asset",
+                "active": True,
+                "opening_balance": "0.00",
+            },
+        ],
+        [],
+    )
+
+    sorted_balances = dashboard._sorted_dashboard_balances(balances)
+
+    assert list(sorted_balances["Classification"]) == [
+        "Asset",
+        "Asset",
+        "Liability",
+        "Equity",
+    ]
+    assert list(sorted_balances["Account"]) == [
+        "Checking",
+        "Savings",
+        "Payable",
+        "Capital",
+    ]
