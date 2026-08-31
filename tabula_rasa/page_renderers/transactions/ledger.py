@@ -64,6 +64,29 @@ def _selection_ids(transaction_ids: Sequence[str], rows: Sequence[int]) -> tuple
     )
 
 
+def _copy_source_key(profile_key: str) -> str:
+    """Return the profile-scoped source ID for the active copy form."""
+    return f"transaction_copy_source_{profile_key}"
+
+
+def _copy_generation_key(profile_key: str) -> str:
+    """Return the profile-scoped generation used to isolate copy widgets."""
+    return f"transaction_copy_generation_{profile_key}"
+
+
+def copied_transaction_description(transaction: Mapping[str, object]) -> str:
+    """Build a clear copy provenance note while retaining the source memo."""
+    source_id = str(transaction.get("id", "")).strip()
+    source_description = str(transaction.get("description", "") or "").strip()
+    provenance = f"Copied from transaction {source_id}"
+    return f"{provenance}: {source_description}" if source_description else provenance
+
+
+def _clear_copy_state(profile_key: str) -> None:
+    """Leave the source row in normal edit mode without writing anything."""
+    st.session_state.pop(_copy_source_key(profile_key), None)
+
+
 def render_ledger(
     context: TransactionsContext,
     *,
@@ -143,11 +166,19 @@ def render_ledger(
             key=f"ledger_search_clear_{context.profile_key}_{table_generation}",
             on_click=clear_search,
         )
+    copy_source_id = str(
+        st.session_state.get(_copy_source_key(context.profile_key), "") or ""
+    )
+    mode_key = f"transaction_ledger_mode_{context.profile_key}"
+    if copy_source_id:
+        # A copy always opens the existing single-row editor, even when the
+        # user started from a one-row Bulk selection.
+        st.session_state[mode_key] = "Edit"
     mode = st.segmented_control(
         "Ledger mode",
         ["Edit", "Bulk"],
         default="Edit",
-        key=f"transaction_ledger_mode_{context.profile_key}",
+        key=mode_key,
         help="Edit manages one row. Bulk enables only the approved multi-row actions.",
         on_change=_change_ledger_mode,
         args=(context.profile_key,),
@@ -301,6 +332,37 @@ def render_ledger(
         },
     )
     selected_rows = ledger_event.selection.rows
+    selected_for_copy = (
+        tuple(
+            str(transaction_id)
+            for transaction_id in st.session_state.get(
+                _bulk_selection_key(context.profile_key), ()
+            )
+            if str(transaction_id) in transaction_ids_set
+        )
+        if mode == "Bulk"
+        else _selection_ids(transaction_ids, selected_rows)
+    )
+    copy_button = st.button(
+        "Copy transaction",
+        disabled=len(selected_for_copy) != 1,
+        key=(
+            "transaction_copy_"
+            f"{context.profile_key}_{st.session_state.get('transaction_ledger_generation', 0)}"
+        ),
+        help=(
+            "Select exactly one transaction to open a prefilled copy form."
+        ),
+    )
+    if copy_button and len(selected_for_copy) == 1:
+        source_id = selected_for_copy[0]
+        st.session_state[_copy_source_key(context.profile_key)] = source_id
+        generation_key = _copy_generation_key(context.profile_key)
+        st.session_state[generation_key] = int(
+            st.session_state.get(generation_key, 0)
+        ) + 1
+        st.session_state["edit_transaction_id"] = source_id
+        st.rerun()
     filtered_recovery_ids = set(editor_receipt_recovery_transaction_ids(context)) - set(
         transaction_ids
     )
@@ -476,19 +538,43 @@ def render_ledger(
             ].iloc[0]
             return f"{row['Date']} — {row['Type']} — {money(row['Amount'])} — {transaction_id[:8]}"
 
+        copy_source_id = str(
+            st.session_state.get(_copy_source_key(context.profile_key), "") or ""
+        )
         st.caption("Select a ledger row (or double-click it) to edit it.")
-        with st.expander("Edit transaction", expanded=bool(selected_rows)):
+        with st.expander(
+            "Copy transaction" if copy_source_id else "Edit transaction",
+            expanded=bool(selected_rows) or bool(copy_source_id),
+        ):
             edit_id = st.selectbox(
                 "Transaction to edit",
                 transaction_ids,
                 format_func=transaction_label,
                 key="edit_transaction_id",
+                disabled=bool(copy_source_id),
             )
             selected = next(
                 transaction for transaction in transactions if transaction["id"] == edit_id
             )
-            edit_widget_scope = f"{context.profile_key}_{edit_id}"
-            with st.form("edit_transaction"):
+            copy_mode = copy_source_id == edit_id
+            copy_generation = st.session_state.get(
+                _copy_generation_key(context.profile_key),
+                0,
+            )
+            edit_widget_scope = (
+                f"{context.profile_key}_{edit_id}_copy_{copy_generation}"
+                if copy_mode
+                else f"{context.profile_key}_{edit_id}"
+            )
+            if copy_mode:
+                st.info(
+                    f"You are editing a new transaction copied from {edit_id}. "
+                    "The source transaction will not be changed."
+                )
+            with st.form(
+                "copy_transaction" if copy_mode else "edit_transaction",
+                clear_on_submit=False,
+            ):
                 current_account_ids = [
                     selected["account_id"],
                     selected.get("to_account_id", ""),
@@ -573,36 +659,61 @@ def render_ledger(
                 )
                 edited_description = st.text_input(
                     "Edit description",
-                    value=selected.get("description", ""),
+                    value=(
+                        copied_transaction_description(selected)
+                        if copy_mode
+                        else selected.get("description", "")
+                    ),
                     key=f"edit_transaction_description_{edit_widget_scope}",
                 )
-                st.warning(
-                    "Deleting this transaction is permanent and cannot be undone.",
-                    icon="⚠️",
-                )
-                confirm_delete = st.checkbox(
-                    "I understand this transaction will be permanently deleted",
-                    key=f"edit_transaction_confirm_delete_{edit_widget_scope}",
-                )
                 edit_error = st.empty()
-                save_column, delete_column = st.columns(2)
-                save_requested = save_column.form_submit_button(
-                    "Save changes",
-                    type="primary",
-                    width="stretch",
-                    key=f"edit_transaction_save_{edit_widget_scope}",
-                )
-                delete_requested = delete_column.form_submit_button(
-                    "Permanently delete",
-                    icon=":material/delete_forever:",
-                    help="Permanently delete this transaction",
-                    width="stretch",
-                    key=f"edit_transaction_delete_{edit_widget_scope}",
-                )
+                if copy_mode:
+                    st.caption(
+                        "Receipts are not copied. Save this transaction first, "
+                        "then attach receipts from its editor."
+                    )
+                    save_column, cancel_column = st.columns(2)
+                    save_requested = save_column.form_submit_button(
+                        "Save copied transaction",
+                        type="primary",
+                        width="stretch",
+                        key=f"edit_transaction_copy_save_{edit_widget_scope}",
+                    )
+                    cancel_requested = cancel_column.form_submit_button(
+                        "Cancel copy",
+                        width="stretch",
+                        key=f"edit_transaction_copy_cancel_{edit_widget_scope}",
+                    )
+                    delete_requested = False
+                    confirm_delete = False
+                else:
+                    st.warning(
+                        "Deleting this transaction is permanent and cannot be undone.",
+                        icon="⚠️",
+                    )
+                    confirm_delete = st.checkbox(
+                        "I understand this transaction will be permanently deleted",
+                        key=f"edit_transaction_confirm_delete_{edit_widget_scope}",
+                    )
+                    save_column, delete_column = st.columns(2)
+                    save_requested = save_column.form_submit_button(
+                        "Save changes",
+                        type="primary",
+                        width="stretch",
+                        key=f"edit_transaction_save_{edit_widget_scope}",
+                    )
+                    delete_requested = delete_column.form_submit_button(
+                        "Permanently delete",
+                        icon=":material/delete_forever:",
+                        help="Permanently delete this transaction",
+                        width="stretch",
+                        key=f"edit_transaction_delete_{edit_widget_scope}",
+                    )
+                    cancel_requested = False
                 if save_requested:
-                    payload = {
-                        "id": edit_id,
+                    transaction_data = {
                         "txn_date": edited_date,
+                        "kind": selected["kind"],
                         "amount": edited_amount,
                         "account_id": edited_account_id,
                         "to_account_id": edited_to_account_id,
@@ -611,11 +722,40 @@ def render_ledger(
                         "reference": edited_reference,
                         "description": edited_description,
                     }
+                    payload = {
+                        **transaction_data,
+                        "id": edit_id,
+                    }
+                    if copy_mode:
+                        payload.update(
+                            {
+                                "source_transaction_id": edit_id,
+                                "copy_generation": copy_generation,
+                            }
+                        )
+                    else:
+                        payload = {
+                            "id": edit_id,
+                            **transaction_data,
+                        }
                     if (
                         selected["kind"] == "Transfer"
                         and edited_account_id == edited_to_account_id
                     ):
                         edit_error.error("Transfer accounts must be different.")
+                    elif copy_mode:
+                        context.confirmed_write(
+                            "copy_transaction",
+                            payload,
+                            lambda: context.storage.create_transaction(
+                                **transaction_data
+                            ),
+                            "Transaction copied.",
+                            on_success=lambda: _clear_copy_state(
+                                context.profile_key
+                            ),
+                            report_error=edit_error.error,
+                        )
                     else:
                         context.confirmed_write(
                             "edit_transaction",
@@ -634,6 +774,9 @@ def render_ledger(
                             "Transaction updated.",
                             report_error=edit_error.error,
                         )
+                if cancel_requested:
+                    _clear_copy_state(context.profile_key)
+                    st.rerun()
                 if delete_requested:
                     if not confirm_delete:
                         edit_error.error(
@@ -652,9 +795,17 @@ def render_ledger(
                             ),
                             report_error=edit_error.error,
                         )
-            render_receipts(
-                context,
-                selected=selected,
-                all_transactions=all_transactions,
-                edit_id=edit_id,
-            )
+            if copy_mode:
+                st.divider()
+                st.subheader("Receipt")
+                st.info(
+                    "No receipts are attached to this new transaction. "
+                    "Save it first to upload or link a receipt."
+                )
+            else:
+                render_receipts(
+                    context,
+                    selected=selected,
+                    all_transactions=all_transactions,
+                    edit_id=edit_id,
+                )
