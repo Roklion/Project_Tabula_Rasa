@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+import secrets
 from typing import Any
 
 import streamlit as st
@@ -211,6 +212,36 @@ _component = st.components.v2.component(
     css=_CSS,
     js=_JS,
 )
+
+
+def browser_api_key_from_secrets(
+    secrets_mapping: Mapping[str, Any],
+) -> str | None:
+    """Return the browser key only when it is distinct from the Routes key.
+
+    A mistakenly reused server key must fail closed instead of crossing the
+    Streamlit component boundary. The Routes client can remain available, but
+    autocomplete falls back to manual entry until two separate keys are set.
+    """
+    raw = secrets_mapping.get("google_maps")
+    if not isinstance(raw, Mapping):
+        return None
+    browser_key = _clean_api_key(raw.get("browser_api_key"))
+    if not browser_key:
+        return None
+    routes_key = _clean_api_key(raw.get("routes_api_key"))
+    if routes_key and secrets.compare_digest(browser_key, routes_key):
+        return None
+    return browser_key
+
+
+def _clean_api_key(value: object) -> str:
+    if not isinstance(value, str):
+        return ""
+    value = value.strip()
+    if not value or len(value) > 256 or any(ord(char) < 32 for char in value):
+        return ""
+    return value
 
 
 def _mapping_selection(

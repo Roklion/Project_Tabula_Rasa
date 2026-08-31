@@ -12,6 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import streamlit as st
 
+from tabula_rasa.address_autocomplete import browser_api_key_from_secrets
 from tabula_rasa.business_profiles import (
     BusinessProfileConfigurationError,
     load_business_profiles,
@@ -74,17 +75,8 @@ STORAGE_IMPLEMENTATION_VERSION = 12
 
 
 def _google_maps_browser_key(secrets: Mapping[str, object]) -> str | None:
-    """Read only the app-wide browser key used by the Places component."""
-    config = secrets.get("google_maps")
-    if not isinstance(config, Mapping):
-        return None
-    value = config.get("browser_api_key")
-    if not isinstance(value, str):
-        return None
-    value = value.strip()
-    if not value or len(value) > 256 or any(ord(char) < 32 for char in value):
-        return None
-    return value
+    """Read the safe app-wide browser key used by the Places component."""
+    return browser_api_key_from_secrets(secrets)
 
 
 def _google_maps_region_code(secrets: Mapping[str, object]) -> str | None:
