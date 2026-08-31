@@ -68,7 +68,7 @@ _CSS = """
 
 _JS = """
 export default function(component) {
-  const {data, parentElement, setTriggerValue} = component;
+  const {data, parentElement, setStateValue, setTriggerValue} = component;
   const label = parentElement.querySelector('#tr-address-label');
   const host = parentElement.querySelector('#tr-address-host');
   const manual = parentElement.querySelector('#tr-address-manual');
@@ -78,6 +78,7 @@ export default function(component) {
   label.textContent = data.label || 'Address';
   manualInput.setAttribute('aria-label', data.label || 'Address');
   let version = Number(data.version || 0);
+  let manualMode = data.manualMode === true;
   let suppressInput = false;
 
   function emit(name, value) {
@@ -93,8 +94,18 @@ export default function(component) {
     manualButton.textContent = 'Use Google suggestions';
     status.textContent = message || 'Google suggestions are unavailable.';
     manualInput.value = data.value || '';
-    manualInput.oninput = () => emit('manual', manualInput.value.trim());
+    manualInput.onchange = () => emit('manual', manualInput.value.trim());
     manualInput.focus();
+  }
+  function selectManualMode() {
+    manualMode = true;
+    setStateValue('manual_mode', true);
+    showManual('Enter an address manually.');
+  }
+  function selectGoogleMode() {
+    manualMode = false;
+    setStateValue('manual_mode', false);
+    setup();
   }
   function loadMaps() {
     if (window.google && window.google.maps && window.google.maps.places) {
@@ -121,6 +132,7 @@ export default function(component) {
     return window.__tabulaRasaPlacesPromise;
   }
   async function setup() {
+    if (manualMode) { showManual('Enter an address manually.'); return; }
     if (!data.apiKey) { showManual('Enter an address manually.'); return; }
     manual.hidden = true;
     manualButton.hidden = false;
@@ -181,8 +193,8 @@ export default function(component) {
         manualButton.hidden = false;
       });
       manualButton.onclick = () => {
-        if (manual.hidden) showManual('Enter an address manually.');
-        else setup();
+        if (manual.hidden) selectManualMode();
+        else selectGoogleMode();
       };
     } catch (error) {
       showManual('Google address suggestions are unavailable.');
@@ -193,7 +205,7 @@ export default function(component) {
   // provider error; users should never be trapped behind a paid integration.
   manualButton.hidden = false;
   manualButton.textContent = 'Enter address manually';
-  manualButton.onclick = () => showManual('Enter an address manually.');
+  manualButton.onclick = selectManualMode;
   setup();
 }
 """
@@ -267,6 +279,12 @@ def address_autocomplete(
             st.session_state[state_key] = current
         return current
 
+    component_state = st.session_state.get(key)
+    manual_mode = (
+        bool(component_state.get("manual_mode", False))
+        if isinstance(component_state, Mapping)
+        else False
+    )
     result = _component(
         data={
             "apiKey": api_key,
@@ -274,12 +292,15 @@ def address_autocomplete(
             "value": current.display_text,
             "version": current.version,
             "regionCode": _region_code(region_code),
+            "manualMode": manual_mode,
         },
+        default={"manual_mode": manual_mode},
         key=key,
         on_selected_change=lambda: None,
         on_manual_change=lambda: None,
         on_changed_change=lambda: None,
         on_failed_change=lambda: None,
+        on_manual_mode_change=lambda: None,
     )
     selected = _mapping_selection(getattr(result, "selected", None))
     manual = _mapping_selection(getattr(result, "manual", None), allow_empty=True)
