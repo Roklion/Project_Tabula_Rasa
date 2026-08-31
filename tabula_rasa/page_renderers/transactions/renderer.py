@@ -8,7 +8,7 @@ from tabula_rasa.hierarchy import hierarchy_paths, ordered_hierarchy
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
 from tabula_rasa.page_renderers.transactions.creation import render_add_transaction
 from tabula_rasa.page_renderers.transactions.ledger import render_ledger
-from tabula_rasa.presentation import render_page_header
+from tabula_rasa.presentation import render_global_footer, render_page_header
 from tabula_rasa.storage import StorageError
 
 
@@ -30,6 +30,7 @@ def render_transactions(context: TransactionsContext) -> None:
         categories = context.storage.list_categories()
     except StorageError as error:
         context.report_storage_error(error)
+        render_global_footer()
         st.stop()
 
     account_paths = hierarchy_paths(accounts)

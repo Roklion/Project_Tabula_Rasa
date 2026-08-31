@@ -13,7 +13,7 @@ import streamlit as st
 
 from tabula_rasa.address_autocomplete import AddressSelection, address_autocomplete
 from tabula_rasa.maps_routing import GoogleRoutesError
-from tabula_rasa.presentation import render_page_header
+from tabula_rasa.presentation import render_global_footer, render_page_header
 from tabula_rasa.storage import GoogleSheetsStorage, StorageError
 
 
@@ -462,6 +462,7 @@ def render_mileage(context: MileageContext) -> None:
             trips = context.storage.list_mileage_trips(start=start, end=end)
         except StorageError as error:
             context.report_storage_error(error)
+            render_global_footer()
             st.stop()
 
         trip_frame = mileage_frame(trips)

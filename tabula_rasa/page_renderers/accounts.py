@@ -23,7 +23,7 @@ from tabula_rasa.page_renderers.hierarchy_ui import (
     render_hierarchy_table,
     render_hierarchy_responsive_css,
 )
-from tabula_rasa.presentation import render_page_header
+from tabula_rasa.presentation import render_global_footer, render_page_header
 from tabula_rasa.storage import GoogleSheetsStorage, StorageError
 
 
@@ -138,6 +138,7 @@ def render_accounts(context: AccountsContext) -> None:
         transactions = context.storage.list_transactions()
     except StorageError as error:
         context.report_storage_error(error)
+        render_global_footer()
         st.stop()
 
     account_frame, account_ids, account_by_id = _account_frame(

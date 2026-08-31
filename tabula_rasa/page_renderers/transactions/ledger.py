@@ -22,6 +22,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     render_receipts,
 )
 from tabula_rasa.page_renderers.transactions.search import filter_transaction_rows
+from tabula_rasa.presentation import render_global_footer
 from tabula_rasa.storage import StorageError, decode_receipt_references
 
 
@@ -274,6 +275,7 @@ def render_ledger(
         )
     except StorageError as error:
         context.report_storage_error(error)
+        render_global_footer()
         st.stop()
     transaction_frame = ledger_frame(
         structured_transactions,
