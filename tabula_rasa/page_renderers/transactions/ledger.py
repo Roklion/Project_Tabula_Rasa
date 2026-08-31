@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from datetime import date
 import hashlib
+import re
 
 import streamlit as st
 
@@ -76,15 +77,37 @@ def _copy_generation_key(profile_key: str) -> str:
 
 
 def copied_transaction_description(transaction: Mapping[str, object]) -> str:
-    """Build a clear copy provenance note while retaining the source memo."""
+    """Build copy provenance while retaining the user's current memo."""
     source_id = str(transaction.get("id") or "").strip()
-    source_description = str(transaction.get("description", "") or "").strip()
-    provenance = (
-        f"Copied from transaction {source_id}"
-        if source_id
-        else "Copied from transaction"
+    description = str(transaction.get("description", "") or "").strip()
+
+    # Copies created by earlier versions put provenance before the memo, while
+    # the current format puts it after the memo. Remove either form repeatedly
+    # so copying an already-copied transaction does not accumulate stale notes.
+    provenance_prefix = re.compile(
+        r"^(?:Copy From|Copied from transaction)\s+[^\s:.]+"
+        r"(?:\s*:\s*|\.\s+|$)"
     )
-    return f"{provenance}: {source_description}" if source_description else provenance
+    provenance_suffix = re.compile(
+        r"(?:^|\.\s+|:\s+)(?:Copy From|Copied from transaction)\s+"
+        r"[^\s:.]+$"
+    )
+    while description:
+        stripped = provenance_prefix.sub("", description, count=1).strip()
+        if stripped != description:
+            description = stripped
+            continue
+        match = provenance_suffix.search(description)
+        if match is None:
+            break
+        description = description[: match.start()].rstrip(" .:")
+
+    provenance = f"Copy From {source_id}" if source_id else "Copy From"
+    if not description:
+        return provenance
+    if not description.endswith("."):
+        description += "."
+    return f"{description} {provenance}"
 
 
 def _editable_account_ids(
