@@ -197,8 +197,11 @@ consequence and explicitly says linked Drive files remain.
 
 In **View & edit ledger**, select exactly one visible transaction and choose
 **Copy transaction**. The editor opens in a clearly labeled copy mode with the
-source date and other eligible fields prefilled. The description identifies the
-source transaction while retaining its original memo. Receipts and receipt
+source date and other eligible fields prefilled. The description retains the
+user's memo, adds a period when needed, and ends with exactly one `Copy From
+<source ID>` suffix. Recopying a transaction removes stale generated `Copy From
+<id>` or `Copied from transaction <id>` notes before adding the current source.
+Receipts and receipt
 references are never copied; save the new transaction first, then attach any
 receipts from its editor. **Save copied transaction** creates a new ID, while
 **Cancel copy** leaves the source unchanged and creates nothing.

@@ -77,6 +77,15 @@ def test_copied_transaction_description_preserves_non_provenance_text() -> None:
     ) == "Copied from the vendor: Original memo. Copy From source-123"
 
 
+def test_copied_transaction_description_preserves_user_copy_text_at_end() -> None:
+    assert copied_transaction_description(
+        {
+            "id": "source-123",
+            "description": "Reminder: Copy From project-123",
+        }
+    ) == "Reminder: Copy From project-123. Copy From source-123"
+
+
 def test_copied_transaction_description_has_no_separator_for_blank_memo() -> None:
     assert copied_transaction_description(
         {"id": "source-123", "description": "  Copy From old-1  "}

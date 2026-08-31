@@ -89,7 +89,7 @@ def copied_transaction_description(transaction: Mapping[str, object]) -> str:
         r"(?:\s*:\s*|\.\s+|$)"
     )
     provenance_suffix = re.compile(
-        r"(?:^|\.\s+|:\s+)(?:Copy From|Copied from transaction)\s+"
+        r"(?:^|\.\s+)(?:Copy From|Copied from transaction)\s+"
         r"[^\s:.]+$"
     )
     while description:

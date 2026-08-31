@@ -530,7 +530,8 @@ generation and latest-date-first ordering.
 In Edit or Bulk mode, **Copy transaction** is enabled only when exactly one
 visible transaction is selected. It opens the existing editor as a clearly
 labeled new-transaction copy workflow. The copy preserves the source date and
-eligible fields, prefixes the description with the source transaction ID, and
+eligible fields, retains the user memo, and appends exactly one `Copy From
+<source ID>` suffix, removing stale generated copy notes when recopying. It
 starts with no receipt references. Save creates a new transaction; Cancel
 discards the copy state without changing the source row.
 
