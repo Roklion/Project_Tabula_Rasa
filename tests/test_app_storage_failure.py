@@ -12,6 +12,7 @@ from tabula_rasa.ledger_auth import hash_password
 from tabula_rasa.google_drive import GoogleDriveClient
 from tabula_rasa.receipt_manifest import build_receipt_manifest
 from tabula_rasa.storage import GoogleSheetsStorage, StorageUnavailableError
+from tests.app_support import authenticated_app, navigate_to
 from tests.fakes import FakeWorkbook
 
 TEST_PASSWORD = "test-password-123"
@@ -27,6 +28,37 @@ def isolate_local_profiles(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
 
 
 class TestAppStorageFailure:
+    @pytest.mark.parametrize(
+        ("page", "failing_method"),
+        [
+            ("Mileage", "list_mileage_trips"),
+            ("Transactions", "list_transactions"),
+        ],
+    )
+    def test_tab_read_failure_keeps_one_page_scope_legal_footer(
+        self,
+        page: str,
+        failing_method: str,
+    ) -> None:
+        storage = GoogleSheetsStorage(FakeWorkbook())
+
+        with authenticated_app(storage) as app:
+            setattr(
+                storage,
+                failing_method,
+                Mock(side_effect=StorageUnavailableError(SAFE_MESSAGE)),
+            )
+            navigate_to(app, page)
+
+        markdown = [str(item.value) for item in app.markdown]
+        footer = (
+            "[Terms of Use](?legal=terms) | "
+            "[Privacy Policy](?legal=privacy)"
+        )
+        assert len(app.exception) == 0
+        assert any(error.value == SAFE_MESSAGE for error in app.error)
+        assert markdown.count(footer) == 1
+
     def test_downloadable_backup_prepares_receipts_before_export(self) -> None:
         st.cache_resource.clear()
         storage = GoogleSheetsStorage(FakeWorkbook())

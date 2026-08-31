@@ -226,6 +226,7 @@ def render_mileage(context: MileageContext) -> None:
         "Keep a dated business-mileage log with the route, purpose, and vehicle.",
     )
     tab_add, tab_log = st.tabs(["Add trip", "View & edit mileage log"])
+    page_footer = st.empty()
 
     with tab_add:
         mileage_form_keys = (
@@ -462,7 +463,8 @@ def render_mileage(context: MileageContext) -> None:
             trips = context.storage.list_mileage_trips(start=start, end=end)
         except StorageError as error:
             context.report_storage_error(error)
-            render_global_footer()
+            with page_footer.container():
+                render_global_footer()
             st.stop()
 
         trip_frame = mileage_frame(trips)

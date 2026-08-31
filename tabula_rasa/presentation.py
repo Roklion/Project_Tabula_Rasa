@@ -38,6 +38,8 @@ DESIGN_TOKENS: Mapping[str, str] = {
     "neutral-border": "#D5D7D4",
 }
 
+GLOBAL_FOOTER_RENDERED_KEY = "_global_footer_rendered"
+
 
 def _css_variables(tokens: Mapping[str, str]) -> str:
     return "\n".join(
@@ -550,6 +552,7 @@ def apply_global_styles() -> None:
 
 def render_global_footer() -> None:
     """Render public legal links on authenticated and pre-auth surfaces."""
+    st.session_state[GLOBAL_FOOTER_RENDERED_KEY] = True
     with st.container(key="global_footer"):
         st.markdown(
             "[Terms of Use](?legal=terms) | "

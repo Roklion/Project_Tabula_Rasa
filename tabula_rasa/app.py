@@ -59,6 +59,7 @@ from tabula_rasa.page_renderers.transactions import (
     render_transactions,
 )
 from tabula_rasa.presentation import (
+    GLOBAL_FOOTER_RENDERED_KEY,
     apply_global_styles,
     render_global_footer,
     reset_profile_presentation_state,
@@ -477,103 +478,102 @@ if page != "Account settings":
         notice_placeholder.success(str(notice))
 
 
-if page == "Dashboard":
-    render_dashboard(DashboardContext(selected_profile_key, storage))
+st.session_state[GLOBAL_FOOTER_RENDERED_KEY] = False
+try:
+    if page == "Dashboard":
+        render_dashboard(DashboardContext(selected_profile_key, storage))
 
-
-elif page == "Transactions":
-    render_transactions(
-        TransactionsContext(
-            profile_key=selected_profile_key,
-            storage=storage,
-            profile_secrets=profile_by_key[selected_profile_key].secrets,
-            configuration_revision=revision,
-            get_drive_client=get_drive_client,
-            confirmed_write=confirmed_write,
-            report_storage_error=report_storage_error,
-            reset_widget_state_if_requested=reset_widget_state_if_requested,
-            schedule_widget_reset=schedule_widget_reset,
-            mark_workbook_data_changed=mark_workbook_data_changed,
+    elif page == "Transactions":
+        render_transactions(
+            TransactionsContext(
+                profile_key=selected_profile_key,
+                storage=storage,
+                profile_secrets=profile_by_key[selected_profile_key].secrets,
+                configuration_revision=revision,
+                get_drive_client=get_drive_client,
+                confirmed_write=confirmed_write,
+                report_storage_error=report_storage_error,
+                reset_widget_state_if_requested=reset_widget_state_if_requested,
+                schedule_widget_reset=schedule_widget_reset,
+                mark_workbook_data_changed=mark_workbook_data_changed,
+            )
         )
-    )
 
-
-elif page == "Mileage":
-    render_mileage(
-        MileageContext(
-            profile_key=selected_profile_key,
-            storage=storage,
-            confirmed_write=confirmed_write,
-            report_storage_error=report_storage_error,
-            reset_widget_state_if_requested=reset_widget_state_if_requested,
-            schedule_widget_reset=schedule_widget_reset,
-            maps_api_key=_google_maps_browser_key(effective_secrets),
-            route_mileage=_route_mileage_callable(effective_secrets),
-            autocomplete_region_code=_google_maps_region_code(effective_secrets),
+    elif page == "Mileage":
+        render_mileage(
+            MileageContext(
+                profile_key=selected_profile_key,
+                storage=storage,
+                confirmed_write=confirmed_write,
+                report_storage_error=report_storage_error,
+                reset_widget_state_if_requested=reset_widget_state_if_requested,
+                schedule_widget_reset=schedule_widget_reset,
+                maps_api_key=_google_maps_browser_key(effective_secrets),
+                route_mileage=_route_mileage_callable(effective_secrets),
+                autocomplete_region_code=_google_maps_region_code(effective_secrets),
+            )
         )
-    )
 
-
-
-elif page == "Accounts":
-    render_accounts(
-        AccountsContext(
-            profile_key=selected_profile_key,
-            storage=storage,
-            confirmed_write=confirmed_write,
-            report_storage_error=report_storage_error,
-            reset_widget_state_if_requested=reset_widget_state_if_requested,
-            schedule_widget_reset=schedule_widget_reset,
+    elif page == "Accounts":
+        render_accounts(
+            AccountsContext(
+                profile_key=selected_profile_key,
+                storage=storage,
+                confirmed_write=confirmed_write,
+                report_storage_error=report_storage_error,
+                reset_widget_state_if_requested=reset_widget_state_if_requested,
+                schedule_widget_reset=schedule_widget_reset,
+            )
         )
-    )
 
-
-elif page == "Categories":
-    render_categories(
-        CategoriesContext(
-            profile_key=selected_profile_key,
-            storage=storage,
-            confirmed_write=confirmed_write,
-            report_storage_error=report_storage_error,
-            reset_widget_state_if_requested=reset_widget_state_if_requested,
-            schedule_widget_reset=schedule_widget_reset,
+    elif page == "Categories":
+        render_categories(
+            CategoriesContext(
+                profile_key=selected_profile_key,
+                storage=storage,
+                confirmed_write=confirmed_write,
+                report_storage_error=report_storage_error,
+                reset_widget_state_if_requested=reset_widget_state_if_requested,
+                schedule_widget_reset=schedule_widget_reset,
+            )
         )
-    )
-elif page == "Reports":
-    render_reports(
-        ReportsContext(
-            profile_key=selected_profile_key,
-            storage=storage,
-            report_storage_error=report_storage_error,
+    elif page == "Reports":
+        render_reports(
+            ReportsContext(
+                profile_key=selected_profile_key,
+                storage=storage,
+                report_storage_error=report_storage_error,
+            )
         )
-    )
 
-
-elif page == "Data & backup":
-    selected_profile_secrets = profile_by_key[selected_profile_key].secrets
-    drive_settings_value = selected_profile_secrets.get("google_drive")
-    render_data_backup(
-        DataBackupContext(
-            profile_key=selected_profile_key,
-            storage=storage,
-            drive_settings=(
-                drive_settings_value
-                if isinstance(
-                    drive_settings_value,
-                    Mapping,
-                )
-                else None
-            ),
-            synology_recovery_settings=selected_profile_secrets.get(
-                "synology_recovery"
-            ),
-            configuration_revision=revision,
-            get_drive_client=get_drive_client,
-            receipt_manifest_for_backup=receipt_manifest_for_backup,
-            confirmed_write=confirmed_write,
-            report_storage_error=report_storage_error,
+    elif page == "Data & backup":
+        selected_profile_secrets = profile_by_key[selected_profile_key].secrets
+        drive_settings_value = selected_profile_secrets.get("google_drive")
+        render_data_backup(
+            DataBackupContext(
+                profile_key=selected_profile_key,
+                storage=storage,
+                drive_settings=(
+                    drive_settings_value
+                    if isinstance(
+                        drive_settings_value,
+                        Mapping,
+                    )
+                    else None
+                ),
+                synology_recovery_settings=selected_profile_secrets.get(
+                    "synology_recovery"
+                ),
+                configuration_revision=revision,
+                get_drive_client=get_drive_client,
+                receipt_manifest_for_backup=receipt_manifest_for_backup,
+                confirmed_write=confirmed_write,
+                report_storage_error=report_storage_error,
+            )
         )
-    )
-
-
-render_global_footer()
+finally:
+    # Streamlit stops suppress later output, so stop paths render through their
+    # page-scope placeholders before stopping. This remains the normal footer
+    # path and a fallback for ordinary Python exceptions.
+    if not st.session_state.get(GLOBAL_FOOTER_RENDERED_KEY):
+        render_global_footer()
