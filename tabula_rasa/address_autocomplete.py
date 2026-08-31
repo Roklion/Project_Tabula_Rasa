@@ -157,6 +157,10 @@ export default function(component) {
     status.textContent = 'Loading Google address suggestions…';
     try {
       await loadMaps();
+      if (manualMode) {
+        showManual('Enter an address manually.');
+        return;
+      }
       showAttribution();
       const options = {
         includedPrimaryTypes: ['street_address', 'premise', 'establishment']

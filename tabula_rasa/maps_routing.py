@@ -275,18 +275,22 @@ def _error_for_response(status_code: int, body: Mapping[str, Any]) -> GoogleRout
     """Map a response to a safe category without exposing API response text."""
     error = body.get("error")
     details: list[str] = []
+
+    def collect_detail(value: object) -> None:
+        if isinstance(value, str):
+            details.append(value.casefold())
+        elif isinstance(value, Mapping):
+            for nested in value.values():
+                collect_detail(nested)
+        elif isinstance(value, list):
+            for nested in value:
+                collect_detail(nested)
+
     if isinstance(error, Mapping):
         for key in ("status", "message", "reason"):
             value = error.get(key)
-            if isinstance(value, str):
-                details.append(value.casefold())
-        error_details = error.get("details")
-        if isinstance(error_details, list):
-            details.extend(
-                str(item).casefold()
-                for item in error_details
-                if isinstance(item, str)
-            )
+            collect_detail(value)
+        collect_detail(error.get("details"))
     markers = " ".join(details)
 
     if status_code in (408, 504):

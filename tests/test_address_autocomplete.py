@@ -51,12 +51,29 @@ def test_failed_maps_load_button_retries_google_mode() -> None:
     ) in _JS
 
 
+def test_manual_mode_wins_if_selected_while_maps_loads() -> None:
+    assert (
+        "await loadMaps();\n"
+        "      if (manualMode) {\n"
+        "        showManual('Enter an address manually.');\n"
+        "        return;\n"
+        "      }"
+    ) in _JS
+
+
 def test_inline_attribution_is_hidden_for_manual_mode() -> None:
     assert '<small id="tr-address-attribution" hidden>Google Maps</small>' in _HTML
     assert "const attribution = parentElement.querySelector('#tr-address-attribution');" in _JS
     assert "function hideAttribution()" in _JS
     assert "hideAttribution();" in _JS
-    assert "await loadMaps();\n      showAttribution();" in _JS
+    assert (
+        "await loadMaps();\n"
+        "      if (manualMode) {\n"
+        "        showManual('Enter an address manually.');\n"
+        "        return;\n"
+        "      }\n"
+        "      showAttribution();"
+    ) in _JS
 
 
 def test_browser_key_fails_closed_when_routes_key_is_reused() -> None:

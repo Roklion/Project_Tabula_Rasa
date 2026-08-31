@@ -154,6 +154,23 @@ def test_compute_route_maps_safe_http_error_categories(
     assert body["error"] != str(raised.value)
 
 
+def test_compute_route_classifies_nested_error_details() -> None:
+    route_client, _ = client_with(
+        response(
+            400,
+            {
+                "error": {
+                    "status": "INVALID_ARGUMENT",
+                    "details": [{"reason": "API_KEY_INVALID"}],
+                }
+            },
+        )
+    )
+
+    with pytest.raises(GoogleRoutesInvalidKeyError):
+        route_client.compute_route("origin", "destination")
+
+
 def test_compute_route_maps_request_timeout_without_raw_error() -> None:
     session = Mock()
     session.post.side_effect = requests.Timeout("secret transport detail")
