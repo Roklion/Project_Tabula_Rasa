@@ -85,6 +85,7 @@ def _calculate_routes(
     route_mileage: Callable[[str, str], float],
     *,
     round_trip: bool,
+    known_outbound: float | None = None,
 ) -> tuple[float, float | None]:
     """Call the injected routing function only for explicit user actions."""
     if not start.place_id or not destination.place_id:
@@ -95,7 +96,11 @@ def _calculate_routes(
         raise RouteValidationError(
             "Starting location and destination must be different."
         )
-    outbound_result = route_mileage(start.place_id, destination.place_id)
+    outbound_result = (
+        route_mileage(start.place_id, destination.place_id)
+        if known_outbound is None
+        else known_outbound
+    )
     outbound = round(
         float(getattr(outbound_result, "suggested_miles", outbound_result)), 1
     )
@@ -322,11 +327,17 @@ def render_mileage(context: MileageContext) -> None:
             if calculate_requested:
                 with st.spinner("Calculating mileage…"):
                     try:
+                        known_outbound = (
+                            route_state.get("outbound")
+                            if route_state and route_state.get("partial")
+                            else None
+                        )
                         outbound, returned = _calculate_routes(
                             start,
                             destination_value,
                             context.route_mileage,  # type: ignore[arg-type]
                             round_trip=round_trip,
+                            known_outbound=known_outbound,
                         )
                         st.session_state[add_route_key] = {
                             "fingerprint": fingerprint,

@@ -80,6 +80,41 @@ def test_round_trip_preserves_outbound_when_return_lookup_fails() -> None:
     ]
 
 
+def test_round_trip_retry_calls_only_failed_return_route() -> None:
+    calls: list[tuple[str, str]] = []
+
+    def initial_route(origin: str, destination: str) -> float:
+        calls.append((origin, destination))
+        if len(calls) == 2:
+            raise TimeoutError("return failed")
+        return 12.4
+
+    with pytest.raises(PartialRouteError) as raised:
+        _calculate_routes(
+            AddressSelection("Office", "place-office", 2),
+            AddressSelection("Client", "place-client", 3),
+            initial_route,
+            round_trip=True,
+        )
+
+    retry_calls: list[tuple[str, str]] = []
+
+    def retry_route(origin: str, destination: str) -> float:
+        retry_calls.append((origin, destination))
+        return 13.1
+
+    outbound, returned = _calculate_routes(
+        AddressSelection("Office", "place-office", 2),
+        AddressSelection("Client", "place-client", 3),
+        retry_route,
+        round_trip=True,
+        known_outbound=raised.value.outbound,
+    )
+
+    assert (outbound, returned) == (12.4, 13.1)
+    assert retry_calls == [("place-client", "place-office")]
+
+
 def test_round_trip_save_passes_independent_return_miles() -> None:
     class Storage:
         def __init__(self) -> None:
