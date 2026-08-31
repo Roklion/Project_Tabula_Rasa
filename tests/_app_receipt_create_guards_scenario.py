@@ -90,6 +90,9 @@ def main() -> None:
         assert len(storage.list_transactions()) == 1
         assert upload_calls == []
 
+        # A completed save resets new-entry fields to their zero defaults;
+        # provide a positive amount for the next transaction workflow.
+        by_label(app.number_input, "Amount").set_value(25)
         by_label(app.file_uploader, "Receipt (optional)").set_value(
             ("bad.pdf", b"", "application/pdf")
         ).run()

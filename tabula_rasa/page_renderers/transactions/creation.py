@@ -73,8 +73,9 @@ def render_add_transaction(
         if kind == "Transfer":
             amount = st.number_input(
                 "Amount",
-                min_value=0.01,
+                min_value=0.0,
                 step=1.0,
+                value=0.0,
                 format="%.2f",
                 key="add_transaction_amount",
             )
@@ -94,8 +95,9 @@ def render_add_transaction(
             ]
             amount = c2.number_input(
                 "Amount",
-                min_value=0.01,
+                min_value=0.0,
                 step=1.0,
+                value=0.0,
                 format="%.2f",
                 key="add_transaction_amount",
             )

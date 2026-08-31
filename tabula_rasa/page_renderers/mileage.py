@@ -326,14 +326,15 @@ def render_mileage(context: MileageContext) -> None:
             )
             c1, c2 = st.columns(2, gap="small")
             miles = c1.number_input(
-                "Business miles", min_value=0.1, step=0.1, format="%.1f",
+                "Business miles", min_value=0.0, step=0.1, value=0.0,
+                format="%.1f",
                 key="add_mileage_miles",
             )
             return_miles = miles
             if round_trip:
                 return_miles = st.number_input(
                     "Return business miles",
-                    min_value=0.1,
+                    min_value=0.0,
                     step=0.1,
                     value=float(miles),
                     format="%.1f",

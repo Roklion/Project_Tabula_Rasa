@@ -816,9 +816,9 @@ from the source.
 
 ### Currency input and output
 
-Use two decimal places, a minimum of 0.01 for current transaction entry,
-right-aligned displayed values, and the existing opening-balance sign
-conventions.
+Use two decimal places for currency, default new transaction amounts to 0.00,
+require a positive amount before saving, right-align displayed values, and
+preserve the existing opening-balance sign conventions.
 
 ### Selectable table
 

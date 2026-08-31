@@ -102,7 +102,8 @@ not affect income or expenses.
 Choose **Income**, **Expense**, or **Transfer**, then enter the date, amount,
 account information, and optional payee, reference, and description. Income
 and Expense require a same-kind category. Transfer requires two different
-active accounts and has no category.
+active accounts and has no category. New transaction amounts start at **0.00**;
+the amount must be greater than zero when you save.
 
 The optional receipt uploader accepts PDF, PNG, JPG, JPEG, WEBP, or HEIC.
 Each file must be non-empty and no larger than 20 MB; one selected batch may
@@ -233,7 +234,8 @@ independent protected copy described in [Backup and recovery](BACKUP_RECOVERY.md
 The Mileage page records trip date, business miles, starting location,
 destination, business purpose, optional vehicle, and optional notes. It
 supports date filtering, trip and mile totals, filtered CSV export, editing,
-and permanent deletion.
+and permanent deletion. New mileage entries start at zero miles; a positive
+distance is required when saving.
 
 When Google Maps is configured, Starting location and Destination offer Google
 address suggestions. Select both suggestions, then choose **Calculate mileage**

@@ -138,6 +138,7 @@ def main() -> None:
         assert initial_ledger_key == "transaction_ledger_test_1"
         by_label(app.segmented_control, "Transaction type").set_value("Expense").run()
         assert app.dataframe[0].key == initial_ledger_key
+        assert by_label(app.number_input, "Amount").value == 0.0
         by_label(app.date_input, "Date").set_value(
             date(date.today().year, 1, 1)
         )
@@ -172,7 +173,7 @@ def main() -> None:
 
         by_label(app.button, "Save transaction").click().run()
         assert len(app.exception) == 0
-        assert by_label(app.number_input, "Amount").value == 0.01
+        assert by_label(app.number_input, "Amount").value == 0.0
         assert by_label(app.text_input, "Payee / customer").value == ""
         assert by_label(app.text_input, "Description / memo").value == ""
         assert "Transaction saved." in success_values(app)
@@ -358,6 +359,7 @@ def main() -> None:
             button.label == "Download filtered mileage CSV"
             for button in app.download_button
         )
+        assert by_label(app.number_input, "Business miles").value == 0.0
         by_label(app.number_input, "Business miles").set_value(18.6)
         by_label(app.text_input, "Vehicle (optional)").input("Blue car")
         by_label(app.text_input, "Starting location").input("Office")
@@ -422,7 +424,7 @@ def main() -> None:
                 "notes",
             )
         }
-        assert by_label(app.number_input, "Business miles").value == 0.1
+        assert by_label(app.number_input, "Business miles").value == 0.0
         assert by_label(app.text_input, "Vehicle (optional)").value == ""
         assert by_label(app.text_input, "Starting location").value == ""
         assert by_label(app.text_input, "Destination").value == ""
