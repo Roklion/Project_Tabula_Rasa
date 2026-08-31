@@ -248,6 +248,11 @@ def render_ledger(
     ].reset_index(drop=True)
     transaction_ids = [str(transaction_id) for transaction_id in transaction_frame["ID"]]
     transaction_ids_set = set(transaction_ids)
+    if copy_source_id and copy_source_id not in transaction_ids_set:
+        # Do not let a filter change turn the copy form into an editor for a
+        # different row while its source is hidden.
+        _clear_copy_state(context.profile_key)
+        copy_source_id = ""
     selection_scope = (
         context.profile_key,
         st.session_state.get("transaction_ledger_generation", 0),
@@ -345,7 +350,7 @@ def render_ledger(
     )
     copy_button = st.button(
         "Copy transaction",
-        disabled=len(selected_for_copy) != 1,
+        disabled=bool(copy_source_id) or len(selected_for_copy) != 1,
         key=(
             "transaction_copy_"
             f"{context.profile_key}_{st.session_state.get('transaction_ledger_generation', 0)}"
