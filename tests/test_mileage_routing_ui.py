@@ -9,6 +9,8 @@ from tabula_rasa.address_autocomplete import AddressSelection
 from tabula_rasa.page_renderers.mileage import (
     PartialRouteError,
     _calculate_routes,
+    _needs_google_maps_attribution,
+    _route_state_is_current,
     _same_selected_place,
     _save_round_trip,
 )
@@ -65,6 +67,35 @@ def test_save_guard_rejects_same_place_id_but_allows_manual_loop() -> None:
         AddressSelection("Office"),
         AddressSelection("Office"),
     )
+
+
+def test_google_maps_attribution_uses_current_session_provenance() -> None:
+    fingerprint = ("Office", "Client", 2, 3, False)
+    selected_start = AddressSelection("Office", "place-office", 2)
+    manual_destination = AddressSelection("Client", version=3)
+
+    # A single current Google selection is enough to attribute the address
+    # autocomplete content, even before a route is calculated.
+    assert _needs_google_maps_attribution(
+        selected_start, manual_destination, None, fingerprint
+    )
+    # A valid route state is also attributable even if the address widgets
+    # have since been reconstructed without Place IDs.
+    assert _needs_google_maps_attribution(
+        AddressSelection("Office", version=2),
+        AddressSelection("Client", version=3),
+        {"fingerprint": fingerprint, "outbound": 12.4},
+        fingerprint,
+    )
+    # Manual fallback and stale route state must not claim Google-derived data.
+    stale = {"fingerprint": ("Old office", "Client", 1, 3, False)}
+    assert not _needs_google_maps_attribution(
+        AddressSelection("Office", version=2),
+        manual_destination,
+        stale,
+        fingerprint,
+    )
+    assert not _route_state_is_current(stale, fingerprint)
 
 
 def test_round_trip_preserves_outbound_when_return_lookup_fails() -> None:

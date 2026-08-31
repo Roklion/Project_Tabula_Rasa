@@ -2,6 +2,7 @@
 
 from tabula_rasa.address_autocomplete import (
     AddressSelection,
+    _HTML,
     _JS,
     browser_api_key_from_secrets,
     _latest_selection,
@@ -35,6 +36,14 @@ def test_manual_fallback_persists_without_rerunning_per_keystroke() -> None:
     assert "setTriggerValue('failed', true)" not in _JS
     assert "window.__tabulaRasaPlacesPromise = null;" in _JS
     assert "if (failedScript) failedScript.remove();" in _JS
+
+
+def test_inline_attribution_is_hidden_for_manual_mode() -> None:
+    assert '<small id="tr-address-attribution" hidden>Google Maps</small>' in _HTML
+    assert "const attribution = parentElement.querySelector('#tr-address-attribution');" in _JS
+    assert "function hideAttribution()" in _JS
+    assert "hideAttribution();" in _JS
+    assert "await loadMaps();\n      showAttribution();" in _JS
 
 
 def test_browser_key_fails_closed_when_routes_key_is_reused() -> None:

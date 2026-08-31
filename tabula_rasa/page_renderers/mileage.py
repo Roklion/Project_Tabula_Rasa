@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import date
 import math
@@ -69,6 +69,30 @@ def _route_ready(
         and start.place_id
         and destination.place_id
         and start.place_id != destination.place_id
+    )
+
+
+def _route_state_is_current(
+    route_state: object, fingerprint: tuple[object, ...]
+) -> bool:
+    """Accept calculated provenance only for the currently selected inputs."""
+    return (
+        isinstance(route_state, Mapping)
+        and route_state.get("fingerprint") == fingerprint
+    )
+
+
+def _needs_google_maps_attribution(
+    start: AddressSelection,
+    destination: AddressSelection,
+    route_state: object,
+    fingerprint: tuple[object, ...],
+) -> bool:
+    """Identify current-session Google content without persisting provenance."""
+    return bool(
+        start.place_id
+        or destination.place_id
+        or _route_state_is_current(route_state, fingerprint)
     )
 
 
@@ -280,7 +304,7 @@ def render_mileage(context: MileageContext) -> None:
                 "retry the return route."
             )
         if route_state:
-            st.caption("Calculated mileage suggestion from Google Maps.")
+            st.caption("Calculated mileage suggestion ready.")
         suggestion = st.session_state.pop("add_mileage_suggestion", None)
         if suggestion:
             st.session_state["add_mileage_miles"] = suggestion[0]
@@ -313,6 +337,10 @@ def render_mileage(context: MileageContext) -> None:
                     key="add_mileage_return_miles",
                     help="The return route is editable independently.",
                 )
+            if _needs_google_maps_attribution(
+                start, destination_value, route_state, fingerprint
+            ):
+                st.caption("Google Maps")
             business_purpose = st.text_input(
                 "Business purpose", key="add_mileage_purpose"
             )
@@ -531,7 +559,7 @@ def render_mileage(context: MileageContext) -> None:
                         st.session_state[miles_key] = 0.1
                     edit_route_state = None
                 if edit_route_state:
-                    st.caption("Calculated mileage suggestion from Google Maps.")
+                    st.caption("Calculated mileage suggestion ready.")
                 edit_suggestion = st.session_state.pop(
                     f"edit_mileage_suggestion_{edit_id}", None
                 )
@@ -555,6 +583,11 @@ def render_mileage(context: MileageContext) -> None:
                         format="%.1f",
                         key=f"edit_mileage_trip_miles_{edit_widget_scope}",
                     )
+                    if _needs_google_maps_attribution(
+                        edit_start, edit_destination, edit_route_state,
+                        edit_fingerprint,
+                    ):
+                        st.caption("Google Maps")
                     edited_vehicle = st.text_input(
                         "Edit vehicle",
                         value=selected.get("vehicle", ""),

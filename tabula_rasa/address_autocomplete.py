@@ -55,7 +55,7 @@ _HTML = """
     Enter address manually
   </button>
   <small id="tr-address-status" role="status" aria-live="polite"></small>
-  <small id="tr-address-attribution">Google Maps</small>
+  <small id="tr-address-attribution" hidden>Google Maps</small>
 </div>
 """
 
@@ -76,11 +76,19 @@ export default function(component) {
   const manualInput = parentElement.querySelector('#tr-address-input');
   const manualButton = parentElement.querySelector('#tr-address-manual-button');
   const status = parentElement.querySelector('#tr-address-status');
+  const attribution = parentElement.querySelector('#tr-address-attribution');
   label.textContent = data.label || 'Address';
   manualInput.setAttribute('aria-label', data.label || 'Address');
   let version = Number(data.version || 0);
   let manualMode = data.manualMode === true;
   let suppressInput = false;
+
+  function showAttribution() {
+    attribution.hidden = false;
+  }
+  function hideAttribution() {
+    attribution.hidden = true;
+  }
 
   function emit(name, value) {
     version += 1;
@@ -89,6 +97,7 @@ export default function(component) {
     });
   }
   function showManual(message) {
+    hideAttribution();
     host.hidden = true;
     manual.hidden = false;
     manualButton.hidden = false;
@@ -147,6 +156,7 @@ export default function(component) {
     status.textContent = 'Loading Google address suggestions…';
     try {
       await loadMaps();
+      showAttribution();
       const options = {
         includedPrimaryTypes: ['street_address', 'premise', 'establishment']
       };
