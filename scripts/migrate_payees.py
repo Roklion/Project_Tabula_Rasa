@@ -15,6 +15,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from tabula_rasa.storage.google_sheets import (  # noqa: E402
+    PRE_PAYEE_WORKSHEET_HEADERS,
     SHEETS_SCOPE,
     WORKSHEET_HEADERS,
     _legacy_payee_id,
@@ -88,6 +89,16 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     if len(payee_headers) != 1:
         raise ValueError(
             "Transactions worksheet must contain exactly one payee or payee_id header"
+        )
+    required_transaction_headers = set(PRE_PAYEE_WORKSHEET_HEADERS["Transactions"]) - {
+        "payee",
+        "receipt_references",
+    }
+    missing_transaction_headers = required_transaction_headers - set(headers)
+    if missing_transaction_headers:
+        missing = ", ".join(sorted(missing_transaction_headers))
+        raise ValueError(
+            f"Transactions worksheet is missing required headers: {missing}"
         )
     payee_sheet = next((sheet for sheet in workbook.worksheets() if sheet.title == "Payees"), None)
 
