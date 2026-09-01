@@ -7,7 +7,6 @@ import sys
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
-from uuid import UUID
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -23,14 +22,6 @@ from tabula_rasa.storage.google_sheets import (  # noqa: E402
     _validate_payee_records,
     normalize_payee_name,
 )
-
-
-def _looks_like_uuid(value: str) -> bool:
-    try:
-        UUID(value)
-    except ValueError:
-        return False
-    return True
 
 
 def migrate_payee_rows(
@@ -49,10 +40,10 @@ def migrate_payee_rows(
     _validate_payee_records(normalized_existing_payees)
     payees_by_key = {
         normalize_payee_name(item.get("name")): {
-            "id": str(item["id"]),
-            "name": str(item["name"]),
-            "active": str(item.get("active", "TRUE")),
-            "created_at": str(item.get("created_at", "")),
+            "id": item["id"],
+            "name": item["name"],
+            "active": item["active"],
+            "created_at": item["created_at"],
         }
         for item in normalized_existing_payees
         if normalize_payee_name(item.get("name"))
@@ -143,11 +134,19 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     rows = [dict(zip(headers, row + [""] * (len(headers) - len(row)))) for row in transaction_values[1:]]
     if "payee" not in headers:
         known_payee_ids = {str(item.get("id", "")).strip() for item in existing}
+        known_payee_names = {
+            normalize_payee_name(str(item.get("name", "")).strip()): payee_id
+            for item, payee_id in (
+                (item, str(item.get("id", "")).strip()) for item in existing
+            )
+            if normalize_payee_name(str(item.get("name", "")).strip())
+            and payee_id
+        }
         legacy_rows = []
         for row in rows:
             value = str(row.get("payee_id", "")).strip()
             if value and value not in known_payee_ids:
-                if _looks_like_uuid(value):
+                if normalize_payee_name(value) not in known_payee_names:
                     raise ValueError(
                         "Transactions worksheet contains an unknown payee_id"
                     )

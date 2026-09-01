@@ -1186,26 +1186,40 @@ class GoogleSheetsStorage:
             for row, record in updates
         ]
         worksheet = self._worksheet(title)
-        try:
-            self._api(
-                lambda: worksheet.batch_update(batch, raw=True),
-                retry_safe=False,
-            )
-        except StorageUnavailableError:
-            current_rows = self._rows(title, force_refresh=True)
-            current_by_id = {
-                str(row.values.get("id", "")): row.values for row in current_rows
-            }
-            if all(
-                current_by_id.get(str(record.get("id", "")), {})
-                == {
-                    header: str(record.get(header, "")) for header in headers
+        for attempt in range(self._retry_attempts):
+            try:
+                self._api(
+                    lambda: worksheet.batch_update(batch, raw=True),
+                    retry_safe=False,
+                )
+            except StorageUnavailableError as error:
+                current_rows = self._rows(title, force_refresh=True)
+                current_by_id = {
+                    str(row.values.get("id", "")): row.values for row in current_rows
                 }
-                for _, record in updates
-            ):
-                return
-            raise
-        self._invalidate(title)
+                intended_by_id = {
+                    str(record.get("id", "")): {
+                        header: str(record.get(header, "")) for header in headers
+                    }
+                    for _, record in updates
+                }
+                if all(
+                    current_by_id.get(record_id, {}) == intended
+                    for record_id, intended in intended_by_id.items()
+                ):
+                    return
+                if not error.retryable or attempt + 1 >= self._retry_attempts:
+                    raise
+                if not all(
+                    current_by_id.get(str(row.values.get("id", "")), {})
+                    == row.values
+                    for row, _ in updates
+                ):
+                    raise
+                self._sleeper(self._retry_base_delay_seconds * (2**attempt))
+                continue
+            self._invalidate(title)
+            return
 
     @staticmethod
     def _sheet_column_index(headers: Sequence[str], column: str) -> int:

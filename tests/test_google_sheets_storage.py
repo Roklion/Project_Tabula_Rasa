@@ -2809,6 +2809,34 @@ class TestGoogleSheetsStorage:
 
         assert result == {"status": "fully_applied", "count": "1"}
 
+    def test_payee_activation_retries_when_batch_update_is_not_applied(self) -> None:
+        delays: list[float] = []
+        storage = GoogleSheetsStorage(
+            self.workbook,
+            retry_attempts=2,
+            retry_base_delay_seconds=0.25,
+            sleeper=delays.append,
+        )
+        payee = storage.create_payee("Vendor", active=False)
+        worksheet = self.workbook.sheets["Payees"]
+        original_batch_update = worksheet.batch_update
+        calls = 0
+
+        def fail_once(data: list[dict[str, object]], **kwargs: object) -> None:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise OSError("temporary failure")
+            original_batch_update(data, **kwargs)
+
+        worksheet.batch_update = Mock(side_effect=fail_once)
+
+        result = storage._ensure_payee_names(["Vendor"])
+
+        assert result[payee["id"]]["active"] == "TRUE"
+        assert calls == 2
+        assert delays == [0.25]
+
     def test_bulk_category_change_uses_one_minimal_atomic_batch(self) -> None:
         first, second, replacement = self._bulk_transaction_fixture()
         expected = [

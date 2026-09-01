@@ -445,6 +445,36 @@ def test_migration_rejects_dangling_uuid_payee_id() -> None:
     assert payee_sheet.rows == original_payees
 
 
+def test_migration_rejects_dangling_non_uuid_payee_id() -> None:
+    workbook = FakeWorkbook()
+    transaction_sheet = workbook.worksheet("Transactions")
+    transaction_sheet.rows.append(
+        [
+            "txn",
+            "2026-09-01",
+            "Expense",
+            "10.00",
+            "account",
+            "",
+            "category",
+            "vendor-1",
+            "",
+            "",
+            "",
+            "now",
+        ]
+    )
+    original_transactions = [list(row) for row in transaction_sheet.rows]
+    payee_sheet = workbook.worksheet("Payees")
+    original_payees = [list(row) for row in payee_sheet.rows]
+
+    with pytest.raises(ValueError, match="unknown payee_id"):
+        migrate_workbook(workbook)
+
+    assert transaction_sheet.rows == original_transactions
+    assert payee_sheet.rows == original_payees
+
+
 def test_legacy_restore_accepts_extra_payee_headers() -> None:
     source = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     account = source.create_account("Checking", "Bank")
