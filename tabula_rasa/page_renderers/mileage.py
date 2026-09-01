@@ -76,8 +76,14 @@ def _route_disabled_reason(
     start: AddressSelection,
     destination: AddressSelection,
     route_mileage: Callable[[str, str], float] | None,
+    autocomplete_available: bool = True,
 ) -> str:
     """Explain why the explicit route action is currently unavailable."""
+    if not autocomplete_available:
+        return (
+            "Google address suggestions are unavailable. Enter mileage manually "
+            "or configure a browser Maps key."
+        )
     if route_mileage is None:
         return (
             "Google Maps routing is not configured. Enter mileage manually "
@@ -374,7 +380,10 @@ def render_mileage(context: MileageContext) -> None:
                 start, destination_value, context.route_mileage
             )
             route_disabled_reason = _route_disabled_reason(
-                start, destination_value, context.route_mileage
+                start,
+                destination_value,
+                context.route_mileage,
+                autocomplete_available=context.maps_api_key is not None,
             )
             calculate_requested = st.button(
                 "Recalculate mileage" if route_state else "Calculate mileage",
