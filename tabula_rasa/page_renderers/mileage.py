@@ -107,7 +107,7 @@ def _autocomplete_available(*keys: str) -> bool:
     """Return whether no address component has reported provider failure."""
     for key in keys:
         state = st.session_state.get(key)
-        if isinstance(state, Mapping) and state.get("provider_failed") is True:
+        if isinstance(state, Mapping) and state.get("failed") is True:
             return False
     return True
 
@@ -150,11 +150,34 @@ def _ledger_location_text(
         "Google text is used only for route lookup. Enter the location text "
         "you want to record in the ledger."
     )
-    return st.text_input(
+    version_key = f"{key}__autocomplete_version"
+    confirmation_key = f"{key}__confirmed"
+    if st.session_state.get(version_key) != selection.version:
+        st.session_state[key] = selection.display_text
+        st.session_state[version_key] = selection.version
+        st.session_state[confirmation_key] = False
+    text = st.text_input(
         f"{label} (recorded text)",
-        value=existing_value,
+        value=st.session_state.get(key, existing_value or selection.display_text),
         key=key,
         help="This user-authored or user-confirmed text is saved to the Mileage ledger.",
+    )
+    st.checkbox(
+        f"Confirm {label.lower()} text",
+        key=confirmation_key,
+        help="Confirm that this text is the location text to save in the ledger.",
+    )
+    return text
+
+
+def _recorded_location_is_confirmed(
+    selection: AddressSelection, *, key: str, text: str
+) -> bool:
+    """Require explicit confirmation before saving unchanged Google text."""
+    return bool(
+        not selection.place_id
+        or st.session_state.get(f"{key}__confirmed") is True
+        or text != selection.display_text
     )
 
 
@@ -317,6 +340,10 @@ def render_mileage(context: MileageContext) -> None:
             "add_mileage_destination__selection",
             "add_mileage_recorded_start",
             "add_mileage_recorded_destination",
+            "add_mileage_recorded_start__autocomplete_version",
+            "add_mileage_recorded_destination__autocomplete_version",
+            "add_mileage_recorded_start__confirmed",
+            "add_mileage_recorded_destination__confirmed",
             _route_key(context, "add"),
         )
         context.reset_widget_state_if_requested(
@@ -344,16 +371,42 @@ def render_mileage(context: MileageContext) -> None:
                 api_key=context.maps_api_key,
                 region_code=context.autocomplete_region_code,
             )
-        recorded_start = _ledger_location_text(
+
+        add_route_key = _route_key(context, "add")
+        route_state = st.session_state.get(add_route_key)
+        round_trip = bool(
+            st.session_state.get("add_mileage_round_trip", False)
+        )
+        fingerprint = (*_selection_fingerprint(start, destination_value), round_trip)
+        address_changed = False
+        if route_state and route_state.get("fingerprint") != fingerprint:
+            # A changed address invalidates a previously paid suggestion.
+            st.session_state.pop(add_route_key, None)
+            route_state = None
+            address_changed = True
+        route_error = st.empty()
+        route_ready = _route_ready(
+            start, destination_value, context.route_mileage
+        )
+        route_disabled_reason = _route_disabled_reason(
             start,
-            label="Starting location",
-            key="add_mileage_recorded_start",
-        )
-        recorded_destination = _ledger_location_text(
             destination_value,
-            label="Destination",
-            key="add_mileage_recorded_destination",
+            context.route_mileage,
+            autocomplete_available=(
+                context.maps_api_key is not None
+                and _autocomplete_available(
+                    "add_mileage_start", "add_mileage_destination"
+                )
+            ),
         )
+        calculate_requested = st.button(
+            "Recalculate mileage" if route_state else "Calculate mileage",
+            disabled=not route_ready,
+            help=route_disabled_reason if not route_ready else None,
+        )
+        if not route_ready and context.route_mileage is not None:
+            st.caption(route_disabled_reason)
+
         round_trip = st.checkbox(
             "Round trip",
             help=(
@@ -363,16 +416,6 @@ def render_mileage(context: MileageContext) -> None:
             ),
             key="add_mileage_round_trip",
         )
-
-        add_route_key = _route_key(context, "add")
-        route_state = st.session_state.get(add_route_key)
-        fingerprint = (*_selection_fingerprint(start, destination_value), round_trip)
-        address_changed = False
-        if route_state and route_state.get("fingerprint") != fingerprint:
-            # A changed address invalidates a previously paid suggestion.
-            st.session_state.pop(add_route_key, None)
-            route_state = None
-            address_changed = True
         if address_changed:
             st.warning(
                 "The route changed, so the Google suggestion was cleared. "
@@ -385,6 +428,20 @@ def render_mileage(context: MileageContext) -> None:
                 "retry the return route."
             )
         _render_google_route_suggestions(route_state)
+
+        recorded_columns = st.columns(2, gap="small")
+        with recorded_columns[0]:
+            recorded_start = _ledger_location_text(
+                start,
+                label="Starting location",
+                key="add_mileage_recorded_start",
+            )
+        with recorded_columns[1]:
+            recorded_destination = _ledger_location_text(
+                destination_value,
+                label="Destination",
+                key="add_mileage_recorded_destination",
+            )
 
         # Keep draft widgets in page state so address-component reruns cannot
         # discard unsubmitted edits.
@@ -423,32 +480,6 @@ def render_mileage(context: MileageContext) -> None:
                 "Business purpose", key="add_mileage_purpose"
             )
             notes = st.text_area("Notes (optional)", key="add_mileage_notes")
-            route_error = st.empty()
-            route_ready = _route_ready(
-                start, destination_value, context.route_mileage
-            )
-            route_disabled_reason = _route_disabled_reason(
-                start,
-                destination_value,
-                context.route_mileage,
-                autocomplete_available=(
-                    context.maps_api_key is not None
-                    and _autocomplete_available(
-                        "add_mileage_start", "add_mileage_destination"
-                    )
-                ),
-            )
-            calculate_requested = st.button(
-                "Recalculate mileage" if route_state else "Calculate mileage",
-                disabled=not route_ready,
-                help=(
-                    route_disabled_reason
-                    if not route_ready
-                    else None
-                ),
-            )
-            if not route_ready and context.route_mileage is not None:
-                st.caption(route_disabled_reason)
             save_error = st.empty()
             submitted = st.button(
                 "Save mileage trip", type="primary", width="stretch"
@@ -493,9 +524,23 @@ def render_mileage(context: MileageContext) -> None:
                     save_error.error(
                         "Enter the starting location text to record in the ledger."
                     )
+                elif start.place_id and not _recorded_location_is_confirmed(
+                    start, key="add_mileage_recorded_start", text=recorded_start
+                ):
+                    save_error.error(
+                        "Confirm the starting location text before saving the trip."
+                    )
                 elif destination_value.place_id and not recorded_destination.strip():
                     save_error.error(
                         "Enter the destination text to record in the ledger."
+                    )
+                elif destination_value.place_id and not _recorded_location_is_confirmed(
+                    destination_value,
+                    key="add_mileage_recorded_destination",
+                    text=recorded_destination,
+                ):
+                    save_error.error(
+                        "Confirm the destination text before saving the trip."
                     )
                 else:
                     payload = {
@@ -757,6 +802,22 @@ def render_mileage(context: MileageContext) -> None:
                         if _same_selected_place(edit_start, edit_destination):
                             edit_error.error(
                                 "Starting location and destination must be different."
+                            )
+                        elif edit_start.place_id and not _recorded_location_is_confirmed(
+                            edit_start,
+                            key=f"edit_mileage_trip_recorded_start_{edit_widget_scope}",
+                            text=edited_start,
+                        ):
+                            edit_error.error(
+                                "Confirm the starting location text before saving changes."
+                            )
+                        elif edit_destination.place_id and not _recorded_location_is_confirmed(
+                            edit_destination,
+                            key=f"edit_mileage_trip_recorded_destination_{edit_widget_scope}",
+                            text=edited_destination,
+                        ):
+                            edit_error.error(
+                                "Confirm the destination text before saving changes."
                             )
                         else:
                             payload = {

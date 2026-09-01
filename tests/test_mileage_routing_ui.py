@@ -10,6 +10,7 @@ from tabula_rasa.page_renderers.mileage import (
     PartialRouteError,
     _calculate_routes,
     _ledger_location_text,
+    _recorded_location_is_confirmed,
     _needs_google_maps_attribution,
     _render_google_route_suggestions,
     _route_state_is_current,
@@ -129,7 +130,7 @@ def test_route_suggestions_render_as_current_transient_values(monkeypatch) -> No
     ]
 
 
-def test_google_location_text_requires_a_separate_ledger_input(monkeypatch) -> None:
+def test_google_location_text_prefills_the_ledger_input(monkeypatch) -> None:
     import streamlit as st
 
     captions: list[str] = []
@@ -141,6 +142,7 @@ def test_google_location_text_requires_a_separate_ledger_input(monkeypatch) -> N
         lambda label, *, value, key, help: inputs.append((label, value, key))
         or value,
     )
+    monkeypatch.setattr(st, "checkbox", lambda *args, **kwargs: False)
 
     google_text = _ledger_location_text(
         AddressSelection("Provider display text", "place-123", 4),
@@ -153,10 +155,83 @@ def test_google_location_text_requires_a_separate_ledger_input(monkeypatch) -> N
         key="ledger-start",
     )
 
-    assert google_text == ""
+    assert google_text == "Provider display text"
     assert manual_text == "Typed by user"
-    assert inputs == [("Starting location (recorded text)", "", "ledger-start")]
+    assert inputs == [
+        ("Starting location (recorded text)", "Provider display text", "ledger-start")
+    ]
     assert len(captions) == 1
+
+
+def test_google_location_text_refreshes_for_a_new_selection_but_preserves_edits(
+    monkeypatch,
+) -> None:
+    import streamlit as st
+
+    inputs: list[str] = []
+    monkeypatch.setattr(
+        st,
+        "text_input",
+        lambda label, *, value, key, help: inputs.append(value) or value,
+    )
+    monkeypatch.setattr(st, "caption", lambda message: None)
+    monkeypatch.setattr(st, "checkbox", lambda *args, **kwargs: False)
+
+    _ledger_location_text(
+        AddressSelection("First result", "place-1", 1),
+        label="Starting location",
+        key="ledger-start",
+    )
+    st.session_state["ledger-start"] = "User-confirmed text"
+    _ledger_location_text(
+        AddressSelection("First result", "place-1", 1),
+        label="Starting location",
+        key="ledger-start",
+    )
+    _ledger_location_text(
+        AddressSelection("Second result", "place-2", 2),
+        label="Starting location",
+        key="ledger-start",
+    )
+
+    assert inputs == ["First result", "User-confirmed text", "Second result"]
+
+
+def test_recorded_google_text_requires_confirmation_unless_edited(monkeypatch) -> None:
+    import streamlit as st
+
+    monkeypatch.setattr(st, "caption", lambda message: None)
+    monkeypatch.setattr(st, "text_input", lambda label, *, value, key, help: value)
+    monkeypatch.setattr(st, "checkbox", lambda *args, **kwargs: False)
+
+    selection = AddressSelection("Provider display text", "place-123", 4)
+    _ledger_location_text(
+        selection,
+        label="Starting location",
+        key="ledger-start",
+    )
+
+    assert not _recorded_location_is_confirmed(
+        selection, key="ledger-start", text="Provider display text"
+    )
+    assert _recorded_location_is_confirmed(
+        selection, key="ledger-start", text="User-confirmed text"
+    )
+    st.session_state["ledger-start__confirmed"] = True
+    assert _recorded_location_is_confirmed(
+        selection, key="ledger-start", text="Provider display text"
+    )
+
+
+def test_add_trip_calculate_button_is_before_recorded_location_fields() -> None:
+    source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
+
+    assert source.index("calculate_requested = st.button(") < source.index(
+        'recorded_start = _ledger_location_text(\n'
+    )
+    assert source.index("calculate_requested = st.button(") < source.index(
+        'st.checkbox(\n            "Round trip"'
+    )
 
 
 def test_round_trip_preserves_outbound_when_return_lookup_fails() -> None:
@@ -323,7 +398,7 @@ def test_autocomplete_availability_distinguishes_manual_mode_from_failure(monkey
     monkeypatch.setattr(
         st,
         "session_state",
-        {"manual": {"manual_mode": True}, "failed": {"provider_failed": True}},
+        {"manual": {"manual_mode": True}, "failed": {"failed": True}},
     )
     assert _autocomplete_available("manual")
     assert not _autocomplete_available("failed")

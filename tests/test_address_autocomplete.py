@@ -1,7 +1,13 @@
 """State-contract tests for the browser address component adapter."""
 
+from types import SimpleNamespace
+
+import streamlit as st
+
+import tabula_rasa.address_autocomplete as address_module
 from tabula_rasa.address_autocomplete import (
     AddressSelection,
+    _COMPONENT_STATE_NAMES,
     _HTML,
     _JS,
     browser_api_key_from_secrets,
@@ -29,6 +35,20 @@ def test_autocomplete_region_requires_two_ascii_letters() -> None:
 
 def test_manual_fallback_persists_without_rerunning_per_keystroke() -> None:
     assert "setStateValue('manual_mode', true)" in _JS
+    assert "setStateValue('failed', true)" in _JS
+    assert "setStateValue('provider_failed'" not in _JS
+    assert "apiKeyConfigured: Boolean(data.apiKey)" in _JS
+    assert "console.error('[Tabula Rasa] Address autocomplete failed'" in _JS
+    assert "'$1[redacted]'" in _JS
+    assert "reportFailure('Google place selection', error);" in _JS
+    assert "maps.importLibrary('places')" in _JS
+    assert "maps.importLibrary = (library, ...args) =>" in _JS
+    assert "maps.__tabulaRasaBootstrapLoader = true;" in _JS
+    assert "delete maps.importLibrary;" in _JS
+    assert "delete maps.__tabulaRasaBootstrapLoader;" in _JS
+    assert "google.maps.__tabulaRasaMapsLoaded" in _JS
+    assert "const {PlaceAutocompleteElement} = placesLibrary || {};" in _JS
+    assert "new google.maps.places.PlaceAutocompleteElement" not in _JS
     assert "if (manualMode) { showManual('Enter an address manually.'); return; }" in _JS
     assert "manualInput.onchange = () => emit('manual', manualInput.value.trim());" in _JS
     assert "manualInput.oninput" not in _JS
@@ -58,7 +78,7 @@ def test_failed_maps_load_button_retries_google_mode() -> None:
         "      manualMode = true;\n"
         "      providerFailed = true;\n"
         "      setStateValue('manual_mode', true);\n"
-        "      setStateValue('provider_failed', true);\n"
+        "      setStateValue('failed', true);\n"
         "      manualButton.onclick = selectGoogleMode;"
     ) in _JS
 
@@ -77,7 +97,7 @@ def test_google_provider_errors_switch_to_manual_mode() -> None:
         "manualMode = true;\n"
         "        providerFailed = true;\n"
         "        setStateValue('manual_mode', true);\n"
-        "        setStateValue('provider_failed', true);\n"
+        "        setStateValue('failed', true);\n"
         "        selectedDisplay = '';\n"
         "        emit('changed', element.value || '');\n"
         "        showManual('Google address suggestions are unavailable.');"
@@ -85,17 +105,31 @@ def test_google_provider_errors_switch_to_manual_mode() -> None:
 
 
 def test_manual_mode_does_not_mark_provider_as_failed() -> None:
-    assert (
-        "manualMode = true;\n"
-        "    providerFailed = false;\n"
-        "    setStateValue('manual_mode', true);\n"
-        "    setStateValue('provider_failed', false);"
-    ) in _JS
+    assert "manualMode = true;\n    providerFailed = false;" in _JS
+    assert "setStateValue('manual_mode', true);\n    setStateValue('failed', false);" in _JS
+
+
+def test_component_defaults_only_use_declared_state_names(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_component(**kwargs: object) -> SimpleNamespace:
+        captured.update(kwargs)
+        return SimpleNamespace()
+
+    monkeypatch.setattr(address_module, "_component", fake_component)
+    monkeypatch.setattr(st, "session_state", {})
+
+    address_module.address_autocomplete("Address", key="address", api_key="key")
+    defaults = captured["default"]
+
+    assert isinstance(defaults, dict)
+    assert set(defaults) <= _COMPONENT_STATE_NAMES
+    assert set(defaults) == {"failed", "manual_mode"}
 
 
 def test_manual_mode_wins_if_selected_while_maps_loads() -> None:
     assert (
-        "await loadMaps();\n"
+        "const placesLibrary = await loadMaps();\n"
         "      if (manualMode) {\n"
         "        showManual('Enter an address manually.');\n"
         "        return;\n"
@@ -114,7 +148,7 @@ def test_inline_attribution_is_hidden_for_manual_mode() -> None:
     assert "function hideAttribution()" in _JS
     assert "hideAttribution();" in _JS
     assert (
-        "await loadMaps();\n"
+        "const placesLibrary = await loadMaps();\n"
         "      if (manualMode) {\n"
         "        showManual('Enter an address manually.');\n"
         "        return;\n"
@@ -163,6 +197,36 @@ def test_address_controls_use_streamlit_visual_tokens() -> None:
     assert ".tr-address button:focus-visible" in _CSS
     assert ".tr-address button:disabled" in _CSS
     assert "font-weight: 600;" in _CSS
+
+
+def test_google_autocomplete_prediction_parts_use_theme_contrast() -> None:
+    from tabula_rasa.address_autocomplete import _CSS
+
+    assert "color-scheme: light;" in _CSS
+    assert "::part(prediction-list)" in _CSS
+    assert "::part(prediction-item-main-text)" in _CSS
+    assert "::part(prediction-item-secondary-text)" in _CSS
+    assert "background-color: var(--st-background-color);" in _CSS
+    assert "color: var(--st-text-color);" in _CSS
+
+
+def test_google_autocomplete_matches_streamlit_control_dimensions() -> None:
+    from tabula_rasa.address_autocomplete import _CSS
+
+    assert "height: 2.5rem;" in _CSS
+    assert "min-height: 2.5rem;" in _CSS
+    assert "padding: .5rem .75rem;" in _CSS
+    assert "border-radius: 6px;" in _CSS
+    assert "min-height: 36px;" in _CSS
+
+
+def test_google_autocomplete_input_has_a_complete_theme_border() -> None:
+    from tabula_rasa.address_autocomplete import _CSS
+
+    assert "::part(input)" in _CSS
+    assert "border: 1px solid var(--st-widget-border-color, rgba(49, 51, 63, .2));" in _CSS
+    assert "border-radius: 6px;" in _CSS
+    assert "::part(input):focus" in _CSS
 
 
 def test_failed_place_details_clear_the_previous_selection() -> None:
