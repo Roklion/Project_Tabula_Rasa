@@ -26,6 +26,12 @@ By using Google Maps features within the Application, users acknowledge that the
 
 Google Maps Platform results, including addresses, routes, distances, and estimated travel information, may contain errors or may not reflect actual travel conditions. Users are responsible for reviewing such information before relying on it for business, reimbursement, tax, or other purposes.
 
+Google route and distance information is advisory. Google-derived suggestions
+and route results are used transiently to assist the user; the Application does
+not represent that it may permanently retain Google-derived content. A mileage
+value recorded in the ledger is retained as an application or user business
+record after the user reviews and confirms it.
+
 ## 4. User Responsibilities
 
 Users are responsible for:

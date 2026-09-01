@@ -16,7 +16,8 @@ Depending on the features used, the Application may process information such as:
 - uploaded receipts or supporting documents;
 - business-use allocations and related explanations;
 - addresses and locations entered for mileage or routing purposes;
-- calculated routes, distances, or mileage information;
+- transient Google-calculated distances, route suggestions, or mileage suggestions;
+- user-confirmed mileage recorded as a business record;
 - user account or access information; and
 - technical information generated through hosting, security, or application logs.
 
@@ -40,13 +41,29 @@ Information is not sold for advertising purposes.
 
 ## 3. Google Maps Platform
 
-The Application may use Google Maps Platform services, including services used for address autocomplete, location identification, routes, and distance calculations.
+The Application may use Google Maps Platform services, including services used
+for address autocomplete, location identification, routes, and distance
+calculations. Autocomplete predictions, Google-formatted addresses or display
+names, route responses, route polylines, Routes `distanceMeters`, and
+Google-calculated mileage suggestions are used transiently and are not retained
+by the current Application. The current Application does not persist Google
+Place IDs.
 
-When these features are used, relevant information such as an address, location, place identifier, route request, device or network information, or other request data may be transmitted to Google as necessary to provide the requested functionality.
+When these features are used, relevant information such as an address, location,
+place identifier supplied during the request, route request, device or network
+information, or other request data may be transmitted to Google as necessary to
+provide the requested functionality. Google may handle information it receives
+under its own terms and privacy practices.
 
 Use of Google Maps features and content is subject to Google's applicable terms and privacy practices, including the [Google Privacy Policy](https://policies.google.com/privacy).
 
-Google Maps Platform content is handled subject to Google's applicable storage, caching, attribution, and usage restrictions. Where permitted, the Application may retain identifiers such as Google Place IDs for recordkeeping or application functionality.
+Google Maps Platform content is handled subject to Google's applicable storage,
+caching, attribution, and usage restrictions. The Application does not introduce
+a Google response cache or persist route polylines or Google provenance fields
+in the Mileage worksheet. Durable bookkeeping records may include user-authored
+location text and mileage that the user reviews and confirms; retaining those
+records does not mean that restricted Google Maps Content has been converted into
+unrestricted customer-owned data.
 
 Additional terms applicable to Google Maps features are available in the [Google Maps/Google Earth Additional Terms of Service](https://maps.google.com/help/terms_maps/).
 
