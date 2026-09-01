@@ -218,6 +218,8 @@ def test_migration_accepts_short_existing_payee_rows() -> None:
 
     assert result == {"payees": 0, "transactions": 1}
     assert transaction_sheet.rows[1][payee_index] == "existing-id"
+    assert payee_sheet.rows[1] == ["existing-id", "Existing vendor", "TRUE", ""]
+    assert GoogleSheetsStorage(workbook).list_payees()[0]["active"] == "TRUE"
 
 
 def test_migration_resumes_after_header_write_failure() -> None:

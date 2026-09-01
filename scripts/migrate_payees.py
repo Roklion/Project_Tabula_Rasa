@@ -84,14 +84,22 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
         )
         payee_values = [list(WORKSHEET_HEADERS["Payees"])]
     payee_headers = [str(value).strip() for value in payee_values[0]]
-    existing = [
-        dict(
-            zip(
-                payee_headers,
-                row + [""] * (len(payee_headers) - len(row)),
-            )
+    payee_rows: list[list[str]] = []
+    payees_changed = False
+    active_index = payee_headers.index("active")
+    for source_row in payee_values[1:]:
+        row = list(source_row) + [""] * (len(payee_headers) - len(source_row))
+        if any(str(value).strip() for value in row) and not row[active_index].strip():
+            row[active_index] = "TRUE"
+            payees_changed = True
+        payee_rows.append(row[: len(payee_headers)])
+    if payees_changed:
+        payee_sheet.update(
+            [payee_headers, *payee_rows], range_name="A1", raw=True
         )
-        for row in payee_values[1:]
+    existing = [
+        dict(zip(payee_headers, row))
+        for row in payee_rows
         if any(str(value).strip() for value in row)
     ]
     rows = [dict(zip(headers, row + [""] * (len(headers) - len(row)))) for row in transaction_values[1:]]
