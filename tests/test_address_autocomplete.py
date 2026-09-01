@@ -51,6 +51,15 @@ def test_failed_maps_load_button_retries_google_mode() -> None:
     ) in _JS
 
 
+def test_google_provider_errors_switch_to_manual_mode() -> None:
+    assert "element.addEventListener('gmp-error', () => {" in _JS
+    assert (
+        "manualMode = true;\\n"
+        "        setStateValue('manual_mode', true);\\n"
+        "        showManual('Google address suggestions are unavailable.');"
+    ) in _JS
+
+
 def test_manual_mode_wins_if_selected_while_maps_loads() -> None:
     assert (
         "await loadMaps();\n"
