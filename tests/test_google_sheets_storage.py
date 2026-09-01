@@ -2260,6 +2260,34 @@ class TestGoogleSheetsStorage:
         with pytest.raises(StorageValidationError, match="unsafe"):
             self.storage.validate_backup_zip(output.getvalue())
 
+    def test_backup_validation_normalizes_padded_payee_ids(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Office", "Expense")
+        payee = self.storage.create_payee("Vendor")
+        self.storage.create_transaction(
+            txn_date="2026-09-01",
+            kind="Expense",
+            amount=10,
+            account_id=account["id"],
+            category_id=category["id"],
+            payee_id=payee["id"],
+        )
+        backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
+
+        def pad_payee_id(rows: list[list[str]]) -> None:
+            payee_id_index = rows[0].index("id")
+            rows[1][payee_id_index] = f"  {payee['id']}  "
+
+        padded_backup = rewrite_backup_tables(backup, {"Payees": pad_payee_id})
+
+        validated = self.storage.validate_backup_zip(padded_backup)
+        target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+        target.restore_backup_zip(padded_backup)
+
+        assert validated["format_version"] == BACKUP_FORMAT_VERSION
+        assert target.list_payees()[0]["id"] == payee["id"]
+        assert target.list_transactions()[0]["payee_id"] == payee["id"]
+
     def test_manifest_rejects_a_drive_filename_that_would_be_trimmed(self) -> None:
         receipt = drive_file_from_reference(
             {**TEST_RECEIPT_REFERENCE, "name": " customer-receipt.pdf "}

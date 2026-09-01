@@ -458,6 +458,12 @@ def _parse_backup_zip(
             set(record_ids)
         ):
             raise StorageValidationError(f"{title} backup IDs are missing or duplicated")
+        if title == "Payees":
+            for record in records:
+                record["id"] = record["id"].strip()
+        elif title == "Transactions" and "payee_id" in headers:
+            for record in records:
+                record["payee_id"] = _clean_text(record.get("payee_id"), "Payee")
         tables[title] = (headers, records)
 
     if "Payees" not in tables:

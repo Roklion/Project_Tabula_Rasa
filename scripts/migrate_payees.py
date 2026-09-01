@@ -29,6 +29,15 @@ def migrate_payee_rows(
     existing_payees: Iterable[Mapping[str, Any]] = (),
 ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     """Return deduplicated payees and transactions with stable payee IDs."""
+    normalized_existing_payees = []
+    for item in existing_payees:
+        normalized = dict(item)
+        normalized["id"] = str(item.get("id") or "").strip()
+        normalized["name"] = str(item.get("name") or "").strip()
+        normalized["active"] = str(item.get("active", "TRUE")).strip().upper()
+        normalized["created_at"] = str(item.get("created_at") or "").strip()
+        normalized_existing_payees.append(normalized)
+    _validate_payee_records(normalized_existing_payees)
     payees_by_key = {
         normalize_payee_name(item.get("name")): {
             "id": str(item["id"]),
@@ -36,7 +45,7 @@ def migrate_payee_rows(
             "active": str(item.get("active", "TRUE")),
             "created_at": str(item.get("created_at", "")),
         }
-        for item in existing_payees
+        for item in normalized_existing_payees
         if normalize_payee_name(item.get("name"))
     }
     migrated: list[dict[str, str]] = []
