@@ -91,10 +91,15 @@ def test_address_controls_use_streamlit_visual_tokens() -> None:
 
     assert "var(--st-secondary-background-color)" in _CSS
     assert "var(--st-widget-border-color" in _CSS
-    assert ".tr-address-host > gmp-place-autocomplete" in _CSS
+    assert "#tr-address-host > gmp-place-autocomplete" in _CSS
     assert ".tr-address button:focus-visible" in _CSS
     assert ".tr-address button:disabled" in _CSS
     assert "font-weight: 600;" in _CSS
+
+
+def test_failed_place_details_clear_the_previous_selection() -> None:
+    assert "selectedDisplay = '';\n          version += 1;" in _JS
+    assert "setTriggerValue('changed', {" in _JS
 
 
 def test_browser_key_fails_closed_when_routes_key_is_reused() -> None:

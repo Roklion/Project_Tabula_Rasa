@@ -72,6 +72,27 @@ def _route_ready(
     )
 
 
+def _route_disabled_reason(
+    start: AddressSelection,
+    destination: AddressSelection,
+    route_mileage: Callable[[str, str], float] | None,
+) -> str:
+    """Explain why the explicit route action is currently unavailable."""
+    if route_mileage is None:
+        return (
+            "Google Maps routing is not configured. Enter mileage manually "
+            "or configure the Maps secrets."
+        )
+    if not start.place_id or not destination.place_id:
+        return (
+            "Choose a Google suggestion for both endpoints to enable mileage "
+            "calculation. Manual entries can still be saved with entered miles."
+        )
+    if start.place_id == destination.place_id:
+        return "Choose different Google places for the starting location and destination."
+    return "Mileage calculation is unavailable. Enter miles manually or try again."
+
+
 def _route_state_is_current(
     route_state: object, fingerprint: tuple[object, ...]
 ) -> bool:
@@ -352,21 +373,20 @@ def render_mileage(context: MileageContext) -> None:
             route_ready = _route_ready(
                 start, destination_value, context.route_mileage
             )
+            route_disabled_reason = _route_disabled_reason(
+                start, destination_value, context.route_mileage
+            )
             calculate_requested = st.button(
                 "Recalculate mileage" if route_state else "Calculate mileage",
                 disabled=not route_ready,
                 help=(
-                    "Choose a Google suggestion for both endpoints to calculate "
-                    "mileage. Manual entries can still be saved with entered miles."
+                    route_disabled_reason
                     if not route_ready
                     else None
                 ),
             )
             if not route_ready and context.route_mileage is not None:
-                st.caption(
-                    "Choose a Google suggestion for both endpoints to enable "
-                    "mileage calculation."
-                )
+                st.caption(route_disabled_reason)
             save_error = st.empty()
             submitted = st.button(
                 "Save mileage trip", type="primary", width="stretch"

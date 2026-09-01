@@ -11,6 +11,7 @@ from tabula_rasa.page_renderers.mileage import (
     _calculate_routes,
     _needs_google_maps_attribution,
     _route_state_is_current,
+    _route_disabled_reason,
     _same_selected_place,
     _save_round_trip,
 )
@@ -200,6 +201,18 @@ def test_mileage_drafts_are_not_buffered_in_forms() -> None:
 def test_manual_fallback_explains_why_calculation_is_disabled() -> None:
     source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
 
-    assert "Choose a Google suggestion for both endpoints to calculate " in source
-    assert "mileage. Manual entries can still be saved" in source
+    assert "Choose a Google suggestion for both endpoints to enable mileage " in source
+    assert "calculation. Manual entries can still be saved" in source
     assert "disabled=not route_ready" in source
+
+
+def test_route_disabled_reason_distinguishes_unconfigured_and_invalid_inputs() -> None:
+    start = AddressSelection("Office", "office", 1)
+    destination = AddressSelection("Client", "client", 1)
+    assert "not configured" in _route_disabled_reason(start, destination, None)
+    assert "both endpoints" in _route_disabled_reason(
+        AddressSelection("Office"), destination, lambda *_: 1.0
+    )
+    assert "different" in _route_disabled_reason(
+        start, AddressSelection("Office", "office", 2), lambda *_: 1.0
+    )

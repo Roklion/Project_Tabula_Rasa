@@ -104,12 +104,12 @@ _CSS = """
   box-shadow: 0 0 0 1px var(--st-primary-color);
   outline: none;
 }
-.tr-address-host,
-.tr-address-host > gmp-place-autocomplete {
+#tr-address-host,
+#tr-address-host > gmp-place-autocomplete {
   box-sizing: border-box;
   width: 100%;
 }
-.tr-address-host > gmp-place-autocomplete {
+#tr-address-host > gmp-place-autocomplete {
   background: var(--st-background-color);
   border: 1px solid var(--st-widget-border-color, rgba(49, 51, 63, .2));
   border-radius: .375rem;
@@ -264,6 +264,10 @@ export default function(component) {
           // Keep the browser error useful without exposing API details.
           status.textContent = 'The address could not be selected. Try again or enter it manually.';
           selectedDisplay = '';
+          version += 1;
+          setTriggerValue('changed', {
+            display_text: element.value || '', place_id: '', version: version
+          });
           manualButton.hidden = false;
         } finally {
           suppressInput = false;
