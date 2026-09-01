@@ -450,19 +450,19 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
         color: var(--tr-warning-text) !important;
     }}
 
-    div[class^="st-key-delete_category_"][data-testid="stButton"] button,
-    div[class^="st-key-edit_mileage_trip_delete_"][data-testid="stButton"] button,
-    .st-key-transaction_bulk_delete_submit[data-testid="stFormSubmitButton"] button,
-    div[class^="st-key-edit_transaction_delete_"][data-testid="stFormSubmitButton"] button {{
+    .st-key-destructive_category_delete [data-testid="stButton"] button,
+    .st-key-destructive_mileage_delete [data-testid="stButton"] button,
+    .st-key-destructive_transaction_bulk_delete [data-testid="stFormSubmitButton"] button,
+    .st-key-destructive_transaction_edit_delete [data-testid="stFormSubmitButton"] button {{
         background: var(--tr-negative-text) !important;
         border-color: var(--tr-negative-text) !important;
         color: var(--tr-surface-primary) !important;
     }}
 
-    div[class^="st-key-delete_category_"][data-testid="stButton"] button:hover,
-    div[class^="st-key-edit_mileage_trip_delete_"][data-testid="stButton"] button:hover,
-    .st-key-transaction_bulk_delete_submit[data-testid="stFormSubmitButton"] button:hover,
-    div[class^="st-key-edit_transaction_delete_"][data-testid="stFormSubmitButton"] button:hover {{
+    .st-key-destructive_category_delete [data-testid="stButton"] button:hover,
+    .st-key-destructive_mileage_delete [data-testid="stButton"] button:hover,
+    .st-key-destructive_transaction_bulk_delete [data-testid="stFormSubmitButton"] button:hover,
+    .st-key-destructive_transaction_edit_delete [data-testid="stFormSubmitButton"] button:hover {{
         background: var(--tr-negative-hover) !important;
         border-color: var(--tr-negative-hover) !important;
         color: var(--tr-surface-primary) !important;

@@ -607,15 +607,15 @@ def render_ledger(
                     f"{selected_snapshot_key}"
                 ),
             )
-            with st.form("transaction_bulk_delete", clear_on_submit=False):
-                delete_error = st.empty()
-                delete_requested = st.form_submit_button(
-                    "Permanently delete selected",
-                    icon=":material/delete_forever:",
-                    type="primary",
-                    width="stretch",
-                    key="transaction_bulk_delete_submit",
-                )
+            with st.container(key="destructive_transaction_bulk_delete"):
+                with st.form("transaction_bulk_delete", clear_on_submit=False):
+                    delete_error = st.empty()
+                    delete_requested = st.form_submit_button(
+                        "Permanently delete selected",
+                        icon=":material/delete_forever:",
+                        type="primary",
+                        width="stretch",
+                    )
             if delete_requested:
                 if not confirm_delete:
                     delete_error.error(
@@ -856,13 +856,15 @@ def render_ledger(
                         width="stretch",
                         key=f"edit_transaction_save_{edit_widget_scope}",
                     )
-                    delete_requested = delete_column.form_submit_button(
-                        "Permanently delete",
-                        icon=":material/delete_forever:",
-                        help="Permanently delete this transaction",
-                        width="stretch",
-                        key=f"edit_transaction_delete_{edit_widget_scope}",
-                    )
+                    with delete_column:
+                        with st.container(key="destructive_transaction_edit_delete"):
+                            delete_requested = st.form_submit_button(
+                                "Permanently delete",
+                                icon=":material/delete_forever:",
+                                help="Permanently delete this transaction",
+                                width="stretch",
+                                key=f"edit_transaction_delete_{edit_widget_scope}",
+                            )
                     cancel_requested = False
                 if copy_mode and not copy_accounts_valid:
                     st.warning(

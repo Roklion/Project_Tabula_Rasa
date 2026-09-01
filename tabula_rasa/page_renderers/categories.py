@@ -266,21 +266,22 @@ def render_categories(context: CategoriesContext) -> None:
                     key=f"confirm_delete_category_{category_id}",
                 )
                 delete_error = st.empty()
-                if st.button(
-                    "Permanently delete category",
-                    icon=":material/delete_forever:",
-                    key=f"delete_category_{category_id}",
-                ):
-                    if not confirm_delete:
-                        delete_error.error(
-                            "Confirm that you understand deletion is permanent. "
-                            "No data changed."
-                        )
-                    else:
-                        context.confirmed_write(
-                            "delete_category",
-                            {"id": category_id},
-                            lambda: context.storage.delete_category(category_id),
-                            "Category deleted.",
-                            report_error=delete_error.error,
-                        )
+                with st.container(key="destructive_category_delete"):
+                    if st.button(
+                        "Permanently delete category",
+                        icon=":material/delete_forever:",
+                        key=f"delete_category_{category_id}",
+                    ):
+                        if not confirm_delete:
+                            delete_error.error(
+                                "Confirm that you understand deletion is permanent. "
+                                "No data changed."
+                            )
+                        else:
+                            context.confirmed_write(
+                                "delete_category",
+                                {"id": category_id},
+                                lambda: context.storage.delete_category(category_id),
+                                "Category deleted.",
+                                report_error=delete_error.error,
+                            )
