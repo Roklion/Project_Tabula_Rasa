@@ -134,6 +134,7 @@ export default function(component) {
   manualInput.setAttribute('aria-label', data.label || 'Address');
   let version = Number(data.version || 0);
   let manualMode = data.manualMode === true;
+  let providerFailed = data.providerFailed === true;
   let suppressInput = false;
   let selectedDisplay = '';
 
@@ -163,12 +164,16 @@ export default function(component) {
   }
   function selectManualMode() {
     manualMode = true;
+    providerFailed = false;
     setStateValue('manual_mode', true);
+    setStateValue('provider_failed', false);
     showManual('Enter an address manually.');
   }
   function selectGoogleMode() {
     manualMode = false;
+    providerFailed = false;
     setStateValue('manual_mode', false);
+    setStateValue('provider_failed', false);
     setup();
   }
   function loadMaps() {
@@ -276,7 +281,9 @@ export default function(component) {
       element.addEventListener('gmp-error', () => {
         status.textContent = 'Google address suggestions are unavailable.';
         manualMode = true;
+        providerFailed = true;
         setStateValue('manual_mode', true);
+        setStateValue('provider_failed', true);
         showManual('Google address suggestions are unavailable.');
         manualButton.hidden = false;
       });
@@ -288,7 +295,9 @@ export default function(component) {
       clearFailedMapsLoad();
       showManual('Google address suggestions are unavailable.');
       manualMode = true;
+      providerFailed = true;
       setStateValue('manual_mode', true);
+      setStateValue('provider_failed', true);
       manualButton.onclick = selectGoogleMode;
     }
   }
@@ -421,8 +430,11 @@ def address_autocomplete(
             "version": current.version,
             "regionCode": _region_code(region_code),
             "manualMode": manual_mode,
+            "providerFailed": bool(component_state.get("provider_failed", False))
+            if isinstance(component_state, Mapping)
+            else False,
         },
-        default={"manual_mode": manual_mode},
+        default={"manual_mode": manual_mode, "provider_failed": False},
         key=key,
         on_selected_change=lambda: None,
         on_manual_change=lambda: None,
