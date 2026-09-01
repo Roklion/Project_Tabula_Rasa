@@ -775,9 +775,10 @@ def render_ledger(
                     key=f"edit_transaction_payee_{edit_widget_scope}",
                 )
                 edited_new_payee = ""
-                if edited_payee_id == "+ Add new payee":
+                if edited_payee_id == "+ Add new payee" or copy_mode:
                     edited_new_payee = st.text_input(
-                        "New payee name",
+                        "Edit payee / customer",
+                        value=selected.get("payee", "") if copy_mode else "",
                         key=f"edit_transaction_new_payee_{edit_widget_scope}",
                     )
                 edited_reference = st.text_input(
@@ -874,7 +875,11 @@ def render_ledger(
                         "account_id": edited_account_id,
                         "to_account_id": edited_to_account_id,
                         "category_id": edited_category_id,
-                        "payee_id": "" if edited_payee_id == "+ Add new payee" else edited_payee_id,
+                        "payee_id": (
+                            ""
+                            if copy_mode or edited_payee_id == "+ Add new payee"
+                            else edited_payee_id
+                        ),
                         "reference": edited_reference,
                         "description": copy_description,
                     }
@@ -898,14 +903,13 @@ def render_ledger(
                         and edited_account_id == edited_to_account_id
                     ):
                         edit_error.error("Transfer accounts must be different.")
-                    elif edited_payee_id == "+ Add new payee" and not edited_new_payee.strip():
-                        edit_error.error("Enter a name for the new payee.")
                     elif copy_mode:
                         context.confirmed_write(
                             "copy_transaction",
                             payload,
                             lambda: context.storage.create_transaction(
-                                **transaction_data
+                                **transaction_data,
+                                payee=edited_new_payee if copy_mode else "",
                             ),
                             "Transaction copied.",
                             on_confirmed=lambda result: st.session_state.__setitem__(

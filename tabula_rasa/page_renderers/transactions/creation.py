@@ -134,7 +134,7 @@ def render_add_transaction(
         new_payee_name = ""
         if payee_id == "+ Add new payee":
             new_payee_name = c1.text_input(
-                "New payee name",
+                "Payee / customer",
                 key="add_transaction_new_payee",
             )
         reference = c2.text_input(
@@ -165,8 +165,6 @@ def render_add_transaction(
                 save_error.error(
                     "Create a second active account before recording a transfer."
                 )
-            elif payee_id == "+ Add new payee" and not new_payee_name.strip():
-                save_error.error("Enter a name for the new payee.")
             else:
                 payload = {
                     "txn_date": transaction_date,

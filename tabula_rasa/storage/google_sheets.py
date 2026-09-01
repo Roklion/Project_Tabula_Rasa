@@ -1853,6 +1853,7 @@ class GoogleSheetsStorage:
             "to_account_id": to_account_id,
             "category_id": category_id,
             "payee_id": payee_id,
+            "payee": payees.get(payee_id, {}).get("name", ""),
             "description": _clean_text(data.get("description"), "Description"),
             "reference": _clean_text(data.get("reference"), "Reference"),
             "receipt_references": (
