@@ -232,7 +232,7 @@ representative relationships, then delete or clearly label the drill workbook.
 
 ## Recover receipt bytes and remap Drive IDs
 
-Ledger restoration does not restore receipt bytes. For a format 5 or 6
+Ledger restoration does not restore receipt bytes. For a format 5, 6, or 7
 archive, copy the matching profile Receipts directory from the protected
 Synology recovery set to a safe local path, then recover against the new
 workbook:
