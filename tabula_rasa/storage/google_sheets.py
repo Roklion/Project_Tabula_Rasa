@@ -138,6 +138,7 @@ BACKUP_FORMAT_VERSION = 7
 BACKUP_HEADERS_BY_VERSION = {
     2: LEGACY_BACKUP_HEADERS,
     3: VERSION_3_WORKSHEET_HEADERS,
+    6: VERSION_6_WORKSHEET_HEADERS,
     LEDGER_ONLY_BACKUP_FORMAT_VERSION: PRE_PAYEE_WORKSHEET_HEADERS,
     RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION: PRE_PAYEE_WORKSHEET_HEADERS,
     BACKUP_FORMAT_VERSION: VERSION_6_WORKSHEET_HEADERS,
@@ -1198,9 +1199,10 @@ class GoogleSheetsStorage:
             expected = {
                 str(key): (str(value) if value is not None else "")
                 for key, value in expected_by_id[transaction_id].items()
+                if str(key) in self._headers("Transactions")
             }
             current = dict(row.values)
-            if current != expected:
+            if {key: current.get(key, "") for key in expected} != expected:
                 raise StorageConflictError(
                     "A selected transaction changed; review the current rows and try again."
                 )
