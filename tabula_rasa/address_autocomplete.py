@@ -151,14 +151,16 @@ export default function(component) {
       display_text: value || '', place_id: '', version: version
     });
   }
-  function showManual(message) {
+  function showManual(message, initialValue) {
     hideAttribution();
     host.hidden = true;
     manual.hidden = false;
     manualButton.hidden = false;
     manualButton.textContent = 'Use Google suggestions';
     status.textContent = message || 'Google suggestions are unavailable.';
-    manualInput.value = data.value || '';
+    const widget = host.querySelector('gmp-place-autocomplete');
+    manualInput.value = initialValue ||
+      (widget && widget.value) || data.value || '';
     manualInput.onchange = () => emit('manual', manualInput.value.trim());
     manualInput.focus();
   }
@@ -259,6 +261,10 @@ export default function(component) {
           await place.fetchFields({fields: ['id', 'displayName', 'formattedAddress']});
           const display = place.formattedAddress ||
             (place.displayName && place.displayName.text) || element.value || '';
+          // Keep the widget text synchronized with the canonical selection so
+          // its follow-up change event cannot clear the Place ID when the
+          // provider's formatted address differs from the displayed text.
+          element.value = display;
           selectedDisplay = display;
           version += 1;
           setTriggerValue('selected', {
