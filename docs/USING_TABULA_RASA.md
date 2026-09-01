@@ -252,10 +252,20 @@ configured or is temporarily unavailable.
 **Round trip** calculates the outbound and reversed return directions
 separately and exposes independently editable mileage values. Saving still
 creates two independent entries in one confirmed write: one outbound row and
-one return row with reversed locations. The rows have separate IDs and can be
+one return row with reversed locations. For newly created round trips, the log
+shows the return row before the outbound row within the same date/timestamp
+pair; existing rows are not rewritten. The rows have separate IDs and can be
 edited or deleted independently later. Recalculating a saved row changes only
 that selected row. The log's From and To filters control its metrics, table,
 and CSV together.
+
+When editing a saved trip, the calculation button appears directly below the
+address controls. Changing an address displays a potential mileage mismatch
+warning immediately, even before recalculation. Recalculate the route, or
+review and edit the existing mileage manually, before saving.
+When an existing trip is opened, its saved addresses appear in the always-visible
+recorded-text fields; the separate Google lookup controls start empty and are
+used only when selecting places for a new route calculation.
 
 Google-derived address suggestions and route mileage retain visible Google Maps
 attribution, including a note below the current mileage control after an

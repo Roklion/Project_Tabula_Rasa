@@ -142,55 +142,96 @@ def _ledger_location_text(
     label: str,
     key: str,
     existing_value: str = "",
+    always_render: bool = False,
 ) -> str:
     """Return manual ledger text without persisting Google display content."""
-    if not selection.place_id:
+    if not selection.place_id and not always_render:
         return selection.display_text
-    st.caption(
-        "Google text is used only for route lookup. Enter the location text "
-        "you want to record in the ledger."
-    )
+    if selection.place_id:
+        st.caption(
+            "Google text is used only for route lookup. Enter the location text "
+            "you want to record in the ledger."
+        )
     version_key = f"{key}__autocomplete_version"
-    confirmation_key = f"{key}__confirmed"
-    if st.session_state.get(version_key) != selection.version:
+    if selection.place_id and st.session_state.get(version_key) != selection.version:
         st.session_state[key] = selection.display_text
         st.session_state[version_key] = selection.version
-        st.session_state[confirmation_key] = False
+    elif key not in st.session_state:
+        st.session_state[key] = existing_value or selection.display_text
     text = st.text_input(
         f"{label} (recorded text)",
-        value=st.session_state.get(key, existing_value or selection.display_text),
         key=key,
-        help="This user-authored or user-confirmed text is saved to the Mileage ledger.",
-    )
-    st.checkbox(
-        f"Confirm {label.lower()} text",
-        key=confirmation_key,
-        help="Confirm that this text is the location text to save in the ledger.",
+        help="This text is saved to the Mileage ledger when you save the trip.",
     )
     return text
 
 
-def _recorded_location_is_confirmed(
-    selection: AddressSelection, *, key: str, text: str
-) -> bool:
-    """Require explicit confirmation before saving unchanged Google text."""
-    return bool(
-        not selection.place_id
-        or st.session_state.get(f"{key}__confirmed") is True
-        or text != selection.display_text
-    )
+def _apply_pending_route_mileage(
+    pending: object,
+    *,
+    fingerprint: tuple[object, ...],
+    round_trip: bool,
+    miles_key: str,
+    return_miles_key: str | None = None,
+) -> None:
+    """Populate editable mileage widgets after an explicit route calculation."""
+    if not isinstance(pending, Mapping):
+        return
+    if pending.get("fingerprint") != fingerprint:
+        return
+    outbound = pending.get("outbound")
+    if not isinstance(outbound, (int, float)) or not math.isfinite(float(outbound)):
+        return
+    st.session_state[miles_key] = float(outbound)
+    st.session_state[f"{miles_key}__calculated"] = float(outbound)
+    if round_trip and return_miles_key:
+        returned = pending.get("return")
+        if isinstance(returned, (int, float)) and math.isfinite(float(returned)):
+            st.session_state[return_miles_key] = float(returned)
+            st.session_state[f"{return_miles_key}__calculated"] = float(returned)
 
 
-def _render_google_route_suggestions(route_state: object) -> None:
-    """Show current-session route distances as suggestions, never ledger data."""
+def _discard_modified_calculated_mileage_markers(
+    *,
+    miles_key: str,
+    return_miles_key: str | None = None,
+) -> None:
+    """Forget calculated provenance after a user edits a mileage widget."""
+    for state_key in (miles_key, return_miles_key):
+        if not state_key:
+            continue
+        marker_key = f"{state_key}__calculated"
+        calculated = st.session_state.get(marker_key)
+        if calculated is not None and st.session_state.get(state_key) != calculated:
+            st.session_state.pop(marker_key, None)
+
+
+def _clear_unchanged_calculated_mileage(
+    route_state: object,
+    *,
+    miles_key: str,
+    return_miles_key: str | None = None,
+) -> None:
+    """Clear untouched calculated values when their route becomes stale."""
     if not isinstance(route_state, Mapping):
         return
-    outbound = route_state.get("outbound")
-    if isinstance(outbound, (int, float)) and math.isfinite(float(outbound)):
-        st.info(f"Google suggested distance: {float(outbound):.1f} mi")
-    returned = route_state.get("return")
-    if isinstance(returned, (int, float)) and math.isfinite(float(returned)):
-        st.info(f"Google suggested return distance: {float(returned):.1f} mi")
+    for state_key, route_key in (
+        (miles_key, "outbound"),
+        (return_miles_key, "return"),
+    ):
+        if not state_key:
+            continue
+        marker_key = f"{state_key}__calculated"
+        calculated = st.session_state.get(marker_key, route_state.get(route_key))
+        if (
+            isinstance(calculated, (int, float))
+            and math.isfinite(float(calculated))
+            and st.session_state.get(state_key) == float(calculated)
+        ):
+            st.session_state.pop(state_key, None)
+            st.session_state.pop(marker_key, None)
+        elif marker_key in st.session_state:
+            st.session_state.pop(marker_key, None)
 
 
 def _same_selected_place(
@@ -201,6 +242,25 @@ def _same_selected_place(
         start.place_id
         and destination.place_id
         and start.place_id == destination.place_id
+    )
+
+
+def _address_text_changed(
+    start: AddressSelection,
+    destination: AddressSelection,
+    original_start: str,
+    original_destination: str,
+) -> bool:
+    """Identify an edit-form address change before a new route is calculated."""
+    return (
+        (
+            start.version > 0
+            and start.display_text.strip() != original_start.strip()
+        )
+        or (
+            destination.version > 0
+            and destination.display_text.strip() != original_destination.strip()
+        )
     )
 
 
@@ -342,9 +402,10 @@ def render_mileage(context: MileageContext) -> None:
             "add_mileage_recorded_destination",
             "add_mileage_recorded_start__autocomplete_version",
             "add_mileage_recorded_destination__autocomplete_version",
-            "add_mileage_recorded_start__confirmed",
-            "add_mileage_recorded_destination__confirmed",
             _route_key(context, "add"),
+            f"{_route_key(context, 'add')}__pending_miles",
+            "add_mileage_miles__calculated",
+            "add_mileage_return_miles__calculated",
         )
         context.reset_widget_state_if_requested(
             "reset_add_mileage_form",
@@ -378,9 +439,26 @@ def render_mileage(context: MileageContext) -> None:
             st.session_state.get("add_mileage_round_trip", False)
         )
         fingerprint = (*_selection_fingerprint(start, destination_value), round_trip)
+        pending_mileage_key = f"{add_route_key}__pending_miles"
+        _apply_pending_route_mileage(
+            st.session_state.pop(pending_mileage_key, None),
+            fingerprint=fingerprint,
+            round_trip=round_trip,
+            miles_key="add_mileage_miles",
+            return_miles_key="add_mileage_return_miles",
+        )
+        _discard_modified_calculated_mileage_markers(
+            miles_key="add_mileage_miles",
+            return_miles_key="add_mileage_return_miles",
+        )
         address_changed = False
         if route_state and route_state.get("fingerprint") != fingerprint:
-            # A changed address invalidates a previously paid suggestion.
+            # A changed address invalidates a previously calculated route.
+            _clear_unchanged_calculated_mileage(
+                route_state,
+                miles_key="add_mileage_miles",
+                return_miles_key="add_mileage_return_miles",
+            )
             st.session_state.pop(add_route_key, None)
             route_state = None
             address_changed = True
@@ -417,18 +495,23 @@ def render_mileage(context: MileageContext) -> None:
             key="add_mileage_round_trip",
         )
         if address_changed:
-            st.warning(
-                "The route changed, so the Google suggestion was cleared. "
-                "Choose both addresses and calculate again; review the "
-                "business mileage before saving."
-            )
+            if route_ready:
+                st.warning(
+                    "The selected addresses changed, so any mileage left in "
+                    "the boxes may not match the current route. Calculate "
+                    "mileage again to refresh it before saving."
+                )
+            else:
+                st.warning(
+                    "The selected addresses changed, so any mileage left in "
+                    "the boxes may not match the current route. Review or "
+                    "enter mileage manually before saving."
+                )
         if route_state and route_state.get("partial"):
             st.warning(
                 "Outbound mileage is ready. Enter return miles manually or "
                 "retry the return route."
             )
-        _render_google_route_suggestions(route_state)
-
         recorded_columns = st.columns(2, gap="small")
         with recorded_columns[0]:
             recorded_start = _ledger_location_text(
@@ -504,6 +587,11 @@ def render_mileage(context: MileageContext) -> None:
                             "outbound": outbound,
                             "return": returned,
                         }
+                        st.session_state[pending_mileage_key] = {
+                            "fingerprint": fingerprint,
+                            "outbound": outbound,
+                            "return": returned,
+                        }
                         st.rerun()
                     except PartialRouteError as error:
                         st.session_state[add_route_key] = {
@@ -511,6 +599,11 @@ def render_mileage(context: MileageContext) -> None:
                             "outbound": error.outbound,
                             "return": None,
                             "partial": True,
+                        }
+                        st.session_state[pending_mileage_key] = {
+                            "fingerprint": fingerprint,
+                            "outbound": error.outbound,
+                            "return": None,
                         }
                         st.rerun()
                     except Exception as error:  # routing clients vary by provider
@@ -524,23 +617,9 @@ def render_mileage(context: MileageContext) -> None:
                     save_error.error(
                         "Enter the starting location text to record in the ledger."
                     )
-                elif start.place_id and not _recorded_location_is_confirmed(
-                    start, key="add_mileage_recorded_start", text=recorded_start
-                ):
-                    save_error.error(
-                        "Confirm the starting location text before saving the trip."
-                    )
                 elif destination_value.place_id and not recorded_destination.strip():
                     save_error.error(
                         "Enter the destination text to record in the ledger."
-                    )
-                elif destination_value.place_id and not _recorded_location_is_confirmed(
-                    destination_value,
-                    key="add_mileage_recorded_destination",
-                    text=recorded_destination,
-                ):
-                    save_error.error(
-                        "Confirm the destination text before saving the trip."
                     )
                 else:
                     payload = {
@@ -675,14 +754,12 @@ def render_mileage(context: MileageContext) -> None:
                     "Edit starting location",
                     key=f"edit_mileage_trip_start_{edit_widget_scope}",
                     api_key=context.maps_api_key,
-                    value=selected.get("start_location", ""),
                     region_code=context.autocomplete_region_code,
                 )
                 edit_destination = address_autocomplete(
                     "Edit destination",
                     key=f"edit_mileage_trip_destination_{edit_widget_scope}",
                     api_key=context.maps_api_key,
-                    value=selected.get("destination", ""),
                     region_code=context.autocomplete_region_code,
                 )
                 edit_route_key = _route_key(context, f"edit_{edit_id}")
@@ -690,25 +767,74 @@ def render_mileage(context: MileageContext) -> None:
                     edit_start, edit_destination
                 )
                 edit_route_state = st.session_state.get(edit_route_key)
+                edit_route_changed = False
+                _discard_modified_calculated_mileage_markers(
+                    miles_key=f"edit_mileage_trip_miles_{edit_widget_scope}",
+                )
                 if (
                     edit_route_state
                     and edit_route_state.get("fingerprint") != edit_fingerprint
                 ):
+                    _clear_unchanged_calculated_mileage(
+                        edit_route_state,
+                        miles_key=f"edit_mileage_trip_miles_{edit_widget_scope}",
+                    )
                     st.session_state.pop(edit_route_key, None)
                     edit_route_state = None
-                _render_google_route_suggestions(edit_route_state)
+                    edit_route_changed = True
+                edit_address_changed = _address_text_changed(
+                    edit_start,
+                    edit_destination,
+                    selected.get("start_location", ""),
+                    selected.get("destination", ""),
+                )
+                edit_pending_mileage_key = f"{edit_route_key}__pending_miles"
+                _apply_pending_route_mileage(
+                    st.session_state.pop(edit_pending_mileage_key, None),
+                    fingerprint=edit_fingerprint,
+                    round_trip=False,
+                    miles_key=f"edit_mileage_trip_miles_{edit_widget_scope}",
+                )
                 edited_start = _ledger_location_text(
                     edit_start,
                     label="Starting location",
                     key=f"edit_mileage_trip_recorded_start_{edit_widget_scope}",
                     existing_value=selected.get("start_location", ""),
+                    always_render=True,
                 )
                 edited_destination = _ledger_location_text(
                     edit_destination,
                     label="Destination",
                     key=f"edit_mileage_trip_recorded_destination_{edit_widget_scope}",
                     existing_value=selected.get("destination", ""),
+                    always_render=True,
                 )
+                calculate_edit_requested = st.button(
+                    "Recalculate mileage"
+                    if edit_route_state
+                    else "Calculate mileage",
+                    disabled=not _route_ready(
+                        edit_start,
+                        edit_destination,
+                        context.route_mileage,
+                    ),
+                    key=f"edit_mileage_trip_calculate_{edit_widget_scope}",
+                )
+                edit_error = st.empty()
+                if _needs_google_maps_attribution(
+                    edit_start,
+                    edit_destination,
+                    edit_route_state,
+                    edit_fingerprint,
+                ):
+                    render_google_maps_attribution()
+                if edit_address_changed or edit_route_changed:
+                    st.warning(
+                        "The address changed, so the existing mileage may not "
+                        "match the current route. Calculate mileage again to "
+                        "refresh it, or review and edit the mileage manually "
+                        "before saving."
+                    )
                 # Address autocomplete can rerun this page before save; a
                 # container keeps the rest of the draft synchronized in state.
                 with st.container():
@@ -727,11 +853,6 @@ def render_mileage(context: MileageContext) -> None:
                         format="%.1f",
                         key=f"edit_mileage_trip_miles_{edit_widget_scope}",
                     )
-                    if _needs_google_maps_attribution(
-                        edit_start, edit_destination, edit_route_state,
-                        edit_fingerprint,
-                    ):
-                        render_google_maps_attribution()
                     edited_vehicle = st.text_input(
                         "Edit vehicle",
                         value=selected.get("vehicle", ""),
@@ -753,18 +874,6 @@ def render_mileage(context: MileageContext) -> None:
                     confirm_delete = st.checkbox(
                         "I understand this mileage trip will be permanently deleted",
                         key=f"edit_mileage_trip_confirm_delete_{edit_widget_scope}",
-                    )
-                    edit_error = st.empty()
-                    calculate_edit_requested = st.button(
-                        "Recalculate mileage"
-                        if edit_route_state
-                        else "Calculate mileage",
-                        disabled=not _route_ready(
-                            edit_start,
-                            edit_destination,
-                            context.route_mileage,
-                        ),
-                        key=f"edit_mileage_trip_calculate_{edit_widget_scope}",
                     )
                     save_column, delete_column = st.columns(2, gap="small")
                     save_requested = save_column.button(
@@ -795,6 +904,10 @@ def render_mileage(context: MileageContext) -> None:
                                     "fingerprint": edit_fingerprint,
                                     "outbound": outbound,
                                 }
+                                st.session_state[edit_pending_mileage_key] = {
+                                    "fingerprint": edit_fingerprint,
+                                    "outbound": outbound,
+                                }
                                 st.rerun()
                             except Exception as error:
                                 edit_error.error(_safe_route_error(error))
@@ -802,22 +915,6 @@ def render_mileage(context: MileageContext) -> None:
                         if _same_selected_place(edit_start, edit_destination):
                             edit_error.error(
                                 "Starting location and destination must be different."
-                            )
-                        elif edit_start.place_id and not _recorded_location_is_confirmed(
-                            edit_start,
-                            key=f"edit_mileage_trip_recorded_start_{edit_widget_scope}",
-                            text=edited_start,
-                        ):
-                            edit_error.error(
-                                "Confirm the starting location text before saving changes."
-                            )
-                        elif edit_destination.place_id and not _recorded_location_is_confirmed(
-                            edit_destination,
-                            key=f"edit_mileage_trip_recorded_destination_{edit_widget_scope}",
-                            text=edited_destination,
-                        ):
-                            edit_error.error(
-                                "Confirm the destination text before saving changes."
                             )
                         else:
                             payload = {

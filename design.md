@@ -606,15 +606,15 @@ When app-wide Google Maps configuration is available, Starting location and
 Destination use a narrowly scoped address-autocomplete component with an
 explicit manual-entry path. After two Google suggestions are selected, an
 explicit Calculate mileage action requests the primary driving route and shows
-an editable one-decimal Google distance suggestion separately from the
-Business miles ledger field. The user enters or confirms the business miles
-that will be recorded. The Calculate mileage action appears directly below the
+the editable one-decimal Business miles field; for a round trip it also fills
+the editable return-mileage field. The user reviews or edits those provisional
+values before saving. The Calculate mileage action appears directly below the
 address controls. Changing either endpoint clears the corresponding calculated
 state. Calculation errors preserve manual entry. When a Google selection is
 used, its final display text pre-fills the editable location text to record;
-later user edits remain respected, and the user explicitly confirms the text
-before saving. The component's Google display text is not written to the
-ledger until the user confirms and saves the trip.
+later user edits remain respected, and the user reviews the text before saving.
+The component's Google display text is not written to the ledger until the
+user saves the trip.
 When either current endpoint was selected with Google autocomplete or the
 current mileage suggestion was calculated by Google Routes, a Google Maps note
 appears directly below the mileage control. Stored rows do not claim Google
@@ -622,11 +622,20 @@ provenance after reload because that metadata is intentionally not persisted.
 
 Round trip performs separate outbound and reversed return calculations and
 shows independently editable mileage values. Saving creates the same two
-independent records in one confirmed write, with each row receiving its own
+independent records in one confirmed write, with the reversed return listed
+before outbound for newly created pairs when the records share a timestamp.
+Existing rows are not rewritten or migrated. Each row receives its own
 confirmed mileage and a separate ID; there is no durable pairing. Recalculating
 a saved row affects only that row. The filters, metrics, table, and CSV use the
 same date scope. Without Maps configuration, the current manual workflow
 remains available.
+
+In the edit section, Calculate mileage appears immediately after the address
+controls and before the editable trip-details row. Changing an edited address
+shows a potential mileage mismatch warning even before recalculation; the user
+can recalculate or review and edit the existing mileage manually before saving.
+The Google lookup controls start empty for an existing row, while the recorded
+text inputs are always visible and initialized from the saved ledger values.
 
 #### Acceptance criteria
 

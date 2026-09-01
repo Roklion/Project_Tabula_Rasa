@@ -10,9 +10,11 @@ from tabula_rasa.page_renderers.mileage import (
     PartialRouteError,
     _calculate_routes,
     _ledger_location_text,
-    _recorded_location_is_confirmed,
     _needs_google_maps_attribution,
-    _render_google_route_suggestions,
+    _address_text_changed,
+    _apply_pending_route_mileage,
+    _discard_modified_calculated_mileage_markers,
+    _clear_unchanged_calculated_mileage,
     _route_state_is_current,
     _route_disabled_reason,
     _autocomplete_available,
@@ -74,6 +76,27 @@ def test_save_guard_rejects_same_place_id_but_allows_manual_loop() -> None:
     )
 
 
+def test_edit_address_change_is_detected_before_recalculation() -> None:
+    assert not _address_text_changed(
+        AddressSelection(),
+        AddressSelection(),
+        "Office",
+        "Client",
+    )
+    assert _address_text_changed(
+        AddressSelection("Updated office", version=1),
+        AddressSelection("Client"),
+        "Office",
+        "Client",
+    )
+    assert not _address_text_changed(
+        AddressSelection("Office"),
+        AddressSelection("Client"),
+        "Office",
+        "Client",
+    )
+
+
 def test_google_maps_attribution_uses_current_session_provenance() -> None:
     fingerprint = ("Office", "Client", 2, 3, False)
     selected_start = AddressSelection("Office", "place-office", 2)
@@ -103,31 +126,77 @@ def test_google_maps_attribution_uses_current_session_provenance() -> None:
     assert not _route_state_is_current(stale, fingerprint)
 
 
-def test_google_route_suggestion_is_not_copied_into_business_miles() -> None:
-    source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
-
-    assert "Google suggested distance: {float(outbound):.1f} mi" in source
-    assert 'st.session_state["add_mileage_miles"] = suggestion[0]' not in source
-    assert 'st.session_state["add_mileage_return_miles"] = suggestion[1]' not in source
-    assert "distanceMeters" not in source
-    assert "route_calculated_at" not in source
-    assert "distance_source" not in source
-
-
-def test_route_suggestions_render_as_current_transient_values(monkeypatch) -> None:
+def test_calculated_route_mileage_populates_editable_widgets(monkeypatch) -> None:
     import streamlit as st
 
-    messages: list[str] = []
-    monkeypatch.setattr(st, "info", messages.append)
-
-    _render_google_route_suggestions(
-        {"outbound": 12.4, "return": 13.1, "fingerprint": ("current",)}
+    session_state: dict[str, object] = {}
+    monkeypatch.setattr(st, "session_state", session_state)
+    _apply_pending_route_mileage(
+        {"outbound": 12.4, "return": 13.1, "fingerprint": ("current",)},
+        fingerprint=("current",),
+        round_trip=True,
+        miles_key="add_mileage_miles",
+        return_miles_key="add_mileage_return_miles",
     )
 
-    assert messages == [
-        "Google suggested distance: 12.4 mi",
-        "Google suggested return distance: 13.1 mi",
-    ]
+    assert session_state["add_mileage_miles"] == 12.4
+    assert session_state["add_mileage_return_miles"] == 13.1
+    assert session_state["add_mileage_miles__calculated"] == 12.4
+    assert session_state["add_mileage_return_miles__calculated"] == 13.1
+
+
+def test_stale_calculated_route_mileage_does_not_overwrite_edits(monkeypatch) -> None:
+    import streamlit as st
+
+    session_state: dict[str, object] = {
+        "add_mileage_miles": 9.5,
+        "add_mileage_return_miles": 10.0,
+    }
+    monkeypatch.setattr(st, "session_state", session_state)
+    _apply_pending_route_mileage(
+        {"outbound": 12.4, "return": 13.1, "fingerprint": ("old",)},
+        fingerprint=("current",),
+        round_trip=True,
+        miles_key="add_mileage_miles",
+        return_miles_key="add_mileage_return_miles",
+    )
+
+    assert session_state["add_mileage_miles"] == 9.5
+    assert session_state["add_mileage_return_miles"] == 10.0
+
+
+def test_stale_calculated_route_mileage_clears_untouched_values(monkeypatch) -> None:
+    import streamlit as st
+
+    session_state: dict[str, object] = {
+        "add_mileage_miles": 12.4,
+        "add_mileage_return_miles": 9.5,
+    }
+    monkeypatch.setattr(st, "session_state", session_state)
+    _clear_unchanged_calculated_mileage(
+        {"outbound": 12.4, "return": 13.1},
+        miles_key="add_mileage_miles",
+        return_miles_key="add_mileage_return_miles",
+    )
+
+    assert "add_mileage_miles" not in session_state
+    assert session_state["add_mileage_return_miles"] == 9.5
+
+
+def test_modified_calculated_mileage_is_treated_as_manual(monkeypatch) -> None:
+    import streamlit as st
+
+    session_state: dict[str, object] = {
+        "add_mileage_miles": 14.0,
+        "add_mileage_miles__calculated": 12.4,
+    }
+    monkeypatch.setattr(st, "session_state", session_state)
+    _discard_modified_calculated_mileage_markers(
+        miles_key="add_mileage_miles",
+    )
+
+    assert session_state["add_mileage_miles"] == 14.0
+    assert "add_mileage_miles__calculated" not in session_state
 
 
 def test_google_location_text_prefills_the_ledger_input(monkeypatch) -> None:
@@ -139,8 +208,10 @@ def test_google_location_text_prefills_the_ledger_input(monkeypatch) -> None:
     monkeypatch.setattr(
         st,
         "text_input",
-        lambda label, *, value, key, help: inputs.append((label, value, key))
-        or value,
+        lambda label, *, key, help: inputs.append(
+            (label, st.session_state[key], key)
+        )
+        or st.session_state[key],
     )
     monkeypatch.setattr(st, "checkbox", lambda *args, **kwargs: False)
 
@@ -172,7 +243,8 @@ def test_google_location_text_refreshes_for_a_new_selection_but_preserves_edits(
     monkeypatch.setattr(
         st,
         "text_input",
-        lambda label, *, value, key, help: inputs.append(value) or value,
+        lambda label, *, key, help: inputs.append(st.session_state[key])
+        or st.session_state[key],
     )
     monkeypatch.setattr(st, "caption", lambda message: None)
     monkeypatch.setattr(st, "checkbox", lambda *args, **kwargs: False)
@@ -197,30 +269,44 @@ def test_google_location_text_refreshes_for_a_new_selection_but_preserves_edits(
     assert inputs == ["First result", "User-confirmed text", "Second result"]
 
 
-def test_recorded_google_text_requires_confirmation_unless_edited(monkeypatch) -> None:
+def test_edit_recorded_location_text_is_visible_without_google_selection(
+    monkeypatch,
+) -> None:
     import streamlit as st
 
+    inputs: list[tuple[str, str]] = []
+    monkeypatch.setattr(st, "session_state", {})
     monkeypatch.setattr(st, "caption", lambda message: None)
-    monkeypatch.setattr(st, "text_input", lambda label, *, value, key, help: value)
-    monkeypatch.setattr(st, "checkbox", lambda *args, **kwargs: False)
+    monkeypatch.setattr(
+        st,
+        "text_input",
+        lambda label, *, key, help: inputs.append(
+            (label, st.session_state[key])
+        )
+        or st.session_state[key],
+    )
 
-    selection = AddressSelection("Provider display text", "place-123", 4)
-    _ledger_location_text(
-        selection,
+    recorded = _ledger_location_text(
+        AddressSelection(),
         label="Starting location",
-        key="ledger-start",
+        key="edit-recorded-start",
+        existing_value="Saved office address",
+        always_render=True,
     )
 
-    assert not _recorded_location_is_confirmed(
-        selection, key="ledger-start", text="Provider display text"
-    )
-    assert _recorded_location_is_confirmed(
-        selection, key="ledger-start", text="User-confirmed text"
-    )
-    st.session_state["ledger-start__confirmed"] = True
-    assert _recorded_location_is_confirmed(
-        selection, key="ledger-start", text="Provider display text"
-    )
+    assert recorded == "Saved office address"
+    assert inputs == [
+        ("Starting location (recorded text)", "Saved office address")
+    ]
+
+
+def test_recorded_google_text_is_saved_only_by_the_explicit_save_action() -> None:
+    source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
+
+    assert 'st.checkbox(\n        f"Confirm {label.lower()} text"' not in source
+    assert "_recorded_location_is_confirmed" not in source
+    assert "context.confirmed_write(" in source
+    assert '"create_mileage_trip"' in source
 
 
 def test_add_trip_calculate_button_is_before_recorded_location_fields() -> None:
@@ -231,6 +317,27 @@ def test_add_trip_calculate_button_is_before_recorded_location_fields() -> None:
     )
     assert source.index("calculate_requested = st.button(") < source.index(
         'st.checkbox(\n            "Round trip"'
+    )
+
+
+def test_edit_calculate_button_is_before_delete_controls() -> None:
+    source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
+    edit_address_section = source[
+        source.index('edit_start = address_autocomplete(') : source.index(
+            'edit_route_key = _route_key',
+            source.index('edit_start = address_autocomplete('),
+        )
+    ]
+
+    assert "value=selected.get" not in edit_address_section
+    assert source.index("calculate_edit_requested = st.button(") < source.index(
+        'st.caption("Update this saved mileage row.")'
+    )
+    assert source.index("calculate_edit_requested = st.button(") < source.index(
+        'st.warning(\n                        "Deleting this mileage trip is permanent'
+    )
+    assert source.index("calculate_edit_requested = st.button(") < source.index(
+        '"Permanently delete mileage trip"'
     )
 
 
@@ -332,8 +439,10 @@ def test_add_mileage_route_invalidation_preserves_business_miles() -> None:
         not in source
     )
     assert '                        st.session_state[miles_key] = 0.1' not in source
-    assert "The route changed, so the Google suggestion was cleared." in source
-    assert "business mileage" in source
+    assert "The selected addresses changed, so any mileage left in " in source
+    assert "may not match the current route." in source
+    assert "mileage manually" in source
+    assert "edit_address_changed = _address_text_changed(" in source
 
 
 def test_mileage_drafts_are_not_buffered_in_forms() -> None:
