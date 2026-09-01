@@ -67,6 +67,8 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     """Migrate one legacy workbook in place; safe to rerun."""
     transactions_sheet = workbook.worksheet("Transactions")
     transaction_values = transactions_sheet.get_all_values()
+    if not transaction_values:
+        return {"payees": 0, "transactions": 0}
     headers = [str(value).strip() for value in transaction_values[0]]
     payee_sheet = next((sheet for sheet in workbook.worksheets() if sheet.title == "Payees"), None)
     if "payee_id" not in headers and "payee" not in headers:

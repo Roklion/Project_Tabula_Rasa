@@ -1912,17 +1912,19 @@ class GoogleSheetsStorage:
         payees: Mapping[str, Mapping[str, str]] | None = None,
         original_transaction: Mapping[str, Any] | None = None,
     ) -> dict[str, str]:
+        payees_force_refresh = True
         if accounts is None and categories is None:
             self._snapshot(["Accounts", "Categories", "Payees"], force_refresh=True)
             accounts = self._account_lookup()
             categories = self._category_lookup()
+            payees_force_refresh = False
         else:
             accounts = accounts or self._account_lookup(force_refresh=True)
             categories = categories or self._category_lookup(force_refresh=True)
         payees = (
             dict(payees)
             if payees is not None
-            else self._payee_lookup(force_refresh=True)
+            else self._payee_lookup(force_refresh=payees_force_refresh)
         )
         kind = _clean_text(data.get("kind"), "Transaction kind", required=True).title()
         if kind not in TRANSACTION_KINDS:

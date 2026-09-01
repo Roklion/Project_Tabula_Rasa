@@ -245,6 +245,13 @@ def test_migration_rejects_payees_worksheet_missing_required_headers() -> None:
         migrate_workbook(workbook)
 
 
+def test_migration_accepts_empty_transactions_worksheet() -> None:
+    workbook = FakeWorkbook()
+    workbook.worksheet("Transactions").rows.clear()
+
+    assert migrate_workbook(workbook) == {"payees": 0, "transactions": 0}
+
+
 def test_migration_resumes_after_header_write_failure() -> None:
     workbook = FakeWorkbook()
     transaction_sheet = workbook.worksheet("Transactions")
@@ -555,6 +562,7 @@ def test_new_payee_transaction_uses_created_record_without_refresh() -> None:
     )
 
     assert storage._payee_lookup.call_count == 1
+    assert storage._payee_lookup.call_args.kwargs["force_refresh"] is False
 
 
 def test_csv_import_validates_all_rows_before_creating_payees() -> None:
