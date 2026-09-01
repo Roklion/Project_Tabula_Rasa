@@ -46,7 +46,9 @@ def test_failed_maps_load_button_retries_google_mode() -> None:
     assert (
         "showManual('Google address suggestions are unavailable.');\n"
         "      manualMode = true;\n"
+        "      providerFailed = true;\n"
         "      setStateValue('manual_mode', true);\n"
+        "      setStateValue('provider_failed', true);\n"
         "      manualButton.onclick = selectGoogleMode;"
     ) in _JS
 
@@ -54,9 +56,20 @@ def test_failed_maps_load_button_retries_google_mode() -> None:
 def test_google_provider_errors_switch_to_manual_mode() -> None:
     assert "element.addEventListener('gmp-error', () => {" in _JS
     assert (
-        "manualMode = true;\\n"
-        "        setStateValue('manual_mode', true);\\n"
+        "manualMode = true;\n"
+        "        providerFailed = true;\n"
+        "        setStateValue('manual_mode', true);\n"
+        "        setStateValue('provider_failed', true);\n"
         "        showManual('Google address suggestions are unavailable.');"
+    ) in _JS
+
+
+def test_manual_mode_does_not_mark_provider_as_failed() -> None:
+    assert (
+        "manualMode = true;\n"
+        "    providerFailed = false;\n"
+        "    setStateValue('manual_mode', true);\n"
+        "    setStateValue('provider_failed', false);"
     ) in _JS
 
 
