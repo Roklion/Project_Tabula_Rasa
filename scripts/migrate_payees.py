@@ -80,9 +80,16 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     if not transaction_values:
         return {"payees": 0, "transactions": 0}
     headers = [str(value).strip() for value in transaction_values[0]]
+    if any(not header for header in headers):
+        raise ValueError("Transactions worksheet has a blank header")
+    if len(headers) != len(set(headers)):
+        raise ValueError("Transactions worksheet has duplicate headers")
+    payee_headers = [header for header in ("payee", "payee_id") if header in headers]
+    if len(payee_headers) != 1:
+        raise ValueError(
+            "Transactions worksheet must contain exactly one payee or payee_id header"
+        )
     payee_sheet = next((sheet for sheet in workbook.worksheets() if sheet.title == "Payees"), None)
-    if "payee_id" not in headers and "payee" not in headers:
-        raise ValueError("Transactions worksheet has neither payee nor payee_id")
 
     if payee_sheet is None:
         payee_sheet = workbook.add_worksheet("Payees", rows=1000, cols=4)

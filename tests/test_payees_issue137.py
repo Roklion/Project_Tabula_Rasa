@@ -6,6 +6,7 @@ import io
 import json
 import threading
 import zipfile
+from collections.abc import Callable
 from unittest.mock import Mock
 
 import pytest
@@ -336,6 +337,36 @@ def test_migration_rejects_malformed_payees_headers(
 
     assert payee_sheet.rows == original_payees
     assert transaction_sheet.rows == original_transactions
+
+
+@pytest.mark.parametrize(
+    ("header_change", "message"),
+    [
+        (lambda headers: headers.__setitem__(1, ""), "blank header"),
+        (lambda headers: headers.__setitem__(1, headers[0]), "duplicate headers"),
+        (
+            lambda headers: headers.append("payee"),
+            "exactly one payee",
+        ),
+    ],
+)
+def test_migration_rejects_malformed_transaction_headers(
+    header_change: Callable[[list[str]], None], message: str
+) -> None:
+    workbook = FakeWorkbook()
+    transaction_sheet = workbook.worksheet("Transactions")
+    headers = list(transaction_sheet.rows[0])
+    header_change(headers)
+    transaction_sheet.rows[0] = headers
+    original_transactions = [list(row) for row in transaction_sheet.rows]
+    payee_sheet = workbook.worksheet("Payees")
+    original_payees = [list(row) for row in payee_sheet.rows]
+
+    with pytest.raises(ValueError, match=message):
+        migrate_workbook(workbook)
+
+    assert transaction_sheet.rows == original_transactions
+    assert payee_sheet.rows == original_payees
 
 
 def test_migration_appends_payees_in_existing_header_order() -> None:
