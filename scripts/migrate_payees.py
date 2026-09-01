@@ -119,7 +119,7 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
                 row["payee_id"] = ""
         if not legacy_rows:
             return {
-                "payees": len(payee_values) - 1,
+                "payees": 0,
                 "transactions": 0,
             }
     payees, migrated = migrate_payee_rows(rows, existing)

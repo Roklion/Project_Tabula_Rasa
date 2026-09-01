@@ -272,7 +272,7 @@ def test_migration_resumes_after_header_write_failure() -> None:
     assert result == {"payees": 0, "transactions": 1}
     assert transaction_sheet.rows[1][payee_index]
     assert workbook.worksheet("Payees").rows[1][1] == "Legacy vendor"
-    assert migrate_workbook(workbook) == {"payees": 1, "transactions": 0}
+    assert migrate_workbook(workbook) == {"payees": 0, "transactions": 0}
 
 
 def test_migration_resumes_after_partial_payee_append() -> None:
