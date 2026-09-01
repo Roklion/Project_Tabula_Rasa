@@ -275,6 +275,9 @@ export default function(component) {
       });
       element.addEventListener('gmp-error', () => {
         status.textContent = 'Google address suggestions are unavailable.';
+        manualMode = true;
+        setStateValue('manual_mode', true);
+        showManual('Google address suggestions are unavailable.');
         manualButton.hidden = false;
       });
       manualButton.onclick = () => {
