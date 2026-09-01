@@ -411,6 +411,41 @@ def test_quickbooks_import_reuses_canonical_payee_for_duplicates() -> None:
     assert len(storage.list_transactions()) == 1
 
 
+def test_quickbooks_import_deduplicates_unseen_payee_variants() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    storage.create_account("Checking", "Bank")
+    storage.create_category("Office", "Expense")
+    rows = [
+        {
+            "Date": "09/01/2026",
+            "Transaction Type": "Expense",
+            "Num": "1",
+            "Name": "Acme Inc",
+            "Memo/Description": "Office supplies",
+            "Account": "Checking",
+            "Split": "Office",
+            "Amount": "(10.00)",
+        },
+        {
+            "Date": "09/01/2026",
+            "Transaction Type": "Expense",
+            "Num": "1",
+            "Name": "Acme  Inc",
+            "Memo/Description": "Office supplies",
+            "Account": "Checking",
+            "Split": "Office",
+            "Amount": "(10.00)",
+        },
+    ]
+
+    preview = storage.preview_quickbooks_transactions(rows)
+
+    assert len(preview["rows"]) == 1
+    assert preview["duplicate_rows"] == [3]
+    assert len(storage.import_quickbooks_transactions(rows)) == 1
+    assert len(storage.list_payees()) == 1
+
+
 def test_new_payee_transaction_uses_created_record_without_refresh() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     account = storage.create_account("Checking", "Bank")

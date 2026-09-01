@@ -2696,7 +2696,9 @@ class GoogleSheetsStorage:
         for item in normalized:
             payee_key = normalize_payee_name(item.get("payee", ""))
             if payee_key:
-                item["payee"] = payee_names.get(payee_key, item["payee"])
+                item["payee"] = payee_names.setdefault(
+                    payee_key, item["payee"]
+                )
             row_number = int(item.pop("_source_row"))
             identity = fingerprint(item)
             if identity in existing or identity in seen:

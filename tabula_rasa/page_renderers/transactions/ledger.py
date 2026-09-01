@@ -761,7 +761,11 @@ def render_ledger(
                 payee_options = ["+ Add new payee", ""] + [
                     str(item["id"])
                     for item in payees
-                    if item.get("active") == "TRUE" or item.get("id") == selected.get("payee_id")
+                    if item.get("active") == "TRUE"
+                    or (
+                        not copy_mode
+                        and item.get("id") == selected.get("payee_id")
+                    )
                 ]
                 edited_payee_id = st.selectbox(
                     "Edit payee / customer",

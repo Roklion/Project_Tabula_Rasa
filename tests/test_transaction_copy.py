@@ -208,6 +208,28 @@ def test_copy_uses_selected_existing_payee() -> None:
     assert copied["payee"] == "Other vendor"
 
 
+def test_copy_does_not_preselect_inactive_source_payee() -> None:
+    storage, source = _transaction_fixture()
+    storage.edit_payee(source["payee_id"], active=False)
+
+    with authenticated_app(storage) as app:
+        navigate_to(app, "Transactions")
+        by_label(app.segmented_control, "Ledger mode").set_value("Bulk").run()
+        app.session_state["transaction_bulk_selected_ids_test"] = (source["id"],)
+        app.run()
+        by_label(app.button, "Copy transaction").click().run()
+
+        payee_selector = by_label(app.selectbox, "Edit payee / customer")
+        assert source["payee_id"] not in payee_selector.options
+        payee_selector.set_value("").run()
+        by_label(app.button, "Save copied transaction").click().run()
+
+    copied = next(
+        item for item in storage.list_transactions() if item["id"] != source["id"]
+    )
+    assert copied["payee_id"] == ""
+
+
 def test_new_payee_name_separates_duplicate_submission_fingerprints() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     storage.create_account("Checking", "Bank")
