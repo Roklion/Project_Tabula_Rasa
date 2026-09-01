@@ -48,6 +48,7 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
     assert "var(--tr-negative-hover)" in css
     assert '[data-testid="stAlertContentWarning"]' in css
     assert '[data-testid="stFormSubmitButton"]:has(' in css
+    assert '[data-testid="stButton"]:has(' in css
     assert '[data-testid="stWidgetLabel"] p' in css
     assert (
         '.st-key-add_mileage_round_trip[data-testid="stCheckbox"] label' in css

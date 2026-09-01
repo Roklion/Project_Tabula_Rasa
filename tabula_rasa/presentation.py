@@ -450,6 +450,9 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
         color: var(--tr-warning-text) !important;
     }}
 
+    [data-testid="stButton"]:has(
+        [data-testid="stIconMaterial"]
+    ) button,
     [data-testid="stFormSubmitButton"]:has(
         [data-testid="stIconMaterial"]
     ) button {{
@@ -458,6 +461,9 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
         color: var(--tr-surface-primary) !important;
     }}
 
+    [data-testid="stButton"]:has(
+        [data-testid="stIconMaterial"]
+    ) button:hover,
     [data-testid="stFormSubmitButton"]:has(
         [data-testid="stIconMaterial"]
     ) button:hover {{
