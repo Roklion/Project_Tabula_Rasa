@@ -274,9 +274,10 @@ def test_edit_recorded_location_text_is_visible_without_google_selection(
 ) -> None:
     import streamlit as st
 
+    captions: list[str] = []
     inputs: list[tuple[str, str]] = []
     monkeypatch.setattr(st, "session_state", {})
-    monkeypatch.setattr(st, "caption", lambda message: None)
+    monkeypatch.setattr(st, "caption", captions.append)
     monkeypatch.setattr(
         st,
         "text_input",
@@ -297,6 +298,9 @@ def test_edit_recorded_location_text_is_visible_without_google_selection(
     assert recorded == "Saved office address"
     assert inputs == [
         ("Starting location (recorded text)", "Saved office address")
+    ]
+    assert captions == [
+        "Enter the location text to record in the ledger. Google text is used only for route lookup."
     ]
 
 

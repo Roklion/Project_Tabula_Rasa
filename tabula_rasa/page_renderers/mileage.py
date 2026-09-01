@@ -147,7 +147,12 @@ def _ledger_location_text(
     """Return manual ledger text without persisting Google display content."""
     if not selection.place_id and not always_render:
         return selection.display_text
-    if selection.place_id:
+    if always_render:
+        st.caption(
+            "Enter the location text to record in the ledger. Google text is "
+            "used only for route lookup."
+        )
+    elif selection.place_id:
         st.caption(
             "Google text is used only for route lookup. Enter the location text "
             "you want to record in the ledger."
