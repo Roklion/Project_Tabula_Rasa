@@ -16,7 +16,7 @@ Depending on the features used, the Application may process information such as:
 - uploaded receipts or supporting documents;
 - business-use allocations and related explanations;
 - addresses and locations entered for mileage or routing purposes;
-- transient Google-calculated distances, route suggestions, or mileage suggestions;
+- transient Routes distance values and Google-calculated mileage suggestions;
 - user-confirmed mileage recorded as a business record;
 - visible location text stored in a mileage business record, which in the current
   pre-implementation behavior may include a formatted address or display name
