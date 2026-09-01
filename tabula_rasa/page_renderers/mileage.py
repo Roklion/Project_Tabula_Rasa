@@ -371,18 +371,13 @@ def render_mileage(context: MileageContext) -> None:
         if route_state and route_state.get("fingerprint") != fingerprint:
             # A changed address invalidates a previously paid suggestion.
             st.session_state.pop(add_route_key, None)
-            # Clear only a calculated suggestion; leave a user's manual value
-            # alone when no route had been calculated in this workflow.
-            if "add_mileage_miles" in st.session_state:
-                st.session_state["add_mileage_miles"] = 0.0
-            if "add_mileage_return_miles" in st.session_state:
-                st.session_state["add_mileage_return_miles"] = 0.0
             route_state = None
             address_changed = True
         if address_changed:
             st.warning(
-                "The route changed, so the calculated mileage was cleared. "
-                "Choose both addresses and calculate again."
+                "The route changed, so the Google suggestion was cleared. "
+                "Choose both addresses and calculate again; review the "
+                "business mileage before saving."
             )
         if route_state and route_state.get("partial"):
             st.warning(

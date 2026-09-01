@@ -91,6 +91,7 @@ _CSS = """
   line-height: 1.25;
   white-space: nowrap;
 }
+.tr-google-maps-attribution[hidden] { display: none; }
 .tr-address button {
   align-self: flex-start;
   background: var(--st-secondary-background-color);

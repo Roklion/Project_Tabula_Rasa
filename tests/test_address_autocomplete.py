@@ -129,6 +129,12 @@ def test_google_selection_cannot_be_overwritten_by_followup_change_event() -> No
         "if (suppressInput || (selectedDisplay && element.value === selectedDisplay))"
         in _JS
     )
+
+
+def test_inline_attribution_css_honors_hidden_state() -> None:
+    from tabula_rasa.address_autocomplete import _CSS
+
+    assert ".tr-google-maps-attribution[hidden] { display: none; }" in _CSS
     assert "selectedDisplay = display;" in _JS
     assert "finally {\n          suppressInput = false;\n        }" in _JS
 

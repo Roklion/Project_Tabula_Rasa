@@ -244,15 +244,20 @@ def test_round_trip_save_passes_independent_return_miles() -> None:
     assert storage.kwargs["return_miles"] == 13.1
 
 
-def test_add_mileage_route_invalidation_restores_zero_defaults() -> None:
+def test_add_mileage_route_invalidation_preserves_business_miles() -> None:
     source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
 
     assert '            _route_key(context, "add"),' in source
-    assert '                st.session_state["add_mileage_miles"] = 0.0' in source
+    assert (
+        '                st.session_state["add_mileage_miles"] = 0.0'
+        not in source
+    )
     assert (
         '                st.session_state["add_mileage_return_miles"] = 0.0'
-        in source
+        not in source
     )
+    assert "The route changed, so the Google suggestion was cleared." in source
+    assert "business mileage" in source
 
 
 def test_mileage_drafts_are_not_buffered_in_forms() -> None:
