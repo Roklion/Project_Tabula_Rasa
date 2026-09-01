@@ -241,6 +241,37 @@ def test_migration_accepts_short_existing_payee_rows() -> None:
     assert GoogleSheetsStorage(workbook).list_payees()[0]["active"] == "TRUE"
 
 
+def test_migration_rejects_existing_payee_without_id_before_transaction_write() -> None:
+    workbook = FakeWorkbook()
+    payee_sheet = workbook.worksheet("Payees")
+    payee_sheet.rows.append(["", "Broken vendor", "TRUE", ""])
+    transaction_sheet = workbook.worksheet("Transactions")
+    payee_index = transaction_sheet.rows[0].index("payee_id")
+    transaction_sheet.rows[0][payee_index] = "payee"
+    transaction_sheet.rows.append(
+        [
+            "txn",
+            "2026-09-01",
+            "Expense",
+            "10.00",
+            "account",
+            "",
+            "category",
+            "Broken vendor",
+            "",
+            "",
+            "",
+            "now",
+        ]
+    )
+    original_transactions = [list(row) for row in transaction_sheet.rows]
+
+    with pytest.raises(StorageValidationError, match="Payee ID is required"):
+        migrate_workbook(workbook)
+
+    assert transaction_sheet.rows == original_transactions
+
+
 def test_migration_rejects_payees_worksheet_missing_required_headers() -> None:
     workbook = FakeWorkbook()
     workbook.worksheet("Payees").rows[0] = ["id", "name", "created_at"]

@@ -19,6 +19,7 @@ from tabula_rasa.storage.google_sheets import (  # noqa: E402
     WORKSHEET_HEADERS,
     _legacy_payee_id,
     _utc_now,
+    _validate_payee_records,
     normalize_payee_name,
 )
 
@@ -100,15 +101,16 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
             row[active_index] = "TRUE"
             payees_changed = True
         payee_rows.append(row[: len(payee_headers)])
-    if payees_changed:
-        payee_sheet.update(
-            [payee_headers, *payee_rows], range_name="A1", raw=True
-        )
     existing = [
         dict(zip(payee_headers, row))
         for row in payee_rows
         if any(str(value).strip() for value in row)
     ]
+    _validate_payee_records(existing)
+    if payees_changed:
+        payee_sheet.update(
+            [payee_headers, *payee_rows], range_name="A1", raw=True
+        )
     rows = [dict(zip(headers, row + [""] * (len(headers) - len(row)))) for row in transaction_values[1:]]
     if "payee" not in headers:
         known_payee_ids = {str(item.get("id", "")).strip() for item in existing}

@@ -167,6 +167,8 @@ def render_add_transaction(
                 save_error.error(
                     "Create a second active account before recording a transfer."
                 )
+            elif payee_id == "+ Add new payee" and not new_payee_name.strip():
+                save_error.error("Enter a payee / customer name before saving.")
             else:
                 payload = {
                     "txn_date": transaction_date,
