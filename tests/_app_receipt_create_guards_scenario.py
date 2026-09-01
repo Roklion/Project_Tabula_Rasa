@@ -85,6 +85,7 @@ def main() -> None:
         by_label(app.number_input, "Amount").set_value(25)
         by_label(app.selectbox, "From Account").set_value("Checking")
         by_label(app.selectbox, "Category").set_value("Office")
+        by_label(app.text_input, "Payee / customer").input("Guard vendor")
 
         by_label(app.button, "Save transaction").click().run()
         assert len(storage.list_transactions()) == 1
@@ -96,6 +97,7 @@ def main() -> None:
         by_label(app.file_uploader, "Receipt (optional)").set_value(
             ("bad.pdf", b"", "application/pdf")
         ).run()
+        by_label(app.text_input, "Payee / customer").input("Guard vendor invalid")
         by_label(app.button, "Save transaction").click().run()
         assert len(storage.list_transactions()) == 1
         assert upload_calls == []
