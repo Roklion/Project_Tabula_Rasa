@@ -301,6 +301,9 @@ export default function(component) {
       };
     } catch (error) {
       clearFailedMapsLoad();
+      selectedDisplay = '';
+      const widget = host.querySelector('gmp-place-autocomplete');
+      emit('changed', (widget && widget.value) || '');
       showManual('Google address suggestions are unavailable.');
       manualMode = true;
       providerFailed = true;
