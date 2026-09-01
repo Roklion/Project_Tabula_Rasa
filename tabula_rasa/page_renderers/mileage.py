@@ -100,10 +100,10 @@ def _route_disabled_reason(
 
 
 def _autocomplete_available(*keys: str) -> bool:
-    """Return whether all address components remain in Google mode."""
+    """Return whether no address component has reported provider failure."""
     for key in keys:
         state = st.session_state.get(key)
-        if isinstance(state, Mapping) and state.get("manual_mode") is True:
+        if isinstance(state, Mapping) and state.get("provider_failed") is True:
             return False
     return True
 
