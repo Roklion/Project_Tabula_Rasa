@@ -185,15 +185,26 @@ def _apply_pending_route_mileage(
     if pending.get("fingerprint") != fingerprint:
         return
     outbound = pending.get("outbound")
-    if not isinstance(outbound, (int, float)) or not math.isfinite(float(outbound)):
-        return
-    st.session_state[miles_key] = float(outbound)
-    st.session_state[f"{miles_key}__calculated"] = float(outbound)
+    if isinstance(outbound, (int, float)) and math.isfinite(float(outbound)):
+        st.session_state[miles_key] = float(outbound)
+        st.session_state[f"{miles_key}__calculated"] = float(outbound)
     if round_trip and return_miles_key:
         returned = pending.get("return")
         if isinstance(returned, (int, float)) and math.isfinite(float(returned)):
             st.session_state[return_miles_key] = float(returned)
             st.session_state[f"{return_miles_key}__calculated"] = float(returned)
+
+
+def _edit_route_warning_visible(
+    address_changed: bool,
+    route_changed: bool,
+    route_state: object,
+    fingerprint: tuple[object, ...],
+) -> bool:
+    """Show an edit warning until a route is recalculated for new addresses."""
+    return route_changed or (
+        address_changed and not _route_state_is_current(route_state, fingerprint)
+    )
 
 
 def _discard_modified_calculated_mileage_markers(
@@ -582,6 +593,15 @@ def render_mileage(context: MileageContext) -> None:
                             if route_state and route_state.get("partial")
                             else None
                         )
+                        preserve_manual_outbound = bool(
+                            round_trip
+                            and route_state
+                            and route_state.get("partial")
+                            and st.session_state.get(
+                                "add_mileage_miles__calculated"
+                            )
+                            is None
+                        )
                         outbound, returned = _calculate_routes(
                             start,
                             destination_value,
@@ -596,7 +616,9 @@ def render_mileage(context: MileageContext) -> None:
                         }
                         st.session_state[pending_mileage_key] = {
                             "fingerprint": fingerprint,
-                            "outbound": outbound,
+                            "outbound": (
+                                None if preserve_manual_outbound else outbound
+                            ),
                             "return": returned,
                         }
                         st.rerun()
@@ -609,7 +631,11 @@ def render_mileage(context: MileageContext) -> None:
                         }
                         st.session_state[pending_mileage_key] = {
                             "fingerprint": fingerprint,
-                            "outbound": error.outbound,
+                            "outbound": (
+                                None
+                                if preserve_manual_outbound
+                                else error.outbound
+                            ),
                             "return": None,
                         }
                         st.rerun()
@@ -835,7 +861,12 @@ def render_mileage(context: MileageContext) -> None:
                     edit_fingerprint,
                 ):
                     render_google_maps_attribution()
-                if edit_address_changed or edit_route_changed:
+                if _edit_route_warning_visible(
+                    edit_address_changed,
+                    edit_route_changed,
+                    edit_route_state,
+                    edit_fingerprint,
+                ):
                     st.warning(
                         "The address changed, so the existing mileage may not "
                         "match the current route. Calculate mileage again to "

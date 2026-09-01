@@ -15,6 +15,7 @@ from tabula_rasa.page_renderers.mileage import (
     _apply_pending_route_mileage,
     _discard_modified_calculated_mileage_markers,
     _clear_unchanged_calculated_mileage,
+    _edit_route_warning_visible,
     _route_state_is_current,
     _route_disabled_reason,
     _autocomplete_available,
@@ -163,6 +164,53 @@ def test_stale_calculated_route_mileage_does_not_overwrite_edits(monkeypatch) ->
 
     assert session_state["add_mileage_miles"] == 9.5
     assert session_state["add_mileage_return_miles"] == 10.0
+
+
+def test_partial_route_retry_preserves_manual_outbound_and_applies_return(
+    monkeypatch,
+) -> None:
+    import streamlit as st
+
+    session_state: dict[str, object] = {"add_mileage_miles": 9.5}
+    monkeypatch.setattr(st, "session_state", session_state)
+    _apply_pending_route_mileage(
+        {
+            "outbound": None,
+            "return": 13.1,
+            "fingerprint": ("current",),
+        },
+        fingerprint=("current",),
+        round_trip=True,
+        miles_key="add_mileage_miles",
+        return_miles_key="add_mileage_return_miles",
+    )
+
+    assert session_state["add_mileage_miles"] == 9.5
+    assert session_state["add_mileage_return_miles"] == 13.1
+    assert session_state["add_mileage_return_miles__calculated"] == 13.1
+
+
+def test_edit_route_warning_clears_after_successful_recalculation() -> None:
+    fingerprint = ("Updated office", "Client", 2, 3, False)
+
+    assert _edit_route_warning_visible(
+        True,
+        False,
+        {"fingerprint": fingerprint, "outbound": 12.4},
+        fingerprint,
+    ) is False
+    assert _edit_route_warning_visible(
+        True,
+        False,
+        None,
+        fingerprint,
+    ) is True
+    assert _edit_route_warning_visible(
+        False,
+        True,
+        {"fingerprint": fingerprint, "outbound": 12.4},
+        fingerprint,
+    ) is True
 
 
 def test_stale_calculated_route_mileage_clears_untouched_values(monkeypatch) -> None:
