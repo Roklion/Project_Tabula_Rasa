@@ -99,6 +99,15 @@ def _route_disabled_reason(
     return "Mileage calculation is unavailable. Enter miles manually or try again."
 
 
+def _autocomplete_available(*keys: str) -> bool:
+    """Return whether all address components remain in Google mode."""
+    for key in keys:
+        state = st.session_state.get(key)
+        if isinstance(state, Mapping) and state.get("manual_mode") is True:
+            return False
+    return True
+
+
 def _route_state_is_current(
     route_state: object, fingerprint: tuple[object, ...]
 ) -> bool:
@@ -383,7 +392,12 @@ def render_mileage(context: MileageContext) -> None:
                 start,
                 destination_value,
                 context.route_mileage,
-                autocomplete_available=context.maps_api_key is not None,
+                autocomplete_available=(
+                    context.maps_api_key is not None
+                    and _autocomplete_available(
+                        "add_mileage_start", "add_mileage_destination"
+                    )
+                ),
             )
             calculate_requested = st.button(
                 "Recalculate mileage" if route_state else "Calculate mileage",
