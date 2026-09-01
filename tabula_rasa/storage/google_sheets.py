@@ -377,13 +377,18 @@ def _parse_backup_zip(
             } | {"manifest.json"}
             if format_version >= RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION:
                 required_files.add("receipts.json")
-            if set(names) != required_files:
+            optional_legacy_payees = format_version < BACKUP_FORMAT_VERSION and "Payees.csv" in names
+            if set(names) not in (required_files, required_files | {"Payees.csv"}) or (
+                optional_legacy_payees and "Payees.csv" not in names
+            ):
                 raise StorageValidationError(
                     "Backup must contain exactly the expected ledger and manifest files"
                 )
             csv_files = {
                 title: archive.read(f"{title}.csv") for title in backup_headers
             }
+            if optional_legacy_payees:
+                csv_files["Payees"] = archive.read("Payees.csv")
             receipt_manifest_bytes = (
                 archive.read("receipts.json")
                 if format_version >= RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION
@@ -398,6 +403,8 @@ def _parse_backup_zip(
     if not all(isinstance(value, dict) for value in (row_counts, file_hashes, worksheet_headers)):
         raise StorageValidationError("Backup manifest is missing validation metadata")
     expected_hash_names = {f"{title}.csv" for title in backup_headers}
+    if "Payees" in csv_files and "Payees.csv" not in expected_hash_names:
+        expected_hash_names.add("Payees.csv")
     if format_version >= RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION:
         expected_hash_names.add("receipts.json")
     if set(file_hashes) != expected_hash_names:
@@ -414,7 +421,9 @@ def _parse_backup_zip(
         if not parsed_rows:
             raise StorageValidationError(f"{title} backup has no header row")
         headers = [value.strip() for value in parsed_rows[0]]
-        required_headers = set(backup_headers[title])
+        required_headers = set(
+            backup_headers.get(title, WORKSHEET_HEADERS[title])
+        )
         if (
             any(not value for value in headers)
             or len(headers) != len(set(headers))
@@ -437,6 +446,9 @@ def _parse_backup_zip(
         ):
             raise StorageValidationError(f"{title} backup IDs are missing or duplicated")
         tables[title] = (headers, records)
+
+    if "Payees" not in tables:
+        tables["Payees"] = (list(WORKSHEET_HEADERS["Payees"]), [])
 
     if format_version < LEDGER_ONLY_BACKUP_FORMAT_VERSION:
         transaction_headers, transactions = tables["Transactions"]
