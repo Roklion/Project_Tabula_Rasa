@@ -200,6 +200,9 @@ def test_add_trip_calculate_button_is_before_recorded_location_fields() -> None:
     assert source.index("calculate_requested = st.button(") < source.index(
         'recorded_start = _ledger_location_text(\n'
     )
+    assert source.index("calculate_requested = st.button(") < source.index(
+        'st.checkbox(\n            "Round trip"'
+    )
 
 
 def test_round_trip_preserves_outbound_when_return_lookup_fails() -> None:

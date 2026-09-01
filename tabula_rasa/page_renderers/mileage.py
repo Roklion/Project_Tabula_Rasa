@@ -353,14 +353,8 @@ def render_mileage(context: MileageContext) -> None:
 
         add_route_key = _route_key(context, "add")
         route_state = st.session_state.get(add_route_key)
-        round_trip = st.checkbox(
-            "Round trip",
-            help=(
-                "Creates an outbound entry and a second entry with the "
-                "starting and ending locations reversed. Outbound and return "
-                "mileage can be reviewed independently."
-            ),
-            key="add_mileage_round_trip",
+        round_trip = bool(
+            st.session_state.get("add_mileage_round_trip", False)
         )
         fingerprint = (*_selection_fingerprint(start, destination_value), round_trip)
         address_changed = False
@@ -369,19 +363,6 @@ def render_mileage(context: MileageContext) -> None:
             st.session_state.pop(add_route_key, None)
             route_state = None
             address_changed = True
-        if address_changed:
-            st.warning(
-                "The route changed, so the Google suggestion was cleared. "
-                "Choose both addresses and calculate again; review the "
-                "business mileage before saving."
-            )
-        if route_state and route_state.get("partial"):
-            st.warning(
-                "Outbound mileage is ready. Enter return miles manually or "
-                "retry the return route."
-            )
-        _render_google_route_suggestions(route_state)
-
         route_error = st.empty()
         route_ready = _route_ready(
             start, destination_value, context.route_mileage
@@ -404,6 +385,28 @@ def render_mileage(context: MileageContext) -> None:
         )
         if not route_ready and context.route_mileage is not None:
             st.caption(route_disabled_reason)
+
+        round_trip = st.checkbox(
+            "Round trip",
+            help=(
+                "Creates an outbound entry and a second entry with the "
+                "starting and ending locations reversed. Outbound and return "
+                "mileage can be reviewed independently."
+            ),
+            key="add_mileage_round_trip",
+        )
+        if address_changed:
+            st.warning(
+                "The route changed, so the Google suggestion was cleared. "
+                "Choose both addresses and calculate again; review the "
+                "business mileage before saving."
+            )
+        if route_state and route_state.get("partial"):
+            st.warning(
+                "Outbound mileage is ready. Enter return miles manually or "
+                "retry the return route."
+            )
+        _render_google_route_suggestions(route_state)
 
         recorded_columns = st.columns(2, gap="small")
         with recorded_columns[0]:
