@@ -190,6 +190,36 @@ def test_migration_uses_supported_raw_append_option() -> None:
     }
 
 
+def test_migration_accepts_short_existing_payee_rows() -> None:
+    workbook = FakeWorkbook()
+    payee_sheet = workbook.worksheet("Payees")
+    payee_sheet.rows.append(["existing-id", "Existing vendor"])
+    transaction_sheet = workbook.worksheet("Transactions")
+    payee_index = transaction_sheet.rows[0].index("payee_id")
+    transaction_sheet.rows[0][payee_index] = "payee"
+    transaction_sheet.rows.append(
+        [
+            "txn",
+            "2026-09-01",
+            "Expense",
+            "10.00",
+            "account",
+            "",
+            "category",
+            "Existing vendor",
+            "",
+            "",
+            "",
+            "now",
+        ]
+    )
+
+    result = migrate_workbook(workbook)
+
+    assert result == {"payees": 0, "transactions": 1}
+    assert transaction_sheet.rows[1][payee_index] == "existing-id"
+
+
 def test_migration_resumes_after_header_write_failure() -> None:
     workbook = FakeWorkbook()
     transaction_sheet = workbook.worksheet("Transactions")

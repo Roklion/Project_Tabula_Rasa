@@ -84,7 +84,16 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
         )
         payee_values = [list(WORKSHEET_HEADERS["Payees"])]
     payee_headers = [str(value).strip() for value in payee_values[0]]
-    existing = [dict(zip(payee_headers, row)) for row in payee_values[1:] if any(str(value).strip() for value in row)]
+    existing = [
+        dict(
+            zip(
+                payee_headers,
+                row + [""] * (len(payee_headers) - len(row)),
+            )
+        )
+        for row in payee_values[1:]
+        if any(str(value).strip() for value in row)
+    ]
     rows = [dict(zip(headers, row + [""] * (len(headers) - len(row)))) for row in transaction_values[1:]]
     if "payee" not in headers:
         known_payee_ids = {str(item.get("id", "")).strip() for item in existing}
