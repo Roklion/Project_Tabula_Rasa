@@ -1770,6 +1770,34 @@ class GoogleSheetsStorage:
         self._append("Payees", record)
         return record
 
+    def _ensure_payee_names(
+        self, names: Iterable[Any]
+    ) -> dict[str, dict[str, str]]:
+        payees = self.list_payees(_force_refresh=True)
+        by_key = {normalize_payee_name(item["name"]): item for item in payees}
+        additions: list[dict[str, str]] = []
+        for value in names:
+            name = _clean_text(value, "New payee")
+            if not name:
+                continue
+            key = normalize_payee_name(name)
+            match = by_key.get(key)
+            if match is None:
+                match = {
+                    "id": str(uuid4()),
+                    "name": name,
+                    "active": "TRUE",
+                    "created_at": _utc_now(),
+                }
+                additions.append(match)
+                by_key[key] = match
+            elif match["active"] != "TRUE":
+                match = self.edit_payee(match["id"], active=True)
+                by_key[key] = match
+        if additions:
+            self._append_many("Payees", additions)
+        return {item["id"]: item for item in by_key.values()}
+
     def edit_payee(self, payee_id: str, **changes: Any) -> dict[str, str]:
         current = self._find_row("Payees", payee_id)
         updated = dict(current.values)
@@ -1813,16 +1841,20 @@ class GoogleSheetsStorage:
         created_at: str | None = None,
         accounts: Mapping[str, Mapping[str, Any]] | None = None,
         categories: Mapping[str, Mapping[str, str]] | None = None,
+        payees: Mapping[str, Mapping[str, str]] | None = None,
     ) -> dict[str, str]:
         if accounts is None and categories is None:
             self._snapshot(["Accounts", "Categories", "Payees"], force_refresh=True)
             accounts = self._account_lookup()
             categories = self._category_lookup()
-            payees = self._payee_lookup()
         else:
             accounts = accounts or self._account_lookup(force_refresh=True)
             categories = categories or self._category_lookup(force_refresh=True)
-            payees = self._payee_lookup(force_refresh=True)
+        payees = (
+            dict(payees)
+            if payees is not None
+            else self._payee_lookup(force_refresh=True)
+        )
         kind = _clean_text(data.get("kind"), "Transaction kind", required=True).title()
         if kind not in TRANSACTION_KINDS:
             raise StorageValidationError("Unknown transaction kind")
@@ -2643,15 +2675,26 @@ class GoogleSheetsStorage:
                 raise StorageValidationError("\n".join(preview["errors"]))
         accounts = self._account_lookup()
         categories = self._category_lookup()
+        payees = self._ensure_payee_names(
+            item.get("payee", "") for item in preview["rows"]
+        )
+        payee_ids_by_name = {
+            normalize_payee_name(item["name"]): item["id"]
+            for item in payees.values()
+        }
         prepared = [
             self._prepare_transaction(
                 {
                     **item,
-                    "new_payee_name": item.get("payee", ""),
+                    "payee_id": payee_ids_by_name.get(
+                        normalize_payee_name(item.get("payee", "")), ""
+                    ),
+                    "new_payee_name": "",
                     "payee": "",
                 },
                 accounts=accounts,
                 categories=categories,
+                payees=payees,
             )
             for item in preview["rows"]
         ]

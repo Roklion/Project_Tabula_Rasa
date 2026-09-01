@@ -5,6 +5,7 @@ import hashlib
 import io
 import json
 import zipfile
+from unittest.mock import Mock
 
 import pytest
 
@@ -193,6 +194,38 @@ def test_invalid_transaction_does_not_create_new_payee() -> None:
         )
 
     assert storage.list_payees() == []
+
+
+def test_quickbooks_import_batches_new_payee_writes() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    storage.create_account("Checking", "Bank")
+    storage.create_category("Office", "Expense")
+    payee_sheet = storage._workbook.sheets["Payees"]
+    payee_sheet.append_rows = Mock(wraps=payee_sheet.append_rows)
+
+    rows = [
+        {
+            "Date": f"09/0{index}/2026",
+            "Transaction Type": "Expense",
+            "Num": str(index),
+            "Name": f"Vendor {index}",
+            "Memo/Description": "Office supplies",
+            "Account": "Checking",
+            "Split": "Office",
+            "Amount": "(10.00)",
+        }
+        for index in range(1, 4)
+    ]
+
+    imported = storage.import_quickbooks_transactions(rows)
+
+    assert len(imported) == 3
+    assert payee_sheet.append_rows.call_count == 1
+    assert {item["payee"] for item in imported} == {
+        "Vendor 1",
+        "Vendor 2",
+        "Vendor 3",
+    }
 
 
 def test_legacy_backup_maps_payee_text_to_existing_stored_value() -> None:

@@ -758,7 +758,7 @@ def render_ledger(
                     key=f"edit_transaction_amount_{edit_widget_scope}",
                 )
                 payee_by_id = {str(item["id"]): str(item["name"]) for item in payees}
-                payee_options = ["+ Add new payee"] + [
+                payee_options = ["+ Add new payee", ""] + [
                     str(item["id"])
                     for item in payees
                     if item.get("active") == "TRUE" or item.get("id") == selected.get("payee_id")
@@ -771,7 +771,9 @@ def render_ledger(
                         if selected.get("payee_id", "") in payee_options
                         else 0
                     ),
-                    format_func=lambda value: payee_by_id.get(value, value),
+                    format_func=lambda value: payee_by_id.get(
+                        value, "No payee" if value == "" else value
+                    ),
                     key=f"edit_transaction_payee_{edit_widget_scope}",
                 )
                 edited_new_payee = ""

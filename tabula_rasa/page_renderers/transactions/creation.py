@@ -121,14 +121,16 @@ def render_add_transaction(
                 else None
             )
         c1, c2 = st.columns(2)
-        payee_options = ["+ Add new payee"] + [
+        payee_options = ["+ Add new payee", ""] + [
             str(payee["id"]) for payee in payees if payee.get("active") == "TRUE"
         ]
         payee_by_id = {str(payee["id"]): str(payee["name"]) for payee in payees}
         payee_id = c1.selectbox(
             "Payee / customer",
             payee_options,
-            format_func=lambda value: payee_by_id.get(value, value),
+            format_func=lambda value: payee_by_id.get(
+                value, "No payee" if value == "" else value
+            ),
             key="add_transaction_payee",
         )
         new_payee_name = ""

@@ -105,9 +105,17 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
         range_name="A1",
         raw=True,
     )
-    if len(payees) > len(existing):
-        payee_sheet.append_rows([[item[header] for header in WORKSHEET_HEADERS["Payees"]] for item in payees[len(existing):]], raw=True)
-    return {"payees": len(payees) - len(existing), "transactions": len(migrated)}
+    existing_ids = {str(item.get("id", "")).strip() for item in existing}
+    new_payees = [item for item in payees if item["id"] not in existing_ids]
+    if new_payees:
+        payee_sheet.append_rows(
+            [
+                [item[header] for header in WORKSHEET_HEADERS["Payees"]]
+                for item in new_payees
+            ],
+            raw=True,
+        )
+    return {"payees": len(new_payees), "transactions": len(migrated)}
 
 
 def main() -> None:
