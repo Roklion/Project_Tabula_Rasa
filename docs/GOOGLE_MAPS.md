@@ -124,12 +124,65 @@ Automated tests always mock Google and must never use either live key.
   incident: restrict or disable the affected key, investigate, then rotate it
   carefully.
 
+## Google Maps data-retention decision
+
+**Decision date:** September 1, 2026
+
+The Application uses Google-derived API content transiently to assist the user.
+Durable bookkeeping values are treated as application/user-entered or
+user-confirmed ledger data only when the user supplies or confirms them. Simply
+pressing Save does not convert otherwise restricted Google Maps Content into
+unrestricted customer-owned data.
+
+| Data | Required treatment |
+| --- | --- |
+| Autocomplete predictions | Session/transient only |
+| Google Places formatted address / display name | Do not persist as Google-derived content |
+| Google Place ID | May be retained if a future implementation genuinely needs it and current Google terms permit it; the current Application does not need or persist it |
+| Raw Places response | Never persist |
+| Raw Routes response | Never persist |
+| Route polyline | Do not request or persist |
+| Routes `distanceMeters` | Transient only |
+| Google-calculated mileage suggestion | Transient only |
+| User-confirmed business mileage recorded in the ledger | Persist as application/user business-record data |
+| User-authored location text stored in the ledger | Persist as application/user business-record data |
+
+This table is the canonical target policy for the follow-up implementation
+work in issue #135. In the current pre-implementation behavior, selecting a
+Google suggestion can copy its formatted address or display name into the
+existing visible Mileage location field when the user saves a trip. That is an
+implementation gap, not a policy exception: the current saved value must not
+be treated as unrestricted Google Maps Content merely because it is in the
+ledger. The follow-up implementation must make durable location text
+user-authored or user-confirmed without persisting Google-derived content.
+
+No Google response cache should be introduced, and no route polyline should be
+stored. No Google provenance fields should be added to the Mileage worksheet
+unless a future product requirement justifies them and the applicable policy is
+reviewed again. The current Mileage and backup schemas therefore do not require
+a migration for issue #135.
+
+## Billing jurisdiction
+
+- **Billing-account country:** United States
+- **Applicable jurisdiction classification:** non-EEA
+- **Review date:** September 1, 2026
+
+This deployment is documented as governed by the applicable non-EEA Google Maps
+Platform terms. If the billing-account country changes, especially to an EEA
+country, the applicable Google Maps Platform terms and this retention decision
+must be reviewed again before relying on them.
+
 ## Current authoritative references
 
+- [Google Maps Platform Terms of Service](https://cloud.google.com/maps-platform/terms)
+- [Maps Service Specific Terms](https://cloud.google.com/maps-platform/terms/maps-service-terms/)
 - [Google Maps Platform API security](https://developers.google.com/maps/api-security-best-practices)
 - [Place Autocomplete Widget](https://developers.google.com/maps/documentation/javascript/place-autocomplete-new)
 - [Maps JavaScript API policies and attribution](https://developers.google.com/maps/documentation/javascript/policies)
 - [Routes API usage, billing, and quotas](https://developers.google.com/maps/documentation/routes/usage-and-billing)
 - [Routes API policies and attribution](https://developers.google.com/maps/documentation/routes/policies)
+- [Google Maps Platform EEA Terms of Service](https://cloud.google.com/terms/maps-platform/eea)
+- [EEA customer FAQ](https://developers.google.com/maps/comms/eea/faq)
 - [Cloud Billing budgets and alerts](https://cloud.google.com/billing/docs/how-to/budgets)
 - [Streamlit Community Cloud Secrets](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/secrets-management)

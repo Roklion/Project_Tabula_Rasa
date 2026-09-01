@@ -1,6 +1,6 @@
 # Terms of Use
 
-**Effective Date:** August 31, 2026
+**Effective Date:** September 1, 2026
 
 These Terms of Use govern access to and use of this bookkeeping and business-record application (the “Application”), operated by **Heathcote Advisory LLC** (“Heathcote,” “we,” “us,” or “our”).
 
@@ -25,6 +25,15 @@ Certain address-search, location, distance, routing, mileage, or related feature
 By using Google Maps features within the Application, users acknowledge that their use of those features is also subject to the [Google Maps/Google Earth Additional Terms of Service](https://maps.google.com/help/terms_maps/) and the [Google Privacy Policy](https://policies.google.com/privacy).
 
 Google Maps Platform results, including addresses, routes, distances, and estimated travel information, may contain errors or may not reflect actual travel conditions. Users are responsible for reviewing such information before relying on it for business, reimbursement, tax, or other purposes.
+
+Google route and distance information is advisory. Google-derived suggestions
+and route results are used transiently to assist the user; the Application does
+not represent that it may permanently retain Google-derived content. A mileage
+value recorded in the ledger is retained as an application or user business
+record after the user reviews and confirms it. Visible location text in a ledger
+record may be retained as part of the Application’s business records, but that
+does not grant the Application a right to retain Google Maps Content beyond
+Google’s applicable terms.
 
 ## 4. User Responsibilities
 

@@ -71,6 +71,6 @@ def test_checked_in_legal_content_includes_google_policy_links() -> None:
         (privacy, "# Privacy Policy"),
     ):
         assert heading in content
-        assert "**Effective Date:** August 31, 2026" in content
+        assert "**Effective Date:** September 1, 2026" in content
         assert "https://maps.google.com/help/terms_maps/" in content
         assert "https://policies.google.com/privacy" in content
