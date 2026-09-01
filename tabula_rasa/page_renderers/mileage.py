@@ -565,19 +565,6 @@ def render_mileage(context: MileageContext) -> None:
             ),
             key="add_mileage_round_trip",
         )
-        if address_changed:
-            if route_ready:
-                st.warning(
-                    "The selected addresses changed, so any mileage left in "
-                    "the boxes may not match the current route. Calculate "
-                    "mileage again to refresh it before saving."
-                )
-            else:
-                st.warning(
-                    "The selected addresses changed, so any mileage left in "
-                    "the boxes may not match the current route. Review or "
-                    "enter mileage manually before saving."
-                )
         if route_state and route_state.get("partial"):
             st.warning(
                 "Outbound mileage is ready. Enter return miles manually or "
@@ -598,6 +585,33 @@ def render_mileage(context: MileageContext) -> None:
                 key="add_mileage_recorded_destination",
                 always_render=bool(context.maps_api_key),
             )
+        recorded_text_changed = bool(
+            route_state
+            and (
+                st.session_state.get(
+                    "add_mileage_recorded_start__manually_edited", False
+                )
+                or st.session_state.get(
+                    "add_mileage_recorded_destination__manually_edited", False
+                )
+            )
+        )
+        if recorded_text_changed:
+            st.session_state[stale_route_key] = True
+            address_changed = True
+        if address_changed:
+            if route_ready:
+                st.warning(
+                    "The selected addresses changed, so any mileage left in "
+                    "the boxes may not match the current route. Calculate "
+                    "mileage again to refresh it before saving."
+                )
+            else:
+                st.warning(
+                    "The selected addresses changed, so any mileage left in "
+                    "the boxes may not match the current route. Review or "
+                    "enter mileage manually before saving."
+                )
 
         # Keep draft widgets in page state so address-component reruns cannot
         # discard unsubmitted edits.
@@ -677,6 +691,13 @@ def render_mileage(context: MileageContext) -> None:
                             ),
                             "return": returned,
                         }
+                        st.session_state.pop(
+                            "add_mileage_recorded_start__manually_edited", None
+                        )
+                        st.session_state.pop(
+                            "add_mileage_recorded_destination__manually_edited",
+                            None,
+                        )
                         st.session_state.pop(stale_route_key, None)
                         st.rerun()
                     except PartialRouteError as error:
@@ -695,6 +716,13 @@ def render_mileage(context: MileageContext) -> None:
                             ),
                             "return": None,
                         }
+                        st.session_state.pop(
+                            "add_mileage_recorded_start__manually_edited", None
+                        )
+                        st.session_state.pop(
+                            "add_mileage_recorded_destination__manually_edited",
+                            None,
+                        )
                         st.session_state.pop(stale_route_key, None)
                         st.rerun()
                     except Exception as error:  # routing clients vary by provider

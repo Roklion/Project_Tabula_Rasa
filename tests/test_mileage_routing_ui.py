@@ -546,6 +546,8 @@ def test_add_mileage_route_invalidation_preserves_business_miles() -> None:
     assert "edit_address_changed = _address_text_changed(" in source
     assert 'stale_route_key = f"{add_route_key}__stale"' in source
     assert "address_changed = bool(st.session_state.get(stale_route_key))" in source
+    assert "recorded_text_changed = bool(" in source
+    assert '"add_mileage_recorded_start__manually_edited"' in source
 
 
 def test_mileage_drafts_are_not_buffered_in_forms() -> None:
