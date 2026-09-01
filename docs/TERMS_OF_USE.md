@@ -1,6 +1,6 @@
 # Terms of Use
 
-**Effective Date:** August 31, 2026
+**Effective Date:** September 1, 2026
 
 These Terms of Use govern access to and use of this bookkeeping and business-record application (the “Application”), operated by **Heathcote Advisory LLC** (“Heathcote,” “we,” “us,” or “our”).
 

@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Effective Date:** August 31, 2026
+**Effective Date:** September 1, 2026
 
 This Privacy Policy describes how **Heathcote Advisory LLC** (“Heathcote,” “we,” “us,” or “our”) handles information in connection with this private bookkeeping and business-record application (the “Application”).
 
@@ -46,9 +46,10 @@ Information is not sold for advertising purposes.
 
 The Application may use Google Maps Platform services, including services used
 for address autocomplete, location identification, routes, and distance
-calculations. Autocomplete predictions, route responses, route polylines, Routes
-`distanceMeters`, and Google-calculated mileage suggestions are used
-transiently. The current pre-implementation behavior may copy a selected
+calculations. Autocomplete predictions, the requested Routes `distanceMeters`
+response, and Google-calculated mileage suggestions are used transiently. The
+Application does not request route polylines. The current pre-implementation
+behavior may copy a selected
 Google-formatted address or display name into the existing visible Mileage
 location field when a user saves a trip. Issue #135’s follow-up implementation
 will make durable location text user-authored or user-confirmed without
