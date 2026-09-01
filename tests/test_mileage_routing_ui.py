@@ -216,3 +216,12 @@ def test_route_disabled_reason_distinguishes_unconfigured_and_invalid_inputs() -
     assert "different" in _route_disabled_reason(
         start, AddressSelection("Office", "office", 2), lambda *_: 1.0
     )
+
+
+def test_route_disabled_reason_explains_missing_browser_autocomplete() -> None:
+    assert "suggestions are unavailable" in _route_disabled_reason(
+        AddressSelection("Office"),
+        AddressSelection("Client"),
+        lambda *_: 1.0,
+        autocomplete_available=False,
+    )
