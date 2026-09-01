@@ -42,12 +42,52 @@ def test_switching_back_to_google_mode_unhides_the_autocomplete_host() -> None:
     assert "manual.hidden = true;\n    host.hidden = false;" in _JS
 
 
+def test_setup_failure_clears_previous_place_selection() -> None:
+    assert (
+        "clearFailedMapsLoad();\n"
+        "      selectedDisplay = '';\n"
+        "      const widget = host.querySelector('gmp-place-autocomplete');\n"
+        "      emit('changed', (widget && widget.value) || '');\n"
+        "      showManual('Google address suggestions are unavailable.');"
+    ) in _JS
+
+
 def test_failed_maps_load_button_retries_google_mode() -> None:
     assert (
         "showManual('Google address suggestions are unavailable.');\n"
         "      manualMode = true;\n"
+        "      providerFailed = true;\n"
         "      setStateValue('manual_mode', true);\n"
+        "      setStateValue('provider_failed', true);\n"
         "      manualButton.onclick = selectGoogleMode;"
+    ) in _JS
+
+
+def test_provider_error_clears_previous_place_selection() -> None:
+    assert (
+        "selectedDisplay = '';\n"
+        "        emit('changed', element.value || '');\n"
+        "        showManual('Google address suggestions are unavailable.');"
+    ) in _JS
+
+
+def test_google_provider_errors_switch_to_manual_mode() -> None:
+    assert "element.addEventListener('gmp-error', () => {" in _JS
+    assert (
+        "manualMode = true;\n"
+        "        providerFailed = true;\n"
+        "        setStateValue('manual_mode', true);\n"
+        "        setStateValue('provider_failed', true);\n"
+        "        showManual('Google address suggestions are unavailable.');"
+    ) in _JS
+
+
+def test_manual_mode_does_not_mark_provider_as_failed() -> None:
+    assert (
+        "manualMode = true;\n"
+        "    providerFailed = false;\n"
+        "    setStateValue('manual_mode', true);\n"
+        "    setStateValue('provider_failed', false);"
     ) in _JS
 
 
@@ -74,6 +114,47 @@ def test_inline_attribution_is_hidden_for_manual_mode() -> None:
         "      }\n"
         "      showAttribution();"
     ) in _JS
+
+
+def test_google_selection_cannot_be_overwritten_by_followup_change_event() -> None:
+    assert "let selectedDisplay = '';" in _JS
+    assert (
+        "if (suppressInput || (selectedDisplay && element.value === selectedDisplay))"
+        in _JS
+    )
+    assert "element.value = display;" in _JS
+    assert "selectedDisplay = display;" in _JS
+    assert "finally {\n          suppressInput = false;\n        }" in _JS
+
+
+def test_provider_fallback_preserves_current_widget_text() -> None:
+    assert (
+        "const widget = host.querySelector('gmp-place-autocomplete');\n"
+        "    manualInput.value = initialValue ||\n"
+        "      (widget && widget.value) || data.value || '';"
+    ) in _JS
+
+
+def test_address_controls_use_streamlit_visual_tokens() -> None:
+    from tabula_rasa.address_autocomplete import _CSS
+
+    assert "var(--st-secondary-background-color)" in _CSS
+    assert "var(--st-widget-border-color" in _CSS
+    assert "#tr-address-host > gmp-place-autocomplete" in _CSS
+    assert ".tr-address button:focus-visible" in _CSS
+    assert ".tr-address button:disabled" in _CSS
+    assert "font-weight: 600;" in _CSS
+
+
+def test_failed_place_details_clear_the_previous_selection() -> None:
+    catch_emission = (
+        "selectedDisplay = '';\\n"
+        "          version += 1;\\n"
+        "          setTriggerValue('changed', {\\n"
+        "            display_text: element.value || '', place_id: '', version: version\\n"
+        "          });"
+    )
+    assert catch_emission in _JS
 
 
 def test_browser_key_fails_closed_when_routes_key_is_reused() -> None:

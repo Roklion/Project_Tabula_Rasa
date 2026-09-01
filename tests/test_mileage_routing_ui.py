@@ -11,6 +11,8 @@ from tabula_rasa.page_renderers.mileage import (
     _calculate_routes,
     _needs_google_maps_attribution,
     _route_state_is_current,
+    _route_disabled_reason,
+    _autocomplete_available,
     _same_selected_place,
     _save_round_trip,
 )
@@ -200,3 +202,63 @@ def test_mileage_drafts_are_not_buffered_in_forms() -> None:
     assert 'with st.form("add_mileage_trip"' not in source
     assert 'with st.form("edit_mileage_trip")' not in source
     assert "st.form_submit_button" not in source
+
+
+def test_manual_fallback_explains_why_calculation_is_disabled() -> None:
+    source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
+
+    assert "Choose a Google suggestion for both endpoints to enable mileage " in source
+    assert "calculation. Manual entries can still be saved" in source
+    assert "disabled=not route_ready" in source
+
+
+def test_route_disabled_reason_reports_missing_autocomplete_before_routing() -> None:
+    assert "suggestions are unavailable" in _route_disabled_reason(
+        AddressSelection("Office"),
+        AddressSelection("Client"),
+        lambda *_: 1.0,
+        autocomplete_available=False,
+    )
+
+
+def test_route_disabled_reason_reports_missing_routing_when_both_are_unavailable() -> None:
+    assert "routing is not configured" in _route_disabled_reason(
+        AddressSelection("Office"),
+        AddressSelection("Client"),
+        None,
+        autocomplete_available=False,
+    )
+
+
+def test_route_disabled_reason_distinguishes_unconfigured_and_invalid_inputs() -> None:
+    start = AddressSelection("Office", "office", 1)
+    destination = AddressSelection("Client", "client", 1)
+    assert "not configured" in _route_disabled_reason(start, destination, None)
+    assert "both endpoints" in _route_disabled_reason(
+        AddressSelection("Office"), destination, lambda *_: 1.0
+    )
+    assert "different" in _route_disabled_reason(
+        start, AddressSelection("Office", "office", 2), lambda *_: 1.0
+    )
+
+
+def test_route_disabled_reason_explains_missing_browser_autocomplete() -> None:
+    assert "suggestions are unavailable" in _route_disabled_reason(
+        AddressSelection("Office"),
+        AddressSelection("Client"),
+        lambda *_: 1.0,
+        autocomplete_available=False,
+    )
+
+
+
+def test_autocomplete_availability_distinguishes_manual_mode_from_failure(monkeypatch) -> None:
+    import streamlit as st
+
+    monkeypatch.setattr(
+        st,
+        "session_state",
+        {"manual": {"manual_mode": True}, "failed": {"provider_failed": True}},
+    )
+    assert _autocomplete_available("manual")
+    assert not _autocomplete_available("failed")

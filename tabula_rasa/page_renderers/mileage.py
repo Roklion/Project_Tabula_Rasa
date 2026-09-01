@@ -72,6 +72,42 @@ def _route_ready(
     )
 
 
+def _route_disabled_reason(
+    start: AddressSelection,
+    destination: AddressSelection,
+    route_mileage: Callable[[str, str], float] | None,
+    autocomplete_available: bool = True,
+) -> str:
+    """Explain why the explicit route action is currently unavailable."""
+    if route_mileage is None:
+        return (
+            "Google Maps routing is not configured. Enter mileage manually "
+            "or configure the Maps secrets."
+        )
+    if not autocomplete_available:
+        return (
+            "Google address suggestions are unavailable. Enter mileage manually "
+            "or configure a browser Maps key."
+        )
+    if not start.place_id or not destination.place_id:
+        return (
+            "Choose a Google suggestion for both endpoints to enable mileage "
+            "calculation. Manual entries can still be saved with entered miles."
+        )
+    if start.place_id == destination.place_id:
+        return "Choose different Google places for the starting location and destination."
+    return "Mileage calculation is unavailable. Enter miles manually or try again."
+
+
+def _autocomplete_available(*keys: str) -> bool:
+    """Return whether no address component has reported provider failure."""
+    for key in keys:
+        state = st.session_state.get(key)
+        if isinstance(state, Mapping) and state.get("provider_failed") is True:
+            return False
+    return True
+
+
 def _route_state_is_current(
     route_state: object, fingerprint: tuple[object, ...]
 ) -> bool:
@@ -350,12 +386,31 @@ def render_mileage(context: MileageContext) -> None:
             )
             notes = st.text_area("Notes (optional)", key="add_mileage_notes")
             route_error = st.empty()
-            calculate_requested = st.button(
-                "Recalculate mileage" if route_state else "Calculate mileage",
-                disabled=not _route_ready(
-                    start, destination_value, context.route_mileage
+            route_ready = _route_ready(
+                start, destination_value, context.route_mileage
+            )
+            route_disabled_reason = _route_disabled_reason(
+                start,
+                destination_value,
+                context.route_mileage,
+                autocomplete_available=(
+                    context.maps_api_key is not None
+                    and _autocomplete_available(
+                        "add_mileage_start", "add_mileage_destination"
+                    )
                 ),
             )
+            calculate_requested = st.button(
+                "Recalculate mileage" if route_state else "Calculate mileage",
+                disabled=not route_ready,
+                help=(
+                    route_disabled_reason
+                    if not route_ready
+                    else None
+                ),
+            )
+            if not route_ready and context.route_mileage is not None:
+                st.caption(route_disabled_reason)
             save_error = st.empty()
             submitted = st.button(
                 "Save mileage trip", type="primary", width="stretch"
