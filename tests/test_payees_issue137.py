@@ -72,6 +72,49 @@ def test_payees_are_normalized_and_transactions_store_references() -> None:
     assert storage.list_transactions()[0]["payee"] == "Acme   Supplies"
 
 
+def test_edit_preserves_unchanged_inactive_transaction_references() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    account = storage.create_account("Checking", "Bank")
+    category = storage.create_category("Office", "Expense")
+    payee = storage.create_payee("Vendor")
+    transaction = storage.create_transaction(
+        txn_date="2026-09-01",
+        kind="Expense",
+        amount=10,
+        account_id=account["id"],
+        category_id=category["id"],
+        payee_id=payee["id"],
+    )
+    storage.edit_account(account["id"], active=False)
+    storage.edit_payee(payee["id"], active=False)
+
+    updated = storage.edit_transaction(transaction["id"], description="Updated")
+
+    assert updated["account_id"] == account["id"]
+    assert updated["payee_id"] == payee["id"]
+    assert updated["description"] == "Updated"
+
+
+def test_list_transactions_rejects_unknown_payee_references() -> None:
+    workbook = FakeWorkbook()
+    storage = GoogleSheetsStorage(workbook, sleeper=lambda _: None)
+    account = storage.create_account("Checking", "Bank")
+    category = storage.create_category("Office", "Expense")
+    storage.create_transaction(
+        txn_date="2026-09-01",
+        kind="Expense",
+        amount=10,
+        account_id=account["id"],
+        category_id=category["id"],
+    )
+    transaction_sheet = workbook.worksheet("Transactions")
+    payee_id_index = transaction_sheet.rows[0].index("payee_id")
+    transaction_sheet.rows[1][payee_id_index] = "missing-payee"
+
+    with pytest.raises(StorageValidationError, match="Payee does not exist"):
+        storage.list_transactions(_force_refresh=True)
+
+
 def test_migration_deduplicates_legacy_payee_text() -> None:
     payees, transactions = migrate_payee_rows(
         [

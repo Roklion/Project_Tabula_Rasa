@@ -74,7 +74,9 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     if payee_sheet is None:
         payee_sheet = workbook.add_worksheet("Payees", rows=1000, cols=4)
         payee_sheet.update([list(WORKSHEET_HEADERS["Payees"])], range_name="A1", raw=True)
-    payee_values = payee_sheet.get_all_values()
+        payee_values = [list(WORKSHEET_HEADERS["Payees"])]
+    else:
+        payee_values = payee_sheet.get_all_values()
     if not payee_values:
         payee_sheet.update(
             [list(WORKSHEET_HEADERS["Payees"])], range_name="A1", raw=True

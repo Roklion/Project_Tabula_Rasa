@@ -1857,6 +1857,7 @@ class GoogleSheetsStorage:
         accounts: Mapping[str, Mapping[str, Any]] | None = None,
         categories: Mapping[str, Mapping[str, str]] | None = None,
         payees: Mapping[str, Mapping[str, str]] | None = None,
+        original_transaction: Mapping[str, Any] | None = None,
     ) -> dict[str, str]:
         if accounts is None and categories is None:
             self._snapshot(["Accounts", "Categories", "Payees"], force_refresh=True)
@@ -1876,7 +1877,12 @@ class GoogleSheetsStorage:
         account_id = _clean_text(data.get("account_id"), "Account", required=True)
         if account_id not in accounts:
             raise StorageValidationError("Source account does not exist")
-        if not _as_bool(accounts[account_id]["active"]):
+        original_account_id = (
+            str(original_transaction.get("account_id", ""))
+            if original_transaction is not None
+            else None
+        )
+        if not _as_bool(accounts[account_id]["active"]) and account_id != original_account_id:
             raise StorageValidationError("Source account is inactive")
 
         to_account_id = _clean_text(data.get("to_account_id"), "Destination account")
@@ -1884,7 +1890,12 @@ class GoogleSheetsStorage:
         if kind == "Transfer":
             if to_account_id not in accounts:
                 raise StorageValidationError("Destination account does not exist")
-            if not _as_bool(accounts[to_account_id]["active"]):
+            original_to_account_id = (
+                str(original_transaction.get("to_account_id", ""))
+                if original_transaction is not None
+                else None
+            )
+            if not _as_bool(accounts[to_account_id]["active"]) and to_account_id != original_to_account_id:
                 raise StorageValidationError("Destination account is inactive")
             if to_account_id == account_id:
                 raise StorageValidationError("Transfer accounts must be different")
@@ -1923,7 +1934,16 @@ class GoogleSheetsStorage:
             payees = self._payee_lookup(force_refresh=True)
         if payee_id and payee_id not in payees:
             raise StorageValidationError("Payee does not exist")
-        if payee_id and not _as_bool(payees[payee_id]["active"], "Payee active"):
+        original_payee_id = (
+            str(original_transaction.get("payee_id", ""))
+            if original_transaction is not None
+            else None
+        )
+        if (
+            payee_id
+            and not _as_bool(payees[payee_id]["active"], "Payee active")
+            and payee_id != original_payee_id
+        ):
             raise StorageValidationError("Payee is inactive")
         return {
             "id": transaction_id or str(uuid4()),
@@ -1974,6 +1994,8 @@ class GoogleSheetsStorage:
             )
             item["category_id"] = _clean_text(item.get("category_id"), "Category")
             item["payee_id"] = _clean_text(item.get("payee_id"), "Payee")
+            if item["payee_id"] and item["payee_id"] not in payees:
+                raise StorageValidationError("Payee does not exist")
             item["payee"] = payees.get(item["payee_id"], {}).get("name", "")
             if start_text and item["txn_date"] < start_text:
                 continue
@@ -2009,6 +2031,7 @@ class GoogleSheetsStorage:
             merged,
             transaction_id=transaction_id,
             created_at=current.values["created_at"],
+            original_transaction=current.values,
         )
         self._replace_row("Transactions", current, updated)
         return updated
