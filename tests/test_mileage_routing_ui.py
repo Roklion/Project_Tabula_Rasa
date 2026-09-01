@@ -206,6 +206,15 @@ def test_manual_fallback_explains_why_calculation_is_disabled() -> None:
     assert "disabled=not route_ready" in source
 
 
+def test_route_disabled_reason_reports_missing_autocomplete_before_routing() -> None:
+    assert "suggestions are unavailable" in _route_disabled_reason(
+        AddressSelection("Office"),
+        AddressSelection("Client"),
+        lambda *_: 1.0,
+        autocomplete_available=False,
+    )
+
+
 def test_route_disabled_reason_distinguishes_unconfigured_and_invalid_inputs() -> None:
     start = AddressSelection("Office", "office", 1)
     destination = AddressSelection("Client", "client", 1)
