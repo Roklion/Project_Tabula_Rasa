@@ -908,6 +908,13 @@ def render_ledger(
                             "Choose active account(s) before saving this copied transaction."
                         )
                     elif (
+                        edited_payee_id == "+ Add new payee"
+                        and not edited_new_payee.strip()
+                    ):
+                        edit_error.error(
+                            "Enter a payee / customer name before saving."
+                        )
+                    elif (
                         selected["kind"] == "Transfer"
                         and edited_account_id == edited_to_account_id
                     ):

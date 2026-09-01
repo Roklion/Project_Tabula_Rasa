@@ -186,6 +186,30 @@ def test_copy_form_can_be_canceled_without_creating_or_mutating_transaction() ->
     )
 
 
+def test_copy_rejects_blank_new_payee_before_the_conditional_input_reruns() -> None:
+    storage, source = _transaction_fixture()
+
+    with authenticated_app(storage) as app:
+        navigate_to(app, "Transactions")
+        by_label(app.segmented_control, "Ledger mode").set_value("Bulk").run()
+        app.session_state["transaction_bulk_selected_ids_test"] = (source["id"],)
+        app.run()
+        by_label(app.button, "Copy transaction").click().run()
+
+        # The first form submit after selecting the add-new sentinel can carry
+        # an empty name; model that payload after the conditional input exists.
+        payee_selector = by_label(app.selectbox, "Edit payee / customer")
+        payee_selector.set_value("+ Add new payee").run()
+        by_label(app.text_input, "Edit payee / customer").set_value("")
+        by_label(app.button, "Save copied transaction").click().run()
+
+        assert len(storage.list_transactions()) == 1
+        assert any(
+            "Enter a payee / customer name before saving." in str(error.value)
+            for error in app.error
+        )
+
+
 def test_copy_uses_selected_existing_payee() -> None:
     storage, source = _transaction_fixture()
     other_payee = storage.create_payee("Other vendor")
