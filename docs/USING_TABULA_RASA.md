@@ -247,7 +247,9 @@ to request the primary driving distance. The one-decimal suggestion is editable
 before save. Changing an endpoint invalidates the old suggestion; choose
 **Recalculate** or enter mileage manually. Autocomplete and calculation remain
 optional, and manual address/mileage entry continues to work when Google is not
-configured or is temporarily unavailable.
+configured or is temporarily unavailable. The recorded Starting location and
+Destination fields remain visible for direct manual entry; the normal Add and
+Edit screens do not require an **Enter address manually** button.
 
 **Round trip** calculates the outbound and reversed return directions
 separately and exposes independently editable mileage values. Saving still

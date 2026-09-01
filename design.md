@@ -603,8 +603,9 @@ Business purpose, Vehicle, and Notes. It provides single-row selection and an
 Edit mileage trip section with all fields, save, and permanent delete.
 
 When app-wide Google Maps configuration is available, Starting location and
-Destination use a narrowly scoped address-autocomplete component with an
-explicit manual-entry path. After two Google suggestions are selected, an
+Destination use a narrowly scoped address-lookup component. The Google lookup
+fields are optional; the editable recorded-text fields are always visible and
+provide the direct manual-entry path. After two Google suggestions are selected, an
 explicit Calculate mileage action requests the primary driving route and shows
 the editable one-decimal Business miles field; for a round trip it also fills
 the editable return-mileage field. The user reviews or edits those provisional
@@ -636,6 +637,9 @@ shows a potential mileage mismatch warning even before recalculation; the user
 can recalculate or review and edit the existing mileage manually before saving.
 The Google lookup controls start empty for an existing row, while the recorded
 text inputs are always visible and initialized from the saved ledger values.
+The normal Add and Edit screens do not show a separate Enter address manually
+button; a provider-failure recovery control may appear only when Google lookup
+itself fails.
 
 #### Acceptance criteria
 

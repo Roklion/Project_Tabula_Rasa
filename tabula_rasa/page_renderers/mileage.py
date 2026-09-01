@@ -518,12 +518,14 @@ def render_mileage(context: MileageContext) -> None:
                 start,
                 label="Starting location",
                 key="add_mileage_recorded_start",
+                always_render=True,
             )
         with recorded_columns[1]:
             recorded_destination = _ledger_location_text(
                 destination_value,
                 label="Destination",
                 key="add_mileage_recorded_destination",
+                always_render=True,
             )
 
         # Keep draft widgets in page state so address-component reruns cannot

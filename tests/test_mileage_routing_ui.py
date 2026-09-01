@@ -318,6 +318,7 @@ def test_add_trip_calculate_button_is_before_recorded_location_fields() -> None:
     assert source.index("calculate_requested = st.button(") < source.index(
         'st.checkbox(\n            "Round trip"'
     )
+    assert source.count("always_render=True") >= 4
 
 
 def test_edit_calculate_button_is_before_delete_controls() -> None:

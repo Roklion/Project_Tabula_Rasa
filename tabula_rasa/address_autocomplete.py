@@ -248,7 +248,7 @@ export default function(component) {
     });
     setStateValue('manual_mode', true);
     setStateValue('failed', false);
-    showManual('Enter an address manually.');
+    showManual('Use the recorded address field below.');
   }
   function selectGoogleMode() {
     manualMode = false;
@@ -320,17 +320,16 @@ export default function(component) {
       manualMode: manualMode,
       apiKeyConfigured: Boolean(data.apiKey)
     });
-    if (manualMode) { showManual('Enter an address manually.'); return; }
-    if (!data.apiKey) { showManual('Enter an address manually.'); return; }
+    if (manualMode) { showManual('Use the recorded address field below.'); return; }
+    if (!data.apiKey) { showManual('Use the recorded address field below.'); return; }
     manual.hidden = true;
     host.hidden = false;
-    manualButton.hidden = false;
-    manualButton.textContent = 'Enter address manually';
+    manualButton.hidden = true;
     status.textContent = 'Loading Google address suggestions…';
     try {
       const placesLibrary = await loadMaps();
       if (manualMode) {
-        showManual('Enter an address manually.');
+        showManual('Use the recorded address field below.');
         return;
       }
       showAttribution();
@@ -390,13 +389,12 @@ export default function(component) {
         } catch (error) {
           // Keep the browser error useful without exposing API details.
           reportFailure('Google place selection', error);
-          status.textContent = 'The address could not be selected. Try again or enter it manually.';
+          status.textContent = 'The address could not be selected. Use the recorded address field below.';
           selectedDisplay = '';
           version += 1;
           setTriggerValue('changed', {
             display_text: element.value || '', place_id: '', version: version
           });
-          manualButton.hidden = false;
         } finally {
           suppressInput = false;
         }
@@ -431,9 +429,10 @@ export default function(component) {
       manualButton.onclick = selectGoogleMode;
     }
   }
-  // Keep manual entry available during script loading as well as after a
-  // provider error; users should never be trapped behind a paid integration.
-  manualButton.hidden = false;
+  // The Mileage page exposes its recorded-text field as the direct manual
+  // entry path. Keep this recovery control hidden during normal operation;
+  // it is shown only after a provider failure so Google can be retried.
+  manualButton.hidden = true;
   manualButton.textContent = 'Enter address manually';
   manualButton.onclick = selectManualMode;
   setup();

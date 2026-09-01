@@ -50,13 +50,14 @@ def test_manual_fallback_persists_without_rerunning_per_keystroke() -> None:
     assert "google.maps.__tabulaRasaMapsLoaded" in _JS
     assert "const {PlaceAutocompleteElement} = placesLibrary || {};" in _JS
     assert "new google.maps.places.PlaceAutocompleteElement" not in _JS
-    assert "if (manualMode) { showManual('Enter an address manually.'); return; }" in _JS
+    assert "if (manualMode) { showManual('Use the recorded address field below.'); return; }" in _JS
     assert "manualInput.onchange = () => emit('manual', manualInput.value.trim());" in _JS
     assert "manualInput.oninput" not in _JS
     assert "element.addEventListener('input'" not in _JS
     assert "setTriggerValue('failed', true)" not in _JS
     assert "window.__tabulaRasaPlacesPromise = null;" in _JS
     assert "if (failedScript) failedScript.remove();" in _JS
+    assert "manualButton.hidden = true;" in _JS
 
 
 def test_switching_back_to_google_mode_unhides_the_autocomplete_host() -> None:
@@ -132,7 +133,7 @@ def test_manual_mode_wins_if_selected_while_maps_loads() -> None:
     assert (
         "const placesLibrary = await loadMaps();\n"
         "      if (manualMode) {\n"
-        "        showManual('Enter an address manually.');\n"
+        "        showManual('Use the recorded address field below.');\n"
         "        return;\n"
         "      }"
     ) in _JS
@@ -151,7 +152,7 @@ def test_inline_attribution_is_hidden_for_manual_mode() -> None:
     assert (
         "const placesLibrary = await loadMaps();\n"
         "      if (manualMode) {\n"
-        "        showManual('Enter an address manually.');\n"
+            "        showManual('Use the recorded address field below.');\n"
         "        return;\n"
         "      }\n"
         "      showAttribution();"
