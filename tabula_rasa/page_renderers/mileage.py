@@ -79,15 +79,15 @@ def _route_disabled_reason(
     autocomplete_available: bool = True,
 ) -> str:
     """Explain why the explicit route action is currently unavailable."""
-    if not autocomplete_available:
-        return (
-            "Google address suggestions are unavailable. Enter mileage manually "
-            "or configure a browser Maps key."
-        )
     if route_mileage is None:
         return (
             "Google Maps routing is not configured. Enter mileage manually "
             "or configure the Maps secrets."
+        )
+    if not autocomplete_available:
+        return (
+            "Google address suggestions are unavailable. Enter mileage manually "
+            "or configure a browser Maps key."
         )
     if not start.place_id or not destination.place_id:
         return (
