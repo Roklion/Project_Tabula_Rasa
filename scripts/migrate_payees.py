@@ -110,7 +110,7 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
                 [item[header] for header in WORKSHEET_HEADERS["Payees"]]
                 for item in new_payees
             ],
-            raw=True,
+            value_input_option="RAW",
         )
     transactions_sheet.update(
         [new_headers]

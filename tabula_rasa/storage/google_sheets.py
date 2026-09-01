@@ -392,9 +392,7 @@ def _parse_backup_zip(
             if format_version >= RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION:
                 required_files.add("receipts.json")
             optional_legacy_payees = format_version < BACKUP_FORMAT_VERSION and "Payees.csv" in names
-            if set(names) not in (required_files, required_files | {"Payees.csv"}) or (
-                optional_legacy_payees and "Payees.csv" not in names
-            ):
+            if set(names) not in (required_files, required_files | {"Payees.csv"}):
                 raise StorageValidationError(
                     "Backup must contain exactly the expected ledger and manifest files"
                 )
@@ -1978,8 +1976,9 @@ class GoogleSheetsStorage:
                 "Choose an existing payee or add a new payee"
             )
         if not payee_id and new_payee_name:
-            payee_id = self.create_payee(new_payee_name)["id"]
-            payees = self._payee_lookup(force_refresh=True)
+            new_payee = self.create_payee(new_payee_name)
+            payee_id = new_payee["id"]
+            payees[payee_id] = new_payee
         if payee_id and payee_id not in payees:
             raise StorageValidationError("Payee does not exist")
         original_payee_id = (
@@ -2683,6 +2682,10 @@ class GoogleSheetsStorage:
         normalized, errors = normalize_rows(
             source_rows, accounts.values(), categories.values()
         )
+        payee_names = {
+            normalize_payee_name(item["name"]): item["name"]
+            for item in self.list_payees()
+        }
         existing = {
             fingerprint(item)
             for item in self.list_transactions()
@@ -2691,6 +2694,9 @@ class GoogleSheetsStorage:
         ready: list[dict[str, str]] = []
         duplicate_rows: list[int] = []
         for item in normalized:
+            payee_key = normalize_payee_name(item.get("payee", ""))
+            if payee_key:
+                item["payee"] = payee_names.get(payee_key, item["payee"])
             row_number = int(item.pop("_source_row"))
             identity = fingerprint(item)
             if identity in existing or identity in seen:

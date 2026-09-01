@@ -159,6 +159,37 @@ def test_migration_preserves_falsy_non_payee_values() -> None:
     ]
 
 
+def test_migration_uses_supported_raw_append_option() -> None:
+    workbook = FakeWorkbook()
+    transaction_sheet = workbook.worksheet("Transactions")
+    payee_index = transaction_sheet.rows[0].index("payee_id")
+    transaction_sheet.rows[0][payee_index] = "payee"
+    transaction_sheet.rows.append(
+        [
+            "txn",
+            "2026-09-01",
+            "Expense",
+            "10.00",
+            "account",
+            "",
+            "category",
+            "Legacy vendor",
+            "",
+            "",
+            "",
+            "now",
+        ]
+    )
+    payee_sheet = workbook.worksheet("Payees")
+    payee_sheet.append_rows = Mock(wraps=payee_sheet.append_rows)
+
+    migrate_workbook(workbook)
+
+    assert payee_sheet.append_rows.call_args.kwargs == {
+        "value_input_option": "RAW"
+    }
+
+
 def test_migration_resumes_after_header_write_failure() -> None:
     workbook = FakeWorkbook()
     transaction_sheet = workbook.worksheet("Transactions")
@@ -325,6 +356,48 @@ def test_quickbooks_import_batches_new_payee_writes() -> None:
         "Vendor 2",
         "Vendor 3",
     }
+
+
+def test_quickbooks_import_reuses_canonical_payee_for_duplicates() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    storage.create_account("Checking", "Bank")
+    storage.create_category("Office", "Expense")
+    storage.create_payee("Acme Inc")
+    rows = [
+        {
+            "Date": "09/01/2026",
+            "Transaction Type": "Expense",
+            "Num": "1",
+            "Name": "Acme  Inc",
+            "Memo/Description": "Office supplies",
+            "Account": "Checking",
+            "Split": "Office",
+            "Amount": "(10.00)",
+        }
+    ]
+
+    assert len(storage.import_quickbooks_transactions(rows)) == 1
+    assert storage.import_quickbooks_transactions(rows) == []
+    assert len(storage.list_transactions()) == 1
+
+
+def test_new_payee_transaction_uses_created_record_without_refresh() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    account = storage.create_account("Checking", "Bank")
+    category = storage.create_category("Office", "Expense")
+    original_lookup = storage._payee_lookup
+    storage._payee_lookup = Mock(wraps=original_lookup)
+
+    storage.create_transaction(
+        txn_date="2026-09-01",
+        kind="Expense",
+        amount=10,
+        account_id=account["id"],
+        category_id=category["id"],
+        new_payee_name="New vendor",
+    )
+
+    assert storage._payee_lookup.call_count == 1
 
 
 def test_csv_import_validates_all_rows_before_creating_payees() -> None:
