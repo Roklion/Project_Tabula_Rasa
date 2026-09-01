@@ -613,7 +613,14 @@ the editable one-decimal Business miles field; for a round trip it also fills
 the editable return-mileage field. The user reviews or edits those provisional
 values before saving. The Calculate mileage action appears directly below the
 address controls. Changing either endpoint clears the corresponding calculated
-state. Calculation errors preserve manual entry. When a Google selection is
+state. Until a ready route has been calculated, show a warning that the current
+mileage cannot yet be compared with a route; this is advisory and does not block
+manual mileage entry. Changing either endpoint clears the corresponding
+calculated state, while changing only the Round trip option preserves existing
+outbound mileage drafts. Enabling Round trip creates a new return-mileage draft
+at 0.0 and warns until the return route is calculated; disabling it removes only
+the return-mileage input and does not warn or change outbound mileage. Calculation
+errors preserve manual entry. When a Google selection is
 used, its final display text pre-fills the editable location text to record;
 later user edits remain respected, and the user reviews the text before saving.
 The component's Google display text is not written to the ledger until the

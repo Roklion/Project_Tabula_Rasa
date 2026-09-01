@@ -243,15 +243,21 @@ distance is required when saving.
 
 When Google Maps is configured, Starting location and Destination offer Google
 address suggestions. Select both suggestions, then choose **Calculate mileage**
-to request the primary driving distance. The one-decimal suggestion is editable
-before save. Changing an endpoint invalidates the old suggestion; choose
-**Recalculate** or enter mileage manually. Autocomplete and calculation remain
-optional, and manual address/mileage entry continues to work when Google is not
-configured or is temporarily unavailable. The recorded Starting location and
-Destination controls are the single direct manual-entry fields when Maps is
-unconfigured, so the page does not show duplicate address inputs. When Maps is
-configured, separate recorded-text fields remain visible; the normal Add and
-Edit screens do not require an **Enter address manually** button.
+to request the primary driving distance. Until that action succeeds, a warning
+indicates that the selected route has no calculated comparison yet; it is
+advisory, and manual mileage entry remains available. The one-decimal suggestion
+is editable before save. Changing an endpoint invalidates the old suggestion;
+choose **Recalculate** or enter mileage manually. Changing only **Round trip**
+preserves the outbound mileage draft; enabling it creates a new return-mileage
+field at 0.0 and warns until the return route is calculated, while disabling it
+removes only that return field without changing outbound mileage. Autocomplete and
+calculation remain optional, and manual address/mileage entry continues to work
+when Google is not configured or is temporarily unavailable. The recorded
+Starting location and Destination controls are the single direct manual-entry
+fields when Maps is unconfigured, so the page does not show duplicate address
+inputs. When Maps is configured, separate recorded-text fields remain visible;
+the normal Add and Edit screens do not require an **Enter address manually**
+button.
 
 **Round trip** calculates the outbound and reversed return directions
 separately and exposes independently editable mileage values. Saving still

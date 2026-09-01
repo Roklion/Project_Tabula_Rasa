@@ -19,6 +19,7 @@ from tabula_rasa.page_renderers.mileage import (
     _edit_route_warning_visible,
     _recorded_address_changed,
     _route_state_is_current,
+    _route_state_has_current_endpoints,
     _route_disabled_reason,
     _autocomplete_available,
     _same_selected_place,
@@ -147,6 +148,20 @@ def test_calculated_route_mileage_populates_editable_widgets(monkeypatch) -> Non
     assert session_state["add_mileage_return_miles"] == 13.1
     assert session_state["add_mileage_miles__calculated"] == 12.4
     assert session_state["add_mileage_return_miles__calculated"] == 13.1
+
+
+def test_round_trip_toggle_is_not_an_endpoint_change() -> None:
+    endpoints = ("Office", "Client", 2, 3)
+
+    assert _route_state_has_current_endpoints(
+        {"fingerprint": (*endpoints, False)}, endpoints
+    )
+    assert _route_state_has_current_endpoints(
+        {"fingerprint": (*endpoints, True)}, endpoints
+    )
+    assert not _route_state_has_current_endpoints(
+        {"fingerprint": ("Other office", "Client", 2, 3, False)}, endpoints
+    )
 
 
 def test_stale_calculated_route_mileage_does_not_overwrite_edits(monkeypatch) -> None:
@@ -418,6 +433,8 @@ def test_add_trip_calculate_button_is_before_recorded_location_fields() -> None:
     assert source.index("calculate_requested = st.button(") < source.index(
         'st.checkbox(\n            "Round trip"'
     )
+    assert "No return-route mileage has been calculated for this round " in source
+    assert "No mileage has been calculated for the selected addresses." in source
     assert source.count("always_render=bool(context.maps_api_key)") >= 4
 
 
