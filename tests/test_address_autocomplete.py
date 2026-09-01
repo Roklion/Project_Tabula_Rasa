@@ -104,7 +104,9 @@ def test_google_provider_errors_switch_to_manual_mode() -> None:
         "        setStateValue('failed', true);\n"
         "        selectedDisplay = '';\n"
         "        emit('changed', element.value || '');\n"
-        "        showManual('Google address suggestions are unavailable.');"
+        "        showManual('Google address suggestions are unavailable.');\n"
+        "        manualButton.hidden = false;\n"
+        "        manualButton.onclick = selectGoogleMode;"
     ) in _JS
 
 

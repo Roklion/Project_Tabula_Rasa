@@ -415,6 +415,7 @@ export default function(component) {
         emit('changed', element.value || '');
         showManual('Google address suggestions are unavailable.');
         manualButton.hidden = false;
+        manualButton.onclick = selectGoogleMode;
       });
       manualButton.onclick = () => {
         if (manual.hidden) selectManualMode();
