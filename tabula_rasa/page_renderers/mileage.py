@@ -650,9 +650,6 @@ def render_mileage(context: MileageContext) -> None:
                     and edit_route_state.get("fingerprint") != edit_fingerprint
                 ):
                     st.session_state.pop(edit_route_key, None)
-                    miles_key = f"edit_mileage_trip_miles_{edit_widget_scope}"
-                    if miles_key in st.session_state:
-                        st.session_state[miles_key] = 0.1
                     edit_route_state = None
                 _render_google_route_suggestions(edit_route_state)
                 edited_start = _ledger_location_text(

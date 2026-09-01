@@ -256,6 +256,7 @@ def test_add_mileage_route_invalidation_preserves_business_miles() -> None:
         '                st.session_state["add_mileage_return_miles"] = 0.0'
         not in source
     )
+    assert '                        st.session_state[miles_key] = 0.1' not in source
     assert "The route changed, so the Google suggestion was cleared." in source
     assert "business mileage" in source
 
