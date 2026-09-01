@@ -77,6 +77,31 @@ def test_payees_are_normalized_and_transactions_store_references() -> None:
     assert storage.list_transactions()[0]["payee"] == "Acme   Supplies"
 
 
+def test_edit_normalizes_unchanged_padded_inactive_payee_reference() -> None:
+    workbook = FakeWorkbook()
+    storage = GoogleSheetsStorage(workbook, sleeper=lambda _: None)
+    account = storage.create_account("Checking", "Bank")
+    category = storage.create_category("Office", "Expense")
+    payee = storage.create_payee("Vendor")
+    transaction = storage.create_transaction(
+        txn_date="2026-09-01",
+        kind="Expense",
+        amount=10,
+        account_id=account["id"],
+        category_id=category["id"],
+        payee_id=payee["id"],
+    )
+    storage.edit_payee(payee["id"], active=False)
+    transaction_sheet = workbook.worksheet("Transactions")
+    payee_index = transaction_sheet.rows[0].index("payee_id")
+    transaction_sheet.rows[1][payee_index] = f"  {payee['id']}  "
+
+    updated = storage.edit_transaction(transaction["id"], description="Updated")
+
+    assert updated["payee_id"] == payee["id"]
+    assert updated["description"] == "Updated"
+
+
 def test_edit_preserves_unchanged_inactive_transaction_references() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     account = storage.create_account("Checking", "Bank")
@@ -286,6 +311,31 @@ def test_migration_rejects_payees_worksheet_missing_created_at() -> None:
 
     with pytest.raises(ValueError, match="missing required headers: created_at"):
         migrate_workbook(workbook)
+
+
+@pytest.mark.parametrize(
+    ("headers", "message"),
+    [
+        (["id", "name", "active", ""], "blank header"),
+        (["id", "name", "active", "active"], "duplicate headers"),
+    ],
+)
+def test_migration_rejects_malformed_payees_headers(
+    headers: list[str], message: str
+) -> None:
+    workbook = FakeWorkbook()
+    payee_sheet = workbook.worksheet("Payees")
+    payee_sheet.rows[0] = headers
+    payee_sheet.rows.append(["existing-id", "Existing vendor", "", ""])
+    original_payees = [list(row) for row in payee_sheet.rows]
+    transaction_sheet = workbook.worksheet("Transactions")
+    original_transactions = [list(row) for row in transaction_sheet.rows]
+
+    with pytest.raises(ValueError, match=message):
+        migrate_workbook(workbook)
+
+    assert payee_sheet.rows == original_payees
+    assert transaction_sheet.rows == original_transactions
 
 
 def test_migration_appends_payees_in_existing_header_order() -> None:

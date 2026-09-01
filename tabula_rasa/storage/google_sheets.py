@@ -2011,7 +2011,7 @@ class GoogleSheetsStorage:
         if payee_id and payee_id not in payees:
             raise StorageValidationError("Payee does not exist")
         original_payee_id = (
-            str(original_transaction.get("payee_id", ""))
+            _clean_text(original_transaction.get("payee_id"), "Payee")
             if original_transaction is not None
             else None
         )
