@@ -249,8 +249,9 @@ advisory, and manual mileage entry remains available. The one-decimal suggestion
 is editable before save. Changing an endpoint invalidates the old suggestion;
 choose **Recalculate** or enter mileage manually. Changing only **Round trip**
 preserves the outbound mileage draft; enabling it creates a new return-mileage
-field at 0.0 and warns until the return route is calculated, while disabling it
-removes only that return field without changing outbound mileage. Autocomplete and
+field initialized from the current outbound value and warns until the return
+route is calculated, while disabling it removes only that return field without
+changing outbound mileage. Autocomplete and
 calculation remain optional, and manual address/mileage entry continues to work
 when Google is not configured or is temporarily unavailable. The recorded
 Starting location and Destination controls are the single direct manual-entry

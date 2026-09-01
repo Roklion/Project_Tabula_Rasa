@@ -618,9 +618,10 @@ mileage cannot yet be compared with a route; this is advisory and does not block
 manual mileage entry. Changing either endpoint clears the corresponding
 calculated state, while changing only the Round trip option preserves existing
 outbound mileage drafts. Enabling Round trip creates a new return-mileage draft
-at 0.0 and warns until the return route is calculated; disabling it removes only
-the return-mileage input and does not warn or change outbound mileage. Calculation
-errors preserve manual entry. When a Google selection is
+initialized from the current outbound mileage draft and warns until the return
+route is calculated; disabling it removes only the return-mileage input and does
+not warn or change outbound mileage. Calculation errors preserve manual entry.
+When a Google selection is
 used, its final display text pre-fills the editable location text to record;
 later user edits remain respected, and the user reviews the text before saving.
 The component's Google display text is not written to the ledger until the
