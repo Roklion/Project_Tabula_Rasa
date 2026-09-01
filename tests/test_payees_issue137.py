@@ -4,6 +4,7 @@ import csv
 import hashlib
 import io
 import json
+import threading
 import zipfile
 from unittest.mock import Mock
 
@@ -498,6 +499,43 @@ def test_quickbooks_import_rejects_inactive_account_before_payee_write() -> None
         storage.import_quickbooks_transactions(rows)
     assert storage.list_payees() == []
     assert storage.list_transactions() == []
+
+
+def test_concurrent_payee_creation_rechecks_inside_shared_lock() -> None:
+    workbook = FakeWorkbook()
+    first = GoogleSheetsStorage(workbook, sleeper=lambda _: None)
+    second = GoogleSheetsStorage(workbook, sleeper=lambda _: None)
+    payee_sheet = workbook.worksheet("Payees")
+    original_append = payee_sheet.append_row
+    append_started = threading.Event()
+    release_append = threading.Event()
+
+    def delayed_append(values: list[str], **kwargs: object) -> None:
+        if not append_started.is_set():
+            append_started.set()
+            assert release_append.wait(timeout=2)
+        original_append(values, **kwargs)
+
+    payee_sheet.append_row = delayed_append  # type: ignore[method-assign]
+    results: list[dict[str, str]] = []
+
+    def create(storage: GoogleSheetsStorage) -> None:
+        results.append(storage.create_payee("Concurrent vendor"))
+
+    first_thread = threading.Thread(target=create, args=(first,))
+    second_thread = threading.Thread(target=create, args=(second,))
+    first_thread.start()
+    assert append_started.wait(timeout=2)
+    second_thread.start()
+    release_append.set()
+    first_thread.join(timeout=2)
+    second_thread.join(timeout=2)
+
+    assert not first_thread.is_alive()
+    assert not second_thread.is_alive()
+    assert len(results) == 2
+    assert results[0]["id"] == results[1]["id"]
+    assert len(workbook.worksheet("Payees").rows) == 2
 
 
 def test_new_payee_transaction_uses_created_record_without_refresh() -> None:

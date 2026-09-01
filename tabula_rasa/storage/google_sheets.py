@@ -101,6 +101,7 @@ WORKSHEET_HEADERS = {
         for header in VERSION_6_WORKSHEET_HEADERS["Transactions"]
     ),
 }
+_PAYEE_WRITE_LOCK = threading.RLock()
 VERSION_3_WORKSHEET_HEADERS = {
     title: (
         tuple(header for header in headers if header != "receipt_references")
@@ -1804,61 +1805,66 @@ class GoogleSheetsStorage:
 
     def create_payee(self, name: str, *, active: bool = True) -> dict[str, str]:
         name = _clean_text(name, "Payee name", required=True)
-        existing = self.list_payees(_force_refresh=True)
-        key = normalize_payee_name(name)
-        match = next((item for item in existing if normalize_payee_name(item["name"]) == key), None)
-        if match is not None:
-            if active and match["active"] != "TRUE":
-                return self.edit_payee(match["id"], active=True)
-            return match
-        record = {
-            "id": str(uuid4()),
-            "name": name,
-            "active": "TRUE" if active else "FALSE",
-            "created_at": _utc_now(),
-        }
-        self._append("Payees", record)
-        return record
+        with _PAYEE_WRITE_LOCK:
+            existing = self.list_payees(_force_refresh=True)
+            key = normalize_payee_name(name)
+            match = next(
+                (item for item in existing if normalize_payee_name(item["name"]) == key),
+                None,
+            )
+            if match is not None:
+                if active and match["active"] != "TRUE":
+                    return self.edit_payee(match["id"], active=True)
+                return match
+            record = {
+                "id": str(uuid4()),
+                "name": name,
+                "active": "TRUE" if active else "FALSE",
+                "created_at": _utc_now(),
+            }
+            self._append("Payees", record)
+            return record
 
     def _ensure_payee_names(
         self, names: Iterable[Any]
     ) -> dict[str, dict[str, str]]:
-        payees = self.list_payees(_force_refresh=True)
-        by_key = {normalize_payee_name(item["name"]): item for item in payees}
-        rows_by_id = {
-            _clean_text(row.values.get("id"), "Payee ID", required=True): row
-            for row in self._rows("Payees")
-        }
-        additions: list[dict[str, str]] = []
-        activations: list[dict[str, str]] = []
-        for value in names:
-            name = _clean_text(value, "New payee")
-            if not name:
-                continue
-            key = normalize_payee_name(name)
-            match = by_key.get(key)
-            if match is None:
-                match = {
-                    "id": str(uuid4()),
-                    "name": name,
-                    "active": "TRUE",
-                    "created_at": _utc_now(),
-                }
-                additions.append(match)
-                by_key[key] = match
-            elif match["active"] != "TRUE":
-                match = dict(match)
-                match["active"] = "TRUE"
-                activations.append(match)
-                by_key[key] = match
-        if activations:
-            self._replace_rows(
-                "Payees",
-                [(rows_by_id[item["id"]], item) for item in activations],
-            )
-        if additions:
-            self._append_many("Payees", additions)
-        return {item["id"]: item for item in by_key.values()}
+        with _PAYEE_WRITE_LOCK:
+            payees = self.list_payees(_force_refresh=True)
+            by_key = {normalize_payee_name(item["name"]): item for item in payees}
+            rows_by_id = {
+                _clean_text(row.values.get("id"), "Payee ID", required=True): row
+                for row in self._rows("Payees")
+            }
+            additions: list[dict[str, str]] = []
+            activations: list[dict[str, str]] = []
+            for value in names:
+                name = _clean_text(value, "New payee")
+                if not name:
+                    continue
+                key = normalize_payee_name(name)
+                match = by_key.get(key)
+                if match is None:
+                    match = {
+                        "id": str(uuid4()),
+                        "name": name,
+                        "active": "TRUE",
+                        "created_at": _utc_now(),
+                    }
+                    additions.append(match)
+                    by_key[key] = match
+                elif match["active"] != "TRUE":
+                    match = dict(match)
+                    match["active"] = "TRUE"
+                    activations.append(match)
+                    by_key[key] = match
+            if activations:
+                self._replace_rows(
+                    "Payees",
+                    [(rows_by_id[item["id"]], item) for item in activations],
+                )
+            if additions:
+                self._append_many("Payees", additions)
+            return {item["id"]: item for item in by_key.values()}
 
     def edit_payee(self, payee_id: str, **changes: Any) -> dict[str, str]:
         current = self._find_row("Payees", payee_id)
