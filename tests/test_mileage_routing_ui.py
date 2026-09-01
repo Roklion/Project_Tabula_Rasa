@@ -201,6 +201,13 @@ def test_edit_route_warning_clears_after_successful_recalculation() -> None:
         fingerprint,
     ) is False
     assert _edit_route_warning_visible(
+        False,
+        False,
+        {"fingerprint": fingerprint, "outbound": 12.4},
+        fingerprint,
+        recorded_address_changed=True,
+    ) is True
+    assert _edit_route_warning_visible(
         True,
         False,
         None,

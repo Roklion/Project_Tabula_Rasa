@@ -207,10 +207,17 @@ def _edit_route_warning_visible(
     route_changed: bool,
     route_state: object,
     fingerprint: tuple[object, ...],
+    *,
+    recorded_address_changed: bool = False,
 ) -> bool:
     """Show an edit warning until a route is recalculated for new addresses."""
-    return route_changed or (
-        address_changed and not _route_state_is_current(route_state, fingerprint)
+    return (
+        route_changed
+        or recorded_address_changed
+        or (
+            address_changed
+            and not _route_state_is_current(route_state, fingerprint)
+        )
     )
 
 
@@ -830,12 +837,6 @@ def render_mileage(context: MileageContext) -> None:
                     st.session_state.pop(edit_route_key, None)
                     edit_route_state = None
                     edit_route_changed = True
-                edit_address_changed = _address_text_changed(
-                    edit_start,
-                    edit_destination,
-                    selected.get("start_location", ""),
-                    selected.get("destination", ""),
-                )
                 edit_pending_mileage_key = f"{edit_route_key}__pending_miles"
                 _apply_pending_route_mileage(
                     st.session_state.pop(edit_pending_mileage_key, None),
@@ -856,6 +857,18 @@ def render_mileage(context: MileageContext) -> None:
                     key=f"edit_mileage_trip_recorded_destination_{edit_widget_scope}",
                     existing_value=selected.get("destination", ""),
                     always_render=bool(context.maps_api_key),
+                )
+                edit_address_changed = _address_text_changed(
+                    edit_start,
+                    edit_destination,
+                    selected.get("start_location", ""),
+                    selected.get("destination", ""),
+                )
+                edit_recorded_address_changed = (
+                    edited_start.strip()
+                    != str(selected.get("start_location", "")).strip()
+                    or edited_destination.strip()
+                    != str(selected.get("destination", "")).strip()
                 )
                 calculate_edit_requested = st.button(
                     "Recalculate mileage"
@@ -881,6 +894,7 @@ def render_mileage(context: MileageContext) -> None:
                     edit_route_changed,
                     edit_route_state,
                     edit_fingerprint,
+                    recorded_address_changed=edit_recorded_address_changed,
                 ):
                     st.warning(
                         "The address changed, so the existing mileage may not "
