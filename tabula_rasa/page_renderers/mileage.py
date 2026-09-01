@@ -460,8 +460,13 @@ def render_mileage(context: MileageContext) -> None:
             "add_mileage_recorded_destination",
             "add_mileage_recorded_start__autocomplete_version",
             "add_mileage_recorded_destination__autocomplete_version",
+            "add_mileage_recorded_start__autofill_value",
+            "add_mileage_recorded_destination__autofill_value",
+            "add_mileage_recorded_start__manually_edited",
+            "add_mileage_recorded_destination__manually_edited",
             _route_key(context, "add"),
             f"{_route_key(context, 'add')}__pending_miles",
+            f"{_route_key(context, 'add')}__stale",
             "add_mileage_miles__calculated",
             "add_mileage_return_miles__calculated",
         )
@@ -509,7 +514,8 @@ def render_mileage(context: MileageContext) -> None:
             miles_key="add_mileage_miles",
             return_miles_key="add_mileage_return_miles",
         )
-        address_changed = False
+        stale_route_key = f"{add_route_key}__stale"
+        address_changed = bool(st.session_state.get(stale_route_key))
         if route_state and route_state.get("fingerprint") != fingerprint:
             # A changed address invalidates a previously calculated route.
             _clear_unchanged_calculated_mileage(
@@ -519,6 +525,7 @@ def render_mileage(context: MileageContext) -> None:
             )
             st.session_state.pop(add_route_key, None)
             route_state = None
+            st.session_state[stale_route_key] = True
             address_changed = True
         route_error = st.empty()
         route_ready = _route_ready(
@@ -663,6 +670,7 @@ def render_mileage(context: MileageContext) -> None:
                             ),
                             "return": returned,
                         }
+                        st.session_state.pop(stale_route_key, None)
                         st.rerun()
                     except PartialRouteError as error:
                         st.session_state[add_route_key] = {
@@ -680,6 +688,7 @@ def render_mileage(context: MileageContext) -> None:
                             ),
                             "return": None,
                         }
+                        st.session_state.pop(stale_route_key, None)
                         st.rerun()
                     except Exception as error:  # routing clients vary by provider
                         route_error.error(_safe_route_error(error))
