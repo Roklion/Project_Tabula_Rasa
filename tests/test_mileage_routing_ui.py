@@ -457,6 +457,7 @@ def test_add_trip_calculate_button_is_before_recorded_location_fields() -> None:
     )
     assert "No return-route mileage has been calculated for this round " in source
     assert "No mileage has been calculated for the selected addresses." in source
+    assert "if context.maps_api_key and _edit_route_warning_visible(" in source
     assert source.count("always_render=bool(context.maps_api_key)") >= 4
 
 

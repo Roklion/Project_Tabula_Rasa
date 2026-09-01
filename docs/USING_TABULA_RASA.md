@@ -269,10 +269,12 @@ edited or deleted independently later. Recalculating a saved row changes only
 that selected row. The log's From and To filters control its metrics, table,
 and CSV together.
 
-When editing a saved trip, the calculation button appears directly below the
-address controls. Changing an address displays a potential mileage mismatch
-warning immediately, even before recalculation. Recalculate the route, or
-review and edit the existing mileage manually, before saving.
+When editing a saved trip with Maps configured, the calculation button appears
+directly below the address controls. Changing an address displays a potential
+mileage mismatch warning immediately, even before recalculation. Recalculate the
+route, or review and edit the existing mileage manually, before saving. In
+manual-only mode, changing recorded text does not display a route-recalculation
+warning because no Google route is available.
 When an existing trip is opened, its saved addresses appear in the recorded
 fields. With Maps configured, those fields are separate from empty Google lookup
 controls; without Maps, the single manual controls are initialized from the

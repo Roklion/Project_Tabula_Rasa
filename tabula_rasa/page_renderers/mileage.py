@@ -561,9 +561,8 @@ def render_mileage(context: MileageContext) -> None:
                     miles_key="add_mileage_miles",
                     return_miles_key="add_mileage_return_miles",
                 )
-            st.session_state.pop(add_route_key, None)
-            route_state = None
-            if endpoints_changed:
+                st.session_state.pop(add_route_key, None)
+                route_state = None
                 st.session_state[stale_route_key] = True
                 address_changed = True
             else:
@@ -1040,7 +1039,7 @@ def render_mileage(context: MileageContext) -> None:
                     edit_fingerprint,
                 ):
                     render_google_maps_attribution()
-                if _edit_route_warning_visible(
+                if context.maps_api_key and _edit_route_warning_visible(
                     edit_address_changed,
                     edit_route_changed,
                     edit_route_state,
