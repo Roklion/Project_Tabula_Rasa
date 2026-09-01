@@ -10,6 +10,7 @@ from tabula_rasa.page_renderers.mileage import (
     PartialRouteError,
     _calculate_routes,
     _ledger_location_text,
+    _recorded_location_is_confirmed,
     _needs_google_maps_attribution,
     _render_google_route_suggestions,
     _route_state_is_current,
@@ -141,6 +142,7 @@ def test_google_location_text_prefills_the_ledger_input(monkeypatch) -> None:
         lambda label, *, value, key, help: inputs.append((label, value, key))
         or value,
     )
+    monkeypatch.setattr(st, "checkbox", lambda *args, **kwargs: False)
 
     google_text = _ledger_location_text(
         AddressSelection("Provider display text", "place-123", 4),
@@ -173,6 +175,7 @@ def test_google_location_text_refreshes_for_a_new_selection_but_preserves_edits(
         lambda label, *, value, key, help: inputs.append(value) or value,
     )
     monkeypatch.setattr(st, "caption", lambda message: None)
+    monkeypatch.setattr(st, "checkbox", lambda *args, **kwargs: False)
 
     _ledger_location_text(
         AddressSelection("First result", "place-1", 1),
@@ -192,6 +195,32 @@ def test_google_location_text_refreshes_for_a_new_selection_but_preserves_edits(
     )
 
     assert inputs == ["First result", "User-confirmed text", "Second result"]
+
+
+def test_recorded_google_text_requires_confirmation_unless_edited(monkeypatch) -> None:
+    import streamlit as st
+
+    monkeypatch.setattr(st, "caption", lambda message: None)
+    monkeypatch.setattr(st, "text_input", lambda label, *, value, key, help: value)
+    monkeypatch.setattr(st, "checkbox", lambda *args, **kwargs: False)
+
+    selection = AddressSelection("Provider display text", "place-123", 4)
+    _ledger_location_text(
+        selection,
+        label="Starting location",
+        key="ledger-start",
+    )
+
+    assert not _recorded_location_is_confirmed(
+        selection, key="ledger-start", text="Provider display text"
+    )
+    assert _recorded_location_is_confirmed(
+        selection, key="ledger-start", text="User-confirmed text"
+    )
+    st.session_state["ledger-start__confirmed"] = True
+    assert _recorded_location_is_confirmed(
+        selection, key="ledger-start", text="Provider display text"
+    )
 
 
 def test_add_trip_calculate_button_is_before_recorded_location_fields() -> None:

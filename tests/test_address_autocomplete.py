@@ -43,6 +43,9 @@ def test_manual_fallback_persists_without_rerunning_per_keystroke() -> None:
     assert "reportFailure('Google place selection', error);" in _JS
     assert "maps.importLibrary('places')" in _JS
     assert "maps.importLibrary = (library, ...args) =>" in _JS
+    assert "maps.__tabulaRasaBootstrapLoader = true;" in _JS
+    assert "delete maps.importLibrary;" in _JS
+    assert "delete maps.__tabulaRasaBootstrapLoader;" in _JS
     assert "google.maps.__tabulaRasaMapsLoaded" in _JS
     assert "const {PlaceAutocompleteElement} = placesLibrary || {};" in _JS
     assert "new google.maps.places.PlaceAutocompleteElement" not in _JS

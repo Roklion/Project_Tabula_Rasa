@@ -151,14 +151,33 @@ def _ledger_location_text(
         "you want to record in the ledger."
     )
     version_key = f"{key}__autocomplete_version"
+    confirmation_key = f"{key}__confirmed"
     if st.session_state.get(version_key) != selection.version:
         st.session_state[key] = selection.display_text
         st.session_state[version_key] = selection.version
-    return st.text_input(
+        st.session_state[confirmation_key] = False
+    text = st.text_input(
         f"{label} (recorded text)",
         value=st.session_state.get(key, existing_value or selection.display_text),
         key=key,
         help="This user-authored or user-confirmed text is saved to the Mileage ledger.",
+    )
+    st.checkbox(
+        f"Confirm {label.lower()} text",
+        key=confirmation_key,
+        help="Confirm that this text is the location text to save in the ledger.",
+    )
+    return text
+
+
+def _recorded_location_is_confirmed(
+    selection: AddressSelection, *, key: str, text: str
+) -> bool:
+    """Require explicit confirmation before saving unchanged Google text."""
+    return bool(
+        not selection.place_id
+        or st.session_state.get(f"{key}__confirmed") is True
+        or text != selection.display_text
     )
 
 
@@ -323,6 +342,8 @@ def render_mileage(context: MileageContext) -> None:
             "add_mileage_recorded_destination",
             "add_mileage_recorded_start__autocomplete_version",
             "add_mileage_recorded_destination__autocomplete_version",
+            "add_mileage_recorded_start__confirmed",
+            "add_mileage_recorded_destination__confirmed",
             _route_key(context, "add"),
         )
         context.reset_widget_state_if_requested(
@@ -503,9 +524,23 @@ def render_mileage(context: MileageContext) -> None:
                     save_error.error(
                         "Enter the starting location text to record in the ledger."
                     )
+                elif start.place_id and not _recorded_location_is_confirmed(
+                    start, key="add_mileage_recorded_start", text=recorded_start
+                ):
+                    save_error.error(
+                        "Confirm the starting location text before saving the trip."
+                    )
                 elif destination_value.place_id and not recorded_destination.strip():
                     save_error.error(
                         "Enter the destination text to record in the ledger."
+                    )
+                elif destination_value.place_id and not _recorded_location_is_confirmed(
+                    destination_value,
+                    key="add_mileage_recorded_destination",
+                    text=recorded_destination,
+                ):
+                    save_error.error(
+                        "Confirm the destination text before saving the trip."
                     )
                 else:
                     payload = {
@@ -767,6 +802,22 @@ def render_mileage(context: MileageContext) -> None:
                         if _same_selected_place(edit_start, edit_destination):
                             edit_error.error(
                                 "Starting location and destination must be different."
+                            )
+                        elif edit_start.place_id and not _recorded_location_is_confirmed(
+                            edit_start,
+                            key=f"edit_mileage_trip_recorded_start_{edit_widget_scope}",
+                            text=edited_start,
+                        ):
+                            edit_error.error(
+                                "Confirm the starting location text before saving changes."
+                            )
+                        elif edit_destination.place_id and not _recorded_location_is_confirmed(
+                            edit_destination,
+                            key=f"edit_mileage_trip_recorded_destination_{edit_widget_scope}",
+                            text=edited_destination,
+                        ):
+                            edit_error.error(
+                                "Confirm the destination text before saving changes."
                             )
                         else:
                             payload = {

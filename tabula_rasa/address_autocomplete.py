@@ -269,6 +269,7 @@ export default function(component) {
     if (!maps.importLibrary) {
       const libraries = new Set();
       let bootstrapPromise;
+      maps.__tabulaRasaBootstrapLoader = true;
       const loadBootstrap = () => {
         if (bootstrapPromise) return bootstrapPromise;
         bootstrapPromise = new Promise((resolve, reject) => {
@@ -300,11 +301,15 @@ export default function(component) {
     return window.__tabulaRasaPlacesLibraryPromise;
   }
   function clearFailedMapsLoad() {
-    if (window.google && window.google.maps && window.google.maps.importLibrary) {
-      return;
-    }
+    const maps = window.google && window.google.maps;
+    const customLoader = maps && maps.__tabulaRasaBootstrapLoader;
     const failedScript = document.querySelector('script[data-tabula-rasa-places]');
     if (failedScript) failedScript.remove();
+    if (customLoader) {
+      delete maps.importLibrary;
+      delete maps.__tabulaRasaMapsLoaded;
+      delete maps.__tabulaRasaBootstrapLoader;
+    }
     window.__tabulaRasaPlacesPromise = null;
     window.__tabulaRasaPlacesLibraryPromise = null;
   }

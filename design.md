@@ -612,8 +612,9 @@ that will be recorded. The Calculate mileage action appears directly below the
 address controls. Changing either endpoint clears the corresponding calculated
 state. Calculation errors preserve manual entry. When a Google selection is
 used, its final display text pre-fills the editable location text to record;
-later user edits remain respected. The component's Google display text is not
-written to the ledger until the user saves the trip.
+later user edits remain respected, and the user explicitly confirms the text
+before saving. The component's Google display text is not written to the
+ledger until the user confirms and saves the trip.
 When either current endpoint was selected with Google autocomplete or the
 current mileage suggestion was calculated by Google Routes, a Google Maps note
 appears directly below the mileage control. Stored rows do not claim Google
