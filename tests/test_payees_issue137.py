@@ -470,6 +470,36 @@ def test_quickbooks_import_deduplicates_unseen_payee_variants() -> None:
     assert len(storage.list_payees()) == 1
 
 
+def test_quickbooks_import_rejects_inactive_account_before_payee_write() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    account = storage.create_account("Checking", "Bank")
+    storage.create_category("Office", "Expense")
+    storage.edit_account(account["id"], active=False)
+    rows = [
+        {
+            "Date": "09/01/2026",
+            "Transaction Type": "Expense",
+            "Num": "1",
+            "Name": "Vendor",
+            "Memo/Description": "Office supplies",
+            "Account": "Checking",
+            "Split": "Office",
+            "Amount": "(10.00)",
+        }
+    ]
+
+    preview = storage.preview_quickbooks_transactions(rows)
+
+    assert preview["rows"] == []
+    assert preview["errors"] == [
+        "QuickBooks row 2: source account 'Checking' is inactive"
+    ]
+    with pytest.raises(StorageValidationError, match="source account.*inactive"):
+        storage.import_quickbooks_transactions(rows)
+    assert storage.list_payees() == []
+    assert storage.list_transactions() == []
+
+
 def test_new_payee_transaction_uses_created_record_without_refresh() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     account = storage.create_account("Checking", "Bank")

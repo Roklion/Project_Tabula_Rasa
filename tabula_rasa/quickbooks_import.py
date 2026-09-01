@@ -297,11 +297,17 @@ def normalize_rows(
             account = account_map.get(_name_key(source_name))
             if account is None:
                 raise ValueError(f"Account '{source_name}' does not exist")
+            if _text(account.get("active")).casefold() != "true":
+                raise ValueError(f"source account '{source_name}' is inactive")
             amount = _amount(source.get("Amount"))
             split_account = account_map.get(_name_key(split_name))
             if txn_type.casefold() in TRANSFER_TYPES:
                 if split_account is None:
                     raise ValueError(f"destination account '{split_name}' does not exist")
+                if _text(split_account.get("active")).casefold() != "true":
+                    raise ValueError(
+                        f"destination account '{split_name}' is inactive"
+                    )
                 if split_account["id"] == account["id"]:
                     raise ValueError("transfer accounts must be different")
                 kind = "Transfer"
@@ -309,6 +315,10 @@ def normalize_rows(
                 category_id = ""
                 to_account_id = split_account["id"]
             elif split_account is not None:
+                if _text(split_account.get("active")).casefold() != "true":
+                    raise ValueError(
+                        f"destination account '{split_name}' is inactive"
+                    )
                 if split_account["id"] == account["id"]:
                     raise ValueError("transfer accounts must be different")
                 kind = "Transfer"
