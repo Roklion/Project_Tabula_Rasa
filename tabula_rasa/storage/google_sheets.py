@@ -2702,6 +2702,8 @@ class GoogleSheetsStorage:
             )
             if preview["errors"]:
                 raise StorageValidationError("\n".join(preview["errors"]))
+        if not preview["rows"]:
+            return []
         accounts = self._account_lookup()
         categories = self._category_lookup()
         payees = self._ensure_payee_names(
