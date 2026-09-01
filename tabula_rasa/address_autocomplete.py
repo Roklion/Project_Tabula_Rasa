@@ -115,7 +115,7 @@ _CSS = """
 .tr-address input {
   width: 100%;
   box-sizing: border-box;
-  background: var(--st-background-color);
+  background: var(--st-secondary-background-color);
   border: 1px solid var(--st-widget-border-color, rgba(49, 51, 63, .2));
   border-radius: .375rem;
   color: var(--st-text-color);
@@ -134,7 +134,7 @@ _CSS = """
   width: 100%;
 }
 #tr-address-host > gmp-place-autocomplete {
-  background: var(--st-background-color);
+  background: var(--st-secondary-background-color);
   border: 0;
   border-radius: .375rem;
   height: 2.5rem;
@@ -149,11 +149,11 @@ _CSS = """
 #tr-address-host > gmp-place-autocomplete::part(input),
 #tr-address-host > gmp-place-autocomplete::part(prediction-list),
 #tr-address-host > gmp-place-autocomplete::part(prediction-item) {
-  background-color: var(--st-background-color);
+  background-color: var(--st-secondary-background-color);
   color: var(--st-text-color);
 }
 #tr-address-host > gmp-place-autocomplete::part(input) {
-  background: var(--st-background-color);
+  background: var(--st-secondary-background-color);
   border: 1px solid var(--st-widget-border-color, rgba(49, 51, 63, .2));
   border-radius: 6px;
   box-shadow: none;
@@ -176,7 +176,7 @@ _CSS = """
   color: var(--st-text-color);
 }
 #tr-address-host > gmp-place-autocomplete::part(prediction-item-selected) {
-  background-color: var(--st-secondary-background-color);
+  background-color: var(--st-background-color);
   color: var(--st-text-color);
 }
 """
@@ -197,7 +197,9 @@ export default function(component) {
   let manualMode = data.manualMode === true;
   let providerFailed = data.providerFailed === true;
   let suppressInput = false;
-  let selectedDisplay = '';
+  // Preserve the selected state when another address component causes a
+  // Streamlit rerun and this component is initialized again.
+  let selectedDisplay = data.placeId ? data.value || '' : '';
 
   function reportFailure(stage, error) {
     const message = error && error.message ? String(error.message) : '';
@@ -348,7 +350,9 @@ export default function(component) {
       element.style.boxSizing = 'border-box';
       element.style.fontFamily = 'inherit';
       host.replaceChildren(element);
-      status.textContent = 'Start typing to choose a Google-verified address.';
+      status.textContent = data.placeId ?
+        'Address selected.' :
+        'Start typing to choose a Google-verified address.';
       // PlaceAutocompleteElement owns the Google session lifecycle. Do not
       // create a parallel token here (that can result in duplicate billing).
       element.addEventListener('change', () => {
@@ -574,6 +578,7 @@ def address_autocomplete(
             "label": label,
             "value": current.display_text,
             "version": current.version,
+            "placeId": current.place_id,
             "regionCode": _region_code(region_code),
             "manualMode": manual_mode,
             "providerFailed": bool(component_state.get("failed", False))
