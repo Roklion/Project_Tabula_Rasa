@@ -249,6 +249,49 @@ def test_migration_rejects_payees_worksheet_missing_required_headers() -> None:
         migrate_workbook(workbook)
 
 
+def test_migration_rejects_payees_worksheet_missing_created_at() -> None:
+    workbook = FakeWorkbook()
+    workbook.worksheet("Payees").rows[0] = ["id", "name", "active"]
+
+    with pytest.raises(ValueError, match="missing required headers: created_at"):
+        migrate_workbook(workbook)
+
+
+def test_migration_appends_payees_in_existing_header_order() -> None:
+    workbook = FakeWorkbook()
+    payee_sheet = workbook.worksheet("Payees")
+    payee_sheet.rows[0] = ["name", "id", "active", "created_at", "notes"]
+    transaction_sheet = workbook.worksheet("Transactions")
+    payee_index = transaction_sheet.rows[0].index("payee_id")
+    transaction_sheet.rows[0][payee_index] = "payee"
+    transaction_sheet.rows.append(
+        [
+            "txn",
+            "2026-09-01",
+            "Expense",
+            "10.00",
+            "account",
+            "",
+            "category",
+            "New vendor",
+            "",
+            "",
+            "",
+            "now",
+        ]
+    )
+
+    migrate_workbook(workbook)
+
+    stored = dict(zip(payee_sheet.rows[0], payee_sheet.rows[1]))
+    assert stored["name"] == "New vendor"
+    assert stored["id"]
+    assert stored["active"] == "TRUE"
+    assert stored["created_at"]
+    assert stored["notes"] == ""
+    assert transaction_sheet.rows[1][payee_index] == stored["id"]
+
+
 def test_migration_accepts_empty_transactions_worksheet() -> None:
     workbook = FakeWorkbook()
     workbook.worksheet("Transactions").rows.clear()

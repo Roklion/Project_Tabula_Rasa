@@ -86,7 +86,7 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
         )
         payee_values = [list(WORKSHEET_HEADERS["Payees"])]
     payee_headers = [str(value).strip() for value in payee_values[0]]
-    required_payee_headers = {"id", "name", "active"}
+    required_payee_headers = set(WORKSHEET_HEADERS["Payees"])
     missing_headers = required_payee_headers - set(payee_headers)
     if missing_headers:
         missing = ", ".join(sorted(missing_headers))
@@ -131,7 +131,7 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     if new_payees:
         payee_sheet.append_rows(
             [
-                [item[header] for header in WORKSHEET_HEADERS["Payees"]]
+                [item.get(header, "") for header in payee_headers]
                 for item in new_payees
             ],
             value_input_option="RAW",
