@@ -114,9 +114,9 @@ Automated tests always mock Google and must never use either live key.
   route request.
 - The autocomplete widget manages its own prediction session. The application
   does not create a second session-token system.
-- The ledger stores the existing visible address and user-confirmed mileage
-  fields. It does not store complete Places or Routes responses, route
-  polylines, or a durable round-trip link.
+- The ledger stores the existing user-authored or user-confirmed location and
+  mileage fields. It does not store autocomplete display content, complete
+  Places or Routes responses, route polylines, or a durable round-trip link.
 - Browser keys are visible to browsers by design and therefore depend on
   website plus API restrictions. Server keys remain in Streamlit Secrets and
   are never sent to the browser.
@@ -147,14 +147,11 @@ unrestricted customer-owned data.
 | User-confirmed business mileage recorded in the ledger | Persist as application/user business-record data |
 | User-authored location text stored in the ledger | Persist as application/user business-record data |
 
-This table is the canonical target policy for the follow-up implementation
-work in issue #135. In the current pre-implementation behavior, selecting a
-Google suggestion can copy its formatted address or display name into the
-existing visible Mileage location field when the user saves a trip. That is an
-implementation gap, not a policy exception: the current saved value must not
-be treated as unrestricted Google Maps Content merely because it is in the
-ledger. The follow-up implementation must make durable location text
-user-authored or user-confirmed without persisting Google-derived content.
+This table is the canonical implementation policy for issue #135. Selecting a
+Google suggestion provides transient routing input only. The Mileage workflow
+shows the selected text for lookup, but does not automatically copy it into a
+durable location field; the user supplies or confirms the text that is recorded
+in the ledger.
 
 No Google response cache should be introduced, and no route polyline should be
 stored. No Google provenance fields should be added to the Mileage worksheet

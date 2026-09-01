@@ -16,6 +16,19 @@ from typing import Any
 import streamlit as st
 
 
+GOOGLE_MAPS_ATTRIBUTION_TEXT = "Google Maps"
+
+
+def render_google_maps_attribution() -> None:
+    """Render the required, legible attribution beside current Maps content."""
+    st.markdown(
+        '<div class="tr-google-maps-attribution" role="note" translate="no" '
+        f'aria-label="{GOOGLE_MAPS_ATTRIBUTION_TEXT} attribution">'
+        f"{GOOGLE_MAPS_ATTRIBUTION_TEXT}</div>",
+        unsafe_allow_html=True,
+    )
+
+
 @dataclass(frozen=True)
 class AddressSelection:
     """The stable value returned by :func:`address_autocomplete`.
@@ -55,7 +68,8 @@ _HTML = """
     Enter address manually
   </button>
   <small id="tr-address-status" role="status" aria-live="polite"></small>
-  <small id="tr-address-attribution" hidden>Google Maps</small>
+  <small id="tr-address-attribution" class="tr-google-maps-attribution"
+    role="note" translate="no" aria-label="Google Maps attribution" hidden>Google Maps</small>
 </div>
 """
 
@@ -69,17 +83,27 @@ _CSS = """
   width: 100%;
 }
 .tr-address label { font-weight: 500; }
-.tr-address small { color: var(--st-text-color); opacity: .75; }
+.tr-address small { color: var(--st-text-color); }
+.tr-google-maps-attribution {
+  color: var(--st-text-color);
+  display: block;
+  font-size: .75rem;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+.tr-google-maps-attribution[hidden] { display: none; }
 .tr-address button {
   align-self: flex-start;
   background: var(--st-secondary-background-color);
   border: 1px solid var(--st-widget-border-color, rgba(49, 51, 63, .2));
-  border-radius: .375rem;
+  border-radius: 6px;
   color: var(--st-text-color);
   cursor: pointer;
   font: inherit;
   font-weight: 600;
-  padding: .25rem .5rem;
+  line-height: 1.25rem;
+  min-height: 36px;
+  padding: .375rem .75rem;
 }
 .tr-address button:hover { border-color: var(--st-primary-color); }
 .tr-address button:focus-visible {
@@ -111,12 +135,49 @@ _CSS = """
 }
 #tr-address-host > gmp-place-autocomplete {
   background: var(--st-background-color);
-  border: 1px solid var(--st-widget-border-color, rgba(49, 51, 63, .2));
+  border: 0;
   border-radius: .375rem;
+  height: 2.5rem;
+  color-scheme: light;
   color: var(--st-text-color);
   display: block;
   font: inherit;
   min-height: 2.5rem;
+  overflow: visible;
+  padding: 0;
+}
+#tr-address-host > gmp-place-autocomplete::part(input),
+#tr-address-host > gmp-place-autocomplete::part(prediction-list),
+#tr-address-host > gmp-place-autocomplete::part(prediction-item) {
+  background-color: var(--st-background-color);
+  color: var(--st-text-color);
+}
+#tr-address-host > gmp-place-autocomplete::part(input) {
+  background: var(--st-background-color);
+  border: 1px solid var(--st-widget-border-color, rgba(49, 51, 63, .2));
+  border-radius: 6px;
+  box-shadow: none;
+  box-sizing: border-box;
+  color: var(--st-text-color);
+  font: inherit;
+  height: 2.5rem;
+  line-height: 1.5rem;
+  min-height: 2.5rem;
+  padding: .5rem .75rem;
+  width: 100%;
+}
+#tr-address-host > gmp-place-autocomplete::part(input):focus {
+  border-color: var(--st-primary-color);
+  box-shadow: 0 0 0 1px var(--st-primary-color);
+  outline: none;
+}
+#tr-address-host > gmp-place-autocomplete::part(prediction-item-main-text),
+#tr-address-host > gmp-place-autocomplete::part(prediction-item-secondary-text) {
+  color: var(--st-text-color);
+}
+#tr-address-host > gmp-place-autocomplete::part(prediction-item-selected) {
+  background-color: var(--st-secondary-background-color);
+  color: var(--st-text-color);
 }
 """
 
@@ -137,6 +198,19 @@ export default function(component) {
   let providerFailed = data.providerFailed === true;
   let suppressInput = false;
   let selectedDisplay = '';
+
+  function reportFailure(stage, error) {
+    const message = error && error.message ? String(error.message) : '';
+    const safeMessage = message.replace(
+      /((?:api[_-]?key|key)=)[^&\\s]+/gi, '$1[redacted]'
+    );
+    console.error('[Tabula Rasa] Address autocomplete failed', {
+      stage: stage,
+      apiKeyConfigured: Boolean(data.apiKey),
+      errorName: error && error.name ? String(error.name) : 'UnknownError',
+      errorMessage: safeMessage.slice(0, 300)
+    });
+  }
 
   function showAttribution() {
     attribution.hidden = false;
@@ -167,48 +241,83 @@ export default function(component) {
   function selectManualMode() {
     manualMode = true;
     providerFailed = false;
+    console.info('[Tabula Rasa] Address autocomplete mode changed', {
+      mode: 'manual'
+    });
     setStateValue('manual_mode', true);
-    setStateValue('provider_failed', false);
+    setStateValue('failed', false);
     showManual('Enter an address manually.');
   }
   function selectGoogleMode() {
     manualMode = false;
     providerFailed = false;
+    console.info('[Tabula Rasa] Address autocomplete mode changed', {
+      mode: 'google',
+      apiKeyConfigured: Boolean(data.apiKey)
+    });
     setStateValue('manual_mode', false);
-    setStateValue('provider_failed', false);
+    setStateValue('failed', false);
     setup();
   }
   function loadMaps() {
-    if (window.google && window.google.maps && window.google.maps.places) {
-      return Promise.resolve();
+    if (window.__tabulaRasaPlacesLibraryPromise) {
+      return window.__tabulaRasaPlacesLibraryPromise;
     }
-    if (window.__tabulaRasaPlacesPromise) return window.__tabulaRasaPlacesPromise;
-    window.__tabulaRasaPlacesPromise = new Promise((resolve, reject) => {
-      const existing = document.querySelector('script[data-tabula-rasa-places]');
-      if (existing) {
-        existing.addEventListener('load', resolve, {once: true});
-        existing.addEventListener('error', reject, {once: true});
-        return;
-      }
-      const script = document.createElement('script');
-      script.src = 'https://maps.googleapis.com/maps/api/js?key=' +
-        encodeURIComponent(data.apiKey) + '&loading=async&libraries=places';
-      script.async = true;
-      script.defer = true;
-      script.dataset.tabulaRasaPlaces = 'true';
-      script.onload = resolve;
-      script.onerror = reject;
-      document.head.appendChild(script);
-    });
-    return window.__tabulaRasaPlacesPromise;
+    if (!window.google) window.google = {};
+    if (!window.google.maps) window.google.maps = {};
+    const maps = window.google.maps;
+    if (!maps.importLibrary) {
+      const libraries = new Set();
+      let bootstrapPromise;
+      maps.__tabulaRasaBootstrapLoader = true;
+      const loadBootstrap = () => {
+        if (bootstrapPromise) return bootstrapPromise;
+        bootstrapPromise = new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          const params = new URLSearchParams();
+          params.set('key', data.apiKey);
+          params.set('v', 'weekly');
+          params.set('loading', 'async');
+          params.set('libraries', [...libraries].join(','));
+          params.set('callback', 'google.maps.__tabulaRasaMapsLoaded');
+          script.src = 'https://maps.googleapis.com/maps/api/js?' + params;
+          script.async = true;
+          script.defer = true;
+          script.dataset.tabulaRasaPlaces = 'true';
+          maps.__tabulaRasaMapsLoaded = resolve;
+          script.onerror = () => reject(
+            new Error('Google Maps JavaScript API could not load')
+          );
+          document.head.appendChild(script);
+        });
+        return bootstrapPromise;
+      };
+      maps.importLibrary = (library, ...args) => {
+        libraries.add(library);
+        return loadBootstrap().then(() => maps.importLibrary(library, ...args));
+      };
+    }
+    window.__tabulaRasaPlacesLibraryPromise = maps.importLibrary('places');
+    return window.__tabulaRasaPlacesLibraryPromise;
   }
   function clearFailedMapsLoad() {
-    if (window.google && window.google.maps && window.google.maps.places) return;
+    const maps = window.google && window.google.maps;
+    const customLoader = maps && maps.__tabulaRasaBootstrapLoader;
     const failedScript = document.querySelector('script[data-tabula-rasa-places]');
     if (failedScript) failedScript.remove();
+    if (customLoader) {
+      delete maps.importLibrary;
+      delete maps.__tabulaRasaMapsLoaded;
+      delete maps.__tabulaRasaBootstrapLoader;
+    }
     window.__tabulaRasaPlacesPromise = null;
+    window.__tabulaRasaPlacesLibraryPromise = null;
   }
   async function setup() {
+    console.info('[Tabula Rasa] Address autocomplete setup', {
+      manualMode: manualMode,
+      apiKeyConfigured: Boolean(data.apiKey)
+    });
     if (manualMode) { showManual('Enter an address manually.'); return; }
     if (!data.apiKey) { showManual('Enter an address manually.'); return; }
     manual.hidden = true;
@@ -217,17 +326,22 @@ export default function(component) {
     manualButton.textContent = 'Enter address manually';
     status.textContent = 'Loading Google address suggestions…';
     try {
-      await loadMaps();
+      const placesLibrary = await loadMaps();
       if (manualMode) {
         showManual('Enter an address manually.');
         return;
       }
       showAttribution();
+      console.info('[Tabula Rasa] Google Maps JavaScript API loaded');
+      const {PlaceAutocompleteElement} = placesLibrary || {};
+      if (typeof PlaceAutocompleteElement !== 'function') {
+        throw new Error('Places library has no autocomplete element');
+      }
       const options = {
         includedPrimaryTypes: ['street_address', 'premise', 'establishment']
       };
       if (data.regionCode) options.includedRegionCodes = [data.regionCode];
-      const element = new google.maps.places.PlaceAutocompleteElement(options);
+      const element = new PlaceAutocompleteElement(options);
       element.setAttribute('aria-label', data.label || 'Address');
       element.value = data.value || '';
       element.style.width = '100%';
@@ -258,13 +372,11 @@ export default function(component) {
           const place = prediction && prediction.toPlace ?
             prediction.toPlace() : null;
           if (!place) throw new Error('No place returned');
-          await place.fetchFields({fields: ['id', 'displayName', 'formattedAddress']});
-          const display = place.formattedAddress ||
-            (place.displayName && place.displayName.text) || element.value || '';
-          // Keep the widget text synchronized with the canonical selection so
-          // its follow-up change event cannot clear the Place ID when the
-          // provider's formatted address differs from the displayed text.
-          element.value = display;
+          // The Place ID is needed only for the current routing request. Do
+          // not fetch or return provider-formatted address content: the
+          // durable ledger text is collected separately by the Mileage UI.
+          await place.fetchFields({fields: ['id']});
+          const display = element.value || '';
           selectedDisplay = display;
           version += 1;
           setTriggerValue('selected', {
@@ -273,6 +385,7 @@ export default function(component) {
           status.textContent = 'Address selected.';
         } catch (error) {
           // Keep the browser error useful without exposing API details.
+          reportFailure('Google place selection', error);
           status.textContent = 'The address could not be selected. Try again or enter it manually.';
           selectedDisplay = '';
           version += 1;
@@ -285,11 +398,12 @@ export default function(component) {
         }
       });
       element.addEventListener('gmp-error', () => {
+        reportFailure('Google Places provider event', null);
         status.textContent = 'Google address suggestions are unavailable.';
         manualMode = true;
         providerFailed = true;
         setStateValue('manual_mode', true);
-        setStateValue('provider_failed', true);
+        setStateValue('failed', true);
         selectedDisplay = '';
         emit('changed', element.value || '');
         showManual('Google address suggestions are unavailable.');
@@ -300,6 +414,7 @@ export default function(component) {
         else selectGoogleMode();
       };
     } catch (error) {
+      reportFailure('Google Maps JavaScript API load or setup', error);
       clearFailedMapsLoad();
       selectedDisplay = '';
       const widget = host.querySelector('gmp-place-autocomplete');
@@ -308,7 +423,7 @@ export default function(component) {
       manualMode = true;
       providerFailed = true;
       setStateValue('manual_mode', true);
-      setStateValue('provider_failed', true);
+      setStateValue('failed', true);
       manualButton.onclick = selectGoogleMode;
     }
   }
@@ -328,6 +443,26 @@ _component = st.components.v2.component(
     css=_CSS,
     js=_JS,
 )
+
+# Components-v2 validates every key in ``default`` against the states declared
+# by the corresponding ``on_<state>_change`` callback. Keep this contract
+# explicit because provider failure and user-selected manual mode are distinct
+# pieces of state.
+_COMPONENT_STATE_NAMES = frozenset(
+    {"selected", "manual", "changed", "failed", "manual_mode"}
+)
+
+
+def _component_default_state(
+    *, manual_mode: bool, failed: bool
+) -> dict[str, bool]:
+    """Return defaults using only declared components-v2 state names."""
+    defaults = {"manual_mode": manual_mode, "failed": failed}
+    undeclared = set(defaults) - _COMPONENT_STATE_NAMES
+    if undeclared:
+        names = ", ".join(sorted(undeclared))
+        raise RuntimeError(f"Undeclared address component state: {names}")
+    return defaults
 
 
 def browser_api_key_from_secrets(
@@ -441,11 +576,11 @@ def address_autocomplete(
             "version": current.version,
             "regionCode": _region_code(region_code),
             "manualMode": manual_mode,
-            "providerFailed": bool(component_state.get("provider_failed", False))
+            "providerFailed": bool(component_state.get("failed", False))
             if isinstance(component_state, Mapping)
             else False,
         },
-        default={"manual_mode": manual_mode, "provider_failed": False},
+        default=_component_default_state(manual_mode=manual_mode, failed=False),
         key=key,
         on_selected_change=lambda: None,
         on_manual_change=lambda: None,

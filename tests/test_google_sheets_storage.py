@@ -1613,6 +1613,28 @@ class TestGoogleSheetsStorage:
         assert records[1]["start_location"] == "Client site"
         assert records[1]["destination"] == "Office"
         assert all("round_trip" not in record for record in records)
+        assert set(records[0]) == {
+            "id",
+            "trip_date",
+            "miles",
+            "vehicle",
+            "start_location",
+            "destination",
+            "business_purpose",
+            "notes",
+            "created_at",
+        }
+        assert not any(
+            field in records[0]
+            for field in (
+                "start_place_id",
+                "destination_place_id",
+                "distance_source",
+                "calculated_miles",
+                "route_calculated_at",
+                "distanceMeters",
+            )
+        )
         listed = self.storage.list_mileage_trips()
         assert {record["id"] for record in listed} == {
             record["id"] for record in records
