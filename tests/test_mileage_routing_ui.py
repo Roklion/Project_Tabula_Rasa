@@ -323,7 +323,7 @@ def test_autocomplete_availability_distinguishes_manual_mode_from_failure(monkey
     monkeypatch.setattr(
         st,
         "session_state",
-        {"manual": {"manual_mode": True}, "failed": {"provider_failed": True}},
+        {"manual": {"manual_mode": True}, "failed": {"failed": True}},
     )
     assert _autocomplete_available("manual")
     assert not _autocomplete_available("failed")

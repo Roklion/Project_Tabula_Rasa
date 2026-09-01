@@ -107,7 +107,7 @@ def _autocomplete_available(*keys: str) -> bool:
     """Return whether no address component has reported provider failure."""
     for key in keys:
         state = st.session_state.get(key)
-        if isinstance(state, Mapping) and state.get("provider_failed") is True:
+        if isinstance(state, Mapping) and state.get("failed") is True:
             return False
     return True
 

@@ -629,8 +629,9 @@ remains available.
 
 Round-trip help remains visible. Create, edit, delete, filtering, totals, and
 export remain available. Autocomplete remains keyboard and narrow-layout
-usable, manual entry is always available, and ordinary reruns do not trigger
-paid route requests. Mileage remains separate from financial transactions.
+usable, its prediction list remains legible in the active app theme, manual
+entry is always available, and ordinary reruns do not trigger paid route
+requests. Mileage remains separate from financial transactions.
 
 ### Accounts
 
