@@ -39,7 +39,10 @@ def migrate_payee_rows(
     }
     migrated: list[dict[str, str]] = []
     for source in transactions:
-        row = {str(key): str(value or "") for key, value in source.items()}
+        row = {
+            str(key): str(value) if value is not None else ""
+            for key, value in source.items()
+        }
         legacy_name = row.pop("payee", "").strip()
         payee_id = row.get("payee_id", "").strip()
         if not payee_id and legacy_name:
@@ -72,6 +75,11 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
         payee_sheet = workbook.add_worksheet("Payees", rows=1000, cols=4)
         payee_sheet.update([list(WORKSHEET_HEADERS["Payees"])], range_name="A1", raw=True)
     payee_values = payee_sheet.get_all_values()
+    if not payee_values:
+        payee_sheet.update(
+            [list(WORKSHEET_HEADERS["Payees"])], range_name="A1", raw=True
+        )
+        payee_values = [list(WORKSHEET_HEADERS["Payees"])]
     payee_headers = [str(value).strip() for value in payee_values[0]]
     existing = [dict(zip(payee_headers, row)) for row in payee_values[1:] if any(str(value).strip() for value in row)]
     rows = [dict(zip(headers, row + [""] * (len(headers) - len(row)))) for row in transaction_values[1:]]
@@ -91,9 +99,12 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
             }
     payees, migrated = migrate_payee_rows(rows, existing)
     new_headers = ["payee_id" if header == "payee" else header for header in headers]
-    transactions_sheet.update([new_headers], range_name="A1", raw=True)
-    for index, row in enumerate(migrated, start=2):
-        transactions_sheet.update([[row.get(header, "") for header in new_headers]], range_name=f"A{index}", raw=True)
+    transactions_sheet.update(
+        [new_headers]
+        + [[row.get(header, "") for header in new_headers] for row in migrated],
+        range_name="A1",
+        raw=True,
+    )
     if len(payees) > len(existing):
         payee_sheet.append_rows([[item[header] for header in WORKSHEET_HEADERS["Payees"]] for item in payees[len(existing):]], raw=True)
     return {"payees": len(payees) - len(existing), "transactions": len(migrated)}

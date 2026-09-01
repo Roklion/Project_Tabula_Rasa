@@ -775,7 +775,7 @@ def render_ledger(
                     key=f"edit_transaction_payee_{edit_widget_scope}",
                 )
                 edited_new_payee = ""
-                if edited_payee_id == "+ Add new payee" or copy_mode:
+                if edited_payee_id == "+ Add new payee":
                     edited_new_payee = st.text_input(
                         "Edit payee / customer",
                         value=selected.get("payee", "") if copy_mode else "",

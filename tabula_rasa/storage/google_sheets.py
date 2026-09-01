@@ -1774,9 +1774,14 @@ class GoogleSheetsStorage:
         current = self._find_row("Payees", payee_id)
         updated = dict(current.values)
         name = _clean_text(changes.get("name", updated["name"]), "Payee name", required=True)
-        existing = self.list_payees(_force_refresh=True)
-        if any(item["id"] != payee_id and normalize_payee_name(item["name"]) == normalize_payee_name(name) for item in existing):
-            raise StorageConflictError("That payee already exists")
+        if "name" in changes and normalize_payee_name(name) != normalize_payee_name(updated["name"]):
+            existing = self.list_payees(_force_refresh=True)
+            if any(
+                item["id"] != payee_id
+                and normalize_payee_name(item["name"]) == normalize_payee_name(name)
+                for item in existing
+            ):
+                raise StorageConflictError("That payee already exists")
         updated.update({"name": name, "active": "TRUE" if _as_bool(changes.get("active", updated["active"]), "Payee active") else "FALSE"})
         self._replace_row("Payees", current, updated)
         return updated
