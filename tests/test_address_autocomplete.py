@@ -65,7 +65,13 @@ def test_failed_maps_load_button_retries_google_mode() -> None:
 
 def test_provider_error_clears_previous_place_selection() -> None:
     assert (
-        "selectedDisplay = '';\n"
+        "element.addEventListener('gmp-error', () => {\n"
+        "        status.textContent = 'Google address suggestions are unavailable.';\n"
+        "        manualMode = true;\n"
+        "        providerFailed = true;\n"
+        "        setStateValue('manual_mode', true);\n"
+        "        setStateValue('provider_failed', true);\n"
+        "        selectedDisplay = '';\n"
         "        emit('changed', element.value || '');\n"
         "        showManual('Google address suggestions are unavailable.');"
     ) in _JS
@@ -74,10 +80,12 @@ def test_provider_error_clears_previous_place_selection() -> None:
 def test_google_provider_errors_switch_to_manual_mode() -> None:
     assert "element.addEventListener('gmp-error', () => {" in _JS
     assert (
-        "manualMode = true;\n"
+        "        manualMode = true;\n"
         "        providerFailed = true;\n"
         "        setStateValue('manual_mode', true);\n"
         "        setStateValue('provider_failed', true);\n"
+        "        selectedDisplay = '';\n"
+        "        emit('changed', element.value || '');\n"
         "        showManual('Google address suggestions are unavailable.');"
     ) in _JS
 
@@ -148,10 +156,10 @@ def test_address_controls_use_streamlit_visual_tokens() -> None:
 
 def test_failed_place_details_clear_the_previous_selection() -> None:
     catch_emission = (
-        "selectedDisplay = '';\\n"
-        "          version += 1;\\n"
-        "          setTriggerValue('changed', {\\n"
-        "            display_text: element.value || '', place_id: '', version: version\\n"
+        "          selectedDisplay = '';\n"
+        "          version += 1;\n"
+        "          setTriggerValue('changed', {\n"
+        "            display_text: element.value || '', place_id: '', version: version\n"
         "          });"
     )
     assert catch_emission in _JS
