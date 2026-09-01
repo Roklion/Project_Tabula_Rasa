@@ -654,7 +654,7 @@ def render_mileage(context: MileageContext) -> None:
             route_state is None
             or (round_trip and route_state.get("return") is None)
         ):
-            if round_trip:
+            if round_trip and route_state is not None:
                 st.warning(
                     "No return-route mileage has been calculated for this round "
                     "trip. Calculate mileage to compare the route, or review the "
