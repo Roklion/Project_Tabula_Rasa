@@ -58,6 +58,8 @@ def test_manual_fallback_persists_without_rerunning_per_keystroke() -> None:
     assert "window.__tabulaRasaPlacesPromise = null;" in _JS
     assert "if (failedScript) failedScript.remove();" in _JS
     assert "manualButton.hidden = true;" in _JS
+    assert "manual.hidden = Boolean(data.apiKey);" in _JS
+    assert "manualInput.onchange = null;" in _JS
 
 
 def test_switching_back_to_google_mode_unhides_the_autocomplete_host() -> None:

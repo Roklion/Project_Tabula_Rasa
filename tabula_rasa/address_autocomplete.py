@@ -230,13 +230,18 @@ export default function(component) {
   function showManual(message, initialValue) {
     hideAttribution();
     host.hidden = true;
-    manual.hidden = false;
+    manual.hidden = Boolean(data.apiKey);
     manualButton.hidden = false;
-    manualButton.textContent = 'Use Google suggestions';
+    manualButton.textContent = data.apiKey ?
+      'Retry Google suggestions' : 'Use Google suggestions';
     status.textContent = message || 'Google suggestions are unavailable.';
     const widget = host.querySelector('gmp-place-autocomplete');
     manualInput.value = initialValue ||
       (widget && widget.value) || data.value || '';
+    if (data.apiKey) {
+      manualInput.onchange = null;
+      return;
+    }
     manualInput.onchange = () => emit('manual', manualInput.value.trim());
     manualInput.focus();
   }
