@@ -129,7 +129,7 @@ def test_route_suggestions_render_as_current_transient_values(monkeypatch) -> No
     ]
 
 
-def test_google_location_text_requires_a_separate_ledger_input(monkeypatch) -> None:
+def test_google_location_text_prefills_the_ledger_input(monkeypatch) -> None:
     import streamlit as st
 
     captions: list[str] = []
@@ -153,10 +153,53 @@ def test_google_location_text_requires_a_separate_ledger_input(monkeypatch) -> N
         key="ledger-start",
     )
 
-    assert google_text == ""
+    assert google_text == "Provider display text"
     assert manual_text == "Typed by user"
-    assert inputs == [("Starting location (recorded text)", "", "ledger-start")]
+    assert inputs == [
+        ("Starting location (recorded text)", "Provider display text", "ledger-start")
+    ]
     assert len(captions) == 1
+
+
+def test_google_location_text_refreshes_for_a_new_selection_but_preserves_edits(
+    monkeypatch,
+) -> None:
+    import streamlit as st
+
+    inputs: list[str] = []
+    monkeypatch.setattr(
+        st,
+        "text_input",
+        lambda label, *, value, key, help: inputs.append(value) or value,
+    )
+    monkeypatch.setattr(st, "caption", lambda message: None)
+
+    _ledger_location_text(
+        AddressSelection("First result", "place-1", 1),
+        label="Starting location",
+        key="ledger-start",
+    )
+    st.session_state["ledger-start"] = "User-confirmed text"
+    _ledger_location_text(
+        AddressSelection("First result", "place-1", 1),
+        label="Starting location",
+        key="ledger-start",
+    )
+    _ledger_location_text(
+        AddressSelection("Second result", "place-2", 2),
+        label="Starting location",
+        key="ledger-start",
+    )
+
+    assert inputs == ["First result", "User-confirmed text", "Second result"]
+
+
+def test_add_trip_calculate_button_is_before_recorded_location_fields() -> None:
+    source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
+
+    assert source.index("calculate_requested = st.button(") < source.index(
+        'recorded_start = _ledger_location_text(\n'
+    )
 
 
 def test_round_trip_preserves_outbound_when_return_lookup_fails() -> None:

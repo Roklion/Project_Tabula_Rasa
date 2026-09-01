@@ -608,10 +608,12 @@ explicit manual-entry path. After two Google suggestions are selected, an
 explicit Calculate mileage action requests the primary driving route and shows
 an editable one-decimal Google distance suggestion separately from the
 Business miles ledger field. The user enters or confirms the business miles
-that will be recorded. Changing either endpoint clears the corresponding
-calculated state. Calculation errors preserve manual entry. When a Google
-selection is used, the user also enters or confirms the location text to
-record; the component's Google display text is not copied automatically.
+that will be recorded. The Calculate mileage action appears directly below the
+address controls. Changing either endpoint clears the corresponding calculated
+state. Calculation errors preserve manual entry. When a Google selection is
+used, its final display text pre-fills the editable location text to record;
+later user edits remain respected. The component's Google display text is not
+written to the ledger until the user saves the trip.
 When either current endpoint was selected with Google autocomplete or the
 current mileage suggestion was calculated by Google Routes, a Google Maps note
 appears directly below the mileage control. Stored rows do not claim Google

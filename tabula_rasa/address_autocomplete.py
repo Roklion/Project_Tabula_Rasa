@@ -135,7 +135,7 @@ _CSS = """
 }
 #tr-address-host > gmp-place-autocomplete {
   background: var(--st-background-color);
-  border: 1px solid var(--st-widget-border-color, rgba(49, 51, 63, .2));
+  border: 0;
   border-radius: .375rem;
   height: 2.5rem;
   color-scheme: light;
@@ -153,12 +153,23 @@ _CSS = """
   color: var(--st-text-color);
 }
 #tr-address-host > gmp-place-autocomplete::part(input) {
+  background: var(--st-background-color);
+  border: 1px solid var(--st-widget-border-color, rgba(49, 51, 63, .2));
+  border-radius: 6px;
+  box-shadow: none;
   box-sizing: border-box;
+  color: var(--st-text-color);
   font: inherit;
   height: 2.5rem;
   line-height: 1.5rem;
   min-height: 2.5rem;
   padding: .5rem .75rem;
+  width: 100%;
+}
+#tr-address-host > gmp-place-autocomplete::part(input):focus {
+  border-color: var(--st-primary-color);
+  box-shadow: 0 0 0 1px var(--st-primary-color);
+  outline: none;
 }
 #tr-address-host > gmp-place-autocomplete::part(prediction-item-main-text),
 #tr-address-host > gmp-place-autocomplete::part(prediction-item-secondary-text) {

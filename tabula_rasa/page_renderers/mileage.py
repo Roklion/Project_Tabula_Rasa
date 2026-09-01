@@ -150,9 +150,13 @@ def _ledger_location_text(
         "Google text is used only for route lookup. Enter the location text "
         "you want to record in the ledger."
     )
+    version_key = f"{key}__autocomplete_version"
+    if st.session_state.get(version_key) != selection.version:
+        st.session_state[key] = selection.display_text
+        st.session_state[version_key] = selection.version
     return st.text_input(
         f"{label} (recorded text)",
-        value=existing_value,
+        value=st.session_state.get(key, existing_value or selection.display_text),
         key=key,
         help="This user-authored or user-confirmed text is saved to the Mileage ledger.",
     )
@@ -317,6 +321,8 @@ def render_mileage(context: MileageContext) -> None:
             "add_mileage_destination__selection",
             "add_mileage_recorded_start",
             "add_mileage_recorded_destination",
+            "add_mileage_recorded_start__autocomplete_version",
+            "add_mileage_recorded_destination__autocomplete_version",
             _route_key(context, "add"),
         )
         context.reset_widget_state_if_requested(
@@ -344,16 +350,9 @@ def render_mileage(context: MileageContext) -> None:
                 api_key=context.maps_api_key,
                 region_code=context.autocomplete_region_code,
             )
-        recorded_start = _ledger_location_text(
-            start,
-            label="Starting location",
-            key="add_mileage_recorded_start",
-        )
-        recorded_destination = _ledger_location_text(
-            destination_value,
-            label="Destination",
-            key="add_mileage_recorded_destination",
-        )
+
+        add_route_key = _route_key(context, "add")
+        route_state = st.session_state.get(add_route_key)
         round_trip = st.checkbox(
             "Round trip",
             help=(
@@ -363,9 +362,6 @@ def render_mileage(context: MileageContext) -> None:
             ),
             key="add_mileage_round_trip",
         )
-
-        add_route_key = _route_key(context, "add")
-        route_state = st.session_state.get(add_route_key)
         fingerprint = (*_selection_fingerprint(start, destination_value), round_trip)
         address_changed = False
         if route_state and route_state.get("fingerprint") != fingerprint:
@@ -385,6 +381,43 @@ def render_mileage(context: MileageContext) -> None:
                 "retry the return route."
             )
         _render_google_route_suggestions(route_state)
+
+        route_error = st.empty()
+        route_ready = _route_ready(
+            start, destination_value, context.route_mileage
+        )
+        route_disabled_reason = _route_disabled_reason(
+            start,
+            destination_value,
+            context.route_mileage,
+            autocomplete_available=(
+                context.maps_api_key is not None
+                and _autocomplete_available(
+                    "add_mileage_start", "add_mileage_destination"
+                )
+            ),
+        )
+        calculate_requested = st.button(
+            "Recalculate mileage" if route_state else "Calculate mileage",
+            disabled=not route_ready,
+            help=route_disabled_reason if not route_ready else None,
+        )
+        if not route_ready and context.route_mileage is not None:
+            st.caption(route_disabled_reason)
+
+        recorded_columns = st.columns(2, gap="small")
+        with recorded_columns[0]:
+            recorded_start = _ledger_location_text(
+                start,
+                label="Starting location",
+                key="add_mileage_recorded_start",
+            )
+        with recorded_columns[1]:
+            recorded_destination = _ledger_location_text(
+                destination_value,
+                label="Destination",
+                key="add_mileage_recorded_destination",
+            )
 
         # Keep draft widgets in page state so address-component reruns cannot
         # discard unsubmitted edits.
@@ -423,32 +456,6 @@ def render_mileage(context: MileageContext) -> None:
                 "Business purpose", key="add_mileage_purpose"
             )
             notes = st.text_area("Notes (optional)", key="add_mileage_notes")
-            route_error = st.empty()
-            route_ready = _route_ready(
-                start, destination_value, context.route_mileage
-            )
-            route_disabled_reason = _route_disabled_reason(
-                start,
-                destination_value,
-                context.route_mileage,
-                autocomplete_available=(
-                    context.maps_api_key is not None
-                    and _autocomplete_available(
-                        "add_mileage_start", "add_mileage_destination"
-                    )
-                ),
-            )
-            calculate_requested = st.button(
-                "Recalculate mileage" if route_state else "Calculate mileage",
-                disabled=not route_ready,
-                help=(
-                    route_disabled_reason
-                    if not route_ready
-                    else None
-                ),
-            )
-            if not route_ready and context.route_mileage is not None:
-                st.caption(route_disabled_reason)
             save_error = st.empty()
             submitted = st.button(
                 "Save mileage trip", type="primary", width="stretch"

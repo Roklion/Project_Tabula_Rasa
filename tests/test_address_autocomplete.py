@@ -217,6 +217,15 @@ def test_google_autocomplete_matches_streamlit_control_dimensions() -> None:
     assert "min-height: 36px;" in _CSS
 
 
+def test_google_autocomplete_input_has_a_complete_theme_border() -> None:
+    from tabula_rasa.address_autocomplete import _CSS
+
+    assert "::part(input)" in _CSS
+    assert "border: 1px solid var(--st-widget-border-color, rgba(49, 51, 63, .2));" in _CSS
+    assert "border-radius: 6px;" in _CSS
+    assert "::part(input):focus" in _CSS
+
+
 def test_failed_place_details_clear_the_previous_selection() -> None:
     catch_emission = (
         "selectedDisplay = '';\n"
