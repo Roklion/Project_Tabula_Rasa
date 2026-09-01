@@ -24,6 +24,7 @@ from tabula_rasa.page_renderers.mileage import (
     _autocomplete_available,
     _same_selected_place,
     _set_widget_default,
+    _acknowledge_recorded_location_text,
     _save_round_trip,
 )
 
@@ -410,9 +411,30 @@ def test_edit_recorded_location_text_is_visible_without_google_selection(
     assert inputs == [
         ("Starting location (recorded text)", "Saved office address")
     ]
+    assert st.session_state["edit-recorded-start__autofill_value"] == (
+        "Saved office address"
+    )
+    assert st.session_state["edit-recorded-start__manually_edited"] is False
     assert captions == [
         "Enter the location text to record in the ledger. Google text is used only for route lookup."
     ]
+
+
+def test_recalculation_rearms_recorded_location_tracking(monkeypatch) -> None:
+    import streamlit as st
+
+    session_state: dict[str, object] = {
+        "recorded-start__autofill_value": "old text",
+        "recorded-start__manually_edited": True,
+    }
+    monkeypatch.setattr(st, "session_state", session_state)
+
+    _acknowledge_recorded_location_text("recorded-start", "new text")
+
+    assert session_state == {
+        "recorded-start__autofill_value": "new text",
+        "recorded-start__manually_edited": False,
+    }
 
 
 def test_recorded_google_text_is_saved_only_by_the_explicit_save_action() -> None:

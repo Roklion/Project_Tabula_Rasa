@@ -179,7 +179,10 @@ def _ledger_location_text(
         st.session_state[manually_edited_key] = False
         st.session_state[version_key] = selection.version
     elif key not in st.session_state:
-        st.session_state[key] = existing_value or selection.display_text
+        initial_text = existing_value or selection.display_text
+        st.session_state[key] = initial_text
+        st.session_state[autofill_key] = initial_text
+        st.session_state[manually_edited_key] = False
     text = st.text_input(
         f"{label} (recorded text)",
         key=key,
@@ -193,6 +196,12 @@ def _ledger_location_text(
         st.session_state.pop(autofill_key, None)
         st.session_state[manually_edited_key] = True
     return text
+
+
+def _acknowledge_recorded_location_text(key: str, text: str) -> None:
+    """Use the current recorded text as the next edit-tracking baseline."""
+    st.session_state[f"{key}__autofill_value"] = text
+    st.session_state[f"{key}__manually_edited"] = False
 
 
 def _edit_address_initial_value(
@@ -745,12 +754,12 @@ def render_mileage(context: MileageContext) -> None:
                             ),
                             "return": returned,
                         }
-                        st.session_state.pop(
-                            "add_mileage_recorded_start__manually_edited", None
+                        _acknowledge_recorded_location_text(
+                            "add_mileage_recorded_start", recorded_start
                         )
-                        st.session_state.pop(
-                            "add_mileage_recorded_destination__manually_edited",
-                            None,
+                        _acknowledge_recorded_location_text(
+                            "add_mileage_recorded_destination",
+                            recorded_destination,
                         )
                         st.session_state.pop(stale_route_key, None)
                         st.rerun()
@@ -770,12 +779,12 @@ def render_mileage(context: MileageContext) -> None:
                             ),
                             "return": None,
                         }
-                        st.session_state.pop(
-                            "add_mileage_recorded_start__manually_edited", None
+                        _acknowledge_recorded_location_text(
+                            "add_mileage_recorded_start", recorded_start
                         )
-                        st.session_state.pop(
-                            "add_mileage_recorded_destination__manually_edited",
-                            None,
+                        _acknowledge_recorded_location_text(
+                            "add_mileage_recorded_destination",
+                            recorded_destination,
                         )
                         st.session_state.pop(stale_route_key, None)
                         st.rerun()
@@ -1122,6 +1131,14 @@ def render_mileage(context: MileageContext) -> None:
                                     "fingerprint": edit_fingerprint,
                                     "outbound": outbound,
                                 }
+                                _acknowledge_recorded_location_text(
+                                    f"edit_mileage_trip_recorded_start_{edit_widget_scope}",
+                                    edited_start,
+                                )
+                                _acknowledge_recorded_location_text(
+                                    f"edit_mileage_trip_recorded_destination_{edit_widget_scope}",
+                                    edited_destination,
+                                )
                                 st.rerun()
                             except Exception as error:
                                 edit_error.error(_safe_route_error(error))
