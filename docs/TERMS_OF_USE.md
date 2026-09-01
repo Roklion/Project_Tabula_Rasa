@@ -30,7 +30,10 @@ Google route and distance information is advisory. Google-derived suggestions
 and route results are used transiently to assist the user; the Application does
 not represent that it may permanently retain Google-derived content. A mileage
 value recorded in the ledger is retained as an application or user business
-record after the user reviews and confirms it.
+record after the user reviews and confirms it. Visible location text in a ledger
+record may be retained as part of the Application’s business records, but that
+does not grant the Application a right to retain Google Maps Content beyond
+Google’s applicable terms.
 
 ## 4. User Responsibilities
 

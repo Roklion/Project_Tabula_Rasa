@@ -18,6 +18,9 @@ Depending on the features used, the Application may process information such as:
 - addresses and locations entered for mileage or routing purposes;
 - transient Google-calculated distances, route suggestions, or mileage suggestions;
 - user-confirmed mileage recorded as a business record;
+- visible location text stored in a mileage business record, which in the current
+  pre-implementation behavior may include a formatted address or display name
+  from a selected Google suggestion;
 - user account or access information; and
 - technical information generated through hosting, security, or application logs.
 
@@ -43,11 +46,14 @@ Information is not sold for advertising purposes.
 
 The Application may use Google Maps Platform services, including services used
 for address autocomplete, location identification, routes, and distance
-calculations. Autocomplete predictions, Google-formatted addresses or display
-names, route responses, route polylines, Routes `distanceMeters`, and
-Google-calculated mileage suggestions are used transiently and are not retained
-by the current Application. The current Application does not persist Google
-Place IDs.
+calculations. Autocomplete predictions, route responses, route polylines, Routes
+`distanceMeters`, and Google-calculated mileage suggestions are used
+transiently. The current pre-implementation behavior may copy a selected
+Google-formatted address or display name into the existing visible Mileage
+location field when a user saves a trip. Issue #135’s follow-up implementation
+will make durable location text user-authored or user-confirmed without
+persisting Google-derived content. The current Application does not persist
+Google Place IDs.
 
 When these features are used, relevant information such as an address, location,
 place identifier supplied during the request, route request, device or network

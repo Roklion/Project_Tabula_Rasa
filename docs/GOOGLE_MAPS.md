@@ -147,6 +147,15 @@ unrestricted customer-owned data.
 | User-confirmed business mileage recorded in the ledger | Persist as application/user business-record data |
 | User-authored location text stored in the ledger | Persist as application/user business-record data |
 
+This table is the canonical target policy for the follow-up implementation
+work in issue #135. In the current pre-implementation behavior, selecting a
+Google suggestion can copy its formatted address or display name into the
+existing visible Mileage location field when the user saves a trip. That is an
+implementation gap, not a policy exception: the current saved value must not
+be treated as unrestricted Google Maps Content merely because it is in the
+ledger. The follow-up implementation must make durable location text
+user-authored or user-confirmed without persisting Google-derived content.
+
 No Google response cache should be introduced, and no route polyline should be
 stored. No Google provenance fields should be added to the Mileage worksheet
 unless a future product requirement justifies them and the applicable policy is
