@@ -48,12 +48,12 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
     assert "var(--tr-negative-hover)" in css
     assert '[data-testid="stAlertContentWarning"]' in css
     for selector in (
-        'div[class^="st-key-delete_category_"][data-testid="stButton"]',
-        'div[class^="st-key-edit_mileage_trip_delete_"][data-testid="stButton"]',
-        '.st-key-transaction_bulk_delete_submit'
-        '[data-testid="stFormSubmitButton"]',
-        'div[class^="st-key-edit_transaction_delete_"]'
-        '[data-testid="stFormSubmitButton"]',
+        '.st-key-destructive_category_delete [data-testid="stButton"]',
+        '.st-key-destructive_mileage_delete [data-testid="stButton"]',
+        '.st-key-destructive_transaction_bulk_delete'
+        ' [data-testid="stFormSubmitButton"]',
+        '.st-key-destructive_transaction_edit_delete'
+        ' [data-testid="stFormSubmitButton"]',
     ):
         assert selector in css
     assert ':has([data-testid="stIconMaterial"])' not in css

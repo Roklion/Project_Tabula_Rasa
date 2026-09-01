@@ -1104,12 +1104,14 @@ def render_mileage(context: MileageContext) -> None:
                         width="stretch",
                         key=f"edit_mileage_trip_save_{edit_widget_scope}",
                     )
-                    delete_requested = delete_column.button(
-                        "Permanently delete mileage trip",
-                        icon=":material/delete_forever:",
-                        width="stretch",
-                        key=f"edit_mileage_trip_delete_{edit_widget_scope}",
-                    )
+                    with delete_column:
+                        with st.container(key="destructive_mileage_delete"):
+                            delete_requested = st.button(
+                                "Permanently delete mileage trip",
+                                icon=":material/delete_forever:",
+                                width="stretch",
+                                key=f"edit_mileage_trip_delete_{edit_widget_scope}",
+                            )
                     if (
                         calculate_edit_requested
                         and context.route_mileage is not None
