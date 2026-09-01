@@ -290,6 +290,8 @@ export default function(component) {
         providerFailed = true;
         setStateValue('manual_mode', true);
         setStateValue('provider_failed', true);
+        selectedDisplay = '';
+        emit('changed', element.value || '');
         showManual('Google address suggestions are unavailable.');
         manualButton.hidden = false;
       });
