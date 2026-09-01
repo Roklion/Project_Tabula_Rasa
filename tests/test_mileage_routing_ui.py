@@ -9,7 +9,9 @@ from tabula_rasa.address_autocomplete import AddressSelection
 from tabula_rasa.page_renderers.mileage import (
     PartialRouteError,
     _calculate_routes,
+    _ledger_location_text,
     _needs_google_maps_attribution,
+    _render_google_route_suggestions,
     _route_state_is_current,
     _route_disabled_reason,
     _autocomplete_available,
@@ -98,6 +100,63 @@ def test_google_maps_attribution_uses_current_session_provenance() -> None:
         fingerprint,
     )
     assert not _route_state_is_current(stale, fingerprint)
+
+
+def test_google_route_suggestion_is_not_copied_into_business_miles() -> None:
+    source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
+
+    assert "Google suggested distance: {float(outbound):.1f} mi" in source
+    assert 'st.session_state["add_mileage_miles"] = suggestion[0]' not in source
+    assert 'st.session_state["add_mileage_return_miles"] = suggestion[1]' not in source
+    assert "distanceMeters" not in source
+    assert "route_calculated_at" not in source
+    assert "distance_source" not in source
+
+
+def test_route_suggestions_render_as_current_transient_values(monkeypatch) -> None:
+    import streamlit as st
+
+    messages: list[str] = []
+    monkeypatch.setattr(st, "info", messages.append)
+
+    _render_google_route_suggestions(
+        {"outbound": 12.4, "return": 13.1, "fingerprint": ("current",)}
+    )
+
+    assert messages == [
+        "Google suggested distance: 12.4 mi",
+        "Google suggested return distance: 13.1 mi",
+    ]
+
+
+def test_google_location_text_requires_a_separate_ledger_input(monkeypatch) -> None:
+    import streamlit as st
+
+    captions: list[str] = []
+    inputs: list[tuple[str, str, str]] = []
+    monkeypatch.setattr(st, "caption", captions.append)
+    monkeypatch.setattr(
+        st,
+        "text_input",
+        lambda label, *, value, key, help: inputs.append((label, value, key))
+        or value,
+    )
+
+    google_text = _ledger_location_text(
+        AddressSelection("Provider display text", "place-123", 4),
+        label="Starting location",
+        key="ledger-start",
+    )
+    manual_text = _ledger_location_text(
+        AddressSelection("Typed by user", version=5),
+        label="Starting location",
+        key="ledger-start",
+    )
+
+    assert google_text == ""
+    assert manual_text == "Typed by user"
+    assert inputs == [("Starting location (recorded text)", "", "ledger-start")]
+    assert len(captions) == 1
 
 
 def test_round_trip_preserves_outbound_when_return_lookup_fails() -> None:

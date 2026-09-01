@@ -78,6 +78,8 @@ def test_google_provider_errors_switch_to_manual_mode() -> None:
         "        providerFailed = true;\n"
         "        setStateValue('manual_mode', true);\n"
         "        setStateValue('provider_failed', true);\n"
+        "        selectedDisplay = '';\n"
+        "        emit('changed', element.value || '');\n"
         "        showManual('Google address suggestions are unavailable.');"
     ) in _JS
 
@@ -102,7 +104,12 @@ def test_manual_mode_wins_if_selected_while_maps_loads() -> None:
 
 
 def test_inline_attribution_is_hidden_for_manual_mode() -> None:
-    assert '<small id="tr-address-attribution" hidden>Google Maps</small>' in _HTML
+    assert (
+        '<small id="tr-address-attribution" class="tr-google-maps-attribution"'
+        in _HTML
+    )
+    assert 'translate="no"' in _HTML
+    assert "Google Maps" in _HTML
     assert "const attribution = parentElement.querySelector('#tr-address-attribution');" in _JS
     assert "function hideAttribution()" in _JS
     assert "hideAttribution();" in _JS
@@ -122,9 +129,15 @@ def test_google_selection_cannot_be_overwritten_by_followup_change_event() -> No
         "if (suppressInput || (selectedDisplay && element.value === selectedDisplay))"
         in _JS
     )
-    assert "element.value = display;" in _JS
     assert "selectedDisplay = display;" in _JS
     assert "finally {\n          suppressInput = false;\n        }" in _JS
+
+
+def test_google_selection_requests_only_transient_place_id() -> None:
+    assert "await place.fetchFields({fields: ['id']});" in _JS
+    assert "formattedAddress" not in _JS
+    assert "displayName" not in _JS
+    assert "durable ledger text is collected separately" in _JS
 
 
 def test_provider_fallback_preserves_current_widget_text() -> None:
@@ -148,13 +161,37 @@ def test_address_controls_use_streamlit_visual_tokens() -> None:
 
 def test_failed_place_details_clear_the_previous_selection() -> None:
     catch_emission = (
-        "selectedDisplay = '';\\n"
-        "          version += 1;\\n"
-        "          setTriggerValue('changed', {\\n"
-        "            display_text: element.value || '', place_id: '', version: version\\n"
+        "selectedDisplay = '';\n"
+        "          version += 1;\n"
+        "          setTriggerValue('changed', {\n"
+        "            display_text: element.value || '', place_id: '', version: version\n"
         "          });"
     )
     assert catch_emission in _JS
+
+
+def test_python_attribution_is_explicit_and_not_translated(monkeypatch) -> None:
+    import streamlit as st
+
+    rendered: list[tuple[str, bool]] = []
+    monkeypatch.setattr(
+        st,
+        "markdown",
+        lambda body, **kwargs: rendered.append(
+            (body, kwargs.get("unsafe_allow_html", False))
+        ),
+    )
+    from tabula_rasa.address_autocomplete import render_google_maps_attribution
+
+    render_google_maps_attribution()
+
+    assert rendered == [
+        (
+            '<div class="tr-google-maps-attribution" role="note" translate="no" '
+            'aria-label="Google Maps attribution">Google Maps</div>',
+            True,
+        )
+    ]
 
 
 def test_browser_key_fails_closed_when_routes_key_is_reused() -> None:
