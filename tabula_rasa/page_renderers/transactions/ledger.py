@@ -614,6 +614,7 @@ def render_ledger(
                     icon=":material/delete_forever:",
                     type="primary",
                     width="stretch",
+                    key="transaction_bulk_delete_submit",
                 )
             if delete_requested:
                 if not confirm_delete:
