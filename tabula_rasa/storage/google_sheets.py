@@ -1847,6 +1847,14 @@ class GoogleSheetsStorage:
             if categories[category_id]["kind"] != kind:
                 raise StorageValidationError("Category kind does not match transaction kind")
 
+        txn_date = _iso_date(data.get("txn_date"))
+        amount = _positive_amount(data.get("amount"))
+        receipt_references = (
+            _encode_receipt_references(data.get("receipt_references", []))
+            if transaction_id is None
+            or data.get("receipt_references", "") != ""
+            else ""
+        )
         payee_id = _clean_text(data.get("payee_id"), "Payee")
         new_payee_name = _clean_text(data.get("new_payee_name"), "New payee")
         legacy_payee = _clean_text(data.get("payee"), "Payee")
@@ -1867,9 +1875,9 @@ class GoogleSheetsStorage:
             raise StorageValidationError("Payee is inactive")
         return {
             "id": transaction_id or str(uuid4()),
-            "txn_date": _iso_date(data.get("txn_date")),
+            "txn_date": txn_date,
             "kind": kind,
-            "amount": _positive_amount(data.get("amount")),
+            "amount": amount,
             "account_id": account_id,
             "to_account_id": to_account_id,
             "category_id": category_id,
@@ -1877,14 +1885,7 @@ class GoogleSheetsStorage:
             "payee": payees.get(payee_id, {}).get("name", ""),
             "description": _clean_text(data.get("description"), "Description"),
             "reference": _clean_text(data.get("reference"), "Reference"),
-            "receipt_references": (
-                _encode_receipt_references(
-                    data.get("receipt_references", [])
-                )
-                if transaction_id is None
-                or data.get("receipt_references", "") != ""
-                else ""
-            ),
+            "receipt_references": receipt_references,
             "created_at": created_at or _utc_now(),
         }
 

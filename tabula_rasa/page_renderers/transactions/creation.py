@@ -174,6 +174,9 @@ def render_add_transaction(
                     "to_account_id": account_map.get(to_account, ""),
                     "category_id": category_id or "",
                     "payee_id": "" if payee_id == "+ Add new payee" else payee_id,
+                    "new_payee_name": (
+                        new_payee_name if payee_id == "+ Add new payee" else ""
+                    ),
                     "description": description,
                     "reference": reference,
                 }
@@ -202,11 +205,6 @@ def render_add_transaction(
                             payload,
                             lambda: context.storage.create_transaction(
                                 **payload,
-                                new_payee_name=(
-                                    new_payee_name
-                                    if payee_id == "+ Add new payee"
-                                    else ""
-                                ),
                             ),
                             lambda _result: st.session_state.get(
                                 "write_success_notice"

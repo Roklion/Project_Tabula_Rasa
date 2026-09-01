@@ -64,14 +64,10 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     transactions_sheet = workbook.worksheet("Transactions")
     transaction_values = transactions_sheet.get_all_values()
     headers = [str(value).strip() for value in transaction_values[0]]
-    if "payee_id" in headers and "payee" not in headers and "Payees" in {
-        sheet.title for sheet in workbook.worksheets()
-    }:
-        return {"payees": len(workbook.worksheet("Payees").get_all_values()) - 1, "transactions": 0}
-    if "payee" not in headers:
+    payee_sheet = next((sheet for sheet in workbook.worksheets() if sheet.title == "Payees"), None)
+    if "payee_id" not in headers and "payee" not in headers:
         raise ValueError("Transactions worksheet has neither payee nor payee_id")
 
-    payee_sheet = next((sheet for sheet in workbook.worksheets() if sheet.title == "Payees"), None)
     if payee_sheet is None:
         payee_sheet = workbook.add_worksheet("Payees", rows=1000, cols=4)
         payee_sheet.update([list(WORKSHEET_HEADERS["Payees"])], range_name="A1", raw=True)
@@ -79,6 +75,20 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     payee_headers = [str(value).strip() for value in payee_values[0]]
     existing = [dict(zip(payee_headers, row)) for row in payee_values[1:] if any(str(value).strip() for value in row)]
     rows = [dict(zip(headers, row + [""] * (len(headers) - len(row)))) for row in transaction_values[1:]]
+    if "payee" not in headers:
+        known_payee_ids = {str(item.get("id", "")).strip() for item in existing}
+        legacy_rows = []
+        for row in rows:
+            value = str(row.get("payee_id", "")).strip()
+            if value and value not in known_payee_ids:
+                legacy_rows.append(row)
+                row["payee"] = value
+                row["payee_id"] = ""
+        if not legacy_rows:
+            return {
+                "payees": len(payee_values) - 1,
+                "transactions": 0,
+            }
     payees, migrated = migrate_payee_rows(rows, existing)
     new_headers = ["payee_id" if header == "payee" else header for header in headers]
     transactions_sheet.update([new_headers], range_name="A1", raw=True)

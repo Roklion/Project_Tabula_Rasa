@@ -85,6 +85,36 @@ def test_migration_deduplicates_legacy_payee_text() -> None:
     assert transactions[2]["payee_id"] == ""
 
 
+def test_migration_resumes_after_header_write_failure() -> None:
+    workbook = FakeWorkbook()
+    transaction_sheet = workbook.worksheet("Transactions")
+    payee_index = transaction_sheet.rows[0].index("payee_id")
+    transaction_sheet.rows[0][payee_index] = "payee"
+    transaction_sheet.rows.append(
+        ["txn", "2026-09-01", "Expense", "10.00", "account", "", "category", "Legacy vendor", "", "", "", "now"]
+    )
+    original_update = transaction_sheet.update
+
+    def fail_first_transaction_row(
+        values: list[list[str]], range_name: str, **kwargs: object
+    ) -> None:
+        if range_name == "A2":
+            raise OSError("simulated interrupted migration")
+        original_update(values, range_name, **kwargs)
+
+    transaction_sheet.update = fail_first_transaction_row  # type: ignore[method-assign]
+    with pytest.raises(OSError, match="interrupted"):
+        migrate_workbook(workbook)
+
+    transaction_sheet.update = original_update  # type: ignore[method-assign]
+    result = migrate_workbook(workbook)
+
+    assert result == {"payees": 1, "transactions": 1}
+    assert transaction_sheet.rows[1][payee_index]
+    assert workbook.worksheet("Payees").rows[1][1] == "Legacy vendor"
+    assert migrate_workbook(workbook) == {"payees": 1, "transactions": 0}
+
+
 def test_legacy_backup_maps_only_to_existing_payees() -> None:
     workbook = FakeWorkbook()
     transaction_sheet = workbook.sheets["Transactions"]
@@ -116,6 +146,24 @@ def test_transactions_reject_arbitrary_payee_text_after_migration() -> None:
         )
 
     assert storage.list_transactions() == []
+
+
+def test_invalid_transaction_does_not_create_new_payee() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    account = storage.create_account("Checking", "Bank")
+    category = storage.create_category("Office", "Expense")
+
+    with pytest.raises(StorageValidationError, match="greater than zero"):
+        storage.create_transaction(
+            txn_date="2026-09-01",
+            kind="Expense",
+            amount=0,
+            account_id=account["id"],
+            category_id=category["id"],
+            new_payee_name="Should not be created",
+        )
+
+    assert storage.list_payees() == []
 
 
 def test_legacy_backup_maps_payee_text_to_existing_stored_value() -> None:
