@@ -16,6 +16,19 @@ from typing import Any
 import streamlit as st
 
 
+GOOGLE_MAPS_ATTRIBUTION_TEXT = "Google Maps"
+
+
+def render_google_maps_attribution() -> None:
+    """Render the required, legible attribution beside current Maps content."""
+    st.markdown(
+        '<div class="tr-google-maps-attribution" role="note" translate="no" '
+        f'aria-label="{GOOGLE_MAPS_ATTRIBUTION_TEXT} attribution">'
+        f"{GOOGLE_MAPS_ATTRIBUTION_TEXT}</div>",
+        unsafe_allow_html=True,
+    )
+
+
 @dataclass(frozen=True)
 class AddressSelection:
     """The stable value returned by :func:`address_autocomplete`.
@@ -55,7 +68,8 @@ _HTML = """
     Enter address manually
   </button>
   <small id="tr-address-status" role="status" aria-live="polite"></small>
-  <small id="tr-address-attribution" hidden>Google Maps</small>
+  <small id="tr-address-attribution" class="tr-google-maps-attribution"
+    role="note" translate="no" aria-label="Google Maps attribution" hidden>Google Maps</small>
 </div>
 """
 
@@ -69,7 +83,15 @@ _CSS = """
   width: 100%;
 }
 .tr-address label { font-weight: 500; }
-.tr-address small { color: var(--st-text-color); opacity: .75; }
+.tr-address small { color: var(--st-text-color); }
+.tr-google-maps-attribution {
+  color: var(--st-text-color);
+  display: block;
+  font-size: .75rem;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+.tr-google-maps-attribution[hidden] { display: none; }
 .tr-address button {
   align-self: flex-start;
   background: var(--st-secondary-background-color);
@@ -258,13 +280,11 @@ export default function(component) {
           const place = prediction && prediction.toPlace ?
             prediction.toPlace() : null;
           if (!place) throw new Error('No place returned');
-          await place.fetchFields({fields: ['id', 'displayName', 'formattedAddress']});
-          const display = place.formattedAddress ||
-            (place.displayName && place.displayName.text) || element.value || '';
-          // Keep the widget text synchronized with the canonical selection so
-          // its follow-up change event cannot clear the Place ID when the
-          // provider's formatted address differs from the displayed text.
-          element.value = display;
+          // The Place ID is needed only for the current routing request. Do
+          // not fetch or return provider-formatted address content: the
+          // durable ledger text is collected separately by the Mileage UI.
+          await place.fetchFields({fields: ['id']});
+          const display = element.value || '';
           selectedDisplay = display;
           version += 1;
           setTriggerValue('selected', {

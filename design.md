@@ -605,9 +605,13 @@ Edit mileage trip section with all fields, save, and permanent delete.
 When app-wide Google Maps configuration is available, Starting location and
 Destination use a narrowly scoped address-autocomplete component with an
 explicit manual-entry path. After two Google suggestions are selected, an
-explicit Calculate mileage action requests the primary driving route and
-populates an editable one-decimal suggestion. Changing either endpoint clears
-the corresponding calculated state. Calculation errors preserve manual entry.
+explicit Calculate mileage action requests the primary driving route and shows
+an editable one-decimal Google distance suggestion separately from the
+Business miles ledger field. The user enters or confirms the business miles
+that will be recorded. Changing either endpoint clears the corresponding
+calculated state. Calculation errors preserve manual entry. When a Google
+selection is used, the user also enters or confirms the location text to
+record; the component's Google display text is not copied automatically.
 When either current endpoint was selected with Google autocomplete or the
 current mileage suggestion was calculated by Google Routes, a Google Maps note
 appears directly below the mileage control. Stored rows do not claim Google
