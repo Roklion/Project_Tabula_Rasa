@@ -94,7 +94,7 @@ def test_provider_error_clears_previous_place_selection() -> None:
 def test_google_provider_errors_switch_to_manual_mode() -> None:
     assert "element.addEventListener('gmp-error', () => {" in _JS
     assert (
-        "manualMode = true;\n"
+        "        manualMode = true;\n"
         "        providerFailed = true;\n"
         "        setStateValue('manual_mode', true);\n"
         "        setStateValue('failed', true);\n"
@@ -231,7 +231,7 @@ def test_google_autocomplete_input_has_a_complete_theme_border() -> None:
 
 def test_failed_place_details_clear_the_previous_selection() -> None:
     catch_emission = (
-        "selectedDisplay = '';\n"
+        "          selectedDisplay = '';\n"
         "          version += 1;\n"
         "          setTriggerValue('changed', {\n"
         "            display_text: element.value || '', place_id: '', version: version\n"

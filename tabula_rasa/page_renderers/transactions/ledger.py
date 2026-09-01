@@ -179,6 +179,7 @@ def render_ledger(
     categories: Sequence[Mapping[str, object]],
     account_paths: Mapping[str, str],
     category_paths: Mapping[str, str],
+    payees: Sequence[Mapping[str, object]],
     render_error_footer: Callable[[], None],
 ) -> None:
     """Render structured filters, the ledger, and single-row editing."""
@@ -756,11 +757,36 @@ def render_ledger(
                     format="%.2f",
                     key=f"edit_transaction_amount_{edit_widget_scope}",
                 )
-                edited_payee = st.text_input(
+                payee_by_id = {str(item["id"]): str(item["name"]) for item in payees}
+                payee_options = ["+ Add new payee", ""] + [
+                    str(item["id"])
+                    for item in payees
+                    if item.get("active") == "TRUE"
+                    or (
+                        not copy_mode
+                        and item.get("id") == selected.get("payee_id")
+                    )
+                ]
+                edited_payee_id = st.selectbox(
                     "Edit payee / customer",
-                    value=selected.get("payee", ""),
+                    payee_options,
+                    index=(
+                        payee_options.index(selected.get("payee_id", ""))
+                        if selected.get("payee_id", "") in payee_options
+                        else 1
+                    ),
+                    format_func=lambda value: payee_by_id.get(
+                        value, "No payee" if value == "" else value
+                    ),
                     key=f"edit_transaction_payee_{edit_widget_scope}",
                 )
+                edited_new_payee = ""
+                if edited_payee_id == "+ Add new payee":
+                    edited_new_payee = st.text_input(
+                        "Edit payee / customer",
+                        value=selected.get("payee", "") if copy_mode else "",
+                        key=f"edit_transaction_new_payee_{edit_widget_scope}",
+                    )
                 edited_reference = st.text_input(
                     "Edit reference",
                     value=selected.get("reference", ""),
@@ -855,7 +881,14 @@ def render_ledger(
                         "account_id": edited_account_id,
                         "to_account_id": edited_to_account_id,
                         "category_id": edited_category_id,
-                        "payee": edited_payee,
+                        "payee_id": (
+                            "" if edited_payee_id == "+ Add new payee" else edited_payee_id
+                        ),
+                        "new_payee_name": (
+                            edited_new_payee
+                            if edited_payee_id == "+ Add new payee"
+                            else ""
+                        ),
                         "reference": edited_reference,
                         "description": copy_description,
                     }
@@ -875,6 +908,13 @@ def render_ledger(
                             "Choose active account(s) before saving this copied transaction."
                         )
                     elif (
+                        edited_payee_id == "+ Add new payee"
+                        and not edited_new_payee.strip()
+                    ):
+                        edit_error.error(
+                            "Enter a payee / customer name before saving."
+                        )
+                    elif (
                         selected["kind"] == "Transfer"
                         and edited_account_id == edited_to_account_id
                     ):
@@ -884,7 +924,7 @@ def render_ledger(
                             "copy_transaction",
                             payload,
                             lambda: context.storage.create_transaction(
-                                **transaction_data
+                                **transaction_data,
                             ),
                             "Transaction copied.",
                             on_confirmed=lambda result: st.session_state.__setitem__(
@@ -935,7 +975,12 @@ def render_ledger(
                                     account_id=edited_account_id,
                                     to_account_id=edited_to_account_id,
                                     category_id=edited_category_id,
-                                    payee=edited_payee,
+                                    payee_id=(
+                                        ""
+                                        if edited_payee_id == "+ Add new payee"
+                                        else edited_payee_id
+                                    ),
+                                    new_payee_name=edited_new_payee,
                                     reference=edited_reference,
                                     description=edited_description,
                                 ),

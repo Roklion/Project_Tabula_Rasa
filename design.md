@@ -472,7 +472,9 @@ The form presents:
 4. Amount for Transfer
 5. From Account
 6. To account for Transfer
-7. Payee / customer and Reference
+7. Payee / customer dropdown and Reference. The first payee option is
+   `+ Add new payee`; new values are stored in the managed Payees table before
+   they are referenced by a transaction.
 8. Description / memo
 9. Receipt (optional)
 10. Save transaction

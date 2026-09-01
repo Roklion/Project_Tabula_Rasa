@@ -31,10 +31,11 @@ storage as the active ledger.
 
 ## Archive format and safety
 
-The current backup format is version 6. Each archive contains:
+The current backup format is version 7. Each archive contains:
 
 - Accounts.csv;
 - Categories.csv;
+- Payees.csv;
 - Transactions.csv;
 - Mileage.csv;
 - receipts.json; and
@@ -57,7 +58,7 @@ empty-string legacy receipt associations, and reconcile active references.
 An explicit empty list remains intentionally unlinked. If preparation or
 validation is incomplete, no backup is created.
 
-The validator and restore path accept formats 2 through 6:
+The validator and restore path accept formats 2 through 7:
 
 | Format | Meaning |
 | --- | --- |
@@ -65,7 +66,19 @@ The validator and restore path accept formats 2 through 6:
 | 3 | Adds Mileage; no transaction receipt references |
 | 4 | Adds transaction receipt references; no receipt inventory |
 | 5 | Adds checksummed receipts.json inventory |
-| 6 | Current format with account and category parent_id hierarchy |
+| 6 | Supported legacy format adding account and category parent_id hierarchy |
+| 7 | Current format with managed Payees and transaction payee_id references |
+
+Before upgrading an existing workbook, run the one-time payee migration:
+
+```text
+python scripts/migrate_payees.py --secrets .streamlit/secrets.toml --profile PROFILE_KEY
+```
+
+It deduplicates legacy payee text using normalized Unicode and whitespace,
+updates transaction references, and is safe to rerun. Older backups are
+accepted during restore; their payee text is mapped only to payees already in
+the target workbook, otherwise the reference is left unset.
 
 Older compatible archives restore records at Layer 1 when hierarchy columns
 are absent. A format-1 archive must first be converted to format 2.
@@ -219,7 +232,7 @@ representative relationships, then delete or clearly label the drill workbook.
 
 ## Recover receipt bytes and remap Drive IDs
 
-Ledger restoration does not restore receipt bytes. For a format 5 or 6
+Ledger restoration does not restore receipt bytes. For a format 5, 6, or 7
 archive, copy the matching profile Receipts directory from the protected
 Synology recovery set to a safe local path, then recover against the new
 workbook:

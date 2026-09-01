@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from scripts.validate_google_sheets import validate
-from tabula_rasa.storage import GoogleSheetsStorage
+from tabula_rasa.storage import GoogleSheetsStorage, StorageValidationError
 from tests.fakes import FakeWorkbook
 
 
@@ -26,13 +26,14 @@ def populated_workbook() -> FakeWorkbook:
     storage = GoogleSheetsStorage(workbook, sleeper=lambda _: None)
     account = storage.create_account("Checking", "Bank")
     category = storage.create_category("Software", "Expense")
+    payee = storage.create_payee("Vendor")
     storage.create_transaction(
         txn_date="2026-07-29",
         kind="Expense",
         amount="12.50",
         account_id=account["id"],
         category_id=category["id"],
-        payee="Vendor",
+        payee_id=payee["id"],
     )
     storage.create_mileage_trip(
         trip_date="2026-07-29",
@@ -81,6 +82,7 @@ def test_explicit_workbook_override_is_read_only_and_reports_counts(
     assert scopes == ["https://www.googleapis.com/auth/spreadsheets.readonly"]
     output = capsys.readouterr().out
     assert "Ledger rows readable: Accounts=1, Categories=1" in output
+    assert "Payees=1" in output
     assert "Transactions=1, Mileage=1" in output
     assert "Explicit workbook override verified; business profile unchanged" in output
     assert "recovery-workbook" not in output
@@ -148,3 +150,24 @@ def test_read_only_validation_accepts_legacy_hierarchy_headers_without_migration
     assert "Ledger rows readable: Accounts=1, Categories=1" in output
     for title in ("Accounts", "Categories"):
         assert workbook.sheets[title].rows == original_rows[title]
+
+
+@patch(
+    "scripts.validate_google_sheets.load_business_profile_document",
+    return_value=PROFILE_DOCUMENT,
+)
+@patch("scripts.validate_google_sheets.Credentials.from_service_account_info")
+@patch("scripts.validate_google_sheets.gspread.authorize")
+def test_validation_rejects_invalid_payee_records(
+    authorize: Mock,
+    _from_service_account_info: Mock,
+    _load_document: Mock,
+) -> None:
+    workbook = populated_workbook()
+    workbook.sheets["Payees"].rows.append(
+        ["another-id", " vendor ", "TRUE", "2026-07-29T00:00:00Z"]
+    )
+    authorize.return_value.open_by_key.return_value = workbook
+
+    with pytest.raises(StorageValidationError, match="unique"):
+        validate(Path("unused.toml"), profile_key="test-business")

@@ -13,13 +13,14 @@ import json
 import math
 import threading
 import time
+import unicodedata
 import zipfile
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Callable, TypeVar
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 import gspread
 from google.auth.exceptions import GoogleAuthError
@@ -49,7 +50,7 @@ from tabula_rasa.receipt_manifest import (
 )
 
 
-VERSION_5_WORKSHEET_HEADERS = {
+PRE_PAYEE_WORKSHEET_HEADERS = {
     "Accounts": (
         "id",
         "name",
@@ -86,18 +87,28 @@ VERSION_5_WORKSHEET_HEADERS = {
         "created_at",
     ),
 }
-WORKSHEET_HEADERS = {
-    **VERSION_5_WORKSHEET_HEADERS,
-    "Accounts": (*VERSION_5_WORKSHEET_HEADERS["Accounts"], "parent_id"),
-    "Categories": (*VERSION_5_WORKSHEET_HEADERS["Categories"], "parent_id"),
+VERSION_5_WORKSHEET_HEADERS = PRE_PAYEE_WORKSHEET_HEADERS
+VERSION_6_WORKSHEET_HEADERS = {
+    **PRE_PAYEE_WORKSHEET_HEADERS,
+    "Accounts": (*PRE_PAYEE_WORKSHEET_HEADERS["Accounts"], "parent_id"),
+    "Categories": (*PRE_PAYEE_WORKSHEET_HEADERS["Categories"], "parent_id"),
 }
+WORKSHEET_HEADERS = {
+    **VERSION_6_WORKSHEET_HEADERS,
+    "Payees": ("id", "name", "active", "created_at"),
+    "Transactions": tuple(
+        "payee_id" if header == "payee" else header
+        for header in VERSION_6_WORKSHEET_HEADERS["Transactions"]
+    ),
+}
+_PAYEE_WRITE_LOCK = threading.RLock()
 VERSION_3_WORKSHEET_HEADERS = {
     title: (
         tuple(header for header in headers if header != "receipt_references")
         if title == "Transactions"
         else headers
     )
-    for title, headers in VERSION_5_WORKSHEET_HEADERS.items()
+    for title, headers in PRE_PAYEE_WORKSHEET_HEADERS.items()
 }
 LEGACY_BACKUP_HEADERS = {
     title: headers
@@ -124,14 +135,16 @@ CATEGORY_KINDS = {"Income", "Expense"}
 TRANSACTION_KINDS = {"Income", "Expense", "Transfer"}
 LEDGER_ONLY_BACKUP_FORMAT_VERSION = 4
 RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION = 5
-BACKUP_FORMAT_VERSION = 6
+BACKUP_FORMAT_VERSION = 7
 BACKUP_HEADERS_BY_VERSION = {
     2: LEGACY_BACKUP_HEADERS,
     3: VERSION_3_WORKSHEET_HEADERS,
-    LEDGER_ONLY_BACKUP_FORMAT_VERSION: VERSION_5_WORKSHEET_HEADERS,
-    RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION: VERSION_5_WORKSHEET_HEADERS,
-    BACKUP_FORMAT_VERSION: WORKSHEET_HEADERS,
+    6: VERSION_6_WORKSHEET_HEADERS,
+    LEDGER_ONLY_BACKUP_FORMAT_VERSION: PRE_PAYEE_WORKSHEET_HEADERS,
+    RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION: PRE_PAYEE_WORKSHEET_HEADERS,
+    BACKUP_FORMAT_VERSION: VERSION_6_WORKSHEET_HEADERS,
 }
+BACKUP_HEADERS_BY_VERSION[BACKUP_FORMAT_VERSION] = WORKSHEET_HEADERS
 SUPPORTED_BACKUP_FORMAT_VERSIONS = set(BACKUP_HEADERS_BY_VERSION)
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 SHEETS_READONLY_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly"
@@ -222,6 +235,17 @@ def _clean_text(value: Any, field: str, *, required: bool = False) -> str:
     return text
 
 
+def normalize_payee_name(value: Any) -> str:
+    """Normalize payee names for deduplication and reference resolution."""
+    return " ".join(
+        unicodedata.normalize("NFKC", _clean_text(value, "Payee")).split()
+    ).casefold()
+
+
+def _legacy_payee_id(name: str) -> str:
+    return str(uuid5(NAMESPACE_URL, f"tabula-rasa:payee:{normalize_payee_name(name)}"))
+
+
 def _validate_hierarchy_records(
     records: Iterable[Mapping[str, Any]],
     *,
@@ -236,6 +260,20 @@ def _validate_hierarchy_records(
         )
     except HierarchyValidationError as exc:
         raise StorageValidationError(str(exc)) from exc
+
+
+def _validate_payee_records(records: Iterable[Mapping[str, Any]]) -> None:
+    seen_ids: set[str] = set()
+    seen_names: set[str] = set()
+    for record in records:
+        payee_id = _clean_text(record.get("id"), "Payee ID", required=True)
+        name = _clean_text(record.get("name"), "Payee name", required=True)
+        _as_bool(record.get("active"), "Payee active")
+        name_key = normalize_payee_name(name)
+        if payee_id in seen_ids or name_key in seen_names:
+            raise StorageValidationError("Payee IDs and names must be unique")
+        seen_ids.add(payee_id)
+        seen_names.add(name_key)
 
 
 def decode_receipt_references(value: Any) -> list[dict[str, Any]]:
@@ -354,13 +392,16 @@ def _parse_backup_zip(
             } | {"manifest.json"}
             if format_version >= RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION:
                 required_files.add("receipts.json")
-            if set(names) != required_files:
+            optional_legacy_payees = format_version < BACKUP_FORMAT_VERSION and "Payees.csv" in names
+            if set(names) not in (required_files, required_files | {"Payees.csv"}):
                 raise StorageValidationError(
                     "Backup must contain exactly the expected ledger and manifest files"
                 )
             csv_files = {
                 title: archive.read(f"{title}.csv") for title in backup_headers
             }
+            if optional_legacy_payees:
+                csv_files["Payees"] = archive.read("Payees.csv")
             receipt_manifest_bytes = (
                 archive.read("receipts.json")
                 if format_version >= RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION
@@ -375,6 +416,8 @@ def _parse_backup_zip(
     if not all(isinstance(value, dict) for value in (row_counts, file_hashes, worksheet_headers)):
         raise StorageValidationError("Backup manifest is missing validation metadata")
     expected_hash_names = {f"{title}.csv" for title in backup_headers}
+    if "Payees" in csv_files and "Payees.csv" not in expected_hash_names:
+        expected_hash_names.add("Payees.csv")
     if format_version >= RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION:
         expected_hash_names.add("receipts.json")
     if set(file_hashes) != expected_hash_names:
@@ -391,7 +434,9 @@ def _parse_backup_zip(
         if not parsed_rows:
             raise StorageValidationError(f"{title} backup has no header row")
         headers = [value.strip() for value in parsed_rows[0]]
-        required_headers = set(backup_headers[title])
+        required_headers = set(
+            backup_headers.get(title, WORKSHEET_HEADERS[title])
+        )
         if (
             any(not value for value in headers)
             or len(headers) != len(set(headers))
@@ -413,7 +458,16 @@ def _parse_backup_zip(
             set(record_ids)
         ):
             raise StorageValidationError(f"{title} backup IDs are missing or duplicated")
+        if title == "Payees":
+            for record in records:
+                record["id"] = record["id"].strip()
+        elif title == "Transactions" and "payee_id" in headers:
+            for record in records:
+                record["payee_id"] = _clean_text(record.get("payee_id"), "Payee")
         tables[title] = (headers, records)
+
+    if "Payees" not in tables:
+        tables["Payees"] = (list(WORKSHEET_HEADERS["Payees"]), [])
 
     if format_version < LEDGER_ONLY_BACKUP_FORMAT_VERSION:
         transaction_headers, transactions = tables["Transactions"]
@@ -441,6 +495,23 @@ def _parse_backup_zip(
                 ]
             tables[title] = (legacy_headers, legacy_records)
 
+        # Formats through version 6 stored arbitrary payee text on each
+        # transaction. Resolve that legacy text once while loading the backup;
+        # unmatched text is intentionally discarded.
+        for transaction in tables["Transactions"][1]:
+            legacy_name = _clean_text(transaction.get("payee"), "Payee")
+            transaction["legacy_payee"] = legacy_name
+            transaction["payee_id"] = ""
+            transaction.pop("payee", None)
+        tables["Transactions"] = (
+            list(WORKSHEET_HEADERS["Transactions"]),
+            tables["Transactions"][1],
+        )
+        tables["Payees"] = (
+            list(WORKSHEET_HEADERS["Payees"]),
+            [],
+        )
+
     _validate_hierarchy_records(
         tables["Accounts"][1],
         compatibility_field="classification",
@@ -451,9 +522,11 @@ def _parse_backup_zip(
         compatibility_field="kind",
         item_label="Category",
     )
+    _validate_payee_records(tables["Payees"][1])
 
     account_ids = {record["id"] for record in tables["Accounts"][1]}
     category_ids = {record["id"] for record in tables["Categories"][1]}
+    payee_ids = {record["id"] for record in tables["Payees"][1]}
     for transaction in tables["Transactions"][1]:
         if transaction.get("account_id") not in account_ids:
             raise StorageValidationError("Backup contains an unknown transaction account")
@@ -463,6 +536,9 @@ def _parse_backup_zip(
         category_id = transaction.get("category_id", "")
         if category_id and category_id not in category_ids:
             raise StorageValidationError("Backup contains an unknown transaction category")
+        payee_id = transaction.get("payee_id", "")
+        if payee_id and payee_id not in payee_ids:
+            raise StorageValidationError("Backup contains an unknown transaction payee")
         decode_receipt_references(
             transaction.get("receipt_references", "")
         )
@@ -690,12 +766,12 @@ class GoogleSheetsStorage:
                     existing_headers = [
                         str(value).strip() for value in values[0]
                     ]
-                    legacy_transaction_headers = set(
-                        VERSION_3_WORKSHEET_HEADERS["Transactions"]
-                    )
+                    transaction_headers_without_receipts = set(
+                        WORKSHEET_HEADERS["Transactions"]
+                    ) - {"receipt_references"}
                     if (
                         "receipt_references" not in existing_headers
-                        and legacy_transaction_headers.issubset(
+                        and transaction_headers_without_receipts.issubset(
                             existing_headers
                         )
                         and len(existing_headers)
@@ -1094,6 +1170,57 @@ class GoogleSheetsStorage:
         )
         self._invalidate(title)
 
+    def _replace_rows(
+        self,
+        title: str,
+        updates: Sequence[tuple[_StoredRow, Mapping[str, Any]]],
+    ) -> None:
+        if not updates:
+            return
+        headers = self._headers(title)
+        batch = [
+            {
+                "range": f"A{row.row_number}",
+                "values": [[str(record.get(header, "")) for header in headers]],
+            }
+            for row, record in updates
+        ]
+        worksheet = self._worksheet(title)
+        for attempt in range(self._retry_attempts):
+            try:
+                self._api(
+                    lambda: worksheet.batch_update(batch, raw=True),
+                    retry_safe=False,
+                )
+            except StorageUnavailableError as error:
+                current_rows = self._rows(title, force_refresh=True)
+                current_by_id = {
+                    str(row.values.get("id", "")): row.values for row in current_rows
+                }
+                intended_by_id = {
+                    str(record.get("id", "")): {
+                        header: str(record.get(header, "")) for header in headers
+                    }
+                    for _, record in updates
+                }
+                if all(
+                    current_by_id.get(record_id, {}) == intended
+                    for record_id, intended in intended_by_id.items()
+                ):
+                    return
+                if not error.retryable or attempt + 1 >= self._retry_attempts:
+                    raise
+                if not all(
+                    current_by_id.get(str(row.values.get("id", "")), {})
+                    == row.values
+                    for row, _ in updates
+                ):
+                    raise
+                self._sleeper(self._retry_base_delay_seconds * (2**attempt))
+                continue
+            self._invalidate(title)
+            return
+
     @staticmethod
     def _sheet_column_index(headers: Sequence[str], column: str) -> int:
         try:
@@ -1155,9 +1282,12 @@ class GoogleSheetsStorage:
             expected = {
                 str(key): (str(value) if value is not None else "")
                 for key, value in expected_by_id[transaction_id].items()
+                if str(key) in self._headers("Transactions")
             }
             current = dict(row.values)
-            if current != expected:
+            if "payee_id" in current:
+                current["payee_id"] = _clean_text(current.get("payee_id"), "Payee")
+            if {key: current.get(key, "") for key in expected} != expected:
                 raise StorageConflictError(
                     "A selected transaction changed; review the current rows and try again."
                 )
@@ -1674,6 +1804,123 @@ class GoogleSheetsStorage:
                     raise
                 self._sleeper(self._retry_base_delay_seconds * (2**attempt))
 
+    def list_payees(
+        self, *, active_only: bool = False, _force_refresh: bool = False
+    ) -> list[dict[str, str]]:
+        payees: list[dict[str, str]] = []
+        seen_ids: set[str] = set()
+        seen_names: set[str] = set()
+        for row in self._rows("Payees", force_refresh=_force_refresh):
+            item = dict(row.values)
+            item["id"] = _clean_text(item.get("id"), "Payee ID", required=True)
+            item["name"] = _clean_text(item.get("name"), "Payee name", required=True)
+            item["active"] = "TRUE" if _as_bool(item.get("active"), "Payee active") else "FALSE"
+            item["created_at"] = _clean_text(item.get("created_at"), "Payee created at")
+            key = normalize_payee_name(item["name"])
+            if item["id"] in seen_ids or key in seen_names:
+                raise StorageValidationError("Payee IDs and names must be unique")
+            seen_ids.add(item["id"])
+            seen_names.add(key)
+            if not active_only or item["active"] == "TRUE":
+                payees.append(item)
+        return sorted(payees, key=lambda item: item["name"].casefold())
+
+    def create_payee(self, name: str, *, active: bool = True) -> dict[str, str]:
+        name = _clean_text(name, "Payee name", required=True)
+        with _PAYEE_WRITE_LOCK:
+            existing = self.list_payees(_force_refresh=True)
+            key = normalize_payee_name(name)
+            match = next(
+                (item for item in existing if normalize_payee_name(item["name"]) == key),
+                None,
+            )
+            if match is not None:
+                if active and match["active"] != "TRUE":
+                    return self.edit_payee(match["id"], active=True)
+                return match
+            record = {
+                "id": str(uuid4()),
+                "name": name,
+                "active": "TRUE" if active else "FALSE",
+                "created_at": _utc_now(),
+            }
+            self._append("Payees", record)
+            return record
+
+    def _ensure_payee_names(
+        self, names: Iterable[Any]
+    ) -> dict[str, dict[str, str]]:
+        with _PAYEE_WRITE_LOCK:
+            payees = self.list_payees(_force_refresh=True)
+            by_key = {normalize_payee_name(item["name"]): item for item in payees}
+            rows_by_id = {
+                _clean_text(row.values.get("id"), "Payee ID", required=True): row
+                for row in self._rows("Payees")
+            }
+            additions: list[dict[str, str]] = []
+            activations: list[dict[str, str]] = []
+            for value in names:
+                name = _clean_text(value, "New payee")
+                if not name:
+                    continue
+                key = normalize_payee_name(name)
+                match = by_key.get(key)
+                if match is None:
+                    match = {
+                        "id": str(uuid4()),
+                        "name": name,
+                        "active": "TRUE",
+                        "created_at": _utc_now(),
+                    }
+                    additions.append(match)
+                    by_key[key] = match
+                elif match["active"] != "TRUE":
+                    match = dict(match)
+                    match["active"] = "TRUE"
+                    activations.append(match)
+                    by_key[key] = match
+            if activations:
+                self._replace_rows(
+                    "Payees",
+                    [(rows_by_id[item["id"]], item) for item in activations],
+                )
+            if additions:
+                self._append_many("Payees", additions)
+            return {item["id"]: item for item in by_key.values()}
+
+    def edit_payee(self, payee_id: str, **changes: Any) -> dict[str, str]:
+        with _PAYEE_WRITE_LOCK:
+            current = self._find_row("Payees", payee_id)
+            updated = dict(current.values)
+            name = _clean_text(
+                changes.get("name", updated["name"]),
+                "Payee name",
+                required=True,
+            )
+            if "name" in changes and normalize_payee_name(name) != normalize_payee_name(updated["name"]):
+                existing = self.list_payees(_force_refresh=True)
+                if any(
+                    item["id"] != payee_id
+                    and normalize_payee_name(item["name"]) == normalize_payee_name(name)
+                    for item in existing
+                ):
+                    raise StorageConflictError("That payee already exists")
+            updated.update(
+                {
+                    "name": name,
+                    "active": "TRUE"
+                    if _as_bool(
+                        changes.get("active", updated["active"]), "Payee active"
+                    )
+                    else "FALSE",
+                }
+            )
+            self._replace_row("Payees", current, updated)
+            return updated
+
+    def _payee_lookup(self, *, force_refresh: bool = False) -> dict[str, dict[str, str]]:
+        return {item["id"]: item for item in self.list_payees(_force_refresh=force_refresh)}
+
     def _account_lookup(self, *, force_refresh: bool = False) -> dict[str, dict[str, Any]]:
         return {
             account["id"]: account
@@ -1698,21 +1945,35 @@ class GoogleSheetsStorage:
         created_at: str | None = None,
         accounts: Mapping[str, Mapping[str, Any]] | None = None,
         categories: Mapping[str, Mapping[str, str]] | None = None,
+        payees: Mapping[str, Mapping[str, str]] | None = None,
+        original_transaction: Mapping[str, Any] | None = None,
     ) -> dict[str, str]:
+        payees_force_refresh = True
         if accounts is None and categories is None:
-            self._snapshot(["Accounts", "Categories"], force_refresh=True)
+            self._snapshot(["Accounts", "Categories", "Payees"], force_refresh=True)
             accounts = self._account_lookup()
             categories = self._category_lookup()
+            payees_force_refresh = False
         else:
             accounts = accounts or self._account_lookup(force_refresh=True)
             categories = categories or self._category_lookup(force_refresh=True)
+        payees = (
+            dict(payees)
+            if payees is not None
+            else self._payee_lookup(force_refresh=payees_force_refresh)
+        )
         kind = _clean_text(data.get("kind"), "Transaction kind", required=True).title()
         if kind not in TRANSACTION_KINDS:
             raise StorageValidationError("Unknown transaction kind")
         account_id = _clean_text(data.get("account_id"), "Account", required=True)
         if account_id not in accounts:
             raise StorageValidationError("Source account does not exist")
-        if not _as_bool(accounts[account_id]["active"]):
+        original_account_id = (
+            _clean_text(original_transaction.get("account_id"), "Account")
+            if original_transaction is not None
+            else None
+        )
+        if not _as_bool(accounts[account_id]["active"]) and account_id != original_account_id:
             raise StorageValidationError("Source account is inactive")
 
         to_account_id = _clean_text(data.get("to_account_id"), "Destination account")
@@ -1720,7 +1981,15 @@ class GoogleSheetsStorage:
         if kind == "Transfer":
             if to_account_id not in accounts:
                 raise StorageValidationError("Destination account does not exist")
-            if not _as_bool(accounts[to_account_id]["active"]):
+            original_to_account_id = (
+                _clean_text(
+                    original_transaction.get("to_account_id"),
+                    "Destination account",
+                )
+                if original_transaction is not None
+                else None
+            )
+            if not _as_bool(accounts[to_account_id]["active"]) and to_account_id != original_to_account_id:
                 raise StorageValidationError("Destination account is inactive")
             if to_account_id == account_id:
                 raise StorageValidationError("Transfer accounts must be different")
@@ -1735,25 +2004,55 @@ class GoogleSheetsStorage:
             if categories[category_id]["kind"] != kind:
                 raise StorageValidationError("Category kind does not match transaction kind")
 
+        txn_date = _iso_date(data.get("txn_date"))
+        amount = _positive_amount(data.get("amount"))
+        receipt_references = (
+            _encode_receipt_references(data.get("receipt_references", []))
+            if transaction_id is None
+            or data.get("receipt_references", "") != ""
+            else ""
+        )
+        payee_id = _clean_text(data.get("payee_id"), "Payee")
+        new_payee_name = _clean_text(data.get("new_payee_name"), "New payee")
+        legacy_payee = _clean_text(data.get("payee"), "Payee")
+        if legacy_payee:
+            raise StorageValidationError(
+                "Transactions must reference a stored payee"
+            )
+        if payee_id and new_payee_name:
+            raise StorageValidationError(
+                "Choose an existing payee or add a new payee"
+            )
+        if not payee_id and new_payee_name:
+            new_payee = self.create_payee(new_payee_name)
+            payee_id = new_payee["id"]
+            payees[payee_id] = new_payee
+        if payee_id and payee_id not in payees:
+            raise StorageValidationError("Payee does not exist")
+        original_payee_id = (
+            _clean_text(original_transaction.get("payee_id"), "Payee")
+            if original_transaction is not None
+            else None
+        )
+        if (
+            payee_id
+            and not _as_bool(payees[payee_id]["active"], "Payee active")
+            and payee_id != original_payee_id
+        ):
+            raise StorageValidationError("Payee is inactive")
         return {
             "id": transaction_id or str(uuid4()),
-            "txn_date": _iso_date(data.get("txn_date")),
+            "txn_date": txn_date,
             "kind": kind,
-            "amount": _positive_amount(data.get("amount")),
+            "amount": amount,
             "account_id": account_id,
             "to_account_id": to_account_id,
             "category_id": category_id,
-            "payee": _clean_text(data.get("payee"), "Payee"),
+            "payee_id": payee_id,
+            "payee": payees.get(payee_id, {}).get("name", ""),
             "description": _clean_text(data.get("description"), "Description"),
             "reference": _clean_text(data.get("reference"), "Reference"),
-            "receipt_references": (
-                _encode_receipt_references(
-                    data.get("receipt_references", [])
-                )
-                if transaction_id is None
-                or data.get("receipt_references", "") != ""
-                else ""
-            ),
+            "receipt_references": receipt_references,
             "created_at": created_at or _utc_now(),
         }
 
@@ -1778,6 +2077,7 @@ class GoogleSheetsStorage:
             if kind not in TRANSACTION_KINDS:
                 raise StorageValidationError("Unknown transaction kind")
         transactions = []
+        payees = self._payee_lookup(force_refresh=_force_refresh)
         for row in self._rows("Transactions", force_refresh=_force_refresh):
             item = dict(row.values)
             item["txn_date"] = _iso_date(item.get("txn_date"))
@@ -1788,6 +2088,10 @@ class GoogleSheetsStorage:
                 item.get("to_account_id"), "Destination account"
             )
             item["category_id"] = _clean_text(item.get("category_id"), "Category")
+            item["payee_id"] = _clean_text(item.get("payee_id"), "Payee")
+            if item["payee_id"] and item["payee_id"] not in payees:
+                raise StorageValidationError("Payee does not exist")
+            item["payee"] = payees.get(item["payee_id"], {}).get("name", "")
             if start_text and item["txn_date"] < start_text:
                 continue
             if end_text and item["txn_date"] > end_text:
@@ -1822,6 +2126,7 @@ class GoogleSheetsStorage:
             merged,
             transaction_id=transaction_id,
             created_at=current.values["created_at"],
+            original_transaction=current.values,
         )
         self._replace_row("Transactions", current, updated)
         return updated
@@ -2349,7 +2654,9 @@ class GoogleSheetsStorage:
             (category["name"].casefold(), category["kind"]): category
             for category in categories.values()
         }
-        prepared = []
+        payees = self._payee_lookup(force_refresh=True)
+        prepared: list[dict[str, str]] = []
+        payee_names: list[str] = []
         for index, row in enumerate(rows, start=2):
             kind = _clean_text(row.get("Type"), "Type", required=True).title()
             if kind not in CATEGORY_KINDS:
@@ -2372,14 +2679,26 @@ class GoogleSheetsStorage:
                         "amount": row.get("Amount"),
                         "account_id": account["id"],
                         "category_id": category["id"],
-                        "payee": row.get("Payee", ""),
+                        "payee_id": "",
+                        "new_payee_name": "",
                         "description": row.get("Description", ""),
                         "reference": row.get("Reference", ""),
                     },
                     accounts=accounts,
                     categories=categories,
+                    payees=payees,
                 )
             )
+            payee_names.append(_clean_text(row.get("Payee", ""), "New payee"))
+        payees = self._ensure_payee_names(payee_names)
+        payee_ids_by_name = {
+            normalize_payee_name(item["name"]): item for item in payees.values()
+        }
+        for record, name in zip(prepared, payee_names):
+            if name:
+                payee = payee_ids_by_name[normalize_payee_name(name)]
+                record["payee_id"] = payee["id"]
+                record["payee"] = payee["name"]
         self._append_many("Transactions", prepared)
         return prepared
 
@@ -2393,7 +2712,7 @@ class GoogleSheetsStorage:
         """Validate and summarize a QuickBooks export without writing anything."""
         source_rows = list(rows)
         self._snapshot(
-            ["Accounts", "Categories", "Transactions"],
+            ["Accounts", "Categories", "Transactions", "Payees"],
             force_refresh=_force_refresh,
         )
         accounts = self._account_lookup()
@@ -2411,6 +2730,10 @@ class GoogleSheetsStorage:
         normalized, errors = normalize_rows(
             source_rows, accounts.values(), categories.values()
         )
+        payee_names = {
+            normalize_payee_name(item["name"]): item["name"]
+            for item in self.list_payees()
+        }
         existing = {
             fingerprint(item)
             for item in self.list_transactions()
@@ -2419,6 +2742,11 @@ class GoogleSheetsStorage:
         ready: list[dict[str, str]] = []
         duplicate_rows: list[int] = []
         for item in normalized:
+            payee_key = normalize_payee_name(item.get("payee", ""))
+            if payee_key:
+                item["payee"] = payee_names.setdefault(
+                    payee_key, item["payee"]
+                )
             row_number = int(item.pop("_source_row"))
             identity = fingerprint(item)
             if identity in existing or identity in seen:
@@ -2501,13 +2829,30 @@ class GoogleSheetsStorage:
             )
             if preview["errors"]:
                 raise StorageValidationError("\n".join(preview["errors"]))
+        if not preview["rows"]:
+            return []
         accounts = self._account_lookup()
         categories = self._category_lookup()
+        payees = self._ensure_payee_names(
+            item.get("payee", "") for item in preview["rows"]
+        )
+        payee_ids_by_name = {
+            normalize_payee_name(item["name"]): item["id"]
+            for item in payees.values()
+        }
         prepared = [
             self._prepare_transaction(
-                item,
+                {
+                    **item,
+                    "payee_id": payee_ids_by_name.get(
+                        normalize_payee_name(item.get("payee", "")), ""
+                    ),
+                    "new_payee_name": "",
+                    "payee": "",
+                },
                 accounts=accounts,
                 categories=categories,
+                payees=payees,
             )
             for item in preview["rows"]
         ]
@@ -2606,14 +2951,28 @@ class GoogleSheetsStorage:
 
     def restore_backup_zip(self, backup: bytes) -> dict[str, int]:
         """Restore a validated backup into a blank initialized workbook."""
-        _, tables, _ = _parse_backup_zip(backup)
+        manifest, tables, _ = _parse_backup_zip(backup)
+        legacy_payees = manifest["format_version"] < BACKUP_FORMAT_VERSION
+        existing_payees = self.list_payees(_force_refresh=True)
+        payees_by_key = {
+            normalize_payee_name(item["name"]): item["id"] for item in existing_payees
+        }
+        if legacy_payees:
+            for transaction in tables["Transactions"][1]:
+                transaction["payee_id"] = payees_by_key.get(
+                    normalize_payee_name(transaction.pop("legacy_payee", "")), ""
+                )
         for title in WORKSHEET_HEADERS:
             target_headers = self._headers(title)
-            if title in tables and set(target_headers) != set(tables[title][0]):
+            if title in tables and not (legacy_payees and title == "Payees") and set(
+                target_headers
+            ) != set(tables[title][0]):
                 raise StorageValidationError(
                     f"{title} target headers do not match the backup"
                 )
-            if self._rows(title, force_refresh=True):
+            if self._rows(title, force_refresh=True) and not (
+                title == "Payees" and legacy_payees
+            ):
                 raise StorageConflictError(
                     "Restore target must have empty ledger worksheets"
                 )
@@ -2623,6 +2982,9 @@ class GoogleSheetsStorage:
             if title not in tables:
                 continue
             _, records = tables[title]
+            if not records and title == "Payees" and legacy_payees:
+                counts[title] = 0
+                continue
             self._append_many(title, records)
             restored = self._rows(title, force_refresh=True)
             expected_by_id = {record["id"]: record for record in records}
