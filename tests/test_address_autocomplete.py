@@ -42,6 +42,16 @@ def test_switching_back_to_google_mode_unhides_the_autocomplete_host() -> None:
     assert "manual.hidden = true;\n    host.hidden = false;" in _JS
 
 
+def test_setup_failure_clears_previous_place_selection() -> None:
+    assert (
+        "clearFailedMapsLoad();\n"
+        "      selectedDisplay = '';\n"
+        "      const widget = host.querySelector('gmp-place-autocomplete');\n"
+        "      emit('changed', (widget && widget.value) || '');\n"
+        "      showManual('Google address suggestions are unavailable.');"
+    ) in _JS
+
+
 def test_failed_maps_load_button_retries_google_mode() -> None:
     assert (
         "showManual('Google address suggestions are unavailable.');\n"
