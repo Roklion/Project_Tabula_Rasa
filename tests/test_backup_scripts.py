@@ -647,6 +647,7 @@ class TestBackupScripts:
             ] == {
                 "Accounts": 0,
                 "Categories": 0,
+                "Payees": 0,
                 "Transactions": 0,
                 "Mileage": 0,
             }

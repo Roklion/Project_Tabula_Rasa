@@ -552,10 +552,10 @@ def test_recovery_preserves_unrelated_manual_edits_before_batch_write() -> None:
     reference = _reference(1, content)
     backup, target, _ = _backup_with_receipts([reference])
     worksheet = target._workbook.sheets["Transactions"]
-    payee_index = worksheet.rows[0].index("payee")
+    description_index = worksheet.rows[0].index("description")
 
     def restore_after_manual_edit(**_kwargs: object) -> tuple[dict[str, object], bool]:
-        worksheet.rows[1][payee_index] = "Manually corrected payee"
+        worksheet.rows[1][description_index] = "Manually corrected description"
         return _drive_file(reference, file_id="newreceipt01"), False
 
     drive = Mock()
@@ -577,7 +577,7 @@ def test_recovery_preserves_unrelated_manual_edits_before_batch_write() -> None:
     assert report["restored"] == 1
     assert report["references_remapped"] == 1
     current = target.list_transactions(_force_refresh=True)[0]
-    assert current["payee"] == "Manually corrected payee"
+    assert current["description"] == "Manually corrected description"
 
 
 def test_recovery_reports_unconfirmed_batch_write_failure() -> None:
@@ -1101,6 +1101,17 @@ def test_recovery_identifies_pre_manifest_v4_as_ledger_only() -> None:
         ledger_manifest = json.loads(source.read("manifest.json"))
         ledger_manifest["format_version"] = 4
         ledger_manifest["sha256"].pop("receipts.json")
+        transaction_bytes = source.read("Transactions.csv").replace(
+            b"payee_id", b"payee"
+        )
+        transaction_headers = list(
+            ledger_manifest["worksheet_headers"]["Transactions"]
+        )
+        transaction_headers[transaction_headers.index("payee_id")] = "payee"
+        ledger_manifest["worksheet_headers"]["Transactions"] = transaction_headers
+        ledger_manifest["sha256"]["Transactions.csv"] = hashlib.sha256(
+            transaction_bytes
+        ).hexdigest()
         for name in source.namelist():
             if name == "receipts.json":
                 continue
@@ -1108,7 +1119,11 @@ def test_recovery_identifies_pre_manifest_v4_as_ledger_only() -> None:
                 name,
                 json.dumps(ledger_manifest).encode("utf-8")
                 if name == "manifest.json"
-                else source.read(name),
+                    else (
+                        transaction_bytes
+                        if name == "Transactions.csv"
+                        else source.read(name)
+                    ),
             )
     drive = Mock()
     with TemporaryDirectory() as directory, pytest.raises(

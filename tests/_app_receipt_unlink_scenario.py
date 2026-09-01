@@ -45,7 +45,6 @@ def main() -> None:
         account_id=checking["id"],
         to_account_id="",
         category_id=office["id"],
-        payee="Receipt vendor",
         reference="",
         description="Receipt unlink test",
     )
@@ -69,7 +68,6 @@ def main() -> None:
         account_id=savings["id"],
         to_account_id="",
         category_id=office["id"],
-        payee="Other receipt vendor",
         reference="",
         description="Receipt filter isolation test",
     )

@@ -23,6 +23,7 @@ def render_add_transaction(
     account_map: Mapping[str, str],
     categories: Sequence[Mapping[str, object]],
     category_paths: Mapping[str, str],
+    payees: Sequence[Mapping[str, object]],
 ) -> None:
     """Render the existing profile-scoped transaction creation workflow."""
     if render_receipt_creation_recovery(context):
@@ -39,6 +40,7 @@ def render_add_transaction(
         "add_transaction_category_income",
         "add_transaction_category_expense",
         "add_transaction_payee",
+        "add_transaction_new_payee",
         "add_transaction_reference",
         "add_transaction_description",
         "add_transaction_receipts",
@@ -119,10 +121,24 @@ def render_add_transaction(
                 else None
             )
         c1, c2 = st.columns(2)
-        payee = c1.text_input(
+        payee_options = ["+ Add new payee", ""] + [
+            str(payee["id"]) for payee in payees if payee.get("active") == "TRUE"
+        ]
+        payee_by_id = {str(payee["id"]): str(payee["name"]) for payee in payees}
+        payee_id = c1.selectbox(
             "Payee / customer",
+            payee_options,
+            format_func=lambda value: payee_by_id.get(
+                value, "No payee" if value == "" else value
+            ),
             key="add_transaction_payee",
         )
+        new_payee_name = ""
+        if payee_id == "+ Add new payee":
+            new_payee_name = c1.text_input(
+                "Payee / customer",
+                key="add_transaction_new_payee",
+            )
         reference = c2.text_input(
             "Reference (optional)",
             key="add_transaction_reference",
@@ -151,6 +167,8 @@ def render_add_transaction(
                 save_error.error(
                     "Create a second active account before recording a transfer."
                 )
+            elif payee_id == "+ Add new payee" and not new_payee_name.strip():
+                save_error.error("Enter a payee / customer name before saving.")
             else:
                 payload = {
                     "txn_date": transaction_date,
@@ -159,7 +177,10 @@ def render_add_transaction(
                     "account_id": account_map[source],
                     "to_account_id": account_map.get(to_account, ""),
                     "category_id": category_id or "",
-                    "payee": payee,
+                    "payee_id": "" if payee_id == "+ Add new payee" else payee_id,
+                    "new_payee_name": (
+                        new_payee_name if payee_id == "+ Add new payee" else ""
+                    ),
                     "description": description,
                     "reference": reference,
                 }
@@ -186,7 +207,9 @@ def render_add_transaction(
                         context.confirmed_write(
                             "create_transaction",
                             payload,
-                            lambda: context.storage.create_transaction(**payload),
+                            lambda: context.storage.create_transaction(
+                                **payload,
+                            ),
                             lambda _result: st.session_state.get(
                                 "write_success_notice"
                             )

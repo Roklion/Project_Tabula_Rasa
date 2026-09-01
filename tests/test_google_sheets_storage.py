@@ -26,7 +26,6 @@ from tabula_rasa.storage.google_sheets import (
     StorageUnavailableError,
     StorageValidationError,
     StorageWorkbookAccessError,
-    VERSION_3_WORKSHEET_HEADERS,
     VERSION_5_WORKSHEET_HEADERS,
     WORKSHEET_HEADERS,
 )
@@ -168,6 +167,36 @@ def rewrite_backup_tables(
     manifest = json.loads(contents["manifest.json"])
     if format_version is not None:
         manifest["format_version"] = format_version
+        if format_version < BACKUP_FORMAT_VERSION and "Payees.csv" in contents:
+            payee_rows = list(
+                csv.reader(io.StringIO(contents["Payees.csv"].decode("utf-8")))
+            )
+            payee_headers = payee_rows[0]
+            payee_id_index = payee_headers.index("id")
+            payee_name_index = payee_headers.index("name")
+            payee_names = {
+                row[payee_id_index]: row[payee_name_index]
+                for row in payee_rows[1:]
+            }
+            transaction_rows = list(
+                csv.reader(io.StringIO(contents["Transactions.csv"].decode("utf-8")))
+            )
+            transaction_headers = transaction_rows[0]
+            payee_id_index = transaction_headers.index("payee_id")
+            transaction_headers[payee_id_index] = "payee"
+            for row in transaction_rows[1:]:
+                row[payee_id_index] = payee_names.get(row[payee_id_index], "")
+            csv_buffer = io.StringIO(newline="")
+            csv.writer(csv_buffer, lineterminator="\n").writerows(transaction_rows)
+            contents["Transactions.csv"] = csv_buffer.getvalue().encode("utf-8")
+            manifest["worksheet_headers"]["Transactions"] = transaction_headers
+            manifest["sha256"]["Transactions.csv"] = hashlib.sha256(
+                contents["Transactions.csv"]
+            ).hexdigest()
+            contents.pop("Payees.csv")
+            manifest["worksheet_headers"].pop("Payees", None)
+            manifest["row_counts"].pop("Payees", None)
+            manifest["sha256"].pop("Payees.csv", None)
     for title, transform in transforms.items():
         filename = f"{title}.csv"
         rows = list(
@@ -204,10 +233,36 @@ def downgrade_backup(backup: bytes, format_version: int) -> bytes:
                     )
                 )
             )
-            indexes = [current_rows[0].index(header) for header in headers]
-            historical_rows = [
-                [row[index] for index in indexes] for row in current_rows
-            ]
+            if title == "Transactions" and "payee" in headers:
+                payee_rows = list(
+                    csv.reader(
+                        io.StringIO(source.read("Payees.csv").decode("utf-8"))
+                    )
+                )
+                payee_headers = payee_rows[0]
+                payee_id_index = payee_headers.index("id")
+                payee_name_index = payee_headers.index("name")
+                payee_names = {
+                    row[payee_id_index]: row[payee_name_index]
+                    for row in payee_rows[1:]
+                }
+                current_headers = current_rows[0]
+                historical_rows = [list(headers)]
+                for row in current_rows[1:]:
+                    current = dict(zip(current_headers, row))
+                    historical_rows.append(
+                        [
+                            payee_names.get(current.get("payee_id", ""), "")
+                            if header == "payee"
+                            else current.get(header, "")
+                            for header in headers
+                        ]
+                    )
+            else:
+                indexes = [current_rows[0].index(header) for header in headers]
+                historical_rows = [
+                    [row[index] for index in indexes] for row in current_rows
+                ]
             csv_buffer = io.StringIO(newline="")
             csv.writer(csv_buffer, lineterminator="\n").writerows(
                 historical_rows
@@ -350,7 +405,7 @@ class TestGoogleSheetsStorage:
                 return_value=object(),
             ),
             patch.object(gspread, "authorize", return_value=google_client),
-            pytest.raises(StorageValidationError, match="missing headers"),
+            pytest.raises(StorageValidationError, match="missing worksheets"),
         ):
             GoogleSheetsStorage.from_secrets_read_only(
                 {
@@ -393,7 +448,15 @@ class TestGoogleSheetsStorage:
     def test_profile_storage_adds_receipt_references_to_existing_transactions(
         self,
     ) -> None:
-        workbook = FakeWorkbook(VERSION_3_WORKSHEET_HEADERS)
+        headers = {
+            title: tuple(
+                header
+                for header in columns
+                if header != "receipt_references"
+            )
+            for title, columns in WORKSHEET_HEADERS.items()
+        }
+        workbook = FakeWorkbook(headers)
         transaction_sheet = workbook.sheets["Transactions"]
         transaction_sheet.rows.append(
             ["txn-1", "2026-07-28", "Expense"]
@@ -417,7 +480,7 @@ class TestGoogleSheetsStorage:
             )
 
         assert transaction_sheet.rows[0] == [
-            *VERSION_3_WORKSHEET_HEADERS["Transactions"],
+            *headers["Transactions"],
             "receipt_references",
         ]
         assert transaction_sheet.rows[1][-1] == ""
@@ -425,7 +488,14 @@ class TestGoogleSheetsStorage:
     def test_profile_storage_migrates_hierarchy_columns_idempotently(
         self,
     ) -> None:
-        workbook = FakeWorkbook(VERSION_5_WORKSHEET_HEADERS)
+        headers = dict(WORKSHEET_HEADERS)
+        headers["Accounts"] = tuple(
+            header for header in headers["Accounts"] if header != "parent_id"
+        )
+        headers["Categories"] = tuple(
+            header for header in headers["Categories"] if header != "parent_id"
+        )
+        workbook = FakeWorkbook(headers)
         workbook.sheets["Accounts"].rows.append(
             [
                 "account-1",
@@ -1242,6 +1312,8 @@ class TestGoogleSheetsStorage:
         destination = self.storage.create_account("Savings", "Bank")
         expense = self.storage.create_category("Software", "Expense")
         income = self.storage.create_category("Sales", "Income")
+        vendor = self.storage.create_payee("Vendor")
+        customer = self.storage.create_payee("Customer")
 
         transaction = self.storage.create_transaction(
             txn_date="2026-07-19",
@@ -1249,7 +1321,7 @@ class TestGoogleSheetsStorage:
             amount="12.5",
             account_id=source["id"],
             category_id=expense["id"],
-            payee="Vendor",
+            payee_id=vendor["id"],
         )
         assert transaction["amount"] == "12.50"
         assert len(self.storage.list_transactions()) == 1
@@ -1259,7 +1331,7 @@ class TestGoogleSheetsStorage:
             kind="Income",
             amount=20,
             category_id=income["id"],
-            payee="Customer",
+            payee_id=customer["id"],
         )
         assert edited["kind"] == "Income"
         assert edited["created_at"] == transaction["created_at"]
@@ -2075,6 +2147,7 @@ class TestGoogleSheetsStorage:
             assert set(archive.namelist()) == {
                 "Accounts.csv",
                 "Categories.csv",
+                "Payees.csv",
                 "Transactions.csv",
                 "Mileage.csv",
                 "manifest.json",
@@ -2082,6 +2155,7 @@ class TestGoogleSheetsStorage:
             }
             manifest = json.loads(archive.read("manifest.json"))
             assert manifest["row_counts"]["Accounts"] == 1
+            assert manifest["row_counts"]["Payees"] == 0
             assert manifest["row_counts"]["Mileage"] == 1
             assert "backup_time" in manifest
             assert manifest["format_version"] == BACKUP_FORMAT_VERSION
@@ -2193,6 +2267,34 @@ class TestGoogleSheetsStorage:
 
         with pytest.raises(StorageValidationError, match="unsafe"):
             self.storage.validate_backup_zip(output.getvalue())
+
+    def test_backup_validation_normalizes_padded_payee_ids(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Office", "Expense")
+        payee = self.storage.create_payee("Vendor")
+        self.storage.create_transaction(
+            txn_date="2026-09-01",
+            kind="Expense",
+            amount=10,
+            account_id=account["id"],
+            category_id=category["id"],
+            payee_id=payee["id"],
+        )
+        backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
+
+        def pad_payee_id(rows: list[list[str]]) -> None:
+            payee_id_index = rows[0].index("id")
+            rows[1][payee_id_index] = f"  {payee['id']}  "
+
+        padded_backup = rewrite_backup_tables(backup, {"Payees": pad_payee_id})
+
+        validated = self.storage.validate_backup_zip(padded_backup)
+        target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+        target.restore_backup_zip(padded_backup)
+
+        assert validated["format_version"] == BACKUP_FORMAT_VERSION
+        assert target.list_payees()[0]["id"] == payee["id"]
+        assert target.list_transactions()[0]["payee_id"] == payee["id"]
 
     def test_manifest_rejects_a_drive_filename_that_would_be_trimmed(self) -> None:
         receipt = drive_file_from_reference(
@@ -2333,13 +2435,14 @@ class TestGoogleSheetsStorage:
     def test_restore_backup_into_blank_workbook_and_verify_rows(self) -> None:
         account = self.storage.create_account("Checking", "Bank", 125)
         category = self.storage.create_category("Sales", "Income")
+        payee = self.storage.create_payee("Customer")
         transaction = self.storage.create_transaction(
             txn_date="2026-07-19",
             kind="Income",
             amount=25,
             account_id=account["id"],
             category_id=category["id"],
-            payee="Customer",
+            payee_id=payee["id"],
         )
         self.storage.link_transaction_receipt(
             transaction["id"],
@@ -2360,6 +2463,7 @@ class TestGoogleSheetsStorage:
         assert counts == {
             "Accounts": 1,
             "Categories": 1,
+            "Payees": 1,
             "Transactions": 1,
             "Mileage": 1,
         }
@@ -2473,7 +2577,12 @@ class TestGoogleSheetsStorage:
         target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
         counts = target.restore_backup_zip(version_2_backup)
 
-        assert counts == {"Accounts": 1, "Categories": 0, "Transactions": 0}
+        assert counts == {
+            "Accounts": 1,
+            "Categories": 0,
+            "Payees": 0,
+            "Transactions": 0,
+        }
         assert target.list_mileage_trips() == []
 
         nonblank_target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
@@ -2681,6 +2790,60 @@ class TestGoogleSheetsStorage:
                 [],
                 expected_transactions=[],
             )
+
+    def test_bulk_category_change_normalizes_padded_payee_ids(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Office", "Expense")
+        replacement = self.storage.create_category("Travel", "Expense")
+        payee = self.storage.create_payee("Vendor")
+        transaction = self.storage.create_transaction(
+            txn_date="2026-07-18",
+            kind="Expense",
+            amount=1,
+            account_id=account["id"],
+            category_id=category["id"],
+            payee_id=payee["id"],
+        )
+        expected = self.storage.list_transactions(_force_refresh=True)
+        transaction_sheet = self.workbook.sheets["Transactions"]
+        payee_index = transaction_sheet.rows[0].index("payee_id")
+        transaction_sheet.rows[1][payee_index] = f"  {payee['id']}  "
+
+        result = self.storage.bulk_change_transaction_category(
+            [transaction["id"]],
+            expected_transactions=expected,
+            category_id=replacement["id"],
+        )
+
+        assert result == {"status": "fully_applied", "count": "1"}
+
+    def test_payee_activation_retries_when_batch_update_is_not_applied(self) -> None:
+        delays: list[float] = []
+        storage = GoogleSheetsStorage(
+            self.workbook,
+            retry_attempts=2,
+            retry_base_delay_seconds=0.25,
+            sleeper=delays.append,
+        )
+        payee = storage.create_payee("Vendor", active=False)
+        worksheet = self.workbook.sheets["Payees"]
+        original_batch_update = worksheet.batch_update
+        calls = 0
+
+        def fail_once(data: list[dict[str, object]], **kwargs: object) -> None:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise OSError("temporary failure")
+            original_batch_update(data, **kwargs)
+
+        worksheet.batch_update = Mock(side_effect=fail_once)
+
+        result = storage._ensure_payee_names(["Vendor"])
+
+        assert result[payee["id"]]["active"] == "TRUE"
+        assert calls == 2
+        assert delays == [0.25]
 
     def test_bulk_category_change_uses_one_minimal_atomic_batch(self) -> None:
         first, second, replacement = self._bulk_transaction_fixture()

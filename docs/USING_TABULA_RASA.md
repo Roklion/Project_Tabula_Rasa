@@ -313,6 +313,10 @@ and validates the selected Drive archive; it does not read or change the live
 workbook. See [Backup and recovery](BACKUP_RECOVERY.md) for the operator
 workflow.
 
+Payees are managed values. Transaction forms offer existing active payees and
+start with **+ Add new payee**. Existing workbooks must be upgraded once with
+`scripts/migrate_payees.py` before using the new transaction schema.
+
 ## Imports
 
 All import previews are profile-scoped and read-only until their explicit

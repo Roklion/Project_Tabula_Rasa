@@ -3,6 +3,7 @@
 from .google_sheets import (
     decode_receipt_references,
     GoogleSheetsStorage,
+    normalize_payee_name,
     StorageAuthenticationError,
     StorageBulkMutationUncertainError,
     StorageConflictError,
@@ -17,6 +18,7 @@ from .google_sheets import (
 __all__ = [
     "decode_receipt_references",
     "GoogleSheetsStorage",
+    "normalize_payee_name",
     "StorageAuthenticationError",
     "StorageBulkMutationUncertainError",
     "StorageConflictError",

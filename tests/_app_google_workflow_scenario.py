@@ -147,6 +147,8 @@ def main() -> None:
         by_label(app.selectbox, "Category").set_value(
             "Testing expense renamed"
         )
+        payee_selector = by_label(app.selectbox, "Payee / customer")
+        assert payee_selector.options[0] == "+ Add new payee"
         by_label(app.text_input, "Payee / customer").input("Test vendor")
         by_label(app.text_input, "Description / memo").input("Keep this memo")
         with patch.object(
@@ -182,6 +184,10 @@ def main() -> None:
             for item in storage.list_transactions()
             if item["kind"] == "Expense"
         )
+        stored_payee = next(
+            item for item in storage.list_payees() if item["name"] == "Test vendor"
+        )
+        assert owner_expense["payee_id"] == stored_payee["id"]
         assert owner_expense["account_id"] == owner_equity["id"]
         statement = balance_sheet(
             storage.list_accounts(active_only=False),

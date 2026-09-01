@@ -76,13 +76,19 @@ make the workbook public.
 | --- | --- |
 | Accounts | id, name, type, classification, opening_balance, active, created_at, parent_id |
 | Categories | id, name, kind, parent_id |
-| Transactions | id, txn_date, kind, amount, account_id, to_account_id, category_id, payee, description, reference, receipt_references, created_at |
+| Payees | id, name, active, created_at |
+| Transactions | id, txn_date, kind, amount, account_id, to_account_id, category_id, payee_id, description, reference, receipt_references, created_at |
 | Mileage | id, trip_date, miles, vehicle, start_location, destination, business_purpose, notes, created_at |
 
 The default Sheet1 tab may remain or be deleted. Existing compatible tabs are
 preserved. Empty required tabs receive headers; populated incompatible tabs
 cause validation to fail rather than being overwritten. Defaults are seeded
 only in a blank workbook.
+
+Existing workbooks that still store transaction payee text must be upgraded
+with the one-time payee migration before using the managed `Payees` and
+`Transactions.payee_id` schema. See [Backup and recovery](BACKUP_RECOVERY.md)
+for the migration command and legacy-backup compatibility details.
 
 On normal startup, the application migrates exact legacy format-version 5
 Accounts and Categories headers by appending a blank parent_id column. Existing
@@ -192,7 +198,8 @@ policy, or app-wide Synology defaults do not require a hosted export.
 
 ## Validate readiness
 
-Validate one configured workbook and its headers without displaying ledger rows:
+Validate one configured workbook, its headers, and managed Payees records
+without displaying ledger rows:
 
 ```powershell
 python scripts\validate_google_sheets.py --profile PROFILE_KEY
