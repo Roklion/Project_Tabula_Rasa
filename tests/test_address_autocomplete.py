@@ -53,6 +53,14 @@ def test_failed_maps_load_button_retries_google_mode() -> None:
     ) in _JS
 
 
+def test_provider_error_clears_previous_place_selection() -> None:
+    assert (
+        "selectedDisplay = '';\n"
+        "        emit('changed', element.value || '');\n"
+        "        showManual('Google address suggestions are unavailable.');"
+    ) in _JS
+
+
 def test_google_provider_errors_switch_to_manual_mode() -> None:
     assert "element.addEventListener('gmp-error', () => {" in _JS
     assert (
