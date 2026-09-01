@@ -1955,7 +1955,7 @@ class GoogleSheetsStorage:
         if account_id not in accounts:
             raise StorageValidationError("Source account does not exist")
         original_account_id = (
-            str(original_transaction.get("account_id", ""))
+            _clean_text(original_transaction.get("account_id"), "Account")
             if original_transaction is not None
             else None
         )
@@ -1968,7 +1968,10 @@ class GoogleSheetsStorage:
             if to_account_id not in accounts:
                 raise StorageValidationError("Destination account does not exist")
             original_to_account_id = (
-                str(original_transaction.get("to_account_id", ""))
+                _clean_text(
+                    original_transaction.get("to_account_id"),
+                    "Destination account",
+                )
                 if original_transaction is not None
                 else None
             )
@@ -2947,7 +2950,9 @@ class GoogleSheetsStorage:
                 )
         for title in WORKSHEET_HEADERS:
             target_headers = self._headers(title)
-            if title in tables and set(target_headers) != set(tables[title][0]):
+            if title in tables and not (legacy_payees and title == "Payees") and set(
+                target_headers
+            ) != set(tables[title][0]):
                 raise StorageValidationError(
                     f"{title} target headers do not match the backup"
                 )

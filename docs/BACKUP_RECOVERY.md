@@ -66,7 +66,7 @@ The validator and restore path accept formats 2 through 7:
 | 3 | Adds Mileage; no transaction receipt references |
 | 4 | Adds transaction receipt references; no receipt inventory |
 | 5 | Adds checksummed receipts.json inventory |
-| 6 | Current format with account and category parent_id hierarchy |
+| 6 | Supported legacy format adding account and category parent_id hierarchy |
 | 7 | Current format with managed Payees and transaction payee_id references |
 
 Before upgrading an existing workbook, run the one-time payee migration:

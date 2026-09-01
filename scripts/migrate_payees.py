@@ -7,6 +7,7 @@ import sys
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -22,6 +23,14 @@ from tabula_rasa.storage.google_sheets import (  # noqa: E402
     _validate_payee_records,
     normalize_payee_name,
 )
+
+
+def _looks_like_uuid(value: str) -> bool:
+    try:
+        UUID(value)
+    except ValueError:
+        return False
+    return True
 
 
 def migrate_payee_rows(
@@ -138,6 +147,10 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
         for row in rows:
             value = str(row.get("payee_id", "")).strip()
             if value and value not in known_payee_ids:
+                if _looks_like_uuid(value):
+                    raise ValueError(
+                        "Transactions worksheet contains an unknown payee_id"
+                    )
                 legacy_rows.append(row)
                 row["payee"] = value
                 row["payee_id"] = ""

@@ -103,6 +103,52 @@ def test_edit_normalizes_unchanged_padded_inactive_payee_reference() -> None:
     assert updated["description"] == "Updated"
 
 
+def test_edit_normalizes_unchanged_padded_inactive_account_reference() -> None:
+    workbook = FakeWorkbook()
+    storage = GoogleSheetsStorage(workbook, sleeper=lambda _: None)
+    account = storage.create_account("Checking", "Bank")
+    category = storage.create_category("Office", "Expense")
+    transaction = storage.create_transaction(
+        txn_date="2026-09-01",
+        kind="Expense",
+        amount=10,
+        account_id=account["id"],
+        category_id=category["id"],
+    )
+    storage.edit_account(account["id"], active=False)
+    transaction_sheet = workbook.worksheet("Transactions")
+    account_index = transaction_sheet.rows[0].index("account_id")
+    transaction_sheet.rows[1][account_index] = f"  {account['id']}  "
+
+    updated = storage.edit_transaction(transaction["id"], description="Updated")
+
+    assert updated["account_id"] == account["id"]
+    assert updated["description"] == "Updated"
+
+
+def test_edit_normalizes_unchanged_padded_inactive_transfer_destination() -> None:
+    workbook = FakeWorkbook()
+    storage = GoogleSheetsStorage(workbook, sleeper=lambda _: None)
+    source = storage.create_account("Checking", "Bank")
+    destination = storage.create_account("Savings", "Bank")
+    transaction = storage.create_transaction(
+        txn_date="2026-09-01",
+        kind="Transfer",
+        amount=10,
+        account_id=source["id"],
+        to_account_id=destination["id"],
+    )
+    storage.edit_account(destination["id"], active=False)
+    transaction_sheet = workbook.worksheet("Transactions")
+    destination_index = transaction_sheet.rows[0].index("to_account_id")
+    transaction_sheet.rows[1][destination_index] = f"  {destination['id']}  "
+
+    updated = storage.edit_transaction(transaction["id"], description="Updated")
+
+    assert updated["to_account_id"] == destination["id"]
+    assert updated["description"] == "Updated"
+
+
 def test_edit_preserves_unchanged_inactive_transaction_references() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     account = storage.create_account("Checking", "Bank")
@@ -367,6 +413,59 @@ def test_migration_rejects_malformed_transaction_headers(
 
     assert transaction_sheet.rows == original_transactions
     assert payee_sheet.rows == original_payees
+
+
+def test_migration_rejects_dangling_uuid_payee_id() -> None:
+    workbook = FakeWorkbook()
+    transaction_sheet = workbook.worksheet("Transactions")
+    transaction_sheet.rows.append(
+        [
+            "txn",
+            "2026-09-01",
+            "Expense",
+            "10.00",
+            "account",
+            "",
+            "category",
+            "123e4567-e89b-12d3-a456-426614174000",
+            "",
+            "",
+            "",
+            "now",
+        ]
+    )
+    original_transactions = [list(row) for row in transaction_sheet.rows]
+    payee_sheet = workbook.worksheet("Payees")
+    original_payees = [list(row) for row in payee_sheet.rows]
+
+    with pytest.raises(ValueError, match="unknown payee_id"):
+        migrate_workbook(workbook)
+
+    assert transaction_sheet.rows == original_transactions
+    assert payee_sheet.rows == original_payees
+
+
+def test_legacy_restore_accepts_extra_payee_headers() -> None:
+    source = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    account = source.create_account("Checking", "Bank")
+    category = source.create_category("Office", "Expense")
+    source.create_transaction(
+        txn_date="2026-09-01",
+        kind="Expense",
+        amount=10,
+        account_id=account["id"],
+        category_id=category["id"],
+    )
+    target_workbook = FakeWorkbook()
+    target_workbook.worksheet("Payees").rows[0].append("notes")
+    target = GoogleSheetsStorage(target_workbook, sleeper=lambda _: None)
+
+    counts = target.restore_backup_zip(_legacy_backup(source, "Legacy vendor"))
+
+    assert counts["Transactions"] == 1
+    assert target_workbook.worksheet("Payees").rows == [
+        ["id", "name", "active", "created_at", "notes"]
+    ]
 
 
 def test_migration_appends_payees_in_existing_header_order() -> None:
