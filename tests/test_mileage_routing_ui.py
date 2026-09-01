@@ -17,6 +17,7 @@ from tabula_rasa.page_renderers.mileage import (
     _clear_unchanged_calculated_mileage,
     _edit_address_initial_value,
     _edit_route_warning_visible,
+    _recorded_address_changed,
     _route_state_is_current,
     _route_disabled_reason,
     _autocomplete_available,
@@ -219,6 +220,19 @@ def test_edit_route_warning_clears_after_successful_recalculation() -> None:
         {"fingerprint": fingerprint, "outbound": 12.4},
         fingerprint,
     ) is True
+
+
+def test_maps_prefill_is_not_an_independent_recorded_address_change() -> None:
+    selected = AddressSelection(
+        display_text="Updated office",
+        place_id="place-office",
+        version=2,
+    )
+
+    assert not _recorded_address_changed(
+        "Updated office", "Saved office", selected
+    )
+    assert _recorded_address_changed("Custom ledger text", "Saved office", selected)
 
 
 def test_edit_lookup_uses_saved_address_only_without_maps() -> None:

@@ -221,6 +221,18 @@ def _edit_route_warning_visible(
     )
 
 
+def _recorded_address_changed(
+    edited_value: str,
+    saved_value: object,
+    selection: AddressSelection,
+) -> bool:
+    """Ignore recorded text that was just populated from a Maps selection."""
+    return edited_value.strip() != str(saved_value or "").strip() and not (
+        selection.place_id
+        and edited_value.strip() == selection.display_text.strip()
+    )
+
+
 def _discard_modified_calculated_mileage_markers(
     *,
     miles_key: str,
@@ -865,10 +877,16 @@ def render_mileage(context: MileageContext) -> None:
                     selected.get("destination", ""),
                 )
                 edit_recorded_address_changed = (
-                    edited_start.strip()
-                    != str(selected.get("start_location", "")).strip()
-                    or edited_destination.strip()
-                    != str(selected.get("destination", "")).strip()
+                    _recorded_address_changed(
+                        edited_start,
+                        selected.get("start_location", ""),
+                        edit_start,
+                    )
+                    or _recorded_address_changed(
+                        edited_destination,
+                        selected.get("destination", ""),
+                        edit_destination,
+                    )
                 )
                 calculate_edit_requested = st.button(
                     "Recalculate mileage"
