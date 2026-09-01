@@ -1826,7 +1826,8 @@ class GoogleSheetsStorage:
         payees = self.list_payees(_force_refresh=True)
         by_key = {normalize_payee_name(item["name"]): item for item in payees}
         rows_by_id = {
-            str(row.values["id"]): row for row in self._rows("Payees")
+            _clean_text(row.values.get("id"), "Payee ID", required=True): row
+            for row in self._rows("Payees")
         }
         additions: list[dict[str, str]] = []
         activations: list[dict[str, str]] = []
@@ -2903,8 +2904,8 @@ class GoogleSheetsStorage:
 
     def restore_backup_zip(self, backup: bytes) -> dict[str, int]:
         """Restore a validated backup into a blank initialized workbook."""
-        _, tables, _ = _parse_backup_zip(backup)
-        legacy_payees = "legacy_payee" in tables["Transactions"][1][0] if tables["Transactions"][1] else False
+        manifest, tables, _ = _parse_backup_zip(backup)
+        legacy_payees = manifest["format_version"] < BACKUP_FORMAT_VERSION
         existing_payees = self.list_payees(_force_refresh=True)
         payees_by_key = {
             normalize_payee_name(item["name"]): item["id"] for item in existing_payees
@@ -2933,6 +2934,7 @@ class GoogleSheetsStorage:
                 continue
             _, records = tables[title]
             if not records and title == "Payees" and legacy_payees:
+                counts[title] = 0
                 continue
             self._append_many(title, records)
             restored = self._rows(title, force_refresh=True)

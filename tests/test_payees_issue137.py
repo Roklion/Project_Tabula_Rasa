@@ -115,6 +115,20 @@ def test_ensuring_payees_batches_reactivation_writes() -> None:
     }
 
 
+def test_ensuring_payees_reactivates_ids_with_storage_whitespace() -> None:
+    workbook = FakeWorkbook()
+    storage = GoogleSheetsStorage(workbook, sleeper=lambda _: None)
+    payee = storage.create_payee("Vendor")
+    storage.edit_payee(payee["id"], active=False)
+    payee_row = workbook.worksheet("Payees").rows[1]
+    payee_row[0] = f"  {payee['id']}  "
+
+    ensured = storage._ensure_payee_names(["Vendor"])
+
+    assert ensured[payee["id"]]["active"] == "TRUE"
+    assert storage.list_payees()[0]["active"] == "TRUE"
+
+
 def test_list_transactions_rejects_unknown_payee_references() -> None:
     workbook = FakeWorkbook()
     storage = GoogleSheetsStorage(workbook, sleeper=lambda _: None)
@@ -220,6 +234,14 @@ def test_migration_accepts_short_existing_payee_rows() -> None:
     assert transaction_sheet.rows[1][payee_index] == "existing-id"
     assert payee_sheet.rows[1] == ["existing-id", "Existing vendor", "TRUE", ""]
     assert GoogleSheetsStorage(workbook).list_payees()[0]["active"] == "TRUE"
+
+
+def test_migration_rejects_payees_worksheet_missing_required_headers() -> None:
+    workbook = FakeWorkbook()
+    workbook.worksheet("Payees").rows[0] = ["id", "name", "created_at"]
+
+    with pytest.raises(ValueError, match="missing required headers: active"):
+        migrate_workbook(workbook)
 
 
 def test_migration_resumes_after_header_write_failure() -> None:
@@ -571,3 +593,42 @@ def test_legacy_backup_drops_unmatched_payee_text() -> None:
     restored = target.list_transactions()[0]
     assert restored["payee_id"] == ""
     assert restored["payee"] == ""
+
+
+def test_legacy_backup_without_transactions_preserves_existing_payees() -> None:
+    source = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    backup = source.export_backup_zip(
+        build_receipt_manifest("test", source.list_transactions(), [])
+    )
+    output = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(backup)) as archive:
+        contents = {name: archive.read(name) for name in archive.namelist()}
+    manifest = json.loads(contents["manifest.json"])
+    transaction_rows = list(
+        csv.reader(io.StringIO(contents["Transactions.csv"].decode("utf-8")))
+    )
+    payee_id_index = transaction_rows[0].index("payee_id")
+    transaction_rows[0][payee_id_index] = "payee"
+    csv_buffer = io.StringIO(newline="")
+    csv.writer(csv_buffer, lineterminator="\n").writerows(transaction_rows)
+    contents["Transactions.csv"] = csv_buffer.getvalue().encode("utf-8")
+    manifest["format_version"] = 6
+    manifest["worksheet_headers"]["Transactions"] = transaction_rows[0]
+    manifest["worksheet_headers"].pop("Payees")
+    manifest["row_counts"].pop("Payees")
+    manifest["sha256"]["Transactions.csv"] = hashlib.sha256(
+        contents["Transactions.csv"]
+    ).hexdigest()
+    manifest["sha256"].pop("Payees.csv")
+    contents.pop("Payees.csv")
+    contents["manifest.json"] = json.dumps(manifest).encode("utf-8")
+    with zipfile.ZipFile(output, "w") as destination:
+        for name, content in contents.items():
+            destination.writestr(name, content)
+
+    target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    existing = target.create_payee("Existing vendor")
+
+    target.restore_backup_zip(output.getvalue())
+
+    assert target.list_payees()[0]["id"] == existing["id"]

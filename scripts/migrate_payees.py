@@ -84,6 +84,11 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
         )
         payee_values = [list(WORKSHEET_HEADERS["Payees"])]
     payee_headers = [str(value).strip() for value in payee_values[0]]
+    required_payee_headers = {"id", "name", "active"}
+    missing_headers = required_payee_headers - set(payee_headers)
+    if missing_headers:
+        missing = ", ".join(sorted(missing_headers))
+        raise ValueError(f"Payees worksheet is missing required headers: {missing}")
     payee_rows: list[list[str]] = []
     payees_changed = False
     active_index = payee_headers.index("active")
