@@ -2783,6 +2783,32 @@ class TestGoogleSheetsStorage:
                 expected_transactions=[],
             )
 
+    def test_bulk_category_change_normalizes_padded_payee_ids(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Office", "Expense")
+        replacement = self.storage.create_category("Travel", "Expense")
+        payee = self.storage.create_payee("Vendor")
+        transaction = self.storage.create_transaction(
+            txn_date="2026-07-18",
+            kind="Expense",
+            amount=1,
+            account_id=account["id"],
+            category_id=category["id"],
+            payee_id=payee["id"],
+        )
+        expected = self.storage.list_transactions(_force_refresh=True)
+        transaction_sheet = self.workbook.sheets["Transactions"]
+        payee_index = transaction_sheet.rows[0].index("payee_id")
+        transaction_sheet.rows[1][payee_index] = f"  {payee['id']}  "
+
+        result = self.storage.bulk_change_transaction_category(
+            [transaction["id"]],
+            expected_transactions=expected,
+            category_id=replacement["id"],
+        )
+
+        assert result == {"status": "fully_applied", "count": "1"}
+
     def test_bulk_category_change_uses_one_minimal_atomic_batch(self) -> None:
         first, second, replacement = self._bulk_transaction_fixture()
         expected = [

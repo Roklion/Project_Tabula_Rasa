@@ -1271,6 +1271,8 @@ class GoogleSheetsStorage:
                 if str(key) in self._headers("Transactions")
             }
             current = dict(row.values)
+            if "payee_id" in current:
+                current["payee_id"] = _clean_text(current.get("payee_id"), "Payee")
             if {key: current.get(key, "") for key in expected} != expected:
                 raise StorageConflictError(
                     "A selected transaction changed; review the current rows and try again."

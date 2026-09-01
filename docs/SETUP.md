@@ -198,7 +198,8 @@ policy, or app-wide Synology defaults do not require a hosted export.
 
 ## Validate readiness
 
-Validate one configured workbook and its headers without displaying ledger rows:
+Validate one configured workbook, its headers, and managed Payees records
+without displaying ledger rows:
 
 ```powershell
 python scripts\validate_google_sheets.py --profile PROFILE_KEY
