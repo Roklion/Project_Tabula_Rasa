@@ -746,12 +746,12 @@ class GoogleSheetsStorage:
                     existing_headers = [
                         str(value).strip() for value in values[0]
                     ]
-                    legacy_transaction_headers = set(
-                        VERSION_3_WORKSHEET_HEADERS["Transactions"]
-                    )
+                    transaction_headers_without_receipts = set(
+                        WORKSHEET_HEADERS["Transactions"]
+                    ) - {"receipt_references"}
                     if (
                         "receipt_references" not in existing_headers
-                        and legacy_transaction_headers.issubset(
+                        and transaction_headers_without_receipts.issubset(
                             existing_headers
                         )
                         and len(existing_headers)
@@ -1848,9 +1848,18 @@ class GoogleSheetsStorage:
                 raise StorageValidationError("Category kind does not match transaction kind")
 
         payee_id = _clean_text(data.get("payee_id"), "Payee")
+        new_payee_name = _clean_text(data.get("new_payee_name"), "New payee")
         legacy_payee = _clean_text(data.get("payee"), "Payee")
-        if not payee_id and legacy_payee:
-            payee_id = self.create_payee(legacy_payee)["id"]
+        if legacy_payee:
+            raise StorageValidationError(
+                "Transactions must reference a stored payee"
+            )
+        if payee_id and new_payee_name:
+            raise StorageValidationError(
+                "Choose an existing payee or add a new payee"
+            )
+        if not payee_id and new_payee_name:
+            payee_id = self.create_payee(new_payee_name)["id"]
             payees = self._payee_lookup(force_refresh=True)
         if payee_id and payee_id not in payees:
             raise StorageValidationError("Payee does not exist")
@@ -2497,7 +2506,7 @@ class GoogleSheetsStorage:
                         "amount": row.get("Amount"),
                         "account_id": account["id"],
                         "category_id": category["id"],
-                        "payee": row.get("Payee", ""),
+                        "new_payee_name": row.get("Payee", ""),
                         "description": row.get("Description", ""),
                         "reference": row.get("Reference", ""),
                     },
@@ -2518,7 +2527,7 @@ class GoogleSheetsStorage:
         """Validate and summarize a QuickBooks export without writing anything."""
         source_rows = list(rows)
         self._snapshot(
-            ["Accounts", "Categories", "Transactions"],
+            ["Accounts", "Categories", "Transactions", "Payees"],
             force_refresh=_force_refresh,
         )
         accounts = self._account_lookup()
@@ -2630,7 +2639,11 @@ class GoogleSheetsStorage:
         categories = self._category_lookup()
         prepared = [
             self._prepare_transaction(
-                item,
+                {
+                    **item,
+                    "new_payee_name": item.get("payee", ""),
+                    "payee": "",
+                },
                 accounts=accounts,
                 categories=categories,
             )

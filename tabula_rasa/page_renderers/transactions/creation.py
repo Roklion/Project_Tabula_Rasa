@@ -202,7 +202,7 @@ def render_add_transaction(
                             payload,
                             lambda: context.storage.create_transaction(
                                 **payload,
-                                payee=(
+                                new_payee_name=(
                                     new_payee_name
                                     if payee_id == "+ Add new payee"
                                     else ""

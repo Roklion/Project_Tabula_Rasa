@@ -26,13 +26,14 @@ def populated_workbook() -> FakeWorkbook:
     storage = GoogleSheetsStorage(workbook, sleeper=lambda _: None)
     account = storage.create_account("Checking", "Bank")
     category = storage.create_category("Software", "Expense")
+    payee = storage.create_payee("Vendor")
     storage.create_transaction(
         txn_date="2026-07-29",
         kind="Expense",
         amount="12.50",
         account_id=account["id"],
         category_id=category["id"],
-        payee="Vendor",
+        payee_id=payee["id"],
     )
     storage.create_mileage_trip(
         trip_date="2026-07-29",

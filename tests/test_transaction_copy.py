@@ -22,13 +22,14 @@ def _transaction_fixture() -> tuple[GoogleSheetsStorage, dict[str, str]]:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     account = storage.create_account("Checking", "Bank")
     category = storage.create_category("Office", "Expense")
+    payee = storage.create_payee("Vendor")
     transaction = storage.create_transaction(
         txn_date=f"{date.today().year}-07-19",
         kind="Expense",
         amount=12.5,
         account_id=account["id"],
         category_id=category["id"],
-        payee="Vendor",
+        payee_id=payee["id"],
         description="Original memo",
         reference="INV-123",
     )

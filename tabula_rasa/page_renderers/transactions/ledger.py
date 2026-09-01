@@ -909,7 +909,9 @@ def render_ledger(
                             payload,
                             lambda: context.storage.create_transaction(
                                 **transaction_data,
-                                payee=edited_new_payee if copy_mode else "",
+                                new_payee_name=(
+                                    edited_new_payee if copy_mode else ""
+                                ),
                             ),
                             "Transaction copied.",
                             on_confirmed=lambda result: st.session_state.__setitem__(
@@ -965,7 +967,7 @@ def render_ledger(
                                         if edited_payee_id == "+ Add new payee"
                                         else edited_payee_id
                                     ),
-                                    payee=edited_new_payee,
+                                    new_payee_name=edited_new_payee,
                                     reference=edited_reference,
                                     description=edited_description,
                                 ),
