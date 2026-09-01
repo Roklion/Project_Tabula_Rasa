@@ -1515,7 +1515,15 @@ class TestGoogleSheetsStorage:
             ("Client site", "Office", "12.6"),
         ]
         assert {record["business_purpose"] for record in records} == {"Project meeting"}
-        assert len(self.storage.list_mileage_trips()) == 2
+        listed = self.storage.list_mileage_trips()
+        assert len(listed) == 2
+        assert [
+            (record["start_location"], record["destination"])
+            for record in listed
+        ] == [
+            ("Client site", "Office"),
+            ("Office", "Client site"),
+        ]
 
     def test_mileage_round_trip_supports_different_return_miles(self) -> None:
         worksheet = self.workbook.sheets["Mileage"]

@@ -2187,7 +2187,10 @@ class GoogleSheetsStorage:
             trips.append(item)
         return sorted(
             trips,
-            key=lambda item: (item["trip_date"], item["created_at"], item["id"]),
+            # Python's sort is stable, so same-timestamp rows retain the
+            # worksheet insertion order. New round-trip writes intentionally
+            # put the reversed return leg before outbound.
+            key=lambda item: (item["trip_date"], item["created_at"]),
             reverse=True,
         )
 
@@ -2223,8 +2226,11 @@ class GoogleSheetsStorage:
             return_data,
             created_at=created_at,
         )
+        # Keep the public return value in semantic outbound/return order, but
+        # write the rows in the order the log should display for a new pair.
+        # Existing rows are not rewritten or migrated.
         records = [outbound, return_trip]
-        self._append_many("Mileage", records)
+        self._append_many("Mileage", [return_trip, outbound])
         return records
 
     def edit_mileage_trip(self, trip_id: str, **changes: Any) -> dict[str, str]:
