@@ -264,6 +264,12 @@ def _discard_modified_calculated_mileage_markers(
             st.session_state.pop(marker_key, None)
 
 
+def _set_widget_default(key: str, value: float) -> None:
+    """Initialize a keyed numeric widget without also passing a default."""
+    if key not in st.session_state:
+        st.session_state[key] = value
+
+
 def _clear_unchanged_calculated_mileage(
     route_state: object,
     *,
@@ -606,18 +612,19 @@ def render_mileage(context: MileageContext) -> None:
                 key="add_mileage_vehicle",
             )
             c1, c2 = st.columns(2, gap="small")
+            _set_widget_default("add_mileage_miles", 0.0)
             miles = c1.number_input(
-                "Business miles", min_value=0.0, step=0.1, value=0.0,
+                "Business miles", min_value=0.0, step=0.1,
                 format="%.1f",
                 key="add_mileage_miles",
             )
             return_miles = miles
             if round_trip:
+                _set_widget_default("add_mileage_return_miles", float(miles))
                 return_miles = st.number_input(
                     "Return business miles",
                     min_value=0.0,
                     step=0.1,
-                    value=float(miles),
                     format="%.1f",
                     key="add_mileage_return_miles",
                     help="The return route is editable independently.",
@@ -965,13 +972,18 @@ def render_mileage(context: MileageContext) -> None:
                         date.fromisoformat(selected["trip_date"]),
                         key=f"edit_mileage_trip_date_{edit_widget_scope}",
                     )
+                    edit_miles_key = (
+                        f"edit_mileage_trip_miles_{edit_widget_scope}"
+                    )
+                    _set_widget_default(
+                        edit_miles_key, float(selected["miles"])
+                    )
                     edited_miles = c2.number_input(
                         "Edit business miles",
                         min_value=0.1,
                         step=0.1,
-                        value=float(selected["miles"]),
                         format="%.1f",
-                        key=f"edit_mileage_trip_miles_{edit_widget_scope}",
+                        key=edit_miles_key,
                     )
                     edited_vehicle = st.text_input(
                         "Edit vehicle",

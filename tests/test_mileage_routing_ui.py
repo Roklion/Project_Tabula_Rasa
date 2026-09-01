@@ -22,6 +22,7 @@ from tabula_rasa.page_renderers.mileage import (
     _route_disabled_reason,
     _autocomplete_available,
     _same_selected_place,
+    _set_widget_default,
     _save_round_trip,
 )
 
@@ -275,6 +276,23 @@ def test_modified_calculated_mileage_is_treated_as_manual(monkeypatch) -> None:
 
     assert session_state["add_mileage_miles"] == 14.0
     assert "add_mileage_miles__calculated" not in session_state
+
+
+def test_widget_default_does_not_overwrite_pending_calculation(monkeypatch) -> None:
+    import streamlit as st
+
+    session_state: dict[str, object] = {
+        "add_mileage_miles": 12.4,
+    }
+    monkeypatch.setattr(st, "session_state", session_state)
+
+    _set_widget_default("add_mileage_miles", 0.0)
+    _set_widget_default("add_mileage_return_miles", 12.4)
+
+    assert session_state == {
+        "add_mileage_miles": 12.4,
+        "add_mileage_return_miles": 12.4,
+    }
 
 
 def test_google_location_text_prefills_the_ledger_input(monkeypatch) -> None:
