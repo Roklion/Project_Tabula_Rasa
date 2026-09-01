@@ -215,6 +215,15 @@ def test_route_disabled_reason_reports_missing_autocomplete_before_routing() -> 
     )
 
 
+def test_route_disabled_reason_reports_missing_routing_when_both_are_unavailable() -> None:
+    assert "routing is not configured" in _route_disabled_reason(
+        AddressSelection("Office"),
+        AddressSelection("Client"),
+        None,
+        autocomplete_available=False,
+    )
+
+
 def test_route_disabled_reason_distinguishes_unconfigured_and_invalid_inputs() -> None:
     start = AddressSelection("Office", "office", 1)
     destination = AddressSelection("Client", "client", 1)
