@@ -12,7 +12,11 @@ import pytest
 
 from scripts.migrate_payees import migrate_payee_rows, migrate_workbook
 from tabula_rasa.receipt_manifest import build_receipt_manifest
-from tabula_rasa.storage import GoogleSheetsStorage, StorageValidationError
+from tabula_rasa.storage import (
+    GoogleSheetsStorage,
+    StorageConflictError,
+    StorageValidationError,
+)
 from tests.fakes import FakeWorkbook
 
 
@@ -543,6 +547,52 @@ def test_concurrent_payee_creation_rechecks_inside_shared_lock() -> None:
     assert len(results) == 2
     assert results[0]["id"] == results[1]["id"]
     assert len(workbook.worksheet("Payees").rows) == 2
+
+
+def test_concurrent_payee_renames_recheck_inside_shared_lock() -> None:
+    workbook = FakeWorkbook()
+    first = GoogleSheetsStorage(workbook, sleeper=lambda _: None)
+    second = GoogleSheetsStorage(workbook, sleeper=lambda _: None)
+    first_payee = first.create_payee("First vendor")
+    second_payee = second.create_payee("Second vendor")
+    payee_sheet = workbook.worksheet("Payees")
+    original_update = payee_sheet.update
+    update_started = threading.Event()
+    release_update = threading.Event()
+
+    def delayed_update(
+        values: list[list[str]], range_name: str, **kwargs: object
+    ) -> None:
+        if not update_started.is_set():
+            update_started.set()
+            assert release_update.wait(timeout=2)
+        original_update(values, range_name, **kwargs)
+
+    payee_sheet.update = delayed_update  # type: ignore[method-assign]
+    renamed: list[dict[str, str]] = []
+    errors: list[Exception] = []
+
+    def rename(storage: GoogleSheetsStorage, payee_id: str) -> None:
+        try:
+            renamed.append(storage.edit_payee(payee_id, name="Merged vendor"))
+        except Exception as error:  # pragma: no cover - assertion below checks the type
+            errors.append(error)
+
+    first_thread = threading.Thread(target=rename, args=(first, first_payee["id"]))
+    second_thread = threading.Thread(target=rename, args=(second, second_payee["id"]))
+    first_thread.start()
+    assert update_started.wait(timeout=2)
+    second_thread.start()
+    release_update.set()
+    first_thread.join(timeout=2)
+    second_thread.join(timeout=2)
+
+    assert not first_thread.is_alive()
+    assert not second_thread.is_alive()
+    assert len(renamed) == 1
+    assert len(errors) == 1
+    assert isinstance(errors[0], StorageConflictError)
+    assert len(workbook.worksheet("Payees").rows) == 3
 
 
 def test_new_payee_transaction_uses_created_record_without_refresh() -> None:
