@@ -121,10 +121,46 @@ def test_migration_resumes_after_header_write_failure() -> None:
     transaction_sheet.update = original_update  # type: ignore[method-assign]
     result = migrate_workbook(workbook)
 
-    assert result == {"payees": 1, "transactions": 1}
+    assert result == {"payees": 0, "transactions": 1}
     assert transaction_sheet.rows[1][payee_index]
     assert workbook.worksheet("Payees").rows[1][1] == "Legacy vendor"
     assert migrate_workbook(workbook) == {"payees": 1, "transactions": 0}
+
+
+def test_migration_resumes_after_partial_payee_append() -> None:
+    workbook = FakeWorkbook()
+    transaction_sheet = workbook.worksheet("Transactions")
+    payee_index = transaction_sheet.rows[0].index("payee_id")
+    transaction_sheet.rows[0][payee_index] = "payee"
+    transaction_sheet.rows.extend(
+        [
+            ["one", "2026-09-01", "Expense", "10.00", "account", "", "category", "First vendor", "", "", "", "now"],
+            ["two", "2026-09-02", "Expense", "11.00", "account", "", "category", "Second vendor", "", "", "", "now"],
+        ]
+    )
+    payee_sheet = workbook.worksheet("Payees")
+    original_append = payee_sheet.append_rows
+
+    def append_first_then_fail(
+        values: list[list[str]], **kwargs: object
+    ) -> None:
+        original_append(values[:1], **kwargs)
+        raise OSError("simulated interrupted payee append")
+
+    payee_sheet.append_rows = append_first_then_fail  # type: ignore[method-assign]
+    with pytest.raises(OSError, match="payee append"):
+        migrate_workbook(workbook)
+
+    payee_sheet.append_rows = original_append  # type: ignore[method-assign]
+    result = migrate_workbook(workbook)
+
+    assert result == {"payees": 1, "transactions": 2}
+    assert {row[1] for row in payee_sheet.rows[1:]} == {
+        "First vendor",
+        "Second vendor",
+    }
+    assert transaction_sheet.rows[0][payee_index] == "payee_id"
+    assert all(transaction_sheet.rows[index][payee_index] for index in (1, 2))
 
 
 def test_migration_initializes_an_empty_payees_worksheet() -> None:
@@ -226,6 +262,67 @@ def test_quickbooks_import_batches_new_payee_writes() -> None:
         "Vendor 2",
         "Vendor 3",
     }
+
+
+def test_csv_import_validates_all_rows_before_creating_payees() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    account = storage.create_account("Checking", "Bank")
+    category = storage.create_category("Office", "Expense")
+    rows = [
+        {
+            "Date": "2026-09-01",
+            "Type": "Expense",
+            "Account": "Checking",
+            "Category": "Office",
+            "Amount": "10.00",
+            "Payee": "First vendor",
+        },
+        {
+            "Date": "not-a-date",
+            "Type": "Expense",
+            "Account": "Checking",
+            "Category": "Office",
+            "Amount": "10.00",
+            "Payee": "Second vendor",
+        },
+    ]
+
+    with pytest.raises(StorageValidationError, match="Date"):
+        storage.import_csv_transactions(rows)
+
+    assert storage.list_transactions() == []
+    assert storage.list_payees() == []
+    assert account["name"] == "Checking"
+    assert category["name"] == "Office"
+
+
+def test_backup_rejects_invalid_payee_records() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    payee = storage.create_payee("Valid vendor")
+    backup = storage.export_backup_zip(
+        build_receipt_manifest("test", storage.list_transactions(), [])
+    )
+    contents: dict[str, bytes]
+    with zipfile.ZipFile(io.BytesIO(backup)) as source:
+        contents = {name: source.read(name) for name in source.namelist()}
+    payee_rows = list(csv.reader(io.StringIO(contents["Payees.csv"].decode())))
+    payee_rows[1][1] = ""
+    csv_buffer = io.StringIO(newline="")
+    csv.writer(csv_buffer, lineterminator="\n").writerows(payee_rows)
+    contents["Payees.csv"] = csv_buffer.getvalue().encode()
+    manifest = json.loads(contents["manifest.json"])
+    manifest["sha256"]["Payees.csv"] = hashlib.sha256(
+        contents["Payees.csv"]
+    ).hexdigest()
+    contents["manifest.json"] = json.dumps(manifest).encode()
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as destination:
+        for name, content in contents.items():
+            destination.writestr(name, content)
+
+    with pytest.raises(StorageValidationError, match="Payee name"):
+        GoogleSheetsStorage.validate_backup_zip(output.getvalue())
+    assert payee["name"] == "Valid vendor"
 
 
 def test_legacy_backup_maps_payee_text_to_existing_stored_value() -> None:

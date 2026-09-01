@@ -99,12 +99,6 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
             }
     payees, migrated = migrate_payee_rows(rows, existing)
     new_headers = ["payee_id" if header == "payee" else header for header in headers]
-    transactions_sheet.update(
-        [new_headers]
-        + [[row.get(header, "") for header in new_headers] for row in migrated],
-        range_name="A1",
-        raw=True,
-    )
     existing_ids = {str(item.get("id", "")).strip() for item in existing}
     new_payees = [item for item in payees if item["id"] not in existing_ids]
     if new_payees:
@@ -115,6 +109,12 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
             ],
             raw=True,
         )
+    transactions_sheet.update(
+        [new_headers]
+        + [[row.get(header, "") for header in new_headers] for row in migrated],
+        range_name="A1",
+        raw=True,
+    )
     return {"payees": len(new_payees), "transactions": len(migrated)}
 
 

@@ -261,6 +261,20 @@ def _validate_hierarchy_records(
         raise StorageValidationError(str(exc)) from exc
 
 
+def _validate_payee_records(records: Iterable[Mapping[str, Any]]) -> None:
+    seen_ids: set[str] = set()
+    seen_names: set[str] = set()
+    for record in records:
+        payee_id = _clean_text(record.get("id"), "Payee ID", required=True)
+        name = _clean_text(record.get("name"), "Payee name", required=True)
+        _as_bool(record.get("active"), "Payee active")
+        name_key = normalize_payee_name(name)
+        if payee_id in seen_ids or name_key in seen_names:
+            raise StorageValidationError("Payee IDs and names must be unique")
+        seen_ids.add(payee_id)
+        seen_names.add(name_key)
+
+
 def decode_receipt_references(value: Any) -> list[dict[str, Any]]:
     """Return validated Drive receipt references from one transaction cell."""
     try:
@@ -503,6 +517,7 @@ def _parse_backup_zip(
         compatibility_field="kind",
         item_label="Category",
     )
+    _validate_payee_records(tables["Payees"][1])
 
     account_ids = {record["id"] for record in tables["Accounts"][1]}
     category_ids = {record["id"] for record in tables["Categories"][1]}
@@ -2521,7 +2536,9 @@ class GoogleSheetsStorage:
             (category["name"].casefold(), category["kind"]): category
             for category in categories.values()
         }
-        prepared = []
+        payees = self._payee_lookup(force_refresh=True)
+        prepared: list[dict[str, str]] = []
+        payee_names: list[str] = []
         for index, row in enumerate(rows, start=2):
             kind = _clean_text(row.get("Type"), "Type", required=True).title()
             if kind not in CATEGORY_KINDS:
@@ -2544,14 +2561,26 @@ class GoogleSheetsStorage:
                         "amount": row.get("Amount"),
                         "account_id": account["id"],
                         "category_id": category["id"],
-                        "new_payee_name": row.get("Payee", ""),
+                        "payee_id": "",
+                        "new_payee_name": "",
                         "description": row.get("Description", ""),
                         "reference": row.get("Reference", ""),
                     },
                     accounts=accounts,
                     categories=categories,
+                    payees=payees,
                 )
             )
+            payee_names.append(_clean_text(row.get("Payee", ""), "New payee"))
+        payees = self._ensure_payee_names(payee_names)
+        payee_ids_by_name = {
+            normalize_payee_name(item["name"]): item for item in payees.values()
+        }
+        for record, name in zip(prepared, payee_names):
+            if name:
+                payee = payee_ids_by_name[normalize_payee_name(name)]
+                record["payee_id"] = payee["id"]
+                record["payee"] = payee["name"]
         self._append_many("Transactions", prepared)
         return prepared
 
