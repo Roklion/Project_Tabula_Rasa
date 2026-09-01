@@ -611,8 +611,10 @@ def render_ledger(
                 delete_error = st.empty()
                 delete_requested = st.form_submit_button(
                     "Permanently delete selected",
+                    icon=":material/delete_forever:",
                     type="primary",
                     width="stretch",
+                    key="transaction_bulk_delete_submit",
                 )
             if delete_requested:
                 if not confirm_delete:

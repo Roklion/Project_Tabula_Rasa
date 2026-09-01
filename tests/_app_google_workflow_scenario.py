@@ -212,6 +212,7 @@ def main() -> None:
         by_label(app.number_input, "Amount").set_value(10)
         by_label(app.selectbox, "From Account").set_value("Checking").run()
         by_label(app.selectbox, "To account").set_value("Primary savings")
+        by_label(app.text_input, "Payee / customer").input("Test transfer")
         by_label(app.button, "Save transaction").click().run()
         assert {item["kind"] for item in storage.list_transactions()} == {
             "Expense",
