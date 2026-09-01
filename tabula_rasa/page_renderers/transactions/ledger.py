@@ -769,7 +769,7 @@ def render_ledger(
                     index=(
                         payee_options.index(selected.get("payee_id", ""))
                         if selected.get("payee_id", "") in payee_options
-                        else 0
+                        else 1
                     ),
                     format_func=lambda value: payee_by_id.get(
                         value, "No payee" if value == "" else value

@@ -95,6 +95,26 @@ def test_edit_preserves_unchanged_inactive_transaction_references() -> None:
     assert updated["description"] == "Updated"
 
 
+def test_ensuring_payees_batches_reactivation_writes() -> None:
+    workbook = FakeWorkbook()
+    storage = GoogleSheetsStorage(workbook, sleeper=lambda _: None)
+    first = storage.create_payee("First vendor")
+    second = storage.create_payee("Second vendor")
+    storage.edit_payee(first["id"], active=False)
+    storage.edit_payee(second["id"], active=False)
+    payee_sheet = workbook.worksheet("Payees")
+    original_batch_update = payee_sheet.batch_update
+    payee_sheet.batch_update = Mock(wraps=original_batch_update)  # type: ignore[method-assign]
+
+    storage._ensure_payee_names(["First vendor", "Second vendor"])
+
+    assert payee_sheet.batch_update.call_count == 1
+    assert {item["id"] for item in storage.list_payees()} == {
+        first["id"],
+        second["id"],
+    }
+
+
 def test_list_transactions_rejects_unknown_payee_references() -> None:
     workbook = FakeWorkbook()
     storage = GoogleSheetsStorage(workbook, sleeper=lambda _: None)

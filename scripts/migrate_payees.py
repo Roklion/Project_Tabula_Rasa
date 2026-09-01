@@ -15,6 +15,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from tabula_rasa.storage.google_sheets import (  # noqa: E402
+    SHEETS_SCOPE,
     WORKSHEET_HEADERS,
     _legacy_payee_id,
     _utc_now,
@@ -132,7 +133,7 @@ def main() -> None:
     secrets = select_profile_secrets(document, args.profile)
     credentials = Credentials.from_service_account_info(
         secrets["gcp_service_account"],
-        scopes=["https://www.googleapis.com/auth/spreadsheets"],
+        scopes=[SHEETS_SCOPE],
     )
     workbook = gspread.authorize(credentials).open_by_key(str(secrets["spreadsheet_id"]).strip())
     result = migrate_workbook(workbook)

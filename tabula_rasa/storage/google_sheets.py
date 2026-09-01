@@ -1165,6 +1165,43 @@ class GoogleSheetsStorage:
         )
         self._invalidate(title)
 
+    def _replace_rows(
+        self,
+        title: str,
+        updates: Sequence[tuple[_StoredRow, Mapping[str, Any]]],
+    ) -> None:
+        if not updates:
+            return
+        headers = self._headers(title)
+        batch = [
+            {
+                "range": f"A{row.row_number}",
+                "values": [[str(record.get(header, "")) for header in headers]],
+            }
+            for row, record in updates
+        ]
+        worksheet = self._worksheet(title)
+        try:
+            self._api(
+                lambda: worksheet.batch_update(batch, raw=True),
+                retry_safe=False,
+            )
+        except StorageUnavailableError:
+            current_rows = self._rows(title, force_refresh=True)
+            current_by_id = {
+                str(row.values.get("id", "")): row.values for row in current_rows
+            }
+            if all(
+                current_by_id.get(str(record.get("id", "")), {})
+                == {
+                    header: str(record.get(header, "")) for header in headers
+                }
+                for _, record in updates
+            ):
+                return
+            raise
+        self._invalidate(title)
+
     @staticmethod
     def _sheet_column_index(headers: Sequence[str], column: str) -> int:
         try:
@@ -1790,7 +1827,11 @@ class GoogleSheetsStorage:
     ) -> dict[str, dict[str, str]]:
         payees = self.list_payees(_force_refresh=True)
         by_key = {normalize_payee_name(item["name"]): item for item in payees}
+        rows_by_id = {
+            str(row.values["id"]): row for row in self._rows("Payees")
+        }
         additions: list[dict[str, str]] = []
+        activations: list[dict[str, str]] = []
         for value in names:
             name = _clean_text(value, "New payee")
             if not name:
@@ -1807,8 +1848,15 @@ class GoogleSheetsStorage:
                 additions.append(match)
                 by_key[key] = match
             elif match["active"] != "TRUE":
-                match = self.edit_payee(match["id"], active=True)
+                match = dict(match)
+                match["active"] = "TRUE"
+                activations.append(match)
                 by_key[key] = match
+        if activations:
+            self._replace_rows(
+                "Payees",
+                [(rows_by_id[item["id"]], item) for item in activations],
+            )
         if additions:
             self._append_many("Payees", additions)
         return {item["id"]: item for item in by_key.values()}
