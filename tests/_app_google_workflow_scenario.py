@@ -359,15 +359,17 @@ def main() -> None:
             button.label == "Download filtered mileage CSV"
             for button in app.download_button
         )
+        assert sum(
+            field.label == "Starting location" for field in app.text_input
+        ) == 1
+        assert sum(
+            field.label == "Destination" for field in app.text_input
+        ) == 1
         assert by_label(app.number_input, "Business miles").value == 0.0
         by_label(app.number_input, "Business miles").set_value(18.6)
         by_label(app.text_input, "Vehicle (optional)").input("Blue car")
-        by_label(app.text_input, "Starting location (recorded text)").input(
-            "Office"
-        )
-        by_label(app.text_input, "Destination (recorded text)").input(
-            "Client site"
-        )
+        by_label(app.text_input, "Starting location").input("Office")
+        by_label(app.text_input, "Destination").input("Client site")
         by_label(app.checkbox, "Round trip").check()
         by_label(app.text_area, "Notes (optional)").input("Keep this note")
         by_label(app.button, "Save mileage trip").click().run()
@@ -378,14 +380,8 @@ def main() -> None:
         )
         assert by_label(app.number_input, "Business miles").value == 18.6
         assert by_label(app.text_input, "Vehicle (optional)").value == "Blue car"
-        assert (
-            by_label(app.text_input, "Starting location (recorded text)").value
-            == "Office"
-        )
-        assert (
-            by_label(app.text_input, "Destination (recorded text)").value
-            == "Client site"
-        )
+        assert by_label(app.text_input, "Starting location").value == "Office"
+        assert by_label(app.text_input, "Destination").value == "Client site"
         assert by_label(app.checkbox, "Round trip").value is True
         assert by_label(app.text_area, "Notes (optional)").value == "Keep this note"
 
@@ -436,13 +432,8 @@ def main() -> None:
         }
         assert by_label(app.number_input, "Business miles").value == 0.0
         assert by_label(app.text_input, "Vehicle (optional)").value == ""
-        assert (
-            by_label(app.text_input, "Starting location (recorded text)").value
-            == ""
-        )
-        assert (
-            by_label(app.text_input, "Destination (recorded text)").value == ""
-        )
+        assert by_label(app.text_input, "Starting location").value == ""
+        assert by_label(app.text_input, "Destination").value == ""
         assert by_label(app.checkbox, "Round trip").value is False
         assert by_label(app.text_input, "Business purpose").value == ""
         assert by_label(app.text_area, "Notes (optional)").value == ""

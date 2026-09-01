@@ -248,7 +248,9 @@ before save. Changing an endpoint invalidates the old suggestion; choose
 **Recalculate** or enter mileage manually. Autocomplete and calculation remain
 optional, and manual address/mileage entry continues to work when Google is not
 configured or is temporarily unavailable. The recorded Starting location and
-Destination fields remain visible for direct manual entry; the normal Add and
+Destination controls are the single direct manual-entry fields when Maps is
+unconfigured, so the page does not show duplicate address inputs. When Maps is
+configured, separate recorded-text fields remain visible; the normal Add and
 Edit screens do not require an **Enter address manually** button.
 
 **Round trip** calculates the outbound and reversed return directions
@@ -265,9 +267,10 @@ When editing a saved trip, the calculation button appears directly below the
 address controls. Changing an address displays a potential mileage mismatch
 warning immediately, even before recalculation. Recalculate the route, or
 review and edit the existing mileage manually, before saving.
-When an existing trip is opened, its saved addresses appear in the always-visible
-recorded-text fields; the separate Google lookup controls start empty and are
-used only when selecting places for a new route calculation.
+When an existing trip is opened, its saved addresses appear in the recorded
+fields. With Maps configured, those fields are separate from empty Google lookup
+controls; without Maps, the single manual controls are initialized from the
+saved addresses.
 
 Google-derived address suggestions and route mileage retain visible Google Maps
 attribution, including a note below the current mileage control after an

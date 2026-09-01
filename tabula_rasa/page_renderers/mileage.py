@@ -171,6 +171,13 @@ def _ledger_location_text(
     return text
 
 
+def _edit_address_initial_value(
+    existing_value: object, maps_api_key: str | None
+) -> str:
+    """Keep edit lookups empty only when a separate Maps control exists."""
+    return "" if maps_api_key else str(existing_value or "")
+
+
 def _apply_pending_route_mileage(
     pending: object,
     *,
@@ -534,14 +541,14 @@ def render_mileage(context: MileageContext) -> None:
                 start,
                 label="Starting location",
                 key="add_mileage_recorded_start",
-                always_render=True,
+                always_render=bool(context.maps_api_key),
             )
         with recorded_columns[1]:
             recorded_destination = _ledger_location_text(
                 destination_value,
                 label="Destination",
                 key="add_mileage_recorded_destination",
-                always_render=True,
+                always_render=bool(context.maps_api_key),
             )
 
         # Keep draft widgets in page state so address-component reruns cannot
@@ -787,12 +794,20 @@ def render_mileage(context: MileageContext) -> None:
                     "Edit starting location",
                     key=f"edit_mileage_trip_start_{edit_widget_scope}",
                     api_key=context.maps_api_key,
+                    value=_edit_address_initial_value(
+                        selected.get("start_location", ""),
+                        context.maps_api_key,
+                    ),
                     region_code=context.autocomplete_region_code,
                 )
                 edit_destination = address_autocomplete(
                     "Edit destination",
                     key=f"edit_mileage_trip_destination_{edit_widget_scope}",
                     api_key=context.maps_api_key,
+                    value=_edit_address_initial_value(
+                        selected.get("destination", ""),
+                        context.maps_api_key,
+                    ),
                     region_code=context.autocomplete_region_code,
                 )
                 edit_route_key = _route_key(context, f"edit_{edit_id}")
@@ -833,14 +848,14 @@ def render_mileage(context: MileageContext) -> None:
                     label="Starting location",
                     key=f"edit_mileage_trip_recorded_start_{edit_widget_scope}",
                     existing_value=selected.get("start_location", ""),
-                    always_render=True,
+                    always_render=bool(context.maps_api_key),
                 )
                 edited_destination = _ledger_location_text(
                     edit_destination,
                     label="Destination",
                     key=f"edit_mileage_trip_recorded_destination_{edit_widget_scope}",
                     existing_value=selected.get("destination", ""),
-                    always_render=True,
+                    always_render=bool(context.maps_api_key),
                 )
                 calculate_edit_requested = st.button(
                     "Recalculate mileage"

@@ -15,6 +15,7 @@ from tabula_rasa.page_renderers.mileage import (
     _apply_pending_route_mileage,
     _discard_modified_calculated_mileage_markers,
     _clear_unchanged_calculated_mileage,
+    _edit_address_initial_value,
     _edit_route_warning_visible,
     _route_state_is_current,
     _route_disabled_reason,
@@ -213,6 +214,11 @@ def test_edit_route_warning_clears_after_successful_recalculation() -> None:
     ) is True
 
 
+def test_edit_lookup_uses_saved_address_only_without_maps() -> None:
+    assert _edit_address_initial_value("Saved office", None) == "Saved office"
+    assert _edit_address_initial_value("Saved office", "browser-key") == ""
+
+
 def test_stale_calculated_route_mileage_clears_untouched_values(monkeypatch) -> None:
     import streamlit as st
 
@@ -370,7 +376,7 @@ def test_add_trip_calculate_button_is_before_recorded_location_fields() -> None:
     assert source.index("calculate_requested = st.button(") < source.index(
         'st.checkbox(\n            "Round trip"'
     )
-    assert source.count("always_render=True") >= 4
+    assert source.count("always_render=bool(context.maps_api_key)") >= 4
 
 
 def test_edit_calculate_button_is_before_delete_controls() -> None:

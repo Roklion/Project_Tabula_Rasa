@@ -616,6 +616,8 @@ used, its final display text pre-fills the editable location text to record;
 later user edits remain respected, and the user reviews the text before saving.
 The component's Google display text is not written to the ledger until the
 user saves the trip.
+When Google Maps is not configured, each lookup control is the single manual
+recorded-text input; the page does not render a duplicate recorded-text field.
 When either current endpoint was selected with Google autocomplete or the
 current mileage suggestion was calculated by Google Routes, a Google Maps note
 appears directly below the mileage control. Stored rows do not claim Google
