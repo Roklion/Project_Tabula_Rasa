@@ -12,6 +12,7 @@ from tabula_rasa.page_renderers.mileage import (
     _needs_google_maps_attribution,
     _route_state_is_current,
     _route_disabled_reason,
+    _autocomplete_available,
     _same_selected_place,
     _save_round_trip,
 )
@@ -243,3 +244,16 @@ def test_route_disabled_reason_explains_missing_browser_autocomplete() -> None:
         lambda *_: 1.0,
         autocomplete_available=False,
     )
+
+
+
+def test_autocomplete_availability_distinguishes_manual_mode_from_failure(monkeypatch) -> None:
+    import streamlit as st
+
+    monkeypatch.setattr(
+        st,
+        "session_state",
+        {"manual": {"manual_mode": True}, "failed": {"provider_failed": True}},
+    )
+    assert _autocomplete_available("manual")
+    assert not _autocomplete_available("failed")
