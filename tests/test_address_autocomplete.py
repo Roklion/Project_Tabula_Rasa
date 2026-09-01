@@ -104,8 +104,17 @@ def test_google_selection_cannot_be_overwritten_by_followup_change_event() -> No
         "if (suppressInput || (selectedDisplay && element.value === selectedDisplay))"
         in _JS
     )
+    assert "element.value = display;" in _JS
     assert "selectedDisplay = display;" in _JS
     assert "finally {\n          suppressInput = false;\n        }" in _JS
+
+
+def test_provider_fallback_preserves_current_widget_text() -> None:
+    assert (
+        "const widget = host.querySelector('gmp-place-autocomplete');\n"
+        "    manualInput.value = initialValue ||\n"
+        "      (widget && widget.value) || data.value || '';"
+    ) in _JS
 
 
 def test_address_controls_use_streamlit_visual_tokens() -> None:
