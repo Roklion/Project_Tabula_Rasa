@@ -366,6 +366,12 @@ def main() -> None:
             button.label == "Download filtered mileage CSV"
             for button in app.download_button
         )
+        assert sum(
+            field.label == "Starting location" for field in app.text_input
+        ) == 1
+        assert sum(
+            field.label == "Destination" for field in app.text_input
+        ) == 1
         assert by_label(app.number_input, "Business miles").value == 0.0
         by_label(app.number_input, "Business miles").set_value(18.6)
         by_label(app.text_input, "Vehicle (optional)").input("Blue car")

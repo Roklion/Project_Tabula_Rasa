@@ -17,8 +17,8 @@ Depending on the features used, the Application may process information such as:
 - business-use allocations and related explanations;
 - addresses and locations entered for mileage or routing purposes;
 - transient Routes distance values and Google-calculated mileage suggestions;
-- user-confirmed mileage recorded as a business record;
-- user-authored or user-confirmed visible location text stored in a mileage
+- user-reviewed and saved mileage recorded as a business record;
+- user-authored or user-reviewed visible location text stored in a mileage
   business record;
 - user account or access information; and
 - technical information generated through hosting, security, or application logs.
@@ -49,9 +49,9 @@ calculations. Autocomplete predictions, the requested Routes `distanceMeters`
 response, and Google-calculated mileage suggestions are used transiently. The
 Application does not request route polylines. Google-specific selection content
 is used only for the current workflow, and the Application does not persist
-Google Place IDs. A selected Google address is not automatically copied to the
-durable Mileage location fields; those fields accept user-authored or
-user-confirmed ledger text.
+Google Place IDs. A selected Google address is not automatically persisted to
+the durable Mileage location fields; it may prefill an editable recorded-text
+field, and only the text the user reviews and saves becomes ledger data.
 
 When these features are used, relevant information such as an address, location,
 place identifier supplied during the request, route request, device or network
@@ -65,7 +65,7 @@ Google Maps Platform content is handled subject to Google's applicable storage,
 caching, attribution, and usage restrictions. The Application does not introduce
 a Google response cache or persist route polylines or Google provenance fields
 in the Mileage worksheet. Durable bookkeeping records may include user-authored
-location text and mileage that the user reviews and confirms; retaining those
+location text and mileage that the user reviews and saves; retaining those
 records does not mean that restricted Google Maps Content has been converted into
 unrestricted customer-owned data.
 

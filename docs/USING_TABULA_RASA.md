@@ -243,19 +243,43 @@ distance is required when saving.
 
 When Google Maps is configured, Starting location and Destination offer Google
 address suggestions. Select both suggestions, then choose **Calculate mileage**
-to request the primary driving distance. The one-decimal suggestion is editable
-before save. Changing an endpoint invalidates the old suggestion; choose
-**Recalculate** or enter mileage manually. Autocomplete and calculation remain
-optional, and manual address/mileage entry continues to work when Google is not
-configured or is temporarily unavailable.
+to request the primary driving distance. Until that action succeeds, a warning
+indicates that the selected route has no calculated comparison yet; it is
+advisory, and manual mileage entry remains available. The one-decimal suggestion
+is editable before save. Changing an endpoint invalidates the old suggestion;
+choose **Recalculate** or enter mileage manually. Changing only **Round trip**
+preserves the outbound mileage draft; enabling it creates a new return-mileage
+field initialized from the current outbound value and warns until the return
+route is calculated, while disabling it removes only that return field without
+changing outbound mileage. Autocomplete and
+calculation remain optional, and manual address/mileage entry continues to work
+when Google is not configured or is temporarily unavailable. The recorded
+Starting location and Destination controls are the single direct manual-entry
+fields when Maps is unconfigured, so the page does not show duplicate address
+inputs. When Maps is configured, separate recorded-text fields remain visible;
+the normal Add and Edit screens do not require an **Enter address manually**
+button.
 
 **Round trip** calculates the outbound and reversed return directions
 separately and exposes independently editable mileage values. Saving still
 creates two independent entries in one confirmed write: one outbound row and
-one return row with reversed locations. The rows have separate IDs and can be
+one return row with reversed locations. For newly created round trips, the log
+shows the return row before the outbound row within the same date/timestamp
+pair; existing rows are not rewritten. The rows have separate IDs and can be
 edited or deleted independently later. Recalculating a saved row changes only
 that selected row. The log's From and To filters control its metrics, table,
 and CSV together.
+
+When editing a saved trip with Maps configured, the calculation button appears
+directly below the address controls. Changing an address displays a potential
+mileage mismatch warning immediately, even before recalculation. Recalculate the
+route, or review and edit the existing mileage manually, before saving. In
+manual-only mode, changing recorded text does not display a route-recalculation
+warning because no Google route is available.
+When an existing trip is opened, its saved addresses appear in the recorded
+fields. With Maps configured, those fields are separate from empty Google lookup
+controls; without Maps, the single manual controls are initialized from the
+saved addresses.
 
 Google-derived address suggestions and route mileage retain visible Google Maps
 attribution, including a note below the current mileage control after an

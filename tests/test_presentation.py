@@ -166,13 +166,15 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
 
 def test_streamlit_theme_matches_the_shared_tokens() -> None:
     with Path(".streamlit/config.toml").open("rb") as config_file:
-        theme = tomllib.load(config_file)["theme"]
+        config = tomllib.load(config_file)
+    theme = config["theme"]
 
     assert theme["primaryColor"] == DESIGN_TOKENS["interactive-primary"]
     assert theme["backgroundColor"] == DESIGN_TOKENS["canvas"]
     assert theme["secondaryBackgroundColor"] == DESIGN_TOKENS["surface-secondary"]
     assert theme["textColor"] == DESIGN_TOKENS["text-primary"]
     assert theme["borderColor"] == DESIGN_TOKENS["border-default"]
+    assert config["client"]["toolbarMode"] == "viewer"
 
 
 def test_render_page_header_keeps_description_optional() -> None:

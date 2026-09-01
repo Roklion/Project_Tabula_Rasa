@@ -115,7 +115,7 @@ _CSS = """
 .tr-address input {
   width: 100%;
   box-sizing: border-box;
-  background: var(--st-background-color);
+  background: var(--st-secondary-background-color);
   border: 1px solid var(--st-widget-border-color, rgba(49, 51, 63, .2));
   border-radius: .375rem;
   color: var(--st-text-color);
@@ -134,7 +134,7 @@ _CSS = """
   width: 100%;
 }
 #tr-address-host > gmp-place-autocomplete {
-  background: var(--st-background-color);
+  background: var(--st-secondary-background-color);
   border: 0;
   border-radius: .375rem;
   height: 2.5rem;
@@ -149,11 +149,11 @@ _CSS = """
 #tr-address-host > gmp-place-autocomplete::part(input),
 #tr-address-host > gmp-place-autocomplete::part(prediction-list),
 #tr-address-host > gmp-place-autocomplete::part(prediction-item) {
-  background-color: var(--st-background-color);
+  background-color: var(--st-secondary-background-color);
   color: var(--st-text-color);
 }
 #tr-address-host > gmp-place-autocomplete::part(input) {
-  background: var(--st-background-color);
+  background: var(--st-secondary-background-color);
   border: 1px solid var(--st-widget-border-color, rgba(49, 51, 63, .2));
   border-radius: 6px;
   box-shadow: none;
@@ -176,7 +176,7 @@ _CSS = """
   color: var(--st-text-color);
 }
 #tr-address-host > gmp-place-autocomplete::part(prediction-item-selected) {
-  background-color: var(--st-secondary-background-color);
+  background-color: var(--st-background-color);
   color: var(--st-text-color);
 }
 """
@@ -197,7 +197,9 @@ export default function(component) {
   let manualMode = data.manualMode === true;
   let providerFailed = data.providerFailed === true;
   let suppressInput = false;
-  let selectedDisplay = '';
+  // Preserve the selected state when another address component causes a
+  // Streamlit rerun and this component is initialized again.
+  let selectedDisplay = data.placeId ? data.value || '' : '';
 
   function reportFailure(stage, error) {
     const message = error && error.message ? String(error.message) : '';
@@ -228,13 +230,18 @@ export default function(component) {
   function showManual(message, initialValue) {
     hideAttribution();
     host.hidden = true;
-    manual.hidden = false;
+    manual.hidden = Boolean(data.apiKey);
     manualButton.hidden = false;
-    manualButton.textContent = 'Use Google suggestions';
+    manualButton.textContent = data.apiKey ?
+      'Retry Google suggestions' : 'Use Google suggestions';
     status.textContent = message || 'Google suggestions are unavailable.';
     const widget = host.querySelector('gmp-place-autocomplete');
     manualInput.value = initialValue ||
       (widget && widget.value) || data.value || '';
+    if (data.apiKey) {
+      manualInput.onchange = null;
+      return;
+    }
     manualInput.onchange = () => emit('manual', manualInput.value.trim());
     manualInput.focus();
   }
@@ -246,7 +253,7 @@ export default function(component) {
     });
     setStateValue('manual_mode', true);
     setStateValue('failed', false);
-    showManual('Enter an address manually.');
+    showManual('Use the recorded address field below.');
   }
   function selectGoogleMode() {
     manualMode = false;
@@ -318,17 +325,16 @@ export default function(component) {
       manualMode: manualMode,
       apiKeyConfigured: Boolean(data.apiKey)
     });
-    if (manualMode) { showManual('Enter an address manually.'); return; }
-    if (!data.apiKey) { showManual('Enter an address manually.'); return; }
+    if (manualMode) { showManual('Use the recorded address field below.'); return; }
+    if (!data.apiKey) { showManual('Use the recorded address field below.'); return; }
     manual.hidden = true;
     host.hidden = false;
-    manualButton.hidden = false;
-    manualButton.textContent = 'Enter address manually';
+    manualButton.hidden = true;
     status.textContent = 'Loading Google address suggestions…';
     try {
       const placesLibrary = await loadMaps();
       if (manualMode) {
-        showManual('Enter an address manually.');
+        showManual('Use the recorded address field below.');
         return;
       }
       showAttribution();
@@ -348,7 +354,9 @@ export default function(component) {
       element.style.boxSizing = 'border-box';
       element.style.fontFamily = 'inherit';
       host.replaceChildren(element);
-      status.textContent = 'Start typing to choose a Google-verified address.';
+      status.textContent = data.placeId ?
+        'Address selected.' :
+        'Start typing to choose a Google-verified address.';
       // PlaceAutocompleteElement owns the Google session lifecycle. Do not
       // create a parallel token here (that can result in duplicate billing).
       element.addEventListener('change', () => {
@@ -386,13 +394,12 @@ export default function(component) {
         } catch (error) {
           // Keep the browser error useful without exposing API details.
           reportFailure('Google place selection', error);
-          status.textContent = 'The address could not be selected. Try again or enter it manually.';
+          status.textContent = 'The address could not be selected. Use the recorded address field below.';
           selectedDisplay = '';
           version += 1;
           setTriggerValue('changed', {
             display_text: element.value || '', place_id: '', version: version
           });
-          manualButton.hidden = false;
         } finally {
           suppressInput = false;
         }
@@ -408,6 +415,7 @@ export default function(component) {
         emit('changed', element.value || '');
         showManual('Google address suggestions are unavailable.');
         manualButton.hidden = false;
+        manualButton.onclick = selectGoogleMode;
       });
       manualButton.onclick = () => {
         if (manual.hidden) selectManualMode();
@@ -427,9 +435,10 @@ export default function(component) {
       manualButton.onclick = selectGoogleMode;
     }
   }
-  // Keep manual entry available during script loading as well as after a
-  // provider error; users should never be trapped behind a paid integration.
-  manualButton.hidden = false;
+  // The Mileage page exposes its recorded-text field as the direct manual
+  // entry path. Keep this recovery control hidden during normal operation;
+  // it is shown only after a provider failure so Google can be retried.
+  manualButton.hidden = true;
   manualButton.textContent = 'Enter address manually';
   manualButton.onclick = selectManualMode;
   setup();
@@ -574,6 +583,7 @@ def address_autocomplete(
             "label": label,
             "value": current.display_text,
             "version": current.version,
+            "placeId": current.place_id,
             "regionCode": _region_code(region_code),
             "manualMode": manual_mode,
             "providerFailed": bool(component_state.get("failed", False))

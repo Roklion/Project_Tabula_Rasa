@@ -1,5 +1,6 @@
 """State-contract tests for the browser address component adapter."""
 
+from inspect import getsource
 from types import SimpleNamespace
 
 import streamlit as st
@@ -49,13 +50,16 @@ def test_manual_fallback_persists_without_rerunning_per_keystroke() -> None:
     assert "google.maps.__tabulaRasaMapsLoaded" in _JS
     assert "const {PlaceAutocompleteElement} = placesLibrary || {};" in _JS
     assert "new google.maps.places.PlaceAutocompleteElement" not in _JS
-    assert "if (manualMode) { showManual('Enter an address manually.'); return; }" in _JS
+    assert "if (manualMode) { showManual('Use the recorded address field below.'); return; }" in _JS
     assert "manualInput.onchange = () => emit('manual', manualInput.value.trim());" in _JS
     assert "manualInput.oninput" not in _JS
     assert "element.addEventListener('input'" not in _JS
     assert "setTriggerValue('failed', true)" not in _JS
     assert "window.__tabulaRasaPlacesPromise = null;" in _JS
     assert "if (failedScript) failedScript.remove();" in _JS
+    assert "manualButton.hidden = true;" in _JS
+    assert "manual.hidden = Boolean(data.apiKey);" in _JS
+    assert "manualInput.onchange = null;" in _JS
 
 
 def test_switching_back_to_google_mode_unhides_the_autocomplete_host() -> None:
@@ -100,7 +104,9 @@ def test_google_provider_errors_switch_to_manual_mode() -> None:
         "        setStateValue('failed', true);\n"
         "        selectedDisplay = '';\n"
         "        emit('changed', element.value || '');\n"
-        "        showManual('Google address suggestions are unavailable.');"
+        "        showManual('Google address suggestions are unavailable.');\n"
+        "        manualButton.hidden = false;\n"
+        "        manualButton.onclick = selectGoogleMode;"
     ) in _JS
 
 
@@ -131,7 +137,7 @@ def test_manual_mode_wins_if_selected_while_maps_loads() -> None:
     assert (
         "const placesLibrary = await loadMaps();\n"
         "      if (manualMode) {\n"
-        "        showManual('Enter an address manually.');\n"
+        "        showManual('Use the recorded address field below.');\n"
         "        return;\n"
         "      }"
     ) in _JS
@@ -150,7 +156,7 @@ def test_inline_attribution_is_hidden_for_manual_mode() -> None:
     assert (
         "const placesLibrary = await loadMaps();\n"
         "      if (manualMode) {\n"
-        "        showManual('Enter an address manually.');\n"
+            "        showManual('Use the recorded address field below.');\n"
         "        return;\n"
         "      }\n"
         "      showAttribution();"
@@ -158,10 +164,23 @@ def test_inline_attribution_is_hidden_for_manual_mode() -> None:
 
 
 def test_google_selection_cannot_be_overwritten_by_followup_change_event() -> None:
-    assert "let selectedDisplay = '';" in _JS
+    assert "let selectedDisplay = data.placeId ? data.value || '' : '';" in _JS
     assert (
         "if (suppressInput || (selectedDisplay && element.value === selectedDisplay))"
         in _JS
+    )
+
+
+def test_google_selection_status_survives_a_component_rerun() -> None:
+    assert "let selectedDisplay = data.placeId ? data.value || '' : '';" in _JS
+    assert (
+        "status.textContent = data.placeId ?\n"
+        "        'Address selected.' :\n"
+        "        'Start typing to choose a Google-verified address.';"
+        in _JS
+    )
+    assert '"placeId": current.place_id,' in getsource(
+        address_module.address_autocomplete
     )
 
 
@@ -206,7 +225,7 @@ def test_google_autocomplete_prediction_parts_use_theme_contrast() -> None:
     assert "::part(prediction-list)" in _CSS
     assert "::part(prediction-item-main-text)" in _CSS
     assert "::part(prediction-item-secondary-text)" in _CSS
-    assert "background-color: var(--st-background-color);" in _CSS
+    assert "background-color: var(--st-secondary-background-color);" in _CSS
     assert "color: var(--st-text-color);" in _CSS
 
 
@@ -218,6 +237,24 @@ def test_google_autocomplete_matches_streamlit_control_dimensions() -> None:
     assert "padding: .5rem .75rem;" in _CSS
     assert "border-radius: 6px;" in _CSS
     assert "min-height: 36px;" in _CSS
+
+
+def test_address_inputs_use_the_widget_surface_background() -> None:
+    from tabula_rasa.address_autocomplete import _CSS
+
+    assert "background: var(--st-secondary-background-color);" in _CSS
+    google_input_rule_start = _CSS.index(
+        "#tr-address-host > gmp-place-autocomplete::part(input) {"
+    )
+    google_input_rule = _CSS[
+        google_input_rule_start : _CSS.index("}", google_input_rule_start)
+    ]
+    assert "background: var(--st-secondary-background-color);" in google_input_rule
+    assert "background: var(--st-background-color);" not in google_input_rule
+    assert (
+        "#tr-address-host > gmp-place-autocomplete {\n"
+        "  background: var(--st-secondary-background-color);"
+    ) in _CSS
 
 
 def test_google_autocomplete_input_has_a_complete_theme_border() -> None:

@@ -92,7 +92,8 @@ automatically update the hosted store.
 
 1. Open Mileage > Add trip and confirm manual address/mileage entry still works.
 2. Select two Google suggestions and choose **Calculate mileage**. Confirm the
-   result is editable and one decimal place is shown.
+   business-miles field is populated, remains editable, and shows one decimal
+   place; for a round trip, confirm the return-mileage field behaves the same.
 3. Change an endpoint and confirm the previous suggestion becomes stale and is
    not silently reused.
 4. Select **Round trip**, calculate, and confirm two route requests are recorded
@@ -149,9 +150,11 @@ unrestricted customer-owned data.
 
 This table is the canonical implementation policy for issue #135. Selecting a
 Google suggestion provides transient routing input only. The Mileage workflow
-shows the selected text for lookup, but does not automatically copy it into a
-durable location field; the user supplies or confirms the text that is recorded
-in the ledger.
+shows the selected text for lookup and uses the transient route result to fill
+editable, unsaved mileage fields; it does not write a durable mileage value
+until the user reviews and saves the trip. The selected display text pre-fills
+an editable location field but is not written to a durable ledger field until
+the user saves the trip.
 
 No Google response cache should be introduced, and no route polyline should be
 stored. No Google provenance fields should be added to the Mileage worksheet
