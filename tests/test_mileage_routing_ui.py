@@ -233,6 +233,9 @@ def test_maps_prefill_is_not_an_independent_recorded_address_change() -> None:
         "Updated office", "Saved office", selected
     )
     assert _recorded_address_changed("Custom ledger text", "Saved office", selected)
+    assert _recorded_address_changed(
+        "Saved office", "Saved office", selected, manually_edited=True
+    )
 
 
 def test_edit_lookup_uses_saved_address_only_without_maps() -> None:

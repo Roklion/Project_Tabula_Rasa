@@ -158,8 +158,12 @@ def _ledger_location_text(
             "you want to record in the ledger."
         )
     version_key = f"{key}__autocomplete_version"
+    autofill_key = f"{key}__autofill_value"
+    manually_edited_key = f"{key}__manually_edited"
     if selection.place_id and st.session_state.get(version_key) != selection.version:
         st.session_state[key] = selection.display_text
+        st.session_state[autofill_key] = selection.display_text
+        st.session_state[manually_edited_key] = False
         st.session_state[version_key] = selection.version
     elif key not in st.session_state:
         st.session_state[key] = existing_value or selection.display_text
@@ -168,6 +172,13 @@ def _ledger_location_text(
         key=key,
         help="This text is saved to the Mileage ledger when you save the trip.",
     )
+    if (
+        autofill_key in st.session_state
+        and text.strip()
+        != str(st.session_state[autofill_key]).strip()
+    ):
+        st.session_state.pop(autofill_key, None)
+        st.session_state[manually_edited_key] = True
     return text
 
 
@@ -225,11 +236,16 @@ def _recorded_address_changed(
     edited_value: str,
     saved_value: object,
     selection: AddressSelection,
+    *,
+    manually_edited: bool = False,
 ) -> bool:
     """Ignore recorded text that was just populated from a Maps selection."""
-    return edited_value.strip() != str(saved_value or "").strip() and not (
-        selection.place_id
-        and edited_value.strip() == selection.display_text.strip()
+    return manually_edited or (
+        edited_value.strip() != str(saved_value or "").strip()
+        and not (
+            selection.place_id
+            and edited_value.strip() == selection.display_text.strip()
+        )
     )
 
 
@@ -881,11 +897,21 @@ def render_mileage(context: MileageContext) -> None:
                         edited_start,
                         selected.get("start_location", ""),
                         edit_start,
+                        manually_edited=st.session_state.get(
+                            f"edit_mileage_trip_recorded_start_{edit_widget_scope}"
+                            "__manually_edited",
+                            False,
+                        ),
                     )
                     or _recorded_address_changed(
                         edited_destination,
                         selected.get("destination", ""),
                         edit_destination,
+                        manually_edited=st.session_state.get(
+                            f"edit_mileage_trip_recorded_destination_{edit_widget_scope}"
+                            "__manually_edited",
+                            False,
+                        ),
                     )
                 )
                 calculate_edit_requested = st.button(
