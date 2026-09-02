@@ -77,8 +77,9 @@ make the workbook public.
 | Accounts | id, name, type, classification, opening_balance, active, created_at, parent_id |
 | Categories | id, name, kind, parent_id |
 | Payees | id, name, active, created_at |
-| Transactions | id, txn_date, kind, amount, account_id, to_account_id, category_id, payee_id, description, reference, receipt_references, created_at |
-| Mileage | id, trip_date, miles, vehicle, start_location, destination, business_purpose, notes, created_at |
+| Tags | id, name, active, created_at |
+| Transactions | id, txn_date, kind, amount, account_id, to_account_id, category_id, payee_id, description, reference, receipt_references, created_at, tag_ids |
+| Mileage | id, trip_date, miles, vehicle, start_location, destination, business_purpose, notes, created_at, tag_ids |
 
 The default Sheet1 tab may remain or be deleted. Existing compatible tabs are
 preserved. Empty required tabs receive headers; populated incompatible tabs
@@ -94,6 +95,10 @@ On normal startup, the application migrates exact legacy format-version 5
 Accounts and Categories headers by appending a blank parent_id column. Existing
 rows remain Layer 1 records. The read-only validation command accepts those
 legacy headers before startup without modifying the workbook.
+
+Normal startup also creates a missing Tags worksheet and appends blank
+`tag_ids` columns to compatible Transactions and Mileage worksheets. This
+upgrade is idempotent, and existing rows remain valid with no Tags.
 
 ## Local profile administration
 

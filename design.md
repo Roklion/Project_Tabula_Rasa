@@ -475,9 +475,12 @@ The form presents:
 7. Payee / customer dropdown and Reference. The first payee option is
    `+ Add new payee`; new values are stored in the managed Payees table before
    they are referenced by a transaction.
-8. Description / memo
-9. Receipt (optional)
-10. Save transaction
+8. Tags (optional). The multi-select lists profile-local stored Tags, lets each
+   selection be removed independently, and offers `+ Add new tag`; a valid new
+   Tag is stored and selected with the transaction.
+9. Description / memo
+10. Receipt (optional)
+11. Save transaction
 
 Only active accounts are offered for new entries. Income and Expense require a
 same-kind category; Transfer has no category and requires two different
@@ -498,14 +501,17 @@ Controls appear in this exact order:
 2. To
 3. Type
 4. Accounts
-5. Search transactions
-6. conditional Clear search
-7. Edit/Bulk mode immediately before the table
+5. Tags
+6. Search transactions
+7. conditional Clear search
+8. Edit/Bulk mode immediately before the table
 
 The table columns, in exact order, are Date, Type, Account, To account,
-Category, Payee, Description, Amount, Receipt, Reference, and ID. To account
-is blank for non-transfers, Category is blank for transfers, Receipt indicates
-one or more linked receipts, and ID remains accessible for disambiguation.
+Category, Payee, Tags, Description, Amount, Receipt, Reference, and ID. To
+account is blank for non-transfers, Category is blank for transfers, Tags is
+blank when none are assigned, Receipt indicates one or more linked receipts,
+and ID remains accessible for disambiguation. The Tags filter matches a record
+when it contains any selected Tag.
 
 The ledger defaults to latest-date-first and Edit mode. The table does not
 begin with a visibly preselected row. When the edit section opens, its
@@ -515,7 +521,7 @@ moves to the first visible row or clears when none remain.
 
 Search is a trimmed, case-insensitive substring match applied after the
 structured filters. It searches Type, Account, To account, Category, Payee,
-Description, Reference, and ID. It does not search dates, amounts, receipt
+Tags, Description, Reference, and ID. It does not search dates, amounts, receipt
 contents, receipt filenames, or hidden Drive metadata. Show result count,
 conditional clear, and a distinct no-results state. Whitespace-only text is
 equivalent to cleared search.
@@ -531,8 +537,8 @@ generation and latest-date-first ordering.
 
 In Edit or Bulk mode, **Copy transaction** is enabled only when exactly one
 visible transaction is selected. It opens the existing editor as a clearly
-labeled new-transaction copy workflow. The copy preserves the source date and
-eligible fields, retains the user memo, and appends exactly one `Copy From
+labeled new-transaction copy workflow. The copy preserves the source date,
+active Tag associations, and other eligible fields, retains the user memo, and appends exactly one `Copy From
 <source ID>` suffix, removing stale generated copy notes when recopying. It
 starts with no receipt references. Save creates a new transaction; Cancel
 discards the copy state without changing the source row.
@@ -567,7 +573,9 @@ the application never blindly retries an ambiguous mutation.
 #### Edit, delete, and receipt acceptance
 
 Preserve type-specific editing of source and destination accounts, category,
-date, amount, payee, reference, and description. Transfer accounts remain
+date, amount, payee, Tags, reference, and description. Tags use stable IDs;
+individual associations can be added or removed without changing the others.
+Transfer accounts remain
 different, and inactive accounts already referenced by a selected historical
 transaction remain available where currently supported. Single deletion has
 the same permanent warning and acknowledgement strength as bulk deletion.
@@ -587,22 +595,29 @@ Create, edit, single delete, search, bulk actions, table columns, and receipt
 operations remain discoverable. Success occurs only after confirmation.
 Receipt-on-create partial failure never duplicates or discards a confirmed
 transaction. Bulk mode cannot operate on rows outside the current visible
-scope. Reconciliation and tags are not implied.
+scope. Tags remain independent of Categories and do not affect accounting.
 
 ### Mileage
 
 #### Purpose and fields
 
 Record and maintain dated business mileage. Add trip preserves Trip date,
-Vehicle, Business miles, Starting location, Destination, Round trip,
-Business purpose, Notes, and Save mileage trip. Related fields may share
+Vehicle, Business miles, Starting location, Destination, Round trip, optional
+Tags, Business purpose, Notes, and Save mileage trip. Related fields may share
 desktop rows: Trip date/Vehicle, Business miles/Round trip, and
 Starting location/Destination.
 
-The log presents From and To, Trips and Business miles metrics, filtered CSV
-download, and the complete table with ID, Date, Miles, From, Destination,
-Business purpose, Vehicle, and Notes. It provides single-row selection and an
-Edit mileage trip section with all fields, save, and permanent delete.
+The log presents From, To, and Tags filters, Trips and Business miles metrics,
+filtered CSV download, and the complete table with ID, Date, Miles, From,
+Destination, Business purpose, Vehicle, Tags, and Notes. The Tags filter
+matches a trip when it contains any selected Tag. It provides single-row
+selection and an Edit mileage trip section with all fields, save, and permanent
+delete.
+
+Mileage Tags use the same profile-local stored Tag list and inline `+ Add new
+tag` behavior as Transactions. Zero, one, or multiple Tags are valid; each is
+independently removable. Round-trip creation applies the same selected Tags to
+both independent rows.
 
 When app-wide Google Maps configuration is available, Starting location and
 Destination use a narrowly scoped address-lookup component. The Google lookup
@@ -904,8 +919,8 @@ verified. Do not show success before confirmation.
 
 ## Durable non-goals and prohibited patterns
 
-The current design does not include reconciliation, transaction tags,
-receipt-content search, cash-flow reports, per-profile user authorization, or
+The current design does not include reconciliation, Tag hierarchies,
+Tag-based financial reports, receipt-content search, cash-flow reports, per-profile user authorization, or
 bulk changes beyond export, compatible category change, and permanent delete.
 Do not add them as implied badges, controls, status fields, or backlog entries
 in this design specification.
