@@ -630,11 +630,7 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
             try:
                 report = load_google_maps_quota_report(secrets_mapping)
             except GoogleMapsQuotaError:
-                st.warning("Google Maps usage is temporarily unavailable.")
-                if st.button("Retry", key="retry-google-maps-usage-sidebar"):
-                    st.session_state.pop(QUOTA_FETCH_ATTEMPTED_KEY, None)
-                    st.rerun()
-                return
+                pass
             st.session_state[QUOTA_REPORT_SESSION_KEY] = report
             st.session_state[QUOTA_REPORT_FETCHED_AT_KEY] = datetime.now(timezone.utc)
             st.session_state[QUOTA_REPORT_CONFIG_KEY] = _quota_config_identity(config)
