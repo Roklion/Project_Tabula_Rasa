@@ -93,7 +93,7 @@ VERSION_6_WORKSHEET_HEADERS = {
     "Accounts": (*PRE_PAYEE_WORKSHEET_HEADERS["Accounts"], "parent_id"),
     "Categories": (*PRE_PAYEE_WORKSHEET_HEADERS["Categories"], "parent_id"),
 }
-WORKSHEET_HEADERS = {
+VERSION_7_WORKSHEET_HEADERS = {
     **VERSION_6_WORKSHEET_HEADERS,
     "Payees": ("id", "name", "active", "created_at"),
     "Transactions": tuple(
@@ -101,7 +101,20 @@ WORKSHEET_HEADERS = {
         for header in VERSION_6_WORKSHEET_HEADERS["Transactions"]
     ),
 }
+WORKSHEET_HEADERS = {
+    **VERSION_7_WORKSHEET_HEADERS,
+    "Tags": ("id", "name", "active", "created_at"),
+    "Transactions": (
+        *VERSION_7_WORKSHEET_HEADERS["Transactions"],
+        "tag_ids",
+    ),
+    "Mileage": (
+        *VERSION_7_WORKSHEET_HEADERS["Mileage"],
+        "tag_ids",
+    ),
+}
 _PAYEE_WRITE_LOCK = threading.RLock()
+_TAG_WRITE_LOCK = threading.RLock()
 VERSION_3_WORKSHEET_HEADERS = {
     title: (
         tuple(header for header in headers if header != "receipt_references")
@@ -135,16 +148,16 @@ CATEGORY_KINDS = {"Income", "Expense"}
 TRANSACTION_KINDS = {"Income", "Expense", "Transfer"}
 LEDGER_ONLY_BACKUP_FORMAT_VERSION = 4
 RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION = 5
-BACKUP_FORMAT_VERSION = 7
+BACKUP_FORMAT_VERSION = 8
 BACKUP_HEADERS_BY_VERSION = {
     2: LEGACY_BACKUP_HEADERS,
     3: VERSION_3_WORKSHEET_HEADERS,
     6: VERSION_6_WORKSHEET_HEADERS,
+    7: VERSION_7_WORKSHEET_HEADERS,
     LEDGER_ONLY_BACKUP_FORMAT_VERSION: PRE_PAYEE_WORKSHEET_HEADERS,
     RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION: PRE_PAYEE_WORKSHEET_HEADERS,
-    BACKUP_FORMAT_VERSION: VERSION_6_WORKSHEET_HEADERS,
+    BACKUP_FORMAT_VERSION: WORKSHEET_HEADERS,
 }
-BACKUP_HEADERS_BY_VERSION[BACKUP_FORMAT_VERSION] = WORKSHEET_HEADERS
 SUPPORTED_BACKUP_FORMAT_VERSIONS = set(BACKUP_HEADERS_BY_VERSION)
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 SHEETS_READONLY_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly"
@@ -242,6 +255,13 @@ def normalize_payee_name(value: Any) -> str:
     ).casefold()
 
 
+def normalize_tag_name(value: Any) -> str:
+    """Normalize tag names for profile-local deduplication."""
+    return " ".join(
+        unicodedata.normalize("NFKC", _clean_text(value, "Tag name")).split()
+    ).casefold()
+
+
 def _legacy_payee_id(name: str) -> str:
     return str(uuid5(NAMESPACE_URL, f"tabula-rasa:payee:{normalize_payee_name(name)}"))
 
@@ -292,6 +312,53 @@ def decode_receipt_references(value: Any) -> list[dict[str, Any]]:
 def _encode_receipt_references(value: Any) -> str:
     references = decode_receipt_references(value)
     return json.dumps(references, separators=(",", ":"), ensure_ascii=False)
+
+
+def _normalize_tag_ids(value: Any) -> list[str]:
+    """Return sorted, unique tag IDs from a JSON cell or write payload."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+        try:
+            value = json.loads(text)
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise StorageValidationError("Tag IDs are not valid JSON") from exc
+    if not isinstance(value, (list, tuple, set)):
+        raise StorageValidationError("Tag IDs must be a JSON array")
+    normalized: list[str] = []
+    for tag_id in value:
+        if not isinstance(tag_id, str):
+            raise StorageValidationError("Tag IDs must be strings")
+        clean_id = tag_id.strip()
+        if not clean_id:
+            raise StorageValidationError("Tag IDs cannot be blank")
+        if clean_id in normalized:
+            raise StorageValidationError("Tag IDs must be unique")
+        normalized.append(clean_id)
+    return sorted(normalized)
+
+
+def _encode_tag_ids(value: Any) -> str:
+    return json.dumps(
+        _normalize_tag_ids(value), separators=(",", ":"), ensure_ascii=False
+    )
+
+
+def _validate_tag_records(records: Iterable[Mapping[str, Any]]) -> None:
+    seen_ids: set[str] = set()
+    seen_names: set[str] = set()
+    for record in records:
+        tag_id = _clean_text(record.get("id"), "Tag ID", required=True)
+        name = _clean_text(record.get("name"), "Tag name", required=True)
+        _as_bool(record.get("active"), "Tag active")
+        name_key = normalize_tag_name(name)
+        if tag_id in seen_ids or name_key in seen_names:
+            raise StorageValidationError("Tag IDs and names must be unique")
+        seen_ids.add(tag_id)
+        seen_names.add(name_key)
 
 
 def _positive_amount(value: Any) -> str:
@@ -485,7 +552,7 @@ def _parse_backup_zip(
                 migrated_transactions,
             )
 
-    if format_version < BACKUP_FORMAT_VERSION:
+    if format_version < 7:
         for title in ("Accounts", "Categories"):
             legacy_headers, legacy_records = tables[title]
             if "parent_id" not in legacy_headers:
@@ -512,6 +579,19 @@ def _parse_backup_zip(
             [],
         )
 
+    # Tags were added in format 8. Older backups have no tag worksheet or
+    # columns, so restore them as an empty, valid tag state.
+    if "Tags" not in tables:
+        tables["Tags"] = (list(WORKSHEET_HEADERS["Tags"]), [])
+    for title in ("Transactions", "Mileage"):
+        if title not in tables:
+            continue
+        headers, records = tables[title]
+        if "tag_ids" not in headers:
+            headers = [*headers, "tag_ids"]
+            records = [{**record, "tag_ids": "[]"} for record in records]
+            tables[title] = (headers, records)
+
     _validate_hierarchy_records(
         tables["Accounts"][1],
         compatibility_field="classification",
@@ -523,10 +603,23 @@ def _parse_backup_zip(
         item_label="Category",
     )
     _validate_payee_records(tables["Payees"][1])
+    _validate_tag_records(tables["Tags"][1])
 
     account_ids = {record["id"] for record in tables["Accounts"][1]}
     category_ids = {record["id"] for record in tables["Categories"][1]}
     payee_ids = {record["id"] for record in tables["Payees"][1]}
+    tag_ids = {record["id"] for record in tables["Tags"][1]}
+    for title in ("Transactions", "Mileage"):
+        if title not in tables:
+            continue
+        for record in tables[title][1]:
+            normalized_tag_ids = _normalize_tag_ids(record.get("tag_ids", ""))
+            if any(tag_id not in tag_ids for tag_id in normalized_tag_ids):
+                raise StorageValidationError(
+                    "Backup contains an unknown "
+                    f"{'transaction' if title == 'Transactions' else 'mileage'} tag"
+                )
+            record["tag_ids"] = _encode_tag_ids(normalized_tag_ids)
     for transaction in tables["Transactions"][1]:
         if transaction.get("account_id") not in account_ids:
             raise StorageValidationError("Backup contains an unknown transaction account")
@@ -782,6 +875,26 @@ class GoogleSheetsStorage:
                             *existing_headers,
                             "receipt_references",
                         ]
+                        worksheet.update(
+                            [migrated_headers],
+                            range_name="A1",
+                            raw=True,
+                        )
+                        values[0] = migrated_headers
+                if title in {"Transactions", "Mileage"} and values:
+                    existing_headers = [
+                        str(value).strip() for value in values[0]
+                    ]
+                    headers_without_tags = set(WORKSHEET_HEADERS[title]) - {
+                        "tag_ids"
+                    }
+                    if (
+                        "tag_ids" not in existing_headers
+                        and headers_without_tags.issubset(existing_headers)
+                        and len(existing_headers) == len(set(existing_headers))
+                    ):
+                        worksheet.add_cols(1)
+                        migrated_headers = [*existing_headers, "tag_ids"]
                         worksheet.update(
                             [migrated_headers],
                             range_name="A1",
@@ -1918,8 +2031,61 @@ class GoogleSheetsStorage:
             self._replace_row("Payees", current, updated)
             return updated
 
+    def list_tags(
+        self, *, active_only: bool = False, _force_refresh: bool = False
+    ) -> list[dict[str, str]]:
+        tags: list[dict[str, str]] = []
+        seen_ids: set[str] = set()
+        seen_names: set[str] = set()
+        for row in self._rows("Tags", force_refresh=_force_refresh):
+            item = dict(row.values)
+            item["id"] = _clean_text(item.get("id"), "Tag ID", required=True)
+            item["name"] = _clean_text(item.get("name"), "Tag name", required=True)
+            item["active"] = (
+                "TRUE" if _as_bool(item.get("active"), "Tag active") else "FALSE"
+            )
+            item["created_at"] = _clean_text(item.get("created_at"), "Tag created at")
+            name_key = normalize_tag_name(item["name"])
+            if item["id"] in seen_ids or name_key in seen_names:
+                raise StorageValidationError("Tag IDs and names must be unique")
+            seen_ids.add(item["id"])
+            seen_names.add(name_key)
+            if not active_only or item["active"] == "TRUE":
+                tags.append(item)
+        return sorted(tags, key=lambda item: item["name"].casefold())
+
+    def create_tag(self, name: str, *, active: bool = True) -> dict[str, str]:
+        """Create or reactivate a profile-local tag by normalized name."""
+        name = _clean_text(name, "Tag name", required=True)
+        with _TAG_WRITE_LOCK:
+            existing = self.list_tags(_force_refresh=True)
+            key = normalize_tag_name(name)
+            match = next(
+                (item for item in existing if normalize_tag_name(item["name"]) == key),
+                None,
+            )
+            if match is not None:
+                if active and match["active"] != "TRUE":
+                    current = self._find_row("Tags", match["id"])
+                    updated = dict(current.values)
+                    updated["active"] = "TRUE"
+                    self._replace_row("Tags", current, updated)
+                    match = {**match, "active": "TRUE"}
+                return match
+            record = {
+                "id": str(uuid4()),
+                "name": name,
+                "active": "TRUE" if active else "FALSE",
+                "created_at": _utc_now(),
+            }
+            self._append("Tags", record)
+            return record
+
     def _payee_lookup(self, *, force_refresh: bool = False) -> dict[str, dict[str, str]]:
         return {item["id"]: item for item in self.list_payees(_force_refresh=force_refresh)}
+
+    def _tag_lookup(self, *, force_refresh: bool = False) -> dict[str, dict[str, str]]:
+        return {item["id"]: item for item in self.list_tags(_force_refresh=force_refresh)}
 
     def _account_lookup(self, *, force_refresh: bool = False) -> dict[str, dict[str, Any]]:
         return {
@@ -1946,14 +2112,20 @@ class GoogleSheetsStorage:
         accounts: Mapping[str, Mapping[str, Any]] | None = None,
         categories: Mapping[str, Mapping[str, str]] | None = None,
         payees: Mapping[str, Mapping[str, str]] | None = None,
+        tags: Mapping[str, Mapping[str, str]] | None = None,
         original_transaction: Mapping[str, Any] | None = None,
     ) -> dict[str, str]:
         payees_force_refresh = True
+        tags_force_refresh = True
         if accounts is None and categories is None:
-            self._snapshot(["Accounts", "Categories", "Payees"], force_refresh=True)
+            self._snapshot(
+                ["Accounts", "Categories", "Payees", "Tags"],
+                force_refresh=True,
+            )
             accounts = self._account_lookup()
             categories = self._category_lookup()
             payees_force_refresh = False
+            tags_force_refresh = False
         else:
             accounts = accounts or self._account_lookup(force_refresh=True)
             categories = categories or self._category_lookup(force_refresh=True)
@@ -1961,6 +2133,11 @@ class GoogleSheetsStorage:
             dict(payees)
             if payees is not None
             else self._payee_lookup(force_refresh=payees_force_refresh)
+        )
+        tags = (
+            dict(tags)
+            if tags is not None
+            else self._tag_lookup(force_refresh=tags_force_refresh)
         )
         kind = _clean_text(data.get("kind"), "Transaction kind", required=True).title()
         if kind not in TRANSACTION_KINDS:
@@ -2040,6 +2217,25 @@ class GoogleSheetsStorage:
             and payee_id != original_payee_id
         ):
             raise StorageValidationError("Payee is inactive")
+        tag_ids = _normalize_tag_ids(data.get("tag_ids", ""))
+        new_tag_name = _clean_text(data.get("new_tag_name"), "New tag")
+        if new_tag_name:
+            new_tag = self.create_tag(new_tag_name)
+            if new_tag["id"] not in tag_ids:
+                tag_ids.append(new_tag["id"])
+            tags[new_tag["id"]] = new_tag
+            tag_ids = _normalize_tag_ids(tag_ids)
+        original_tag_ids = (
+            _normalize_tag_ids(original_transaction.get("tag_ids", ""))
+            if original_transaction is not None
+            else []
+        )
+        for tag_id in tag_ids:
+            tag = tags.get(tag_id)
+            if tag is None:
+                raise StorageValidationError("Tag does not exist")
+            if not _as_bool(tag["active"], "Tag active") and tag_id not in original_tag_ids:
+                raise StorageValidationError("Tag is inactive")
         return {
             "id": transaction_id or str(uuid4()),
             "txn_date": txn_date,
@@ -2053,6 +2249,7 @@ class GoogleSheetsStorage:
             "description": _clean_text(data.get("description"), "Description"),
             "reference": _clean_text(data.get("reference"), "Reference"),
             "receipt_references": receipt_references,
+            "tag_ids": _encode_tag_ids(tag_ids),
             "created_at": created_at or _utc_now(),
         }
 
@@ -2078,6 +2275,7 @@ class GoogleSheetsStorage:
                 raise StorageValidationError("Unknown transaction kind")
         transactions = []
         payees = self._payee_lookup(force_refresh=_force_refresh)
+        tags = self._tag_lookup(force_refresh=_force_refresh)
         for row in self._rows("Transactions", force_refresh=_force_refresh):
             item = dict(row.values)
             item["txn_date"] = _iso_date(item.get("txn_date"))
@@ -2092,6 +2290,11 @@ class GoogleSheetsStorage:
             if item["payee_id"] and item["payee_id"] not in payees:
                 raise StorageValidationError("Payee does not exist")
             item["payee"] = payees.get(item["payee_id"], {}).get("name", "")
+            normalized_tag_ids = _normalize_tag_ids(item.get("tag_ids", ""))
+            if any(tag_id not in tags for tag_id in normalized_tag_ids):
+                raise StorageValidationError("Tag does not exist")
+            item["tag_ids"] = normalized_tag_ids
+            item["tags"] = [tags[tag_id]["name"] for tag_id in normalized_tag_ids]
             if start_text and item["txn_date"] < start_text:
                 continue
             if end_text and item["txn_date"] > end_text:
@@ -2454,7 +2657,24 @@ class GoogleSheetsStorage:
         *,
         trip_id: str | None = None,
         created_at: str | None = None,
+        original_tag_ids: Any = "",
     ) -> dict[str, str]:
+        tags = self._tag_lookup(force_refresh=True)
+        tag_ids = _normalize_tag_ids(data.get("tag_ids", ""))
+        new_tag_name = _clean_text(data.get("new_tag_name"), "New tag")
+        if new_tag_name:
+            new_tag = self.create_tag(new_tag_name)
+            if new_tag["id"] not in tag_ids:
+                tag_ids.append(new_tag["id"])
+            tags[new_tag["id"]] = new_tag
+            tag_ids = _normalize_tag_ids(tag_ids)
+        original_tag_ids = _normalize_tag_ids(original_tag_ids)
+        for tag_id in tag_ids:
+            tag = tags.get(tag_id)
+            if tag is None:
+                raise StorageValidationError("Tag does not exist")
+            if not _as_bool(tag["active"], "Tag active") and tag_id not in original_tag_ids:
+                raise StorageValidationError("Tag is inactive")
         return {
             "id": trip_id or str(uuid4()),
             "trip_date": _iso_date(data.get("trip_date")),
@@ -2470,6 +2690,7 @@ class GoogleSheetsStorage:
                 data.get("business_purpose"), "Business purpose", required=True
             ),
             "notes": _clean_text(data.get("notes"), "Notes"),
+            "tag_ids": _encode_tag_ids(tag_ids),
             "created_at": created_at or _utc_now(),
         }
 
@@ -2483,12 +2704,18 @@ class GoogleSheetsStorage:
         start_text = _iso_date(start) if start is not None else None
         end_text = _iso_date(end) if end is not None else None
         trips = []
+        tags = self._tag_lookup(force_refresh=_force_refresh)
         for row in self._rows("Mileage", force_refresh=_force_refresh):
             item = dict(row.values)
             if start_text and item["trip_date"] < start_text:
                 continue
             if end_text and item["trip_date"] > end_text:
                 continue
+            normalized_tag_ids = _normalize_tag_ids(item.get("tag_ids", ""))
+            if any(tag_id not in tags for tag_id in normalized_tag_ids):
+                raise StorageValidationError("Tag does not exist")
+            item["tag_ids"] = normalized_tag_ids
+            item["tags"] = [tags[tag_id]["name"] for tag_id in normalized_tag_ids]
             trips.append(item)
         return sorted(
             trips,
@@ -2546,6 +2773,7 @@ class GoogleSheetsStorage:
             merged,
             trip_id=trip_id,
             created_at=current.values["created_at"],
+            original_tag_ids=current.values.get("tag_ids", ""),
         )
         self._replace_row("Mileage", current, updated)
         return updated
@@ -2718,7 +2946,7 @@ class GoogleSheetsStorage:
         """Validate and summarize a QuickBooks export without writing anything."""
         source_rows = list(rows)
         self._snapshot(
-            ["Accounts", "Categories", "Transactions", "Payees"],
+            ["Accounts", "Categories", "Transactions", "Payees", "Tags"],
             force_refresh=_force_refresh,
         )
         accounts = self._account_lookup()
