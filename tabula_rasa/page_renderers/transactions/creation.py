@@ -15,6 +15,10 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     receipt_creation_workflow_key,
     render_receipt_creation_recovery,
 )
+from tabula_rasa.page_renderers.tag_selector import (
+    inline_tag_name_error,
+    render_tag_selector,
+)
 
 
 def render_add_transaction(
@@ -24,6 +28,7 @@ def render_add_transaction(
     categories: Sequence[Mapping[str, object]],
     category_paths: Mapping[str, str],
     payees: Sequence[Mapping[str, object]],
+    tags: Sequence[Mapping[str, object]],
 ) -> None:
     """Render the existing profile-scoped transaction creation workflow."""
     if render_receipt_creation_recovery(context):
@@ -41,6 +46,8 @@ def render_add_transaction(
         "add_transaction_category_expense",
         "add_transaction_payee",
         "add_transaction_new_payee",
+        "add_transaction_tags",
+        "add_transaction_tags__new_name",
         "add_transaction_reference",
         "add_transaction_description",
         "add_transaction_receipts",
@@ -143,6 +150,11 @@ def render_add_transaction(
             "Reference (optional)",
             key="add_transaction_reference",
         )
+        tag_ids, new_tag_name = render_tag_selector(
+            tags,
+            label="Tags",
+            key="add_transaction_tags",
+        )
         description = st.text_input(
             "Description / memo",
             key="add_transaction_description",
@@ -169,6 +181,8 @@ def render_add_transaction(
                 )
             elif payee_id == "+ Add new payee" and not new_payee_name.strip():
                 save_error.error("Enter a payee / customer name before saving.")
+            elif (tag_error := inline_tag_name_error(new_tag_name)):
+                save_error.error(tag_error)
             else:
                 payload = {
                     "txn_date": transaction_date,
@@ -181,6 +195,8 @@ def render_add_transaction(
                     "new_payee_name": (
                         new_payee_name if payee_id == "+ Add new payee" else ""
                     ),
+                    "tag_ids": tag_ids,
+                    "new_tag_name": new_tag_name or "",
                     "description": description,
                     "reference": reference,
                 }

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+
 import pandas as pd
 
 from tabula_rasa.hierarchy import hierarchy_paths
@@ -12,12 +14,51 @@ def money(value: float) -> str:
     return f"${value:,.2f}"
 
 
+def _tag_names(
+    transaction: Mapping[str, object],
+    tags: Sequence[Mapping[str, object]] | Mapping[str, str] | None,
+) -> str:
+    """Return a compact display value for a transaction's optional Tags."""
+    raw_names = transaction.get("tags")
+    if isinstance(raw_names, str):
+        return raw_names
+    if isinstance(raw_names, Sequence) and not isinstance(raw_names, (str, bytes)):
+        names = [
+            str(item.get("name") or "").strip()
+            if isinstance(item, Mapping)
+            else str(item).strip()
+            for item in raw_names
+        ]
+        return ", ".join(name for name in names if name)
+    if not tags:
+        return ""
+    by_id = (
+        dict(tags)
+        if isinstance(tags, Mapping)
+        else {
+            str(tag.get("id") or "").strip(): str(tag.get("name") or "").strip()
+            for tag in tags
+        }
+    )
+    raw_ids = transaction.get("tag_ids", ())
+    if isinstance(raw_ids, str):
+        return ""
+    if not isinstance(raw_ids, Sequence):
+        return ""
+    return ", ".join(
+        by_id[str(tag_id).strip()]
+        for tag_id in raw_ids
+        if str(tag_id).strip() in by_id
+    )
+
+
 def ledger_frame(
     transactions: list[dict],
     accounts: list[dict],
     categories: list[dict],
     *,
     display_paths: bool = True,
+    tags: Sequence[Mapping[str, object]] | Mapping[str, str] | None = None,
 ) -> pd.DataFrame:
     account_names = (
         hierarchy_paths(accounts)
@@ -29,8 +70,9 @@ def ledger_frame(
         if display_paths
         else {category["id"]: category["name"] for category in categories}
     )
-    rows = [
-        {
+    rows = []
+    for transaction in transactions:
+        row = {
             "ID": transaction["id"],
             "Date": transaction["txn_date"],
             "Type": transaction["kind"],
@@ -42,22 +84,26 @@ def ledger_frame(
             "Reference": transaction.get("reference", ""),
             "Amount": float(transaction["amount"]),
         }
-        for transaction in transactions
+        if tags is not None:
+            row["Tags"] = _tag_names(transaction, tags)
+        rows.append(row)
+    columns = [
+        "ID",
+        "Date",
+        "Type",
+        "Account",
+        "To account",
+        "Category",
+        "Payee",
+        "Description",
+        "Reference",
+        "Amount",
     ]
+    if tags is not None:
+        columns.append("Tags")
     return pd.DataFrame(
         rows,
-        columns=[
-            "ID",
-            "Date",
-            "Type",
-            "Account",
-            "To account",
-            "Category",
-            "Payee",
-            "Description",
-            "Reference",
-            "Amount",
-        ],
+        columns=columns,
     )
 
 
