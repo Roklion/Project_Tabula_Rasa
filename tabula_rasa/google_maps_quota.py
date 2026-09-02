@@ -27,6 +27,9 @@ MONITORED_SERVICES = ("routes.googleapis.com", "places.googleapis.com")
 READ_ONLY_SCOPE = "https://www.googleapis.com/auth/cloud-platform.read-only"
 DEFAULT_TIMEOUT_SECONDS = 15.0
 QUOTA_CACHE_TTL_SECONDS = 120
+QUOTA_VIEW_REQUESTED_KEY = "google_maps_quota_view_requested"
+QUOTA_REPORT_SESSION_KEY = "google_maps_quota_report"
+QUOTA_FETCH_ATTEMPTED_KEY = "google_maps_quota_fetch_attempted"
 
 
 class GoogleMapsQuotaError(RuntimeError):
@@ -575,13 +578,34 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
         except GoogleMapsQuotaConfigurationError:
             st.info("Configure the dedicated Maps quota reader to view usage.")
             return
+        if not st.session_state.get(QUOTA_VIEW_REQUESTED_KEY, False):
+            st.caption("Select Load usage to query Google quota monitoring.")
+            if st.button("Load usage", key="load-google-maps-usage-sidebar"):
+                st.session_state[QUOTA_VIEW_REQUESTED_KEY] = True
+                st.rerun()
+            return
         if st.button("Refresh", key="refresh-google-maps-usage-sidebar"):
             clear_google_maps_quota_cache()
+            st.session_state.pop(QUOTA_REPORT_SESSION_KEY, None)
+            st.session_state.pop(QUOTA_FETCH_ATTEMPTED_KEY, None)
             st.rerun()
-        try:
-            report = load_google_maps_quota_report(secrets_mapping)
-        except GoogleMapsQuotaError:
+        report = st.session_state.get(QUOTA_REPORT_SESSION_KEY)
+        if report is None and not st.session_state.get(QUOTA_FETCH_ATTEMPTED_KEY, False):
+            st.session_state[QUOTA_FETCH_ATTEMPTED_KEY] = True
+            try:
+                report = load_google_maps_quota_report(secrets_mapping)
+            except GoogleMapsQuotaError:
+                st.warning("Google Maps usage is temporarily unavailable.")
+                if st.button("Retry", key="retry-google-maps-usage-sidebar"):
+                    st.session_state.pop(QUOTA_FETCH_ATTEMPTED_KEY, None)
+                    st.rerun()
+                return
+            st.session_state[QUOTA_REPORT_SESSION_KEY] = report
+        if report is None:
             st.warning("Google Maps usage is temporarily unavailable.")
+            if st.button("Retry", key="retry-google-maps-usage-sidebar"):
+                st.session_state.pop(QUOTA_FETCH_ATTEMPTED_KEY, None)
+                st.rerun()
             return
         now = datetime.now(timezone.utc)
         for service_report in report.services:
