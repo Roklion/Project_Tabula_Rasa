@@ -2839,6 +2839,22 @@ class GoogleSheetsStorage:
         expected: Mapping[str, Any] | None = None,
         **changes: Any,
     ) -> dict[str, str]:
+        with _MIXED_USE_CREATE_LOCK:
+            return self._edit_mixed_use_expense(
+                source_id,
+                expected_source=expected_source,
+                expected=expected,
+                **changes,
+            )
+
+    def _edit_mixed_use_expense(
+        self,
+        source_id: str,
+        *,
+        expected_source: Mapping[str, Any] | None = None,
+        expected: Mapping[str, Any] | None = None,
+        **changes: Any,
+    ) -> dict[str, str]:
         source_id = _clean_text(source_id, "Mixed-use source ID", required=True)
         expected_source = expected_source or expected
         sources, transactions = self._raw_mixed_use_snapshot()
