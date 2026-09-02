@@ -33,6 +33,8 @@ QUOTA_REPORT_SESSION_KEY = "google_maps_quota_report"
 QUOTA_REPORT_FETCHED_AT_KEY = "google_maps_quota_report_fetched_at"
 QUOTA_REPORT_CONFIG_KEY = "google_maps_quota_report_config"
 QUOTA_FETCH_ATTEMPTED_KEY = "google_maps_quota_fetch_attempted"
+QUOTA_CONFIG_ERROR_KEY = "google_maps_quota_config_error"
+QUOTA_CONFIG_ERROR_CONFIG_KEY = "google_maps_quota_config_error_config"
 
 
 class GoogleMapsQuotaError(RuntimeError):
@@ -606,8 +608,11 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
             st.session_state.pop(QUOTA_REPORT_FETCHED_AT_KEY, None)
             st.session_state.pop(QUOTA_REPORT_CONFIG_KEY, None)
             st.session_state.pop(QUOTA_FETCH_ATTEMPTED_KEY, None)
+            st.session_state.pop(QUOTA_CONFIG_ERROR_KEY, None)
+            st.session_state.pop(QUOTA_CONFIG_ERROR_CONFIG_KEY, None)
             st.rerun()
         report = st.session_state.get(QUOTA_REPORT_SESSION_KEY)
+        config_identity = _quota_config_identity(config)
         if report is not None:
             fetched_at = st.session_state.get(QUOTA_REPORT_FETCHED_AT_KEY)
             config_identity = st.session_state.get(QUOTA_REPORT_CONFIG_KEY)
@@ -626,11 +631,30 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
             st.session_state[QUOTA_FETCH_ATTEMPTED_KEY] = True
             try:
                 report = load_google_maps_quota_report(secrets_mapping)
+            except GoogleMapsQuotaConfigurationError as exc:
+                st.session_state[QUOTA_CONFIG_ERROR_KEY] = str(exc)
+                st.session_state[QUOTA_CONFIG_ERROR_CONFIG_KEY] = config_identity
             except GoogleMapsQuotaError:
                 pass
-            st.session_state[QUOTA_REPORT_SESSION_KEY] = report
-            st.session_state[QUOTA_REPORT_FETCHED_AT_KEY] = datetime.now(timezone.utc)
-            st.session_state[QUOTA_REPORT_CONFIG_KEY] = _quota_config_identity(config)
+            else:
+                st.session_state[QUOTA_REPORT_SESSION_KEY] = report
+                st.session_state[QUOTA_REPORT_FETCHED_AT_KEY] = datetime.now(timezone.utc)
+                st.session_state[QUOTA_REPORT_CONFIG_KEY] = config_identity
+                st.session_state.pop(QUOTA_CONFIG_ERROR_KEY, None)
+                st.session_state.pop(QUOTA_CONFIG_ERROR_CONFIG_KEY, None)
+        config_error = st.session_state.get(QUOTA_CONFIG_ERROR_KEY)
+        if config_error and st.session_state.get(QUOTA_CONFIG_ERROR_CONFIG_KEY) != config_identity:
+            st.session_state.pop(QUOTA_CONFIG_ERROR_KEY, None)
+            st.session_state.pop(QUOTA_CONFIG_ERROR_CONFIG_KEY, None)
+            config_error = None
+        if config_error:
+            st.error(config_error)
+            if st.button("Retry", key="retry-google-maps-usage-sidebar"):
+                st.session_state.pop(QUOTA_FETCH_ATTEMPTED_KEY, None)
+                st.session_state.pop(QUOTA_CONFIG_ERROR_KEY, None)
+                st.session_state.pop(QUOTA_CONFIG_ERROR_CONFIG_KEY, None)
+                st.rerun()
+            return
         if report is None:
             st.warning("Google Maps usage is temporarily unavailable.")
             if st.button("Retry", key="retry-google-maps-usage-sidebar"):

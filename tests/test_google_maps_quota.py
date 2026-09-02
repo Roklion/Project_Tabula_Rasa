@@ -15,6 +15,8 @@ from tabula_rasa.google_maps_quota import (
     GoogleMapsQuotaReport,
     GoogleMapsQuotaUsage,
     GoogleMapsServiceReport,
+    QUOTA_CONFIG_ERROR_CONFIG_KEY,
+    QUOTA_CONFIG_ERROR_KEY,
     QUOTA_REPORT_CONFIG_KEY,
     QUOTA_REPORT_FETCHED_AT_KEY,
     QUOTA_REPORT_SESSION_KEY,
@@ -374,3 +376,27 @@ def test_sidebar_expires_report_without_requerying_until_refresh() -> None:
     info.assert_any_call("The usage report expired. Select Refresh to load a current report.")
     warning.assert_not_called()
     assert QUOTA_REPORT_SESSION_KEY in session_state
+
+
+def test_sidebar_preserves_sanitized_configuration_error_without_retrying() -> None:
+    session_state = {QUOTA_VIEW_REQUESTED_KEY: True}
+    error = GoogleMapsQuotaConfigurationError(
+        "Google Maps quota monitoring credentials are invalid."
+    )
+    with patch("tabula_rasa.google_maps_quota.st.expander", return_value=MagicMock()), patch(
+        "tabula_rasa.google_maps_quota.st.caption"
+    ), patch("tabula_rasa.google_maps_quota.st.error") as show_error, patch(
+        "tabula_rasa.google_maps_quota.st.button", return_value=False
+    ), patch(
+        "tabula_rasa.google_maps_quota.st.session_state", session_state
+    ), patch(
+        "tabula_rasa.google_maps_quota.load_google_maps_quota_report",
+        side_effect=error,
+    ) as load:
+        render_google_maps_usage_sidebar(secrets())
+        render_google_maps_usage_sidebar(secrets())
+
+    load.assert_called_once()
+    show_error.assert_called_with(str(error))
+    assert session_state[QUOTA_CONFIG_ERROR_KEY] == str(error)
+    assert QUOTA_CONFIG_ERROR_CONFIG_KEY in session_state
