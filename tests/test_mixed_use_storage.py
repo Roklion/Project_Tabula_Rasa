@@ -606,6 +606,40 @@ def test_replace_rows_refreshes_positions_after_retry_backoff(
     assert rows[0].values["id"] == "inserted-during-backoff"
 
 
+def test_replace_rows_refreshes_positions_after_retry_guard(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    account = default_storage.create_account("Guard refresh", "Bank")
+    row = default_storage._find_row("Accounts", account["id"])
+    worksheet = default_storage._worksheet("Accounts")
+    original_batch_update = worksheet.batch_update
+    calls = 0
+
+    def shift_during_guard() -> None:
+        worksheet.rows.insert(1, list(worksheet.rows[1]))
+        worksheet.rows[1][0] = "inserted-during-guard"
+
+    def fail_then_retry(data: list[dict[str, object]], **kwargs: object) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise OSError("temporary response lost")
+        original_batch_update(data, **kwargs)
+
+    worksheet.batch_update = fail_then_retry  # type: ignore[method-assign]
+    default_storage._replace_rows(
+        "Accounts",
+        [(row, {**row.values, "name": "Guard refresh updated"})],
+        before_retry=shift_during_guard,
+    )
+
+    rows = default_storage._rows("Accounts", force_refresh=True)
+    assert next(item for item in rows if item.values["id"] == account["id"]).values[
+        "name"
+    ] == "Guard refresh updated"
+    assert rows[0].values["id"] == "inserted-during-guard"
+
+
 def test_mixed_use_backup_round_trip_includes_source_and_linkage(
     default_storage: GoogleSheetsStorage,
 ) -> None:
@@ -1319,6 +1353,42 @@ def test_mixed_use_delete_repairs_source_only_partial_pair(
 
     assert default_storage.list_mixed_use_expenses() == []
     assert default_storage.list_transactions() == []
+
+
+def test_mixed_use_delete_rechecks_projection_before_source_only_repair(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    transaction = default_storage.list_transactions()[0]
+    transaction_sheet = default_storage._worksheet("Transactions")
+    transaction_headers = default_storage._headers("Transactions")
+    transaction_sheet.rows.pop(1)
+    default_storage._invalidate("Transactions")
+    original_rows = default_storage._rows
+    injected = False
+
+    def restore_projection_before_repair(
+        title: str, *, force_refresh: bool = False
+    ) -> list[object]:
+        nonlocal injected
+        if title == "Transactions" and force_refresh and not injected:
+            injected = True
+            transaction_sheet.append_row(
+                [transaction.get(header, "") for header in transaction_headers]
+            )
+        return original_rows(title, force_refresh=force_refresh)
+
+    default_storage._rows = restore_projection_before_repair  # type: ignore[method-assign]
+    with pytest.raises(StorageConflictError, match="changed"):
+        default_storage.delete_mixed_use_expense(source["id"])
+
+    assert default_storage.list_mixed_use_expenses() == [source]
+    assert default_storage.list_transactions() == [transaction]
 
 
 def test_mixed_use_delete_revalidates_records_inside_retry(

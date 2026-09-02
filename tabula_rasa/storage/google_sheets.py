@@ -1548,6 +1548,8 @@ class GoogleSheetsStorage:
                         f"A row in {title} changed unexpectedly during a write retry."
                     ) from error
                 self._sleeper(self._retry_base_delay_seconds * (2**attempt))
+                if before_retry is not None:
+                    before_retry()
                 retry_rows = self._rows(title, force_refresh=True)
                 retry_by_id: dict[str, _StoredRow] = {}
                 for row in retry_rows:
@@ -1571,8 +1573,6 @@ class GoogleSheetsStorage:
                     raise StorageConflictError(
                         f"A row in {title} changed unexpectedly during a write retry."
                     ) from error
-                if before_retry is not None:
-                    before_retry()
                 current_updates = [
                     (
                         retry_by_id[
@@ -3146,6 +3146,19 @@ class GoogleSheetsStorage:
         if transaction is None:
             if expected_source is not None and not self._mixed_use_record_matches(
                 "MixedUseExpenses", source, expected_source
+            ):
+                raise StorageConflictError(
+                    "The mixed-use expense changed; refresh it before deleting."
+                )
+            latest_transactions = self._rows(
+                "Transactions", force_refresh=True
+            )
+            if any(
+                _clean_text(row.values.get("source_type"), "Transaction source type")
+                == MIXED_USE_SOURCE_TYPE
+                and _clean_text(row.values.get("source_id"), "Transaction source ID")
+                == source_id
+                for row in latest_transactions
             ):
                 raise StorageConflictError(
                     "The mixed-use expense changed; refresh it before deleting."
