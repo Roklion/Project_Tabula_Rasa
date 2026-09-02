@@ -8,7 +8,7 @@ and when a future UI builds a live preview.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation, localcontext
+from decimal import Decimal, InvalidOperation, Overflow, localcontext
 from typing import Any
 
 
@@ -58,9 +58,14 @@ def calculate_allocated_amount(
     """Return the currency-rounded business portion of a mixed-use expense."""
     total = _decimal(total_expense, "Total expense")
     total = _quantize(total, CURRENCY_QUANTUM, "Total expense")
-    percentage = _decimal(
-        business_use_percentage, "Business-use percentage"
-    ).normalize()
+    try:
+        percentage = _decimal(
+            business_use_percentage, "Business-use percentage"
+        ).normalize()
+    except (InvalidOperation, Overflow):
+        raise MixedUseAllocationError(
+            "Business-use percentage is too large"
+        ) from None
     if total <= 0:
         raise MixedUseAllocationError("Total expense must be greater than zero")
     if percentage <= 0:

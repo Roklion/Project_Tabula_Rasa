@@ -729,6 +729,9 @@ def _parse_backup_zip(
             transaction.get("receipt_references", "")
         )
 
+    category_records = {
+        record["id"]: record for record in tables["Categories"][1]
+    }
     for source in tables.get("MixedUseExpenses", ((), []))[1]:
         _iso_date(source.get("txn_date"))
         account_id = _clean_text(source.get("account_id"), "Account", required=True)
@@ -737,9 +740,6 @@ def _parse_backup_zip(
         category_id = _clean_text(source.get("category_id"), "Category", required=True)
         if category_id not in category_ids:
             raise StorageValidationError("Backup contains an unknown mixed-use category")
-        category_records = {
-            record["id"]: record for record in tables["Categories"][1]
-        }
         if category_records[category_id].get("kind") != "Expense":
             raise StorageValidationError(
                 "Mixed-use source category must be an Expense category"
@@ -2012,6 +2012,9 @@ class GoogleSheetsStorage:
     def edit_category(self, category_id: str, **changes: Any) -> dict[str, str]:
         current = self._find_row("Categories", category_id)
         updated = dict(current.values)
+        normalized_category_id = _clean_text(
+            updated.get("id"), "Category ID", required=True
+        )
         existing_categories = self.list_categories()
         name = _clean_text(
             changes.get("name", updated["name"]), "Category name", required=True
@@ -2024,14 +2027,15 @@ class GoogleSheetsStorage:
         if kind != updated["kind"]:
             sources, _ = self._raw_mixed_use_snapshot()
             if any(
-                str(source.get("category_id") or "").strip() == category_id
+                str(source.get("category_id") or "").strip()
+                == normalized_category_id
                 for source in sources.values()
             ):
                 raise StorageConflictError(
                     "Category kind cannot change while used by a mixed-use expense"
                 )
         if any(
-            category["id"] != category_id
+            category["id"] != normalized_category_id
             and category["name"].casefold() == name.casefold()
             and category["kind"] == kind
             for category in existing_categories
@@ -2049,7 +2053,7 @@ class GoogleSheetsStorage:
         )
         _validate_hierarchy_records(
             [
-                updated if category["id"] == category_id else category
+                updated if category["id"] == normalized_category_id else category
                 for category in existing_categories
             ],
             compatibility_field="kind",
@@ -2565,20 +2569,20 @@ class GoogleSheetsStorage:
             ) and self._mixed_use_record_matches(
                 "Transactions", actual_transaction, expected_transaction
             )
-            not_applied = (
-                self._mixed_use_record_matches(
-                    "MixedUseExpenses",
-                    actual_source,
-                    original_source,
+            if original_source is not None:
+                source_not_applied = self._mixed_use_record_matches(
+                    "MixedUseExpenses", actual_source, original_source
                 )
-                and self._mixed_use_record_matches(
-                    "Transactions",
-                    actual_transaction,
-                    original_transaction,
+                transaction_not_applied = (
+                    actual_transaction is None
+                    if original_transaction is None
+                    else self._mixed_use_record_matches(
+                        "Transactions", actual_transaction, original_transaction
+                    )
                 )
-                if original_source is not None and original_transaction is not None
-                else actual_source is None and actual_transaction is None
-            )
+                not_applied = source_not_applied and transaction_not_applied
+            else:
+                not_applied = actual_source is None and actual_transaction is None
         if fully_applied:
             return {"status": "fully_applied"}
         if not_applied:
@@ -2759,6 +2763,7 @@ class GoogleSheetsStorage:
                         expected_source=source,
                         expected_transaction=projection,
                         error=error,
+                        original_source=source,
                     )
                     if outcome is not None:
                         return self.get_mixed_use_expense(source_id)
@@ -3032,6 +3037,12 @@ class GoogleSheetsStorage:
         if source.values.get("linked_transaction_id") != transaction_id:
             raise StorageValidationError(
                 "Mixed-use source and projection IDs do not match"
+            )
+        if str(source.values.get("receipt_references") or "") != str(
+            transaction.get("receipt_references") or ""
+        ):
+            raise StorageConflictError(
+                "The mixed-use receipt references changed; refresh before retrying."
             )
 
         transaction_headers = self._headers("Transactions")
