@@ -3136,6 +3136,15 @@ class GoogleSheetsStorage:
             compatibility_field="kind",
             item_label="Category",
         )
+        tag_records = [dict(row.values) for row in snapshot["Tags"]]
+        for tag in tag_records:
+            tag["id"] = _clean_text(tag.get("id"), "Tag ID", required=True)
+            tag["name"] = _clean_text(tag.get("name"), "Tag name", required=True)
+            tag["active"] = (
+                "TRUE" if _as_bool(tag.get("active"), "Tag active") else "FALSE"
+            )
+        _validate_tag_records(tag_records)
+        known_tag_ids = {tag["id"] for tag in tag_records}
         for title in WORKSHEET_HEADERS:
             headers = self._headers(title)
             rows = snapshot[title]
@@ -3145,7 +3154,19 @@ class GoogleSheetsStorage:
             writer = csv.writer(csv_buffer, lineterminator="\n")
             writer.writerow(headers)
             for row in rows:
-                writer.writerow([row.values.get(header, "") for header in headers])
+                values = dict(row.values)
+                if title in {"Transactions", "Mileage"}:
+                    normalized_tag_ids = _normalize_tag_ids(values.get("tag_ids", ""))
+                    if any(tag_id not in known_tag_ids for tag_id in normalized_tag_ids):
+                        raise StorageValidationError(
+                            "Backup contains an unknown "
+                            f"{'transaction' if title == 'Transactions' else 'mileage'} tag"
+                        )
+                    values["tag_ids"] = _encode_tag_ids(normalized_tag_ids)
+                elif title == "Tags":
+                    tag = next(item for item in tag_records if item["id"] == values.get("id", ""))
+                    values = tag
+                writer.writerow([values.get(header, "") for header in headers])
             csv_files[f"{title}.csv"] = csv_buffer.getvalue().encode("utf-8")
 
         try:
