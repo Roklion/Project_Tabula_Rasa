@@ -311,6 +311,90 @@ def test_mixed_use_uncertain_create_never_retries_projection_blindly(
     assert len(default_storage.list_transactions()) == 1
 
 
+def test_mixed_use_create_returns_success_when_final_response_is_lost(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    inputs = {
+        **_expense_inputs(default_storage),
+        "total_expense": "100",
+        "business_use_percentage": "50",
+        "allocation_rationale": "Measured use",
+        "source_id": "source-final-write",
+        "linked_transaction_id": "transaction-final-write",
+    }
+    original_append = default_storage._append
+    calls = 0
+
+    def append_then_lose_final_result(title: str, record: dict[str, str]) -> None:
+        nonlocal calls
+        original_append(title, record)
+        calls += 1
+        if calls == 2:
+            raise StorageUnavailableError("response lost")
+
+    default_storage._append = append_then_lose_final_result  # type: ignore[method-assign]
+    result = default_storage.create_mixed_use_expense(**inputs)
+
+    assert result["id"] == inputs["source_id"]
+    assert len(default_storage.list_transactions()) == 1
+
+
+def test_mixed_use_edit_returns_success_when_final_response_is_lost(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    original_replace = default_storage._replace_row
+    calls = 0
+
+    def replace_then_lose_final_result(title: str, row: object, record: object) -> None:
+        nonlocal calls
+        original_replace(title, row, record)  # type: ignore[arg-type]
+        calls += 1
+        if calls == 2:
+            raise StorageUnavailableError("response lost")
+
+    default_storage._replace_row = replace_then_lose_final_result  # type: ignore[method-assign]
+    result = default_storage.edit_mixed_use_expense(
+        source["id"],
+        total_expense="200",
+        business_use_percentage="25",
+        allocation_rationale="Updated use",
+    )
+
+    assert result["allocated_amount"] == "50.00"
+
+
+def test_mixed_use_delete_returns_success_when_final_response_is_lost(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    original_delete = default_storage._delete_mixed_use_row
+    calls = 0
+
+    def delete_then_lose_final_result(title: str, record_id: str) -> None:
+        nonlocal calls
+        original_delete(title, record_id)
+        calls += 1
+        if calls == 2:
+            raise StorageUnavailableError("response lost")
+
+    default_storage._delete_mixed_use_row = delete_then_lose_final_result  # type: ignore[method-assign]
+    default_storage.delete_mixed_use_expense(source["id"])
+
+    assert default_storage.list_mixed_use_expenses() == []
+    assert default_storage.list_transactions() == []
+
+
 def test_mixed_use_uncertain_edit_classifies_partial_pair_safely(
     default_storage: GoogleSheetsStorage,
 ) -> None:
