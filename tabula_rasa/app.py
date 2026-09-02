@@ -483,7 +483,6 @@ if page != "Account settings":
 with st.sidebar:
     render_google_maps_usage_sidebar(effective_secrets)
 
-
 st.session_state[GLOBAL_FOOTER_RENDERED_KEY] = False
 try:
     if page == "Dashboard":

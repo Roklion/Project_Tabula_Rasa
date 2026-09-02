@@ -43,9 +43,17 @@ def test_config_requires_explicit_project_and_dedicated_credential() -> None:
 
     with pytest.raises(GoogleMapsQuotaConfigurationError):
         GoogleMapsQuotaMonitoringConfig.from_secrets({"google_maps": {}})
-    with pytest.raises(GoogleMapsQuotaConfigurationError):
+    with pytest.raises(
+        GoogleMapsQuotaConfigurationError, match="invalid project number"
+    ):
         GoogleMapsQuotaMonitoringConfig.from_secrets(
             {"google_maps": {"quota_monitoring": {"project_number": "maps-id"}}}
+        )
+    with pytest.raises(
+        GoogleMapsQuotaConfigurationError, match="invalid project number"
+    ):
+        GoogleMapsQuotaMonitoringConfig(
+            "9" * 21, SERVICE_ACCOUNT
         )
 
 

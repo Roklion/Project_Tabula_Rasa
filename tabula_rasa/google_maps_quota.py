@@ -51,9 +51,14 @@ class GoogleMapsQuotaMonitoringConfig:
 
     def __post_init__(self) -> None:
         project_number = _clean_text(self.project_number)
-        if not project_number.isdigit() or int(project_number) <= 0:
+        if (
+            len(project_number) > 20
+            or not project_number.isascii()
+            or not project_number.isdigit()
+            or int(project_number or "0") <= 0
+        ):
             raise GoogleMapsQuotaConfigurationError(
-                "Google Maps quota monitoring has an invalid project ID."
+                "Google Maps quota monitoring has an invalid project number."
             )
         if not isinstance(self.service_account_info, Mapping):
             raise GoogleMapsQuotaConfigurationError(

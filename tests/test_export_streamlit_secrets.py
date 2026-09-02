@@ -108,7 +108,7 @@ class TestExportStreamlitSecrets:
                     "routes_timeout_seconds": 15,
                     "autocomplete_region_code": "us",
                     "quota_monitoring": {
-                        "project_id": "maps-project-id",
+                        "project_number": "123456789",
                         "timeout_seconds": 15,
                         "service_account": {
                             "type": "service_account",
@@ -156,7 +156,7 @@ class TestExportStreamlitSecrets:
             "routes_timeout_seconds": 15,
             "autocomplete_region_code": "us",
             "quota_monitoring": {
-                "project_id": "maps-project-id",
+                "project_number": "123456789",
                 "timeout_seconds": 15,
                 "service_account": {
                     "type": "service_account",

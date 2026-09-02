@@ -124,9 +124,9 @@ and `places.googleapis.com` consumer quota metrics and recent
 quotas or use this account for Routes/Places requests.
 
 Cloud Monitoring is sampled data, not a live counter. Reporting can lag several
-minutes, including up to about 240 seconds after sampling. The Account settings
-view reports the Google timestamp and data age, and does not claim to show
-remaining requests or billing/spend in real time. Missing or incompatible
+minutes, including up to about 240 seconds after sampling. The authenticated
+sidebar expander reports the Google timestamp and data age. It does not claim
+to show remaining requests or billing/spend in real time. Missing or incompatible
 usage is shown as unavailable rather than as zero.
 
 ## Controlled validation

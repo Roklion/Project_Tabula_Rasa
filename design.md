@@ -220,12 +220,13 @@ surface, sidebar, and documentation. The authenticated sidebar is ordered:
 9. Log out in the utility area
 
 Below the workbook metadata and utility controls, the authenticated sidebar
-also contains a compact, read-only **Google Maps API usage** expander when
-quota monitoring is configured. Routes API and Places API (New) are visibly
-separate and show effective quota, recent Google-reported usage, compatible
-utilization, timestamp, and age. The expander warns that Monitoring may lag
-several minutes (including up to about 240 seconds after sampling), and is not
-a real-time remaining-request or billing/spend meter.
+also contains a compact, read-only **Google Maps API usage** expander after
+authentication. Routes API and Places API (New) are visibly separate and show
+effective quota, recent Google-reported usage, compatible utilization,
+timestamp, and age. Until configured, the expander reports its setup guidance.
+It warns that Monitoring may lag several minutes (including up to about 240
+seconds after sampling), and is not a real-time remaining-request or
+billing/spend meter.
 
 Require application-password authentication before any ledger page or workbook
 data is visible. Show the business selector when profiles exist and the
