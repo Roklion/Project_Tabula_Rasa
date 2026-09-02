@@ -620,9 +620,6 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
                 or getattr(report, "project_number", None) != config.project_number
             )
             if stale:
-                st.session_state.pop(QUOTA_REPORT_SESSION_KEY, None)
-                st.session_state.pop(QUOTA_REPORT_FETCHED_AT_KEY, None)
-                st.session_state.pop(QUOTA_REPORT_CONFIG_KEY, None)
                 st.info("The usage report expired. Select Refresh to load a current report.")
                 return
         if report is None and not st.session_state.get(QUOTA_FETCH_ATTEMPTED_KEY, False):

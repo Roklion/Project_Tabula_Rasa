@@ -359,6 +359,8 @@ def test_sidebar_expires_report_without_requerying_until_refresh() -> None:
     with patch("tabula_rasa.google_maps_quota.st.expander", return_value=MagicMock()), patch(
         "tabula_rasa.google_maps_quota.st.caption"
     ), patch("tabula_rasa.google_maps_quota.st.info") as info, patch(
+        "tabula_rasa.google_maps_quota.st.warning"
+    ) as warning, patch(
         "tabula_rasa.google_maps_quota.st.button", return_value=False
     ), patch(
         "tabula_rasa.google_maps_quota.st.session_state", session_state
@@ -366,7 +368,9 @@ def test_sidebar_expires_report_without_requerying_until_refresh() -> None:
         "tabula_rasa.google_maps_quota.load_google_maps_quota_report"
     ) as load:
         render_google_maps_usage_sidebar(secrets())
+        render_google_maps_usage_sidebar(secrets())
 
     load.assert_not_called()
     info.assert_any_call("The usage report expired. Select Refresh to load a current report.")
-    assert QUOTA_REPORT_SESSION_KEY not in session_state
+    warning.assert_not_called()
+    assert QUOTA_REPORT_SESSION_KEY in session_state
