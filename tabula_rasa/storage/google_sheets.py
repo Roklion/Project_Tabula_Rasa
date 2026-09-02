@@ -2827,12 +2827,22 @@ class GoogleSheetsStorage:
             created_at=current_source.get("created_at"),
             original_transaction=current_transaction,
         )
+        fresh_transaction = self._find_row("Transactions", transaction_id)
+        fresh_source = self._find_row("MixedUseExpenses", source_id)
+        if not self._mixed_use_record_matches(
+            "Transactions", fresh_transaction.values, current_transaction
+        ) or not self._mixed_use_record_matches(
+            "MixedUseExpenses", fresh_source.values, current_source
+        ):
+            raise StorageConflictError(
+                "The mixed-use expense changed; refresh it before editing."
+            )
         try:
             self._replace_rows(
                 "Transactions",
                 [
                     (
-                        self._find_row("Transactions", transaction_id),
+                        fresh_transaction,
                         updated_transaction,
                     )
                 ],
@@ -2841,7 +2851,7 @@ class GoogleSheetsStorage:
                 "MixedUseExpenses",
                 [
                     (
-                        self._find_row("MixedUseExpenses", source_id),
+                        fresh_source,
                         updated_source,
                     )
                 ],

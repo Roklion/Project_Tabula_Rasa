@@ -63,6 +63,12 @@ def test_allocation_uses_decimal_currency_rounding_and_five_places() -> None:
     assert normalized.allocated_amount == "41.15"
 
 
+def test_allocation_preserves_precision_before_currency_rounding() -> None:
+    assert calculate_allocated_amount(
+        "3165809505055861412909.65", "35.52850"
+    ) == Decimal("1124764630003771722085.61")
+
+
 @pytest.mark.parametrize("percentage", ["0", "-1", "100.00001", "0.000001"])
 def test_allocation_rejects_percentage_boundaries_and_precision(
     percentage: str,
@@ -518,6 +524,38 @@ def test_mixed_use_edit_returns_success_when_final_response_is_lost(
     )
 
     assert result["allocated_amount"] == "50.00"
+
+
+def test_mixed_use_edit_rejects_receipt_drift_before_replacing_rows(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    original_find = default_storage._find_row
+    calls = 0
+
+    def find_after_receipt_update(title: str, record_id: str) -> object:
+        nonlocal calls
+        if calls == 0:
+            transaction_sheet = default_storage._worksheet("Transactions")
+            source_sheet = default_storage._worksheet("MixedUseExpenses")
+            transaction_headers = default_storage._headers("Transactions")
+            source_headers = default_storage._headers("MixedUseExpenses")
+            reference = '[{"id":"oldreceipt01","name":"Receipt"}]'
+            transaction_sheet.rows[1][transaction_headers.index("receipt_references")] = reference
+            source_sheet.rows[1][source_headers.index("receipt_references")] = reference
+        calls += 1
+        return original_find(title, record_id)
+
+    default_storage._find_row = find_after_receipt_update  # type: ignore[method-assign]
+    with pytest.raises(StorageConflictError, match="changed"):
+        default_storage.edit_mixed_use_expense(
+            source["id"], allocation_rationale="Updated use"
+        )
 
 
 def test_mixed_use_delete_returns_success_when_final_response_is_lost(

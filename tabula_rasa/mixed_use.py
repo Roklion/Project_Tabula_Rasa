@@ -8,7 +8,7 @@ and when a future UI builds a live preview.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, localcontext
 from typing import Any
 
 
@@ -73,9 +73,16 @@ def calculate_allocated_amount(
         raise MixedUseAllocationError(
             "Business-use percentage supports at most 5 decimal places"
         )
-    allocated = _quantize(
-        total * percentage / Decimal("100"), CURRENCY_QUANTUM, "Allocated amount"
-    )
+    with localcontext() as context:
+        context.prec = max(
+            28,
+            len(total.as_tuple().digits) + len(percentage.as_tuple().digits) + 10,
+        )
+        allocated = _quantize(
+            total * percentage / Decimal("100"),
+            CURRENCY_QUANTUM,
+            "Allocated amount",
+        )
     if allocated <= 0:
         raise MixedUseAllocationError(
             "Allocated business amount must be greater than $0.00"
