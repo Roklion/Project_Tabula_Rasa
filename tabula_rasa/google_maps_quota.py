@@ -511,13 +511,17 @@ def load_google_maps_quota_report(
 
 def _quota_config_identity(config: GoogleMapsQuotaMonitoringConfig) -> str:
     """Return a non-sensitive identity for the cached report configuration."""
+    private_key = _clean_text(config.service_account_info.get("private_key"))
+    private_key_digest = hashlib.sha256(private_key.encode("utf-8")).hexdigest()
     material = json.dumps(
         {
             "project_number": config.project_number,
-            "service_account": dict(config.service_account_info),
+            "service_account_type": _clean_text(config.service_account_info.get("type")),
+            "client_email": _clean_text(config.service_account_info.get("client_email")),
+            "token_uri": _clean_text(config.service_account_info.get("token_uri")),
+            "private_key_digest": private_key_digest,
         },
         sort_keys=True,
-        default=repr,
     )
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 

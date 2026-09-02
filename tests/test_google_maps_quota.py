@@ -56,6 +56,7 @@ def test_config_requires_explicit_project_and_dedicated_credential() -> None:
     assert config.project_number == "123456789"
     assert config.service_account_info == SERVICE_ACCOUNT
     assert "private-key" not in repr(config)
+    assert "private-key" not in _quota_config_identity(config)
 
     with pytest.raises(GoogleMapsQuotaConfigurationError):
         GoogleMapsQuotaMonitoringConfig.from_secrets({"google_maps": {}})
