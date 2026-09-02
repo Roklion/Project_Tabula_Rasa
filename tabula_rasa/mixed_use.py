@@ -58,7 +58,9 @@ def calculate_allocated_amount(
     """Return the currency-rounded business portion of a mixed-use expense."""
     total = _decimal(total_expense, "Total expense")
     total = _quantize(total, CURRENCY_QUANTUM, "Total expense")
-    percentage = _decimal(business_use_percentage, "Business-use percentage")
+    percentage = _decimal(
+        business_use_percentage, "Business-use percentage"
+    ).normalize()
     if total <= 0:
         raise MixedUseAllocationError("Total expense must be greater than zero")
     if percentage <= 0:

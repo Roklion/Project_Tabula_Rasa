@@ -2660,6 +2660,40 @@ class TestGoogleSheetsStorage:
         assert restored["id"] == transaction["id"]
         assert restored["receipt_references"] == ""
 
+    def test_restore_clears_provenance_from_legacy_backup(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Office", "Expense")
+        transaction = self.storage.create_transaction(
+            txn_date="2026-07-19",
+            kind="Expense",
+            amount=25,
+            account_id=account["id"],
+            category_id=category["id"],
+        )
+        current_backup = self.storage.export_backup_zip(
+            backup_receipt_manifest(self.storage)
+        )
+
+        def add_legacy_provenance(rows: list[list[str]]) -> None:
+            source_type = rows[0].index("source_type")
+            source_id = rows[0].index("source_id")
+            rows[1][source_type] = "mixed_use_expense"
+            rows[1][source_id] = "orphaned-source"
+
+        legacy_backup = rewrite_backup_tables(
+            current_backup,
+            {"Transactions": add_legacy_provenance},
+            format_version=5,
+        )
+
+        target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+        target.restore_backup_zip(legacy_backup)
+
+        restored = target._rows("Transactions", force_refresh=True)[0].values
+        assert restored["id"] == transaction["id"]
+        assert restored["source_type"] == ""
+        assert restored["source_id"] == ""
+
     def test_restore_refuses_nonblank_target(self) -> None:
         self.storage.create_account("Checking", "Bank")
         backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))

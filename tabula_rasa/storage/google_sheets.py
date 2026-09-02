@@ -689,8 +689,13 @@ def _parse_backup_zip(
         for header in ("source_type", "source_id"):
             if header not in transaction_headers:
                 transaction_headers.append(header)
-                for transaction in transactions:
-                    transaction[header] = ""
+        for transaction in transactions:
+            # Provenance was introduced with the mixed-use backup format. A
+            # legacy archive cannot carry a trusted MixedUseExpenses table,
+            # so discard even user-supplied extra provenance columns rather
+            # than restoring orphaned projections.
+            transaction["source_type"] = ""
+            transaction["source_id"] = ""
         tables["Transactions"] = (transaction_headers, transactions)
 
     _validate_hierarchy_records(
@@ -1426,15 +1431,16 @@ class GoogleSheetsStorage:
         if not updates:
             return
         headers = self._headers(title)
-        batch = [
-            {
-                "range": f"A{row.row_number}",
-                "values": [[str(record.get(header, "")) for header in headers]],
-            }
-            for row, record in updates
-        ]
         worksheet = self._worksheet(title)
+        current_updates = list(updates)
         for attempt in range(self._retry_attempts):
+            batch = [
+                {
+                    "range": f"A{row.row_number}",
+                    "values": [[str(record.get(header, "")) for header in headers]],
+                }
+                for row, record in current_updates
+            ]
             try:
                 self._api(
                     lambda: worksheet.batch_update(batch, raw=True),
@@ -1443,7 +1449,7 @@ class GoogleSheetsStorage:
             except StorageUnavailableError as error:
                 current_rows = self._rows(title, force_refresh=True)
                 current_by_id = {
-                    str(row.values.get("id", "")): row.values for row in current_rows
+                    str(row.values.get("id", "")): row for row in current_rows
                 }
                 intended_by_id = {
                     str(record.get("id", "")): {
@@ -1452,18 +1458,25 @@ class GoogleSheetsStorage:
                     for _, record in updates
                 }
                 if all(
-                    current_by_id.get(record_id, {}) == intended
+                    current_by_id.get(record_id, _StoredRow(0, {})).values == intended
                     for record_id, intended in intended_by_id.items()
                 ):
                     return
                 if not error.retryable or attempt + 1 >= self._retry_attempts:
                     raise
                 if not all(
-                    current_by_id.get(str(row.values.get("id", "")), {})
+                    current_by_id.get(str(row.values.get("id", "")), _StoredRow(0, {})).values
                     == row.values
-                    for row, _ in updates
+                    for row, _ in current_updates
                 ):
                     raise
+                current_updates = [
+                    (
+                        current_by_id[str(row.values.get("id", ""))],
+                        record,
+                    )
+                    for row, record in current_updates
+                ]
                 self._sleeper(self._retry_base_delay_seconds * (2**attempt))
                 continue
             self._invalidate(title)
@@ -1479,14 +1492,17 @@ class GoogleSheetsStorage:
             ) from exc
 
     def _transactions_sheet_id(self) -> int:
-        sheet_id = getattr(self._worksheet("Transactions"), "id", None)
+        return self._sheet_id("Transactions")
+
+    def _sheet_id(self, title: str) -> int:
+        sheet_id = getattr(self._worksheet(title), "id", None)
         if sheet_id is None:
-            raise StorageValidationError("Transactions worksheet has no stable sheet ID")
+            raise StorageValidationError(f"{title} worksheet has no stable sheet ID")
         try:
             return int(sheet_id)
         except (TypeError, ValueError) as exc:
             raise StorageValidationError(
-                f"Transactions worksheet has an invalid sheet ID: {sheet_id}"
+                f"{title} worksheet has an invalid sheet ID: {sheet_id}"
             ) from exc
 
     def _fresh_bulk_transaction_snapshot(
@@ -3045,7 +3061,7 @@ class GoogleSheetsStorage:
             {
                 "updateCells": {
                     "range": {
-                        "sheetId": int(self._worksheet("MixedUseExpenses").id),
+                        "sheetId": self._sheet_id("MixedUseExpenses"),
                         "startRowIndex": source.row_number - 1,
                         "endRowIndex": source.row_number,
                         "startColumnIndex": source_reference_column,
@@ -3383,7 +3399,7 @@ class GoogleSheetsStorage:
             source_reference_column = self._sheet_column_index(
                 source_headers, "receipt_references"
             )
-            source_sheet_id = int(self._worksheet("MixedUseExpenses").id)
+            source_sheet_id = self._sheet_id("MixedUseExpenses")
         requests: list[dict[str, Any]] = []
         transaction_batch: list[dict[str, Any]] = []
         transaction_reference_column_number = transaction_reference_column + 1

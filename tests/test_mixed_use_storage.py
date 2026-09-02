@@ -63,6 +63,13 @@ def test_allocation_uses_decimal_currency_rounding_and_five_places() -> None:
     assert normalized.allocated_amount == "41.15"
 
 
+def test_allocation_accepts_trailing_zero_percentage_precision() -> None:
+    normalized = validate_mixed_use_allocation("100", "12.340000")
+
+    assert normalized.business_use_percentage == "12.34"
+    assert normalized.allocated_amount == "12.34"
+
+
 def test_allocation_preserves_precision_before_currency_rounding() -> None:
     assert calculate_allocated_amount(
         "3165809505055861412909.65", "35.52850"
@@ -296,10 +303,51 @@ def test_mixed_use_delete_removes_source_and_projection(
         allocation_rationale="Measured business use",
     )
 
+
     default_storage.delete_mixed_use_expense(source["id"], expected_source=source)
 
     assert default_storage.list_mixed_use_expenses() == []
     assert default_storage.list_transactions() == []
+
+
+def test_sheet_id_validation_is_consistent_for_mixed_use_worksheets(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    worksheet = default_storage._worksheet("MixedUseExpenses")
+    worksheet.id = "not-an-integer"
+
+    with pytest.raises(StorageValidationError, match="invalid sheet ID"):
+        default_storage._sheet_id("MixedUseExpenses")
+
+
+def test_replace_rows_rebuilds_ranges_after_rows_shift_during_retry(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    account = default_storage.create_account("Retry target", "Bank")
+    row = default_storage._find_row("Accounts", account["id"])
+    worksheet = default_storage._worksheet("Accounts")
+    original_batch_update = worksheet.batch_update
+    calls = 0
+
+    def insert_row_then_fail(data: list[dict[str, object]], **kwargs: object) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            worksheet.rows.insert(1, list(worksheet.rows[1]))
+            worksheet.rows[1][0] = "inserted-before-retry"
+            raise OSError("temporary failure")
+        original_batch_update(data, **kwargs)
+
+    worksheet.batch_update = insert_row_then_fail  # type: ignore[method-assign]
+    replacement = {**row.values, "name": "Retry target updated"}
+
+    default_storage._replace_rows("Accounts", [(row, replacement)])
+
+    rows = default_storage._rows("Accounts", force_refresh=True)
+    assert next(item for item in rows if item.values["id"] == account["id"]).values[
+        "name"
+    ] == "Retry target updated"
+    assert rows[0].values["id"] == "inserted-before-retry"
 
 
 def test_mixed_use_backup_round_trip_includes_source_and_linkage(
