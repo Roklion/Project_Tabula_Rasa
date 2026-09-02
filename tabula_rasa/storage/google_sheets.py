@@ -1453,11 +1453,14 @@ class GoogleSheetsStorage:
                 )
             except StorageUnavailableError as error:
                 current_rows = self._rows(title, force_refresh=True)
-                current_by_id = {
-                    str(row.values.get("id", "")): row for row in current_rows
-                }
+                current_by_id: dict[str, _StoredRow] = {}
+                for row in current_rows:
+                    row_id = _clean_text(row.values.get("id"), "ID", required=True)
+                    if row_id in current_by_id:
+                        raise StorageValidationError(f"Duplicate ID detected in {title}")
+                    current_by_id[row_id] = row
                 intended_by_id = {
-                    str(record.get("id", "")): {
+                    _clean_text(record.get("id"), "ID", required=True): {
                         header: str(record.get(header, "")) for header in headers
                     }
                     for _, record in updates
@@ -1470,14 +1473,19 @@ class GoogleSheetsStorage:
                 if not error.retryable or attempt + 1 >= self._retry_attempts:
                     raise
                 if not all(
-                    current_by_id.get(str(row.values.get("id", "")), _StoredRow(0, {})).values
+                    current_by_id.get(
+                        _clean_text(row.values.get("id"), "ID", required=True),
+                        _StoredRow(0, {}),
+                    ).values
                     == row.values
                     for row, _ in current_updates
                 ):
                     raise
                 current_updates = [
                     (
-                        current_by_id[str(row.values.get("id", ""))],
+                        current_by_id[
+                            _clean_text(row.values.get("id"), "ID", required=True)
+                        ],
                         record,
                     )
                     for row, record in current_updates
@@ -2072,6 +2080,10 @@ class GoogleSheetsStorage:
         return updated
 
     def delete_category(self, category_id: str) -> None:
+        with _MIXED_USE_CREATE_LOCK:
+            self._delete_category(category_id)
+
+    def _delete_category(self, category_id: str) -> None:
         category_id = _clean_text(category_id, "ID", required=True)
         current = self._find_row("Categories", category_id)
         existing_categories = self.list_categories(_force_refresh=True)

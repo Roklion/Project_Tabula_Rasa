@@ -260,6 +260,33 @@ def test_mixed_use_edit_shares_mixed_use_creation_lock(
     assert not errors
 
 
+def test_category_delete_shares_mixed_use_creation_lock(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    category = default_storage.create_category("Unused category", "Expense")
+    started = threading.Event()
+    finished = threading.Event()
+    errors: list[BaseException] = []
+
+    def delete_category() -> None:
+        started.set()
+        try:
+            default_storage.delete_category(category["id"])
+        except BaseException as error:  # pragma: no cover - assertion below reports it
+            errors.append(error)
+        finally:
+            finished.set()
+
+    worker = threading.Thread(target=delete_category)
+    with google_sheets_module._MIXED_USE_CREATE_LOCK:
+        worker.start()
+        assert started.wait(1)
+        assert not finished.wait(0.1)
+    assert finished.wait(1)
+    worker.join(timeout=1)
+    assert not errors
+
+
 def test_generic_transaction_mutations_reject_mixed_use_projections(
     default_storage: GoogleSheetsStorage,
 ) -> None:
