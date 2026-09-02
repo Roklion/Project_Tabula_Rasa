@@ -26,6 +26,7 @@ from tabula_rasa.storage.google_sheets import (
     StorageUnavailableError,
     StorageValidationError,
     StorageWorkbookAccessError,
+    PRE_MIXED_USE_WORKSHEET_HEADERS,
     VERSION_5_WORKSHEET_HEADERS,
     WORKSHEET_HEADERS,
 )
@@ -489,6 +490,41 @@ class TestGoogleSheetsStorage:
             "receipt_references",
         ]
         assert transaction_sheet.rows[1][-1] == ""
+
+    def test_profile_storage_migrates_pre_mixed_transactions_before_provenance(
+        self,
+    ) -> None:
+        headers = dict(WORKSHEET_HEADERS)
+        headers["Transactions"] = tuple(
+            header
+            for header in PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"]
+            if header != "receipt_references"
+        )
+        workbook = FakeWorkbook(headers)
+        google_client = Mock()
+        google_client.open_by_key.return_value = workbook
+
+        with (
+            patch.object(
+                Credentials,
+                "from_service_account_info",
+                return_value=object(),
+            ),
+            patch.object(gspread, "authorize", return_value=google_client),
+        ):
+            GoogleSheetsStorage.from_secrets(
+                {
+                    "spreadsheet_id": "given-spreadsheet-id",
+                    "gcp_service_account": {"type": "service_account"},
+                }
+            )
+
+        assert workbook.sheets["Transactions"].rows[0] == [
+            *headers["Transactions"],
+            "receipt_references",
+            "source_type",
+            "source_id",
+        ]
 
     def test_profile_storage_migrates_hierarchy_columns_idempotently(
         self,

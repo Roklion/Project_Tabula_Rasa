@@ -970,7 +970,7 @@ class GoogleSheetsStorage:
                         str(value).strip() for value in values[0]
                     ]
                     transaction_headers_without_receipts = set(
-                        WORKSHEET_HEADERS["Transactions"]
+                        PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"]
                     ) - {"receipt_references"}
                     if (
                         "receipt_references" not in existing_headers
@@ -2572,6 +2572,11 @@ class GoogleSheetsStorage:
                 "amount": allocation.allocated_amount,
                 "description": original_description,
             },
+            created_at=(
+                original_transaction.get("created_at")
+                if original_transaction is not None
+                else None
+            ),
             original_transaction=original_transaction,
         )
         source = {
@@ -2893,6 +2898,109 @@ class GoogleSheetsStorage:
             deletion=True,
         )
 
+    def _replace_receipt_references(
+        self,
+        current: _StoredRow,
+        encoded_references: str,
+    ) -> dict[str, str]:
+        """Replace receipt references while preserving mixed-use row parity."""
+        transaction = current.values
+        source_type = _clean_text(
+            transaction.get("source_type"), "Transaction source type"
+        )
+        source_id = _clean_text(transaction.get("source_id"), "Transaction source ID")
+        if not source_type:
+            updated = dict(transaction)
+            updated["receipt_references"] = encoded_references
+            self._replace_row("Transactions", current, updated)
+            return updated
+        if source_type != MIXED_USE_SOURCE_TYPE or not source_id:
+            raise StorageValidationError(
+                "Transaction source type and source ID are invalid"
+            )
+        source = self._find_row("MixedUseExpenses", source_id)
+        transaction_id = _clean_text(transaction.get("id"), "Transaction ID", required=True)
+        if source.values.get("linked_transaction_id") != transaction_id:
+            raise StorageValidationError(
+                "Mixed-use source and projection IDs do not match"
+            )
+
+        transaction_headers = self._headers("Transactions")
+        source_headers = self._headers("MixedUseExpenses")
+        transaction_reference_column = self._sheet_column_index(
+            transaction_headers, "receipt_references"
+        )
+        source_reference_column = self._sheet_column_index(
+            source_headers, "receipt_references"
+        )
+        requests = [
+            {
+                "updateCells": {
+                    "range": {
+                        "sheetId": self._transactions_sheet_id(),
+                        "startRowIndex": current.row_number - 1,
+                        "endRowIndex": current.row_number,
+                        "startColumnIndex": transaction_reference_column,
+                        "endColumnIndex": transaction_reference_column + 1,
+                    },
+                    "rows": [
+                        {"values": [{"userEnteredValue": {"stringValue": encoded_references}}]}
+                    ],
+                    "fields": "userEnteredValue",
+                }
+            },
+            {
+                "updateCells": {
+                    "range": {
+                        "sheetId": int(self._worksheet("MixedUseExpenses").id),
+                        "startRowIndex": source.row_number - 1,
+                        "endRowIndex": source.row_number,
+                        "startColumnIndex": source_reference_column,
+                        "endColumnIndex": source_reference_column + 1,
+                    },
+                    "rows": [
+                        {"values": [{"userEnteredValue": {"stringValue": encoded_references}}]}
+                    ],
+                    "fields": "userEnteredValue",
+                }
+            },
+        ]
+        try:
+            self._batch_update_spreadsheet(requests)
+        except StorageUnavailableError as error:
+            try:
+                confirmed_transaction = self._find_row(
+                    "Transactions", transaction_id
+                )
+                confirmed_source = self._find_row("MixedUseExpenses", source_id)
+            except StorageError as read_error:
+                raise StorageBulkMutationUncertainError(
+                    "The mixed-use receipt update completed, but its paired "
+                    "postcondition could not be read.",
+                    outcome="mixed_ambiguous",
+                    retryable=False,
+                ) from read_error
+            if (
+                str(confirmed_transaction.values.get("receipt_references") or "")
+                == encoded_references
+                and str(confirmed_source.values.get("receipt_references") or "")
+                == encoded_references
+            ):
+                self._invalidate("Transactions")
+                self._invalidate("MixedUseExpenses")
+                return dict(confirmed_transaction.values)
+            raise StorageBulkMutationUncertainError(
+                "The mixed-use receipt update was not fully applied. Review the "
+                "source and ledger before retrying.",
+                outcome="not_applied" if error.retryable else "mixed_ambiguous",
+                retryable=error.retryable,
+            ) from error
+        self._invalidate("Transactions")
+        self._invalidate("MixedUseExpenses")
+        updated = dict(transaction)
+        updated["receipt_references"] = encoded_references
+        return updated
+
     def set_transaction_receipt_references(
         self,
         transaction_id: str,
@@ -2900,12 +3008,9 @@ class GoogleSheetsStorage:
     ) -> dict[str, str]:
         """Replace the Drive receipt references attached to one transaction."""
         current = self._find_row("Transactions", transaction_id)
-        updated = dict(current.values)
-        updated["receipt_references"] = _encode_receipt_references(
-            references
+        return self._replace_receipt_references(
+            current, _encode_receipt_references(references)
         )
-        self._replace_row("Transactions", current, updated)
-        return updated
 
     def initialize_legacy_transaction_receipts(
         self,
@@ -2947,10 +3052,9 @@ class GoogleSheetsStorage:
             raise StorageConflictError(
                 "The transaction receipt references are already initialized"
             )
-        updated = dict(current.values)
-        updated["receipt_references"] = _encode_receipt_references(normalized)
-        self._replace_row("Transactions", current, updated)
-        return updated
+        return self._replace_receipt_references(
+            current, _encode_receipt_references(normalized)
+        )
 
     def link_transaction_receipt(
         self,
@@ -2989,12 +3093,9 @@ class GoogleSheetsStorage:
             if item["id"] != normalized_reference["id"]
         ]
         references.append(normalized_reference)
-        updated = dict(current.values)
-        updated["receipt_references"] = _encode_receipt_references(
-            references
+        return self._replace_receipt_references(
+            current, _encode_receipt_references(references)
         )
-        self._replace_row("Transactions", current, updated)
-        return updated
 
     def remap_transaction_receipt(
         self,
@@ -3048,10 +3149,9 @@ class GoogleSheetsStorage:
             if index not in replacement_indexes
         ]
         retained.insert(first_index, normalized_reference)
-        updated = dict(current.values)
-        updated["receipt_references"] = _encode_receipt_references(retained)
-        self._replace_row("Transactions", current, updated)
-        return updated
+        return self._replace_receipt_references(
+            current, _encode_receipt_references(retained)
+        )
 
     def apply_receipt_recovery_plan(
         self,
@@ -3349,11 +3449,14 @@ class GoogleSheetsStorage:
             item for item in references if item["id"] != str(file_id)
         ]
         if retained == references:
+            if _clean_text(current.values.get("source_type"), "Transaction source type"):
+                return self._replace_receipt_references(
+                    current, _encode_receipt_references(references)
+                )
             return dict(current.values)
-        updated = dict(current.values)
-        updated["receipt_references"] = _encode_receipt_references(retained)
-        self._replace_row("Transactions", current, updated)
-        return updated
+        return self._replace_receipt_references(
+            current, _encode_receipt_references(retained)
+        )
 
     def delete_transaction(self, transaction_id: str) -> None:
         for attempt in range(self._retry_attempts):

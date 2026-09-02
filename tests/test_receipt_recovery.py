@@ -250,6 +250,48 @@ def test_mixed_use_receipt_recovery_updates_source_and_projection() -> None:
     )[0]["id"] == "newreceipt01"
 
 
+def test_mixed_use_receipt_mutation_apis_update_source_and_projection() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
+    account = storage.create_account("Checking", "Bank")
+    category = storage.create_category("Office", "Expense")
+    source = storage.create_mixed_use_expense(
+        txn_date="2026-07-31",
+        total_expense="100.00",
+        business_use_percentage="50",
+        account_id=account["id"],
+        category_id=category["id"],
+        description="Shared office",
+        allocation_rationale="Measured use",
+    )
+    transaction_id = source["linked_transaction_id"]
+    first = _reference(1, b"first receipt")
+    second = _reference(2, b"second receipt")
+    transaction_sheet = storage._workbook.sheets["Transactions"]
+    source_sheet = storage._workbook.sheets["MixedUseExpenses"]
+    transaction_sheet.rows[1][transaction_sheet.rows[0].index("receipt_references")] = ""
+    source_sheet.rows[1][source_sheet.rows[0].index("receipt_references")] = ""
+
+    storage.initialize_legacy_transaction_receipts(
+        transaction_id, references=[first]
+    )
+    storage.link_transaction_receipt(transaction_id, reference=second)
+    storage.remap_transaction_receipt(
+        transaction_id,
+        old_file_id=str(first["id"]),
+        reference=second,
+    )
+    storage.unlink_transaction_receipt(
+        transaction_id, file_id=str(second["id"])
+    )
+
+    assert decode_receipt_references(
+        storage.list_transactions(_force_refresh=True)[0]["receipt_references"]
+    ) == []
+    assert decode_receipt_references(
+        storage.list_mixed_use_expenses()[0]["receipt_references"]
+    ) == []
+
+
 def test_recovery_preserves_conflict_check_before_skipping_reused_file() -> None:
     content = b"receipt"
     reference = _reference(1, content)

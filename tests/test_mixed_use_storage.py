@@ -108,6 +108,9 @@ def test_mixed_use_edit_updates_same_projection_and_detects_stale_source(
         business_use_percentage="25",
         allocation_rationale="Quarterly measured usage",
     )
+    original_projection_created_at = default_storage.list_transactions()[0][
+        "created_at"
+    ]
     edited = default_storage.edit_mixed_use_expense(
         source["id"],
         expected_source=source,
@@ -123,6 +126,7 @@ def test_mixed_use_edit_updates_same_projection_and_detects_stale_source(
     assert transaction["id"] == source["linked_transaction_id"]
     assert transaction["amount"] == "25.00"
     assert transaction["reference"] == "UPDATED-119"
+    assert transaction["created_at"] == original_projection_created_at
     assert transaction["description"].endswith(
         "Allocation rationale: Updated quarterly measurement"
     )
