@@ -30,6 +30,11 @@ from tabula_rasa.hierarchy import (
     HierarchyValidationError,
     validate_two_level_hierarchy,
 )
+from tabula_rasa.mixed_use import (
+    MIXED_USE_SOURCE_TYPE,
+    MixedUseAllocationError,
+    validate_mixed_use_allocation,
+)
 from tabula_rasa.quickbooks_import import (
     fingerprint,
     missing_references,
@@ -93,13 +98,39 @@ VERSION_6_WORKSHEET_HEADERS = {
     "Accounts": (*PRE_PAYEE_WORKSHEET_HEADERS["Accounts"], "parent_id"),
     "Categories": (*PRE_PAYEE_WORKSHEET_HEADERS["Categories"], "parent_id"),
 }
-WORKSHEET_HEADERS = {
+PRE_MIXED_USE_WORKSHEET_HEADERS = {
     **VERSION_6_WORKSHEET_HEADERS,
     "Payees": ("id", "name", "active", "created_at"),
     "Transactions": tuple(
         "payee_id" if header == "payee" else header
         for header in VERSION_6_WORKSHEET_HEADERS["Transactions"]
     ),
+}
+MIXED_USE_WORKSHEET_HEADERS = (
+    "id",
+    "txn_date",
+    "kind",
+    "total_expense",
+    "business_use_percentage",
+    "allocated_amount",
+    "account_id",
+    "category_id",
+    "payee_id",
+    "description",
+    "reference",
+    "receipt_references",
+    "allocation_rationale",
+    "linked_transaction_id",
+    "created_at",
+)
+WORKSHEET_HEADERS = {
+    **PRE_MIXED_USE_WORKSHEET_HEADERS,
+    "Transactions": (
+        *PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"],
+        "source_type",
+        "source_id",
+    ),
+    "MixedUseExpenses": MIXED_USE_WORKSHEET_HEADERS,
 }
 _PAYEE_WRITE_LOCK = threading.RLock()
 VERSION_3_WORKSHEET_HEADERS = {
@@ -135,16 +166,17 @@ CATEGORY_KINDS = {"Income", "Expense"}
 TRANSACTION_KINDS = {"Income", "Expense", "Transfer"}
 LEDGER_ONLY_BACKUP_FORMAT_VERSION = 4
 RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION = 5
-BACKUP_FORMAT_VERSION = 7
+PAYEE_BACKUP_FORMAT_VERSION = 7
+BACKUP_FORMAT_VERSION = 8
 BACKUP_HEADERS_BY_VERSION = {
     2: LEGACY_BACKUP_HEADERS,
     3: VERSION_3_WORKSHEET_HEADERS,
     6: VERSION_6_WORKSHEET_HEADERS,
     LEDGER_ONLY_BACKUP_FORMAT_VERSION: PRE_PAYEE_WORKSHEET_HEADERS,
     RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION: PRE_PAYEE_WORKSHEET_HEADERS,
-    BACKUP_FORMAT_VERSION: VERSION_6_WORKSHEET_HEADERS,
+    PAYEE_BACKUP_FORMAT_VERSION: PRE_MIXED_USE_WORKSHEET_HEADERS,
+    BACKUP_FORMAT_VERSION: WORKSHEET_HEADERS,
 }
-BACKUP_HEADERS_BY_VERSION[BACKUP_FORMAT_VERSION] = WORKSHEET_HEADERS
 SUPPORTED_BACKUP_FORMAT_VERSIONS = set(BACKUP_HEADERS_BY_VERSION)
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 SHEETS_READONLY_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly"
@@ -359,6 +391,139 @@ def _as_bool(value: Any, field: str = "active") -> bool:
     raise StorageValidationError(f"{field} must be true or false")
 
 
+def mixed_use_ledger_description(description: Any, rationale: Any) -> str:
+    """Build the deterministic description for a mixed-use projection."""
+    original = _clean_text(description, "Description")
+    explanation = _clean_text(rationale, "Allocation rationale", required=True)
+    prefix = f"{original}\n" if original else ""
+    return f"{prefix}Allocation rationale: {explanation}"
+
+
+def _validate_mixed_use_tables(
+    tables: Mapping[str, tuple[Sequence[str], list[dict[str, str]]]],
+) -> None:
+    """Validate source/projection relationships in a workbook or backup."""
+    source_table = tables.get("MixedUseExpenses")
+    if source_table is None:
+        sources: list[dict[str, str]] = []
+    else:
+        sources = source_table[1]
+    transactions = tables.get("Transactions", ((), []))[1]
+    sources_by_id: dict[str, dict[str, str]] = {}
+    linked_ids: set[str] = set()
+    for source in sources:
+        source_id = _clean_text(source.get("id"), "Mixed-use source ID", required=True)
+        if source_id in sources_by_id:
+            raise StorageValidationError("Mixed-use source IDs must be unique")
+        sources_by_id[source_id] = source
+        if _clean_text(source.get("kind"), "Mixed-use kind", required=True) != "Expense":
+            raise StorageValidationError("Mixed-use sources must be Expense records")
+        linked_id = _clean_text(
+            source.get("linked_transaction_id"),
+            "Linked transaction ID",
+            required=True,
+        )
+        if linked_id in linked_ids:
+            raise StorageValidationError(
+                "Mixed-use linked transaction IDs must be unique"
+            )
+        linked_ids.add(linked_id)
+        try:
+            allocation = validate_mixed_use_allocation(
+                source.get("total_expense"),
+                source.get("business_use_percentage"),
+            )
+        except MixedUseAllocationError as exc:
+            raise StorageValidationError(str(exc)) from exc
+        if source.get("total_expense", "") != allocation.total_expense:
+            raise StorageValidationError(
+                "Mixed-use total expense has a non-canonical value"
+            )
+        if source.get("business_use_percentage", "") != allocation.business_use_percentage:
+            raise StorageValidationError(
+                "Mixed-use business-use percentage has a non-canonical value"
+            )
+        if source.get("allocated_amount", "") != allocation.allocated_amount:
+            raise StorageValidationError(
+                "Mixed-use allocated amount does not match its allocation"
+            )
+        _clean_text(source.get("allocation_rationale"), "Allocation rationale", required=True)
+        decode_receipt_references(source.get("receipt_references", ""))
+
+    transactions_by_id = {
+        _clean_text(transaction.get("id"), "Transaction ID", required=True): transaction
+        for transaction in transactions
+    }
+    if len(transactions_by_id) != len(transactions):
+        raise StorageValidationError("Transaction IDs must be unique")
+    linked_source_ids: set[str] = set()
+    for transaction in transactions:
+        source_type = _clean_text(transaction.get("source_type"), "Transaction source type")
+        source_id = _clean_text(transaction.get("source_id"), "Transaction source ID")
+        if bool(source_type) != bool(source_id):
+            raise StorageValidationError(
+                "Transaction source type and source ID must be provided together"
+            )
+        if not source_type:
+            continue
+        if source_type != MIXED_USE_SOURCE_TYPE:
+            raise StorageValidationError("Transaction source type is unsupported")
+        source = sources_by_id.get(source_id)
+        if source is None:
+            raise StorageValidationError(
+                "Mixed-use projection references an unknown source record"
+            )
+        transaction_id = _clean_text(transaction.get("id"), "Transaction ID", required=True)
+        if source_id in linked_source_ids:
+            raise StorageValidationError(
+                "A mixed-use source has more than one projection transaction"
+            )
+        linked_source_ids.add(source_id)
+        if source.get("linked_transaction_id") != transaction_id:
+            raise StorageValidationError(
+                "Mixed-use source and projection IDs do not match"
+            )
+        if transaction.get("kind") != "Expense":
+            raise StorageValidationError("Mixed-use projections must be Expense records")
+        for field in (
+            "txn_date",
+            "account_id",
+            "category_id",
+            "payee_id",
+            "reference",
+        ):
+            if _clean_text(transaction.get(field), field) != _clean_text(
+                source.get(field), field
+            ):
+                raise StorageValidationError(
+                    f"Mixed-use source and projection {field} values do not match"
+                )
+        if _clean_text(transaction.get("description"), "Description") != mixed_use_ledger_description(
+            source.get("description"), source.get("allocation_rationale")
+        ):
+            raise StorageValidationError(
+                "Mixed-use projection description is out of sync"
+            )
+        if transaction.get("amount") != source.get("allocated_amount"):
+            raise StorageValidationError(
+                "Mixed-use projection amount does not match its source"
+            )
+        if transaction.get("receipt_references", "") != source.get(
+            "receipt_references", ""
+        ):
+            raise StorageValidationError(
+                "Mixed-use source and projection receipt references do not match"
+            )
+    for source in sources:
+        linked_id = source.get("linked_transaction_id")
+        if linked_id not in transactions_by_id or _clean_text(
+            transactions_by_id[linked_id].get("source_id"), "Transaction source ID"
+        ) != source.get("id"):
+            raise StorageValidationError(
+                "Mixed-use source references a missing projection transaction"
+            )
+
+
 def _parse_backup_zip(
     backup: bytes,
 ) -> tuple[
@@ -392,7 +557,10 @@ def _parse_backup_zip(
             } | {"manifest.json"}
             if format_version >= RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION:
                 required_files.add("receipts.json")
-            optional_legacy_payees = format_version < BACKUP_FORMAT_VERSION and "Payees.csv" in names
+            optional_legacy_payees = (
+                format_version < PAYEE_BACKUP_FORMAT_VERSION
+                and "Payees.csv" in names
+            )
             if set(names) not in (required_files, required_files | {"Payees.csv"}):
                 raise StorageValidationError(
                     "Backup must contain exactly the expected ledger and manifest files"
@@ -485,7 +653,7 @@ def _parse_backup_zip(
                 migrated_transactions,
             )
 
-    if format_version < BACKUP_FORMAT_VERSION:
+    if format_version < PAYEE_BACKUP_FORMAT_VERSION:
         for title in ("Accounts", "Categories"):
             legacy_headers, legacy_records = tables[title]
             if "parent_id" not in legacy_headers:
@@ -511,6 +679,16 @@ def _parse_backup_zip(
             list(WORKSHEET_HEADERS["Payees"]),
             [],
         )
+
+    if format_version < BACKUP_FORMAT_VERSION:
+        transaction_headers, transactions = tables["Transactions"]
+        transaction_headers = list(transaction_headers)
+        for header in ("source_type", "source_id"):
+            if header not in transaction_headers:
+                transaction_headers.append(header)
+                for transaction in transactions:
+                    transaction[header] = ""
+        tables["Transactions"] = (transaction_headers, transactions)
 
     _validate_hierarchy_records(
         tables["Accounts"][1],
@@ -542,6 +720,9 @@ def _parse_backup_zip(
         decode_receipt_references(
             transaction.get("receipt_references", "")
         )
+
+    if format_version >= BACKUP_FORMAT_VERSION:
+        _validate_mixed_use_tables(tables)
 
     receipt_manifest: dict[str, Any] | None = None
     if receipt_manifest_bytes is not None:
@@ -781,6 +962,51 @@ class GoogleSheetsStorage:
                         migrated_headers = [
                             *existing_headers,
                             "receipt_references",
+                        ]
+                        worksheet.update(
+                            [migrated_headers],
+                            range_name="A1",
+                            raw=True,
+                        )
+                        values[0] = migrated_headers
+                if title == "MixedUseExpenses" and values:
+                    existing_headers = [
+                        str(value).strip() for value in values[0]
+                    ]
+                    if (
+                        "receipt_references" not in existing_headers
+                        and set(MIXED_USE_WORKSHEET_HEADERS) - {"receipt_references"}
+                        <= set(existing_headers)
+                        and len(existing_headers) == len(set(existing_headers))
+                    ):
+                        worksheet.add_cols(1)
+                        migrated_headers = [*existing_headers, "receipt_references"]
+                        worksheet.update(
+                            [migrated_headers],
+                            range_name="A1",
+                            raw=True,
+                        )
+                        values[0] = migrated_headers
+                if title == "Transactions" and values:
+                    existing_headers = [
+                        str(value).strip() for value in values[0]
+                    ]
+                    missing_provenance_headers = [
+                        header
+                        for header in WORKSHEET_HEADERS["Transactions"]
+                        if header not in existing_headers
+                    ]
+                    if missing_provenance_headers:
+                        if not set(PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"]).issubset(
+                            existing_headers
+                        ):
+                            raise StorageValidationError(
+                                "Transactions is missing its pre-mixed-use headers"
+                            )
+                        worksheet.add_cols(len(missing_provenance_headers))
+                        migrated_headers = [
+                            *existing_headers,
+                            *missing_provenance_headers,
                         ]
                         worksheet.update(
                             [migrated_headers],
@@ -2080,6 +2306,7 @@ class GoogleSheetsStorage:
         payees = self._payee_lookup(force_refresh=_force_refresh)
         for row in self._rows("Transactions", force_refresh=_force_refresh):
             item = dict(row.values)
+            item["id"] = _clean_text(item.get("id"), "Transaction ID", required=True)
             item["txn_date"] = _iso_date(item.get("txn_date"))
             item["account_id"] = _clean_text(
                 item.get("account_id"), "Account", required=True
@@ -2089,6 +2316,18 @@ class GoogleSheetsStorage:
             )
             item["category_id"] = _clean_text(item.get("category_id"), "Category")
             item["payee_id"] = _clean_text(item.get("payee_id"), "Payee")
+            item["source_type"] = _clean_text(
+                item.get("source_type"), "Transaction source type"
+            )
+            item["source_id"] = _clean_text(
+                item.get("source_id"), "Transaction source ID"
+            )
+            if bool(item["source_type"]) != bool(item["source_id"]):
+                raise StorageValidationError(
+                    "Transaction source type and source ID must be provided together"
+                )
+            if item["source_type"] and item["source_type"] != MIXED_USE_SOURCE_TYPE:
+                raise StorageValidationError("Transaction source type is unsupported")
             if item["payee_id"] and item["payee_id"] not in payees:
                 raise StorageValidationError("Payee does not exist")
             item["payee"] = payees.get(item["payee_id"], {}).get("name", "")
@@ -2130,6 +2369,443 @@ class GoogleSheetsStorage:
         )
         self._replace_row("Transactions", current, updated)
         return updated
+
+    def _raw_mixed_use_snapshot(
+        self,
+    ) -> tuple[dict[str, dict[str, str]], dict[str, dict[str, str]]]:
+        snapshot = self._snapshot(
+            ["MixedUseExpenses", "Transactions"], force_refresh=True
+        )
+        sources: dict[str, dict[str, str]] = {}
+        for row in snapshot["MixedUseExpenses"]:
+            source = dict(row.values)
+            source_id = _clean_text(
+                source.get("id"), "Mixed-use source ID", required=True
+            )
+            if source_id in sources:
+                raise StorageValidationError("Mixed-use source IDs must be unique")
+            sources[source_id] = source
+        transactions: dict[str, dict[str, str]] = {}
+        for row in snapshot["Transactions"]:
+            transaction = dict(row.values)
+            transaction_id = _clean_text(
+                transaction.get("id"), "Transaction ID", required=True
+            )
+            if transaction_id in transactions:
+                raise StorageValidationError("Transaction IDs must be unique")
+            transactions[transaction_id] = transaction
+        return sources, transactions
+
+    def _validate_mixed_use_references(
+        self,
+        source: Mapping[str, Any],
+        *,
+        accounts: Mapping[str, Mapping[str, Any]] | None = None,
+        categories: Mapping[str, Mapping[str, str]] | None = None,
+        payees: Mapping[str, Mapping[str, str]] | None = None,
+    ) -> None:
+        accounts = accounts or self._account_lookup(force_refresh=True)
+        categories = categories or self._category_lookup(force_refresh=True)
+        payees = payees or self._payee_lookup(force_refresh=True)
+        account_id = _clean_text(source.get("account_id"), "Account", required=True)
+        if account_id not in accounts:
+            raise StorageValidationError("Source account does not exist")
+        category_id = _clean_text(source.get("category_id"), "Category", required=True)
+        if category_id not in categories:
+            raise StorageValidationError("Category does not exist")
+        if categories[category_id]["kind"] != "Expense":
+            raise StorageValidationError("Category kind does not match transaction kind")
+        payee_id = _clean_text(source.get("payee_id"), "Payee")
+        if payee_id and payee_id not in payees:
+            raise StorageValidationError("Payee does not exist")
+        decode_receipt_references(source.get("receipt_references", ""))
+
+    @staticmethod
+    def _mixed_use_record_matches(
+        title: str,
+        actual: Mapping[str, Any] | None,
+        expected: Mapping[str, Any],
+    ) -> bool:
+        if actual is None:
+            return False
+        return all(
+            str(actual.get(header, "") or "") == str(expected.get(header, "") or "")
+            for header in WORKSHEET_HEADERS[title]
+        )
+
+    def _mixed_use_mutation_result(
+        self,
+        *,
+        operation: str,
+        source_id: str,
+        transaction_id: str,
+        expected_source: Mapping[str, Any],
+        expected_transaction: Mapping[str, Any],
+        error: StorageUnavailableError | None,
+        deletion: bool = False,
+    ) -> dict[str, str] | None:
+        try:
+            sources, transactions = self._raw_mixed_use_snapshot()
+        except StorageError as read_error:
+            raise StorageBulkMutationUncertainError(
+                f"The mixed-use {operation} completed but its postcondition could not "
+                "be read. Review the source and ledger before retrying.",
+                outcome="mixed_ambiguous",
+                retryable=False,
+            ) from read_error
+        actual_source = sources.get(source_id)
+        actual_transaction = transactions.get(transaction_id)
+        if deletion:
+            fully_applied = actual_source is None and actual_transaction is None
+            not_applied = self._mixed_use_record_matches(
+                "MixedUseExpenses", actual_source, expected_source
+            ) and self._mixed_use_record_matches(
+                "Transactions", actual_transaction, expected_transaction
+            )
+        else:
+            fully_applied = self._mixed_use_record_matches(
+                "MixedUseExpenses", actual_source, expected_source
+            ) and self._mixed_use_record_matches(
+                "Transactions", actual_transaction, expected_transaction
+            )
+            not_applied = actual_source is None and actual_transaction is None
+        if fully_applied:
+            return {"status": "fully_applied"}
+        if not_applied:
+            retryable = error.retryable if error is not None else False
+            raise StorageBulkMutationUncertainError(
+                f"The mixed-use {operation} was not applied. Review the source and "
+                "ledger before retrying.",
+                outcome="not_applied",
+                retryable=retryable,
+            ) from error
+        raise StorageBulkMutationUncertainError(
+            f"The mixed-use {operation} outcome is ambiguous. Do not retry until the "
+            "source and ledger relationship is reviewed.",
+            outcome="mixed_ambiguous",
+            retryable=False,
+        ) from error
+
+    def _prepare_mixed_use_expense(
+        self,
+        data: Mapping[str, Any],
+        *,
+        source_id: str | None = None,
+        linked_transaction_id: str | None = None,
+        created_at: str | None = None,
+    ) -> tuple[dict[str, str], dict[str, str]]:
+        try:
+            allocation = validate_mixed_use_allocation(
+                data.get("total_expense"),
+                data.get("business_use_percentage"),
+            )
+        except MixedUseAllocationError as exc:
+            raise StorageValidationError(str(exc)) from exc
+        rationale = _clean_text(
+            data.get("allocation_rationale"),
+            "Allocation rationale",
+            required=True,
+        )
+        source_id = _clean_text(
+            source_id if source_id is not None else data.get("source_id", data.get("id")),
+            "Mixed-use source ID",
+        ) or str(uuid4())
+        linked_transaction_id = _clean_text(
+            linked_transaction_id
+            if linked_transaction_id is not None
+            else data.get("linked_transaction_id"),
+            "Linked transaction ID",
+        ) or str(uuid4())
+        original_description = _clean_text(data.get("description"), "Description")
+        transaction = self._prepare_transaction(
+            {
+                **data,
+                "kind": "Expense",
+                "amount": allocation.allocated_amount,
+                "description": original_description,
+            }
+        )
+        source = {
+            "id": source_id,
+            "txn_date": transaction["txn_date"],
+            "kind": "Expense",
+            "total_expense": allocation.total_expense,
+            "business_use_percentage": allocation.business_use_percentage,
+            "allocated_amount": allocation.allocated_amount,
+            "account_id": transaction["account_id"],
+            "category_id": transaction["category_id"],
+            "payee_id": transaction["payee_id"],
+            "payee": transaction["payee"],
+            "description": original_description,
+            "reference": transaction["reference"],
+            "receipt_references": transaction["receipt_references"],
+            "allocation_rationale": rationale,
+            "linked_transaction_id": linked_transaction_id,
+            "created_at": created_at or _utc_now(),
+        }
+        projection = {
+            **transaction,
+            "id": linked_transaction_id,
+            "description": mixed_use_ledger_description(
+                original_description, rationale
+            ),
+            "source_type": MIXED_USE_SOURCE_TYPE,
+            "source_id": source_id,
+        }
+        return source, projection
+
+    def list_mixed_use_expenses(
+        self, *, _force_refresh: bool = False
+    ) -> list[dict[str, str]]:
+        del _force_refresh  # Mixed-use relationships always require a fresh read.
+        sources, transactions = self._raw_mixed_use_snapshot()
+        tables = {
+            "MixedUseExpenses": (MIXED_USE_WORKSHEET_HEADERS, list(sources.values())),
+            "Transactions": (
+                WORKSHEET_HEADERS["Transactions"],
+                list(transactions.values()),
+            ),
+        }
+        _validate_mixed_use_tables(tables)
+        accounts = self._account_lookup(force_refresh=True)
+        categories = self._category_lookup(force_refresh=True)
+        payees = self._payee_lookup(force_refresh=True)
+        result = []
+        for source in sources.values():
+            self._validate_mixed_use_references(
+                source,
+                accounts=accounts,
+                categories=categories,
+                payees=payees,
+            )
+            item = dict(source)
+            item["payee"] = payees.get(item["payee_id"], {}).get("name", "")
+            item["ledger_status"] = "linked"
+            result.append(item)
+        return sorted(
+            result,
+            key=lambda item: (item["txn_date"], item["created_at"], item["id"]),
+            reverse=True,
+        )
+
+    def get_mixed_use_expense(self, source_id: str) -> dict[str, str]:
+        source_id = _clean_text(source_id, "Mixed-use source ID", required=True)
+        for source in self.list_mixed_use_expenses():
+            if source["id"] == source_id:
+                return source
+        raise StorageNotFoundError("Mixed-use expense no longer exists")
+
+    def resolve_mixed_use_expense(self, source_id: str) -> dict[str, str]:
+        """Resolve one source record through its durable projection link."""
+        return self.get_mixed_use_expense(source_id)
+
+    def create_mixed_use_expense(self, **data: Any) -> dict[str, str]:
+        source, projection = self._prepare_mixed_use_expense(data)
+        sources, transactions = self._raw_mixed_use_snapshot()
+        source_id = source["id"]
+        transaction_id = projection["id"]
+        existing_source = sources.get(source_id)
+        existing_transaction = transactions.get(transaction_id)
+        if existing_source is not None or existing_transaction is not None:
+            if self._mixed_use_record_matches(
+                "MixedUseExpenses", existing_source, source
+            ) and self._mixed_use_record_matches(
+                "Transactions", existing_transaction, projection
+            ):
+                return self.get_mixed_use_expense(source_id)
+            raise StorageConflictError(
+                "The mixed-use source or linked transaction ID is already in use"
+            )
+        try:
+            self._append("MixedUseExpenses", source)
+            self._append("Transactions", projection)
+        except (StorageError, OSError) as error:
+            if isinstance(error, StorageUnavailableError):
+                self._mixed_use_mutation_result(
+                    operation="create",
+                    source_id=source_id,
+                    transaction_id=transaction_id,
+                    expected_source=source,
+                    expected_transaction=projection,
+                    error=error,
+                )
+            raise StorageBulkMutationUncertainError(
+                "The mixed-use create did not complete. Review the source and ledger "
+                "before retrying.",
+                outcome="mixed_ambiguous",
+                retryable=False,
+            ) from error
+        self._mixed_use_mutation_result(
+            operation="create",
+            source_id=source_id,
+            transaction_id=transaction_id,
+            expected_source=source,
+            expected_transaction=projection,
+            error=None,
+        )
+        return self.get_mixed_use_expense(source_id)
+
+    def edit_mixed_use_expense(
+        self,
+        source_id: str,
+        *,
+        expected_source: Mapping[str, Any] | None = None,
+        expected: Mapping[str, Any] | None = None,
+        **changes: Any,
+    ) -> dict[str, str]:
+        source_id = _clean_text(source_id, "Mixed-use source ID", required=True)
+        expected_source = expected_source or expected
+        sources, transactions = self._raw_mixed_use_snapshot()
+        current_source = sources.get(source_id)
+        if current_source is None:
+            raise StorageNotFoundError("Mixed-use expense no longer exists")
+        transaction_id = _clean_text(
+            current_source.get("linked_transaction_id"),
+            "Linked transaction ID",
+            required=True,
+        )
+        current_transaction = transactions.get(transaction_id)
+        if current_transaction is None:
+            raise StorageValidationError(
+                "Mixed-use source has no linked projection transaction"
+            )
+        _validate_mixed_use_tables(
+            {
+                "MixedUseExpenses": (
+                    MIXED_USE_WORKSHEET_HEADERS,
+                    list(sources.values()),
+                ),
+                "Transactions": (
+                    WORKSHEET_HEADERS["Transactions"],
+                    list(transactions.values()),
+                ),
+            }
+        )
+        if expected_source is not None and not self._mixed_use_record_matches(
+            "MixedUseExpenses", current_source, expected_source
+        ):
+            raise StorageConflictError(
+                "The mixed-use expense changed; refresh it before editing."
+            )
+        if "id" in changes or "source_id" in changes or "linked_transaction_id" in changes:
+            raise StorageValidationError("Mixed-use source IDs cannot be edited")
+        merged = {**current_source, **changes}
+        updated_source, updated_transaction = self._prepare_mixed_use_expense(
+            merged,
+            source_id=source_id,
+            linked_transaction_id=transaction_id,
+            created_at=current_source.get("created_at"),
+        )
+        try:
+            self._replace_row(
+                "Transactions",
+                self._find_row("Transactions", transaction_id),
+                updated_transaction,
+            )
+            self._replace_row(
+                "MixedUseExpenses",
+                self._find_row("MixedUseExpenses", source_id),
+                updated_source,
+            )
+        except StorageUnavailableError as error:
+            self._mixed_use_mutation_result(
+                operation="edit",
+                source_id=source_id,
+                transaction_id=transaction_id,
+                expected_source=updated_source,
+                expected_transaction=updated_transaction,
+                error=error,
+            )
+            raise AssertionError("Mixed-use edit postcondition did not classify")
+        self._mixed_use_mutation_result(
+            operation="edit",
+            source_id=source_id,
+            transaction_id=transaction_id,
+            expected_source=updated_source,
+            expected_transaction=updated_transaction,
+            error=None,
+        )
+        return self.get_mixed_use_expense(source_id)
+
+    def _delete_mixed_use_row(self, title: str, record_id: str) -> None:
+        for attempt in range(self._retry_attempts):
+            current = self._find_row(title, record_id)
+            worksheet = self._worksheet(title)
+            try:
+                self._api(
+                    lambda: worksheet.delete_rows(current.row_number),
+                    retry_safe=False,
+                )
+                self._invalidate(title)
+                return
+            except StorageUnavailableError as error:
+                self._invalidate(title)
+                if not error.retryable or attempt + 1 >= self._retry_attempts:
+                    raise
+                try:
+                    self._find_row(title, record_id)
+                except StorageNotFoundError:
+                    return
+                self._sleeper(self._retry_base_delay_seconds * (2**attempt))
+
+    def delete_mixed_use_expense(
+        self,
+        source_id: str,
+        *,
+        expected_source: Mapping[str, Any] | None = None,
+        expected: Mapping[str, Any] | None = None,
+    ) -> None:
+        source_id = _clean_text(source_id, "Mixed-use source ID", required=True)
+        expected_source = expected_source or expected
+        sources, transactions = self._raw_mixed_use_snapshot()
+        source = sources.get(source_id)
+        if source is None:
+            raise StorageNotFoundError("Mixed-use expense no longer exists")
+        transaction_id = _clean_text(
+            source.get("linked_transaction_id"),
+            "Linked transaction ID",
+            required=True,
+        )
+        transaction = transactions.get(transaction_id)
+        if transaction is None:
+            raise StorageValidationError(
+                "Mixed-use source has no linked projection transaction"
+            )
+        _validate_mixed_use_tables(
+            {
+                "MixedUseExpenses": (MIXED_USE_WORKSHEET_HEADERS, list(sources.values())),
+                "Transactions": (WORKSHEET_HEADERS["Transactions"], list(transactions.values())),
+            }
+        )
+        if expected_source is not None and not self._mixed_use_record_matches(
+            "MixedUseExpenses", source, expected_source
+        ):
+            raise StorageConflictError(
+                "The mixed-use expense changed; refresh it before deleting."
+            )
+        try:
+            self._delete_mixed_use_row("Transactions", transaction_id)
+            self._delete_mixed_use_row("MixedUseExpenses", source_id)
+        except StorageUnavailableError as error:
+            self._mixed_use_mutation_result(
+                operation="delete",
+                source_id=source_id,
+                transaction_id=transaction_id,
+                expected_source=source,
+                expected_transaction=transaction,
+                error=error,
+                deletion=True,
+            )
+            raise AssertionError("Mixed-use delete postcondition did not classify")
+        self._mixed_use_mutation_result(
+            operation="delete",
+            source_id=source_id,
+            transaction_id=transaction_id,
+            expected_source=source,
+            expected_transaction=transaction,
+            error=None,
+            deletion=True,
+        )
 
     def set_transaction_receipt_references(
         self,
@@ -2873,6 +3549,12 @@ class GoogleSheetsStorage:
         csv_files: dict[str, bytes] = {}
         archive_buffer = io.BytesIO()
         snapshot = self._snapshot(WORKSHEET_HEADERS, force_refresh=True)
+        _validate_mixed_use_tables(
+            {
+                title: (WORKSHEET_HEADERS[title], [dict(row.values) for row in rows])
+                for title, rows in snapshot.items()
+            }
+        )
         _validate_hierarchy_records(
             [row.values for row in snapshot["Accounts"]],
             compatibility_field="classification",
@@ -2958,7 +3640,7 @@ class GoogleSheetsStorage:
     def restore_backup_zip(self, backup: bytes) -> dict[str, int]:
         """Restore a validated backup into a blank initialized workbook."""
         manifest, tables, _ = _parse_backup_zip(backup)
-        legacy_payees = manifest["format_version"] < BACKUP_FORMAT_VERSION
+        legacy_payees = manifest["format_version"] < PAYEE_BACKUP_FORMAT_VERSION
         existing_payees = self.list_payees(_force_refresh=True)
         payees_by_key = {
             normalize_payee_name(item["name"]): item["id"] for item in existing_payees
@@ -2988,6 +3670,8 @@ class GoogleSheetsStorage:
             if title not in tables:
                 continue
             _, records = tables[title]
+            if title == "MixedUseExpenses" and not records:
+                continue
             if not records and title == "Payees" and legacy_payees:
                 counts[title] = 0
                 continue
