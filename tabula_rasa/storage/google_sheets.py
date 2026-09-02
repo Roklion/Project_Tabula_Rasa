@@ -2655,6 +2655,10 @@ class GoogleSheetsStorage:
         transaction_id = projection["id"]
         existing_source = sources.get(source_id)
         existing_transaction = transactions.get(transaction_id)
+        if existing_source is not None:
+            # A source-only retry must compare against the persisted source,
+            # including its original timestamp, rather than regenerate it.
+            source["created_at"] = str(existing_source.get("created_at", ""))
         if existing_source is not None or existing_transaction is not None:
             if self._mixed_use_record_matches(
                 "MixedUseExpenses", existing_source, source
@@ -3092,7 +3096,21 @@ class GoogleSheetsStorage:
             )
             for transaction_id, transaction in current_by_id.items()
         }
-        if expected_receipts != current_receipts:
+        intended_values = {
+            str(transaction_id): _encode_receipt_references(references)
+            for transaction_id, references in updates.items()
+        }
+        if expected_receipts != current_receipts and (
+            not intended_values
+            or not all(
+                transaction_id in current_by_id
+                and str(
+                    current_by_id[transaction_id].get("receipt_references") or ""
+                )
+                == value
+                for transaction_id, value in intended_values.items()
+            )
+        ):
             return False, current_transactions
 
         rows_by_id = {
@@ -3103,32 +3121,147 @@ class GoogleSheetsStorage:
             raise StorageNotFoundError(
                 "A transaction disappeared during receipt recovery."
             )
-        if not updates:
+        mixed_source_ids: set[str] = set()
+        for transaction_id in intended_values:
+            transaction = current_by_id[transaction_id]
+            source_type = _clean_text(
+                transaction.get("source_type"),
+                "Transaction source type",
+            )
+            source_id = _clean_text(
+                transaction.get("source_id"),
+                "Transaction source ID",
+            )
+            if not source_type:
+                continue
+            if source_type != MIXED_USE_SOURCE_TYPE or not source_id:
+                raise StorageValidationError(
+                    "Receipt recovery found invalid transaction provenance."
+                )
+            mixed_source_ids.add(source_id)
+
+        mixed_source_rows: dict[str, _StoredRow] = {}
+        if mixed_source_ids:
+            source_rows = self._rows("MixedUseExpenses", force_refresh=True)
+            for row in source_rows:
+                source_id = _clean_text(row.values.get("id"), "Mixed-use source ID")
+                if source_id in mixed_source_ids and source_id in mixed_source_rows:
+                    raise StorageValidationError(
+                        "Receipt recovery found duplicate mixed-use source IDs."
+                    )
+                if source_id in mixed_source_ids:
+                    mixed_source_rows[source_id] = row
+            for source_id in mixed_source_ids:
+                if source_id not in mixed_source_rows:
+                    raise StorageValidationError(
+                        "Receipt recovery found a missing mixed-use source."
+                    )
+            for transaction_id in intended_values:
+                transaction = current_by_id[transaction_id]
+                source_id = _clean_text(
+                    transaction.get("source_id"), "Transaction source ID"
+                )
+                if not source_id:
+                    continue
+                source_row = mixed_source_rows.get(source_id)
+                if source_row is None:
+                    raise AssertionError("Mixed-use source lookup lost a validated ID")
+                if source_row.values.get("linked_transaction_id") != transaction_id:
+                    raise StorageValidationError(
+                        "Receipt recovery found a mismatched mixed-use projection."
+                    )
+
+        if not intended_values:
             return True, current_transactions
 
         headers = self._headers("Transactions")
-        reference_column = headers.index("receipt_references") + 1
-        column_name = ""
-        while reference_column:
-            reference_column, remainder = divmod(reference_column - 1, 26)
-            column_name = chr(65 + remainder) + column_name
-        intended_values = {
-            str(transaction_id): _encode_receipt_references(references)
-            for transaction_id, references in updates.items()
-        }
-        batch = [
-            {
-                "range": f"{column_name}{rows_by_id[transaction_id].row_number}",
-                "values": [[value]],
-            }
-            for transaction_id, value in intended_values.items()
-        ]
-        worksheet = self._worksheet("Transactions")
-        try:
-            self._api(
-                lambda: worksheet.batch_update(batch, raw=True),
-                retry_safe=False,
+        transaction_reference_column = self._sheet_column_index(
+            headers, "receipt_references"
+        )
+        transaction_sheet_id = self._transactions_sheet_id()
+        source_reference_column: int | None = None
+        source_sheet_id: int | None = None
+        if mixed_source_rows:
+            source_headers = self._headers("MixedUseExpenses")
+            source_reference_column = self._sheet_column_index(
+                source_headers, "receipt_references"
             )
+            source_sheet_id = int(self._worksheet("MixedUseExpenses").id)
+        requests: list[dict[str, Any]] = []
+        transaction_batch: list[dict[str, Any]] = []
+        transaction_reference_column_number = transaction_reference_column + 1
+        transaction_column_name = ""
+        while transaction_reference_column_number:
+            transaction_reference_column_number, remainder = divmod(
+                transaction_reference_column_number - 1, 26
+            )
+            transaction_column_name = chr(65 + remainder) + transaction_column_name
+        for transaction_id, value in intended_values.items():
+            current_transaction = current_by_id[transaction_id]
+            if str(current_transaction.get("receipt_references") or "") != value:
+                transaction_batch.append(
+                    {
+                        "range": (
+                            f"{transaction_column_name}"
+                            f"{rows_by_id[transaction_id].row_number}"
+                        ),
+                        "values": [[value]],
+                    }
+                )
+                requests.append(
+                    {
+                        "updateCells": {
+                            "range": {
+                                "sheetId": transaction_sheet_id,
+                                "startRowIndex": rows_by_id[transaction_id].row_number - 1,
+                                "endRowIndex": rows_by_id[transaction_id].row_number,
+                                "startColumnIndex": transaction_reference_column,
+                                "endColumnIndex": transaction_reference_column + 1,
+                            },
+                            "rows": [
+                                {"values": [{"userEnteredValue": {"stringValue": value}}]}
+                            ],
+                            "fields": "userEnteredValue",
+                        }
+                    }
+                )
+            source_id = _clean_text(
+                current_transaction.get("source_id"), "Transaction source ID"
+            )
+            if not source_id:
+                continue
+            source_row = mixed_source_rows[source_id]
+            if str(source_row.values.get("receipt_references") or "") == value:
+                continue
+            requests.append(
+                {
+                    "updateCells": {
+                        "range": {
+                            "sheetId": source_sheet_id,
+                            "startRowIndex": source_row.row_number - 1,
+                            "endRowIndex": source_row.row_number,
+                            "startColumnIndex": source_reference_column,
+                            "endColumnIndex": source_reference_column + 1,
+                        },
+                        "rows": [
+                            {"values": [{"userEnteredValue": {"stringValue": value}}]}
+                        ],
+                        "fields": "userEnteredValue",
+                    }
+                }
+            )
+        if not requests:
+            return True, current_transactions
+        try:
+            if mixed_source_rows:
+                self._batch_update_spreadsheet(requests)
+            else:
+                self._api(
+                    lambda: self._worksheet("Transactions").batch_update(
+                        transaction_batch, raw=True
+                    ),
+                    retry_safe=False,
+                )
         except StorageUnavailableError as error:
             confirmed_rows = self._rows("Transactions", force_refresh=True)
             confirmed_by_id = {
@@ -3143,6 +3276,23 @@ class GoogleSheetsStorage:
                 raise StorageValidationError(
                     "Receipt recovery found duplicate live transaction IDs."
                 )
+            confirmed_sources: dict[str, dict[str, str]] = {}
+            if mixed_source_rows:
+                try:
+                    confirmed_source_rows = self._rows(
+                        "MixedUseExpenses", force_refresh=True
+                    )
+                except StorageError as read_error:
+                    raise StorageBulkMutationUncertainError(
+                        "Receipt recovery completed, but the mixed-use source "
+                        "postcondition could not be read.",
+                        outcome="mixed_ambiguous",
+                        retryable=False,
+                    ) from read_error
+                confirmed_sources = {
+                    str(row.values["id"]): dict(row.values)
+                    for row in confirmed_source_rows
+                }
             if all(
                 transaction_id in confirmed_by_id
                 and
@@ -3154,12 +3304,34 @@ class GoogleSheetsStorage:
                 )
                 == value
                 for transaction_id, value in intended_values.items()
+            ) and all(
+                source_id in confirmed_sources
+                and str(
+                    confirmed_sources[source_id].get("receipt_references") or ""
+                )
+                == value
+                for transaction_id, value in intended_values.items()
+                for source_id in [
+                    _clean_text(
+                        current_by_id[transaction_id].get("source_id"),
+                        "Transaction source ID",
+                    )
+                ]
+                if source_id
             ):
+                self._invalidate("Transactions")
+                if mixed_source_rows:
+                    self._invalidate("MixedUseExpenses")
                 return True, confirmed_transactions
             if error.retryable:
+                self._invalidate("Transactions")
+                if mixed_source_rows:
+                    self._invalidate("MixedUseExpenses")
                 return False, confirmed_transactions
             raise
         self._invalidate("Transactions")
+        if mixed_source_rows:
+            self._invalidate("MixedUseExpenses")
         return True, current_transactions
 
     def unlink_transaction_receipt(

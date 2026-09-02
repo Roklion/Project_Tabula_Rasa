@@ -260,9 +260,13 @@ def test_mixed_use_uncertain_create_never_retries_projection_blindly(
 
     assert len(default_storage._rows("MixedUseExpenses", force_refresh=True)) == 1
     assert default_storage._rows("Transactions", force_refresh=True) == []
+    original_created_at = default_storage._rows(
+        "MixedUseExpenses", force_refresh=True
+    )[0].values["created_at"]
     default_storage._append = original_append  # type: ignore[method-assign]
     retried = default_storage.create_mixed_use_expense(**inputs)
     assert retried["id"] == "source-retry-safe"
+    assert retried["created_at"] == original_created_at
     assert len(default_storage.list_transactions()) == 1
 
 

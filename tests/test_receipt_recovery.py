@@ -217,6 +217,39 @@ def test_recovery_reuses_original_drive_file_without_remapping() -> None:
     assert report["skipped"] == 0
 
 
+def test_mixed_use_receipt_recovery_updates_source_and_projection() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
+    account = storage.create_account("Checking", "Bank")
+    category = storage.create_category("Office", "Expense")
+    old_reference = _reference(1, b"receipt")
+    source = storage.create_mixed_use_expense(
+        txn_date="2026-07-31",
+        total_expense="100.00",
+        business_use_percentage="50",
+        account_id=account["id"],
+        category_id=category["id"],
+        description="Shared office",
+        allocation_rationale="Measured use",
+        receipt_references=[old_reference],
+    )
+    transaction_id = source["linked_transaction_id"]
+    expected_transactions = storage.list_transactions(_force_refresh=True)
+    new_reference = {**old_reference, "id": "newreceipt01"}
+
+    applied, _ = storage.apply_receipt_recovery_plan(
+        expected_transactions,
+        {transaction_id: [new_reference]},
+    )
+
+    assert applied is True
+    assert decode_receipt_references(
+        storage.list_transactions(_force_refresh=True)[0]["receipt_references"]
+    )[0]["id"] == "newreceipt01"
+    assert decode_receipt_references(
+        storage.list_mixed_use_expenses()[0]["receipt_references"]
+    )[0]["id"] == "newreceipt01"
+
+
 def test_recovery_preserves_conflict_check_before_skipping_reused_file() -> None:
     content = b"receipt"
     reference = _reference(1, content)
