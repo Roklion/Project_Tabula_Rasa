@@ -576,6 +576,36 @@ def test_replace_rows_reports_conflict_when_row_changes_during_retry(
     worksheet.batch_update = original_batch_update  # type: ignore[method-assign]
 
 
+def test_replace_rows_refreshes_positions_after_retry_backoff(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    account = default_storage.create_account("Backoff refresh", "Bank")
+    row = default_storage._find_row("Accounts", account["id"])
+    worksheet = default_storage._worksheet("Accounts")
+    original_batch_update = worksheet.batch_update
+    calls = 0
+
+    def shift_then_timeout(data: list[dict[str, object]], **kwargs: object) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            worksheet.rows.insert(1, list(worksheet.rows[1]))
+            worksheet.rows[1][0] = "inserted-during-backoff"
+            raise OSError("temporary response lost")
+        original_batch_update(data, **kwargs)
+
+    worksheet.batch_update = shift_then_timeout  # type: ignore[method-assign]
+    default_storage._replace_rows(
+        "Accounts", [(row, {**row.values, "name": "Backoff refresh updated"})]
+    )
+
+    rows = default_storage._rows("Accounts", force_refresh=True)
+    assert next(item for item in rows if item.values["id"] == account["id"]).values[
+        "name"
+    ] == "Backoff refresh updated"
+    assert rows[0].values["id"] == "inserted-during-backoff"
+
+
 def test_mixed_use_backup_round_trip_includes_source_and_linkage(
     default_storage: GoogleSheetsStorage,
 ) -> None:
@@ -1257,6 +1287,38 @@ def test_mixed_use_uncertain_delete_rejects_partial_pair_as_ambiguous(
     default_storage._delete_mixed_use_row = delete_then_lose_transaction_result  # type: ignore[method-assign]
     with pytest.raises(StorageBulkMutationUncertainError, match="ambiguous"):
         default_storage.delete_mixed_use_expense(source["id"])
+
+
+def test_mixed_use_delete_repairs_source_only_partial_pair(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    original_delete = default_storage._delete_mixed_use_row
+
+    def delete_then_lose_transaction_result(
+        title: str,
+        record_id: str,
+        *,
+        expected_record: object = None,
+    ) -> None:
+        original_delete(title, record_id, expected_record=expected_record)  # type: ignore[arg-type]
+        if title == "Transactions":
+            raise StorageUnavailableError("uncertain", retryable=False)
+
+    default_storage._delete_mixed_use_row = delete_then_lose_transaction_result  # type: ignore[method-assign]
+    with pytest.raises(StorageBulkMutationUncertainError, match="ambiguous"):
+        default_storage.delete_mixed_use_expense(source["id"])
+
+    default_storage._delete_mixed_use_row = original_delete  # type: ignore[method-assign]
+    default_storage.delete_mixed_use_expense(source["id"])
+
+    assert default_storage.list_mixed_use_expenses() == []
+    assert default_storage.list_transactions() == []
 
 
 def test_mixed_use_delete_revalidates_records_inside_retry(

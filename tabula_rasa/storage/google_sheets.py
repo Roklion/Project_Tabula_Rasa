@@ -1547,18 +1547,41 @@ class GoogleSheetsStorage:
                     raise StorageConflictError(
                         f"A row in {title} changed unexpectedly during a write retry."
                     ) from error
+                self._sleeper(self._retry_base_delay_seconds * (2**attempt))
+                retry_rows = self._rows(title, force_refresh=True)
+                retry_by_id: dict[str, _StoredRow] = {}
+                for row in retry_rows:
+                    row_id = _clean_text(row.values.get("id"), "ID", required=True)
+                    if row_id in retry_by_id:
+                        raise StorageValidationError(f"Duplicate ID detected in {title}")
+                    retry_by_id[row_id] = row
+                if all(
+                    retry_by_id.get(record_id, _StoredRow(0, {})).values == intended
+                    for record_id, intended in intended_by_id.items()
+                ):
+                    return
+                if not all(
+                    retry_by_id.get(
+                        _clean_text(row.values.get("id"), "ID", required=True),
+                        _StoredRow(0, {}),
+                    ).values
+                    == row.values
+                    for row, _ in current_updates
+                ):
+                    raise StorageConflictError(
+                        f"A row in {title} changed unexpectedly during a write retry."
+                    ) from error
                 if before_retry is not None:
                     before_retry()
                 current_updates = [
                     (
-                        current_by_id[
+                        retry_by_id[
                             _clean_text(row.values.get("id"), "ID", required=True)
                         ],
                         record,
                     )
                     for row, record in current_updates
                 ]
-                self._sleeper(self._retry_base_delay_seconds * (2**attempt))
                 continue
             self._invalidate(title)
             return
@@ -3121,9 +3144,16 @@ class GoogleSheetsStorage:
         )
         transaction = transactions.get(transaction_id)
         if transaction is None:
-            raise StorageValidationError(
-                "Mixed-use source has no linked projection transaction"
+            if expected_source is not None and not self._mixed_use_record_matches(
+                "MixedUseExpenses", source, expected_source
+            ):
+                raise StorageConflictError(
+                    "The mixed-use expense changed; refresh it before deleting."
+                )
+            self._delete_mixed_use_row(
+                "MixedUseExpenses", source_id, expected_record=source
             )
+            return
         _validate_mixed_use_tables(
             {
                 "MixedUseExpenses": (MIXED_USE_WORKSHEET_HEADERS, list(sources.values())),
