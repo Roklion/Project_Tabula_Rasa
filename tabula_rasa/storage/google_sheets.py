@@ -2819,15 +2819,23 @@ class GoogleSheetsStorage:
             original_transaction=current_transaction,
         )
         try:
-            self._replace_row(
+            self._replace_rows(
                 "Transactions",
-                self._find_row("Transactions", transaction_id),
-                updated_transaction,
+                [
+                    (
+                        self._find_row("Transactions", transaction_id),
+                        updated_transaction,
+                    )
+                ],
             )
-            self._replace_row(
+            self._replace_rows(
                 "MixedUseExpenses",
-                self._find_row("MixedUseExpenses", source_id),
-                updated_source,
+                [
+                    (
+                        self._find_row("MixedUseExpenses", source_id),
+                        updated_source,
+                    )
+                ],
             )
         except StorageUnavailableError as error:
             outcome = self._mixed_use_mutation_result(

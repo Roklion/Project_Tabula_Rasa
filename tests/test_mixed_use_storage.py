@@ -478,17 +478,17 @@ def test_mixed_use_edit_returns_success_when_final_response_is_lost(
         business_use_percentage="50",
         allocation_rationale="Measured use",
     )
-    original_replace = default_storage._replace_row
+    original_replace = default_storage._replace_rows
     calls = 0
 
-    def replace_then_lose_final_result(title: str, row: object, record: object) -> None:
+    def replace_then_lose_final_result(title: str, updates: object) -> None:
         nonlocal calls
-        original_replace(title, row, record)  # type: ignore[arg-type]
+        original_replace(title, updates)  # type: ignore[arg-type]
         calls += 1
         if calls == 2:
             raise StorageUnavailableError("response lost")
 
-    default_storage._replace_row = replace_then_lose_final_result  # type: ignore[method-assign]
+    default_storage._replace_rows = replace_then_lose_final_result  # type: ignore[method-assign]
     result = default_storage.edit_mixed_use_expense(
         source["id"],
         total_expense="200",
@@ -534,17 +534,17 @@ def test_mixed_use_uncertain_edit_classifies_partial_pair_safely(
         business_use_percentage="50",
         allocation_rationale="Measured use",
     )
-    original_replace = default_storage._replace_row
+    original_replace = default_storage._replace_rows
     calls = 0
 
-    def replace_then_lose_first_result(title: str, row: object, record: object) -> None:
+    def replace_then_lose_first_result(title: str, updates: object) -> None:
         nonlocal calls
-        original_replace(title, row, record)  # type: ignore[arg-type]
+        original_replace(title, updates)  # type: ignore[arg-type]
         calls += 1
         if calls == 1:
             raise StorageUnavailableError("uncertain", retryable=False)
 
-    default_storage._replace_row = replace_then_lose_first_result  # type: ignore[method-assign]
+    default_storage._replace_rows = replace_then_lose_first_result  # type: ignore[method-assign]
     with pytest.raises(StorageBulkMutationUncertainError, match="ambiguous"):
         default_storage.edit_mixed_use_expense(
             source["id"],
