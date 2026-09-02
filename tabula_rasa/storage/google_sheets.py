@@ -2850,7 +2850,7 @@ class GoogleSheetsStorage:
                 try:
                     self._append("Transactions", projection)
                 except StorageUnavailableError as error:
-                    outcome = self._mixed_use_mutation_result(
+                    self._mixed_use_mutation_result(
                         operation="create",
                         source_id=source_id,
                         transaction_id=transaction_id,
@@ -2859,9 +2859,7 @@ class GoogleSheetsStorage:
                         error=error,
                         original_source=source,
                     )
-                    if outcome is not None:
-                        return self.get_mixed_use_expense(source_id)
-                    raise StorageError("Mixed-use create retry postcondition did not classify")
+                    return self.get_mixed_use_expense(source_id)
                 self._mixed_use_mutation_result(
                     operation="create",
                     source_id=source_id,
@@ -3012,7 +3010,7 @@ class GoogleSheetsStorage:
                 ],
             )
         except StorageUnavailableError as error:
-            outcome = self._mixed_use_mutation_result(
+            self._mixed_use_mutation_result(
                 operation="edit",
                 source_id=source_id,
                 transaction_id=transaction_id,
@@ -3022,9 +3020,7 @@ class GoogleSheetsStorage:
                 original_source=current_source,
                 original_transaction=current_transaction,
             )
-            if outcome is not None:
-                return self.get_mixed_use_expense(source_id)
-            raise StorageError("Mixed-use edit postcondition did not classify")
+            return self.get_mixed_use_expense(source_id)
         self._mixed_use_mutation_result(
             operation="edit",
             source_id=source_id,
@@ -3135,7 +3131,7 @@ class GoogleSheetsStorage:
                 "MixedUseExpenses", source_id, expected_record=source
             )
         except StorageUnavailableError as error:
-            outcome = self._mixed_use_mutation_result(
+            self._mixed_use_mutation_result(
                 operation="delete",
                 source_id=source_id,
                 transaction_id=transaction_id,
@@ -3144,9 +3140,7 @@ class GoogleSheetsStorage:
                 error=error,
                 deletion=True,
             )
-            if outcome is not None:
-                return
-            raise StorageError("Mixed-use delete postcondition did not classify")
+            return
         self._mixed_use_mutation_result(
             operation="delete",
             source_id=source_id,
@@ -3606,10 +3600,6 @@ class GoogleSheetsStorage:
             latest_transactions = [
                 dict(row.values) for row in latest_transaction_rows
             ]
-            if len(latest_transactions_by_id) != len(latest_transaction_rows):
-                raise StorageValidationError(
-                    "Receipt recovery found duplicate live transaction IDs."
-                )
             if any(
                 latest_transactions_by_id.get(transaction_id) is None
                 or latest_transactions_by_id[transaction_id].values
