@@ -3211,7 +3211,7 @@ class GoogleSheetsStorage:
     def restore_backup_zip(self, backup: bytes) -> dict[str, int]:
         """Restore a validated backup into a blank initialized workbook."""
         manifest, tables, _ = _parse_backup_zip(backup)
-        legacy_payees = manifest["format_version"] < BACKUP_FORMAT_VERSION
+        legacy_payees = manifest["format_version"] < 7
         existing_payees = self.list_payees(_force_refresh=True)
         payees_by_key = {
             normalize_payee_name(item["name"]): item["id"] for item in existing_payees
