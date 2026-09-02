@@ -120,6 +120,9 @@ def test_mixed_use_create_persists_one_allocated_projection(
     )
     assert source["linked_transaction_id"] == transactions[0]["id"]
     assert source["allocated_amount"] == "50.00"
+    assert "payee" not in default_storage._rows(
+        "MixedUseExpenses", force_refresh=True
+    )[0].values
 
 
 def test_mixed_use_edit_updates_same_projection_and_detects_stale_source(
@@ -170,7 +173,9 @@ def test_category_kind_change_rejects_mixed_use_references(
     )
 
     with pytest.raises(StorageConflictError, match="mixed-use expense"):
-        default_storage.edit_category(source["category_id"], kind="Income")
+        default_storage.edit_category(
+            f" {source['category_id']} ", kind="Income"
+        )
 
     category = next(
         item
@@ -510,6 +515,33 @@ def test_mixed_use_source_only_retry_classifies_missing_projection_as_retryable(
     assert calls == 3
 
 
+def test_mixed_use_create_verifies_uncertain_source_payload_before_projection(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    inputs = {
+        **_expense_inputs(default_storage),
+        "total_expense": "100",
+        "business_use_percentage": "50",
+        "allocation_rationale": "Measured use",
+        "source_id": "source-payload-conflict",
+        "linked_transaction_id": "transaction-payload-conflict",
+    }
+    original_append = default_storage._append
+
+    def append_conflicting_source(title: str, record: dict[str, str]) -> None:
+        if title == "MixedUseExpenses":
+            conflicting = {**record, "allocation_rationale": "Other use"}
+            original_append(title, conflicting)
+            return
+        original_append(title, record)
+
+    default_storage._append = append_conflicting_source  # type: ignore[method-assign]
+    with pytest.raises(StorageConflictError, match="different data"):
+        default_storage.create_mixed_use_expense(**inputs)
+
+    assert default_storage._rows("Transactions", force_refresh=True) == []
+
+
 def test_mixed_use_create_returns_success_when_final_response_is_lost(
     default_storage: GoogleSheetsStorage,
 ) -> None:
@@ -676,6 +708,88 @@ def test_mixed_use_receipt_update_rejects_pair_drift_before_writing(
         default_storage.set_transaction_receipt_references(
             source["linked_transaction_id"], []
         )
+
+
+def test_mixed_use_receipt_update_refreshes_row_position_before_writing(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    original_find = default_storage._find_row
+    calls = 0
+
+    def find_after_transaction_row_shift(title: str, record_id: str) -> object:
+        nonlocal calls
+        if calls == 1:
+            worksheet = default_storage._worksheet("Transactions")
+            worksheet.rows.insert(1, list(worksheet.rows[1]))
+            worksheet.rows[1][0] = "unrelated-transaction"
+            default_storage._invalidate("Transactions")
+        calls += 1
+        return original_find(title, record_id)
+
+    default_storage._find_row = find_after_transaction_row_shift  # type: ignore[method-assign]
+    updated = default_storage.set_transaction_receipt_references(
+        source["linked_transaction_id"], []
+    )
+
+    assert updated["id"] == source["linked_transaction_id"]
+    rows = default_storage._rows("Transactions", force_refresh=True)
+    assert [
+        (item.row_number, item.values["id"], item.values["receipt_references"])
+        for item in rows
+    ] == [(2, "unrelated-transaction", "[]"), (3, source["linked_transaction_id"], "[]")]
+    assert rows[0].values["id"] == "unrelated-transaction"
+    assert rows[0].values["receipt_references"] == "[]"
+    assert rows[1].values["id"] == source["linked_transaction_id"]
+    assert rows[1].values["receipt_references"] == "[]"
+
+
+def test_receipt_recovery_restarts_after_mixed_use_pair_drift(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    transaction = default_storage.list_transactions()[0]
+    original_rows = default_storage._rows
+    calls = 0
+
+    def rows_after_concurrent_receipt_update(
+        title: str, *, force_refresh: bool = False
+    ) -> list[object]:
+        nonlocal calls
+        if title == "MixedUseExpenses":
+            reference = '[{"id":"recovery-concurrent","name":"Receipt"}]'
+            transaction_sheet = default_storage._worksheet("Transactions")
+            source_sheet = default_storage._worksheet("MixedUseExpenses")
+            transaction_headers = default_storage._headers("Transactions")
+            source_headers = default_storage._headers("MixedUseExpenses")
+            transaction_sheet.rows[1][transaction_headers.index("receipt_references")] = reference
+            source_sheet.rows[1][source_headers.index("receipt_references")] = reference
+            default_storage._invalidate("Transactions")
+            default_storage._invalidate("MixedUseExpenses")
+        calls += 1
+        return original_rows(title, force_refresh=force_refresh)
+
+    default_storage._rows = rows_after_concurrent_receipt_update  # type: ignore[method-assign]
+    applied, fresh_transactions = default_storage.apply_receipt_recovery_plan(
+        [transaction], {transaction["id"]: []}
+    )
+
+    assert applied is False
+    assert fresh_transactions[0]["id"] == transaction["id"]
+    assert fresh_transactions[0]["receipt_references"] == (
+        '[{"id":"recovery-concurrent","name":"Receipt"}]'
+    )
+    assert calls == 3
 
 
 def test_mixed_use_delete_rejects_pair_drift_before_deleting_rows(

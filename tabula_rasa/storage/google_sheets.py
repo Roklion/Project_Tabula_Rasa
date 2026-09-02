@@ -2656,7 +2656,6 @@ class GoogleSheetsStorage:
             "account_id": transaction["account_id"],
             "category_id": transaction["category_id"],
             "payee_id": transaction["payee_id"],
-            "payee": transaction["payee"],
             "description": original_description,
             "reference": transaction["reference"],
             "receipt_references": transaction["receipt_references"],
@@ -2782,7 +2781,16 @@ class GoogleSheetsStorage:
             )
         try:
             self._append("MixedUseExpenses", source)
+            persisted_source = self._find_row("MixedUseExpenses", source_id)
+            if not self._mixed_use_record_matches(
+                "MixedUseExpenses", persisted_source.values, source
+            ):
+                raise StorageConflictError(
+                    "The mixed-use source ID is already in use with different data"
+                )
             self._append("Transactions", projection)
+        except StorageConflictError:
+            raise
         except (StorageError, OSError) as error:
             if isinstance(error, StorageUnavailableError):
                 outcome = self._mixed_use_mutation_result(
@@ -3044,6 +3052,19 @@ class GoogleSheetsStorage:
             raise StorageConflictError(
                 "The mixed-use receipt references changed; refresh before retrying."
             )
+        fresh_transaction = self._find_row("Transactions", transaction_id)
+        fresh_source = self._find_row("MixedUseExpenses", source_id)
+        if not self._mixed_use_record_matches(
+            "Transactions", fresh_transaction.values, transaction
+        ) or not self._mixed_use_record_matches(
+            "MixedUseExpenses", fresh_source.values, source.values
+        ):
+            raise StorageConflictError(
+                "The mixed-use receipt pair changed; refresh before retrying."
+            )
+        current = fresh_transaction
+        transaction = fresh_transaction.values
+        source = fresh_source
 
         transaction_headers = self._headers("Transactions")
         source_headers = self._headers("MixedUseExpenses")
@@ -3394,6 +3415,11 @@ class GoogleSheetsStorage:
                     raise StorageValidationError(
                         "Receipt recovery found a mismatched mixed-use projection."
                     )
+                if str(source_row.values.get("receipt_references") or "") != str(
+                    transaction.get("receipt_references") or ""
+                ):
+                    latest_rows = self._rows("Transactions", force_refresh=True)
+                    return False, [dict(row.values) for row in latest_rows]
 
         if not intended_values:
             return True, current_transactions
