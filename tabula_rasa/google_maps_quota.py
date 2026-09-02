@@ -513,6 +513,11 @@ def _rate_period_seconds(unit: str) -> float | None:
     return None
 
 
+def _format_google_timestamp(timestamp: datetime) -> str:
+    """Render the source point timestamp in an unambiguous UTC form."""
+    return timestamp.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
 def _usage_in_limit_unit(
     usage: GoogleMapsQuotaUsage, limit: GoogleMapsQuotaLimit
 ) -> tuple[float, str] | None:
@@ -585,6 +590,8 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
                         ratio = _utilization(usage, limit)
                         utilization = f" · {ratio:.1%}" if ratio is not None else ""
                         age = (
+                            " · Google timestamp: "
+                            f"{_format_google_timestamp(usage.timestamp)}"
                             " · Google data age: "
                             f"{max(0, int((now - usage.timestamp).total_seconds()))}s"
                         )

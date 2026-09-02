@@ -6,10 +6,15 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from tabula_rasa.google_maps_quota import (
+    GoogleMapsQuotaLimit,
+    GoogleMapsQuotaMetric,
     GoogleMapsQuotaConfigurationError,
     GoogleMapsQuotaMonitoringConfig,
     GoogleMapsQuotaRequestError,
     GoogleMapsQuotaClient,
+    GoogleMapsQuotaReport,
+    GoogleMapsQuotaUsage,
+    GoogleMapsServiceReport,
     parse_quota_metrics,
     parse_usage_time_series,
     render_google_maps_usage_sidebar,
@@ -217,3 +222,53 @@ def test_sidebar_is_discoverable_but_does_not_call_google_when_unconfigured() ->
     assert "up to about 240 seconds after sampling" in caption.call_args.args[0]
     info.assert_called_once()
     load.assert_not_called()
+
+
+def test_sidebar_shows_google_timestamp_with_recent_usage() -> None:
+    report = GoogleMapsQuotaReport(
+        project_number="123456789",
+        services=(
+            GoogleMapsServiceReport(
+                service="routes.googleapis.com",
+                quota_metrics=(
+                    GoogleMapsQuotaMetric(
+                        name="metric-resource",
+                        display_name="Compute Routes",
+                        metric="routes.googleapis.com/requests",
+                        unit="1/min/{project}",
+                        limits=(
+                            GoogleMapsQuotaLimit(
+                                name="limit-resource",
+                                display_name="Requests per minute",
+                                metric="routes.googleapis.com/requests",
+                                unit="1/min/{project}",
+                                effective_limit=10,
+                                default_limit=10,
+                            ),
+                        ),
+                    ),
+                ),
+                usage={
+                    "routes.googleapis.com/requests": GoogleMapsQuotaUsage(
+                        quota_metric="routes.googleapis.com/requests",
+                        service="routes.googleapis.com",
+                        value=4,
+                        unit="1/min/{project}",
+                        timestamp=datetime(2026, 9, 1, 12, 1, tzinfo=timezone.utc),
+                    )
+                },
+            ),
+        ),
+    )
+    with patch("tabula_rasa.google_maps_quota.st.expander", return_value=MagicMock()), patch(
+        "tabula_rasa.google_maps_quota.st.caption"
+    ) as caption, patch("tabula_rasa.google_maps_quota.st.markdown"), patch(
+        "tabula_rasa.google_maps_quota.st.button", return_value=False
+    ), patch(
+        "tabula_rasa.google_maps_quota.load_google_maps_quota_report", return_value=report
+    ):
+        render_google_maps_usage_sidebar(secrets())
+
+    rendered = "\n".join(str(call.args[0]) for call in caption.call_args_list)
+    assert "Google timestamp: 2026-09-01 12:01:00 UTC" in rendered
+    assert "Google data age:" in rendered
