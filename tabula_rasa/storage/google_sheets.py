@@ -2174,6 +2174,14 @@ class GoogleSheetsStorage:
             )
         for attempt in range(self._retry_attempts):
             current = self._find_row("Categories", category_id)
+            mixed_use_sources = self._rows("MixedUseExpenses", force_refresh=True)
+            if any(
+                _clean_text(row.values.get("category_id"), "Category") == category_id
+                for row in mixed_use_sources
+            ):
+                raise StorageConflictError(
+                    "That category has mixed-use expenses and cannot be deleted"
+                )
             worksheet = self._worksheet("Categories")
             try:
                 self._api(

@@ -1338,6 +1338,34 @@ class TestGoogleSheetsStorage:
             referenced["id"],
         }
 
+    def test_delete_category_rechecks_mixed_use_sources_after_retry(
+        self,
+    ) -> None:
+        category = self.storage.create_category("Referenced mixed-use", "Expense")
+        source_headers = self.storage._headers("MixedUseExpenses")
+        source_row = [""] * len(source_headers)
+        source_row[source_headers.index("id")] = "source-119"
+        source_row[source_headers.index("category_id")] = category["id"]
+        source_sheet = self.workbook.sheets["MixedUseExpenses"]
+        category_sheet = self.workbook.sheets["Categories"]
+        original_delete = category_sheet.delete_rows
+        injected = False
+
+        def inject_source_then_timeout(row_number: int) -> None:
+            nonlocal injected
+            if not injected:
+                injected = True
+                source_sheet.append_row(source_row)
+                raise OSError("response lost before category deletion")
+            original_delete(row_number)
+
+        category_sheet.delete_rows = inject_source_then_timeout
+
+        with pytest.raises(StorageConflictError, match="mixed-use expenses"):
+            self.storage.delete_category(category["id"])
+
+        assert self.storage.list_categories() == [category]
+
     def test_category_hierarchy_transitions_and_validation(self) -> None:
         account = self.storage.create_account("Checking", "Bank")
         travel = self.storage.create_category("Travel", "Expense")
