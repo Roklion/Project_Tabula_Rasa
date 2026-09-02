@@ -21,6 +21,10 @@ from tabula_rasa.google_maps_quota import (
     QUOTA_REPORT_FETCHED_AT_KEY,
     QUOTA_REPORT_SESSION_KEY,
     QUOTA_VIEW_REQUESTED_KEY,
+    _format_number,
+    _quota_config_identity,
+    _rate_in_minutes,
+    _rate_period_seconds,
     parse_quota_metrics,
     parse_usage_time_series,
     render_google_maps_usage_sidebar,
@@ -170,6 +174,13 @@ def test_usage_parser_maps_google_label_and_keeps_newest_timestamp() -> None:
     assert usage["routes.googleapis.com/requests"].timestamp == datetime(
         2026, 9, 1, 12, 1, tzinfo=timezone.utc
     )
+
+
+def test_number_and_rate_formatting_preserve_zero_and_exact_periods() -> None:
+    assert _format_number(0.0) == "0"
+    assert _rate_period_seconds("1/session") is None
+    assert _rate_period_seconds("1/min/{project}") == 60.0
+    assert _rate_in_minutes(2.0, "1/s") == 120.0
 
 
 def test_client_paginates_service_usage_and_queries_both_services() -> None:
@@ -386,6 +397,34 @@ def test_sidebar_expires_report_without_requerying_until_refresh() -> None:
     info.assert_any_call("The usage report expired. Select Refresh to load a current report.")
     warning.assert_not_called()
     assert QUOTA_REPORT_SESSION_KEY in session_state
+
+
+def test_sidebar_displays_stale_report_without_requerying_google() -> None:
+    report = GoogleMapsQuotaReport(project_number="123456789", services=())
+    config = GoogleMapsQuotaMonitoringConfig.from_secrets(secrets())
+    session_state = {
+        QUOTA_VIEW_REQUESTED_KEY: True,
+        QUOTA_REPORT_SESSION_KEY: report,
+        QUOTA_REPORT_FETCHED_AT_KEY: datetime.now(timezone.utc)
+        - timedelta(seconds=121),
+        QUOTA_REPORT_CONFIG_KEY: _quota_config_identity(config),
+    }
+    with patch("tabula_rasa.google_maps_quota.st.expander", return_value=MagicMock()), patch(
+        "tabula_rasa.google_maps_quota.st.caption"
+    ), patch("tabula_rasa.google_maps_quota.st.warning") as warning, patch(
+        "tabula_rasa.google_maps_quota.st.button", return_value=False
+    ), patch(
+        "tabula_rasa.google_maps_quota.st.session_state", session_state
+    ), patch(
+        "tabula_rasa.google_maps_quota.load_google_maps_quota_report"
+    ) as load:
+        render_google_maps_usage_sidebar(secrets())
+
+    load.assert_not_called()
+    warning.assert_called_with(
+        "This report is more than 120 seconds old and may be stale. Select Refresh for current data."
+    )
+    assert session_state[QUOTA_REPORT_SESSION_KEY] is report
 
 
 def test_sidebar_preserves_sanitized_configuration_error_without_retrying() -> None:

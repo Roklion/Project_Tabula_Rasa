@@ -530,31 +530,35 @@ def clear_google_maps_quota_cache() -> None:
 def _format_number(value: float | None) -> str:
     if value is None:
         return "Unavailable"
-    return f"{value:,.2f}".rstrip("0").rstrip(".")
+    formatted = f"{value:,.2f}".rstrip("0").rstrip(".")
+    return formatted if formatted else "0"
 
 
 def _rate_in_minutes(value: float, unit: str) -> float | None:
-    lower = unit.casefold()
-    if "/s" in lower or "per second" in lower:
-        return value * 60
-    if "/min" in lower or "per minute" in lower:
-        return value
-    if "/h" in lower or "per hour" in lower:
-        return value / 60
-    if "/d" in lower or "per day" in lower:
-        return value / 1440
-    return None
+    period = _rate_period_seconds(unit)
+    return value * (60.0 / period) if period is not None else None
 
 
 def _rate_period_seconds(unit: str) -> float | None:
     lower = unit.casefold()
-    if "/s" in lower or "per second" in lower:
+    components = lower.split("/")
+    if len(components) > 1:
+        period = components[1].strip()
+        if period == "s":
+            return 1.0
+        if period == "min":
+            return 60.0
+        if period == "h":
+            return 3600.0
+        if period == "d":
+            return 86400.0
+    if "per second" in lower:
         return 1.0
-    if "/min" in lower or "per minute" in lower:
+    if "per minute" in lower:
         return 60.0
-    if "/h" in lower or "per hour" in lower:
+    if "per hour" in lower:
         return 3600.0
-    if "/d" in lower or "per day" in lower:
+    if "per day" in lower:
         return 86400.0
     return None
 
@@ -619,16 +623,20 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
             fetched_at = st.session_state.get(QUOTA_REPORT_FETCHED_AT_KEY)
             cached_config_identity = st.session_state.get(QUOTA_REPORT_CONFIG_KEY)
             now = datetime.now(timezone.utc)
-            stale = (
+            configuration_changed = (
+                cached_config_identity != current_config_identity
+                or getattr(report, "project_number", None) != config.project_number
+            )
+            expired = (
                 not isinstance(fetched_at, datetime)
                 or fetched_at.tzinfo is None
                 or now - fetched_at >= timedelta(seconds=QUOTA_CACHE_TTL_SECONDS)
-                or cached_config_identity != current_config_identity
-                or getattr(report, "project_number", None) != config.project_number
             )
-            if stale:
+            if configuration_changed:
                 st.info("The usage report expired. Select Refresh to load a current report.")
                 return
+            if expired:
+                st.warning("This report is more than 120 seconds old and may be stale. Select Refresh for current data.")
         if report is None and not st.session_state.get(QUOTA_FETCH_ATTEMPTED_KEY, False):
             st.session_state[QUOTA_FETCH_ATTEMPTED_KEY] = True
             try:
