@@ -3164,7 +3164,8 @@ class GoogleSheetsStorage:
                         )
                     values["tag_ids"] = _encode_tag_ids(normalized_tag_ids)
                 elif title == "Tags":
-                    tag = next(item for item in tag_records if item["id"] == values.get("id", ""))
+                    record_id = _clean_text(values.get("id"), "Tag ID", required=True)
+                    tag = next(item for item in tag_records if item["id"] == record_id)
                     values = tag
                 writer.writerow([values.get(header, "") for header in headers])
             csv_files[f"{title}.csv"] = csv_buffer.getvalue().encode("utf-8")
