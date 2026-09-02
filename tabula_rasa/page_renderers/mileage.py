@@ -18,6 +18,7 @@ from tabula_rasa.address_autocomplete import (
 )
 from tabula_rasa.maps_routing import GoogleRoutesError
 from tabula_rasa.presentation import render_global_footer, render_page_header
+from tabula_rasa.page_renderers.tag_selector import ADD_NEW_TAG, render_tag_selector
 from tabula_rasa.storage import GoogleSheetsStorage, StorageError
 
 
@@ -99,7 +100,9 @@ def _route_disabled_reason(
             "calculation. Manual entries can still be saved with entered miles."
         )
     if start.place_id == destination.place_id:
-        return "Choose different Google places for the starting location and destination."
+        return (
+            "Choose different Google places for the starting location and destination."
+        )
     return "Mileage calculation is unavailable. Enter miles manually or try again."
 
 
@@ -190,8 +193,7 @@ def _ledger_location_text(
     )
     if (
         autofill_key in st.session_state
-        and text.strip()
-        != str(st.session_state[autofill_key]).strip()
+        and text.strip() != str(st.session_state[autofill_key]).strip()
     ):
         st.session_state.pop(autofill_key, None)
         st.session_state[manually_edited_key] = True
@@ -247,10 +249,7 @@ def _edit_route_warning_visible(
     return (
         route_changed
         or recorded_address_changed
-        or (
-            address_changed
-            and not _route_state_is_current(route_state, fingerprint)
-        )
+        or (address_changed and not _route_state_is_current(route_state, fingerprint))
     )
 
 
@@ -339,14 +338,10 @@ def _address_text_changed(
 ) -> bool:
     """Identify an edit-form address change before a new route is calculated."""
     return (
-        (
-            start.version > 0
-            and start.display_text.strip() != original_start.strip()
-        )
-        or (
-            destination.version > 0
-            and destination.display_text.strip() != original_destination.strip()
-        )
+        start.version > 0 and start.display_text.strip() != original_start.strip()
+    ) or (
+        destination.version > 0
+        and destination.display_text.strip() != original_destination.strip()
     )
 
 
@@ -376,9 +371,7 @@ def _calculate_routes(
         float(getattr(outbound_result, "suggested_miles", outbound_result)), 1
     )
     if not math.isfinite(outbound) or outbound <= 0:
-        raise RouteValidationError(
-            "Google returned no usable mileage for this route."
-        )
+        raise RouteValidationError("Google returned no usable mileage for this route.")
     if not round_trip:
         return outbound, None
     try:
@@ -410,6 +403,8 @@ def _save_round_trip(
     destination: str,
     business_purpose: str,
     notes: str,
+    tag_ids: list[str] | tuple[str, ...] = (),
+    new_tag_name: str = "",
 ) -> Any:
     """Persist two legs with their independently editable distances."""
     kwargs = {
@@ -421,6 +416,8 @@ def _save_round_trip(
         "destination": destination,
         "business_purpose": business_purpose,
         "notes": notes,
+        "tag_ids": list(tag_ids),
+        "new_tag_name": new_tag_name,
     }
     return storage.create_mileage_round_trip(**kwargs)
 
@@ -433,8 +430,114 @@ def _safe_route_error(error: Exception) -> str:
     return "Could not calculate mileage. Check the locations and try again."
 
 
-def mileage_frame(trips: list[dict]) -> pd.DataFrame:
-    """Return the stable, user-facing eight-column mileage table."""
+def _tag_records_by_id(tags: object) -> dict[str, Mapping[str, object]]:
+    if isinstance(tags, Mapping):
+        values = tags.values()
+    elif isinstance(tags, (list, tuple)):
+        values = tags
+    else:
+        values = ()
+    return {
+        str(item.get("id") or "").strip(): item
+        for item in values
+        if isinstance(item, Mapping) and str(item.get("id") or "").strip()
+    }
+
+
+def _tag_name(tag_id: object, tag_by_id: Mapping[str, Mapping[str, object]]) -> str:
+    normalized = str(tag_id or "").strip()
+    item = tag_by_id.get(normalized)
+    return str(item.get("name") or normalized) if item else normalized
+
+
+def _trip_tag_ids(
+    trip: Mapping[str, object],
+    tag_by_id: Mapping[str, Mapping[str, object]],
+) -> list[str]:
+    raw_ids = trip.get("tag_ids", ())
+    if isinstance(raw_ids, str):
+        raw_ids = [raw_ids]
+    ids = (
+        [str(value).strip() for value in raw_ids if str(value).strip()]
+        if isinstance(raw_ids, (list, tuple, set))
+        else []
+    )
+    if ids:
+        return list(dict.fromkeys(ids))
+    raw_tags = trip.get("tags", ())
+    if isinstance(raw_tags, str):
+        raw_tags = [raw_tags]
+    names_to_ids = {
+        str(item.get("name") or ""): tag_id for tag_id, item in tag_by_id.items()
+    }
+    return (
+        list(
+            dict.fromkeys(
+                names_to_ids.get(str(value), str(value)).strip()
+                for value in raw_tags
+                if str(value).strip()
+            )
+        )
+        if isinstance(raw_tags, (list, tuple, set))
+        else []
+    )
+
+
+def _tag_names_for_trip(
+    trip: Mapping[str, object],
+    tag_by_id: Mapping[str, Mapping[str, object]],
+) -> str:
+    raw_tags = trip.get("tags", ())
+    if isinstance(raw_tags, str):
+        raw_tags = [raw_tags]
+    if isinstance(raw_tags, (list, tuple, set)) and raw_tags:
+        names = [
+            str(item.get("name") or "").strip()
+            if isinstance(item, Mapping)
+            else str(item).strip()
+            for item in raw_tags
+        ]
+        names = [name for name in names if name]
+        if names:
+            return ", ".join(dict.fromkeys(names))
+    return ", ".join(
+        _tag_name(tag_id, tag_by_id)
+        for tag_id in _trip_tag_ids(trip, tag_by_id)
+        if _tag_name(tag_id, tag_by_id)
+    )
+
+
+def _render_tag_selector(
+    tags: object,
+    *,
+    key: str,
+    selected_ids: list[str] | tuple[str, ...] = (),
+    label: str = "Tags",
+) -> tuple[list[str], str]:
+    """Render the shared optional multi-Tag selector for mileage forms."""
+    if not isinstance(tags, (list, tuple)):
+        return [], ""
+    return render_tag_selector(
+        tags,
+        label=label,
+        key=key,
+        selected_ids=selected_ids,
+        preserve_inactive_ids=selected_ids,
+    )
+
+
+def _inline_tag_creation_requested(key: str) -> bool:
+    """Identify an inline-create selection before its name is validated."""
+    selected = st.session_state.get(key, ())
+    return isinstance(selected, (list, tuple, set)) and ADD_NEW_TAG in selected
+
+
+def mileage_frame(
+    trips: list[dict],
+    tags: object = None,
+) -> pd.DataFrame:
+    """Return the stable, user-facing mileage table with resolved Tags."""
+    tag_by_id = _tag_records_by_id(tags)
     return pd.DataFrame(
         [
             {
@@ -446,6 +549,7 @@ def mileage_frame(trips: list[dict]) -> pd.DataFrame:
                 "Business purpose": trip.get("business_purpose", ""),
                 "Vehicle": trip.get("vehicle", ""),
                 "Notes": trip.get("notes", ""),
+                "Tags": _tag_names_for_trip(trip, tag_by_id),
             }
             for trip in trips
         ],
@@ -458,6 +562,7 @@ def mileage_frame(trips: list[dict]) -> pd.DataFrame:
             "Business purpose",
             "Vehicle",
             "Notes",
+            "Tags",
         ],
     )
 
@@ -468,6 +573,12 @@ def render_mileage(context: MileageContext) -> None:
         "Mileage",
         "Keep a dated business-mileage log with the route, purpose, and vehicle.",
     )
+    try:
+        tags = context.storage.list_tags()
+    except StorageError as error:
+        context.report_storage_error(error)
+        st.stop()
+    tag_by_id = _tag_records_by_id(tags)
     tab_add, tab_log = st.tabs(["Add trip", "View & edit mileage log"])
     page_footer = st.empty()
 
@@ -482,6 +593,8 @@ def render_mileage(context: MileageContext) -> None:
             "add_mileage_round_trip__last",
             "add_mileage_purpose",
             "add_mileage_notes",
+            "add_mileage_tag_ids",
+            "add_mileage_tag_ids__new_name",
             "add_mileage_return_miles",
             "add_mileage_start__selection",
             "add_mileage_destination__selection",
@@ -527,9 +640,7 @@ def render_mileage(context: MileageContext) -> None:
 
         add_route_key = _route_key(context, "add")
         route_state = st.session_state.get(add_route_key)
-        round_trip = bool(
-            st.session_state.get("add_mileage_round_trip", False)
-        )
+        round_trip = bool(st.session_state.get("add_mileage_round_trip", False))
         last_round_trip = st.session_state.get("add_mileage_round_trip__last")
         round_trip_toggled = (
             isinstance(last_round_trip, bool) and last_round_trip != round_trip
@@ -576,9 +687,7 @@ def render_mileage(context: MileageContext) -> None:
                 st.session_state[add_route_key] = updated_route_state
                 route_state = updated_route_state
         route_error = st.empty()
-        route_ready = _route_ready(
-            start, destination_value, context.route_mileage
-        )
+        route_ready = _route_ready(start, destination_value, context.route_mileage)
         route_disabled_reason = _route_disabled_reason(
             start,
             destination_value,
@@ -659,8 +768,7 @@ def render_mileage(context: MileageContext) -> None:
                     "enter mileage manually before saving."
                 )
         elif route_ready and (
-            route_state is None
-            or (round_trip and route_state.get("return") is None)
+            route_state is None or (round_trip and route_state.get("return") is None)
         ):
             if round_trip and route_state is not None:
                 st.warning(
@@ -690,7 +798,9 @@ def render_mileage(context: MileageContext) -> None:
             c1, c2 = st.columns(2, gap="small")
             _set_widget_default("add_mileage_miles", 0.0)
             miles = c1.number_input(
-                "Business miles", min_value=0.0, step=0.1,
+                "Business miles",
+                min_value=0.0,
+                step=0.1,
                 format="%.1f",
                 key="add_mileage_miles",
             )
@@ -713,10 +823,12 @@ def render_mileage(context: MileageContext) -> None:
                 "Business purpose", key="add_mileage_purpose"
             )
             notes = st.text_area("Notes (optional)", key="add_mileage_notes")
-            save_error = st.empty()
-            submitted = st.button(
-                "Save mileage trip", type="primary", width="stretch"
+            tag_ids, new_tag_name = _render_tag_selector(
+                tags,
+                key="add_mileage_tag_ids",
             )
+            save_error = st.empty()
+            submitted = st.button("Save mileage trip", type="primary", width="stretch")
             if calculate_requested and context.route_mileage is not None:
                 with st.spinner("Calculating mileage…"):
                     try:
@@ -729,9 +841,7 @@ def render_mileage(context: MileageContext) -> None:
                             round_trip
                             and route_state
                             and route_state.get("partial")
-                            and st.session_state.get(
-                                "add_mileage_miles__calculated"
-                            )
+                            and st.session_state.get("add_mileage_miles__calculated")
                             is None
                         )
                         outbound, returned = _calculate_routes(
@@ -772,9 +882,7 @@ def render_mileage(context: MileageContext) -> None:
                         st.session_state[pending_mileage_key] = {
                             "fingerprint": fingerprint,
                             "outbound": (
-                                None
-                                if preserve_manual_outbound
-                                else error.outbound
+                                None if preserve_manual_outbound else error.outbound
                             ),
                             "return": None,
                         }
@@ -794,6 +902,11 @@ def render_mileage(context: MileageContext) -> None:
                     save_error.error(
                         "Starting location and destination must be different."
                     )
+                elif (
+                    _inline_tag_creation_requested("add_mileage_tag_ids")
+                    and not new_tag_name.strip()
+                ):
+                    save_error.error("Enter a Tag name before saving.")
                 elif start.place_id and not recorded_start.strip():
                     save_error.error(
                         "Enter the starting location text to record in the ledger."
@@ -812,6 +925,8 @@ def render_mileage(context: MileageContext) -> None:
                         "destination": recorded_destination,
                         "business_purpose": business_purpose,
                         "notes": notes,
+                        "tag_ids": tag_ids,
+                        "new_tag_name": new_tag_name,
                         "round_trip": round_trip,
                     }
                     context.confirmed_write(
@@ -830,6 +945,8 @@ def render_mileage(context: MileageContext) -> None:
                                 destination=recorded_destination,
                                 business_purpose=business_purpose,
                                 notes=notes,
+                                tag_ids=tag_ids,
+                                new_tag_name=new_tag_name,
                             )
                         )
                         if round_trip
@@ -841,6 +958,8 @@ def render_mileage(context: MileageContext) -> None:
                             destination=recorded_destination,
                             business_purpose=business_purpose,
                             notes=notes,
+                            tag_ids=tag_ids,
+                            new_tag_name=new_tag_name,
                         ),
                         (
                             "Round trip saved as two mileage entries."
@@ -860,15 +979,34 @@ def render_mileage(context: MileageContext) -> None:
             "From", date(date.today().year, 1, 1), key="mileage_start"
         )
         end = c2.date_input("To", date.today(), key="mileage_end")
+        selected_tag_names = st.multiselect(
+            "Tags",
+            [
+                tag_id
+                for tag_id, item in tag_by_id.items()
+                if item.get("active") in (True, "TRUE", "true", 1, "1")
+            ],
+            format_func=lambda value: _tag_name(value, tag_by_id),
+            key=f"mileage_filter_tags_{context.profile_key}",
+            placeholder="All tags",
+            help="Show mileage rows with any selected Tag.",
+        )
+        selected_tag_ids = set(selected_tag_names)
         try:
             trips = context.storage.list_mileage_trips(start=start, end=end)
+            if selected_tag_ids:
+                trips = [
+                    trip
+                    for trip in trips
+                    if selected_tag_ids.intersection(_trip_tag_ids(trip, tag_by_id))
+                ]
         except StorageError as error:
             context.report_storage_error(error)
             with page_footer.container():
                 render_global_footer()
             st.stop()
 
-        trip_frame = mileage_frame(trips)
+        trip_frame = mileage_frame(trips, tags)
         metric_trips, metric_miles = st.columns(2, gap="small")
         metric_trips.metric("Trips", len(trips))
         metric_miles.metric(
@@ -892,9 +1030,7 @@ def render_mileage(context: MileageContext) -> None:
         def select_mileage_trip() -> None:
             selected_rows = st.session_state[mileage_table_key].selection.rows
             if selected_rows:
-                st.session_state["edit_mileage_trip_id"] = trip_ids[
-                    selected_rows[0]
-                ]
+                st.session_state["edit_mileage_trip_id"] = trip_ids[selected_rows[0]]
 
         mileage_event = st.dataframe(
             trip_frame,
@@ -952,9 +1088,7 @@ def render_mileage(context: MileageContext) -> None:
                     region_code=context.autocomplete_region_code,
                 )
                 edit_route_key = _route_key(context, f"edit_{edit_id}")
-                edit_fingerprint = _selection_fingerprint(
-                    edit_start, edit_destination
-                )
+                edit_fingerprint = _selection_fingerprint(edit_start, edit_destination)
                 edit_route_state = st.session_state.get(edit_route_key)
                 edit_route_changed = False
                 _discard_modified_calculated_mileage_markers(
@@ -998,32 +1132,27 @@ def render_mileage(context: MileageContext) -> None:
                     selected.get("start_location", ""),
                     selected.get("destination", ""),
                 )
-                edit_recorded_address_changed = (
-                    _recorded_address_changed(
-                        edited_start,
-                        selected.get("start_location", ""),
-                        edit_start,
-                        manually_edited=st.session_state.get(
-                            f"edit_mileage_trip_recorded_start_{edit_widget_scope}"
-                            "__manually_edited",
-                            False,
-                        ),
-                    )
-                    or _recorded_address_changed(
-                        edited_destination,
-                        selected.get("destination", ""),
-                        edit_destination,
-                        manually_edited=st.session_state.get(
-                            f"edit_mileage_trip_recorded_destination_{edit_widget_scope}"
-                            "__manually_edited",
-                            False,
-                        ),
-                    )
+                edit_recorded_address_changed = _recorded_address_changed(
+                    edited_start,
+                    selected.get("start_location", ""),
+                    edit_start,
+                    manually_edited=st.session_state.get(
+                        f"edit_mileage_trip_recorded_start_{edit_widget_scope}"
+                        "__manually_edited",
+                        False,
+                    ),
+                ) or _recorded_address_changed(
+                    edited_destination,
+                    selected.get("destination", ""),
+                    edit_destination,
+                    manually_edited=st.session_state.get(
+                        f"edit_mileage_trip_recorded_destination_{edit_widget_scope}"
+                        "__manually_edited",
+                        False,
+                    ),
                 )
                 calculate_edit_requested = st.button(
-                    "Recalculate mileage"
-                    if edit_route_state
-                    else "Calculate mileage",
+                    "Recalculate mileage" if edit_route_state else "Calculate mileage",
                     disabled=not _route_ready(
                         edit_start,
                         edit_destination,
@@ -1062,18 +1191,21 @@ def render_mileage(context: MileageContext) -> None:
                         date.fromisoformat(selected["trip_date"]),
                         key=f"edit_mileage_trip_date_{edit_widget_scope}",
                     )
-                    edit_miles_key = (
-                        f"edit_mileage_trip_miles_{edit_widget_scope}"
-                    )
-                    _set_widget_default(
-                        edit_miles_key, float(selected["miles"])
-                    )
+                    edit_miles_key = f"edit_mileage_trip_miles_{edit_widget_scope}"
+                    _set_widget_default(edit_miles_key, float(selected["miles"]))
                     edited_miles = c2.number_input(
                         "Edit business miles",
                         min_value=0.1,
                         step=0.1,
                         format="%.1f",
                         key=edit_miles_key,
+                    )
+                    selected_edit_tag_ids = _trip_tag_ids(selected, tag_by_id)
+                    edited_tag_ids, edited_new_tag_name = _render_tag_selector(
+                        tags,
+                        key=f"edit_mileage_trip_tag_ids_{edit_widget_scope}",
+                        selected_ids=selected_edit_tag_ids,
+                        label="Edit Tags",
                     )
                     edited_vehicle = st.text_input(
                         "Edit vehicle",
@@ -1112,10 +1244,7 @@ def render_mileage(context: MileageContext) -> None:
                                 width="stretch",
                                 key=f"edit_mileage_trip_delete_{edit_widget_scope}",
                             )
-                    if (
-                        calculate_edit_requested
-                        and context.route_mileage is not None
-                    ):
+                    if calculate_edit_requested and context.route_mileage is not None:
                         with st.spinner("Calculating mileage…"):
                             try:
                                 outbound, _ = _calculate_routes(
@@ -1148,6 +1277,13 @@ def render_mileage(context: MileageContext) -> None:
                             edit_error.error(
                                 "Starting location and destination must be different."
                             )
+                        elif (
+                            _inline_tag_creation_requested(
+                                f"edit_mileage_trip_tag_ids_{edit_widget_scope}"
+                            )
+                            and not edited_new_tag_name.strip()
+                        ):
+                            edit_error.error("Enter a Tag name before saving.")
                         else:
                             payload = {
                                 "id": edit_id,
@@ -1158,6 +1294,8 @@ def render_mileage(context: MileageContext) -> None:
                                 "destination": edited_destination,
                                 "business_purpose": edited_purpose,
                                 "notes": edited_notes,
+                                "tag_ids": edited_tag_ids,
+                                "new_tag_name": edited_new_tag_name,
                             }
                             context.confirmed_write(
                                 "edit_mileage_trip",
@@ -1171,6 +1309,8 @@ def render_mileage(context: MileageContext) -> None:
                                     destination=edited_destination,
                                     business_purpose=edited_purpose,
                                     notes=edited_notes,
+                                    tag_ids=edited_tag_ids,
+                                    new_tag_name=edited_new_tag_name,
                                 ),
                                 "Mileage trip updated.",
                                 report_error=edit_error.error,
