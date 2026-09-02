@@ -141,6 +141,27 @@ def test_mixed_use_edit_updates_same_projection_and_detects_stale_source(
         )
 
 
+def test_category_kind_change_rejects_mixed_use_references(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured business use",
+    )
+
+    with pytest.raises(StorageConflictError, match="mixed-use expense"):
+        default_storage.edit_category(source["category_id"], kind="Income")
+
+    category = next(
+        item
+        for item in default_storage.list_categories()
+        if item["id"] == source["category_id"]
+    )
+    assert category["kind"] == "Expense"
+
+
 def test_generic_transaction_mutations_reject_mixed_use_projections(
     default_storage: GoogleSheetsStorage,
 ) -> None:

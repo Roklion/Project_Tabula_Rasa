@@ -2005,6 +2005,15 @@ class GoogleSheetsStorage:
         ).title()
         if kind not in CATEGORY_KINDS:
             raise StorageValidationError("Category kind must be Income or Expense")
+        if kind != updated["kind"]:
+            sources, _ = self._raw_mixed_use_snapshot()
+            if any(
+                str(source.get("category_id") or "").strip() == category_id
+                for source in sources.values()
+            ):
+                raise StorageConflictError(
+                    "Category kind cannot change while used by a mixed-use expense"
+                )
         if any(
             category["id"] != category_id
             and category["name"].casefold() == name.casefold()
