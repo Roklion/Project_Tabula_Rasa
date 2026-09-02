@@ -488,6 +488,10 @@ def _validate_mixed_use_tables(
             )
         if transaction.get("kind") != "Expense":
             raise StorageValidationError("Mixed-use projections must be Expense records")
+        if _clean_text(transaction.get("to_account_id"), "Destination account"):
+            raise StorageValidationError(
+                "Mixed-use projections cannot have a destination account"
+            )
         for field in (
             "txn_date",
             "account_id",
@@ -2573,13 +2577,12 @@ class GoogleSheetsStorage:
                 source_not_applied = self._mixed_use_record_matches(
                     "MixedUseExpenses", actual_source, original_source
                 )
-                transaction_not_applied = (
-                    actual_transaction is None
-                    if original_transaction is None
-                    else self._mixed_use_record_matches(
+                if original_transaction is None:
+                    transaction_not_applied = actual_transaction is None
+                else:
+                    transaction_not_applied = self._mixed_use_record_matches(
                         "Transactions", actual_transaction, original_transaction
                     )
-                )
                 not_applied = source_not_applied and transaction_not_applied
             else:
                 not_applied = actual_source is None and actual_transaction is None
@@ -2924,9 +2927,21 @@ class GoogleSheetsStorage:
         )
         return self.get_mixed_use_expense(source_id)
 
-    def _delete_mixed_use_row(self, title: str, record_id: str) -> None:
+    def _delete_mixed_use_row(
+        self,
+        title: str,
+        record_id: str,
+        *,
+        expected_record: Mapping[str, Any] | None = None,
+    ) -> None:
         for attempt in range(self._retry_attempts):
             current = self._find_row(title, record_id)
+            if expected_record is not None and not self._mixed_use_record_matches(
+                title, current.values, expected_record
+            ):
+                raise StorageConflictError(
+                    f"The {title} record changed; refresh before deleting."
+                )
             worksheet = self._worksheet(title)
             try:
                 self._api(
@@ -2991,8 +3006,12 @@ class GoogleSheetsStorage:
                 "The mixed-use expense changed; refresh it before deleting."
             )
         try:
-            self._delete_mixed_use_row("Transactions", transaction_id)
-            self._delete_mixed_use_row("MixedUseExpenses", source_id)
+            self._delete_mixed_use_row(
+                "Transactions", transaction_id, expected_record=transaction
+            )
+            self._delete_mixed_use_row(
+                "MixedUseExpenses", source_id, expected_record=source
+            )
         except StorageUnavailableError as error:
             outcome = self._mixed_use_mutation_result(
                 operation="delete",
@@ -3543,6 +3562,25 @@ class GoogleSheetsStorage:
                     str(row.values["id"]): dict(row.values)
                     for row in confirmed_source_rows
                 }
+            def mixed_source_receipts_confirmed() -> bool:
+                for transaction_id, value in intended_values.items():
+                    source_id = _clean_text(
+                        current_by_id[transaction_id].get("source_id"),
+                        "Transaction source ID",
+                    )
+                    if not source_id:
+                        continue
+                    if (
+                        source_id not in confirmed_sources
+                        or str(
+                            confirmed_sources[source_id].get("receipt_references")
+                            or ""
+                        )
+                        != value
+                    ):
+                        return False
+                return True
+
             if all(
                 transaction_id in confirmed_by_id
                 and
@@ -3554,21 +3592,7 @@ class GoogleSheetsStorage:
                 )
                 == value
                 for transaction_id, value in intended_values.items()
-            ) and all(
-                source_id in confirmed_sources
-                and str(
-                    confirmed_sources[source_id].get("receipt_references") or ""
-                )
-                == value
-                for transaction_id, value in intended_values.items()
-                for source_id in [
-                    _clean_text(
-                        current_by_id[transaction_id].get("source_id"),
-                        "Transaction source ID",
-                    )
-                ]
-                if source_id
-            ):
+            ) and mixed_source_receipts_confirmed():
                 self._invalidate("Transactions")
                 if mixed_source_rows:
                     self._invalidate("MixedUseExpenses")

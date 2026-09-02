@@ -222,6 +222,29 @@ def test_generic_transaction_mutations_reject_mixed_use_projections(
     ]
 
 
+def test_mixed_use_projection_rejects_destination_account(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    destination = next(
+        account
+        for account in default_storage.list_accounts(active_only=False)
+        if account["id"] != source["account_id"]
+    )
+    transaction_sheet = default_storage._worksheet("Transactions")
+    headers = default_storage._headers("Transactions")
+    transaction_sheet.rows[1][headers.index("to_account_id")] = destination["id"]
+    default_storage._invalidate("Transactions")
+
+    with pytest.raises(StorageValidationError, match="destination account"):
+        default_storage.list_mixed_use_expenses()
+
+
 def test_generic_transaction_mutations_reject_half_populated_provenance(
     default_storage: GoogleSheetsStorage,
 ) -> None:
@@ -837,9 +860,14 @@ def test_mixed_use_delete_returns_success_when_final_response_is_lost(
     original_delete = default_storage._delete_mixed_use_row
     calls = 0
 
-    def delete_then_lose_final_result(title: str, record_id: str) -> None:
+    def delete_then_lose_final_result(
+        title: str,
+        record_id: str,
+        *,
+        expected_record: object = None,
+    ) -> None:
         nonlocal calls
-        original_delete(title, record_id)
+        original_delete(title, record_id, expected_record=expected_record)  # type: ignore[arg-type]
         calls += 1
         if calls == 2:
             raise StorageUnavailableError("response lost")
@@ -914,11 +942,54 @@ def test_mixed_use_uncertain_delete_rejects_partial_pair_as_ambiguous(
     )
     original_delete = default_storage._delete_mixed_use_row
 
-    def delete_then_lose_transaction_result(title: str, record_id: str) -> None:
-        original_delete(title, record_id)
+    def delete_then_lose_transaction_result(
+        title: str,
+        record_id: str,
+        *,
+        expected_record: object = None,
+    ) -> None:
+        original_delete(title, record_id, expected_record=expected_record)  # type: ignore[arg-type]
         if title == "Transactions":
             raise StorageUnavailableError("uncertain", retryable=False)
 
     default_storage._delete_mixed_use_row = delete_then_lose_transaction_result  # type: ignore[method-assign]
     with pytest.raises(StorageBulkMutationUncertainError, match="ambiguous"):
         default_storage.delete_mixed_use_expense(source["id"])
+
+
+def test_mixed_use_delete_revalidates_records_inside_retry(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    transaction = default_storage._find_row(
+        "Transactions", source["linked_transaction_id"]
+    ).values
+    worksheet = default_storage._worksheet("Transactions")
+    original_delete = worksheet.delete_rows
+    calls = 0
+
+    def edit_then_fail(row_number: int) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            description_column = default_storage._headers("Transactions").index(
+                "description"
+            )
+            worksheet.rows[row_number - 1][description_column] = "changed"
+            raise OSError("temporary failure")
+        original_delete(row_number)
+
+    worksheet.delete_rows = edit_then_fail  # type: ignore[method-assign]
+    with pytest.raises(StorageConflictError, match="record changed"):
+        default_storage._delete_mixed_use_row(
+            "Transactions",
+            source["linked_transaction_id"],
+            expected_record=transaction,
+        )
+
+    assert len(default_storage._rows("Transactions", force_refresh=True)) == 1
