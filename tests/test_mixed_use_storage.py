@@ -1391,6 +1391,44 @@ def test_mixed_use_delete_rechecks_projection_before_source_only_repair(
     assert default_storage.list_transactions() == [transaction]
 
 
+def test_mixed_use_delete_rechecks_projection_before_source_delete(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    transaction = default_storage.list_transactions()[0]
+    original_delete = default_storage._delete_mixed_use_row
+    injected = False
+
+    def delete_then_restore_projection(
+        title: str,
+        record_id: str,
+        *,
+        expected_record: object = None,
+    ) -> None:
+        nonlocal injected
+        original_delete(title, record_id, expected_record=expected_record)  # type: ignore[arg-type]
+        if title == "Transactions" and not injected:
+            injected = True
+            transaction_sheet = default_storage._worksheet("Transactions")
+            headers = default_storage._headers("Transactions")
+            transaction_sheet.append_row(
+                [transaction.get(header, "") for header in headers]
+            )
+            default_storage._invalidate("Transactions")
+
+    default_storage._delete_mixed_use_row = delete_then_restore_projection  # type: ignore[method-assign]
+    with pytest.raises(StorageConflictError, match="changed"):
+        default_storage.delete_mixed_use_expense(source["id"])
+
+    assert default_storage.list_mixed_use_expenses() == [source]
+    assert default_storage.list_transactions() == [transaction]
+
+
 def test_mixed_use_delete_revalidates_records_inside_retry(
     default_storage: GoogleSheetsStorage,
 ) -> None:

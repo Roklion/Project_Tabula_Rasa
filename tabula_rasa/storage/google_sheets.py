@@ -3193,6 +3193,19 @@ class GoogleSheetsStorage:
             self._delete_mixed_use_row(
                 "Transactions", transaction_id, expected_record=transaction
             )
+            latest_transactions = self._rows(
+                "Transactions", force_refresh=True
+            )
+            if any(
+                _clean_text(row.values.get("source_type"), "Transaction source type")
+                == MIXED_USE_SOURCE_TYPE
+                and _clean_text(row.values.get("source_id"), "Transaction source ID")
+                == source_id
+                for row in latest_transactions
+            ):
+                raise StorageConflictError(
+                    "The mixed-use expense changed; refresh it before deleting."
+                )
             self._delete_mixed_use_row(
                 "MixedUseExpenses", source_id, expected_record=source
             )
