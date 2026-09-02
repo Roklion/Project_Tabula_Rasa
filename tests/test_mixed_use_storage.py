@@ -173,6 +173,33 @@ def test_generic_transaction_mutations_reject_mixed_use_projections(
     ]
 
 
+def test_generic_transaction_mutations_reject_half_populated_provenance(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured business use",
+    )
+    transaction_sheet = default_storage._worksheet("Transactions")
+    headers = default_storage._headers("Transactions")
+    transaction_sheet.rows[1][headers.index("source_type")] = ""
+    default_storage._invalidate("Transactions")
+    transaction = dict(default_storage._rows("Transactions", force_refresh=True)[0].values)
+
+    with pytest.raises(StorageValidationError, match="provided together"):
+        default_storage.delete_transaction(transaction["id"])
+    with pytest.raises(StorageValidationError, match="provided together"):
+        default_storage.bulk_delete_transactions(
+            [transaction["id"]], expected_transactions=[transaction]
+        )
+
+    sources = default_storage._rows("MixedUseExpenses", force_refresh=True)
+    assert sources[0].values["id"] == source["id"]
+    assert sources[0].values["linked_transaction_id"] == transaction["id"]
+
+
 def test_mixed_use_delete_removes_source_and_projection(
     default_storage: GoogleSheetsStorage,
 ) -> None:

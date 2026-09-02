@@ -1548,8 +1548,13 @@ class GoogleSheetsStorage:
         source_type = _clean_text(
             transaction.get("source_type"), "Transaction source type"
         )
-        if not source_type:
+        source_id = _clean_text(transaction.get("source_id"), "Transaction source ID")
+        if not source_type and not source_id:
             return
+        if bool(source_type) != bool(source_id):
+            raise StorageValidationError(
+                "Transaction source type and source ID must be provided together"
+            )
         if source_type != MIXED_USE_SOURCE_TYPE:
             raise StorageValidationError("Transaction source type is unsupported")
         raise StorageValidationError(
