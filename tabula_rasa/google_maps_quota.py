@@ -204,7 +204,7 @@ def _number(value: object) -> float | None:
         result = float(value)
     except (TypeError, ValueError):
         return None
-    return result if result >= 0 else None
+    return result if result >= 0 or result == -1 else None
 
 
 def _dimensions(value: object) -> dict[str, str]:
@@ -530,6 +530,8 @@ def clear_google_maps_quota_cache() -> None:
 def _format_number(value: float | None) -> str:
     if value is None:
         return "Unavailable"
+    if value < 0:
+        return "Unlimited"
     formatted = f"{value:,.2f}".rstrip("0").rstrip(".")
     return formatted if formatted else "0"
 

@@ -22,6 +22,7 @@ from tabula_rasa.google_maps_quota import (
     QUOTA_REPORT_SESSION_KEY,
     QUOTA_VIEW_REQUESTED_KEY,
     _format_number,
+    _number,
     _quota_config_identity,
     _rate_in_minutes,
     _rate_period_seconds,
@@ -178,6 +179,9 @@ def test_usage_parser_maps_google_label_and_keeps_newest_timestamp() -> None:
 
 def test_number_and_rate_formatting_preserve_zero_and_exact_periods() -> None:
     assert _format_number(0.0) == "0"
+    assert _number("-1") == -1.0
+    assert _number("-2") is None
+    assert _format_number(-1.0) == "Unlimited"
     assert _rate_period_seconds("1/session") is None
     assert _rate_period_seconds("1/min/{project}") == 60.0
     assert _rate_in_minutes(2.0, "1/s") == 120.0
