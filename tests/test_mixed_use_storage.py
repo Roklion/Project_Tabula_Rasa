@@ -558,6 +558,39 @@ def test_mixed_use_edit_rejects_receipt_drift_before_replacing_rows(
         )
 
 
+def test_mixed_use_delete_rejects_pair_drift_before_deleting_rows(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    original_find = default_storage._find_row
+    calls = 0
+
+    def find_after_receipt_update(title: str, record_id: str) -> object:
+        nonlocal calls
+        if calls == 0:
+            transaction_sheet = default_storage._worksheet("Transactions")
+            source_sheet = default_storage._worksheet("MixedUseExpenses")
+            transaction_headers = default_storage._headers("Transactions")
+            source_headers = default_storage._headers("MixedUseExpenses")
+            reference = '[{"id":"oldreceipt01","name":"Receipt"}]'
+            transaction_sheet.rows[1][transaction_headers.index("receipt_references")] = reference
+            source_sheet.rows[1][source_headers.index("receipt_references")] = reference
+        calls += 1
+        return original_find(title, record_id)
+
+    default_storage._find_row = find_after_receipt_update  # type: ignore[method-assign]
+    with pytest.raises(StorageConflictError, match="changed"):
+        default_storage.delete_mixed_use_expense(source["id"])
+
+    assert len(default_storage._rows("Transactions", force_refresh=True)) == 1
+    assert len(default_storage._rows("MixedUseExpenses", force_refresh=True)) == 1
+
+
 def test_mixed_use_delete_returns_success_when_final_response_is_lost(
     default_storage: GoogleSheetsStorage,
 ) -> None:
@@ -611,6 +644,29 @@ def test_mixed_use_uncertain_edit_classifies_partial_pair_safely(
             business_use_percentage="25",
             allocation_rationale="Updated use",
         )
+
+
+def test_mixed_use_edit_classifies_unchanged_pair_as_retryable_not_applied(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+
+    def fail_before_replace(_title: str, _updates: object) -> None:
+        raise StorageUnavailableError("temporary", retryable=True)
+
+    default_storage._replace_rows = fail_before_replace  # type: ignore[method-assign]
+    with pytest.raises(StorageBulkMutationUncertainError) as error:
+        default_storage.edit_mixed_use_expense(
+            source["id"], allocation_rationale="Updated use"
+        )
+
+    assert error.value.outcome == "not_applied"
+    assert error.value.retryable is True
 
 
 def test_mixed_use_uncertain_delete_rejects_partial_pair_as_ambiguous(

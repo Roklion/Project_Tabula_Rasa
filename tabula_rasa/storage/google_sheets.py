@@ -2522,6 +2522,8 @@ class GoogleSheetsStorage:
         expected_transaction: Mapping[str, Any],
         error: StorageUnavailableError | None,
         deletion: bool = False,
+        original_source: Mapping[str, Any] | None = None,
+        original_transaction: Mapping[str, Any] | None = None,
     ) -> dict[str, str] | None:
         try:
             sources, transactions = self._raw_mixed_use_snapshot()
@@ -2547,7 +2549,20 @@ class GoogleSheetsStorage:
             ) and self._mixed_use_record_matches(
                 "Transactions", actual_transaction, expected_transaction
             )
-            not_applied = actual_source is None and actual_transaction is None
+            not_applied = (
+                self._mixed_use_record_matches(
+                    "MixedUseExpenses",
+                    actual_source,
+                    original_source,
+                )
+                and self._mixed_use_record_matches(
+                    "Transactions",
+                    actual_transaction,
+                    original_transaction,
+                )
+                if original_source is not None and original_transaction is not None
+                else actual_source is None and actual_transaction is None
+            )
         if fully_applied:
             return {"status": "fully_applied"}
         if not_applied:
@@ -2864,6 +2879,8 @@ class GoogleSheetsStorage:
                 expected_source=updated_source,
                 expected_transaction=updated_transaction,
                 error=error,
+                original_source=current_source,
+                original_transaction=current_transaction,
             )
             if outcome is not None:
                 return self.get_mixed_use_expense(source_id)
@@ -2930,6 +2947,16 @@ class GoogleSheetsStorage:
         )
         if expected_source is not None and not self._mixed_use_record_matches(
             "MixedUseExpenses", source, expected_source
+        ):
+            raise StorageConflictError(
+                "The mixed-use expense changed; refresh it before deleting."
+            )
+        fresh_transaction = self._find_row("Transactions", transaction_id)
+        fresh_source = self._find_row("MixedUseExpenses", source_id)
+        if not self._mixed_use_record_matches(
+            "Transactions", fresh_transaction.values, transaction
+        ) or not self._mixed_use_record_matches(
+            "MixedUseExpenses", fresh_source.values, source
         ):
             raise StorageConflictError(
                 "The mixed-use expense changed; refresh it before deleting."
