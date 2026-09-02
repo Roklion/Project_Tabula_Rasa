@@ -1543,6 +1543,19 @@ class GoogleSheetsStorage:
             current_by_id_values[transaction_id] = current
         return selected_rows, current_by_id_values
 
+    @staticmethod
+    def _reject_mixed_use_projection(transaction: Mapping[str, Any]) -> None:
+        source_type = _clean_text(
+            transaction.get("source_type"), "Transaction source type"
+        )
+        if not source_type:
+            return
+        if source_type != MIXED_USE_SOURCE_TYPE:
+            raise StorageValidationError("Transaction source type is unsupported")
+        raise StorageValidationError(
+            "Mixed-use projections must be changed through mixed-use expense APIs"
+        )
+
     def _bulk_postcondition_error(
         self,
         *,
@@ -1634,6 +1647,8 @@ class GoogleSheetsStorage:
         selected_rows, current_by_id = self._fresh_bulk_transaction_snapshot(
             transaction_ids, expected_transactions
         )
+        for transaction in current_by_id.values():
+            self._reject_mixed_use_projection(transaction)
         categories = self._category_lookup(force_refresh=True)
         category_id = _clean_text(category_id, "Category", required=True)
         target = categories.get(category_id)
@@ -1718,6 +1733,8 @@ class GoogleSheetsStorage:
         selected_rows, current_by_id = self._fresh_bulk_transaction_snapshot(
             transaction_ids, expected_transactions
         )
+        for transaction in current_by_id.values():
+            self._reject_mixed_use_projection(transaction)
         sheet_id = self._transactions_sheet_id()
         requests = [
             {
@@ -2405,6 +2422,7 @@ class GoogleSheetsStorage:
 
     def edit_transaction(self, transaction_id: str, **changes: Any) -> dict[str, str]:
         current = self._find_row("Transactions", transaction_id)
+        self._reject_mixed_use_projection(current.values)
         merged = dict(current.values)
         merged.update(changes)
         updated = self._prepare_transaction(
@@ -3461,6 +3479,7 @@ class GoogleSheetsStorage:
     def delete_transaction(self, transaction_id: str) -> None:
         for attempt in range(self._retry_attempts):
             current = self._find_row("Transactions", transaction_id)
+            self._reject_mixed_use_projection(current.values)
             worksheet = self._worksheet("Transactions")
             try:
                 self._api(

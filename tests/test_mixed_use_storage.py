@@ -136,6 +136,43 @@ def test_mixed_use_edit_updates_same_projection_and_detects_stale_source(
         )
 
 
+def test_generic_transaction_mutations_reject_mixed_use_projections(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured business use",
+    )
+    projection = default_storage.list_transactions()[0]
+    replacement = next(
+        category
+        for category in default_storage.list_categories()
+        if category["kind"] == "Expense"
+        and category["id"] != projection["category_id"]
+    )
+
+    with pytest.raises(StorageValidationError, match="mixed-use expense APIs"):
+        default_storage.edit_transaction(projection["id"], description="Changed")
+    with pytest.raises(StorageValidationError, match="mixed-use expense APIs"):
+        default_storage.delete_transaction(projection["id"])
+    with pytest.raises(StorageValidationError, match="mixed-use expense APIs"):
+        default_storage.bulk_change_transaction_category(
+            [projection["id"]],
+            expected_transactions=[projection],
+            category_id=replacement["id"],
+        )
+    with pytest.raises(StorageValidationError, match="mixed-use expense APIs"):
+        default_storage.bulk_delete_transactions(
+            [projection["id"]], expected_transactions=[projection]
+        )
+
+    assert default_storage.get_mixed_use_expense(source["id"])["linked_transaction_id"] == projection[
+        "id"
+    ]
+
+
 def test_mixed_use_delete_removes_source_and_projection(
     default_storage: GoogleSheetsStorage,
 ) -> None:
