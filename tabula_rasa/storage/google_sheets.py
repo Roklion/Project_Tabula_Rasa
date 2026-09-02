@@ -418,6 +418,9 @@ def _validate_mixed_use_tables(
         sources_by_id[source_id] = source
         if _clean_text(source.get("kind"), "Mixed-use kind", required=True) != "Expense":
             raise StorageValidationError("Mixed-use sources must be Expense records")
+        _iso_date(source.get("txn_date"))
+        _clean_text(source.get("account_id"), "Account", required=True)
+        _clean_text(source.get("category_id"), "Category", required=True)
         linked_id = _clean_text(
             source.get("linked_transaction_id"),
             "Linked transaction ID",
@@ -720,6 +723,25 @@ def _parse_backup_zip(
         decode_receipt_references(
             transaction.get("receipt_references", "")
         )
+
+    for source in tables.get("MixedUseExpenses", ((), []))[1]:
+        _iso_date(source.get("txn_date"))
+        account_id = _clean_text(source.get("account_id"), "Account", required=True)
+        if account_id not in account_ids:
+            raise StorageValidationError("Backup contains an unknown mixed-use account")
+        category_id = _clean_text(source.get("category_id"), "Category", required=True)
+        if category_id not in category_ids:
+            raise StorageValidationError("Backup contains an unknown mixed-use category")
+        category_records = {
+            record["id"]: record for record in tables["Categories"][1]
+        }
+        if category_records[category_id].get("kind") != "Expense":
+            raise StorageValidationError(
+                "Mixed-use source category must be an Expense category"
+            )
+        payee_id = _clean_text(source.get("payee_id"), "Payee")
+        if payee_id and payee_id not in payee_ids:
+            raise StorageValidationError("Backup contains an unknown mixed-use payee")
 
     if format_version >= BACKUP_FORMAT_VERSION:
         _validate_mixed_use_tables(tables)
@@ -2443,6 +2465,7 @@ class GoogleSheetsStorage:
         if payee_id and payee_id not in payees:
             raise StorageValidationError("Payee does not exist")
         decode_receipt_references(source.get("receipt_references", ""))
+        _iso_date(source.get("txn_date"))
 
     @staticmethod
     def _mixed_use_record_matches(
@@ -3614,6 +3637,16 @@ class GoogleSheetsStorage:
                 for title, rows in snapshot.items()
             }
         )
+        accounts = self._account_lookup(force_refresh=True)
+        categories = self._category_lookup(force_refresh=True)
+        payees = self._payee_lookup(force_refresh=True)
+        for row in snapshot["MixedUseExpenses"]:
+            self._validate_mixed_use_references(
+                row.values,
+                accounts=accounts,
+                categories=categories,
+                payees=payees,
+            )
         _validate_hierarchy_records(
             [row.values for row in snapshot["Accounts"]],
             compatibility_field="classification",
