@@ -603,6 +603,12 @@ def _parse_backup_zip(
         item_label="Category",
     )
     _validate_payee_records(tables["Payees"][1])
+    for tag in tables["Tags"][1]:
+        tag["id"] = _clean_text(tag.get("id"), "Tag ID", required=True)
+        tag["name"] = _clean_text(tag.get("name"), "Tag name", required=True)
+        tag["active"] = (
+            "TRUE" if _as_bool(tag.get("active"), "Tag active") else "FALSE"
+        )
     _validate_tag_records(tables["Tags"][1])
 
     account_ids = {record["id"] for record in tables["Accounts"][1]}
@@ -2218,6 +2224,17 @@ class GoogleSheetsStorage:
         ):
             raise StorageValidationError("Payee is inactive")
         tag_ids = _normalize_tag_ids(data.get("tag_ids", ""))
+        original_tag_ids = (
+            _normalize_tag_ids(original_transaction.get("tag_ids", ""))
+            if original_transaction is not None
+            else []
+        )
+        for tag_id in tag_ids:
+            tag = tags.get(tag_id)
+            if tag is None:
+                raise StorageValidationError("Tag does not exist")
+            if not _as_bool(tag["active"], "Tag active") and tag_id not in original_tag_ids:
+                raise StorageValidationError("Tag is inactive")
         new_tag_name = _clean_text(data.get("new_tag_name"), "New tag")
         if new_tag_name:
             new_tag = self.create_tag(new_tag_name)
@@ -2225,11 +2242,6 @@ class GoogleSheetsStorage:
                 tag_ids.append(new_tag["id"])
             tags[new_tag["id"]] = new_tag
             tag_ids = _normalize_tag_ids(tag_ids)
-        original_tag_ids = (
-            _normalize_tag_ids(original_transaction.get("tag_ids", ""))
-            if original_transaction is not None
-            else []
-        )
         for tag_id in tag_ids:
             tag = tags.get(tag_id)
             if tag is None:
@@ -2659,8 +2671,28 @@ class GoogleSheetsStorage:
         created_at: str | None = None,
         original_tag_ids: Any = "",
     ) -> dict[str, str]:
+        trip_date = _iso_date(data.get("trip_date"))
+        miles = _positive_miles(data.get("miles"))
+        vehicle = _clean_text(data.get("vehicle"), "Vehicle")
+        start_location = _clean_text(
+            data.get("start_location"), "Starting location", required=True
+        )
+        destination = _clean_text(
+            data.get("destination"), "Destination", required=True
+        )
+        business_purpose = _clean_text(
+            data.get("business_purpose"), "Business purpose", required=True
+        )
+        notes = _clean_text(data.get("notes"), "Notes")
         tags = self._tag_lookup(force_refresh=True)
         tag_ids = _normalize_tag_ids(data.get("tag_ids", ""))
+        original_tag_ids = _normalize_tag_ids(original_tag_ids)
+        for tag_id in tag_ids:
+            tag = tags.get(tag_id)
+            if tag is None:
+                raise StorageValidationError("Tag does not exist")
+            if not _as_bool(tag["active"], "Tag active") and tag_id not in original_tag_ids:
+                raise StorageValidationError("Tag is inactive")
         new_tag_name = _clean_text(data.get("new_tag_name"), "New tag")
         if new_tag_name:
             new_tag = self.create_tag(new_tag_name)
@@ -2668,7 +2700,6 @@ class GoogleSheetsStorage:
                 tag_ids.append(new_tag["id"])
             tags[new_tag["id"]] = new_tag
             tag_ids = _normalize_tag_ids(tag_ids)
-        original_tag_ids = _normalize_tag_ids(original_tag_ids)
         for tag_id in tag_ids:
             tag = tags.get(tag_id)
             if tag is None:
@@ -2677,19 +2708,13 @@ class GoogleSheetsStorage:
                 raise StorageValidationError("Tag is inactive")
         return {
             "id": trip_id or str(uuid4()),
-            "trip_date": _iso_date(data.get("trip_date")),
-            "miles": _positive_miles(data.get("miles")),
-            "vehicle": _clean_text(data.get("vehicle"), "Vehicle"),
-            "start_location": _clean_text(
-                data.get("start_location"), "Starting location", required=True
-            ),
-            "destination": _clean_text(
-                data.get("destination"), "Destination", required=True
-            ),
-            "business_purpose": _clean_text(
-                data.get("business_purpose"), "Business purpose", required=True
-            ),
-            "notes": _clean_text(data.get("notes"), "Notes"),
+            "trip_date": trip_date,
+            "miles": miles,
+            "vehicle": vehicle,
+            "start_location": start_location,
+            "destination": destination,
+            "business_purpose": business_purpose,
+            "notes": notes,
             "tag_ids": _encode_tag_ids(tag_ids),
             "created_at": created_at or _utc_now(),
         }
