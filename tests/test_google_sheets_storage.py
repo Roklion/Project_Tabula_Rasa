@@ -563,6 +563,41 @@ class TestGoogleSheetsStorage:
         assert transaction_sheet.rows[1][source_type_index] == ""
         assert transaction_sheet.rows[1][source_id_index] == ""
 
+    def test_profile_storage_rejects_mixed_use_provenance_without_source_sheet(
+        self,
+    ) -> None:
+        headers = dict(PRE_MIXED_USE_WORKSHEET_HEADERS)
+        transaction_headers = [
+            *PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"],
+            "source_type",
+            "source_id",
+        ]
+        headers["Transactions"] = tuple(transaction_headers)
+        workbook = FakeWorkbook(headers)
+        transaction_sheet = workbook.sheets["Transactions"]
+        row = [""] * len(transaction_headers)
+        row[transaction_headers.index("source_type")] = "mixed_use_expense"
+        row[transaction_headers.index("source_id")] = "source-119"
+        transaction_sheet.rows.append(row)
+        google_client = Mock()
+        google_client.open_by_key.return_value = workbook
+
+        with (
+            patch.object(
+                Credentials,
+                "from_service_account_info",
+                return_value=object(),
+            ),
+            patch.object(gspread, "authorize", return_value=google_client),
+            pytest.raises(StorageValidationError, match="MixedUseExpenses worksheet"),
+        ):
+            GoogleSheetsStorage.from_secrets(
+                {
+                    "spreadsheet_id": "given-spreadsheet-id",
+                    "gcp_service_account": {"type": "service_account"},
+                }
+            )
+
     def test_profile_storage_migrates_hierarchy_columns_idempotently(
         self,
     ) -> None:

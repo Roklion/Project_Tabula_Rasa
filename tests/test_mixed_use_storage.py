@@ -137,6 +137,23 @@ def test_mixed_use_create_persists_one_allocated_projection(
     )[0].values
 
 
+def test_transaction_edit_canonicalizes_padded_id(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    transaction = default_storage.create_transaction(
+        **_expense_inputs(default_storage),
+        kind="Expense",
+        amount="20",
+    )
+
+    edited = default_storage.edit_transaction(
+        f"  {transaction['id']}  ", description="Updated"
+    )
+
+    assert edited["id"] == transaction["id"]
+    assert edited["description"] == "Updated"
+
+
 def test_mixed_use_edit_updates_same_projection_and_detects_stale_source(
     default_storage: GoogleSheetsStorage,
 ) -> None:

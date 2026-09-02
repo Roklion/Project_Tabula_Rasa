@@ -1067,6 +1067,30 @@ class GoogleSheetsStorage:
                     existing_headers = [
                         str(value).strip() for value in values[0]
                     ]
+                    provenance_indexes = {
+                        header: existing_headers.index(header)
+                        for header in ("source_type", "source_id")
+                        if header in existing_headers
+                    }
+                    has_recognized_provenance = any(
+                        (
+                            "source_id" in provenance_indexes
+                            and len(row) > provenance_indexes["source_id"]
+                            and str(row[provenance_indexes["source_id"]]).strip()
+                        )
+                        or (
+                            "source_type" in provenance_indexes
+                            and len(row) > provenance_indexes["source_type"]
+                            and str(row[provenance_indexes["source_type"]]).strip()
+                            == MIXED_USE_SOURCE_TYPE
+                        )
+                        for row in values[1:]
+                    )
+                    if has_recognized_provenance:
+                        raise StorageValidationError(
+                            "Transactions contain mixed-use provenance, but the "
+                            "MixedUseExpenses worksheet is missing"
+                        )
                     cleared_values = [
                         [
                             *list(row),
@@ -2522,6 +2546,7 @@ class GoogleSheetsStorage:
         return record
 
     def edit_transaction(self, transaction_id: str, **changes: Any) -> dict[str, str]:
+        transaction_id = _clean_text(transaction_id, "Transaction ID", required=True)
         current = self._find_row("Transactions", transaction_id)
         self._reject_mixed_use_projection(current.values)
         merged = dict(current.values)
@@ -3568,9 +3593,16 @@ class GoogleSheetsStorage:
             latest_transaction_rows = self._rows(
                 "Transactions", force_refresh=True
             )
-            latest_transactions_by_id = {
-                str(row.values["id"]): row for row in latest_transaction_rows
-            }
+            latest_transactions_by_id: dict[str, _StoredRow] = {}
+            for row in latest_transaction_rows:
+                transaction_id = _clean_text(
+                    row.values.get("id"), "Transaction ID", required=True
+                )
+                if transaction_id in latest_transactions_by_id:
+                    raise StorageValidationError(
+                        "Receipt recovery found duplicate live transaction IDs."
+                    )
+                latest_transactions_by_id[transaction_id] = row
             latest_transactions = [
                 dict(row.values) for row in latest_transaction_rows
             ]
