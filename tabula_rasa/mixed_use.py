@@ -44,13 +44,20 @@ def _decimal_places(value: Decimal) -> int:
     return max(0, -value.as_tuple().exponent)
 
 
+def _quantize(value: Decimal, quantum: Decimal, field: str) -> Decimal:
+    try:
+        return value.quantize(quantum)
+    except InvalidOperation:
+        raise MixedUseAllocationError(f"{field} is too large") from None
+
+
 def calculate_allocated_amount(
     total_expense: Any,
     business_use_percentage: Any,
 ) -> Decimal:
     """Return the currency-rounded business portion of a mixed-use expense."""
     total = _decimal(total_expense, "Total expense")
-    total = total.quantize(CURRENCY_QUANTUM)
+    total = _quantize(total, CURRENCY_QUANTUM, "Total expense")
     percentage = _decimal(business_use_percentage, "Business-use percentage")
     if total <= 0:
         raise MixedUseAllocationError("Total expense must be greater than zero")
@@ -66,7 +73,9 @@ def calculate_allocated_amount(
         raise MixedUseAllocationError(
             "Business-use percentage supports at most 5 decimal places"
         )
-    allocated = (total * percentage / Decimal("100")).quantize(CURRENCY_QUANTUM)
+    allocated = _quantize(
+        total * percentage / Decimal("100"), CURRENCY_QUANTUM, "Allocated amount"
+    )
     if allocated <= 0:
         raise MixedUseAllocationError(
             "Allocated business amount must be greater than $0.00"
@@ -83,9 +92,11 @@ def validate_mixed_use_allocation(
     percentage = _decimal(business_use_percentage, "Business-use percentage")
     allocated = calculate_allocated_amount(total, percentage)
     return MixedUseAllocation(
-        total_expense=format(total.quantize(CURRENCY_QUANTUM), "f"),
+        total_expense=format(_quantize(total, CURRENCY_QUANTUM, "Total expense"), "f"),
         business_use_percentage=format(
-            percentage.quantize(PERCENTAGE_QUANTUM), "f"
+            _quantize(
+                percentage, PERCENTAGE_QUANTUM, "Business-use percentage"
+            ),
         ).rstrip("0").rstrip(".")
         or "0",
         allocated_amount=format(allocated, "f"),

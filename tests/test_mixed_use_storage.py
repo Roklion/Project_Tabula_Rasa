@@ -76,6 +76,11 @@ def test_allocation_rejects_result_that_rounds_to_zero() -> None:
         validate_mixed_use_allocation("0.01", "0.00001")
 
 
+def test_allocation_rejects_values_that_exceed_decimal_context() -> None:
+    with pytest.raises(MixedUseAllocationError, match="too large"):
+        validate_mixed_use_allocation("1e28", "50")
+
+
 def test_mixed_use_create_persists_one_allocated_projection(
     default_storage: GoogleSheetsStorage,
 ) -> None:
@@ -198,6 +203,37 @@ def test_generic_transaction_mutations_reject_half_populated_provenance(
     sources = default_storage._rows("MixedUseExpenses", force_refresh=True)
     assert sources[0].values["id"] == source["id"]
     assert sources[0].values["linked_transaction_id"] == transaction["id"]
+
+
+def test_receipt_mutations_reject_half_populated_provenance(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured business use",
+    )
+    transaction = default_storage.list_transactions()[0]
+    transaction_sheet = default_storage._worksheet("Transactions")
+    headers = default_storage._headers("Transactions")
+    transaction_sheet.rows[1][headers.index("source_type")] = ""
+    transaction_sheet.rows[1][headers.index("receipt_references")] = (
+        '[{"id":"oldreceipt01","name":"Receipt"}]'
+    )
+    default_storage._invalidate("Transactions")
+
+    with pytest.raises(StorageValidationError, match="provided together"):
+        default_storage.set_transaction_receipt_references(
+            transaction["id"], []
+        )
+    with pytest.raises(StorageValidationError, match="provided together"):
+        default_storage.unlink_transaction_receipt(
+            transaction["id"], file_id="oldreceipt01"
+        )
+
+    sources = default_storage._rows("MixedUseExpenses", force_refresh=True)
+    assert sources[0].values["id"] == source["id"]
 
 
 def test_mixed_use_delete_removes_source_and_projection(

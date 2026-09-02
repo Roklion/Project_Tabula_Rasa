@@ -2938,12 +2938,16 @@ class GoogleSheetsStorage:
             transaction.get("source_type"), "Transaction source type"
         )
         source_id = _clean_text(transaction.get("source_id"), "Transaction source ID")
+        if bool(source_type) != bool(source_id):
+            raise StorageValidationError(
+                "Transaction source type and source ID must be provided together"
+            )
         if not source_type:
             updated = dict(transaction)
             updated["receipt_references"] = encoded_references
             self._replace_row("Transactions", current, updated)
             return updated
-        if source_type != MIXED_USE_SOURCE_TYPE or not source_id:
+        if source_type != MIXED_USE_SOURCE_TYPE:
             raise StorageValidationError(
                 "Transaction source type and source ID are invalid"
             )
