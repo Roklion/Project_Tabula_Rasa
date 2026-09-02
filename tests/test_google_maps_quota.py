@@ -176,6 +176,7 @@ def test_client_paginates_service_usage_and_queries_both_services() -> None:
     session.get.side_effect = [
         response({"metrics": [], "nextPageToken": "next"}),
         response({"metrics": []}),
+        response({"timeSeries": [], "nextPageToken": "usage-next"}),
         response({"timeSeries": []}),
         response({"metrics": []}),
         response({"timeSeries": []}),
@@ -193,6 +194,39 @@ def test_client_paginates_service_usage_and_queries_both_services() -> None:
     assert session.get.call_args_list[2].kwargs["params"]["aggregation.groupByFields"] == (
         "metric.labels.quota_metric"
     )
+    assert session.get.call_args_list[3].kwargs["params"]["pageToken"] == "usage-next"
+
+
+def test_client_merges_monitoring_usage_across_pages() -> None:
+    def response(payload: object) -> Mock:
+        item = Mock(status_code=200)
+        item.json.return_value = payload
+        return item
+
+    def series(metric: str, value: float) -> dict[str, object]:
+        return {
+            "resource": {"labels": {"service": "routes.googleapis.com"}},
+            "metric": {"labels": {"quota_metric": metric}},
+            "points": [
+                {
+                    "interval": {"endTime": "2026-09-01T12:01:00Z"},
+                    "value": {"doubleValue": value},
+                }
+            ],
+        }
+
+    session = Mock()
+    session.get.side_effect = [
+        response({"timeSeries": [series("routes.googleapis.com/first", 2)], "nextPageToken": "next"}),
+        response({"timeSeries": [series("routes.googleapis.com/second", 3)]}),
+    ]
+    config = GoogleMapsQuotaMonitoringConfig.from_secrets(secrets())
+
+    usage = GoogleMapsQuotaClient(config, session=session)._usage("routes.googleapis.com")
+
+    assert usage["routes.googleapis.com/first"].value == 2
+    assert usage["routes.googleapis.com/second"].value == 3
+    assert session.get.call_args_list[1].kwargs["params"]["pageToken"] == "next"
 
 
 def test_client_redacts_transport_and_http_failures() -> None:

@@ -418,7 +418,7 @@ class GoogleMapsQuotaClient:
             end = end.replace(tzinfo=timezone.utc)
         start = end - timedelta(minutes=15)
         url = f"{MONITORING_ENDPOINT}/projects/{self.config.project_number}/timeSeries"
-        params = {
+        params: dict[str, Any] = {
             "filter": (
                 f'metric.type = "{MONITORING_METRIC_TYPE}" AND '
                 f'resource.type = "{MONITORING_RESOURCE_TYPE}" AND '
@@ -432,7 +432,30 @@ class GoogleMapsQuotaClient:
             "aggregation.groupByFields": "metric.labels.quota_metric",
             "view": "FULL",
         }
-        return parse_usage_time_series(self._get(url, params), service=service)
+        result: dict[str, GoogleMapsQuotaUsage] = {}
+        page_token = ""
+        while True:
+            if page_token:
+                params["pageToken"] = page_token
+            payload = self._get(url, params)
+            for key, usage in parse_usage_time_series(payload, service=service).items():
+                current = result.get(key)
+                if current is None or usage.timestamp > current.timestamp:
+                    result[key] = usage
+                elif usage.timestamp == current.timestamp:
+                    result[key] = GoogleMapsQuotaUsage(
+                        quota_metric=usage.quota_metric,
+                        service=usage.service,
+                        value=current.value + usage.value,
+                        unit=current.unit,
+                        timestamp=usage.timestamp,
+                        dimensions=current.dimensions,
+                    )
+            next_token = _clean_text(payload.get("nextPageToken"))
+            if not next_token or next_token == page_token:
+                break
+            page_token = next_token
+        return result
 
     def fetch_report(self) -> GoogleMapsQuotaReport:
         services = tuple(
