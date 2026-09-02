@@ -125,8 +125,10 @@ def test_switching_ledger_mode_preserves_copy_editor_target() -> None:
 
 def test_copy_form_can_be_canceled_without_creating_or_mutating_transaction() -> None:
     storage, source = _transaction_fixture()
-    original_source = dict(source)
     original_rows = storage.list_transactions()
+    original_source = next(
+        item for item in original_rows if item["id"] == source["id"]
+    )
 
     with authenticated_app(storage) as app:
         navigate_to(app, "Transactions")

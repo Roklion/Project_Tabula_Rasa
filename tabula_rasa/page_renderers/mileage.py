@@ -548,8 +548,8 @@ def mileage_frame(
                 "Destination": trip.get("destination", ""),
                 "Business purpose": trip.get("business_purpose", ""),
                 "Vehicle": trip.get("vehicle", ""),
-                "Notes": trip.get("notes", ""),
                 "Tags": _tag_names_for_trip(trip, tag_by_id),
+                "Notes": trip.get("notes", ""),
             }
             for trip in trips
         ],
@@ -561,8 +561,8 @@ def mileage_frame(
             "Destination",
             "Business purpose",
             "Vehicle",
-            "Notes",
             "Tags",
+            "Notes",
         ],
     )
 

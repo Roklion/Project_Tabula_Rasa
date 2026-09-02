@@ -36,20 +36,44 @@ def _legacy_backup(storage: GoogleSheetsStorage, payee_name: str) -> bytes:
     headers = transaction_rows[0]
     payee_id_index = headers.index("payee_id")
     headers[payee_id_index] = "payee"
+    tag_ids_index = headers.index("tag_ids")
     for row in transaction_rows[1:]:
         row[payee_id_index] = payee_name
+    transaction_rows = [
+        [value for index, value in enumerate(row) if index != tag_ids_index]
+        for row in transaction_rows
+    ]
+    mileage_rows = list(
+        csv.reader(io.StringIO(contents["Mileage.csv"].decode("utf-8")))
+    )
+    mileage_tag_ids_index = mileage_rows[0].index("tag_ids")
+    mileage_rows = [
+        [value for index, value in enumerate(row) if index != mileage_tag_ids_index]
+        for row in mileage_rows
+    ]
     csv_buffer = io.StringIO(newline="")
     csv.writer(csv_buffer, lineterminator="\n").writerows(transaction_rows)
     contents["Transactions.csv"] = csv_buffer.getvalue().encode("utf-8")
+    csv_buffer = io.StringIO(newline="")
+    csv.writer(csv_buffer, lineterminator="\n").writerows(mileage_rows)
+    contents["Mileage.csv"] = csv_buffer.getvalue().encode("utf-8")
     manifest["format_version"] = 6
-    manifest["worksheet_headers"]["Transactions"] = headers
+    manifest["worksheet_headers"]["Transactions"] = transaction_rows[0]
+    manifest["worksheet_headers"]["Mileage"] = mileage_rows[0]
     manifest["sha256"]["Transactions.csv"] = hashlib.sha256(
         contents["Transactions.csv"]
+    ).hexdigest()
+    manifest["sha256"]["Mileage.csv"] = hashlib.sha256(
+        contents["Mileage.csv"]
     ).hexdigest()
     manifest["worksheet_headers"].pop("Payees")
     manifest["row_counts"].pop("Payees")
     manifest["sha256"].pop("Payees.csv")
     contents.pop("Payees.csv")
+    manifest["worksheet_headers"].pop("Tags")
+    manifest["row_counts"].pop("Tags")
+    manifest["sha256"].pop("Tags.csv")
+    contents.pop("Tags.csv")
     contents["manifest.json"] = json.dumps(manifest).encode("utf-8")
     with zipfile.ZipFile(output, "w") as destination:
         for name, content in contents.items():
@@ -1083,18 +1107,42 @@ def test_legacy_backup_without_transactions_preserves_existing_payees() -> None:
     )
     payee_id_index = transaction_rows[0].index("payee_id")
     transaction_rows[0][payee_id_index] = "payee"
+    tag_ids_index = transaction_rows[0].index("tag_ids")
+    transaction_rows = [
+        [value for index, value in enumerate(row) if index != tag_ids_index]
+        for row in transaction_rows
+    ]
+    mileage_rows = list(
+        csv.reader(io.StringIO(contents["Mileage.csv"].decode("utf-8")))
+    )
+    mileage_tag_ids_index = mileage_rows[0].index("tag_ids")
+    mileage_rows = [
+        [value for index, value in enumerate(row) if index != mileage_tag_ids_index]
+        for row in mileage_rows
+    ]
     csv_buffer = io.StringIO(newline="")
     csv.writer(csv_buffer, lineterminator="\n").writerows(transaction_rows)
     contents["Transactions.csv"] = csv_buffer.getvalue().encode("utf-8")
+    csv_buffer = io.StringIO(newline="")
+    csv.writer(csv_buffer, lineterminator="\n").writerows(mileage_rows)
+    contents["Mileage.csv"] = csv_buffer.getvalue().encode("utf-8")
     manifest["format_version"] = 6
     manifest["worksheet_headers"]["Transactions"] = transaction_rows[0]
+    manifest["worksheet_headers"]["Mileage"] = mileage_rows[0]
     manifest["worksheet_headers"].pop("Payees")
     manifest["row_counts"].pop("Payees")
     manifest["sha256"]["Transactions.csv"] = hashlib.sha256(
         contents["Transactions.csv"]
     ).hexdigest()
+    manifest["sha256"]["Mileage.csv"] = hashlib.sha256(
+        contents["Mileage.csv"]
+    ).hexdigest()
     manifest["sha256"].pop("Payees.csv")
     contents.pop("Payees.csv")
+    manifest["worksheet_headers"].pop("Tags")
+    manifest["row_counts"].pop("Tags")
+    manifest["sha256"].pop("Tags.csv")
+    contents.pop("Tags.csv")
     contents["manifest.json"] = json.dumps(manifest).encode("utf-8")
     with zipfile.ZipFile(output, "w") as destination:
         for name, content in contents.items():

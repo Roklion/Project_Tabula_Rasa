@@ -623,7 +623,7 @@ def test_mileage_frame_resolves_stable_tag_ids_and_keeps_no_tag_blank() -> None:
         tags,
     )
 
-    assert list(frame.columns)[-1] == "Tags"
+    assert list(frame.columns)[-2:] == ["Tags", "Notes"]
     assert frame.loc[0, "Tags"] == "Tax, Project Alpha"
     assert frame.loc[1, "Tags"] == ""
 

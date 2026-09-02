@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import hashlib
 import io
 import json
@@ -1101,19 +1102,45 @@ def test_recovery_identifies_pre_manifest_v4_as_ledger_only() -> None:
         ledger_manifest = json.loads(source.read("manifest.json"))
         ledger_manifest["format_version"] = 4
         ledger_manifest["sha256"].pop("receipts.json")
-        transaction_bytes = source.read("Transactions.csv").replace(
-            b"payee_id", b"payee"
+        transaction_rows = list(
+            csv.reader(
+                io.StringIO(source.read("Transactions.csv").decode("utf-8"))
+            )
         )
-        transaction_headers = list(
-            ledger_manifest["worksheet_headers"]["Transactions"]
+        payee_id_index = transaction_rows[0].index("payee_id")
+        transaction_rows[0][payee_id_index] = "payee"
+        tag_ids_index = transaction_rows[0].index("tag_ids")
+        transaction_rows = [
+            [value for index, value in enumerate(row) if index != tag_ids_index]
+            for row in transaction_rows
+        ]
+        csv_buffer = io.StringIO(newline="")
+        csv.writer(csv_buffer, lineterminator="\n").writerows(transaction_rows)
+        transaction_bytes = csv_buffer.getvalue().encode("utf-8")
+        mileage_rows = list(
+            csv.reader(io.StringIO(source.read("Mileage.csv").decode("utf-8")))
         )
-        transaction_headers[transaction_headers.index("payee_id")] = "payee"
-        ledger_manifest["worksheet_headers"]["Transactions"] = transaction_headers
+        mileage_tag_ids_index = mileage_rows[0].index("tag_ids")
+        mileage_rows = [
+            [value for index, value in enumerate(row) if index != mileage_tag_ids_index]
+            for row in mileage_rows
+        ]
+        csv_buffer = io.StringIO(newline="")
+        csv.writer(csv_buffer, lineterminator="\n").writerows(mileage_rows)
+        mileage_bytes = csv_buffer.getvalue().encode("utf-8")
+        ledger_manifest["worksheet_headers"]["Transactions"] = transaction_rows[0]
+        ledger_manifest["worksheet_headers"]["Mileage"] = mileage_rows[0]
         ledger_manifest["sha256"]["Transactions.csv"] = hashlib.sha256(
             transaction_bytes
         ).hexdigest()
+        ledger_manifest["sha256"]["Mileage.csv"] = hashlib.sha256(
+            mileage_bytes
+        ).hexdigest()
+        ledger_manifest["worksheet_headers"].pop("Tags")
+        ledger_manifest["row_counts"].pop("Tags")
+        ledger_manifest["sha256"].pop("Tags.csv")
         for name in source.namelist():
-            if name == "receipts.json":
+            if name in {"receipts.json", "Tags.csv"}:
                 continue
             destination.writestr(
                 name,
@@ -1122,7 +1149,11 @@ def test_recovery_identifies_pre_manifest_v4_as_ledger_only() -> None:
                     else (
                         transaction_bytes
                         if name == "Transactions.csv"
-                        else source.read(name)
+                        else (
+                            mileage_bytes
+                            if name == "Mileage.csv"
+                            else source.read(name)
+                        )
                     ),
             )
     drive = Mock()
