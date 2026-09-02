@@ -133,6 +133,7 @@ WORKSHEET_HEADERS = {
     "MixedUseExpenses": MIXED_USE_WORKSHEET_HEADERS,
 }
 _PAYEE_WRITE_LOCK = threading.RLock()
+_MIXED_USE_CREATE_LOCK = threading.RLock()
 VERSION_3_WORKSHEET_HEADERS = {
     title: (
         tuple(header for header in headers if header != "receipt_references")
@@ -2723,6 +2724,10 @@ class GoogleSheetsStorage:
         return self.get_mixed_use_expense(source_id)
 
     def create_mixed_use_expense(self, **data: Any) -> dict[str, str]:
+        with _MIXED_USE_CREATE_LOCK:
+            return self._create_mixed_use_expense(**data)
+
+    def _create_mixed_use_expense(self, **data: Any) -> dict[str, str]:
         source, projection = self._prepare_mixed_use_expense(data)
         sources, transactions = self._raw_mixed_use_snapshot()
         source_id = source["id"]
@@ -3439,6 +3444,48 @@ class GoogleSheetsStorage:
                 ):
                     latest_rows = self._rows("Transactions", force_refresh=True)
                     return False, [dict(row.values) for row in latest_rows]
+
+            latest_transaction_rows = self._rows(
+                "Transactions", force_refresh=True
+            )
+            latest_transactions_by_id = {
+                str(row.values["id"]): row for row in latest_transaction_rows
+            }
+            latest_transactions = [
+                dict(row.values) for row in latest_transaction_rows
+            ]
+            if len(latest_transactions_by_id) != len(latest_transaction_rows):
+                raise StorageValidationError(
+                    "Receipt recovery found duplicate live transaction IDs."
+                )
+            if any(
+                latest_transactions_by_id.get(transaction_id) is None
+                or latest_transactions_by_id[transaction_id].values
+                != current_by_id[transaction_id]
+                for transaction_id in intended_values
+            ):
+                return False, latest_transactions
+            latest_source_rows = self._rows(
+                "MixedUseExpenses", force_refresh=True
+            )
+            latest_sources_by_id = {
+                str(row.values["id"]): row for row in latest_source_rows
+            }
+            for source_id, source_row in mixed_source_rows.items():
+                latest_source = latest_sources_by_id.get(source_id)
+                if latest_source is None or latest_source.values != source_row.values:
+                    return False, latest_transactions
+            current_rows = latest_transaction_rows
+            current_transactions = latest_transactions
+            current_by_id = {
+                str(transaction["id"]): transaction
+                for transaction in current_transactions
+            }
+            rows_by_id = latest_transactions_by_id
+            mixed_source_rows = {
+                source_id: latest_sources_by_id[source_id]
+                for source_id in mixed_source_rows
+            }
 
         if not intended_values:
             return True, current_transactions

@@ -84,9 +84,19 @@ def test_allocation_rejects_percentage_boundaries_and_precision(
         validate_mixed_use_allocation("100", percentage)
 
 
-def test_allocation_rejects_percentage_normalization_overflow() -> None:
-    with pytest.raises(MixedUseAllocationError, match="too large"):
-        validate_mixed_use_allocation("100", "1e1000000000")
+@pytest.mark.parametrize(
+    "percentage",
+    [
+        "1e1000000000",
+        "99.9999999999999999999999999999",
+        "100.00000000000000000000000000001",
+    ],
+)
+def test_allocation_rejects_large_or_overprecise_percentages(
+    percentage: str,
+) -> None:
+    with pytest.raises(MixedUseAllocationError):
+        validate_mixed_use_allocation("100", percentage)
 
 
 def test_allocation_rejects_result_that_rounds_to_zero() -> None:

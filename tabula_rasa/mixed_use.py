@@ -8,7 +8,7 @@ and when a future UI builds a live preview.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation, Overflow, localcontext
+from decimal import Decimal, InvalidOperation, localcontext
 from typing import Any
 
 
@@ -44,6 +44,18 @@ def _decimal_places(value: Decimal) -> int:
     return max(0, -value.as_tuple().exponent)
 
 
+def _normalize_exact(value: Decimal) -> Decimal:
+    """Remove insignificant trailing zeros without applying context rounding."""
+    sign, digits, exponent = value.as_tuple()
+    if not any(digits):
+        return Decimal(0)
+    digits = list(digits)
+    while len(digits) > 1 and digits[-1] == 0:
+        digits.pop()
+        exponent += 1
+    return Decimal((sign, tuple(digits), exponent))
+
+
 def _quantize(value: Decimal, quantum: Decimal, field: str) -> Decimal:
     try:
         return value.quantize(quantum)
@@ -58,14 +70,9 @@ def calculate_allocated_amount(
     """Return the currency-rounded business portion of a mixed-use expense."""
     total = _decimal(total_expense, "Total expense")
     total = _quantize(total, CURRENCY_QUANTUM, "Total expense")
-    try:
-        percentage = _decimal(
-            business_use_percentage, "Business-use percentage"
-        ).normalize()
-    except (InvalidOperation, Overflow):
-        raise MixedUseAllocationError(
-            "Business-use percentage is too large"
-        ) from None
+    percentage = _normalize_exact(
+        _decimal(business_use_percentage, "Business-use percentage")
+    )
     if total <= 0:
         raise MixedUseAllocationError("Total expense must be greater than zero")
     if percentage <= 0:
