@@ -2836,7 +2836,7 @@ class GoogleSheetsStorage:
                     )
                     if outcome is not None:
                         return self.get_mixed_use_expense(source_id)
-                    raise AssertionError("Mixed-use create retry postcondition did not classify")
+                    raise StorageError("Mixed-use create retry postcondition did not classify")
                 self._mixed_use_mutation_result(
                     operation="create",
                     source_id=source_id,
@@ -2999,7 +2999,7 @@ class GoogleSheetsStorage:
             )
             if outcome is not None:
                 return self.get_mixed_use_expense(source_id)
-            raise AssertionError("Mixed-use edit postcondition did not classify")
+            raise StorageError("Mixed-use edit postcondition did not classify")
         self._mixed_use_mutation_result(
             operation="edit",
             source_id=source_id,
@@ -3044,6 +3044,20 @@ class GoogleSheetsStorage:
                 self._sleeper(self._retry_base_delay_seconds * (2**attempt))
 
     def delete_mixed_use_expense(
+        self,
+        source_id: str,
+        *,
+        expected_source: Mapping[str, Any] | None = None,
+        expected: Mapping[str, Any] | None = None,
+    ) -> None:
+        with _MIXED_USE_CREATE_LOCK:
+            self._delete_mixed_use_expense(
+                source_id,
+                expected_source=expected_source,
+                expected=expected,
+            )
+
+    def _delete_mixed_use_expense(
         self,
         source_id: str,
         *,
@@ -3107,7 +3121,7 @@ class GoogleSheetsStorage:
             )
             if outcome is not None:
                 return
-            raise AssertionError("Mixed-use delete postcondition did not classify")
+            raise StorageError("Mixed-use delete postcondition did not classify")
         self._mixed_use_mutation_result(
             operation="delete",
             source_id=source_id,
