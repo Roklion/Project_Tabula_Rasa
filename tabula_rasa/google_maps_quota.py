@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+import hashlib
 import json
 from typing import Any
 
@@ -29,6 +30,8 @@ DEFAULT_TIMEOUT_SECONDS = 15.0
 QUOTA_CACHE_TTL_SECONDS = 120
 QUOTA_VIEW_REQUESTED_KEY = "google_maps_quota_view_requested"
 QUOTA_REPORT_SESSION_KEY = "google_maps_quota_report"
+QUOTA_REPORT_FETCHED_AT_KEY = "google_maps_quota_report_fetched_at"
+QUOTA_REPORT_CONFIG_KEY = "google_maps_quota_report_config"
 QUOTA_FETCH_ATTEMPTED_KEY = "google_maps_quota_fetch_attempted"
 
 
@@ -502,6 +505,19 @@ def load_google_maps_quota_report(
     )
 
 
+def _quota_config_identity(config: GoogleMapsQuotaMonitoringConfig) -> str:
+    """Return a non-sensitive identity for the cached report configuration."""
+    material = json.dumps(
+        {
+            "project_number": config.project_number,
+            "service_account": dict(config.service_account_info),
+        },
+        sort_keys=True,
+        default=repr,
+    )
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
 def clear_google_maps_quota_cache() -> None:
     """Clear only the quota-monitoring cache."""
     _cached_quota_report.clear()
@@ -574,7 +590,7 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
             "not a real-time remaining-request or billing/spend meter."
         )
         try:
-            GoogleMapsQuotaMonitoringConfig.from_secrets(secrets_mapping)
+            config = GoogleMapsQuotaMonitoringConfig.from_secrets(secrets_mapping)
         except GoogleMapsQuotaConfigurationError:
             st.info("Configure the dedicated Maps quota reader to view usage.")
             return
@@ -587,9 +603,28 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
         if st.button("Refresh", key="refresh-google-maps-usage-sidebar"):
             clear_google_maps_quota_cache()
             st.session_state.pop(QUOTA_REPORT_SESSION_KEY, None)
+            st.session_state.pop(QUOTA_REPORT_FETCHED_AT_KEY, None)
+            st.session_state.pop(QUOTA_REPORT_CONFIG_KEY, None)
             st.session_state.pop(QUOTA_FETCH_ATTEMPTED_KEY, None)
             st.rerun()
         report = st.session_state.get(QUOTA_REPORT_SESSION_KEY)
+        if report is not None:
+            fetched_at = st.session_state.get(QUOTA_REPORT_FETCHED_AT_KEY)
+            config_identity = st.session_state.get(QUOTA_REPORT_CONFIG_KEY)
+            now = datetime.now(timezone.utc)
+            stale = (
+                not isinstance(fetched_at, datetime)
+                or fetched_at.tzinfo is None
+                or now - fetched_at >= timedelta(seconds=QUOTA_CACHE_TTL_SECONDS)
+                or config_identity != _quota_config_identity(config)
+                or getattr(report, "project_number", None) != config.project_number
+            )
+            if stale:
+                st.session_state.pop(QUOTA_REPORT_SESSION_KEY, None)
+                st.session_state.pop(QUOTA_REPORT_FETCHED_AT_KEY, None)
+                st.session_state.pop(QUOTA_REPORT_CONFIG_KEY, None)
+                st.info("The usage report expired. Select Refresh to load a current report.")
+                return
         if report is None and not st.session_state.get(QUOTA_FETCH_ATTEMPTED_KEY, False):
             st.session_state[QUOTA_FETCH_ATTEMPTED_KEY] = True
             try:
@@ -601,6 +636,8 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
                     st.rerun()
                 return
             st.session_state[QUOTA_REPORT_SESSION_KEY] = report
+            st.session_state[QUOTA_REPORT_FETCHED_AT_KEY] = datetime.now(timezone.utc)
+            st.session_state[QUOTA_REPORT_CONFIG_KEY] = _quota_config_identity(config)
         if report is None:
             st.warning("Google Maps usage is temporarily unavailable.")
             if st.button("Retry", key="retry-google-maps-usage-sidebar"):

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -15,6 +15,9 @@ from tabula_rasa.google_maps_quota import (
     GoogleMapsQuotaReport,
     GoogleMapsQuotaUsage,
     GoogleMapsServiceReport,
+    QUOTA_REPORT_CONFIG_KEY,
+    QUOTA_REPORT_FETCHED_AT_KEY,
+    QUOTA_REPORT_SESSION_KEY,
     QUOTA_VIEW_REQUESTED_KEY,
     parse_quota_metrics,
     parse_usage_time_series,
@@ -340,3 +343,28 @@ def test_sidebar_reuses_loaded_report_without_requerying_google() -> None:
         render_google_maps_usage_sidebar(secrets())
 
     load.assert_called_once()
+
+
+def test_sidebar_expires_report_without_requerying_until_refresh() -> None:
+    report = GoogleMapsQuotaReport(project_number="123456789", services=())
+    session_state = {
+        QUOTA_VIEW_REQUESTED_KEY: True,
+        QUOTA_REPORT_SESSION_KEY: report,
+        QUOTA_REPORT_FETCHED_AT_KEY: datetime.now(timezone.utc)
+        - timedelta(seconds=121),
+        QUOTA_REPORT_CONFIG_KEY: "stale-config",
+    }
+    with patch("tabula_rasa.google_maps_quota.st.expander", return_value=MagicMock()), patch(
+        "tabula_rasa.google_maps_quota.st.caption"
+    ), patch("tabula_rasa.google_maps_quota.st.info") as info, patch(
+        "tabula_rasa.google_maps_quota.st.button", return_value=False
+    ), patch(
+        "tabula_rasa.google_maps_quota.st.session_state", session_state
+    ), patch(
+        "tabula_rasa.google_maps_quota.load_google_maps_quota_report"
+    ) as load:
+        render_google_maps_usage_sidebar(secrets())
+
+    load.assert_not_called()
+    info.assert_any_call("The usage report expired. Select Refresh to load a current report.")
+    assert QUOTA_REPORT_SESSION_KEY not in session_state
