@@ -107,6 +107,17 @@ class TestExportStreamlitSecrets:
                     "routes_api_key": "routes-key",
                     "routes_timeout_seconds": 15,
                     "autocomplete_region_code": "us",
+                    "quota_monitoring": {
+                        "project_id": "maps-project-id",
+                        "timeout_seconds": 15,
+                        "service_account": {
+                            "type": "service_account",
+                            "project_id": "maps-project-id",
+                            "client_email": "quota-reader@example.test",
+                            "private_key": "private-key",
+                            "token_uri": "https://oauth2.googleapis.com/token",
+                        },
+                    },
                 },
                 "synology_recovery_defaults": {
                     "base_path": "/volume1/Tabula_Rasa_Backups",
@@ -144,6 +155,17 @@ class TestExportStreamlitSecrets:
             "routes_api_key": "routes-key",
             "routes_timeout_seconds": 15,
             "autocomplete_region_code": "us",
+            "quota_monitoring": {
+                "project_id": "maps-project-id",
+                "timeout_seconds": 15,
+                "service_account": {
+                    "type": "service_account",
+                    "project_id": "maps-project-id",
+                    "client_email": "quota-reader@example.test",
+                    "private_key": "private-key",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                },
+            },
         }
         assert hosted_north["google_drive"]["refresh_token"] == (
             "north-refresh-token"

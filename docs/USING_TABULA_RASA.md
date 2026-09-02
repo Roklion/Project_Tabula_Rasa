@@ -25,6 +25,17 @@ The current application password grants access to every configured profile. It
 does not provide per-profile user permissions. Select **Log out** to clear the
 authenticated session.
 
+## Google Maps API usage
+
+When quota monitoring is configured, the bottom of the authenticated sidebar
+contains a compact **Google Maps API usage** expander. Routes API and Places API
+(New) are shown separately with effective quota, recent Google-reported usage,
+compatible utilization, and the Google point timestamp/data age. Missing data is
+shown as unavailable rather than zero. Cloud Monitoring sampling/reporting can
+lag several minutes, including up to about 240 seconds after sampling, so this
+is not a real-time remaining-request or billing/spend meter. The refresh action
+clears only this view's 120-second cache.
+
 ## Dashboard
 
 The Dashboard shows:
