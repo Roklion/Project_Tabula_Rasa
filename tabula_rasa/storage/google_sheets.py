@@ -2266,7 +2266,7 @@ class GoogleSheetsStorage:
             and payee_id != original_payee_id
         ):
             raise StorageValidationError("Payee is inactive")
-        return {
+        record = {
             "id": transaction_id or str(uuid4()),
             "txn_date": txn_date,
             "kind": kind,
@@ -2281,6 +2281,25 @@ class GoogleSheetsStorage:
             "receipt_references": receipt_references,
             "created_at": created_at or _utc_now(),
         }
+        if original_transaction is not None:
+            source_type = _clean_text(
+                original_transaction.get("source_type"),
+                "Transaction source type",
+            )
+            source_id = _clean_text(
+                original_transaction.get("source_id"),
+                "Transaction source ID",
+            )
+            if bool(source_type) != bool(source_id):
+                raise StorageValidationError(
+                    "Transaction source type and source ID must be provided together"
+                )
+            if source_type:
+                if source_type != MIXED_USE_SOURCE_TYPE:
+                    raise StorageValidationError("Transaction source type is unsupported")
+                record["source_type"] = source_type
+                record["source_id"] = source_id
+        return record
 
     def list_transactions(
         self,
