@@ -526,6 +526,43 @@ class TestGoogleSheetsStorage:
             "source_id",
         ]
 
+    def test_profile_storage_clears_colliding_legacy_provenance_columns(
+        self,
+    ) -> None:
+        headers = dict(PRE_MIXED_USE_WORKSHEET_HEADERS)
+        transaction_headers = [
+            *PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"],
+            "source_type",
+        ]
+        headers["Transactions"] = tuple(transaction_headers)
+        workbook = FakeWorkbook(headers)
+        transaction_sheet = workbook.sheets["Transactions"]
+        legacy_row = [""] * len(transaction_headers)
+        legacy_row[transaction_headers.index("source_type")] = "legacy custom value"
+        transaction_sheet.rows.append(legacy_row)
+        google_client = Mock()
+        google_client.open_by_key.return_value = workbook
+
+        with (
+            patch.object(
+                Credentials,
+                "from_service_account_info",
+                return_value=object(),
+            ),
+            patch.object(gspread, "authorize", return_value=google_client),
+        ):
+            GoogleSheetsStorage.from_secrets(
+                {
+                    "spreadsheet_id": "given-spreadsheet-id",
+                    "gcp_service_account": {"type": "service_account"},
+                }
+            )
+
+        source_type_index = transaction_sheet.rows[0].index("source_type")
+        source_id_index = transaction_sheet.rows[0].index("source_id")
+        assert transaction_sheet.rows[1][source_type_index] == ""
+        assert transaction_sheet.rows[1][source_id_index] == ""
+
     def test_profile_storage_migrates_hierarchy_columns_idempotently(
         self,
     ) -> None:

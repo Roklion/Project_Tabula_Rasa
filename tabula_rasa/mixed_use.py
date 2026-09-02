@@ -118,6 +118,7 @@ def validate_mixed_use_allocation(
             _quantize(
                 percentage, PERCENTAGE_QUANTUM, "Business-use percentage"
             ),
+            "f",
         ).rstrip("0").rstrip(".")
         or "0",
         allocated_amount=format(allocated, "f"),

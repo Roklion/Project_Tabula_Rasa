@@ -287,6 +287,23 @@ def test_category_delete_shares_mixed_use_creation_lock(
     assert not errors
 
 
+def test_category_delete_rejects_orphaned_mixed_use_source(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    transaction_sheet = default_storage._worksheet("Transactions")
+    transaction_sheet.rows.pop(1)
+    default_storage._invalidate("Transactions")
+
+    with pytest.raises(StorageConflictError, match="mixed-use expenses"):
+        default_storage.delete_category(source["category_id"])
+
+
 def test_generic_transaction_mutations_reject_mixed_use_projections(
     default_storage: GoogleSheetsStorage,
 ) -> None:

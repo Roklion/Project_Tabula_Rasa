@@ -439,15 +439,15 @@ def _validate_mixed_use_tables(
             )
         except MixedUseAllocationError as exc:
             raise StorageValidationError(str(exc)) from exc
-        if source.get("total_expense", "") != allocation.total_expense:
+        if (source.get("total_expense") or "") != allocation.total_expense:
             raise StorageValidationError(
                 "Mixed-use total expense has a non-canonical value"
             )
-        if source.get("business_use_percentage", "") != allocation.business_use_percentage:
+        if (source.get("business_use_percentage") or "") != allocation.business_use_percentage:
             raise StorageValidationError(
                 "Mixed-use business-use percentage has a non-canonical value"
             )
-        if source.get("allocated_amount", "") != allocation.allocated_amount:
+        if (source.get("allocated_amount") or "") != allocation.allocated_amount:
             raise StorageValidationError(
                 "Mixed-use allocated amount does not match its allocation"
             )
@@ -941,6 +941,7 @@ class GoogleSheetsStorage:
             actual_worksheets = {
                 worksheet.title: worksheet for worksheet in workbook.worksheets()
             }
+            pre_mixed_use_workbook = "MixedUseExpenses" not in actual_worksheets
             initial_values: dict[str, list[list[Any]]] = {}
             for title, headers in WORKSHEET_HEADERS.items():
                 worksheet = actual_worksheets.get(title)
@@ -1046,6 +1047,43 @@ class GoogleSheetsStorage:
                             raw=True,
                         )
                         values[0] = migrated_headers
+                if (
+                    title == "Transactions"
+                    and values
+                    and pre_mixed_use_workbook
+                    and any(
+                        header in {
+                            "source_type",
+                            "source_id",
+                        }
+                        for header in (
+                            str(value).strip() for value in values[0]
+                        )
+                    )
+                ):
+                    # A pre-mixed-use workbook may have used these names for
+                    # custom columns. Clear their cells before the names gain
+                    # provenance semantics in the upgraded schema.
+                    existing_headers = [
+                        str(value).strip() for value in values[0]
+                    ]
+                    cleared_values = [
+                        [
+                            *list(row),
+                            *([""] * (len(existing_headers) - len(row))),
+                        ]
+                        for row in values
+                    ]
+                    provenance_indexes = [
+                        existing_headers.index(header)
+                        for header in ("source_type", "source_id")
+                        if header in existing_headers
+                    ]
+                    for row in cleared_values[1:]:
+                        for index in provenance_indexes:
+                            row[index] = ""
+                    worksheet.update(cleared_values, range_name="A1", raw=True)
+                    values = cleared_values
                 if not any(str(value).strip() for row in values for value in row):
                     worksheet.update(
                         [list(headers)], range_name="A1", raw=True
@@ -2102,6 +2140,14 @@ class GoogleSheetsStorage:
             raise StorageConflictError(
                 "That category has transactions and cannot be deleted"
             )
+        mixed_use_sources = self._rows("MixedUseExpenses", force_refresh=True)
+        if any(
+            _clean_text(row.values.get("category_id"), "Category") == category_id
+            for row in mixed_use_sources
+        ):
+            raise StorageConflictError(
+                "That category has mixed-use expenses and cannot be deleted"
+            )
         for attempt in range(self._retry_attempts):
             current = self._find_row("Categories", category_id)
             worksheet = self._worksheet("Categories")
@@ -3077,6 +3123,16 @@ class GoogleSheetsStorage:
         current: _StoredRow,
         encoded_references: str,
     ) -> dict[str, str]:
+        with _MIXED_USE_CREATE_LOCK:
+            return self._replace_receipt_references_locked(
+                current, encoded_references
+            )
+
+    def _replace_receipt_references_locked(
+        self,
+        current: _StoredRow,
+        encoded_references: str,
+    ) -> dict[str, str]:
         """Replace receipt references while preserving mixed-use row parity."""
         transaction = current.values
         source_type = _clean_text(
@@ -3369,6 +3425,16 @@ class GoogleSheetsStorage:
         expected_transactions: Sequence[Mapping[str, Any]],
         updates: Mapping[str, Sequence[Mapping[str, Any]]],
     ) -> tuple[bool, list[dict[str, str]]]:
+        with _MIXED_USE_CREATE_LOCK:
+            return self._apply_receipt_recovery_plan(
+                expected_transactions, updates
+            )
+
+    def _apply_receipt_recovery_plan(
+        self,
+        expected_transactions: Sequence[Mapping[str, Any]],
+        updates: Mapping[str, Sequence[Mapping[str, Any]]],
+    ) -> tuple[bool, list[dict[str, str]]]:
         """Apply receipt-cell updates when the live receipt snapshot is unchanged.
 
         A fresh full transaction read authorizes both cached no-op conclusions
@@ -3454,11 +3520,11 @@ class GoogleSheetsStorage:
             source_rows = self._rows("MixedUseExpenses", force_refresh=True)
             for row in source_rows:
                 source_id = _clean_text(row.values.get("id"), "Mixed-use source ID")
-                if source_id in mixed_source_ids and source_id in mixed_source_rows:
-                    raise StorageValidationError(
-                        "Receipt recovery found duplicate mixed-use source IDs."
-                    )
                 if source_id in mixed_source_ids:
+                    if source_id in mixed_source_rows:
+                        raise StorageValidationError(
+                            "Receipt recovery found duplicate mixed-use source IDs."
+                        )
                     mixed_source_rows[source_id] = row
             for source_id in mixed_source_ids:
                 if source_id not in mixed_source_rows:
