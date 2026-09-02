@@ -3083,6 +3083,7 @@ class GoogleSheetsStorage:
         record_id: str,
         *,
         expected_record: Mapping[str, Any] | None = None,
+        before_retry: Callable[[], None] | None = None,
     ) -> None:
         for attempt in range(self._retry_attempts):
             current = self._find_row(title, record_id)
@@ -3109,6 +3110,8 @@ class GoogleSheetsStorage:
                 except StorageNotFoundError:
                     return
                 self._sleeper(self._retry_base_delay_seconds * (2**attempt))
+                if before_retry is not None:
+                    before_retry()
 
     def delete_mixed_use_expense(
         self,
@@ -3189,6 +3192,21 @@ class GoogleSheetsStorage:
             raise StorageConflictError(
                 "The mixed-use expense changed; refresh it before deleting."
             )
+
+        def reject_reappeared_projection() -> None:
+            latest_transactions = self._rows(
+                "Transactions", force_refresh=True
+            )
+            if any(
+                _clean_text(row.values.get("source_type"), "Transaction source type")
+                == MIXED_USE_SOURCE_TYPE
+                and _clean_text(row.values.get("source_id"), "Transaction source ID")
+                == source_id
+                for row in latest_transactions
+            ):
+                raise StorageConflictError(
+                    "The mixed-use expense changed; refresh it before deleting."
+                )
         try:
             self._delete_mixed_use_row(
                 "Transactions", transaction_id, expected_record=transaction
@@ -3207,7 +3225,10 @@ class GoogleSheetsStorage:
                     "The mixed-use expense changed; refresh it before deleting."
                 )
             self._delete_mixed_use_row(
-                "MixedUseExpenses", source_id, expected_record=source
+                "MixedUseExpenses",
+                source_id,
+                expected_record=source,
+                before_retry=reject_reappeared_projection,
             )
         except StorageUnavailableError as error:
             self._mixed_use_mutation_result(

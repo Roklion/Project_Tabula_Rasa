@@ -1195,9 +1195,15 @@ def test_mixed_use_delete_returns_success_when_final_response_is_lost(
         record_id: str,
         *,
         expected_record: object = None,
+        before_retry: object = None,
     ) -> None:
         nonlocal calls
-        original_delete(title, record_id, expected_record=expected_record)  # type: ignore[arg-type]
+        original_delete(
+            title,
+            record_id,
+            expected_record=expected_record,
+            before_retry=before_retry,  # type: ignore[arg-type]
+        )
         calls += 1
         if calls == 2:
             raise StorageUnavailableError("response lost")
@@ -1313,8 +1319,14 @@ def test_mixed_use_uncertain_delete_rejects_partial_pair_as_ambiguous(
         record_id: str,
         *,
         expected_record: object = None,
+        before_retry: object = None,
     ) -> None:
-        original_delete(title, record_id, expected_record=expected_record)  # type: ignore[arg-type]
+        original_delete(
+            title,
+            record_id,
+            expected_record=expected_record,
+            before_retry=before_retry,  # type: ignore[arg-type]
+        )
         if title == "Transactions":
             raise StorageUnavailableError("uncertain", retryable=False)
 
@@ -1339,8 +1351,14 @@ def test_mixed_use_delete_repairs_source_only_partial_pair(
         record_id: str,
         *,
         expected_record: object = None,
+        before_retry: object = None,
     ) -> None:
-        original_delete(title, record_id, expected_record=expected_record)  # type: ignore[arg-type]
+        original_delete(
+            title,
+            record_id,
+            expected_record=expected_record,
+            before_retry=before_retry,  # type: ignore[arg-type]
+        )
         if title == "Transactions":
             raise StorageUnavailableError("uncertain", retryable=False)
 
@@ -1422,6 +1440,44 @@ def test_mixed_use_delete_rechecks_projection_before_source_delete(
             default_storage._invalidate("Transactions")
 
     default_storage._delete_mixed_use_row = delete_then_restore_projection  # type: ignore[method-assign]
+    with pytest.raises(StorageConflictError, match="changed"):
+        default_storage.delete_mixed_use_expense(source["id"])
+
+    assert default_storage.list_mixed_use_expenses() == [source]
+    assert default_storage.list_transactions() == [transaction]
+
+
+def test_mixed_use_delete_rechecks_projection_during_source_retry(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    transaction = default_storage.list_transactions()[0]
+    source_sheet = default_storage._worksheet("MixedUseExpenses")
+    transaction_sheet = default_storage._worksheet("Transactions")
+    transaction_headers = default_storage._headers("Transactions")
+    original_delete = source_sheet.delete_rows
+    delete_calls = 0
+
+    def fail_source_delete_once(row_number: int) -> None:
+        nonlocal delete_calls
+        delete_calls += 1
+        if delete_calls == 1:
+            raise OSError("temporary failure")
+        original_delete(row_number)
+
+    def restore_projection_during_retry(_delay: float) -> None:
+        transaction_sheet.append_row(
+            [transaction.get(header, "") for header in transaction_headers]
+        )
+        default_storage._invalidate("Transactions")
+
+    source_sheet.delete_rows = fail_source_delete_once  # type: ignore[method-assign]
+    default_storage._sleeper = restore_projection_during_retry
     with pytest.raises(StorageConflictError, match="changed"):
         default_storage.delete_mixed_use_expense(source["id"])
 
