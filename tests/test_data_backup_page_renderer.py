@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import ast
+import csv
 from dataclasses import fields
 import importlib
+import io
 from pathlib import Path
 from unittest.mock import patch
 
@@ -12,7 +14,10 @@ from streamlit.testing.v1 import AppTest
 
 from tabula_rasa.ledger_auth import hash_password
 from tabula_rasa.page_renderers.data_backup.context import DataBackupContext
-from tabula_rasa.page_renderers.data_backup.exports import prepared_exports_key
+from tabula_rasa.page_renderers.data_backup.exports import (
+    prepare_csv_exports,
+    prepared_exports_key,
+)
 from tabula_rasa.storage import GoogleSheetsStorage
 from tests.app_support import TEST_PASSWORD
 from tests.fakes import FakeWorkbook
@@ -116,6 +121,40 @@ def test_prepared_exports_key_isolated_by_profile_configuration_and_data_revisio
     assert prepared_exports_key("north", "config-2", 0) != (
         prepared_exports_key("north", "config-1", 0)
     )
+
+
+def test_csv_exports_include_resolved_transaction_and_mileage_tags() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    account = storage.create_account("Checking", "Bank")
+    category = storage.create_category("Travel", "Expense")
+    tag = storage.create_tag("Client project")
+    storage.create_transaction(
+        txn_date="2026-09-02",
+        kind="Expense",
+        amount="12.50",
+        account_id=account["id"],
+        category_id=category["id"],
+        tag_ids=[tag["id"]],
+    )
+    storage.create_mileage_trip(
+        trip_date="2026-09-02",
+        miles="8.5",
+        start_location="Office",
+        destination="Client",
+        business_purpose="Meeting",
+        tag_ids=[tag["id"]],
+    )
+
+    exports = prepare_csv_exports(storage)
+    transaction = next(
+        csv.DictReader(io.StringIO(exports["transactions"].decode("utf-8")))
+    )
+    mileage = next(
+        csv.DictReader(io.StringIO(exports["mileage"].decode("utf-8")))
+    )
+
+    assert transaction["Tags"] == "Client project"
+    assert mileage["Tags"] == "Client project"
 
 
 def test_unconfigured_drive_and_missing_local_synology_states_are_explicit() -> None:
