@@ -2015,6 +2015,10 @@ class GoogleSheetsStorage:
         return record
 
     def edit_category(self, category_id: str, **changes: Any) -> dict[str, str]:
+        with _MIXED_USE_CREATE_LOCK:
+            return self._edit_category(category_id, **changes)
+
+    def _edit_category(self, category_id: str, **changes: Any) -> dict[str, str]:
         current = self._find_row("Categories", category_id)
         updated = dict(current.values)
         normalized_category_id = _clean_text(
@@ -3089,6 +3093,12 @@ class GoogleSheetsStorage:
         current = fresh_transaction
         transaction = fresh_transaction.values
         source = fresh_source
+        original_transaction_receipts = str(
+            transaction.get("receipt_references") or ""
+        )
+        original_source_receipts = str(
+            source.values.get("receipt_references") or ""
+        )
 
         transaction_headers = self._headers("Transactions")
         source_headers = self._headers("MixedUseExpenses")
@@ -3154,11 +3164,19 @@ class GoogleSheetsStorage:
                 self._invalidate("Transactions")
                 self._invalidate("MixedUseExpenses")
                 return dict(confirmed_transaction.values)
+            not_applied = (
+                original_transaction_receipts
+                == str(
+                    confirmed_transaction.values.get("receipt_references") or ""
+                )
+                and original_source_receipts
+                == str(confirmed_source.values.get("receipt_references") or "")
+            )
             raise StorageBulkMutationUncertainError(
                 "The mixed-use receipt update was not fully applied. Review the "
                 "source and ledger before retrying.",
-                outcome="not_applied" if error.retryable else "mixed_ambiguous",
-                retryable=error.retryable,
+                outcome="not_applied" if error.retryable and not_applied else "mixed_ambiguous",
+                retryable=error.retryable and not_applied,
             ) from error
         self._invalidate("Transactions")
         self._invalidate("MixedUseExpenses")
@@ -3365,17 +3383,11 @@ class GoogleSheetsStorage:
             str(transaction_id): _encode_receipt_references(references)
             for transaction_id, references in updates.items()
         }
-        if expected_receipts != current_receipts and (
-            not intended_values
-            or not all(
-                transaction_id in current_by_id
-                and str(
-                    current_by_id[transaction_id].get("receipt_references") or ""
-                )
-                == value
-                for transaction_id, value in intended_values.items()
-            )
-        ):
+        expected_after_updates = dict(expected_receipts)
+        if any(transaction_id not in expected_after_updates for transaction_id in intended_values):
+            return False, current_transactions
+        expected_after_updates.update(intended_values)
+        if current_receipts not in (expected_receipts, expected_after_updates):
             return False, current_transactions
 
         rows_by_id = {

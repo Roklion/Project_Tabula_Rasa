@@ -4,6 +4,7 @@ import csv
 import hashlib
 import io
 import json
+import threading
 import zipfile
 from decimal import Decimal
 from unittest.mock import patch
@@ -24,6 +25,7 @@ from tabula_rasa.storage import (
     StorageUnavailableError,
     StorageValidationError,
 )
+from tabula_rasa.storage import google_sheets as google_sheets_module
 from tabula_rasa.storage.google_sheets import (
     BACKUP_FORMAT_VERSION,
     MIXED_USE_WORKSHEET_HEADERS,
@@ -193,6 +195,35 @@ def test_category_kind_change_rejects_mixed_use_references(
         if item["id"] == source["category_id"]
     )
     assert category["kind"] == "Expense"
+
+
+def test_category_edit_shares_mixed_use_creation_lock(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    category = next(
+        item for item in default_storage.list_categories() if item["name"] == "Office"
+    )
+    started = threading.Event()
+    finished = threading.Event()
+    errors: list[BaseException] = []
+
+    def edit_category() -> None:
+        started.set()
+        try:
+            default_storage.edit_category(category["id"], name="Office updated")
+        except BaseException as error:  # pragma: no cover - assertion below reports it
+            errors.append(error)
+        finally:
+            finished.set()
+
+    worker = threading.Thread(target=edit_category)
+    with google_sheets_module._MIXED_USE_CREATE_LOCK:
+        worker.start()
+        assert started.wait(1)
+        assert not finished.wait(0.1)
+    assert finished.wait(1)
+    worker.join(timeout=1)
+    assert not errors
 
 
 def test_generic_transaction_mutations_reject_mixed_use_projections(
@@ -825,6 +856,53 @@ def test_receipt_recovery_restarts_after_mixed_use_pair_drift(
     assert calls == 3
 
 
+def test_receipt_recovery_rejects_unrelated_receipt_drift(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    unrelated = default_storage.create_transaction(
+        **_expense_inputs(default_storage),
+        kind="Expense",
+        amount="20",
+    )
+    expected_transactions = default_storage.list_transactions()
+    transaction_sheet = default_storage._worksheet("Transactions")
+    headers = default_storage._headers("Transactions")
+    unrelated_row = next(
+        row
+        for row in transaction_sheet.rows[1:]
+        if row[headers.index("id")] == unrelated["id"]
+    )
+    unrelated_row[headers.index("receipt_references")] = (
+        '[{"id":"unrelatedreceipt","name":"Receipt"}]'
+    )
+    default_storage._invalidate("Transactions")
+
+    applied, fresh_transactions = default_storage.apply_receipt_recovery_plan(
+        expected_transactions,
+        {
+            source["linked_transaction_id"]: [
+                {"id": "recoveredreceipt", "name": "Receipt"}
+            ]
+        },
+    )
+
+    assert applied is False
+    assert next(
+        item for item in fresh_transactions if item["id"] == unrelated["id"]
+    )["receipt_references"] == '[{"id":"unrelatedreceipt","name":"Receipt"}]'
+    assert next(
+        item
+        for item in fresh_transactions
+        if item["id"] == source["linked_transaction_id"]
+    )["receipt_references"] == "[]"
+
+
 def test_mixed_use_delete_rejects_pair_drift_before_deleting_rows(
     default_storage: GoogleSheetsStorage,
 ) -> None:
@@ -939,6 +1017,42 @@ def test_mixed_use_edit_classifies_unchanged_pair_as_retryable_not_applied(
 
     assert error.value.outcome == "not_applied"
     assert error.value.retryable is True
+
+
+def test_mixed_use_receipt_update_classifies_partial_pair_as_ambiguous(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    old_references = '[{"id":"old-receipt","name":"Receipt"}]'
+    transaction_sheet = default_storage._worksheet("Transactions")
+    source_sheet = default_storage._worksheet("MixedUseExpenses")
+    transaction_headers = default_storage._headers("Transactions")
+    source_headers = default_storage._headers("MixedUseExpenses")
+    transaction_sheet.rows[1][transaction_headers.index("receipt_references")] = (
+        old_references
+    )
+    source_sheet.rows[1][source_headers.index("receipt_references")] = old_references
+    default_storage._invalidate("Transactions")
+    default_storage._invalidate("MixedUseExpenses")
+
+    def apply_transaction_only(_requests: object) -> None:
+        transaction_sheet.rows[1][transaction_headers.index("receipt_references")] = "[]"
+        default_storage._invalidate("Transactions")
+        raise StorageUnavailableError("response lost", retryable=True)
+
+    default_storage._batch_update_spreadsheet = apply_transaction_only  # type: ignore[method-assign]
+    with pytest.raises(StorageBulkMutationUncertainError) as error:
+        default_storage.set_transaction_receipt_references(
+            source["linked_transaction_id"], []
+        )
+
+    assert error.value.outcome == "mixed_ambiguous"
+    assert error.value.retryable is False
 
 
 def test_mixed_use_uncertain_delete_rejects_partial_pair_as_ambiguous(
