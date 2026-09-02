@@ -324,3 +324,19 @@ def test_sidebar_does_not_query_google_until_usage_is_loaded() -> None:
 
     load.assert_not_called()
     assert any("Select Load usage" in str(call.args[0]) for call in caption.call_args_list)
+
+
+def test_sidebar_reuses_loaded_report_without_requerying_google() -> None:
+    report = GoogleMapsQuotaReport(project_number="123456789", services=())
+    session_state = {QUOTA_VIEW_REQUESTED_KEY: True}
+    with patch("tabula_rasa.google_maps_quota.st.expander", return_value=MagicMock()), patch(
+        "tabula_rasa.google_maps_quota.st.caption"
+    ), patch("tabula_rasa.google_maps_quota.st.markdown"), patch(
+        "tabula_rasa.google_maps_quota.st.button", return_value=False
+    ), patch("tabula_rasa.google_maps_quota.st.session_state", session_state), patch(
+        "tabula_rasa.google_maps_quota.load_google_maps_quota_report", return_value=report
+    ) as load:
+        render_google_maps_usage_sidebar(secrets())
+        render_google_maps_usage_sidebar(secrets())
+
+    load.assert_called_once()
