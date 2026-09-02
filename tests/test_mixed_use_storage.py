@@ -21,6 +21,7 @@ from tabula_rasa.storage import (
     GoogleSheetsStorage,
     StorageBulkMutationUncertainError,
     StorageConflictError,
+    StorageUnavailableError,
     StorageValidationError,
 )
 from tabula_rasa.storage.google_sheets import (
@@ -263,3 +264,53 @@ def test_mixed_use_uncertain_create_never_retries_projection_blindly(
     retried = default_storage.create_mixed_use_expense(**inputs)
     assert retried["id"] == "source-retry-safe"
     assert len(default_storage.list_transactions()) == 1
+
+
+def test_mixed_use_uncertain_edit_classifies_partial_pair_safely(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    original_replace = default_storage._replace_row
+    calls = 0
+
+    def replace_then_lose_first_result(title: str, row: object, record: object) -> None:
+        nonlocal calls
+        original_replace(title, row, record)  # type: ignore[arg-type]
+        calls += 1
+        if calls == 1:
+            raise StorageUnavailableError("uncertain", retryable=False)
+
+    default_storage._replace_row = replace_then_lose_first_result  # type: ignore[method-assign]
+    with pytest.raises(StorageBulkMutationUncertainError, match="ambiguous"):
+        default_storage.edit_mixed_use_expense(
+            source["id"],
+            total_expense="200",
+            business_use_percentage="25",
+            allocation_rationale="Updated use",
+        )
+
+
+def test_mixed_use_uncertain_delete_rejects_partial_pair_as_ambiguous(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    original_delete = default_storage._delete_mixed_use_row
+
+    def delete_then_lose_transaction_result(title: str, record_id: str) -> None:
+        original_delete(title, record_id)
+        if title == "Transactions":
+            raise StorageUnavailableError("uncertain", retryable=False)
+
+    default_storage._delete_mixed_use_row = delete_then_lose_transaction_result  # type: ignore[method-assign]
+    with pytest.raises(StorageBulkMutationUncertainError, match="ambiguous"):
+        default_storage.delete_mixed_use_expense(source["id"])
