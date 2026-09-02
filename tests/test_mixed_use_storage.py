@@ -236,6 +236,29 @@ def test_receipt_mutations_reject_half_populated_provenance(
     assert sources[0].values["id"] == source["id"]
 
 
+def test_receipt_recovery_rejects_half_populated_provenance(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured business use",
+    )
+    expected_transaction = default_storage.list_transactions()[0]
+    transaction_sheet = default_storage._worksheet("Transactions")
+    headers = default_storage._headers("Transactions")
+    transaction_sheet.rows[1][headers.index("source_type")] = ""
+    default_storage._invalidate("Transactions")
+
+    with pytest.raises(
+        StorageValidationError, match="incomplete transaction provenance"
+    ):
+        default_storage.apply_receipt_recovery_plan(
+            [expected_transaction], {expected_transaction["id"]: []}
+        )
+
+
 def test_mixed_use_delete_removes_source_and_projection(
     default_storage: GoogleSheetsStorage,
 ) -> None:
@@ -400,6 +423,50 @@ def test_mixed_use_create_returns_success_when_final_response_is_lost(
 
     assert result["id"] == inputs["source_id"]
     assert len(default_storage.list_transactions()) == 1
+
+
+def test_mixed_use_retry_reuses_projection_timestamp_after_postcondition_failure(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    inputs = {
+        **_expense_inputs(default_storage),
+        "total_expense": "100",
+        "business_use_percentage": "50",
+        "allocation_rationale": "Measured use",
+        "source_id": "source-postcondition-retry",
+        "linked_transaction_id": "transaction-postcondition-retry",
+    }
+    original_snapshot = default_storage._raw_mixed_use_snapshot
+    calls = 0
+
+    def fail_after_written_pair() -> tuple[
+        dict[str, dict[str, str]], dict[str, dict[str, str]]
+    ]:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise StorageUnavailableError("postcondition unavailable")
+        return original_snapshot()
+
+    default_storage._raw_mixed_use_snapshot = fail_after_written_pair  # type: ignore[method-assign]
+    with pytest.raises(StorageBulkMutationUncertainError, match="postcondition"):
+        default_storage.create_mixed_use_expense(**inputs)
+    default_storage._raw_mixed_use_snapshot = original_snapshot  # type: ignore[method-assign]
+    persisted_projection_created_at = default_storage._rows(
+        "Transactions", force_refresh=True
+    )[0].values["created_at"]
+
+    with patch(
+        "tabula_rasa.storage.google_sheets._utc_now",
+        return_value="2099-01-01T00:00:00Z",
+    ):
+        retried = default_storage.create_mixed_use_expense(**inputs)
+
+    assert retried["id"] == inputs["source_id"]
+    assert (
+        default_storage.list_transactions()[0]["created_at"]
+        == persisted_projection_created_at
+    )
 
 
 def test_mixed_use_edit_returns_success_when_final_response_is_lost(

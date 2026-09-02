@@ -2687,6 +2687,12 @@ class GoogleSheetsStorage:
             # A source-only retry must compare against the persisted source,
             # including its original timestamp, rather than regenerate it.
             source["created_at"] = str(existing_source.get("created_at", ""))
+        if existing_transaction is not None:
+            # A fully-applied retry must also compare against the projection's
+            # persisted timestamp, which is generated independently of the source.
+            projection["created_at"] = str(
+                existing_transaction.get("created_at", "")
+            )
         if existing_source is not None or existing_transaction is not None:
             if self._mixed_use_record_matches(
                 "MixedUseExpenses", existing_source, source
@@ -3265,9 +3271,13 @@ class GoogleSheetsStorage:
                 transaction.get("source_id"),
                 "Transaction source ID",
             )
+            if bool(source_type) != bool(source_id):
+                raise StorageValidationError(
+                    "Receipt recovery found incomplete transaction provenance."
+                )
             if not source_type:
                 continue
-            if source_type != MIXED_USE_SOURCE_TYPE or not source_id:
+            if source_type != MIXED_USE_SOURCE_TYPE:
                 raise StorageValidationError(
                     "Receipt recovery found invalid transaction provenance."
                 )
