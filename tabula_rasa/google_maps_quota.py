@@ -382,20 +382,20 @@ class GoogleMapsQuotaClient:
     def _get(self, url: str, params: Mapping[str, Any]) -> Mapping[str, Any]:
         try:
             response = self.session.get(url, params=dict(params), timeout=self.config.timeout_seconds)
-        except Exception as exc:
+        except Exception:
             raise GoogleMapsQuotaRequestError(
                 "Google Maps quota data is temporarily unavailable. Retry later."
-            ) from exc
+            ) from None
         if response.status_code != 200:
             raise GoogleMapsQuotaRequestError(
                 "Google Maps quota data could not be read. Verify the monitoring service account and APIs."
             )
         try:
             payload = response.json()
-        except (ValueError, TypeError) as exc:
+        except (ValueError, TypeError):
             raise GoogleMapsQuotaRequestError(
                 "Google Maps quota data could not be read. Retry later."
-            ) from exc
+            ) from None
         if not isinstance(payload, Mapping):
             raise GoogleMapsQuotaRequestError(
                 "Google Maps quota data could not be read. Retry later."

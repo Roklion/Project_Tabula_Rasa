@@ -241,6 +241,8 @@ def test_client_redacts_transport_and_http_failures() -> None:
     with pytest.raises(GoogleMapsQuotaRequestError) as error:
         client._get("https://example.test", {})
     assert "private-key" not in str(error.value)
+    assert error.value.__cause__ is None
+    assert error.value.__suppress_context__ is True
 
     session.get.side_effect = None
     session.get.return_value = Mock(status_code=403)
