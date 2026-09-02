@@ -1494,6 +1494,8 @@ class GoogleSheetsStorage:
         self,
         title: str,
         updates: Sequence[tuple[_StoredRow, Mapping[str, Any]]],
+        *,
+        before_retry: Callable[[], None] | None = None,
     ) -> None:
         if not updates:
             return
@@ -1542,7 +1544,11 @@ class GoogleSheetsStorage:
                     == row.values
                     for row, _ in current_updates
                 ):
-                    raise
+                    raise StorageConflictError(
+                        f"A row in {title} changed unexpectedly during a write retry."
+                    ) from error
+                if before_retry is not None:
+                    before_retry()
                 current_updates = [
                     (
                         current_by_id[
@@ -2103,7 +2109,7 @@ class GoogleSheetsStorage:
         ).title()
         if kind not in CATEGORY_KINDS:
             raise StorageValidationError("Category kind must be Income or Expense")
-        if kind != updated["kind"]:
+        def reject_mixed_use_kind_change() -> None:
             sources, _ = self._raw_mixed_use_snapshot()
             if any(
                 str(source.get("category_id") or "").strip()
@@ -2113,6 +2119,8 @@ class GoogleSheetsStorage:
                 raise StorageConflictError(
                     "Category kind cannot change while used by a mixed-use expense"
                 )
+        if kind != updated["kind"]:
+            reject_mixed_use_kind_change()
         if any(
             category["id"] != normalized_category_id
             and category["name"].casefold() == name.casefold()
@@ -2138,7 +2146,14 @@ class GoogleSheetsStorage:
             compatibility_field="kind",
             item_label="Category",
         )
-        self._replace_row("Categories", current, updated)
+        if kind != current.values["kind"]:
+            self._replace_rows(
+                "Categories",
+                [(current, updated)],
+                before_retry=reject_mixed_use_kind_change,
+            )
+        else:
+            self._replace_row("Categories", current, updated)
         return updated
 
     def delete_category(self, category_id: str) -> None:
@@ -3549,6 +3564,16 @@ class GoogleSheetsStorage:
                     "Receipt recovery found incomplete transaction provenance."
                 )
             if not source_type:
+                expected_source_type = _clean_text(
+                    expected_by_id[transaction_id].get("source_type"),
+                    "Expected transaction source type",
+                )
+                expected_source_id = _clean_text(
+                    expected_by_id[transaction_id].get("source_id"),
+                    "Expected transaction source ID",
+                )
+                if expected_source_type or expected_source_id:
+                    return False, current_transactions
                 continue
             if source_type != MIXED_USE_SOURCE_TYPE:
                 raise StorageValidationError(

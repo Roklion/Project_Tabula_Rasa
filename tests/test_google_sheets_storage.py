@@ -1366,6 +1366,36 @@ class TestGoogleSheetsStorage:
 
         assert self.storage.list_categories() == [category]
 
+    def test_edit_category_rechecks_mixed_use_sources_during_retry(
+        self,
+    ) -> None:
+        category = self.storage.create_category("Editable mixed-use", "Expense")
+        source_headers = self.storage._headers("MixedUseExpenses")
+        source_row = [""] * len(source_headers)
+        source_row[source_headers.index("id")] = "source-edit-119"
+        source_row[source_headers.index("category_id")] = category["id"]
+        source_sheet = self.workbook.sheets["MixedUseExpenses"]
+        category_sheet = self.workbook.sheets["Categories"]
+        original_batch_update = category_sheet.batch_update
+        injected = False
+
+        def inject_source_then_timeout(
+            data: list[dict[str, object]], **kwargs: object
+        ) -> None:
+            nonlocal injected
+            if not injected:
+                injected = True
+                source_sheet.append_row(source_row)
+                raise OSError("response lost before category update")
+            original_batch_update(data, **kwargs)
+
+        category_sheet.batch_update = inject_source_then_timeout
+
+        with pytest.raises(StorageConflictError, match="mixed-use expense"):
+            self.storage.edit_category(category["id"], kind="Income")
+
+        assert self.storage.list_categories() == [category]
+
     def test_category_hierarchy_transitions_and_validation(self) -> None:
         account = self.storage.create_account("Checking", "Bank")
         travel = self.storage.create_category("Travel", "Expense")

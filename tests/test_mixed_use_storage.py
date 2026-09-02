@@ -551,6 +551,31 @@ def test_replace_rows_rebuilds_ranges_after_rows_shift_during_retry(
     assert rows[0].values["id"] == "inserted-before-retry"
 
 
+def test_replace_rows_reports_conflict_when_row_changes_during_retry(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    account = default_storage.create_account("Retry conflict", "Bank")
+    row = default_storage._find_row("Accounts", account["id"])
+    worksheet = default_storage._worksheet("Accounts")
+    original_batch_update = worksheet.batch_update
+
+    def change_then_timeout(data: list[dict[str, object]], **kwargs: object) -> None:
+        del data, kwargs
+        worksheet.rows[row.row_number - 1][worksheet.rows[0].index("name")] = (
+            "Changed elsewhere"
+        )
+        raise OSError("temporary response lost")
+
+    worksheet.batch_update = change_then_timeout  # type: ignore[method-assign]
+
+    with pytest.raises(StorageConflictError, match="changed unexpectedly"):
+        default_storage._replace_rows(
+            "Accounts", [(row, {**row.values, "name": "Retry conflict updated"})]
+        )
+
+    worksheet.batch_update = original_batch_update  # type: ignore[method-assign]
+
+
 def test_mixed_use_backup_round_trip_includes_source_and_linkage(
     default_storage: GoogleSheetsStorage,
 ) -> None:
@@ -981,6 +1006,32 @@ def test_receipt_recovery_restarts_after_mixed_use_pair_drift(
         '[{"id":"recovery-concurrent","name":"Receipt"}]'
     )
     assert calls == 3
+
+
+def test_receipt_recovery_restarts_after_mixed_use_provenance_drift(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    expected_transactions = default_storage.list_transactions()
+    transaction_sheet = default_storage._worksheet("Transactions")
+    headers = default_storage._headers("Transactions")
+    transaction_sheet.rows[1][headers.index("source_type")] = ""
+    transaction_sheet.rows[1][headers.index("source_id")] = ""
+    default_storage._invalidate("Transactions")
+
+    applied, fresh_transactions = default_storage.apply_receipt_recovery_plan(
+        expected_transactions,
+        {source["linked_transaction_id"]: []},
+    )
+
+    assert applied is False
+    assert fresh_transactions[0]["source_type"] == ""
+    assert fresh_transactions[0]["source_id"] == ""
 
 
 def test_receipt_recovery_rejects_unrelated_receipt_drift(
