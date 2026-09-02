@@ -211,6 +211,11 @@ def rewrite_backup_tables(
         manifest["sha256"][filename] = hashlib.sha256(
             contents[filename]
         ).hexdigest()
+    if format_version is not None and format_version < BACKUP_FORMAT_VERSION:
+        contents.pop("MixedUseExpenses.csv", None)
+        manifest["worksheet_headers"].pop("MixedUseExpenses", None)
+        manifest["row_counts"].pop("MixedUseExpenses", None)
+        manifest["sha256"].pop("MixedUseExpenses.csv", None)
     contents["manifest.json"] = json.dumps(manifest).encode("utf-8")
     with zipfile.ZipFile(output, "w") as destination:
         for name, content in contents.items():
@@ -2150,6 +2155,7 @@ class TestGoogleSheetsStorage:
                 "Payees.csv",
                 "Transactions.csv",
                 "Mileage.csv",
+                "MixedUseExpenses.csv",
                 "manifest.json",
                 "receipts.json",
             }

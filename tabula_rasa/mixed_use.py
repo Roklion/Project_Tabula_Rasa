@@ -50,6 +50,7 @@ def calculate_allocated_amount(
 ) -> Decimal:
     """Return the currency-rounded business portion of a mixed-use expense."""
     total = _decimal(total_expense, "Total expense")
+    total = total.quantize(CURRENCY_QUANTUM)
     percentage = _decimal(business_use_percentage, "Business-use percentage")
     if total <= 0:
         raise MixedUseAllocationError("Total expense must be greater than zero")

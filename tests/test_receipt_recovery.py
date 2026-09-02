@@ -1101,6 +1101,9 @@ def test_recovery_identifies_pre_manifest_v4_as_ledger_only() -> None:
         ledger_manifest = json.loads(source.read("manifest.json"))
         ledger_manifest["format_version"] = 4
         ledger_manifest["sha256"].pop("receipts.json")
+        ledger_manifest["sha256"].pop("MixedUseExpenses.csv", None)
+        ledger_manifest["row_counts"].pop("MixedUseExpenses", None)
+        ledger_manifest["worksheet_headers"].pop("MixedUseExpenses", None)
         transaction_bytes = source.read("Transactions.csv").replace(
             b"payee_id", b"payee"
         )
@@ -1113,7 +1116,7 @@ def test_recovery_identifies_pre_manifest_v4_as_ledger_only() -> None:
             transaction_bytes
         ).hexdigest()
         for name in source.namelist():
-            if name == "receipts.json":
+            if name in {"receipts.json", "MixedUseExpenses.csv"}:
                 continue
             destination.writestr(
                 name,

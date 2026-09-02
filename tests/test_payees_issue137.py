@@ -50,6 +50,10 @@ def _legacy_backup(storage: GoogleSheetsStorage, payee_name: str) -> bytes:
     manifest["row_counts"].pop("Payees")
     manifest["sha256"].pop("Payees.csv")
     contents.pop("Payees.csv")
+    manifest["worksheet_headers"].pop("MixedUseExpenses", None)
+    manifest["row_counts"].pop("MixedUseExpenses", None)
+    manifest["sha256"].pop("MixedUseExpenses.csv", None)
+    contents.pop("MixedUseExpenses.csv", None)
     contents["manifest.json"] = json.dumps(manifest).encode("utf-8")
     with zipfile.ZipFile(output, "w") as destination:
         for name, content in contents.items():
@@ -1095,6 +1099,10 @@ def test_legacy_backup_without_transactions_preserves_existing_payees() -> None:
     ).hexdigest()
     manifest["sha256"].pop("Payees.csv")
     contents.pop("Payees.csv")
+    manifest["worksheet_headers"].pop("MixedUseExpenses", None)
+    manifest["row_counts"].pop("MixedUseExpenses", None)
+    manifest["sha256"].pop("MixedUseExpenses.csv", None)
+    contents.pop("MixedUseExpenses.csv", None)
     contents["manifest.json"] = json.dumps(manifest).encode("utf-8")
     with zipfile.ZipFile(output, "w") as destination:
         for name, content in contents.items():

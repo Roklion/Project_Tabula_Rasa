@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+import hashlib
 import io
 import json
 import zipfile
@@ -19,6 +21,7 @@ from tabula_rasa.storage import (
     GoogleSheetsStorage,
     StorageBulkMutationUncertainError,
     StorageConflictError,
+    StorageValidationError,
 )
 from tabula_rasa.storage.google_sheets import (
     BACKUP_FORMAT_VERSION,
@@ -169,6 +172,40 @@ def test_mixed_use_backup_round_trip_includes_source_and_linkage(
     assert target.list_transactions()[0]["source_id"] == source["id"]
 
 
+def test_current_backup_rejects_orphaned_mixed_use_projection(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="80",
+        business_use_percentage="12.5",
+        allocation_rationale="Home office calculation",
+    )
+    backup = default_storage.export_backup_zip(
+        {"business_profile_key": "test", "receipts": [], "schema_version": 1}
+    )
+    output = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(backup)) as source, zipfile.ZipFile(
+        output, "w"
+    ) as destination:
+        contents = {name: source.read(name) for name in source.namelist()}
+        rows = list(csv.reader(io.StringIO(contents["Transactions.csv"].decode())))
+        rows[1][rows[0].index("source_id")] = "missing-source"
+        csv_buffer = io.StringIO(newline="")
+        csv.writer(csv_buffer, lineterminator="\n").writerows(rows)
+        contents["Transactions.csv"] = csv_buffer.getvalue().encode()
+        manifest = json.loads(contents["manifest.json"])
+        manifest["sha256"]["Transactions.csv"] = hashlib.sha256(
+            contents["Transactions.csv"]
+        ).hexdigest()
+        contents["manifest.json"] = json.dumps(manifest).encode()
+        for name, content in contents.items():
+            destination.writestr(name, content)
+
+    with pytest.raises(StorageValidationError, match="unknown source"):
+        GoogleSheetsStorage.validate_backup_zip(output.getvalue())
+
+
 def test_writable_initialization_upgrades_pre_mixed_workbook_idempotently() -> None:
     workbook = FakeWorkbook(PRE_MIXED_USE_WORKSHEET_HEADERS)
     google_client = type("GoogleClient", (), {"open_by_key": lambda self, _: workbook})()
@@ -222,3 +259,7 @@ def test_mixed_use_uncertain_create_never_retries_projection_blindly(
 
     assert len(default_storage._rows("MixedUseExpenses", force_refresh=True)) == 1
     assert default_storage._rows("Transactions", force_refresh=True) == []
+    default_storage._append = original_append  # type: ignore[method-assign]
+    retried = default_storage.create_mixed_use_expense(**inputs)
+    assert retried["id"] == "source-retry-safe"
+    assert len(default_storage.list_transactions()) == 1

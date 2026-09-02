@@ -2328,6 +2328,11 @@ class GoogleSheetsStorage:
                 )
             if item["source_type"] and item["source_type"] != MIXED_USE_SOURCE_TYPE:
                 raise StorageValidationError("Transaction source type is unsupported")
+            if not item["source_type"]:
+                # Preserve the pre-Phase-A public shape for ordinary rows while
+                # exposing both fields whenever a projection is present.
+                item.pop("source_type")
+                item.pop("source_id")
             if item["payee_id"] and item["payee_id"] not in payees:
                 raise StorageValidationError("Payee does not exist")
             item["payee"] = payees.get(item["payee_id"], {}).get("name", "")
@@ -2493,6 +2498,7 @@ class GoogleSheetsStorage:
         source_id: str | None = None,
         linked_transaction_id: str | None = None,
         created_at: str | None = None,
+        original_transaction: Mapping[str, Any] | None = None,
     ) -> tuple[dict[str, str], dict[str, str]]:
         try:
             allocation = validate_mixed_use_allocation(
@@ -2523,7 +2529,8 @@ class GoogleSheetsStorage:
                 "kind": "Expense",
                 "amount": allocation.allocated_amount,
                 "description": original_description,
-            }
+            },
+            original_transaction=original_transaction,
         )
         source = {
             "id": source_id,
@@ -2613,6 +2620,38 @@ class GoogleSheetsStorage:
                 "Transactions", existing_transaction, projection
             ):
                 return self.get_mixed_use_expense(source_id)
+            if (
+                self._mixed_use_record_matches(
+                    "MixedUseExpenses", existing_source, source
+                )
+                and existing_transaction is None
+            ):
+                # A source-only result is an incomplete operation, not a new
+                # create. Reusing the caller's stable IDs safely resumes the
+                # missing projection without creating a second source.
+                try:
+                    self._append("Transactions", projection)
+                except StorageUnavailableError as error:
+                    self._mixed_use_mutation_result(
+                        operation="create",
+                        source_id=source_id,
+                        transaction_id=transaction_id,
+                        expected_source=source,
+                        expected_transaction=projection,
+                        error=error,
+                    )
+                    raise AssertionError(
+                        "Mixed-use create retry postcondition did not classify"
+                    )
+                self._mixed_use_mutation_result(
+                    operation="create",
+                    source_id=source_id,
+                    transaction_id=transaction_id,
+                    expected_source=source,
+                    expected_transaction=projection,
+                    error=None,
+                )
+                return self.get_mixed_use_expense(source_id)
             raise StorageConflictError(
                 "The mixed-use source or linked transaction ID is already in use"
             )
@@ -2695,6 +2734,7 @@ class GoogleSheetsStorage:
             source_id=source_id,
             linked_transaction_id=transaction_id,
             created_at=current_source.get("created_at"),
+            original_transaction=current_transaction,
         )
         try:
             self._replace_row(

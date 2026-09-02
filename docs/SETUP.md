@@ -77,8 +77,9 @@ make the workbook public.
 | Accounts | id, name, type, classification, opening_balance, active, created_at, parent_id |
 | Categories | id, name, kind, parent_id |
 | Payees | id, name, active, created_at |
-| Transactions | id, txn_date, kind, amount, account_id, to_account_id, category_id, payee_id, description, reference, receipt_references, created_at |
+| Transactions | id, txn_date, kind, amount, account_id, to_account_id, category_id, payee_id, description, reference, receipt_references, created_at, source_type, source_id |
 | Mileage | id, trip_date, miles, vehicle, start_location, destination, business_purpose, notes, created_at |
+| MixedUseExpenses | id, txn_date, kind, total_expense, business_use_percentage, allocated_amount, account_id, category_id, payee_id, description, reference, receipt_references, allocation_rationale, linked_transaction_id, created_at |
 
 The default Sheet1 tab may remain or be deleted. Existing compatible tabs are
 preserved. Empty required tabs receive headers; populated incompatible tabs
@@ -91,9 +92,12 @@ with the one-time payee migration before using the managed `Payees` and
 for the migration command and legacy-backup compatibility details.
 
 On normal startup, the application migrates exact legacy format-version 5
-Accounts and Categories headers by appending a blank parent_id column. Existing
-rows remain Layer 1 records. The read-only validation command accepts those
-legacy headers before startup without modifying the workbook.
+Accounts and Categories headers by appending a blank parent_id column. It also
+creates the MixedUseExpenses worksheet and appends blank source_type/source_id
+columns to Transactions when upgrading a pre-mixed-use workbook. Existing rows
+remain ordinary records with no mixed-use linkage. These migrations are
+idempotent. The read-only validation command does not modify legacy headers or
+create the new worksheet.
 
 ## Local profile administration
 
