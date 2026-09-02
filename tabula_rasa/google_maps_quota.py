@@ -424,6 +424,8 @@ class GoogleMapsQuotaClient:
         end = self.now()
         if end.tzinfo is None:
             end = end.replace(tzinfo=timezone.utc)
+        else:
+            end = end.astimezone(timezone.utc)
         start = end - timedelta(minutes=15)
         url = f"{MONITORING_ENDPOINT}/projects/{self.config.project_number}/timeSeries"
         params: dict[str, Any] = {
@@ -432,8 +434,8 @@ class GoogleMapsQuotaClient:
                 f'resource.type = "{MONITORING_RESOURCE_TYPE}" AND '
                 f'resource.labels.service = "{service}"'
             ),
-            "interval.startTime": start.isoformat().replace("+00:00", "Z"),
-            "interval.endTime": end.isoformat().replace("+00:00", "Z"),
+            "interval.startTime": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "interval.endTime": end.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "aggregation.alignmentPeriod": "60s",
             "aggregation.perSeriesAligner": "ALIGN_RATE",
             "aggregation.crossSeriesReducer": "REDUCE_SUM",
@@ -612,16 +614,16 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
             st.session_state.pop(QUOTA_CONFIG_ERROR_CONFIG_KEY, None)
             st.rerun()
         report = st.session_state.get(QUOTA_REPORT_SESSION_KEY)
-        config_identity = _quota_config_identity(config)
+        current_config_identity = _quota_config_identity(config)
         if report is not None:
             fetched_at = st.session_state.get(QUOTA_REPORT_FETCHED_AT_KEY)
-            config_identity = st.session_state.get(QUOTA_REPORT_CONFIG_KEY)
+            cached_config_identity = st.session_state.get(QUOTA_REPORT_CONFIG_KEY)
             now = datetime.now(timezone.utc)
             stale = (
                 not isinstance(fetched_at, datetime)
                 or fetched_at.tzinfo is None
                 or now - fetched_at >= timedelta(seconds=QUOTA_CACHE_TTL_SECONDS)
-                or config_identity != _quota_config_identity(config)
+                or cached_config_identity != current_config_identity
                 or getattr(report, "project_number", None) != config.project_number
             )
             if stale:
@@ -633,23 +635,23 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
                 report = load_google_maps_quota_report(secrets_mapping)
             except GoogleMapsQuotaConfigurationError as exc:
                 st.session_state[QUOTA_CONFIG_ERROR_KEY] = str(exc)
-                st.session_state[QUOTA_CONFIG_ERROR_CONFIG_KEY] = config_identity
+                st.session_state[QUOTA_CONFIG_ERROR_CONFIG_KEY] = current_config_identity
             except GoogleMapsQuotaError:
                 pass
             else:
                 st.session_state[QUOTA_REPORT_SESSION_KEY] = report
                 st.session_state[QUOTA_REPORT_FETCHED_AT_KEY] = datetime.now(timezone.utc)
-                st.session_state[QUOTA_REPORT_CONFIG_KEY] = config_identity
+                st.session_state[QUOTA_REPORT_CONFIG_KEY] = current_config_identity
                 st.session_state.pop(QUOTA_CONFIG_ERROR_KEY, None)
                 st.session_state.pop(QUOTA_CONFIG_ERROR_CONFIG_KEY, None)
         config_error = st.session_state.get(QUOTA_CONFIG_ERROR_KEY)
-        if config_error and st.session_state.get(QUOTA_CONFIG_ERROR_CONFIG_KEY) != config_identity:
+        if config_error and st.session_state.get(QUOTA_CONFIG_ERROR_CONFIG_KEY) != current_config_identity:
             st.session_state.pop(QUOTA_CONFIG_ERROR_KEY, None)
             st.session_state.pop(QUOTA_CONFIG_ERROR_CONFIG_KEY, None)
             config_error = None
         if config_error:
             st.error(config_error)
-            if st.button("Retry", key="retry-google-maps-usage-sidebar"):
+            if st.button("Retry", key="retry-config-error-google-maps-usage-sidebar"):
                 st.session_state.pop(QUOTA_FETCH_ATTEMPTED_KEY, None)
                 st.session_state.pop(QUOTA_CONFIG_ERROR_KEY, None)
                 st.session_state.pop(QUOTA_CONFIG_ERROR_CONFIG_KEY, None)
@@ -657,7 +659,7 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
             return
         if report is None:
             st.warning("Google Maps usage is temporarily unavailable.")
-            if st.button("Retry", key="retry-google-maps-usage-sidebar"):
+            if st.button("Retry", key="retry-fetch-error-google-maps-usage-sidebar"):
                 st.session_state.pop(QUOTA_FETCH_ATTEMPTED_KEY, None)
                 st.rerun()
             return

@@ -189,7 +189,11 @@ def test_client_paginates_service_usage_and_queries_both_services() -> None:
     ]
     config = GoogleMapsQuotaMonitoringConfig.from_secrets(secrets())
     report = GoogleMapsQuotaClient(
-        config, session=session, now=lambda: datetime(2026, 9, 1, tzinfo=timezone.utc)
+        config,
+        session=session,
+        now=lambda: datetime(
+            2026, 9, 1, 12, tzinfo=timezone(timedelta(hours=-4))
+        ),
     ).fetch_report()
     assert [item.service for item in report.services] == [
         "routes.googleapis.com",
@@ -199,6 +203,12 @@ def test_client_paginates_service_usage_and_queries_both_services() -> None:
     assert session.get.call_args_list[1].kwargs["params"]["pageToken"] == "next"
     assert session.get.call_args_list[2].kwargs["params"]["aggregation.groupByFields"] == (
         "metric.labels.quota_metric"
+    )
+    assert session.get.call_args_list[2].kwargs["params"]["interval.startTime"] == (
+        "2026-09-01T15:45:00Z"
+    )
+    assert session.get.call_args_list[2].kwargs["params"]["interval.endTime"] == (
+        "2026-09-01T16:00:00Z"
     )
     assert session.get.call_args_list[3].kwargs["params"]["pageToken"] == "usage-next"
 
