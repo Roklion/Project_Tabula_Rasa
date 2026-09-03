@@ -361,6 +361,66 @@ def test_category_delete_shares_mixed_use_creation_lock(
     assert not errors
 
 
+def test_transaction_delete_shares_mixed_use_creation_lock(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    transaction = default_storage.create_transaction(
+        **_expense_inputs(default_storage), kind="Expense", amount="10"
+    )
+    started = threading.Event()
+    finished = threading.Event()
+    errors: list[BaseException] = []
+
+    def delete_transaction() -> None:
+        started.set()
+        try:
+            default_storage.delete_transaction(transaction["id"])
+        except BaseException as error:  # pragma: no cover - assertion below reports it
+            errors.append(error)
+        finally:
+            finished.set()
+
+    worker = threading.Thread(target=delete_transaction)
+    with google_sheets_module._MIXED_USE_CREATE_LOCK:
+        worker.start()
+        assert started.wait(1)
+        assert not finished.wait(0.1)
+    assert finished.wait(1)
+    worker.join(timeout=1)
+    assert not errors
+
+
+def test_bulk_transaction_delete_shares_mixed_use_creation_lock(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    transaction = default_storage.create_transaction(
+        **_expense_inputs(default_storage), kind="Expense", amount="10"
+    )
+    started = threading.Event()
+    finished = threading.Event()
+    errors: list[BaseException] = []
+
+    def delete_transaction() -> None:
+        started.set()
+        try:
+            default_storage.bulk_delete_transactions(
+                [transaction["id"]], expected_transactions=[transaction]
+            )
+        except BaseException as error:  # pragma: no cover - assertion below reports it
+            errors.append(error)
+        finally:
+            finished.set()
+
+    worker = threading.Thread(target=delete_transaction)
+    with google_sheets_module._MIXED_USE_CREATE_LOCK:
+        worker.start()
+        assert started.wait(1)
+        assert not finished.wait(0.1)
+    assert finished.wait(1)
+    worker.join(timeout=1)
+    assert not errors
+
+
 def test_category_delete_rejects_orphaned_mixed_use_source(
     default_storage: GoogleSheetsStorage,
 ) -> None:

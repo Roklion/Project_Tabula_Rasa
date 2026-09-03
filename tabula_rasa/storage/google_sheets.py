@@ -1870,54 +1870,55 @@ class GoogleSheetsStorage:
         expected_transactions: Sequence[Mapping[str, Any]],
     ) -> dict[str, str]:
         """Revalidate and delete transactions with one atomic row-index batch."""
-        selected_rows, current_by_id = self._fresh_bulk_transaction_snapshot(
-            transaction_ids, expected_transactions
-        )
-        for transaction in current_by_id.values():
-            self._reject_mixed_use_projection(transaction)
-        sheet_id = self._transactions_sheet_id()
-        requests = [
-            {
-                "deleteDimension": {
-                    "range": {
-                        "sheetId": sheet_id,
-                        "dimension": "ROWS",
-                        "startIndex": selected_rows[transaction_id].row_number - 1,
-                        "endIndex": selected_rows[transaction_id].row_number,
+        with _MIXED_USE_CREATE_LOCK:
+            selected_rows, current_by_id = self._fresh_bulk_transaction_snapshot(
+                transaction_ids, expected_transactions
+            )
+            for transaction in current_by_id.values():
+                self._reject_mixed_use_projection(transaction)
+            sheet_id = self._transactions_sheet_id()
+            requests = [
+                {
+                    "deleteDimension": {
+                        "range": {
+                            "sheetId": sheet_id,
+                            "dimension": "ROWS",
+                            "startIndex": selected_rows[transaction_id].row_number - 1,
+                            "endIndex": selected_rows[transaction_id].row_number,
+                        }
                     }
                 }
-            }
-            for transaction_id in sorted(
-                selected_rows,
-                key=lambda item: selected_rows[item].row_number,
-                reverse=True,
-            )
-        ]
-        try:
-            self._batch_update_spreadsheet(requests)
-        except StorageUnavailableError as error:
-            outcome = self._bulk_postcondition_error(
+                for transaction_id in sorted(
+                    selected_rows,
+                    key=lambda item: selected_rows[item].row_number,
+                    reverse=True,
+                )
+            ]
+            try:
+                self._batch_update_spreadsheet(requests)
+            except StorageUnavailableError as error:
+                outcome = self._bulk_postcondition_error(
+                    operation="transaction deletion",
+                    error=error,
+                    expected_by_id=current_by_id,
+                    postcondition=lambda current: all(
+                        item in current and current[item] == current_by_id[item]
+                        for item in current_by_id
+                    ),
+                    fully_applied=lambda current: not any(
+                        item in current for item in current_by_id
+                    ),
+                )
+                if outcome is not None:
+                    return outcome
+                raise AssertionError("Bulk deletion postcondition did not classify")
+            self._verify_bulk_success(
                 operation="transaction deletion",
-                error=error,
-                expected_by_id=current_by_id,
-                postcondition=lambda current: all(
-                    item in current and current[item] == current_by_id[item]
-                    for item in current_by_id
-                ),
-                fully_applied=lambda current: not any(
+                postcondition=lambda current: not any(
                     item in current for item in current_by_id
                 ),
             )
-            if outcome is not None:
-                return outcome
-            raise AssertionError("Bulk deletion postcondition did not classify")
-        self._verify_bulk_success(
-            operation="transaction deletion",
-            postcondition=lambda current: not any(
-                item in current for item in current_by_id
-            ),
-        )
-        return {"status": "fully_applied", "count": str(len(selected_rows))}
+            return {"status": "fully_applied", "count": str(len(selected_rows))}
 
     def list_accounts(
         self, *, active_only: bool = True, _force_refresh: bool = False
@@ -4037,28 +4038,29 @@ class GoogleSheetsStorage:
         )
 
     def delete_transaction(self, transaction_id: str) -> None:
-        for attempt in range(self._retry_attempts):
-            current = self._find_row("Transactions", transaction_id)
-            self._reject_mixed_use_projection(current.values)
-            worksheet = self._worksheet("Transactions")
-            try:
-                self._api(
-                    lambda: worksheet.delete_rows(current.row_number),
-                    retry_safe=False,
-                )
-                self._invalidate("Transactions")
-                return
-            except StorageUnavailableError as error:
-                self._invalidate("Transactions")
-                if not error.retryable:
-                    raise
+        with _MIXED_USE_CREATE_LOCK:
+            for attempt in range(self._retry_attempts):
+                current = self._find_row("Transactions", transaction_id)
+                self._reject_mixed_use_projection(current.values)
+                worksheet = self._worksheet("Transactions")
                 try:
-                    self._find_row("Transactions", transaction_id)
-                except StorageNotFoundError:
+                    self._api(
+                        lambda: worksheet.delete_rows(current.row_number),
+                        retry_safe=False,
+                    )
+                    self._invalidate("Transactions")
                     return
-                if attempt + 1 >= self._retry_attempts:
-                    raise
-                self._sleeper(self._retry_base_delay_seconds * (2**attempt))
+                except StorageUnavailableError as error:
+                    self._invalidate("Transactions")
+                    if not error.retryable:
+                        raise
+                    try:
+                        self._find_row("Transactions", transaction_id)
+                    except StorageNotFoundError:
+                        return
+                    if attempt + 1 >= self._retry_attempts:
+                        raise
+                    self._sleeper(self._retry_base_delay_seconds * (2**attempt))
 
     def _prepare_mileage_trip(
         self,
