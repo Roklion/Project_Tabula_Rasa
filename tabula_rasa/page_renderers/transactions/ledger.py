@@ -32,6 +32,7 @@ from tabula_rasa.page_renderers.tag_selector import (
     inline_tag_name_error,
     render_tag_selector,
     schedule_tag_selector_reset,
+    tag_selector_error,
 )
 from tabula_rasa.storage import StorageError, decode_receipt_references
 
@@ -1002,6 +1003,12 @@ def render_ledger(
                         and edited_account_id == edited_to_account_id
                     ):
                         edit_error.error("Transfer accounts must be different.")
+                    elif (
+                        tag_error := tag_selector_error(
+                            f"edit_transaction_tags_{edit_widget_scope}"
+                        )
+                    ):
+                        edit_error.error(tag_error)
                     elif (tag_error := inline_tag_name_error(edited_new_tag_name)):
                         edit_error.error(tag_error)
                     elif copy_mode:

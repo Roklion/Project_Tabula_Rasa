@@ -23,6 +23,7 @@ from tabula_rasa.page_renderers.tag_selector import (
     inline_tag_name_error,
     render_tag_selector,
     schedule_tag_selector_reset,
+    tag_selector_error,
 )
 from tabula_rasa.storage import GoogleSheetsStorage, StorageError, normalize_tag_name
 
@@ -915,6 +916,8 @@ def render_mileage(context: MileageContext) -> None:
                     and not new_tag_name.strip()
                 ):
                     save_error.error("Enter a Tag name before saving.")
+                elif (tag_error := tag_selector_error("add_mileage_tag_ids")):
+                    save_error.error(tag_error)
                 elif (tag_error := inline_tag_name_error(new_tag_name)):
                     save_error.error(tag_error)
                 elif start.place_id and not recorded_start.strip():
@@ -1294,6 +1297,12 @@ def render_mileage(context: MileageContext) -> None:
                             and not edited_new_tag_name.strip()
                         ):
                             edit_error.error("Enter a Tag name before saving.")
+                        elif (
+                            tag_error := tag_selector_error(
+                                f"edit_mileage_trip_tag_ids_{edit_widget_scope}"
+                            )
+                        ):
+                            edit_error.error(tag_error)
                         elif (tag_error := inline_tag_name_error(edited_new_tag_name)):
                             edit_error.error(tag_error)
                         else:
