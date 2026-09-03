@@ -131,13 +131,18 @@ def _render_payees(context: PayeesTagsContext, payees: list[dict[str, str]]) -> 
     with st.expander("Remove payee"):
         remove_id = st.selectbox("Payee to remove", ids, format_func=labels, key=f"managed_remove_payee_id_{context.profile_key}")
         remove_name = by_id[remove_id]["name"]
-        if counts.get(remove_id, 0):
+        is_referenced = bool(counts.get(remove_id, 0))
+        if is_referenced:
             st.info(f"This payee has {counts[remove_id]} references. Unassign it from those records or merge it before removal.")
         st.warning(f"Permanently removing payee {remove_name!r} cannot be undone and is available only when it is unreferenced.")
-        remove_ack = st.checkbox(f"I understand payee {remove_name!r} will be permanently removed and cannot be restored", key=f"managed_remove_payee_ack_{context.profile_key}")
+        remove_ack = st.checkbox(
+            f"I understand payee {remove_name!r} will be permanently removed and cannot be restored",
+            key=f"managed_remove_payee_ack_{context.profile_key}_{remove_id}",
+            disabled=is_referenced,
+        )
         remove_error = st.empty()
         with st.container(key="destructive_managed_payee_remove"):
-            if st.button("Permanently remove payee", icon=":material/delete_forever:", key=f"managed_remove_payee_{context.profile_key}"):
+            if st.button("Permanently remove payee", icon=":material/delete_forever:", key=f"managed_remove_payee_{context.profile_key}", disabled=is_referenced):
                 if not remove_ack:
                     remove_error.error("Acknowledge permanent removal before continuing. No data changed.")
                 else:
@@ -210,13 +215,18 @@ def _render_tags(context: PayeesTagsContext, tags: list[dict[str, str]]) -> None
     with st.expander("Remove tag"):
         remove_id = st.selectbox("Tag to remove", ids, format_func=labels, key=f"managed_remove_tag_id_{context.profile_key}")
         remove_name = by_id[remove_id]["name"]
-        if counts.get(remove_id, 0):
+        is_referenced = bool(counts.get(remove_id, 0))
+        if is_referenced:
             st.info(f"This tag has {counts[remove_id]} references. Unassign it from those records or merge it before removal.")
         st.warning(f"Permanently removing tag {remove_name!r} cannot be undone and is available only when it is unreferenced.")
-        remove_ack = st.checkbox(f"I understand tag {remove_name!r} will be permanently removed and cannot be restored", key=f"managed_remove_tag_ack_{context.profile_key}")
+        remove_ack = st.checkbox(
+            f"I understand tag {remove_name!r} will be permanently removed and cannot be restored",
+            key=f"managed_remove_tag_ack_{context.profile_key}_{remove_id}",
+            disabled=is_referenced,
+        )
         remove_error = st.empty()
         with st.container(key="destructive_managed_tag_remove"):
-            if st.button("Permanently remove tag", icon=":material/delete_forever:", key=f"managed_remove_tag_{context.profile_key}"):
+            if st.button("Permanently remove tag", icon=":material/delete_forever:", key=f"managed_remove_tag_{context.profile_key}", disabled=is_referenced):
                 if not remove_ack:
                     remove_error.error("Acknowledge permanent removal before continuing. No data changed.")
                 else:

@@ -478,5 +478,8 @@ def test_management_destructive_controls_scope_acknowledgement_and_style_hooks()
     ).read_text(encoding="utf-8")
     assert "managed_merge_payee_ack_{context.profile_key}_{target_id}_" in management_source
     assert "managed_merge_tag_ack_{context.profile_key}_{target_id}_" in management_source
+    assert "managed_remove_payee_ack_{context.profile_key}_{remove_id}" in management_source
+    assert "managed_remove_tag_ack_{context.profile_key}_{remove_id}" in management_source
+    assert "disabled=is_referenced" in management_source
     assert 'key="destructive_managed_payee_remove"' in management_source
     assert 'key="destructive_managed_tag_remove"' in management_source
