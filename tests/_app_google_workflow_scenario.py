@@ -129,6 +129,7 @@ def main() -> None:
             ("date_input", "To"),
             ("selectbox", "Type"),
             ("multiselect", "Accounts"),
+            ("multiselect", "Tags"),
             ("text_input", "Search transactions"),
             ("button_group", "Ledger mode"),
             ("dataframe", None),
@@ -245,6 +246,7 @@ def main() -> None:
             ("date_input", "To"),
             ("selectbox", "Type"),
             ("multiselect", "Accounts"),
+            ("multiselect", "Tags"),
             ("text_input", "Search transactions"),
             ("button", "Clear search"),
             ("button_group", "Ledger mode"),
@@ -356,6 +358,7 @@ def main() -> None:
             "Destination",
             "Business purpose",
             "Vehicle",
+            "Tags",
             "Notes",
         ]
         assert {metric.label for metric in app.metric} == {
@@ -419,6 +422,8 @@ def main() -> None:
             "destination",
             "business_purpose",
             "notes",
+            "tag_ids",
+            "tags",
             "created_at",
         }
         assert set(return_trip) == set(outbound)

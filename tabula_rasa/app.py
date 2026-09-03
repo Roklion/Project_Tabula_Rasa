@@ -74,7 +74,7 @@ from tabula_rasa.receipt_backfill import (
 )
 
 
-STORAGE_IMPLEMENTATION_VERSION = 13
+STORAGE_IMPLEMENTATION_VERSION = 14
 
 
 def _google_maps_browser_key(secrets: Mapping[str, object]) -> str | None:

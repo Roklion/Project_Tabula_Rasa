@@ -35,7 +35,14 @@ def validation_report(path: Path, manifest: Mapping[str, Any]) -> str:
         raise StorageValidationError("Backup manifest is missing row counts.")
     rows = ", ".join(
         f"{title}={row_counts.get(title, 0)}"
-        for title in ("Accounts", "Categories", "Transactions", "Mileage")
+        for title in (
+            "Accounts",
+            "Categories",
+            "Payees",
+            "Tags",
+            "Transactions",
+            "Mileage",
+        )
         if title in row_counts
     )
     receipt_status = (

@@ -59,13 +59,14 @@ def validate(
         "Accounts": len(storage.list_accounts(active_only=False)),
         "Categories": len(storage.list_categories()),
         "Payees": len(storage.list_payees()),
+        "Tags": len(storage.list_tags()),
         "Transactions": len(storage.list_transactions()),
         "Mileage": len(storage.list_mileage_trips()),
     }
 
     print(f"Workbook access verified: {workbook.title}")
     print(
-        "Worksheet headers verified: Accounts, Categories, Payees, "
+        "Worksheet headers verified: Accounts, Categories, Payees, Tags, "
         "Transactions, Mileage"
     )
     print(

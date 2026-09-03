@@ -100,10 +100,15 @@ not affect income or expenses.
 ### Add a transaction
 
 Choose **Income**, **Expense**, or **Transfer**, then enter the date, amount,
-account information, and optional payee, reference, and description. Income
+account information, and optional payee, Tags, reference, and description. Income
 and Expense require a same-kind category. Transfer requires two different
 active accounts and has no category. New transaction amounts start at **0.00**;
 the amount must be greater than zero when you save.
+
+Tags are optional profile-local labels that remain separate from accounting
+Categories. Select zero, one, or multiple stored Tags; remove any selection
+without clearing the others. Choose **+ Add new tag** to create a normalized,
+duplicate-safe Tag and attach it when the transaction is saved.
 
 The optional receipt uploader accepts PDF, PNG, JPG, JPEG, WEBP, or HEIC.
 Each file must be non-empty and no larger than 20 MB; one selected batch may
@@ -127,17 +132,19 @@ The ledger opens latest-date-first. Its controls appear in this order:
 2. **To**;
 3. **Type**;
 4. **Accounts**;
-5. **Search transactions**;
-6. conditional **Clear search**; and
-7. **Edit/Bulk** mode immediately before the table.
+5. **Tags**;
+6. **Search transactions**;
+7. conditional **Clear search**; and
+8. **Edit/Bulk** mode immediately before the table.
 
 The table retains these user-facing columns: Date, Type, Account, To account,
-Category, Payee, Description, Amount, Receipt, Reference, and ID. To account
-is blank for non-transfers and Category is blank for transfers. Receipt shows
-when one or more receipts are linked.
+Category, Payee, Tags, Description, Amount, Receipt, Reference, and ID. To
+account is blank for non-transfers, Category is blank for transfers, and Tags
+is blank when no Tags are assigned. The Tags filter includes records containing
+any selected Tag. Receipt shows when one or more receipts are linked.
 
 Search is a trimmed, case-insensitive substring match over Type, Account, To
-account, Category, Payee, Description, Reference, and transaction ID. It is
+account, Category, Payee, Tags, Description, Reference, and transaction ID. It is
 applied after the date, type, and account filters. It does not search dates,
 amounts, receipt contents, receipt filenames, or hidden Drive metadata.
 Whitespace-only search behaves as cleared search. The result count and a
@@ -179,15 +186,16 @@ Bulk actions recheck the complete stable-ID selection immediately before a
 write. The application reports an uncertain mutation after a fresh read rather
 than blindly repeating an ambiguous write.
 
-No bulk changes are available for dates, amounts, payees, descriptions,
-references, accounts, transfer fields, or receipts. Reconciliation, tags,
+No bulk changes are available for dates, amounts, payees, Tags, descriptions,
+references, accounts, transfer fields, or receipts. Reconciliation,
 receipt-content search, and cash-flow reporting are not part of this workflow.
 
 ### Edit and delete
 
 Saved transactions retain their type and can edit the source account,
 destination account for transfers, category for income or expense, date,
-amount, payee, reference, and description. Transfer accounts must remain
+amount, payee, Tags, reference, and description. Each Tag can be added or
+removed independently. Transfer accounts must remain
 different. An inactive account already referenced by a transaction remains
 available when editing that historical record.
 
@@ -198,7 +206,7 @@ consequence and explicitly says linked Drive files remain.
 
 In **View & edit ledger**, select exactly one visible transaction and choose
 **Copy transaction**. The editor opens in a clearly labeled copy mode with the
-source date and other eligible fields prefilled. The description retains the
+source date, active Tags, and other eligible fields prefilled. The description retains the
 user's memo, adds a period when needed, and ends with exactly one `Copy From
 <source ID>` suffix. Recopying a transaction removes stale generated `Copy From
 <id>` or `Copied from transaction <id>` notes before adding the current source.
@@ -236,10 +244,16 @@ independent protected copy described in [Backup and recovery](BACKUP_RECOVERY.md
 ## Mileage
 
 The Mileage page records trip date, business miles, starting location,
-destination, business purpose, optional vehicle, and optional notes. It
+destination, business purpose, optional vehicle, optional Tags, and optional notes. It
 supports date filtering, trip and mile totals, filtered CSV export, editing,
 and permanent deletion. New mileage entries start at zero miles; a positive
 distance is required when saving.
+
+Mileage uses the same profile-local Tag list and inline **+ Add new tag** flow
+as Transactions. Select zero, one, or multiple Tags, and remove individual
+selections without affecting the others. The log and CSV display resolved Tag
+names, and the Tags filter includes trips containing any selected Tag. A round
+trip applies the same Tags to both independently saved legs.
 
 When Google Maps is configured, Starting location and Destination offer Google
 address suggestions. Select both suggestions, then choose **Calculate mileage**
@@ -325,6 +339,12 @@ workflow.
 Payees are managed values. Transaction forms offer existing active payees and
 start with **+ Add new payee**. Existing workbooks must be upgraded once with
 `scripts/migrate_payees.py` before using the new transaction schema.
+
+Tags are managed, profile-local values referenced by stable IDs from both
+transactions and mileage rows. Inline Tag creation normalizes names and prevents
+duplicates. Compatible existing workbooks upgrade automatically with an empty
+Tags worksheet and blank Tag associations, so existing records require no
+manual changes.
 
 ## Imports
 

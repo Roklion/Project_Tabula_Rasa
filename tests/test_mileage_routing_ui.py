@@ -26,6 +26,10 @@ from tabula_rasa.page_renderers.mileage import (
     _set_widget_default,
     _acknowledge_recorded_location_text,
     _save_round_trip,
+    _inline_tag_creation_requested,
+    _tag_names_for_trip,
+    _trip_tag_ids,
+    mileage_frame,
 )
 
 
@@ -48,6 +52,14 @@ def test_round_trip_calculation_uses_reversed_place_ids() -> None:
         ("place-office", "place-client"),
         ("place-client", "place-office"),
     ]
+
+
+def test_trip_tag_ids_normalize_legacy_tag_names() -> None:
+    tags = {
+        "tax": {"id": "tax", "name": "Tax"},
+    }
+
+    assert _trip_tag_ids({"tags": ["  tAx  "]}, tags) == ["tax"]
 
 
 def test_calculation_rejects_missing_or_identical_place_ids() -> None:
@@ -212,31 +224,43 @@ def test_partial_route_retry_preserves_manual_outbound_and_applies_return(
 def test_edit_route_warning_clears_after_successful_recalculation() -> None:
     fingerprint = ("Updated office", "Client", 2, 3, False)
 
-    assert _edit_route_warning_visible(
-        True,
-        False,
-        {"fingerprint": fingerprint, "outbound": 12.4},
-        fingerprint,
-    ) is False
-    assert _edit_route_warning_visible(
-        False,
-        False,
-        {"fingerprint": fingerprint, "outbound": 12.4},
-        fingerprint,
-        recorded_address_changed=True,
-    ) is True
-    assert _edit_route_warning_visible(
-        True,
-        False,
-        None,
-        fingerprint,
-    ) is True
-    assert _edit_route_warning_visible(
-        False,
-        True,
-        {"fingerprint": fingerprint, "outbound": 12.4},
-        fingerprint,
-    ) is True
+    assert (
+        _edit_route_warning_visible(
+            True,
+            False,
+            {"fingerprint": fingerprint, "outbound": 12.4},
+            fingerprint,
+        )
+        is False
+    )
+    assert (
+        _edit_route_warning_visible(
+            False,
+            False,
+            {"fingerprint": fingerprint, "outbound": 12.4},
+            fingerprint,
+            recorded_address_changed=True,
+        )
+        is True
+    )
+    assert (
+        _edit_route_warning_visible(
+            True,
+            False,
+            None,
+            fingerprint,
+        )
+        is True
+    )
+    assert (
+        _edit_route_warning_visible(
+            False,
+            True,
+            {"fingerprint": fingerprint, "outbound": 12.4},
+            fingerprint,
+        )
+        is True
+    )
 
 
 def test_maps_prefill_is_not_an_independent_recorded_address_change() -> None:
@@ -246,9 +270,7 @@ def test_maps_prefill_is_not_an_independent_recorded_address_change() -> None:
         version=2,
     )
 
-    assert not _recorded_address_changed(
-        "Updated office", "Saved office", selected
-    )
+    assert not _recorded_address_changed("Updated office", "Saved office", selected)
     assert _recorded_address_changed("Custom ledger text", "Saved office", selected)
     assert _recorded_address_changed(
         "Saved office", "Saved office", selected, manually_edited=True
@@ -320,10 +342,9 @@ def test_google_location_text_prefills_the_ledger_input(monkeypatch) -> None:
     monkeypatch.setattr(
         st,
         "text_input",
-        lambda label, *, key, help: inputs.append(
-            (label, st.session_state[key], key)
-        )
-        or st.session_state[key],
+        lambda label, *, key, help: (
+            inputs.append((label, st.session_state[key], key)) or st.session_state[key]
+        ),
     )
     monkeypatch.setattr(st, "checkbox", lambda *args, **kwargs: False)
 
@@ -355,8 +376,9 @@ def test_google_location_text_refreshes_for_a_new_selection_but_preserves_edits(
     monkeypatch.setattr(
         st,
         "text_input",
-        lambda label, *, key, help: inputs.append(st.session_state[key])
-        or st.session_state[key],
+        lambda label, *, key, help: (
+            inputs.append(st.session_state[key]) or st.session_state[key]
+        ),
     )
     monkeypatch.setattr(st, "caption", lambda message: None)
     monkeypatch.setattr(st, "checkbox", lambda *args, **kwargs: False)
@@ -393,10 +415,9 @@ def test_edit_recorded_location_text_is_visible_without_google_selection(
     monkeypatch.setattr(
         st,
         "text_input",
-        lambda label, *, key, help: inputs.append(
-            (label, st.session_state[key])
-        )
-        or st.session_state[key],
+        lambda label, *, key, help: (
+            inputs.append((label, st.session_state[key])) or st.session_state[key]
+        ),
     )
 
     recorded = _ledger_location_text(
@@ -408,9 +429,7 @@ def test_edit_recorded_location_text_is_visible_without_google_selection(
     )
 
     assert recorded == "Saved office address"
-    assert inputs == [
-        ("Starting location (recorded text)", "Saved office address")
-    ]
+    assert inputs == [("Starting location (recorded text)", "Saved office address")]
     assert st.session_state["edit-recorded-start__autofill_value"] == (
         "Saved office address"
     )
@@ -450,7 +469,7 @@ def test_add_trip_calculate_button_is_before_recorded_location_fields() -> None:
     source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
 
     assert source.index("calculate_requested = st.button(") < source.index(
-        'recorded_start = _ledger_location_text(\n'
+        "recorded_start = _ledger_location_text(\n"
     )
     assert source.index("calculate_requested = st.button(") < source.index(
         'st.checkbox(\n            "Round trip"'
@@ -464,9 +483,9 @@ def test_add_trip_calculate_button_is_before_recorded_location_fields() -> None:
 def test_edit_calculate_button_is_before_delete_controls() -> None:
     source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
     edit_address_section = source[
-        source.index('edit_start = address_autocomplete(') : source.index(
-            'edit_route_key = _route_key',
-            source.index('edit_start = address_autocomplete('),
+        source.index("edit_start = address_autocomplete(") : source.index(
+            "edit_route_key = _route_key",
+            source.index("edit_start = address_autocomplete("),
         )
     ]
 
@@ -567,19 +586,117 @@ def test_round_trip_save_passes_independent_return_miles() -> None:
     assert storage.kwargs["return_miles"] == 13.1
 
 
+def test_round_trip_save_passes_the_same_tags_to_both_legs() -> None:
+    class Storage:
+        def __init__(self) -> None:
+            self.kwargs: dict[str, object] = {}
+
+        def create_mileage_round_trip(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+    storage = Storage()
+    _save_round_trip(
+        storage,  # type: ignore[arg-type]
+        trip_date=date(2026, 8, 31),
+        miles=12.4,
+        return_miles=13.1,
+        vehicle="",
+        start_location="Office",
+        destination="Client",
+        business_purpose="Meeting",
+        notes="",
+        tag_ids=["project", "tax"],
+        new_tag_name="",
+    )
+
+    assert storage.kwargs["tag_ids"] == ["project", "tax"]
+    assert storage.kwargs["new_tag_name"] == ""
+
+
+def test_mileage_frame_resolves_stable_tag_ids_and_keeps_no_tag_blank() -> None:
+    tags = [
+        {"id": "project", "name": "Project Alpha", "active": "TRUE"},
+        {"id": "tax", "name": "Tax", "active": "TRUE"},
+    ]
+    frame = mileage_frame(
+        [
+            {
+                "id": "one",
+                "trip_date": "2026-08-31",
+                "miles": "2.5",
+                "tag_ids": ["tax", "project"],
+            },
+            {"id": "two", "trip_date": "2026-08-30", "miles": "1.0", "tag_ids": []},
+        ],
+        tags,
+    )
+
+    assert list(frame.columns)[-2:] == ["Tags", "Notes"]
+    assert frame.loc[0, "Tags"] == "Tax, Project Alpha"
+    assert frame.loc[1, "Tags"] == ""
+
+
+def test_mileage_tag_helpers_dedupe_and_support_legacy_display_names() -> None:
+    tags = {
+        "project": {"id": "project", "name": "Project Alpha"},
+        "tax": {"id": "tax", "name": "Tax"},
+    }
+    assert _trip_tag_ids({"tag_ids": ["project", "project", "tax"]}, tags) == [
+        "project",
+        "tax",
+    ]
+    assert _trip_tag_ids({"tags": ["Tax", "Tax"]}, tags) == ["tax"]
+    assert _tag_names_for_trip({"tag_ids": ["tax", "project"]}, tags) == (
+        "Tax, Project Alpha"
+    )
+
+
+def test_mileage_tag_ux_is_profile_scoped_and_persisted_through_add_edit() -> None:
+    source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
+
+    assert "render_tag_selector(" in source
+    assert 'key="add_mileage_tag_ids"' in source
+    assert 'f"edit_mileage_trip_tag_ids_{edit_widget_scope}"' in source
+    assert 'f"mileage_filter_tags_{context.profile_key}"' in source
+    assert '"tag_ids": tag_ids' in source
+    assert '"tag_ids": edited_tag_ids' in source
+    assert '"new_tag_name": new_tag_name' in source
+    assert '"new_tag_name": edited_new_tag_name' in source
+    assert 'if str(tag_id).strip() and str(item.get("name") or "").strip()' in source
+
+
+def test_blank_inline_tag_name_is_detected_before_a_mileage_write(monkeypatch) -> None:
+    import streamlit as st
+
+    monkeypatch.setattr(st, "session_state", {"tag-key": ["+ Add new tag"]})
+
+    assert _inline_tag_creation_requested("tag-key")
+    assert not _inline_tag_creation_requested("missing-key")
+
+
+def test_mileage_save_paths_validate_blank_inline_tag_names() -> None:
+    source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
+
+    assert source.count('save_error.error("Enter a Tag name before saving.")') == 1
+    assert source.count('edit_error.error("Enter a Tag name before saving.")') == 1
+    assert source.index(
+        '_inline_tag_creation_requested("add_mileage_tag_ids")'
+    ) < source.index("context.confirmed_write(")
+    edit_guard = source.index("_inline_tag_creation_requested(\n")
+    edit_write = source.index("context.confirmed_write(", edit_guard)
+    assert edit_guard < edit_write
+
+
 def test_add_mileage_route_invalidation_preserves_business_miles() -> None:
     source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
 
     assert '            _route_key(context, "add"),' in source
-    assert (
-        '                st.session_state["add_mileage_miles"] = 0.0'
-        not in source
-    )
+    assert '                st.session_state["add_mileage_miles"] = 0.0' not in source
     assert (
         '                st.session_state["add_mileage_return_miles"] = 0.0'
         not in source
     )
-    assert '                        st.session_state[miles_key] = 0.1' not in source
+    assert "                        st.session_state[miles_key] = 0.1" not in source
     assert "The selected addresses changed, so any mileage left in " in source
     assert "may not match the current route." in source
     assert "mileage manually" in source
@@ -615,7 +732,9 @@ def test_route_disabled_reason_reports_missing_autocomplete_before_routing() -> 
     )
 
 
-def test_route_disabled_reason_reports_missing_routing_when_both_are_unavailable() -> None:
+def test_route_disabled_reason_reports_missing_routing_when_both_are_unavailable() -> (
+    None
+):
     assert "routing is not configured" in _route_disabled_reason(
         AddressSelection("Office"),
         AddressSelection("Client"),
@@ -645,8 +764,9 @@ def test_route_disabled_reason_explains_missing_browser_autocomplete() -> None:
     )
 
 
-
-def test_autocomplete_availability_distinguishes_manual_mode_from_failure(monkeypatch) -> None:
+def test_autocomplete_availability_distinguishes_manual_mode_from_failure(
+    monkeypatch,
+) -> None:
     import streamlit as st
 
     monkeypatch.setattr(

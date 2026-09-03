@@ -648,6 +648,7 @@ class TestBackupScripts:
                 "Accounts": 0,
                 "Categories": 0,
                 "Payees": 0,
+                "Tags": 0,
                 "Transactions": 0,
                 "Mileage": 0,
             }
@@ -759,5 +760,6 @@ class TestBackupScripts:
 
         assert f"Format version: {BACKUP_FORMAT_VERSION}" in report
         assert "Accounts=0" in report
+        assert "Tags=0" in report
         assert "Mileage=0" in report
         assert "Manifest checksums: verified" in report

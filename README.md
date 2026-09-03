@@ -7,7 +7,7 @@ deployment.
 
 The application supports:
 
-- accounts, categories, transactions, transfers, and mileage;
+- accounts, categories, profile-local Tags, transactions, transfers, and mileage;
 - balance-sheet, income-and-expense, and account reporting;
 - receipt storage in a business-specific Google Drive folder;
 - validated, versioned local and Google Drive backups;
