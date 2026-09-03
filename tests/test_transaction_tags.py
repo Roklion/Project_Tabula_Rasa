@@ -8,6 +8,7 @@ from tabula_rasa.page_renderers.tag_selector import (
     ADD_NEW_TAG,
     inline_tag_name_error,
     render_tag_selector,
+    schedule_tag_selector_reset,
 )
 from tabula_rasa.page_renderers.transactions.ledger import _copyable_tag_ids
 
@@ -55,6 +56,30 @@ def test_tag_selector_preserves_an_inactive_association_for_normal_edit(monkeypa
     assert selected == ["active", "old"]
     assert new_name is None
     assert state["edit-tags"] == ["old"]
+
+
+def test_tag_selector_resets_after_confirmed_inline_creation(monkeypatch) -> None:
+    state: dict[str, object] = {
+        "edit-tags": [ADD_NEW_TAG],
+        "edit-tags__new_name": "New tag",
+    }
+    monkeypatch.setattr(st, "session_state", state)
+    monkeypatch.setattr(st, "multiselect", Mock(return_value=[]))
+    text_input = Mock(return_value="")
+    monkeypatch.setattr(st, "text_input", text_input)
+
+    schedule_tag_selector_reset("edit-tags")
+    selected, new_name = render_tag_selector(
+        [{"id": "new", "name": "New tag", "active": "TRUE"}],
+        label="Edit tags",
+        key="edit-tags",
+    )
+
+    assert selected == []
+    assert new_name is None
+    assert state["edit-tags"] == []
+    assert "edit-tags__new_name" not in state
+    text_input.assert_not_called()
 
 
 def test_blank_inline_tag_name_is_rejected_before_storage_write() -> None:

@@ -18,7 +18,11 @@ from tabula_rasa.address_autocomplete import (
 )
 from tabula_rasa.maps_routing import GoogleRoutesError
 from tabula_rasa.presentation import render_global_footer, render_page_header
-from tabula_rasa.page_renderers.tag_selector import ADD_NEW_TAG, render_tag_selector
+from tabula_rasa.page_renderers.tag_selector import (
+    ADD_NEW_TAG,
+    render_tag_selector,
+    schedule_tag_selector_reset,
+)
 from tabula_rasa.storage import GoogleSheetsStorage, StorageError, normalize_tag_name
 
 
@@ -1316,6 +1320,9 @@ def render_mileage(context: MileageContext) -> None:
                                     new_tag_name=edited_new_tag_name,
                                 ),
                                 "Mileage trip updated.",
+                                on_success=lambda: schedule_tag_selector_reset(
+                                    f"edit_mileage_trip_tag_ids_{edit_widget_scope}"
+                                ),
                                 report_error=edit_error.error,
                             )
                     if delete_requested:

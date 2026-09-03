@@ -31,6 +31,7 @@ from tabula_rasa.page_renderers.transactions.search import filter_transaction_ro
 from tabula_rasa.page_renderers.tag_selector import (
     inline_tag_name_error,
     render_tag_selector,
+    schedule_tag_selector_reset,
 )
 from tabula_rasa.storage import StorageError, decode_receipt_references
 
@@ -157,6 +158,11 @@ def _copyable_tag_ids(
 def _clear_copy_state(profile_key: str) -> None:
     """Leave the source row in normal edit mode without writing anything."""
     st.session_state.pop(_copy_source_key(profile_key), None)
+
+
+def _finish_copy_save(profile_key: str, tag_selector_key: str) -> None:
+    _clear_copy_state(profile_key)
+    schedule_tag_selector_reset(tag_selector_key)
 
 
 def _pending_edit_transaction_key(profile_key: str) -> str:
@@ -1010,8 +1016,9 @@ def render_ledger(
                                 _pending_edit_transaction_key(context.profile_key),
                                 result,
                             ),
-                            on_success=lambda: _clear_copy_state(
-                                context.profile_key
+                            on_success=lambda: _finish_copy_save(
+                                context.profile_key,
+                                f"edit_transaction_tags_{edit_widget_scope}",
                             ),
                             report_error=edit_error.error,
                         )
@@ -1075,6 +1082,9 @@ def render_ledger(
                                     )
                                     if prepared_receipts and receipt_folder
                                     else None
+                                ),
+                                on_success=lambda: schedule_tag_selector_reset(
+                                    f"edit_transaction_tags_{edit_widget_scope}"
                                 ),
                                 report_error=edit_error.error,
                             )

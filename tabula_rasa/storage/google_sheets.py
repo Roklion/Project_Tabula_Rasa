@@ -2213,6 +2213,18 @@ class GoogleSheetsStorage:
             raise StorageValidationError(
                 "Choose an existing payee or add a new payee"
             )
+        tag_ids = _normalize_tag_ids(data.get("tag_ids", ""))
+        original_tag_ids = (
+            _normalize_tag_ids(original_transaction.get("tag_ids", ""))
+            if original_transaction is not None
+            else []
+        )
+        for tag_id in tag_ids:
+            tag = tags.get(tag_id)
+            if tag is None:
+                raise StorageValidationError("Tag does not exist")
+            if not _as_bool(tag["active"], "Tag active") and tag_id not in original_tag_ids:
+                raise StorageValidationError("Tag is inactive")
         if not payee_id and new_payee_name:
             new_payee = self.create_payee(new_payee_name)
             payee_id = new_payee["id"]
@@ -2230,18 +2242,6 @@ class GoogleSheetsStorage:
             and payee_id != original_payee_id
         ):
             raise StorageValidationError("Payee is inactive")
-        tag_ids = _normalize_tag_ids(data.get("tag_ids", ""))
-        original_tag_ids = (
-            _normalize_tag_ids(original_transaction.get("tag_ids", ""))
-            if original_transaction is not None
-            else []
-        )
-        for tag_id in tag_ids:
-            tag = tags.get(tag_id)
-            if tag is None:
-                raise StorageValidationError("Tag does not exist")
-            if not _as_bool(tag["active"], "Tag active") and tag_id not in original_tag_ids:
-                raise StorageValidationError("Tag is inactive")
         new_tag_name = _clean_text(data.get("new_tag_name"), "New tag")
         if new_tag_name:
             new_tag = self.create_tag(new_tag_name)

@@ -779,6 +779,24 @@ class TestGoogleSheetsStorage:
                 tag_ids=["missing-tag"],
             )
 
+    def test_invalid_tag_does_not_persist_new_payee(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Office", "Expense")
+
+        with pytest.raises(StorageValidationError, match="Tag does not exist"):
+            self.storage.create_transaction(
+                txn_date="2026-09-01",
+                kind="Expense",
+                amount=10,
+                account_id=account["id"],
+                category_id=category["id"],
+                new_payee_name="Orphan payee",
+                tag_ids=["missing-tag"],
+            )
+
+        assert self.storage.list_payees() == []
+        assert self.storage.list_transactions() == []
+
     def test_invalid_mileage_does_not_create_inline_tag(self) -> None:
         with pytest.raises(StorageValidationError, match="Miles must be greater"):
             self.storage.create_mileage_trip(

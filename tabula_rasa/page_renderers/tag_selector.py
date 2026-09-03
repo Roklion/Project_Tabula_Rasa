@@ -38,6 +38,11 @@ def _tag_label(tag: Mapping[str, Any], *, inactive: bool = False) -> str:
     return f"{name} (inactive)" if inactive else name
 
 
+def schedule_tag_selector_reset(key: str) -> None:
+    """Reset one selector on the rerun after its confirmed write."""
+    st.session_state[f"{key}__reset"] = True
+
+
 def render_tag_selector(
     tags: Sequence[Mapping[str, Any]],
     *,
@@ -54,6 +59,9 @@ def render_tag_selector(
     historical associations can be retained while editing. The new Tag name
     is submitted alongside the record and is created by the storage write.
     """
+    if st.session_state.pop(f"{key}__reset", False):
+        st.session_state.pop(key, None)
+        st.session_state.pop(f"{key}__new_name", None)
     by_id = {
         tag_id: tag
         for tag in tags
