@@ -1490,6 +1490,31 @@ def test_mixed_use_delete_returns_success_when_final_response_is_lost(
     assert default_storage.list_transactions() == []
 
 
+def test_mixed_use_delete_confirms_final_delete_after_lost_response(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    source_worksheet = default_storage._worksheet("MixedUseExpenses")
+    original_delete_rows = source_worksheet.delete_rows
+
+    def delete_then_lose_response(row_number: int) -> None:
+        original_delete_rows(row_number)
+        raise OSError("response lost after delete")
+
+    source_worksheet.delete_rows = delete_then_lose_response  # type: ignore[method-assign]
+    default_storage._retry_attempts = 1
+
+    default_storage.delete_mixed_use_expense(source["id"])
+
+    assert default_storage.list_mixed_use_expenses() == []
+    assert default_storage.list_transactions() == []
+
+
 def test_mixed_use_uncertain_edit_classifies_partial_pair_safely(
     default_storage: GoogleSheetsStorage,
 ) -> None:

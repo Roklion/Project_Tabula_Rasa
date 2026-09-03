@@ -3195,12 +3195,14 @@ class GoogleSheetsStorage:
                 return
             except StorageUnavailableError as error:
                 self._invalidate(title)
-                if not error.retryable or attempt + 1 >= self._retry_attempts:
+                if not error.retryable:
                     raise
                 try:
                     self._find_row(title, record_id)
                 except StorageNotFoundError:
                     return
+                if attempt + 1 >= self._retry_attempts:
+                    raise
                 self._sleeper(self._retry_base_delay_seconds * (2**attempt))
                 if before_retry is not None:
                     before_retry()
