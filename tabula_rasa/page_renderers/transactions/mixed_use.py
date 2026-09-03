@@ -112,6 +112,25 @@ def _payee_options(payees: Sequence[Mapping[str, object]]) -> tuple[list[str], d
 def _source_label(source: Mapping[str, object], account_paths: Mapping[str, str]) -> str:
     return f"{source.get('txn_date', '')} — {source.get('payee', '') or source.get('description', '') or 'No payee'} — {account_paths.get(str(source.get('account_id')), 'Unknown account')} — {'$'}{source.get('total_expense', '0.00')} — {str(source.get('id', ''))[:8]}"
 
+
+def _incomplete_source_ids(
+    sources: Sequence[Mapping[str, object]],
+    transactions: Sequence[Mapping[str, object]],
+) -> set[str]:
+    """Identify persisted sources whose projection still needs recovery."""
+    transaction_ids = {
+        str(item.get("id") or "")
+        for item in transactions
+        if str(item.get("id") or "")
+    }
+    return {
+        str(source.get("id") or "")
+        for source in sources
+        if str(source.get("id") or "")
+        and str(source.get("linked_transaction_id") or "") not in transaction_ids
+    }
+
+
 def _render_preview(preview: Mapping[str, str]) -> None:
     st.markdown("#### Ledger Result (read-only)")
     if preview["status"] != "ready":
@@ -128,11 +147,48 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
     profile = context.profile_key
     st.subheader("Mixed-use expenses")
     st.caption("Save the full expense and business-use allocation; only the allocated amount enters the ledger.")
+    incomplete_source_ids: set[str] = set()
     try:
         sources = context.storage.list_mixed_use_expenses()
     except StorageError as error:
-        context.report_storage_error(error)
-        return
+        try:
+            raw_sources = context.storage.list_mixed_use_expense_sources(
+                _force_refresh=True
+            )
+            transactions = context.storage.list_transactions(_force_refresh=True)
+        except StorageError:
+            context.report_storage_error(error)
+            return
+        incomplete_source_ids = _incomplete_source_ids(raw_sources, transactions)
+        if not incomplete_source_ids:
+            context.report_storage_error(error)
+            return
+        sources = [dict(item) for item in raw_sources]
+        st.warning(
+            "A mixed-use expense was saved without its ledger projection. "
+            "Select it below and save again to repair the missing projection."
+        )
+        transaction_by_id = {
+            str(item.get("id") or ""): item for item in transactions
+        }
+        for item in sources:
+            linked = transaction_by_id.get(
+                str(item.get("linked_transaction_id") or "")
+            )
+            item["tag_ids"] = list(linked.get("tag_ids", ())) if linked else []
+            item["ledger_status"] = (
+                "incomplete"
+                if str(item.get("id") or "") in incomplete_source_ids
+                else "linked"
+            )
+            item["payee"] = next(
+                (
+                    str(payee.get("name") or "")
+                    for payee in payees
+                    if str(payee.get("id") or "") == str(item.get("payee_id") or "")
+                ),
+                "",
+            )
     source_by_id = {str(item["id"]): item for item in sources}
     recovery = st.session_state.get(receipt_creation_workflow_key(profile))
     if isinstance(recovery, Mapping):
@@ -171,6 +227,9 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
     if sources:
         selected_id = st.selectbox("Edit an existing mixed-use expense (optional)", choices, index=choices.index(selected_id), format_func=lambda value: "Create new mixed-use expense" if not value else _source_label(source_by_id[value], account_paths), key=selected_key)
     source = source_by_id.get(selected_id)
+    source_incomplete = bool(
+        source and str(source.get("id") or "") in incomplete_source_ids
+    )
     if source:
         if st.session_state.get(baseline_id_key) != selected_id:
             st.session_state[baseline_key] = dict(source)
@@ -276,7 +335,12 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             ),
         )
         save_error = st.empty()
-        if st.button("Save changes" if source else "Save mixed-use expense", type="primary", key=f"mixed_save_{scope}"):
+        save_label = (
+            "Repair ledger projection"
+            if source_incomplete
+            else "Save changes" if source else "Save mixed-use expense"
+        )
+        if st.button(save_label, type="primary", key=f"mixed_save_{scope}"):
             tag_error = inline_tag_name_error(new_tag_name)
             if (selector_error := tag_selector_error(f"mixed_tags_{scope}")):
                 save_error.error(selector_error)
@@ -291,7 +355,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                 )
             else:
                 try:
-                    if source:
+                    if source and not source_incomplete:
                         prepared_receipts = prepare_editor_receipt_uploads(
                             context,
                             str(source["linked_transaction_id"]),
@@ -321,7 +385,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                     # validation error; the write is skipped below.
                     pass
                 payload = {"txn_date": txn_date, "account_id": account_id, "category_id": category_id, "payee_id": payee_id, "new_payee_name": new_payee_name, "tag_ids": tag_ids, "new_tag_name": new_tag_name or "", "reference": reference, "description": description, "total_expense": total_expense, "business_use_percentage": business_use_percentage, "allocation_rationale": rationale}
-                if source:
+                if source and not source_incomplete:
                     payload["expected_source"] = expected_source
                     def operation():
                         return context.storage.edit_mixed_use_expense(
@@ -329,8 +393,18 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                         )
                     action, success = "edit_mixed_use_expense", "Mixed-use expense updated."
                 else:
-                    payload["source_id"] = pending_source_id
-                    payload["linked_transaction_id"] = pending_transaction_id
+                    payload["source_id"] = (
+                        str(source["id"])
+                        if source_incomplete
+                        else pending_source_id
+                    )
+                    payload["linked_transaction_id"] = (
+                        str(source["linked_transaction_id"])
+                        if source_incomplete
+                        else pending_transaction_id
+                    )
+                    if source_incomplete:
+                        payload["expected_source"] = expected_source
                     def operation():
                         return context.storage.create_mixed_use_expense(**payload)
                     action, success = "create_mixed_use_expense", "Mixed-use expense saved."
@@ -405,4 +479,4 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             if not confirmed:
                 delete_error.error("Confirm the permanent deletion before continuing.")
             else:
-                context.confirmed_write("delete_mixed_use_expense", {"id": source["id"], "expected_source": source}, lambda: context.storage.delete_mixed_use_expense(source["id"], expected_source=source), "Mixed-use expense deleted.", on_success=lambda: st.session_state.pop(selected_key, None), report_error=delete_error.error)
+                context.confirmed_write("delete_mixed_use_expense", {"id": source["id"], "expected_source": expected_source}, lambda: context.storage.delete_mixed_use_expense(source["id"], expected_source=expected_source), "Mixed-use expense deleted.", on_success=lambda: st.session_state.pop(selected_key, None), report_error=delete_error.error)

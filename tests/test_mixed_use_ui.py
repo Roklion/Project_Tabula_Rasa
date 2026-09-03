@@ -249,6 +249,31 @@ def test_mixed_use_app_test_create_edit_delete_and_transactions_tabs(default_sto
         assert default_storage.list_transactions() == []
 
 
+def test_mixed_use_app_test_exposes_source_only_projection_repair(default_storage) -> None:
+    source = default_storage.create_mixed_use_expense(
+        txn_date="2026-09-03",
+        total_expense="100",
+        business_use_percentage="50",
+        account_id=next(item for item in default_storage.list_accounts() if item["active"])["id"],
+        category_id=next(item for item in default_storage.list_categories() if item["kind"] == "Expense")["id"],
+        allocation_rationale="Measured use",
+    )
+    transaction_sheet = default_storage._worksheet("Transactions")
+    transaction_sheet.rows.pop(1)
+    default_storage._invalidate("Transactions")
+
+    with authenticated_app(default_storage) as app:
+        navigate_to(app, "Transactions")
+        app.session_state["mixed_use_selected_source_id_test"] = source["id"]
+        app.run()
+        assert any("without its ledger projection" in str(item.value) for item in app.warning)
+        tab = _mixed_tab(app)
+        _tab_field(tab, "button", "Repair ledger projection").click().run()
+
+    assert len(default_storage.list_transactions()) == 1
+    assert default_storage.list_mixed_use_expenses()[0]["id"] == source["id"]
+
+
 def test_mixed_use_app_test_validation_preserves_inputs(default_storage) -> None:
     account = next(item for item in default_storage.list_accounts() if item["active"])
     category = next(item for item in default_storage.list_categories() if item["kind"] == "Expense")
