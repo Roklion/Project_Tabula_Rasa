@@ -123,16 +123,18 @@ def _render_payees(context: PayeesTagsContext, payees: list[dict[str, str]]) -> 
 
     with st.expander("Remove payee"):
         remove_id = st.selectbox("Payee to remove", ids, format_func=labels, key=f"managed_remove_payee_id_{context.profile_key}")
+        remove_name = by_id[remove_id]["name"]
         if counts.get(remove_id, 0):
             st.info(f"This payee has {counts[remove_id]} references. Unassign it from those records or merge it before removal.")
-        st.warning("Removal is permanent and is available only for an unreferenced payee.")
-        remove_ack = st.checkbox("I understand this payee will be permanently removed", key=f"managed_remove_payee_ack_{context.profile_key}")
+        st.warning(f"Permanently removing payee {remove_name!r} cannot be undone and is available only when it is unreferenced.")
+        remove_ack = st.checkbox(f"I understand payee {remove_name!r} will be permanently removed and cannot be restored", key=f"managed_remove_payee_ack_{context.profile_key}")
         remove_error = st.empty()
-        if st.button("Remove payee", type="primary", key=f"managed_remove_payee_{context.profile_key}"):
-            if not remove_ack:
-                remove_error.error("Acknowledge permanent removal before continuing. No data changed.")
-            else:
-                _write(context, "remove_payee", {"id": remove_id}, lambda: context.storage.remove_payee(remove_id, expected_payee=by_id[remove_id]), "Payee removed.", remove_error)
+        with st.container(key=f"destructive_managed_payee_remove_{context.profile_key}"):
+            if st.button("Permanently remove payee", icon=":material/delete_forever:", key=f"managed_remove_payee_{context.profile_key}"):
+                if not remove_ack:
+                    remove_error.error("Acknowledge permanent removal before continuing. No data changed.")
+                else:
+                    _write(context, "remove_payee", {"id": remove_id}, lambda: context.storage.remove_payee(remove_id, expected_payee=by_id[remove_id]), "Payee removed.", remove_error)
 
 
 def _render_tags(context: PayeesTagsContext, tags: list[dict[str, str]]) -> None:
@@ -193,16 +195,18 @@ def _render_tags(context: PayeesTagsContext, tags: list[dict[str, str]]) -> None
 
     with st.expander("Remove tag"):
         remove_id = st.selectbox("Tag to remove", ids, format_func=labels, key=f"managed_remove_tag_id_{context.profile_key}")
+        remove_name = by_id[remove_id]["name"]
         if counts.get(remove_id, 0):
             st.info(f"This tag has {counts[remove_id]} references. Unassign it from those records or merge it before removal.")
-        st.warning("Removal is permanent and is available only for an unreferenced tag.")
-        remove_ack = st.checkbox("I understand this tag will be permanently removed", key=f"managed_remove_tag_ack_{context.profile_key}")
+        st.warning(f"Permanently removing tag {remove_name!r} cannot be undone and is available only when it is unreferenced.")
+        remove_ack = st.checkbox(f"I understand tag {remove_name!r} will be permanently removed and cannot be restored", key=f"managed_remove_tag_ack_{context.profile_key}")
         remove_error = st.empty()
-        if st.button("Remove tag", type="primary", key=f"managed_remove_tag_{context.profile_key}"):
-            if not remove_ack:
-                remove_error.error("Acknowledge permanent removal before continuing. No data changed.")
-            else:
-                _write(context, "remove_tag", {"id": remove_id}, lambda: context.storage.remove_tag(remove_id, expected_tag=by_id[remove_id]), "Tag removed.", remove_error)
+        with st.container(key=f"destructive_managed_tag_remove_{context.profile_key}"):
+            if st.button("Permanently remove tag", icon=":material/delete_forever:", key=f"managed_remove_tag_{context.profile_key}"):
+                if not remove_ack:
+                    remove_error.error("Acknowledge permanent removal before continuing. No data changed.")
+                else:
+                    _write(context, "remove_tag", {"id": remove_id}, lambda: context.storage.remove_tag(remove_id, expected_tag=by_id[remove_id]), "Tag removed.", remove_error)
 
 
 def render_payees_tags(context: PayeesTagsContext) -> None:

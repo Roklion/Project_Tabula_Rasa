@@ -132,6 +132,45 @@ def test_non_applied_tag_merge_is_retryable(default_storage, monkeypatch) -> Non
     assert raised.value.retryable is True
 
 
+def test_confirmed_tag_merge_readback_failure_is_uncertain(default_storage, monkeypatch) -> None:
+    target = default_storage.create_tag("Target")
+    source = default_storage.create_tag("Source")
+    original_snapshot = default_storage._snapshot
+    snapshot_calls = 0
+
+    def fail_readback(titles, *, force_refresh=False):
+        nonlocal snapshot_calls
+        snapshot_calls += 1
+        if snapshot_calls >= 2:
+            raise StorageUnavailableError("readback unavailable", retryable=True)
+        return original_snapshot(titles, force_refresh=force_refresh)
+
+    monkeypatch.setattr(default_storage, "_snapshot", fail_readback)
+    with pytest.raises(StorageBulkMutationUncertainError) as raised:
+        default_storage.merge_tags(target["id"], [source["id"]])
+    assert raised.value.outcome == "mixed_ambiguous"
+    assert raised.value.retryable is False
+
+
+def test_confirmed_tag_removal_readback_failure_is_uncertain(default_storage, monkeypatch) -> None:
+    tag = default_storage.create_tag("Unused")
+    original_snapshot = default_storage._snapshot
+    snapshot_calls = 0
+
+    def fail_readback(titles, *, force_refresh=False):
+        nonlocal snapshot_calls
+        snapshot_calls += 1
+        if snapshot_calls >= 2:
+            raise StorageUnavailableError("readback unavailable", retryable=True)
+        return original_snapshot(titles, force_refresh=force_refresh)
+
+    monkeypatch.setattr(default_storage, "_snapshot", fail_readback)
+    with pytest.raises(StorageBulkMutationUncertainError) as raised:
+        default_storage.remove_tag(tag["id"])
+    assert raised.value.outcome == "mixed_ambiguous"
+    assert raised.value.retryable is False
+
+
 def test_partial_source_delete_is_ambiguous_not_retryable(default_storage, monkeypatch) -> None:
     first = default_storage.create_tag("First")
     second = default_storage.create_tag("Second")

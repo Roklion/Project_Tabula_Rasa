@@ -2658,6 +2658,38 @@ class GoogleSheetsStorage:
             retryable=False,
         ) from error
 
+    def _managed_confirmed_postcondition(
+        self,
+        *,
+        operation: str,
+        read_state: Callable[[], Any],
+        fully_applied: Callable[[Any], bool],
+        invalidate: Iterable[str],
+    ) -> None:
+        """Require a readable postcondition after a confirmed batch write."""
+        try:
+            state = read_state()
+        except StorageError as read_error:
+            for title in invalidate:
+                self._invalidate(title)
+            raise StorageBulkMutationUncertainError(
+                f"The {operation} completed but its postcondition could not be read. "
+                "Review the affected records before retrying.",
+                outcome="mixed_ambiguous",
+                retryable=False,
+            ) from read_error
+        if not fully_applied(state):
+            for title in invalidate:
+                self._invalidate(title)
+            raise StorageBulkMutationUncertainError(
+                f"The {operation} completed but its postcondition is ambiguous. "
+                "Review the affected records before retrying.",
+                outcome="mixed_ambiguous",
+                retryable=False,
+            )
+        for title in invalidate:
+            self._invalidate(title)
+
     def _managed_update_request(
         self, title: str, row: _StoredRow, column: str, value: str
     ) -> dict[str, Any]:
@@ -2845,15 +2877,12 @@ class GoogleSheetsStorage:
                 if result is not None:
                     return {**result, "count": str(len(source_ids))}
                 raise AssertionError("managed batch classification did not return")
-            if not fully_applied(fresh_state()):
-                for title in ("Payees", "Transactions", "MixedUseExpenses"):
-                    self._invalidate(title)
-                raise StorageBulkMutationUncertainError(
-                    "The payee merge completed but its postcondition is ambiguous. Review the affected records before retrying.",
-                    outcome="mixed_ambiguous", retryable=False,
-                )
-            for title in ("Payees", "Transactions", "MixedUseExpenses"):
-                self._invalidate(title)
+            self._managed_confirmed_postcondition(
+                operation="payee merge",
+                read_state=fresh_state,
+                fully_applied=fully_applied,
+                invalidate=("Payees", "Transactions", "MixedUseExpenses"),
+            )
             return {"status": "fully_applied", "count": str(len(source_ids))}
 
     merge_payee = merge_payees
@@ -2931,16 +2960,12 @@ class GoogleSheetsStorage:
                 if result is not None:
                     return result
                 raise AssertionError("managed batch classification did not return")
-            state = read_state()
-            if not fully_applied(state):
-                for title in ("Payees", "Transactions", "MixedUseExpenses"):
-                    self._invalidate(title)
-                raise StorageBulkMutationUncertainError(
-                    "The payee removal completed but its postcondition is ambiguous. Review the payee before retrying.",
-                    outcome="mixed_ambiguous", retryable=False,
-                )
-            for title in ("Payees", "Transactions", "MixedUseExpenses"):
-                self._invalidate(title)
+            self._managed_confirmed_postcondition(
+                operation="payee removal",
+                read_state=read_state,
+                fully_applied=fully_applied,
+                invalidate=("Payees", "Transactions", "MixedUseExpenses"),
+            )
             return {"status": "fully_applied"}
 
     delete_payee = remove_payee
@@ -3155,15 +3180,12 @@ class GoogleSheetsStorage:
                 if result is not None:
                     return {**result, "count": str(len(source_ids))}
                 raise AssertionError("managed batch classification did not return")
-            if not fully_applied(fresh_state()):
-                for title in ("Tags", "Transactions", "Mileage"):
-                    self._invalidate(title)
-                raise StorageBulkMutationUncertainError(
-                    "The tag merge completed but its postcondition is ambiguous. Review the affected records before retrying.",
-                    outcome="mixed_ambiguous", retryable=False,
-                )
-            for title in ("Tags", "Transactions", "Mileage"):
-                self._invalidate(title)
+            self._managed_confirmed_postcondition(
+                operation="tag merge",
+                read_state=fresh_state,
+                fully_applied=fully_applied,
+                invalidate=("Tags", "Transactions", "Mileage"),
+            )
             return {"status": "fully_applied", "count": str(len(source_ids))}
 
     merge_tag = merge_tags
@@ -3232,16 +3254,12 @@ class GoogleSheetsStorage:
                 if result is not None:
                     return result
                 raise AssertionError("managed batch classification did not return")
-            state = read_state()
-            if not is_gone(state):
-                for title in ("Tags", "Transactions", "Mileage"):
-                    self._invalidate(title)
-                raise StorageBulkMutationUncertainError(
-                    "The tag removal completed but its postcondition is ambiguous. Review the tag before retrying.",
-                    outcome="mixed_ambiguous", retryable=False,
-                )
-            for title in ("Tags", "Transactions", "Mileage"):
-                self._invalidate(title)
+            self._managed_confirmed_postcondition(
+                operation="tag removal",
+                read_state=read_state,
+                fully_applied=is_gone,
+                invalidate=("Tags", "Transactions", "Mileage"),
+            )
             return {"status": "fully_applied"}
 
     delete_tag = remove_tag
