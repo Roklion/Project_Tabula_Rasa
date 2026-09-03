@@ -783,7 +783,7 @@ def test_generic_receipt_setter_rejects_receipts_owned_by_another_transaction(
     reference = {"id": "setterowned01", "name": "Receipt.pdf"}
     default_storage.set_transaction_receipt_references(owner["id"], [reference])
 
-    with pytest.raises(StorageConflictError, match="already linked"):
+    with pytest.raises(StorageValidationError, match="changed through mixed-use"):
         default_storage.set_transaction_receipt_references(
             source["linked_transaction_id"], [reference]
         )
@@ -921,8 +921,8 @@ def test_receipt_link_scans_for_duplicate_ownership_inside_lock(
 
     def link_receipt() -> None:
         try:
-            default_storage.link_transaction_receipt(
-                source["linked_transaction_id"],
+            default_storage.link_mixed_use_receipt(
+                source["id"],
                 reference={"id": "receipt-lock-check", "name": "Receipt"},
             )
         except BaseException as error:  # pragma: no cover - assertion below reports it
@@ -1578,9 +1578,9 @@ def test_mixed_use_receipt_update_rejects_pair_drift_before_writing(
         return original_find(title, record_id)
 
     default_storage._find_row = find_after_concurrent_receipt_update  # type: ignore[method-assign]
-    with pytest.raises(StorageConflictError, match="receipt references changed"):
-        default_storage.set_transaction_receipt_references(
-            source["linked_transaction_id"], []
+    with pytest.raises(StorageConflictError, match="receipt pair changed"):
+        default_storage.set_mixed_use_receipt_references(
+            source["id"], [], expected_source=source
         )
 
 
@@ -1607,8 +1607,8 @@ def test_mixed_use_receipt_update_refreshes_row_position_before_writing(
         return original_find(title, record_id)
 
     default_storage._find_row = find_after_transaction_row_shift  # type: ignore[method-assign]
-    updated = default_storage.set_transaction_receipt_references(
-        source["linked_transaction_id"], []
+    updated = default_storage.set_mixed_use_receipt_references(
+        source["id"], [], expected_source=source
     )
 
     assert updated["id"] == source["linked_transaction_id"]
@@ -2052,9 +2052,10 @@ def test_mixed_use_receipt_update_classifies_partial_pair_as_ambiguous(
         raise StorageUnavailableError("response lost", retryable=True)
 
     default_storage._batch_update_spreadsheet = apply_transaction_only  # type: ignore[method-assign]
+    expected_source = default_storage.get_mixed_use_expense(source["id"])
     with pytest.raises(StorageBulkMutationUncertainError) as error:
-        default_storage.set_transaction_receipt_references(
-            source["linked_transaction_id"], []
+        default_storage.set_mixed_use_receipt_references(
+            source["id"], [], expected_source=expected_source
         )
 
     assert error.value.outcome == "mixed_ambiguous"
