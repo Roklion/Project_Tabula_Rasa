@@ -5,7 +5,8 @@ business profiles. A profile selects its own Google Sheets workbook,
 service-account credential, optional Google Drive authorization, and recovery
 destinations. The application password and OAuth client are intentionally
 deployment-wide. The optional Google Maps browser and Routes credentials are
-also app-wide; they are never profile identities.
+also app-wide; the separate quota-monitoring identity is app-wide as well.
+They are never profile identities.
 
 ## System context
 
@@ -19,10 +20,11 @@ flowchart LR
         Ledger["Ledger and reporting services"]
         DriveClient["Google Drive client"]
         MapsClient["Maps autocomplete and routing"]
+        QuotaClient["Maps quota monitoring"]
     end
 
     subgraph Config["Configuration boundary"]
-        AppSecrets["App-wide secrets<br/>password hash, OAuth client,<br/>and Maps keys"]
+        AppSecrets["App-wide secrets<br/>password hash, OAuth client,<br/>Maps keys, quota reader"]
         ProfileSecrets["Per-profile secrets<br/>spreadsheet, service account,<br/>refresh token, root and child IDs"]
     end
 
@@ -30,6 +32,7 @@ flowchart LR
         Sheets["Business Google Sheet"]
         Drive["Profile storage root<br/>Receipts and Ledger Backups"]
         Maps["Places and Routes APIs"]
+        Usage["Service Usage and Cloud Monitoring"]
     end
 
     NAS["Optional Synology recovery folder"]
@@ -41,10 +44,12 @@ flowchart LR
     AppSecrets --> Auth
     AppSecrets --> DriveClient
     AppSecrets --> MapsClient
+    AppSecrets --> QuotaClient
     ProfileSecrets --> Profile
     Ledger -->|"Profile service account"| Sheets
     DriveClient -->|"Profile OAuth grant"| Drive
     MapsClient -->|"Restricted app-wide keys"| Maps
+    QuotaClient -->|"Dedicated read-only identity"| Usage
     Drive -->|"Cloud Sync download only"| NAS
 ```
 
@@ -62,6 +67,7 @@ authorization.
 | Ledger reads and writes | Profile Sheets service account | Profile Google workbook | One profile |
 | Receipts and cloud backups | Shared OAuth client plus profile refresh token | Profile Drive root and managed children | One profile |
 | Address suggestions and route mileage | Restricted browser and server Maps keys | Google Places and Routes APIs | Entire deployment |
+| Maps quota and usage monitoring | Dedicated Maps quota service account with read-only scope | Service Usage and Cloud Monitoring in the explicit Maps project number | Entire deployment |
 | Local configuration | Operating-system file permissions | .streamlit/secrets.toml and business_profiles.json | Local deployment |
 | Hosted configuration | Streamlit Secrets | Hosted deployment | Hosted projection of each profile |
 | NAS recovery copy | DSM account and separate Cloud Sync authorization | Profile-specific NAS root | One profile |
@@ -74,7 +80,10 @@ folders do not need to be shared with the Sheets service account.
 The browser Maps key is sent only to the autocomplete component and depends on
 website plus API restrictions. The Routes key remains server-side and is sent
 only to the Routes API. Neither key is sourced from or grants access to a
-business profile, workbook, service account, or Drive authorization. The
+business profile, workbook, service account, or Drive authorization. Quota
+monitoring uses a separate app-wide service-account JSON mapping and the
+`cloud-platform.read-only` scope; it never reuses profile Sheets credentials or
+human Drive OAuth. The
 ledger persists only the existing visible address and user-confirmed mileage;
 it does not retain complete Google responses or polylines.
 

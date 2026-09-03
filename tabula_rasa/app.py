@@ -39,6 +39,7 @@ from tabula_rasa.maps_routing import (
     GoogleRoutesConfigurationError,
     load_routes_config,
 )
+from tabula_rasa.google_maps_quota import render_google_maps_usage_sidebar
 from tabula_rasa.page_renderers.accounts import AccountsContext, render_accounts
 from tabula_rasa.page_renderers.categories import (
     CategoriesContext,
@@ -477,6 +478,10 @@ if page != "Account settings":
     if notice:
         notice_placeholder.success(str(notice))
 
+# This is intentionally outside Account settings: quota health is useful in
+# hosted deployments too, while remaining read-only and app-wide.
+with st.sidebar:
+    render_google_maps_usage_sidebar(effective_secrets)
 
 st.session_state[GLOBAL_FOOTER_RENDERED_KEY] = False
 try:
@@ -571,6 +576,7 @@ try:
                 report_storage_error=report_storage_error,
             )
         )
+
 finally:
     # Streamlit stops suppress later output, so stop paths render through their
     # page-scope placeholders before stopping. This remains the normal footer
