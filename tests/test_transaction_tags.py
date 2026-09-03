@@ -37,6 +37,23 @@ def test_tag_selector_keeps_each_selection_and_exposes_inline_creation(monkeypat
     text_input.assert_called_once()
 
 
+def test_tag_selector_accepts_a_typed_new_name_when_search_hides_sentinel(monkeypatch) -> None:
+    state: dict[str, object] = {}
+    monkeypatch.setattr(st, "session_state", state)
+    multiselect = Mock(return_value=["project", "Client work"])
+    monkeypatch.setattr(st, "multiselect", multiselect)
+
+    selected, new_name = render_tag_selector(
+        [{"id": "project", "name": "Project", "active": "TRUE"}],
+        label="Tags",
+        key="tags",
+    )
+
+    assert selected == ["project"]
+    assert new_name == "Client work"
+    assert multiselect.call_args.kwargs["accept_new_options"] is True
+
+
 def test_tag_selector_preserves_an_inactive_association_for_normal_edit(monkeypatch) -> None:
     state: dict[str, object] = {}
     monkeypatch.setattr(st, "session_state", state)

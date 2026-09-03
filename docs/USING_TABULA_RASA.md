@@ -108,7 +108,9 @@ the amount must be greater than zero when you save.
 Tags are optional profile-local labels that remain separate from accounting
 Categories. Select zero, one, or multiple stored Tags; remove any selection
 without clearing the others. Choose **+ Add new tag** to create a normalized,
-duplicate-safe Tag and attach it when the transaction is saved.
+duplicate-safe Tag and attach it when the transaction is saved. You can also
+type a new name into the selector and press Enter when searching; the typed
+value is handled as the inline Tag to create.
 
 The optional receipt uploader accepts PDF, PNG, JPG, JPEG, WEBP, or HEIC.
 Each file must be non-empty and no larger than 20 MB; one selected batch may
@@ -251,7 +253,8 @@ distance is required when saving.
 
 Mileage uses the same profile-local Tag list and inline **+ Add new tag** flow
 as Transactions. Select zero, one, or multiple Tags, and remove individual
-selections without affecting the others. The log and CSV display resolved Tag
+selections without affecting the others. You can also type a new name into the
+selector and press Enter when searching. The log and CSV display resolved Tag
 names, and the Tags filter includes trips containing any selected Tag. A round
 trip applies the same Tags to both independently saved legs.
 
