@@ -2895,6 +2895,27 @@ class GoogleSheetsStorage:
         existing_source = (
             sources.get(requested_source_id) if requested_source_id else None
         )
+        if existing_source is None and not requested_source_id and requested_transaction_id:
+            matching_sources = [
+                source
+                for source in sources.values()
+                if _clean_text(
+                    source.get("linked_transaction_id"),
+                    "Linked transaction ID",
+                )
+                == requested_transaction_id
+            ]
+            if len(matching_sources) > 1:
+                raise StorageValidationError(
+                    "Mixed-use source linked transaction IDs must be unique"
+                )
+            if matching_sources:
+                existing_source = matching_sources[0]
+                requested_source_id = _clean_text(
+                    existing_source.get("id"),
+                    "Mixed-use source ID",
+                    required=True,
+                )
         existing_transaction = (
             transactions.get(requested_transaction_id)
             if requested_transaction_id

@@ -826,6 +826,38 @@ def test_mixed_use_source_only_retry_classifies_missing_projection_as_retryable(
     assert calls == 3
 
 
+def test_mixed_use_source_only_retry_resolves_generated_source_from_linked_id(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    inputs = {
+        **_expense_inputs(default_storage),
+        "total_expense": "100",
+        "business_use_percentage": "50",
+        "allocation_rationale": "Measured use",
+        "linked_transaction_id": "transaction-generated-source-retry",
+    }
+    original_append = default_storage._append
+    calls = 0
+
+    def fail_projection_on_both_attempts(title: str, record: dict[str, str]) -> None:
+        nonlocal calls
+        calls += 1
+        if title == "Transactions":
+            raise StorageUnavailableError("projection unavailable", retryable=True)
+        original_append(title, record)
+
+    default_storage._append = fail_projection_on_both_attempts  # type: ignore[method-assign]
+    with pytest.raises(StorageBulkMutationUncertainError):
+        default_storage.create_mixed_use_expense(**inputs)
+    with pytest.raises(StorageBulkMutationUncertainError) as retry_error:
+        default_storage.create_mixed_use_expense(**inputs)
+
+    assert retry_error.value.outcome == "not_applied"
+    assert len(default_storage._rows("MixedUseExpenses", force_refresh=True)) == 1
+    assert default_storage._rows("Transactions", force_refresh=True) == []
+    assert calls == 3
+
+
 def test_mixed_use_create_retry_reuses_pair_after_account_deactivation(
     default_storage: GoogleSheetsStorage,
 ) -> None:
