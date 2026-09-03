@@ -110,7 +110,8 @@ Categories. Select zero, one, or multiple stored Tags; remove any selection
 without clearing the others. Choose **+ Add new tag** to create a normalized,
 duplicate-safe Tag and attach it when the transaction is saved. You can also
 type a new name into the selector and press Enter when searching; the typed
-value is handled as the inline Tag to create.
+value is handled as the inline Tag to create. The selector labels "+ Add new
+tag" and "Add new tag" are reserved and cannot be saved as Tag names.
 
 The optional receipt uploader accepts PDF, PNG, JPG, JPEG, WEBP, or HEIC.
 Each file must be non-empty and no larger than 20 MB; one selected batch may
@@ -255,8 +256,10 @@ Mileage uses the same profile-local Tag list and inline **+ Add new tag** flow
 as Transactions. Select zero, one, or multiple Tags, and remove individual
 selections without affecting the others. You can also type a new name into the
 selector and press Enter when searching. The log and CSV display resolved Tag
-names, and the Tags filter includes trips containing any selected Tag. A round
-trip applies the same Tags to both independently saved legs.
+names, and the Tags filter includes trips containing any selected Tag. The
+selector labels "+ Add new tag" and "Add new tag" are reserved and cannot be
+saved as Tag names. A round trip applies the same Tags to both independently
+saved legs.
 
 When Google Maps is configured, Starting location and Destination offer Google
 address suggestions. Select both suggestions, then choose **Calculate mileage**

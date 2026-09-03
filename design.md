@@ -478,7 +478,8 @@ The form presents:
 8. Tags (optional). The multi-select lists profile-local stored Tags, lets each
    selection be removed independently, and offers `+ Add new tag`; a valid new
    Tag is stored and selected with the transaction. Typing a new name and
-   pressing Enter in the selector is an equivalent inline-create path.
+   pressing Enter in the selector is an equivalent inline-create path. The
+   selector labels `+ Add new tag` and `Add new tag` are reserved Tag names.
 9. Description / memo
 10. Receipt (optional)
 11. Save transaction

@@ -106,6 +106,13 @@ def test_blank_inline_tag_name_is_rejected_before_storage_write() -> None:
     assert inline_tag_name_error("Project") is None
 
 
+def test_inline_tag_selector_label_cannot_be_saved_as_a_tag_name() -> None:
+    message = "Choose a different Tag name; this selector label is reserved."
+
+    assert inline_tag_name_error(ADD_NEW_TAG) == message
+    assert inline_tag_name_error("Add new tag") == message
+
+
 def test_copy_drops_inactive_source_tags() -> None:
     assert _copyable_tag_ids(
         [

@@ -13,8 +13,15 @@ ADD_NEW_TAG = "+ Add new tag"
 
 def inline_tag_name_error(new_name: str | None) -> str | None:
     """Return the validation message for an explicitly requested new Tag."""
-    if new_name is not None and not new_name.strip():
-        return "Enter a Tag name before saving."
+    if new_name is not None:
+        stripped = new_name.strip()
+        if not stripped:
+            return "Enter a Tag name before saving."
+        if stripped.casefold() in {
+            ADD_NEW_TAG.casefold(),
+            ADD_NEW_TAG.removeprefix("+ ").casefold(),
+        }:
+            return "Choose a different Tag name; this selector label is reserved."
     return None
 
 
