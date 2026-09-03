@@ -175,6 +175,11 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         if st.session_state.get(baseline_id_key) != selected_id:
             st.session_state[baseline_key] = dict(source)
             st.session_state[baseline_id_key] = selected_id
+        elif isinstance(st.session_state.get(baseline_key), Mapping):
+            baseline = dict(st.session_state[baseline_key])
+            if baseline.get("receipt_references") != source.get("receipt_references"):
+                baseline["receipt_references"] = source.get("receipt_references", "")
+                st.session_state[baseline_key] = baseline
         expected_source = st.session_state.get(baseline_key, source)
     else:
         st.session_state.pop(baseline_key, None)
@@ -259,6 +264,16 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             type=RECEIPT_UPLOAD_TYPES,
             accept_multiple_files=True,
             key=f"mixed_receipts_{scope}",
+            disabled=bool(
+                isinstance(recovery, Mapping)
+                and not recovery_source
+            ),
+            help=(
+                "Resolve the pending receipt recovery in Add transaction before "
+                "uploading receipts here."
+                if isinstance(recovery, Mapping) and not recovery_source
+                else None
+            ),
         )
         save_error = st.empty()
         if st.button("Save changes" if source else "Save mixed-use expense", type="primary", key=f"mixed_save_{scope}"):
@@ -269,6 +284,11 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                 save_error.error(tag_error)
             elif not rationale.strip():
                 save_error.error("Allocation rationale is required.")
+            elif isinstance(recovery, Mapping) and not recovery_source and receipt_uploads:
+                save_error.error(
+                    "Resolve the pending receipt recovery in Add transaction "
+                    "before saving mixed-use receipts."
+                )
             else:
                 try:
                     if source:
