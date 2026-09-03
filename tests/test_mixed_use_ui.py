@@ -7,6 +7,14 @@ from tabula_rasa.page_renderers.transactions.mixed_use import (
     mixed_use_preview,
 )
 from tabula_rasa.page_renderers.transactions.ledger import transaction_is_mixed_use
+from tabula_rasa.ledger_presentation import ledger_frame
+from tabula_rasa.ledger_reporting import (
+    account_balances,
+    category_activity_rollups,
+    profit_and_loss,
+)
+from tabula_rasa.page_renderers.data_backup.exports import prepare_csv_exports
+from tabula_rasa.page_renderers.transactions.search import filter_transaction_rows
 from tabula_rasa.storage import (
     decode_receipt_references,
     StorageConflictError,
@@ -302,3 +310,43 @@ def test_mixed_use_app_test_is_profile_scoped_and_derived_ledger_is_read_only() 
         assert "Permanently delete" not in ledger_labels
         assert "Remove receipt" not in ledger_labels
         assert "Link selected receipt" not in ledger_labels
+
+
+def test_mixed_use_projection_is_counted_once_across_read_paths(default_storage) -> None:
+    account = default_storage.create_account("Read Path Checking", "Bank")
+    category = default_storage.create_category("Read Path Office", "Expense")
+    source = default_storage.create_mixed_use_expense(
+        txn_date="2026-09-03",
+        total_expense="100.00",
+        business_use_percentage="25",
+        account_id=account["id"],
+        category_id=category["id"],
+        description="Shared office",
+        allocation_rationale="Measured use",
+    )
+    transactions = default_storage.list_transactions()
+    accounts = default_storage.list_accounts(active_only=False)
+    categories = default_storage.list_categories()
+    tags = default_storage.list_tags()
+
+    assert [row["id"] for row in transactions] == [source["linked_transaction_id"]]
+    assert profit_and_loss(transactions)["expenses"] == 25.0
+    balances = account_balances(accounts, transactions)
+    checking = next(row for row in balances if row["id"] == account["id"])
+    assert checking["balance"] == -25.0
+    rollups = category_activity_rollups(transactions, categories, kind="Expense")
+    assert [row["rollup_total"] for row in rollups if row["id"] == category["id"]] == [25.0]
+
+    frame = ledger_frame(transactions, accounts, categories, tags=tags)
+    assert len(frame) == 1
+    assert frame.iloc[0]["ID"] == source["linked_transaction_id"]
+    assert frame.iloc[0]["Amount"] == 25.0
+    matched = filter_transaction_rows(frame.to_dict(orient="records"), "Shared office")
+    assert len(matched) == 1
+    assert matched[0]["ID"] == source["linked_transaction_id"]
+
+    exports = prepare_csv_exports(default_storage)
+    csv_text = exports["transactions"].decode("utf-8")
+    assert csv_text.count(source["linked_transaction_id"]) == 1
+    assert source["id"] not in csv_text
+    assert ",25.0," in csv_text or ",25.00," in csv_text

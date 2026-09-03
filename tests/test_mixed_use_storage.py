@@ -789,6 +789,51 @@ def test_generic_receipt_setter_rejects_receipts_owned_by_another_transaction(
         )
 
 
+@pytest.mark.parametrize(
+    "operation",
+    [
+        "set_transaction_receipt_references",
+        "initialize_legacy_transaction_receipts",
+        "link_transaction_receipt",
+        "remap_transaction_receipt",
+        "unlink_transaction_receipt",
+    ],
+)
+def test_every_generic_receipt_mutation_rejects_mixed_use_projection(
+    default_storage: GoogleSheetsStorage, operation: str
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    transaction_id = source["linked_transaction_id"]
+    reference = {"id": "generic-guard-receipt", "name": "Receipt.pdf"}
+
+    with pytest.raises(StorageValidationError, match="changed through mixed-use"):
+        if operation == "set_transaction_receipt_references":
+            default_storage.set_transaction_receipt_references(
+                transaction_id, [reference]
+            )
+        elif operation == "initialize_legacy_transaction_receipts":
+            default_storage.initialize_legacy_transaction_receipts(
+                transaction_id, references=[reference]
+            )
+        elif operation == "link_transaction_receipt":
+            default_storage.link_transaction_receipt(
+                transaction_id, reference=reference
+            )
+        elif operation == "remap_transaction_receipt":
+            default_storage.remap_transaction_receipt(
+                transaction_id, old_file_id="old-receipt", reference=reference
+            )
+        else:
+            default_storage.unlink_transaction_receipt(
+                transaction_id, file_id="old-receipt"
+            )
+
+
 def test_mixed_use_create_rejects_source_link_mismatch_before_payee_creation(
     default_storage: GoogleSheetsStorage,
 ) -> None:

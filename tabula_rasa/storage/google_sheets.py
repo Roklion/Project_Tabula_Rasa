@@ -3908,6 +3908,8 @@ class GoogleSheetsStorage:
         references: Sequence[Mapping[str, Any]],
     ) -> dict[str, str]:
         """Populate one still-blank legacy receipt cell with rich references."""
+        current = self._find_row("Transactions", transaction_id)
+        self._reject_mixed_use_projection(current.values)
         try:
             normalized = [
                 validate_receipt_reference(reference, allow_legacy=False)
@@ -3936,8 +3938,6 @@ class GoogleSheetsStorage:
                 raise StorageConflictError(
                     "That receipt is already linked to another transaction"
                 )
-        current = self._find_row("Transactions", transaction_id)
-        self._reject_mixed_use_projection(current.values)
         if str(current.values.get("receipt_references", "")) != "":
             raise StorageConflictError(
                 "The transaction receipt references are already initialized"
@@ -4040,6 +4040,8 @@ class GoogleSheetsStorage:
         reference: Mapping[str, Any],
     ) -> dict[str, str]:
         """Replace one recovered old Drive ID with a verified new reference."""
+        current = self._find_row("Transactions", transaction_id)
+        self._reject_mixed_use_projection(current.values)
         try:
             normalized_reference = validate_receipt_reference(
                 reference,
@@ -4060,8 +4062,6 @@ class GoogleSheetsStorage:
                 raise StorageConflictError(
                     "That receipt is already linked to another transaction"
                 )
-        current = self._find_row("Transactions", transaction_id)
-        self._reject_mixed_use_projection(current.values)
         references = decode_receipt_references(
             current.values.get("receipt_references", "")
         )
