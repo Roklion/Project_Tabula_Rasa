@@ -1073,6 +1073,30 @@ def test_mixed_use_delete_removes_source_and_projection(
     assert default_storage.list_transactions() == []
 
 
+def test_mixed_use_delete_rejects_stale_source_baseline(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured business use",
+    )
+    updated = default_storage.edit_mixed_use_expense(
+        source["id"],
+        expected_source=source,
+        allocation_rationale="Updated business use",
+    )
+
+    with pytest.raises(StorageConflictError, match="changed"):
+        default_storage.delete_mixed_use_expense(
+            source["id"], expected_source=source
+        )
+
+    assert default_storage.get_mixed_use_expense(source["id"]) == updated
+    assert len(default_storage.list_transactions()) == 1
+
+
 def test_sheet_id_validation_is_consistent_for_mixed_use_worksheets(
     default_storage: GoogleSheetsStorage,
 ) -> None:
