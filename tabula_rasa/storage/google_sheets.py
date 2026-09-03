@@ -2407,6 +2407,7 @@ class GoogleSheetsStorage:
         categories: Mapping[str, Mapping[str, str]] | None = None,
         payees: Mapping[str, Mapping[str, str]] | None = None,
         original_transaction: Mapping[str, Any] | None = None,
+        preserve_existing_payee: bool = False,
     ) -> dict[str, str]:
         payees_force_refresh = True
         if accounts is None and categories is None:
@@ -2483,17 +2484,31 @@ class GoogleSheetsStorage:
             raise StorageValidationError(
                 "Choose an existing payee or add a new payee"
             )
+        original_payee_id = (
+            _clean_text(original_transaction.get("payee_id"), "Payee")
+            if original_transaction is not None
+            else None
+        )
+        if (
+            preserve_existing_payee
+            and original_payee_id
+            and not payee_id
+            and new_payee_name
+        ):
+            if original_payee_id not in payees:
+                raise StorageValidationError("Payee does not exist")
+            if new_payee_name != payees[original_payee_id]["name"]:
+                raise StorageConflictError(
+                    "The mixed-use retry specifies a different payee"
+                )
+            payee_id = original_payee_id
+            new_payee_name = ""
         if not payee_id and new_payee_name:
             new_payee = self.create_payee(new_payee_name)
             payee_id = new_payee["id"]
             payees[payee_id] = new_payee
         if payee_id and payee_id not in payees:
             raise StorageValidationError("Payee does not exist")
-        original_payee_id = (
-            _clean_text(original_transaction.get("payee_id"), "Payee")
-            if original_transaction is not None
-            else None
-        )
         if (
             payee_id
             and not _as_bool(payees[payee_id]["active"], "Payee active")
@@ -2769,6 +2784,7 @@ class GoogleSheetsStorage:
         linked_transaction_id: str | None = None,
         created_at: str | None = None,
         original_transaction: Mapping[str, Any] | None = None,
+        preserve_existing_payee: bool = False,
     ) -> tuple[dict[str, str], dict[str, str]]:
         try:
             allocation = validate_mixed_use_allocation(
@@ -2806,6 +2822,7 @@ class GoogleSheetsStorage:
                 else None
             ),
             original_transaction=original_transaction,
+            preserve_existing_payee=preserve_existing_payee,
         )
         source = {
             "id": source_id,
@@ -2940,6 +2957,9 @@ class GoogleSheetsStorage:
             source_id=requested_source_id or None,
             linked_transaction_id=requested_transaction_id or None,
             original_transaction=original_transaction,
+            preserve_existing_payee=(
+                existing_source is not None or existing_transaction is not None
+            ),
         )
         source_id = source["id"]
         transaction_id = projection["id"]

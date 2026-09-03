@@ -858,6 +858,44 @@ def test_mixed_use_source_only_retry_resolves_generated_source_from_linked_id(
     assert calls == 3
 
 
+def test_mixed_use_retry_does_not_recreate_new_payee_after_deactivation(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    inputs = {
+        **_expense_inputs(default_storage),
+        "total_expense": "100",
+        "business_use_percentage": "50",
+        "allocation_rationale": "Measured use",
+        "linked_transaction_id": "transaction-new-payee-retry",
+    }
+    payee_id = inputs.pop("payee_id")
+    inputs["new_payee_name"] = "New vendor"
+    original_append = default_storage._append
+
+    def fail_projection(title: str, record: dict[str, str]) -> None:
+        if title == "Transactions":
+            raise StorageUnavailableError("projection unavailable", retryable=True)
+        original_append(title, record)
+
+    default_storage._append = fail_projection  # type: ignore[method-assign]
+    with pytest.raises(StorageBulkMutationUncertainError):
+        default_storage.create_mixed_use_expense(**inputs)
+
+    source = default_storage._rows("MixedUseExpenses", force_refresh=True)[0].values
+    created_payee_id = source["payee_id"]
+    assert created_payee_id != payee_id
+    default_storage.edit_payee(created_payee_id, active=False)
+    payee_count = len(default_storage._rows("Payees", force_refresh=True))
+
+    with pytest.raises(StorageBulkMutationUncertainError) as retry_error:
+        default_storage.create_mixed_use_expense(**inputs)
+
+    assert retry_error.value.outcome == "not_applied"
+    assert len(default_storage._rows("Payees", force_refresh=True)) == payee_count
+    assert len(default_storage._rows("MixedUseExpenses", force_refresh=True)) == 1
+    assert default_storage._rows("Transactions", force_refresh=True) == []
+
+
 def test_mixed_use_create_retry_reuses_pair_after_account_deactivation(
     default_storage: GoogleSheetsStorage,
 ) -> None:
