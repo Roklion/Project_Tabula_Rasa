@@ -105,7 +105,7 @@ def _render_payees(context: PayeesTagsContext, payees: list[dict[str, str]]) -> 
         rename_name = st.text_input("Renamed payee name", value=by_id[rename_id]["name"], key=f"managed_rename_payee_name_{context.profile_key}_{rename_id}")
         rename_error = st.empty()
         if st.button("Rename payee", type="primary", key=f"managed_rename_payee_{context.profile_key}"):
-            _write(context, "edit_payee", {"id": rename_id, "name": rename_name}, lambda: context.storage.edit_payee(rename_id, name=rename_name), "Payee renamed.", rename_error)
+            _write(context, "edit_payee", {"id": rename_id, "name": rename_name}, lambda: context.storage.edit_payee(rename_id, name=rename_name, expected_payee=by_id[rename_id]), "Payee renamed.", rename_error)
 
     with st.expander("Merge payees"):
         target_id = st.selectbox("Target payee", ids, format_func=labels, key=f"managed_merge_payee_target_{context.profile_key}")
@@ -119,7 +119,7 @@ def _render_payees(context: PayeesTagsContext, payees: list[dict[str, str]]) -> 
             elif not acknowledged:
                 merge_error.error("Acknowledge the permanent source removal before merging. No data changed.")
             else:
-                _write(context, "merge_payees", {"target_id": target_id, "source_ids": source_ids}, lambda: context.storage.merge_payees(target_id, source_ids), "Payees merged.", merge_error)
+                _write(context, "merge_payees", {"target_id": target_id, "source_ids": source_ids}, lambda: context.storage.merge_payees(target_id, source_ids, expected_payees=payees), "Payees merged.", merge_error)
 
     with st.expander("Remove payee"):
         remove_id = st.selectbox("Payee to remove", ids, format_func=labels, key=f"managed_remove_payee_id_{context.profile_key}")
@@ -132,7 +132,7 @@ def _render_payees(context: PayeesTagsContext, payees: list[dict[str, str]]) -> 
             if not remove_ack:
                 remove_error.error("Acknowledge permanent removal before continuing. No data changed.")
             else:
-                _write(context, "remove_payee", {"id": remove_id}, lambda: context.storage.remove_payee(remove_id), "Payee removed.", remove_error)
+                _write(context, "remove_payee", {"id": remove_id}, lambda: context.storage.remove_payee(remove_id, expected_payee=by_id[remove_id]), "Payee removed.", remove_error)
 
 
 def _render_tags(context: PayeesTagsContext, tags: list[dict[str, str]]) -> None:
@@ -175,7 +175,7 @@ def _render_tags(context: PayeesTagsContext, tags: list[dict[str, str]]) -> None
         rename_name = st.text_input("Renamed tag name", value=by_id[rename_id]["name"], key=f"managed_rename_tag_name_{context.profile_key}_{rename_id}")
         rename_error = st.empty()
         if st.button("Rename tag", type="primary", key=f"managed_rename_tag_{context.profile_key}"):
-            _write(context, "edit_tag", {"id": rename_id, "name": rename_name}, lambda: context.storage.edit_tag(rename_id, name=rename_name), "Tag renamed.", rename_error)
+            _write(context, "edit_tag", {"id": rename_id, "name": rename_name}, lambda: context.storage.edit_tag(rename_id, name=rename_name, expected_tag=by_id[rename_id]), "Tag renamed.", rename_error)
 
     with st.expander("Merge tags"):
         target_id = st.selectbox("Target tag", ids, format_func=labels, key=f"managed_merge_tag_target_{context.profile_key}")
@@ -189,7 +189,7 @@ def _render_tags(context: PayeesTagsContext, tags: list[dict[str, str]]) -> None
             elif not acknowledged:
                 merge_error.error("Acknowledge the permanent source removal before merging. No data changed.")
             else:
-                _write(context, "merge_tags", {"target_id": target_id, "source_ids": source_ids}, lambda: context.storage.merge_tags(target_id, source_ids), "Tags merged.", merge_error)
+                _write(context, "merge_tags", {"target_id": target_id, "source_ids": source_ids}, lambda: context.storage.merge_tags(target_id, source_ids, expected_tags=tags), "Tags merged.", merge_error)
 
     with st.expander("Remove tag"):
         remove_id = st.selectbox("Tag to remove", ids, format_func=labels, key=f"managed_remove_tag_id_{context.profile_key}")
@@ -202,7 +202,7 @@ def _render_tags(context: PayeesTagsContext, tags: list[dict[str, str]]) -> None
             if not remove_ack:
                 remove_error.error("Acknowledge permanent removal before continuing. No data changed.")
             else:
-                _write(context, "remove_tag", {"id": remove_id}, lambda: context.storage.remove_tag(remove_id), "Tag removed.", remove_error)
+                _write(context, "remove_tag", {"id": remove_id}, lambda: context.storage.remove_tag(remove_id, expected_tag=by_id[remove_id]), "Tag removed.", remove_error)
 
 
 def render_payees_tags(context: PayeesTagsContext) -> None:

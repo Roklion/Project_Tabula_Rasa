@@ -2509,10 +2509,22 @@ class GoogleSheetsStorage:
                 self._append_many("Payees", additions)
             return {item["id"]: item for item in by_key.values()}
 
-    def edit_payee(self, payee_id: str, **changes: Any) -> dict[str, str]:
+    def edit_payee(
+        self,
+        payee_id: str,
+        *,
+        expected_payee: Mapping[str, Any] | None = None,
+        expected: Mapping[str, Any] | None = None,
+        **changes: Any,
+    ) -> dict[str, str]:
         with _PAYEE_WRITE_LOCK:
             current = self._find_row("Payees", payee_id)
             updated = dict(current.values)
+            expected_record = expected_payee or expected
+            if expected_record is not None:
+                self._assert_expected_managed_records(
+                    {str(updated["id"]): updated}, expected_record
+                )
             name = _clean_text(
                 changes.get("name", updated["name"]),
                 "Payee name",
@@ -2595,14 +2607,16 @@ class GoogleSheetsStorage:
         *,
         operation: str,
         error: StorageUnavailableError | None,
-        fully_applied: Callable[[], bool],
-        not_applied: Callable[[], bool],
+        read_state: Callable[[], Any],
+        fully_applied: Callable[[Any], bool],
+        not_applied: Callable[[Any], bool],
         invalidate: Iterable[str],
     ) -> dict[str, str] | None:
         """Classify a cross-sheet batch response using a fresh postcondition read."""
         try:
-            applied = fully_applied()
-            untouched = not_applied()
+            state = read_state()
+            applied = fully_applied(state)
+            untouched = not applied and not_applied(state)
         except StorageError as read_error:
             for title in invalidate:
                 self._invalidate(title)
@@ -2685,18 +2699,48 @@ class GoogleSheetsStorage:
             snapshot = self._snapshot(
                 ["Payees", "Transactions", "MixedUseExpenses"], force_refresh=True
             )
+            _validate_mixed_use_tables(
+                {
+                    "MixedUseExpenses": (
+                        WORKSHEET_HEADERS["MixedUseExpenses"],
+                        [dict(row.values) for row in snapshot["MixedUseExpenses"]],
+                    ),
+                    "Transactions": (
+                        WORKSHEET_HEADERS["Transactions"],
+                        [dict(row.values) for row in snapshot["Transactions"]],
+                    ),
+                }
+            )
             payee_rows = self._managed_rows_by_id(snapshot["Payees"], "Payees")
             payees = {record_id: dict(row.values) for record_id, row in payee_rows.items()}
-            self._assert_expected_managed_records(payees, expected_payees)
             if target_id not in payees:
                 raise StorageNotFoundError("Payee no longer exists")
             missing = [item for item in source_ids if item not in payees]
             if missing and len(missing) == len(source_ids):
                 # A retried merge may have already removed every source. Once
-                # the target still exists, this is a safe converged outcome.
-                return {"status": "fully_applied", "count": str(len(source_ids))}
+                # the target still exists and no reference survives, this is
+                # a safe converged outcome. Do not hide an inconsistent
+                # workbook behind a successful retry.
+                expected_records = self._expected_managed_records(expected_payees)
+                self._assert_expected_managed_records(
+                    {target_id: payees[target_id]},
+                    {target_id: expected_records[target_id]}
+                    if target_id in expected_records
+                    else None,
+                )
+                references = [
+                    row
+                    for row in (*snapshot["Transactions"], *snapshot["MixedUseExpenses"])
+                    if _clean_text(row.values.get("payee_id"), "Payee") in source_ids
+                ]
+                if not references:
+                    return {"status": "fully_applied", "count": str(len(source_ids))}
+                raise StorageConflictError(
+                    "The selected source payee records are missing but their references remain."
+                )
             if missing:
                 raise StorageNotFoundError("A source payee no longer exists")
+            self._assert_expected_managed_records(payees, expected_payees)
 
             transaction_rows = self._managed_rows_by_id(snapshot["Transactions"], "Transactions")
             mixed_rows = self._managed_rows_by_id(snapshot["MixedUseExpenses"], "MixedUseExpenses")
@@ -2738,25 +2782,36 @@ class GoogleSheetsStorage:
                     self._managed_rows_by_id(current["MixedUseExpenses"], "MixedUseExpenses"),
                 )
 
-            def fully_applied() -> bool:
-                current_payees, current_transactions, current_mixed = fresh_state()
+            def fully_applied(state: Any) -> bool:
+                current_payees, current_transactions, current_mixed = state
                 return (
                     target_id in current_payees
                     and not any(item in current_payees for item in source_ids)
                     and all(
-                        _clean_text(row.values.get("payee_id"), "Payee") == target_id
-                        for record_id, row in current_transactions.items()
-                        if record_id in transaction_updates
+                        _clean_text(row.values.get("payee_id"), "Payee") != source_id
+                        for source_id in source_ids
+                        for row in (*current_transactions.values(), *current_mixed.values())
                     )
                     and all(
-                        _clean_text(row.values.get("payee_id"), "Payee") == target_id
-                        for record_id, row in current_mixed.items()
-                        if record_id in mixed_updates
+                        record_id in current_transactions
+                        and _clean_text(current_transactions[record_id].values.get("payee_id"), "Payee") == target_id
+                        for record_id in transaction_updates
+                    )
+                    and all(
+                        record_id in current_mixed
+                        and _clean_text(current_mixed[record_id].values.get("payee_id"), "Payee") == target_id
+                        for record_id in mixed_updates
                     )
                 )
 
-            def not_applied() -> bool:
-                _, current_transactions, current_mixed = fresh_state()
+            def not_applied(state: Any) -> bool:
+                current_payees, current_transactions, current_mixed = state
+                if any(
+                    record_id not in current_payees
+                    or current_payees[record_id] != row.values
+                    for record_id, row in payee_rows.items()
+                ):
+                    return False
                 return all(
                     record_id in current_transactions
                     and current_transactions[record_id].values == row.values
@@ -2771,13 +2826,14 @@ class GoogleSheetsStorage:
             except StorageUnavailableError as error:
                 result = self._managed_batch_result(
                     operation="payee merge", error=error, fully_applied=fully_applied,
+                    read_state=fresh_state,
                     not_applied=not_applied,
                     invalidate=("Payees", "Transactions", "MixedUseExpenses"),
                 )
                 if result is not None:
                     return {**result, "count": str(len(source_ids))}
                 raise AssertionError("managed batch classification did not return")
-            if not fully_applied():
+            if not fully_applied(fresh_state()):
                 for title in ("Payees", "Transactions", "MixedUseExpenses"):
                     self._invalidate(title)
                 raise StorageBulkMutationUncertainError(
@@ -2790,7 +2846,13 @@ class GoogleSheetsStorage:
 
     merge_payee = merge_payees
 
-    def remove_payee(self, payee_id: str) -> dict[str, str]:
+    def remove_payee(
+        self,
+        payee_id: str,
+        *,
+        expected_payee: Mapping[str, Any] | None = None,
+        expected: Mapping[str, Any] | None = None,
+    ) -> dict[str, str]:
         """Permanently remove one unreferenced payee after a fresh check."""
         payee_id = _clean_text(payee_id, "Payee", required=True)
         with _MIXED_USE_CREATE_LOCK, _PAYEE_WRITE_LOCK:
@@ -2800,6 +2862,11 @@ class GoogleSheetsStorage:
             payee_rows = self._managed_rows_by_id(snapshot["Payees"], "Payees")
             if payee_id not in payee_rows:
                 raise StorageNotFoundError("Payee no longer exists")
+            expected_record = expected_payee or expected
+            if expected_record is not None:
+                self._assert_expected_managed_records(
+                    {payee_id: dict(payee_rows[payee_id].values)}, expected_record
+                )
             references = sum(
                 _clean_text(row.values.get("payee_id"), "Payee") == payee_id
                 for row in (*snapshot["Transactions"], *snapshot["MixedUseExpenses"])
@@ -2812,16 +2879,17 @@ class GoogleSheetsStorage:
             try:
                 self._batch_update_spreadsheet([request])
             except StorageUnavailableError as error:
-                def is_gone() -> bool:
-                    return payee_id not in self._managed_rows_by_id(
+                def read_state() -> dict[str, _StoredRow]:
+                    return self._managed_rows_by_id(
                         self._rows("Payees", force_refresh=True), "Payees"
                     )
-                def remains() -> bool:
-                    return payee_id in self._managed_rows_by_id(
-                        self._rows("Payees", force_refresh=True), "Payees"
-                    )
+                def is_gone(state: Any) -> bool:
+                    return payee_id not in state
+                def remains(state: Any) -> bool:
+                    return payee_id in state
                 result = self._managed_batch_result(
                     operation="payee removal", error=error, fully_applied=is_gone,
+                    read_state=read_state,
                     not_applied=remains, invalidate=("Payees",),
                 )
                 if result is not None:
@@ -2888,12 +2956,24 @@ class GoogleSheetsStorage:
             self._append("Tags", record)
             return record
 
-    def edit_tag(self, tag_id: str, **changes: Any) -> dict[str, str]:
+    def edit_tag(
+        self,
+        tag_id: str,
+        *,
+        expected_tag: Mapping[str, Any] | None = None,
+        expected: Mapping[str, Any] | None = None,
+        **changes: Any,
+    ) -> dict[str, str]:
         """Rename or activate/deactivate a tag while retaining its stable ID."""
         tag_id = _clean_text(tag_id, "Tag", required=True)
         with _TAG_WRITE_LOCK:
             current = self._find_row("Tags", tag_id)
             updated = dict(current.values)
+            expected_record = expected_tag or expected
+            if expected_record is not None:
+                self._assert_expected_managed_records(
+                    {str(updated["id"]): updated}, expected_record
+                )
             name = _clean_text(changes.get("name", updated.get("name")), "Tag name", required=True)
             if normalize_tag_name(name) != normalize_tag_name(updated.get("name", "")):
                 existing = self.list_tags(_force_refresh=True)
@@ -2934,14 +3014,34 @@ class GoogleSheetsStorage:
             snapshot = self._snapshot(["Tags", "Transactions", "Mileage"], force_refresh=True)
             tag_rows = self._managed_rows_by_id(snapshot["Tags"], "Tags")
             tags = {record_id: dict(row.values) for record_id, row in tag_rows.items()}
-            self._assert_expected_managed_records(tags, expected_tags)
             if target_id not in tags:
                 raise StorageNotFoundError("Tag no longer exists")
-            if any(item not in tags for item in source_ids):
-                missing = [item for item in source_ids if item not in tags]
-                if len(missing) == len(source_ids):
+            missing = [item for item in source_ids if item not in tags]
+            if missing and len(missing) == len(source_ids):
+                expected_records = self._expected_managed_records(expected_tags)
+                self._assert_expected_managed_records(
+                    {target_id: tags[target_id]},
+                    {target_id: expected_records[target_id]}
+                    if target_id in expected_records
+                    else None,
+                )
+                references = [
+                    row
+                    for row in (*snapshot["Transactions"], *snapshot["Mileage"])
+                    if any(
+                        item in source_ids
+                        for item in _normalize_tag_ids(row.values.get("tag_ids", ""))
+                    )
+                ]
+                if not references:
                     return {"status": "fully_applied", "count": str(len(source_ids))}
+                raise StorageConflictError(
+                    "The selected source tag records are missing but their references remain."
+                )
+            if missing:
+                missing = [item for item in source_ids if item not in tags]
                 raise StorageNotFoundError("A source tag no longer exists")
+            self._assert_expected_managed_records(tags, expected_tags)
             update_rows: dict[str, tuple[str, _StoredRow, str]] = {}
             for title in ("Transactions", "Mileage"):
                 for record_id, row in self._managed_rows_by_id(snapshot[title], title).items():
@@ -2968,9 +3068,15 @@ class GoogleSheetsStorage:
                     self._managed_rows_by_id(current["Mileage"], "Mileage"),
                 )
 
-            def fully_applied() -> bool:
-                current_tags, current_transactions, current_mileage = fresh_state()
+            def fully_applied(state: Any) -> bool:
+                current_tags, current_transactions, current_mileage = state
                 if target_id not in current_tags or any(item in current_tags for item in source_ids):
+                    return False
+                if any(
+                    item in _normalize_tag_ids(row.values.get("tag_ids", ""))
+                    for item in source_ids
+                    for row in (*current_transactions.values(), *current_mileage.values())
+                ):
                     return False
                 for title, row, expected_value in update_rows.values():
                     current_rows = current_transactions if title == "Transactions" else current_mileage
@@ -2981,8 +3087,14 @@ class GoogleSheetsStorage:
                         return False
                 return True
 
-            def not_applied() -> bool:
-                _, current_transactions, current_mileage = fresh_state()
+            def not_applied(state: Any) -> bool:
+                current_tags, current_transactions, current_mileage = state
+                if any(
+                    record_id not in current_tags
+                    or current_tags[record_id] != row.values
+                    for record_id, row in tag_rows.items()
+                ):
+                    return False
                 for title, row, _ in update_rows.values():
                     current_rows = current_transactions if title == "Transactions" else current_mileage
                     current = current_rows.get(
@@ -2997,13 +3109,14 @@ class GoogleSheetsStorage:
             except StorageUnavailableError as error:
                 result = self._managed_batch_result(
                     operation="tag merge", error=error, fully_applied=fully_applied,
+                    read_state=fresh_state,
                     not_applied=not_applied,
                     invalidate=("Tags", "Transactions", "Mileage"),
                 )
                 if result is not None:
                     return {**result, "count": str(len(source_ids))}
                 raise AssertionError("managed batch classification did not return")
-            if not fully_applied():
+            if not fully_applied(fresh_state()):
                 for title in ("Tags", "Transactions", "Mileage"):
                     self._invalidate(title)
                 raise StorageBulkMutationUncertainError(
@@ -3016,7 +3129,13 @@ class GoogleSheetsStorage:
 
     merge_tag = merge_tags
 
-    def remove_tag(self, tag_id: str) -> dict[str, str]:
+    def remove_tag(
+        self,
+        tag_id: str,
+        *,
+        expected_tag: Mapping[str, Any] | None = None,
+        expected: Mapping[str, Any] | None = None,
+    ) -> dict[str, str]:
         """Permanently remove one tag only when no transaction or trip uses it."""
         tag_id = _clean_text(tag_id, "Tag", required=True)
         with _MIXED_USE_CREATE_LOCK, _TAG_WRITE_LOCK:
@@ -3024,6 +3143,11 @@ class GoogleSheetsStorage:
             tag_rows = self._managed_rows_by_id(snapshot["Tags"], "Tags")
             if tag_id not in tag_rows:
                 raise StorageNotFoundError("Tag no longer exists")
+            expected_record = expected_tag or expected
+            if expected_record is not None:
+                self._assert_expected_managed_records(
+                    {tag_id: dict(tag_rows[tag_id].values)}, expected_record
+                )
             references = 0
             for row in (*snapshot["Transactions"], *snapshot["Mileage"]):
                 if tag_id in _normalize_tag_ids(row.values.get("tag_ids", "")):
@@ -3037,16 +3161,17 @@ class GoogleSheetsStorage:
                     self._managed_delete_request("Tags", tag_rows[tag_id])
                 ])
             except StorageUnavailableError as error:
-                def is_gone() -> bool:
-                    return tag_id not in self._managed_rows_by_id(
+                def read_state() -> dict[str, _StoredRow]:
+                    return self._managed_rows_by_id(
                         self._rows("Tags", force_refresh=True), "Tags"
                     )
-                def remains() -> bool:
-                    return tag_id in self._managed_rows_by_id(
-                        self._rows("Tags", force_refresh=True), "Tags"
-                    )
+                def is_gone(state: Any) -> bool:
+                    return tag_id not in state
+                def remains(state: Any) -> bool:
+                    return tag_id in state
                 result = self._managed_batch_result(
                     operation="tag removal", error=error, fully_applied=is_gone,
+                    read_state=read_state,
                     not_applied=remains, invalidate=("Tags",),
                 )
                 if result is not None:
