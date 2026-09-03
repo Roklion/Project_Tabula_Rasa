@@ -218,6 +218,81 @@ def test_recovery_reuses_original_drive_file_without_remapping() -> None:
     assert report["skipped"] == 0
 
 
+def test_mixed_use_receipt_recovery_updates_source_and_projection() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
+    account = storage.create_account("Checking", "Bank")
+    category = storage.create_category("Office", "Expense")
+    old_reference = _reference(1, b"receipt")
+    source = storage.create_mixed_use_expense(
+        txn_date="2026-07-31",
+        total_expense="100.00",
+        business_use_percentage="50",
+        account_id=account["id"],
+        category_id=category["id"],
+        description="Shared office",
+        allocation_rationale="Measured use",
+        receipt_references=[old_reference],
+    )
+    transaction_id = source["linked_transaction_id"]
+    expected_transactions = storage.list_transactions(_force_refresh=True)
+    new_reference = {**old_reference, "id": "newreceipt01"}
+
+    applied, _ = storage.apply_receipt_recovery_plan(
+        expected_transactions,
+        {transaction_id: [new_reference]},
+    )
+
+    assert applied is True
+    assert decode_receipt_references(
+        storage.list_transactions(_force_refresh=True)[0]["receipt_references"]
+    )[0]["id"] == "newreceipt01"
+    assert decode_receipt_references(
+        storage.list_mixed_use_expenses()[0]["receipt_references"]
+    )[0]["id"] == "newreceipt01"
+
+
+def test_mixed_use_receipt_mutation_apis_update_source_and_projection() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
+    account = storage.create_account("Checking", "Bank")
+    category = storage.create_category("Office", "Expense")
+    source = storage.create_mixed_use_expense(
+        txn_date="2026-07-31",
+        total_expense="100.00",
+        business_use_percentage="50",
+        account_id=account["id"],
+        category_id=category["id"],
+        description="Shared office",
+        allocation_rationale="Measured use",
+    )
+    transaction_id = source["linked_transaction_id"]
+    first = _reference(1, b"first receipt")
+    second = _reference(2, b"second receipt")
+    transaction_sheet = storage._workbook.sheets["Transactions"]
+    source_sheet = storage._workbook.sheets["MixedUseExpenses"]
+    transaction_sheet.rows[1][transaction_sheet.rows[0].index("receipt_references")] = ""
+    source_sheet.rows[1][source_sheet.rows[0].index("receipt_references")] = ""
+
+    storage.initialize_legacy_transaction_receipts(
+        transaction_id, references=[first]
+    )
+    storage.link_transaction_receipt(transaction_id, reference=second)
+    storage.remap_transaction_receipt(
+        transaction_id,
+        old_file_id=str(first["id"]),
+        reference=second,
+    )
+    storage.unlink_transaction_receipt(
+        transaction_id, file_id=str(second["id"])
+    )
+
+    assert decode_receipt_references(
+        storage.list_transactions(_force_refresh=True)[0]["receipt_references"]
+    ) == []
+    assert decode_receipt_references(
+        storage.list_mixed_use_expenses()[0]["receipt_references"]
+    ) == []
+
+
 def test_recovery_preserves_conflict_check_before_skipping_reused_file() -> None:
     content = b"receipt"
     reference = _reference(1, content)
@@ -231,10 +306,17 @@ def test_recovery_preserves_conflict_check_before_skipping_reused_file() -> None
         account_id=accounts[0]["id"],
         category_id=categories[0]["id"],
     )
-    target.set_transaction_receipt_references(
-        other_transaction["id"],
-        [reference],
+    # Seed the deliberately invalid duplicate-reference state directly.  The
+    # public setter now correctly rejects creating this conflict.
+    transaction_sheet = target._workbook.worksheet("Transactions")
+    headers = transaction_sheet.rows[0]
+    receipt_column = headers.index("receipt_references")
+    id_column = headers.index("id")
+    other_row = next(
+        row for row in transaction_sheet.rows[1:] if row[id_column] == other_transaction["id"]
     )
+    other_row[receipt_column] = json.dumps([reference], separators=(",", ":"))
+    target._invalidate("Transactions")
     drive = Mock()
     drive.restore_receipt.return_value = (_drive_file(reference), True)
 
@@ -1102,6 +1184,9 @@ def test_recovery_identifies_pre_manifest_v4_as_ledger_only() -> None:
         ledger_manifest = json.loads(source.read("manifest.json"))
         ledger_manifest["format_version"] = 4
         ledger_manifest["sha256"].pop("receipts.json")
+        ledger_manifest["sha256"].pop("MixedUseExpenses.csv", None)
+        ledger_manifest["row_counts"].pop("MixedUseExpenses", None)
+        ledger_manifest["worksheet_headers"].pop("MixedUseExpenses", None)
         transaction_rows = list(
             csv.reader(
                 io.StringIO(source.read("Transactions.csv").decode("utf-8"))
@@ -1140,7 +1225,7 @@ def test_recovery_identifies_pre_manifest_v4_as_ledger_only() -> None:
         ledger_manifest["row_counts"].pop("Tags")
         ledger_manifest["sha256"].pop("Tags.csv")
         for name in source.namelist():
-            if name in {"receipts.json", "Tags.csv"}:
+            if name in {"receipts.json", "MixedUseExpenses.csv", "Tags.csv"}:
                 continue
             destination.writestr(
                 name,

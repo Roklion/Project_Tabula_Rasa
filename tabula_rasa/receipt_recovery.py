@@ -19,6 +19,7 @@ from tabula_rasa.receipt_manifest import (
 )
 from tabula_rasa.storage import (
     GoogleSheetsStorage,
+    MIXED_USE_SOURCE_TYPE,
     StorageError,
     decode_receipt_references,
 )
@@ -128,6 +129,7 @@ def _plan_receipt_reconciliation(
         if current_references is None:
             outcomes.append(None)
             continue
+        transaction = transactions_by_id[transaction_id]
 
         confirmed_reference_present = any(
             str(current_reference.get("id")) == confirmed_file_id
@@ -148,6 +150,8 @@ def _plan_receipt_reconciliation(
             )
         )
         if confirmed_reference_present and not stale_old_reference_present:
+            if transaction.get("source_type") == MIXED_USE_SOURCE_TYPE:
+                updates[transaction_id] = current_references
             outcomes.append(False)
             continue
 

@@ -62,12 +62,13 @@ def validate(
         "Tags": len(storage.list_tags()),
         "Transactions": len(storage.list_transactions()),
         "Mileage": len(storage.list_mileage_trips()),
+        "MixedUseExpenses": len(storage.list_mixed_use_expenses()),
     }
 
     print(f"Workbook access verified: {workbook.title}")
     print(
-        "Worksheet headers verified: Accounts, Categories, Payees, Tags, "
-        "Transactions, Mileage"
+        "Worksheet headers verified: Accounts, Categories, Payees, "
+        "Tags, Transactions, Mileage, MixedUseExpenses"
     )
     print(
         "Ledger rows readable: "

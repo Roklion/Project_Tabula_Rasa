@@ -26,6 +26,7 @@ from tabula_rasa.storage.google_sheets import (
     StorageUnavailableError,
     StorageValidationError,
     StorageWorkbookAccessError,
+    PRE_MIXED_USE_WORKSHEET_HEADERS,
     VERSION_7_WORKSHEET_HEADERS,
     VERSION_5_WORKSHEET_HEADERS,
     WORKSHEET_HEADERS,
@@ -236,6 +237,11 @@ def rewrite_backup_tables(
         manifest["sha256"][filename] = hashlib.sha256(
             contents[filename]
         ).hexdigest()
+    if format_version is not None and format_version < BACKUP_FORMAT_VERSION:
+        contents.pop("MixedUseExpenses.csv", None)
+        manifest["worksheet_headers"].pop("MixedUseExpenses", None)
+        manifest["row_counts"].pop("MixedUseExpenses", None)
+        manifest["sha256"].pop("MixedUseExpenses.csv", None)
     contents["manifest.json"] = json.dumps(manifest).encode("utf-8")
     with zipfile.ZipFile(output, "w") as destination:
         for name, content in contents.items():
@@ -509,6 +515,110 @@ class TestGoogleSheetsStorage:
             "receipt_references",
         ]
         assert transaction_sheet.rows[1][-1] == ""
+
+    def test_profile_storage_migrates_pre_mixed_transactions_before_provenance(
+        self,
+    ) -> None:
+        headers = dict(WORKSHEET_HEADERS)
+        headers["Transactions"] = tuple(
+            header
+            for header in PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"]
+            if header != "receipt_references"
+        )
+        workbook = FakeWorkbook(headers)
+        google_client = Mock()
+        google_client.open_by_key.return_value = workbook
+
+        with (
+            patch.object(
+                Credentials,
+                "from_service_account_info",
+                return_value=object(),
+            ),
+            patch.object(gspread, "authorize", return_value=google_client),
+        ):
+            GoogleSheetsStorage.from_secrets(
+                {
+                    "spreadsheet_id": "given-spreadsheet-id",
+                    "gcp_service_account": {"type": "service_account"},
+                }
+            )
+
+        assert set(workbook.sheets["Transactions"].rows[0]) == set(
+            WORKSHEET_HEADERS["Transactions"]
+        )
+
+    def test_profile_storage_clears_colliding_legacy_provenance_columns(
+        self,
+    ) -> None:
+        headers = dict(PRE_MIXED_USE_WORKSHEET_HEADERS)
+        transaction_headers = [
+            *PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"],
+            "source_type",
+        ]
+        headers["Transactions"] = tuple(transaction_headers)
+        workbook = FakeWorkbook(headers)
+        transaction_sheet = workbook.sheets["Transactions"]
+        legacy_row = [""] * len(transaction_headers)
+        legacy_row[transaction_headers.index("source_type")] = "legacy custom value"
+        transaction_sheet.rows.append(legacy_row)
+        google_client = Mock()
+        google_client.open_by_key.return_value = workbook
+
+        with (
+            patch.object(
+                Credentials,
+                "from_service_account_info",
+                return_value=object(),
+            ),
+            patch.object(gspread, "authorize", return_value=google_client),
+        ):
+            GoogleSheetsStorage.from_secrets(
+                {
+                    "spreadsheet_id": "given-spreadsheet-id",
+                    "gcp_service_account": {"type": "service_account"},
+                }
+            )
+
+        source_type_index = transaction_sheet.rows[0].index("source_type")
+        source_id_index = transaction_sheet.rows[0].index("source_id")
+        assert transaction_sheet.rows[1][source_type_index] == ""
+        assert transaction_sheet.rows[1][source_id_index] == ""
+
+    def test_profile_storage_rejects_mixed_use_provenance_without_source_sheet(
+        self,
+    ) -> None:
+        headers = dict(PRE_MIXED_USE_WORKSHEET_HEADERS)
+        transaction_headers = [
+            *PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"],
+            "source_type",
+            "source_id",
+        ]
+        headers["Transactions"] = tuple(transaction_headers)
+        workbook = FakeWorkbook(headers)
+        transaction_sheet = workbook.sheets["Transactions"]
+        row = [""] * len(transaction_headers)
+        row[transaction_headers.index("source_type")] = "mixed_use_expense"
+        row[transaction_headers.index("source_id")] = "source-119"
+        transaction_sheet.rows.append(row)
+        google_client = Mock()
+        google_client.open_by_key.return_value = workbook
+
+        with (
+            patch.object(
+                Credentials,
+                "from_service_account_info",
+                return_value=object(),
+            ),
+            patch.object(gspread, "authorize", return_value=google_client),
+            pytest.raises(StorageValidationError, match="MixedUseExpenses worksheet"),
+        ):
+            GoogleSheetsStorage.from_secrets(
+                {
+                    "spreadsheet_id": "given-spreadsheet-id",
+                    "gcp_service_account": {"type": "service_account"},
+                }
+            )
 
     def test_profile_storage_migrates_hierarchy_columns_idempotently(
         self,
@@ -851,8 +961,9 @@ class TestGoogleSheetsStorage:
 
         assert "Tags" in workbook.sheets
         for title in ("Transactions", "Mileage"):
-            assert workbook.sheets[title].rows[0] == list(WORKSHEET_HEADERS[title])
-            assert workbook.sheets[title].add_cols.call_count == 1
+            assert set(workbook.sheets[title].rows[0]) == set(WORKSHEET_HEADERS[title])
+            expected_migrations = 2 if title == "Transactions" else 1
+            assert workbook.sheets[title].add_cols.call_count == expected_migrations
 
     @pytest.mark.parametrize("field", ["id", "name"])
     def test_list_accounts_rejects_missing_required_display_fields(
@@ -1416,6 +1527,139 @@ class TestGoogleSheetsStorage:
             child["id"],
             referenced["id"],
         }
+
+    def test_delete_category_rechecks_mixed_use_sources_after_retry(
+        self,
+    ) -> None:
+        category = self.storage.create_category("Referenced mixed-use", "Expense")
+        source_headers = self.storage._headers("MixedUseExpenses")
+        source_row = [""] * len(source_headers)
+        source_row[source_headers.index("id")] = "source-119"
+        source_row[source_headers.index("category_id")] = category["id"]
+        source_sheet = self.workbook.sheets["MixedUseExpenses"]
+        category_sheet = self.workbook.sheets["Categories"]
+        original_delete = category_sheet.delete_rows
+        injected = False
+
+        def inject_source_then_timeout(row_number: int) -> None:
+            nonlocal injected
+            if not injected:
+                injected = True
+                source_sheet.append_row(source_row)
+                raise OSError("response lost before category deletion")
+            original_delete(row_number)
+
+        category_sheet.delete_rows = inject_source_then_timeout
+
+        with pytest.raises(StorageConflictError, match="mixed-use expenses"):
+            self.storage.delete_category(category["id"])
+
+        assert self.storage.list_categories() == [category]
+
+    def test_edit_category_rechecks_mixed_use_sources_during_retry(
+        self,
+    ) -> None:
+        category = self.storage.create_category("Editable mixed-use", "Expense")
+        source_headers = self.storage._headers("MixedUseExpenses")
+        source_row = [""] * len(source_headers)
+        source_row[source_headers.index("id")] = "source-edit-119"
+        source_row[source_headers.index("category_id")] = category["id"]
+        source_sheet = self.workbook.sheets["MixedUseExpenses"]
+        category_sheet = self.workbook.sheets["Categories"]
+        original_batch_update = category_sheet.batch_update
+        injected = False
+
+        def inject_source_then_timeout(
+            data: list[dict[str, object]], **kwargs: object
+        ) -> None:
+            nonlocal injected
+            if not injected:
+                injected = True
+                source_sheet.append_row(source_row)
+                raise OSError("response lost before category update")
+            original_batch_update(data, **kwargs)
+
+        category_sheet.batch_update = inject_source_then_timeout
+
+        with pytest.raises(StorageConflictError, match="mixed-use expense"):
+            self.storage.edit_category(category["id"], kind="Income")
+
+        assert self.storage.list_categories() == [category]
+
+    def test_edit_category_refreshes_row_after_mixed_use_guard(self) -> None:
+        category = self.storage.create_category("Editable mixed-use", "Expense")
+        category_sheet = self.workbook.sheets["Categories"]
+        original_snapshot = self.storage._raw_mixed_use_snapshot
+        injected = False
+
+        def inject_category_before_guard() -> object:
+            nonlocal injected
+            if not injected:
+                injected = True
+                category_sheet.rows.insert(
+                    1,
+                    [
+                        "inserted-category",
+                        "Inserted category",
+                        "Expense",
+                        "",
+                    ],
+                )
+                self.storage._invalidate("Categories")
+            return original_snapshot()
+
+        self.storage._raw_mixed_use_snapshot = inject_category_before_guard  # type: ignore[method-assign]
+        edited = self.storage.edit_category(category["id"], kind="Income")
+
+        assert edited["kind"] == "Income"
+        assert next(
+            item
+            for item in self.storage.list_categories()
+            if item["id"] == category["id"]
+        )["kind"] == "Income"
+        assert next(
+            item
+            for item in self.storage.list_categories()
+            if item["id"] == "inserted-category"
+        )["kind"] == "Expense"
+
+    def test_delete_category_refreshes_row_after_mixed_use_guard(self) -> None:
+        category = self.storage.create_category("Unused", "Expense")
+        category_sheet = self.workbook.sheets["Categories"]
+        original_rows = self.storage._rows
+        mixed_use_reads = 0
+
+        def inject_category_during_guard(
+            title: str, *, force_refresh: bool = False
+        ) -> list[object]:
+            nonlocal mixed_use_reads
+            if title == "MixedUseExpenses" and force_refresh:
+                mixed_use_reads += 1
+                if mixed_use_reads == 2:
+                    category_sheet.rows.insert(
+                        1,
+                        [
+                            "inserted-category",
+                            "Inserted category",
+                            "Expense",
+                            "",
+                        ],
+                    )
+                    self.storage._invalidate("Categories")
+            return original_rows(title, force_refresh=force_refresh)
+
+        self.storage._rows = inject_category_during_guard  # type: ignore[method-assign]
+        self.storage.delete_category(category["id"])
+
+        assert next(
+            item
+            for item in self.storage.list_categories()
+            if item["id"] == "inserted-category"
+        )["name"] == "Inserted category"
+        assert all(
+            item["id"] != category["id"]
+            for item in self.storage.list_categories()
+        )
 
     def test_category_hierarchy_transitions_and_validation(self) -> None:
         account = self.storage.create_account("Checking", "Bank")
@@ -2390,6 +2634,7 @@ class TestGoogleSheetsStorage:
                 "Payees.csv",
                 "Transactions.csv",
                 "Mileage.csv",
+                "MixedUseExpenses.csv",
                 "Tags.csv",
                 "manifest.json",
                 "receipts.json",
@@ -2860,6 +3105,40 @@ class TestGoogleSheetsStorage:
         restored = target.list_transactions()[0]
         assert restored["id"] == transaction["id"]
         assert restored["receipt_references"] == ""
+
+    def test_restore_clears_provenance_from_legacy_backup(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Office", "Expense")
+        transaction = self.storage.create_transaction(
+            txn_date="2026-07-19",
+            kind="Expense",
+            amount=25,
+            account_id=account["id"],
+            category_id=category["id"],
+        )
+        current_backup = self.storage.export_backup_zip(
+            backup_receipt_manifest(self.storage)
+        )
+
+        def add_legacy_provenance(rows: list[list[str]]) -> None:
+            source_type = rows[0].index("source_type")
+            source_id = rows[0].index("source_id")
+            rows[1][source_type] = "mixed_use_expense"
+            rows[1][source_id] = "orphaned-source"
+
+        legacy_backup = rewrite_backup_tables(
+            current_backup,
+            {"Transactions": add_legacy_provenance},
+            format_version=5,
+        )
+
+        target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+        target.restore_backup_zip(legacy_backup)
+
+        restored = target._rows("Transactions", force_refresh=True)[0].values
+        assert restored["id"] == transaction["id"]
+        assert restored["source_type"] == ""
+        assert restored["source_id"] == ""
 
     def test_restore_refuses_nonblank_target(self) -> None:
         self.storage.create_account("Checking", "Bank")

@@ -42,6 +42,7 @@ def validation_report(path: Path, manifest: Mapping[str, Any]) -> str:
             "Tags",
             "Transactions",
             "Mileage",
+            "MixedUseExpenses",
         )
         if title in row_counts
     )

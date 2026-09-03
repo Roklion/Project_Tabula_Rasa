@@ -39,6 +39,7 @@ The current backup format is version 8. Each archive contains:
 - Tags.csv;
 - Transactions.csv;
 - Mileage.csv;
+- MixedUseExpenses.csv;
 - receipts.json; and
 - manifest.json.
 
@@ -68,8 +69,17 @@ The validator and restore path accept formats 2 through 8:
 | 4 | Adds transaction receipt references; no receipt inventory |
 | 5 | Adds checksummed receipts.json inventory |
 | 6 | Supported legacy format adding account and category parent_id hierarchy |
-| 7 | Adds managed Payees and transaction payee_id references |
-| 8 | Current format with stable Tags and transaction/mileage tag associations |
+| 7 | Pre-mixed-use format with managed Payees and transaction payee_id references |
+| 8 | Current format with mixed-use sources, stable Tags, and transaction/mileage tag associations |
+
+MixedUseExpenses.csv is the authoritative source record for each cost-based
+mixed-use expense. Transactions.csv contains one ordinary Expense projection
+for each source, with source_type=mixed_use_expense and source_id set to the
+source ID; its amount is the allocated business amount only. The source's
+linked_transaction_id must point back to that projection. Current-format
+backup validation rejects missing, orphaned, duplicated, or inconsistent
+source/projection relationships. Formats 2 through 7 restore with no
+mixed-use source records or linkage.
 
 Before upgrading an existing workbook, run the one-time payee migration:
 
@@ -234,7 +244,7 @@ representative relationships, then delete or clearly label the drill workbook.
 
 ## Recover receipt bytes and remap Drive IDs
 
-Ledger restoration does not restore receipt bytes. For a format 5, 6, or 7
+Ledger restoration does not restore receipt bytes. For a format 5, 6, 7, or 8
 archive, copy the matching profile Receipts directory from the protected
 Synology recovery set to a safe local path, then recover against the new
 workbook:

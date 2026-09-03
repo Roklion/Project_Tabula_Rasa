@@ -462,6 +462,21 @@ Create income, expense, and transfer entries; optionally attach receipts;
 filter, search, and review the ledger; edit or permanently delete saved
 entries; perform approved bulk actions; and manage receipt references.
 
+#### Phase A mixed-use storage contract
+
+The storage/domain layer also defines a dedicated `MixedUseExpenses` source
+collection for cost-based mixed-use expenses. A source is the authoritative
+editable record and contains the normal Expense inputs, total expense,
+business-use percentage, currency-rounded allocated amount, Allocation
+Rationale, its stable source ID, and its stable linked transaction ID. The
+linked row in `Transactions` remains an ordinary Expense projection containing
+only the allocated business amount and generic `source_type`/`source_id`
+provenance. Source-aware create, edit, and delete operations preserve this
+relationship, use fresh reads, and classify uncertain multi-record writes;
+they do not expose a mixed-use page or workflow in Phase A. Current-format
+backups include the source collection and reject orphaned or inconsistent
+relationships; older backup formats restore with no mixed-use records.
+
 #### Add transaction contract
 
 The form presents:
