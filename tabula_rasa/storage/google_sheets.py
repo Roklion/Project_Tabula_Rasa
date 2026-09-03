@@ -2497,10 +2497,6 @@ class GoogleSheetsStorage:
         ):
             if original_payee_id not in payees:
                 raise StorageValidationError("Payee does not exist")
-            if new_payee_name != payees[original_payee_id]["name"]:
-                raise StorageConflictError(
-                    "The mixed-use retry specifies a different payee"
-                )
             payee_id = original_payee_id
             new_payee_name = ""
         if not payee_id and new_payee_name:
@@ -3572,31 +3568,32 @@ class GoogleSheetsStorage:
             )
         except ReceiptManifestError as exc:
             raise StorageValidationError(str(exc)) from exc
-        for transaction in self.list_transactions(_force_refresh=True):
-            if transaction["id"] == transaction_id:
-                continue
-            if any(
-                item["id"] == normalized_reference["id"]
-                for item in decode_receipt_references(
-                    transaction.get("receipt_references", "")
-                )
-            ):
-                raise StorageConflictError(
-                    "That receipt is already linked to another transaction"
-                )
-        current = self._find_row("Transactions", transaction_id)
-        references = decode_receipt_references(
-            current.values.get("receipt_references", "")
-        )
-        references = [
-            item
-            for item in references
-            if item["id"] != normalized_reference["id"]
-        ]
-        references.append(normalized_reference)
-        return self._replace_receipt_references(
-            current, _encode_receipt_references(references)
-        )
+        with _MIXED_USE_CREATE_LOCK:
+            for transaction in self.list_transactions(_force_refresh=True):
+                if transaction["id"] == transaction_id:
+                    continue
+                if any(
+                    item["id"] == normalized_reference["id"]
+                    for item in decode_receipt_references(
+                        transaction.get("receipt_references", "")
+                    )
+                ):
+                    raise StorageConflictError(
+                        "That receipt is already linked to another transaction"
+                    )
+            current = self._find_row("Transactions", transaction_id)
+            references = decode_receipt_references(
+                current.values.get("receipt_references", "")
+            )
+            references = [
+                item
+                for item in references
+                if item["id"] != normalized_reference["id"]
+            ]
+            references.append(normalized_reference)
+            return self._replace_receipt_references(
+                current, _encode_receipt_references(references)
+            )
 
     def remap_transaction_receipt(
         self,

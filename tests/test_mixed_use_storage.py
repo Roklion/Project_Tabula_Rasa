@@ -496,6 +496,47 @@ def test_receipt_mutations_reject_half_populated_provenance(
     assert sources[0].values["id"] == source["id"]
 
 
+def test_receipt_link_scans_for_duplicate_ownership_inside_lock(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    scan_started = threading.Event()
+    finished = threading.Event()
+    errors: list[BaseException] = []
+    original_list_transactions = default_storage.list_transactions
+
+    def list_transactions(*args: object, **kwargs: object) -> list[dict[str, str]]:
+        scan_started.set()
+        return original_list_transactions(*args, **kwargs)
+
+    default_storage.list_transactions = list_transactions  # type: ignore[method-assign]
+
+    def link_receipt() -> None:
+        try:
+            default_storage.link_transaction_receipt(
+                source["linked_transaction_id"],
+                reference={"id": "receipt-lock-check", "name": "Receipt"},
+            )
+        except BaseException as error:  # pragma: no cover - assertion below reports it
+            errors.append(error)
+        finally:
+            finished.set()
+
+    with google_sheets_module._MIXED_USE_CREATE_LOCK:
+        worker = threading.Thread(target=link_receipt)
+        worker.start()
+        assert not scan_started.wait(0.1)
+        assert not finished.wait(0.1)
+    assert finished.wait(1)
+    worker.join(timeout=1)
+    assert not errors
+
+
 def test_receipt_recovery_rejects_half_populated_provenance(
     default_storage: GoogleSheetsStorage,
 ) -> None:
@@ -858,7 +899,7 @@ def test_mixed_use_source_only_retry_resolves_generated_source_from_linked_id(
     assert calls == 3
 
 
-def test_mixed_use_retry_does_not_recreate_new_payee_after_deactivation(
+def test_mixed_use_retry_reuses_renamed_payee_after_deactivation(
     default_storage: GoogleSheetsStorage,
 ) -> None:
     inputs = {
@@ -884,7 +925,9 @@ def test_mixed_use_retry_does_not_recreate_new_payee_after_deactivation(
     source = default_storage._rows("MixedUseExpenses", force_refresh=True)[0].values
     created_payee_id = source["payee_id"]
     assert created_payee_id != payee_id
-    default_storage.edit_payee(created_payee_id, active=False)
+    default_storage.edit_payee(
+        created_payee_id, name="Renamed vendor", active=False
+    )
     payee_count = len(default_storage._rows("Payees", force_refresh=True))
 
     with pytest.raises(StorageBulkMutationUncertainError) as retry_error:
