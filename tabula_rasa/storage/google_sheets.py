@@ -19,6 +19,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
+from functools import wraps
 from typing import Any, Callable, TypeVar
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
@@ -283,6 +284,17 @@ class _StoredRow:
 T = TypeVar("T")
 
 
+def _active_ledger_mutation_lock(operation: Callable[..., T]) -> Callable[..., T]:
+    """Serialize writes that can create or change Payee/Tag references."""
+
+    @wraps(operation)
+    def locked(*args: Any, **kwargs: Any) -> T:
+        with _MIXED_USE_CREATE_LOCK:
+            return operation(*args, **kwargs)
+
+    return locked
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
@@ -395,6 +407,22 @@ def _normalize_tag_ids(value: Any) -> list[str]:
             raise StorageValidationError("Tag IDs must be unique")
         normalized.append(clean_id)
     return sorted(normalized)
+
+
+def _raw_tag_ids_may_contain(value: Any, candidates: Iterable[str]) -> bool:
+    """Use a cheap substring check before parsing a stored tag-ID JSON cell."""
+    raw_value = "" if value is None else str(value)
+    return any(candidate in raw_value for candidate in candidates)
+
+
+def _managed_comparison_text(value: Any) -> str:
+    """Preserve falsy expected values while normalizing comparison text."""
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    text = str(value).strip()
+    return text.upper() if text.upper() in {"TRUE", "FALSE"} else text
 
 
 def _encode_tag_ids(value: Any) -> str:
@@ -2509,10 +2537,22 @@ class GoogleSheetsStorage:
                 self._append_many("Payees", additions)
             return {item["id"]: item for item in by_key.values()}
 
-    def edit_payee(self, payee_id: str, **changes: Any) -> dict[str, str]:
+    def edit_payee(
+        self,
+        payee_id: str,
+        *,
+        expected_payee: Mapping[str, Any] | None = None,
+        expected: Mapping[str, Any] | None = None,
+        **changes: Any,
+    ) -> dict[str, str]:
         with _PAYEE_WRITE_LOCK:
             current = self._find_row("Payees", payee_id)
             updated = dict(current.values)
+            expected_record = expected_payee or expected
+            if expected_record is not None:
+                self._assert_expected_managed_records(
+                    {str(updated["id"]): updated}, expected_record
+                )
             name = _clean_text(
                 changes.get("name", updated["name"]),
                 "Payee name",
@@ -2538,6 +2578,414 @@ class GoogleSheetsStorage:
             )
             self._replace_row("Payees", current, updated)
             return updated
+
+    @staticmethod
+    def _expected_managed_records(
+        expected: Iterable[Mapping[str, Any]] | Mapping[str, Mapping[str, Any]] | None,
+    ) -> dict[str, Mapping[str, Any]]:
+        """Normalize an optional caller snapshot used by management actions."""
+        if expected is None:
+            return {}
+        if isinstance(expected, Mapping) and "id" in expected:
+            values = [(expected.get("id"), expected)]
+        elif isinstance(expected, Mapping):
+            values = expected.items()
+        else:
+            values = ((None, item) for item in expected)
+        result: dict[str, Mapping[str, Any]] = {}
+        for mapping_id, item in values:
+            record_id = _clean_text(
+                item.get("id", mapping_id), "Managed record ID", required=True
+            )
+            result[record_id] = item
+        return result
+
+    @staticmethod
+    def _assert_expected_managed_records(
+        current: Mapping[str, Mapping[str, str]],
+        expected: Iterable[Mapping[str, Any]] | Mapping[str, Mapping[str, Any]] | None,
+    ) -> None:
+        for record_id, expected_record in GoogleSheetsStorage._expected_managed_records(
+            expected
+        ).items():
+            actual = current.get(record_id)
+            if actual is None or any(
+                _managed_comparison_text(actual.get(key))
+                != _managed_comparison_text(value)
+                for key, value in expected_record.items()
+                if key != "tags"
+            ):
+                raise StorageConflictError(
+                    "A payee or tag changed; refresh the management list and try again."
+                )
+
+    @staticmethod
+    def _managed_rows_by_id(
+        rows: Iterable[_StoredRow], title: str
+    ) -> dict[str, _StoredRow]:
+        result: dict[str, _StoredRow] = {}
+        for row in rows:
+            record_id = _clean_text(row.values.get("id"), f"{title} ID", required=True)
+            if record_id in result:
+                raise StorageValidationError(f"Duplicate ID detected in {title}")
+            result[record_id] = row
+        return result
+
+    def _managed_batch_result(
+        self,
+        *,
+        operation: str,
+        error: StorageUnavailableError | None,
+        read_state: Callable[[], Any],
+        fully_applied: Callable[[Any], bool],
+        not_applied: Callable[[Any], bool],
+        invalidate: Iterable[str],
+    ) -> dict[str, str] | None:
+        """Classify a cross-sheet batch response using a fresh postcondition read."""
+        try:
+            state = read_state()
+            applied = fully_applied(state)
+            untouched = not applied and not_applied(state)
+        except StorageError as read_error:
+            for title in invalidate:
+                self._invalidate(title)
+            raise StorageBulkMutationUncertainError(
+                f"The {operation} completed but its postcondition could not be read. "
+                "Review the affected records before retrying.",
+                outcome="mixed_ambiguous",
+                retryable=False,
+            ) from read_error
+        if applied:
+            for title in invalidate:
+                self._invalidate(title)
+            return {"status": "fully_applied"}
+        if untouched:
+            retryable = bool(error and error.retryable)
+            raise StorageBulkMutationUncertainError(
+                f"The {operation} was not applied. Review the affected records before retrying.",
+                outcome="not_applied",
+                retryable=retryable,
+            ) from error
+        for title in invalidate:
+            self._invalidate(title)
+        raise StorageBulkMutationUncertainError(
+            f"The {operation} outcome is ambiguous. Do not retry until the affected "
+            "records are reviewed.",
+            outcome="mixed_ambiguous",
+            retryable=False,
+        ) from error
+
+    def _managed_confirmed_postcondition(
+        self,
+        *,
+        operation: str,
+        read_state: Callable[[], Any],
+        fully_applied: Callable[[Any], bool],
+        invalidate: Iterable[str],
+    ) -> None:
+        """Require a readable postcondition after a confirmed batch write."""
+        try:
+            state = read_state()
+        except StorageError as read_error:
+            for title in invalidate:
+                self._invalidate(title)
+            raise StorageBulkMutationUncertainError(
+                f"The {operation} completed but its postcondition could not be read. "
+                "Review the affected records before retrying.",
+                outcome="mixed_ambiguous",
+                retryable=False,
+            ) from read_error
+        if not fully_applied(state):
+            for title in invalidate:
+                self._invalidate(title)
+            raise StorageBulkMutationUncertainError(
+                f"The {operation} completed but its postcondition is ambiguous. "
+                "Review the affected records before retrying.",
+                outcome="mixed_ambiguous",
+                retryable=False,
+            )
+        for title in invalidate:
+            self._invalidate(title)
+
+    def _managed_update_request(
+        self, title: str, row: _StoredRow, column: str, value: str
+    ) -> dict[str, Any]:
+        headers = self._headers(title)
+        column_index = self._sheet_column_index(headers, column)
+        return {
+            "updateCells": {
+                "range": {
+                    "sheetId": self._sheet_id(title),
+                    "startRowIndex": row.row_number - 1,
+                    "endRowIndex": row.row_number,
+                    "startColumnIndex": column_index,
+                    "endColumnIndex": column_index + 1,
+                },
+                "rows": [{"values": [{"userEnteredValue": {"stringValue": value}}]}],
+                "fields": "userEnteredValue",
+            }
+        }
+
+    def _managed_delete_request(self, title: str, row: _StoredRow) -> dict[str, Any]:
+        return {
+            "deleteDimension": {
+                "range": {
+                    "sheetId": self._sheet_id(title),
+                    "dimension": "ROWS",
+                    "startIndex": row.row_number - 1,
+                    "endIndex": row.row_number,
+                }
+            }
+        }
+
+    def merge_payees(
+        self,
+        target_payee_id: str,
+        source_payee_ids: Sequence[str],
+        *,
+        expected_payees: Iterable[Mapping[str, Any]]
+        | Mapping[str, Mapping[str, Any]]
+        | None = None,
+    ) -> dict[str, str]:
+        """Merge source payees into one target while preserving all references."""
+        target_id = _clean_text(target_payee_id, "Target payee", required=True)
+        source_ids = list(dict.fromkeys(
+            _clean_text(item, "Source payee", required=True) for item in source_payee_ids
+        ))
+        if not source_ids:
+            raise StorageValidationError("Select at least one source payee")
+        if target_id in source_ids:
+            raise StorageValidationError("The target payee cannot also be a source")
+        with _MIXED_USE_CREATE_LOCK, _PAYEE_WRITE_LOCK:
+            snapshot = self._snapshot(
+                ["Payees", "Transactions", "MixedUseExpenses"], force_refresh=True
+            )
+            _validate_mixed_use_tables(
+                {
+                    "MixedUseExpenses": (
+                        WORKSHEET_HEADERS["MixedUseExpenses"],
+                        [dict(row.values) for row in snapshot["MixedUseExpenses"]],
+                    ),
+                    "Transactions": (
+                        WORKSHEET_HEADERS["Transactions"],
+                        [dict(row.values) for row in snapshot["Transactions"]],
+                    ),
+                }
+            )
+            payee_rows = self._managed_rows_by_id(snapshot["Payees"], "Payees")
+            payees = {record_id: dict(row.values) for record_id, row in payee_rows.items()}
+            if target_id not in payees:
+                raise StorageNotFoundError("Payee no longer exists")
+            missing = [item for item in source_ids if item not in payees]
+            if missing and len(missing) == len(source_ids):
+                # A retried merge may have already removed every source. Once
+                # the target still exists and no reference survives, this is
+                # a safe converged outcome. Do not hide an inconsistent
+                # workbook behind a successful retry.
+                expected_records = self._expected_managed_records(expected_payees)
+                self._assert_expected_managed_records(
+                    {target_id: payees[target_id]},
+                    {target_id: expected_records[target_id]}
+                    if target_id in expected_records
+                    else None,
+                )
+                references = [
+                    row
+                    for row in (*snapshot["Transactions"], *snapshot["MixedUseExpenses"])
+                    if _clean_text(row.values.get("payee_id"), "Payee") in source_ids
+                ]
+                if not references:
+                    return {"status": "fully_applied", "count": str(len(source_ids))}
+                raise StorageConflictError(
+                    "The selected source payee records are missing but their references remain."
+                )
+            if missing:
+                raise StorageNotFoundError("A source payee no longer exists")
+            self._assert_expected_managed_records(payees, expected_payees)
+
+            transaction_rows = self._managed_rows_by_id(snapshot["Transactions"], "Transactions")
+            mixed_rows = self._managed_rows_by_id(snapshot["MixedUseExpenses"], "MixedUseExpenses")
+            transaction_updates = {
+                record_id: row
+                for record_id, row in transaction_rows.items()
+                if _clean_text(row.values.get("payee_id"), "Payee") in source_ids
+            }
+            mixed_updates = {
+                record_id: row
+                for record_id, row in mixed_rows.items()
+                if _clean_text(row.values.get("payee_id"), "Payee") in source_ids
+            }
+            requests: list[dict[str, Any]] = []
+            for row in transaction_updates.values():
+                requests.append(
+                    self._managed_update_request(
+                        "Transactions", row, "payee_id", target_id
+                    )
+                )
+            for row in mixed_updates.values():
+                requests.append(
+                    self._managed_update_request(
+                        "MixedUseExpenses", row, "payee_id", target_id
+                    )
+                )
+            for source_id in sorted(source_ids, key=lambda item: payee_rows[item].row_number, reverse=True):
+                requests.append(self._managed_delete_request("Payees", payee_rows[source_id]))
+            if not requests:
+                raise StorageValidationError("The selected payees have no mergeable changes")
+
+            def fresh_state() -> tuple[dict[str, dict[str, str]], dict[str, _StoredRow], dict[str, _StoredRow]]:
+                current = self._snapshot(
+                    ["Payees", "Transactions", "MixedUseExpenses"], force_refresh=True
+                )
+                return (
+                    {record_id: dict(row.values) for record_id, row in self._managed_rows_by_id(current["Payees"], "Payees").items()},
+                    self._managed_rows_by_id(current["Transactions"], "Transactions"),
+                    self._managed_rows_by_id(current["MixedUseExpenses"], "MixedUseExpenses"),
+                )
+
+            def fully_applied(state: Any) -> bool:
+                current_payees, current_transactions, current_mixed = state
+                return (
+                    target_id in current_payees
+                    and not any(item in current_payees for item in source_ids)
+                    and all(
+                        _clean_text(row.values.get("payee_id"), "Payee") != source_id
+                        for source_id in source_ids
+                        for row in (*current_transactions.values(), *current_mixed.values())
+                    )
+                    and all(
+                        record_id in current_transactions
+                        and _clean_text(current_transactions[record_id].values.get("payee_id"), "Payee") == target_id
+                        for record_id in transaction_updates
+                    )
+                    and all(
+                        record_id in current_mixed
+                        and _clean_text(current_mixed[record_id].values.get("payee_id"), "Payee") == target_id
+                        for record_id in mixed_updates
+                    )
+                )
+
+            def not_applied(state: Any) -> bool:
+                current_payees, current_transactions, current_mixed = state
+                if any(
+                    record_id not in current_payees
+                    or current_payees[record_id] != row.values
+                    for record_id, row in payee_rows.items()
+                ):
+                    return False
+                return all(
+                    record_id in current_transactions
+                    and current_transactions[record_id].values == row.values
+                    for record_id, row in transaction_updates.items()
+                ) and all(
+                    record_id in current_mixed and current_mixed[record_id].values == row.values
+                    for record_id, row in mixed_updates.items()
+                )
+
+            try:
+                self._batch_update_spreadsheet(requests)
+            except StorageUnavailableError as error:
+                result = self._managed_batch_result(
+                    operation="payee merge", error=error, fully_applied=fully_applied,
+                    read_state=fresh_state,
+                    not_applied=not_applied,
+                    invalidate=("Payees", "Transactions", "MixedUseExpenses"),
+                )
+                if result is not None:
+                    return {**result, "count": str(len(source_ids))}
+                raise AssertionError("managed batch classification did not return")
+            self._managed_confirmed_postcondition(
+                operation="payee merge",
+                read_state=fresh_state,
+                fully_applied=fully_applied,
+                invalidate=("Payees", "Transactions", "MixedUseExpenses"),
+            )
+            return {"status": "fully_applied", "count": str(len(source_ids))}
+
+    merge_payee = merge_payees
+
+    def remove_payee(
+        self,
+        payee_id: str,
+        *,
+        expected_payee: Mapping[str, Any] | None = None,
+        expected: Mapping[str, Any] | None = None,
+    ) -> dict[str, str]:
+        """Permanently remove one unreferenced payee after a fresh check."""
+        payee_id = _clean_text(payee_id, "Payee", required=True)
+        with _MIXED_USE_CREATE_LOCK, _PAYEE_WRITE_LOCK:
+            snapshot = self._snapshot(
+                ["Payees", "Transactions", "MixedUseExpenses"], force_refresh=True
+            )
+            payee_rows = self._managed_rows_by_id(snapshot["Payees"], "Payees")
+            if payee_id not in payee_rows:
+                raise StorageNotFoundError("Payee no longer exists")
+            expected_record = expected_payee or expected
+            if expected_record is not None:
+                self._assert_expected_managed_records(
+                    {payee_id: dict(payee_rows[payee_id].values)}, expected_record
+                )
+            references = sum(
+                _clean_text(row.values.get("payee_id"), "Payee") == payee_id
+                for row in (*snapshot["Transactions"], *snapshot["MixedUseExpenses"])
+            )
+            if references:
+                raise StorageConflictError(
+                    f"This payee is referenced by {references} records. Merge it or unassign it first."
+                )
+            request = self._managed_delete_request("Payees", payee_rows[payee_id])
+
+            def read_state() -> tuple[dict[str, _StoredRow], dict[str, _StoredRow], dict[str, _StoredRow]]:
+                current = self._snapshot(
+                    ["Payees", "Transactions", "MixedUseExpenses"],
+                    force_refresh=True,
+                )
+                return (
+                    self._managed_rows_by_id(current["Payees"], "Payees"),
+                    self._managed_rows_by_id(current["Transactions"], "Transactions"),
+                    self._managed_rows_by_id(current["MixedUseExpenses"], "MixedUseExpenses"),
+                )
+
+            def references_present(state: Any) -> bool:
+                _, current_transactions, current_mixed = state
+                return any(
+                    _clean_text(row.values.get("payee_id"), "Payee") == payee_id
+                    for row in (*current_transactions.values(), *current_mixed.values())
+                )
+
+            def fully_applied(state: Any) -> bool:
+                current_payees, _, _ = state
+                return payee_id not in current_payees and not references_present(state)
+
+            def not_applied(state: Any) -> bool:
+                current_payees, _, _ = state
+                return (
+                    payee_id in current_payees
+                    and current_payees[payee_id].values == payee_rows[payee_id].values
+                    and not references_present(state)
+                )
+
+            try:
+                self._batch_update_spreadsheet([request])
+            except StorageUnavailableError as error:
+                result = self._managed_batch_result(
+                    operation="payee removal", error=error, fully_applied=fully_applied,
+                    read_state=read_state,
+                    not_applied=not_applied,
+                    invalidate=("Payees", "Transactions", "MixedUseExpenses"),
+                )
+                if result is not None:
+                    return result
+                raise AssertionError("managed batch classification did not return")
+            self._managed_confirmed_postcondition(
+                operation="payee removal",
+                read_state=read_state,
+                fully_applied=fully_applied,
+                invalidate=("Payees", "Transactions", "MixedUseExpenses"),
+            )
+            return {"status": "fully_applied"}
+
+    delete_payee = remove_payee
 
     def list_tags(
         self, *, active_only: bool = False, _force_refresh: bool = False
@@ -2588,6 +3036,254 @@ class GoogleSheetsStorage:
             }
             self._append("Tags", record)
             return record
+
+    def edit_tag(
+        self,
+        tag_id: str,
+        *,
+        expected_tag: Mapping[str, Any] | None = None,
+        expected: Mapping[str, Any] | None = None,
+        **changes: Any,
+    ) -> dict[str, str]:
+        """Rename or activate/deactivate a tag while retaining its stable ID."""
+        tag_id = _clean_text(tag_id, "Tag", required=True)
+        with _TAG_WRITE_LOCK:
+            current = self._find_row("Tags", tag_id)
+            updated = dict(current.values)
+            expected_record = expected_tag or expected
+            if expected_record is not None:
+                self._assert_expected_managed_records(
+                    {str(updated["id"]): updated}, expected_record
+                )
+            name = _clean_text(changes.get("name", updated.get("name")), "Tag name", required=True)
+            if normalize_tag_name(name) != normalize_tag_name(updated.get("name", "")):
+                existing = self.list_tags(_force_refresh=True)
+                if any(
+                    item["id"] != tag_id
+                    and normalize_tag_name(item["name"]) == normalize_tag_name(name)
+                    for item in existing
+                ):
+                    raise StorageConflictError("That tag already exists")
+            updated.update({
+                "name": name,
+                "active": "TRUE"
+                if _as_bool(changes.get("active", updated.get("active")), "Tag active")
+                else "FALSE",
+            })
+            self._replace_row("Tags", current, updated)
+            return updated
+
+    def merge_tags(
+        self,
+        target_tag_id: str,
+        source_tag_ids: Sequence[str],
+        *,
+        expected_tags: Iterable[Mapping[str, Any]]
+        | Mapping[str, Mapping[str, Any]]
+        | None = None,
+    ) -> dict[str, str]:
+        """Merge source tags into a target across transaction and mileage rows."""
+        target_id = _clean_text(target_tag_id, "Target tag", required=True)
+        source_ids = list(dict.fromkeys(
+            _clean_text(item, "Source tag", required=True) for item in source_tag_ids
+        ))
+        if not source_ids:
+            raise StorageValidationError("Select at least one source tag")
+        if target_id in source_ids:
+            raise StorageValidationError("The target tag cannot also be a source")
+        with _MIXED_USE_CREATE_LOCK, _TAG_WRITE_LOCK:
+            snapshot = self._snapshot(["Tags", "Transactions", "Mileage"], force_refresh=True)
+            tag_rows = self._managed_rows_by_id(snapshot["Tags"], "Tags")
+            tags = {record_id: dict(row.values) for record_id, row in tag_rows.items()}
+            if target_id not in tags:
+                raise StorageNotFoundError("Tag no longer exists")
+            missing = [item for item in source_ids if item not in tags]
+            if missing and len(missing) == len(source_ids):
+                expected_records = self._expected_managed_records(expected_tags)
+                self._assert_expected_managed_records(
+                    {target_id: tags[target_id]},
+                    {target_id: expected_records[target_id]}
+                    if target_id in expected_records
+                    else None,
+                )
+                references = []
+                for row in (*snapshot["Transactions"], *snapshot["Mileage"]):
+                    raw_tags = row.values.get("tag_ids", "")
+                    if _raw_tag_ids_may_contain(raw_tags, source_ids) and any(
+                        item in source_ids for item in _normalize_tag_ids(raw_tags)
+                    ):
+                        references.append(row)
+                if not references:
+                    return {"status": "fully_applied", "count": str(len(source_ids))}
+                raise StorageConflictError(
+                    "The selected source tag records are missing but their references remain."
+                )
+            if missing:
+                raise StorageNotFoundError("A source tag no longer exists")
+            self._assert_expected_managed_records(tags, expected_tags)
+            update_rows: dict[str, tuple[str, _StoredRow, str]] = {}
+            for title in ("Transactions", "Mileage"):
+                for record_id, row in self._managed_rows_by_id(snapshot[title], title).items():
+                    raw_tags = row.values.get("tag_ids", "")
+                    if not _raw_tag_ids_may_contain(raw_tags, source_ids):
+                        continue
+                    tag_ids = _normalize_tag_ids(raw_tags)
+                    if not any(item in source_ids for item in tag_ids):
+                        continue
+                    merged_ids = [target_id if item in source_ids else item for item in tag_ids]
+                    merged_ids = list(dict.fromkeys(merged_ids))
+                    update_rows[f"{title}:{record_id}"] = (
+                        title, row, _encode_tag_ids(merged_ids)
+                    )
+            requests = [
+                self._managed_update_request(title, row, "tag_ids", value)
+                for title, row, value in update_rows.values()
+            ]
+            for source_id in sorted(source_ids, key=lambda item: tag_rows[item].row_number, reverse=True):
+                requests.append(self._managed_delete_request("Tags", tag_rows[source_id]))
+
+            def fresh_state() -> tuple[dict[str, _StoredRow], dict[str, _StoredRow], dict[str, _StoredRow]]:
+                current = self._snapshot(["Tags", "Transactions", "Mileage"], force_refresh=True)
+                return (
+                    self._managed_rows_by_id(current["Tags"], "Tags"),
+                    self._managed_rows_by_id(current["Transactions"], "Transactions"),
+                    self._managed_rows_by_id(current["Mileage"], "Mileage"),
+                )
+
+            def fully_applied(state: Any) -> bool:
+                current_tags, current_transactions, current_mileage = state
+                if target_id not in current_tags or any(item in current_tags for item in source_ids):
+                    return False
+                if any(
+                    item in _normalize_tag_ids(row.values.get("tag_ids", ""))
+                    for item in source_ids
+                    for row in (*current_transactions.values(), *current_mileage.values())
+                ):
+                    return False
+                for title, row, expected_value in update_rows.values():
+                    current_rows = current_transactions if title == "Transactions" else current_mileage
+                    record_id = _clean_text(row.values.get("id"), "ID", required=True)
+                    if record_id not in current_rows:
+                        return False
+                    if str(current_rows[record_id].values.get("tag_ids", "")) != expected_value:
+                        return False
+                return True
+
+            def not_applied(state: Any) -> bool:
+                current_tags, current_transactions, current_mileage = state
+                if any(
+                    record_id not in current_tags
+                    or current_tags[record_id].values != row.values
+                    for record_id, row in tag_rows.items()
+                ):
+                    return False
+                for title, row, _ in update_rows.values():
+                    current_rows = current_transactions if title == "Transactions" else current_mileage
+                    current = current_rows.get(
+                        _clean_text(row.values.get("id"), "ID", required=True)
+                    )
+                    if current is None or current.values != row.values:
+                        return False
+                return True
+
+            try:
+                self._batch_update_spreadsheet(requests)
+            except StorageUnavailableError as error:
+                result = self._managed_batch_result(
+                    operation="tag merge", error=error, fully_applied=fully_applied,
+                    read_state=fresh_state,
+                    not_applied=not_applied,
+                    invalidate=("Tags", "Transactions", "Mileage"),
+                )
+                if result is not None:
+                    return {**result, "count": str(len(source_ids))}
+                raise AssertionError("managed batch classification did not return")
+            self._managed_confirmed_postcondition(
+                operation="tag merge",
+                read_state=fresh_state,
+                fully_applied=fully_applied,
+                invalidate=("Tags", "Transactions", "Mileage"),
+            )
+            return {"status": "fully_applied", "count": str(len(source_ids))}
+
+    merge_tag = merge_tags
+
+    def remove_tag(
+        self,
+        tag_id: str,
+        *,
+        expected_tag: Mapping[str, Any] | None = None,
+        expected: Mapping[str, Any] | None = None,
+    ) -> dict[str, str]:
+        """Permanently remove one tag only when no transaction or trip uses it."""
+        tag_id = _clean_text(tag_id, "Tag", required=True)
+        with _MIXED_USE_CREATE_LOCK, _TAG_WRITE_LOCK:
+            snapshot = self._snapshot(["Tags", "Transactions", "Mileage"], force_refresh=True)
+            tag_rows = self._managed_rows_by_id(snapshot["Tags"], "Tags")
+            if tag_id not in tag_rows:
+                raise StorageNotFoundError("Tag no longer exists")
+            expected_record = expected_tag or expected
+            if expected_record is not None:
+                self._assert_expected_managed_records(
+                    {tag_id: dict(tag_rows[tag_id].values)}, expected_record
+                )
+            references = 0
+            for row in (*snapshot["Transactions"], *snapshot["Mileage"]):
+                raw_tags = row.values.get("tag_ids", "")
+                if _raw_tag_ids_may_contain(
+                    raw_tags, (tag_id,)
+                ) and tag_id in _normalize_tag_ids(raw_tags):
+                    references += 1
+            if references:
+                raise StorageConflictError(
+                    f"This tag is referenced by {references} records. Merge it or unassign it first."
+                )
+            def read_state() -> tuple[dict[str, _StoredRow], dict[str, _StoredRow], dict[str, _StoredRow]]:
+                current = self._snapshot(
+                    ["Tags", "Transactions", "Mileage"], force_refresh=True
+                )
+                return (
+                    self._managed_rows_by_id(current["Tags"], "Tags"),
+                    self._managed_rows_by_id(current["Transactions"], "Transactions"),
+                    self._managed_rows_by_id(current["Mileage"], "Mileage"),
+                )
+            def references_present(state: Any) -> bool:
+                _, current_transactions, current_mileage = state
+                return any(
+                    tag_id in _normalize_tag_ids(row.values.get("tag_ids", ""))
+                    for row in (*current_transactions.values(), *current_mileage.values())
+                )
+            def is_gone(state: Any) -> bool:
+                return tag_id not in state[0] and not references_present(state)
+            def remains(state: Any) -> bool:
+                return (
+                    tag_id in state[0]
+                    and state[0][tag_id].values == tag_rows[tag_id].values
+                    and not references_present(state)
+                )
+            try:
+                self._batch_update_spreadsheet([
+                    self._managed_delete_request("Tags", tag_rows[tag_id])
+                ])
+            except StorageUnavailableError as error:
+                result = self._managed_batch_result(
+                    operation="tag removal", error=error, fully_applied=is_gone,
+                    read_state=read_state,
+                    not_applied=remains,
+                    invalidate=("Tags", "Transactions", "Mileage"),
+                )
+                if result is not None:
+                    return result
+                raise AssertionError("managed batch classification did not return")
+            self._managed_confirmed_postcondition(
+                operation="tag removal",
+                read_state=read_state,
+                fully_applied=is_gone,
+                invalidate=("Tags", "Transactions", "Mileage"),
+            )
+            return {"status": "fully_applied"}
+
+    delete_tag = remove_tag
 
     def _payee_lookup(self, *, force_refresh: bool = False) -> dict[str, dict[str, str]]:
         return {item["id"]: item for item in self.list_payees(_force_refresh=force_refresh)}
@@ -2879,9 +3575,10 @@ class GoogleSheetsStorage:
         )
 
     def create_transaction(self, **data: Any) -> dict[str, str]:
-        record = self._prepare_transaction(data)
-        self._append("Transactions", record)
-        return record
+        with _MIXED_USE_CREATE_LOCK:
+            record = self._prepare_transaction(data)
+            self._append("Transactions", record)
+            return record
 
     def edit_transaction(self, transaction_id: str, **changes: Any) -> dict[str, str]:
         with _MIXED_USE_CREATE_LOCK:
@@ -3166,6 +3863,15 @@ class GoogleSheetsStorage:
             key=lambda item: (item["txn_date"], item["created_at"], item["id"]),
             reverse=True,
         )
+
+    def list_mixed_use_expense_sources(
+        self, *, _force_refresh: bool = False
+    ) -> list[dict[str, str]]:
+        """Return cached source rows for lightweight reference-count displays."""
+        return [
+            dict(row.values)
+            for row in self._rows("MixedUseExpenses", force_refresh=_force_refresh)
+        ]
 
     def get_mixed_use_expense(self, source_id: str) -> dict[str, str]:
         source_id = _clean_text(source_id, "Mixed-use source ID", required=True)
@@ -4486,9 +5192,10 @@ class GoogleSheetsStorage:
         )
 
     def create_mileage_trip(self, **data: Any) -> dict[str, str]:
-        record = self._prepare_mileage_trip(data)
-        self._append("Mileage", record)
-        return record
+        with _MIXED_USE_CREATE_LOCK:
+            record = self._prepare_mileage_trip(data)
+            self._append("Mileage", record)
+            return record
 
     def create_mileage_round_trip(
         self,
@@ -4502,69 +5209,72 @@ class GoogleSheetsStorage:
         one distance for both legs.  When supplied, it is validated and used
         only for the reversed return entry.
         """
-        created_at = _utc_now()
-        new_tag_name = _clean_text(data.get("new_tag_name"), "New tag")
-        prepared_data = dict(data)
-        prepared_data["new_tag_name"] = ""
-        outbound = self._prepare_mileage_trip(
-            prepared_data,
-            created_at=created_at,
-        )
-        return_data = dict(prepared_data)
-        return_data.update(
-            {
-                "start_location": data.get("destination"),
-                "destination": data.get("start_location"),
-            }
-        )
-        if return_miles is not None:
-            return_data["miles"] = return_miles
-        return_trip = self._prepare_mileage_trip(
-            return_data,
-            created_at=created_at,
-        )
-        if new_tag_name:
-            new_tag = self.create_tag(new_tag_name)
-            for trip in (outbound, return_trip):
-                tag_ids = _normalize_tag_ids(trip["tag_ids"])
-                if new_tag["id"] not in tag_ids:
-                    tag_ids.append(new_tag["id"])
-                trip["tag_ids"] = _encode_tag_ids(tag_ids)
-        # Keep the public return value in semantic outbound/return order, but
-        # write the rows in the order the log should display for a new pair.
-        # Existing rows are not rewritten or migrated.
-        records = [outbound, return_trip]
-        self._append_many("Mileage", [return_trip, outbound])
-        return records
+        with _MIXED_USE_CREATE_LOCK:
+            created_at = _utc_now()
+            new_tag_name = _clean_text(data.get("new_tag_name"), "New tag")
+            prepared_data = dict(data)
+            prepared_data["new_tag_name"] = ""
+            outbound = self._prepare_mileage_trip(
+                prepared_data,
+                created_at=created_at,
+            )
+            return_data = dict(prepared_data)
+            return_data.update(
+                {
+                    "start_location": data.get("destination"),
+                    "destination": data.get("start_location"),
+                }
+            )
+            if return_miles is not None:
+                return_data["miles"] = return_miles
+            return_trip = self._prepare_mileage_trip(
+                return_data,
+                created_at=created_at,
+            )
+            if new_tag_name:
+                new_tag = self.create_tag(new_tag_name)
+                for trip in (outbound, return_trip):
+                    tag_ids = _normalize_tag_ids(trip["tag_ids"])
+                    if new_tag["id"] not in tag_ids:
+                        tag_ids.append(new_tag["id"])
+                    trip["tag_ids"] = _encode_tag_ids(tag_ids)
+            # Keep the public return value in semantic outbound/return order, but
+            # write the rows in the order the log should display for a new pair.
+            # Existing rows are not rewritten or migrated.
+            records = [outbound, return_trip]
+            self._append_many("Mileage", [return_trip, outbound])
+            return records
 
     def edit_mileage_trip(self, trip_id: str, **changes: Any) -> dict[str, str]:
-        current = self._find_row("Mileage", trip_id)
-        merged = dict(current.values)
-        merged.update(changes)
-        updated = self._prepare_mileage_trip(
-            merged,
-            trip_id=trip_id,
-            created_at=current.values["created_at"],
-            original_tag_ids=current.values.get("tag_ids", ""),
-        )
-        self._replace_row("Mileage", current, updated)
-        return updated
+        with _MIXED_USE_CREATE_LOCK:
+            current = self._find_row("Mileage", trip_id)
+            merged = dict(current.values)
+            merged.update(changes)
+            updated = self._prepare_mileage_trip(
+                merged,
+                trip_id=trip_id,
+                created_at=current.values["created_at"],
+                original_tag_ids=current.values.get("tag_ids", ""),
+            )
+            self._replace_row("Mileage", current, updated)
+            return updated
 
     def delete_mileage_trip(self, trip_id: str) -> None:
-        for attempt in range(self._retry_attempts):
-            current = self._find_row("Mileage", trip_id)
-            worksheet = self._worksheet("Mileage")
-            try:
-                self._api(
-                    lambda: worksheet.delete_rows(current.row_number),
-                    retry_safe=False,
-                )
-                self._invalidate("Mileage")
-                return
-            except StorageUnavailableError as error:
-                self._invalidate("Mileage")
-                if not error.retryable:
-                    raise
+        with _MIXED_USE_CREATE_LOCK:
+            for attempt in range(self._retry_attempts):
+                current = self._find_row("Mileage", trip_id)
+                worksheet = self._worksheet("Mileage")
+                try:
+                    self._api(
+                        lambda: worksheet.delete_rows(current.row_number),
+                        retry_safe=False,
+                    )
+                    self._invalidate("Mileage")
+                    return
+                except StorageUnavailableError as error:
+                    self._invalidate("Mileage")
+                    if not error.retryable:
+                        raise
                 try:
                     self._find_row("Mileage", trip_id)
                 except StorageNotFoundError:
@@ -4630,6 +5340,7 @@ class GoogleSheetsStorage:
             },
         }
 
+    @_active_ledger_mutation_lock
     def import_quickbooks_mileage(
         self, rows: Iterable[Mapping[str, Any]]
     ) -> list[dict[str, str]]:
@@ -4647,6 +5358,7 @@ class GoogleSheetsStorage:
         self._append_many("Mileage", prepared)
         return prepared
 
+    @_active_ledger_mutation_lock
     def import_csv_transactions(
         self, rows: Iterable[Mapping[str, Any]]
     ) -> list[dict[str, str]]:
@@ -4782,6 +5494,7 @@ class GoogleSheetsStorage:
             "summary": {"ready": len(ready), "duplicates": len(duplicate_rows), **counts},
         }
 
+    @_active_ledger_mutation_lock
     def import_quickbooks_transactions(
         self, rows: Iterable[Mapping[str, Any]], *, auto_create: bool = False
     ) -> list[dict[str, str]]:
