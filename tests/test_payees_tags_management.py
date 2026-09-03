@@ -6,6 +6,9 @@ from tabula_rasa.storage import (
     StorageBulkMutationUncertainError,
     StorageConflictError,
 )
+from tests.app_support import authenticated_app, navigate_to
+from tests.fakes import FakeWorkbook
+from tabula_rasa.storage import GoogleSheetsStorage
 
 
 def _ledger_setup(storage):
@@ -110,3 +113,19 @@ def test_non_applied_management_batch_is_classified(default_storage, monkeypatch
         default_storage.remove_tag(tag["id"])
     assert raised.value.outcome == "not_applied"
     assert raised.value.retryable is True
+
+
+def test_transactions_exposes_profile_local_management_tab() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook())
+    with authenticated_app(storage=storage) as app:
+        navigate_to(app, "Transactions")
+        management = next(tab for tab in app.tabs if tab.label == "Payees & Tags")
+        labels = [getattr(node, "label", "") for node in management]
+        assert "Payees" in labels
+        assert "Tags" in labels
+        assert "New payee name" in labels
+        assert "New tag name" in labels
+        assert any(
+            "Business profile:" in str(node.value)
+            for node in app.caption
+        )

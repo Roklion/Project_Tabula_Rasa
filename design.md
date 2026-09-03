@@ -247,6 +247,7 @@ Page headers state the page purpose and place its primary workflow actions
 near the relevant content. Use tabs for current workflow divisions:
 
 - Transactions: Add transaction and View & edit ledger
+- Transactions: Payees & Tags management
 - Mileage: Add trip and View & edit mileage log
 
 Use bordered containers or expanders for dense independent workflows such as
@@ -614,6 +615,28 @@ operations remain discoverable. Success occurs only after confirmation.
 Receipt-on-create partial failure never duplicates or discards a confirmed
 transaction. Bulk mode cannot operate on rows outside the current visible
 scope. Tags remain independent of Categories and do not affect accounting.
+
+#### Payees & Tags management
+
+Transactions includes a third top-level tab named **Payees & Tags**. It has
+visually separate **Payees** and **Tags** subtabs and always identifies the
+selected business profile. Each section lists all stored values, including
+inactive values, and provides add, rename, merge, and remove workflows.
+
+Rename retains the stable ID and every existing reference. A merge requires an
+explicit target, one or more explicit sources, and acknowledgement before one
+confirmed, atomic workbook mutation. Payee merges update both Transactions and
+the corresponding MixedUseExpenses source/projection pair. Tag merges update
+Transactions and Mileage, replace source IDs with the target, and de-duplicate
+an association when both are present. Unrelated fields and associations remain
+unchanged.
+
+Removal is permanent and permitted only when a fresh reference check finds no
+uses. A referenced Payee or Tag is not silently unassigned; the page reports
+the reference count and directs the user to unassign it through the relevant
+transaction or mileage editor, or to merge it. Confirmed writes invalidate only
+the affected profile-local caches. Uncertain batch responses are classified
+after a fresh read and are never blindly repeated.
 
 ### Mileage
 
