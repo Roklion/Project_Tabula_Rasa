@@ -25,6 +25,7 @@ MONITORING_ENDPOINT = "https://monitoring.googleapis.com/v3"
 MONITORING_METRIC_TYPE = "serviceruntime.googleapis.com/quota/rate/net_usage"
 MONITORING_RESOURCE_TYPE = "consumer_quota"
 MONITORED_SERVICES = ("routes.googleapis.com", "places.googleapis.com")
+SERVICE_USAGE_PAGE_SIZE = 200
 SERVICE_USAGE_READ_SCOPE = "https://www.googleapis.com/auth/cloud-platform.read-only"
 MONITORING_READ_SCOPE = "https://www.googleapis.com/auth/monitoring.read"
 READ_ONLY_SCOPES = (SERVICE_USAGE_READ_SCOPE, MONITORING_READ_SCOPE)
@@ -429,7 +430,10 @@ class GoogleMapsQuotaClient:
         page_token = ""
         parsed: list[GoogleMapsQuotaMetric] = []
         while True:
-            params: dict[str, Any] = {"view": "FULL", "pageSize": 1000}
+            params: dict[str, Any] = {
+                "view": "FULL",
+                "pageSize": SERVICE_USAGE_PAGE_SIZE,
+            }
             if page_token:
                 params["pageToken"] = page_token
             payload = self._get(url, params, api_name="Service Usage")

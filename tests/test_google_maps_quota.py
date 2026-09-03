@@ -25,6 +25,7 @@ from tabula_rasa.google_maps_quota import (
     QUOTA_REQUEST_ERROR_KEY,
     QUOTA_VIEW_REQUESTED_KEY,
     READ_ONLY_SCOPES,
+    SERVICE_USAGE_PAGE_SIZE,
     SERVICE_USAGE_READ_SCOPE,
     _format_number,
     _number,
@@ -227,6 +228,11 @@ def test_client_paginates_service_usage_and_queries_both_services() -> None:
         "places.googleapis.com",
     ]
     assert session.get.call_args_list[0].kwargs["params"]["view"] == "FULL"
+    assert (
+        session.get.call_args_list[0].kwargs["params"]["pageSize"]
+        == SERVICE_USAGE_PAGE_SIZE
+        == 200
+    )
     assert session.get.call_args_list[1].kwargs["params"]["pageToken"] == "next"
     assert session.get.call_args_list[2].kwargs["params"]["aggregation.groupByFields"] == (
         "metric.labels.quota_metric"
