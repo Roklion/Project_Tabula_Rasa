@@ -64,8 +64,8 @@ def _write(
 
 def _render_payees(context: PayeesTagsContext, payees: list[dict[str, str]]) -> None:
     try:
-        transactions = context.storage.list_transactions(_force_refresh=True)
-        mixed_sources = context.storage.list_mixed_use_expenses(_force_refresh=True)
+        transactions = context.storage.list_transactions()
+        mixed_sources = context.storage.list_mixed_use_expense_sources()
     except StorageError as error:
         context.report_storage_error(error)
         return
@@ -139,8 +139,8 @@ def _render_payees(context: PayeesTagsContext, payees: list[dict[str, str]]) -> 
 
 def _render_tags(context: PayeesTagsContext, tags: list[dict[str, str]]) -> None:
     try:
-        transactions = context.storage.list_transactions(_force_refresh=True)
-        mileage = context.storage.list_mileage_trips(_force_refresh=True)
+        transactions = context.storage.list_transactions()
+        mileage = context.storage.list_mileage_trips()
     except StorageError as error:
         context.report_storage_error(error)
         return

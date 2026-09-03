@@ -45,6 +45,8 @@ def render_transactions(context: TransactionsContext) -> None:
             "Payees",
             "Transactions",
             "Tags",
+            "MixedUseExpenses",
+            "Mileage",
         )
         accounts = context.storage.list_accounts(active_only=False)
         active_accounts = _ordered_active_accounts(accounts)

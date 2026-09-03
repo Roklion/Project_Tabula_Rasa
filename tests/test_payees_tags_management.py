@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from threading import Event, Thread
 
@@ -450,3 +452,19 @@ def test_transactions_exposes_profile_local_management_tab() -> None:
             "Business profile:" in str(node.value)
             for node in app.caption
         )
+
+
+def test_management_display_uses_prefetched_cached_rows() -> None:
+    renderer_source = Path(
+        "tabula_rasa/page_renderers/transactions/renderer.py"
+    ).read_text(encoding="utf-8")
+    management_source = Path(
+        "tabula_rasa/page_renderers/transactions/payees_tags.py"
+    ).read_text(encoding="utf-8")
+    assert '"MixedUseExpenses"' in renderer_source
+    assert '"Mileage"' in renderer_source
+    assert "list_mixed_use_expense_sources()" in management_source
+    assert "list_transactions()" in management_source
+    assert "list_mileage_trips()" in management_source
+    assert "list_mixed_use_expenses(_force_refresh=True)" not in management_source
+    assert "list_mileage_trips(_force_refresh=True)" not in management_source

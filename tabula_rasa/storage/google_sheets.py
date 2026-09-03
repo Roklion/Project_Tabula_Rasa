@@ -3843,6 +3843,15 @@ class GoogleSheetsStorage:
             reverse=True,
         )
 
+    def list_mixed_use_expense_sources(
+        self, *, _force_refresh: bool = False
+    ) -> list[dict[str, str]]:
+        """Return cached source rows for lightweight reference-count displays."""
+        return [
+            dict(row.values)
+            for row in self._rows("MixedUseExpenses", force_refresh=_force_refresh)
+        ]
+
     def get_mixed_use_expense(self, source_id: str) -> dict[str, str]:
         source_id = _clean_text(source_id, "Mixed-use source ID", required=True)
         for source in self.list_mixed_use_expenses():
