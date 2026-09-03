@@ -304,7 +304,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         rows = [{"Date": item["txn_date"], "Payee / description": item.get("payee") or item.get("description", ""), "Account": account_paths.get(item.get("account_id", ""), "Unknown"), "Category": category_paths.get(item.get("category_id", ""), "Unknown"), "Total": f"{'$'}{item['total_expense']}", "Business %": item["business_use_percentage"], "Allocated": f"{'$'}{item['allocated_amount']}", "Rationale": item["allocation_rationale"], "Status": item.get("ledger_status", "linked")} for item in sources]
         st.dataframe(rows, hide_index=True, width="stretch")
     if source:
-        linked_transactions = context.storage.list_transactions(_force_refresh=True)
+        linked_transactions = context.storage.list_transactions()
         linked = next(
             (
                 item for item in linked_transactions

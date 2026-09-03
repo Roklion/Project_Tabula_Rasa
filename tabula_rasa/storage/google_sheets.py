@@ -2909,9 +2909,11 @@ class GoogleSheetsStorage:
 
     def _raw_mixed_use_snapshot(
         self,
+        *,
+        force_refresh: bool = True,
     ) -> tuple[dict[str, dict[str, str]], dict[str, dict[str, str]]]:
         snapshot = self._snapshot(
-            ["MixedUseExpenses", "Transactions"], force_refresh=True
+            ["MixedUseExpenses", "Transactions"], force_refresh=force_refresh
         )
         sources: dict[str, dict[str, str]] = {}
         for row in snapshot["MixedUseExpenses"]:
@@ -3141,8 +3143,9 @@ class GoogleSheetsStorage:
     def list_mixed_use_expenses(
         self, *, _force_refresh: bool = False
     ) -> list[dict[str, str]]:
-        del _force_refresh  # Mixed-use relationships always require a fresh read.
-        sources, transactions = self._raw_mixed_use_snapshot()
+        sources, transactions = self._raw_mixed_use_snapshot(
+            force_refresh=_force_refresh
+        )
         tables = {
             "MixedUseExpenses": (MIXED_USE_WORKSHEET_HEADERS, list(sources.values())),
             "Transactions": (
@@ -3151,9 +3154,9 @@ class GoogleSheetsStorage:
             ),
         }
         _validate_mixed_use_tables(tables)
-        accounts = self._account_lookup(force_refresh=True)
-        categories = self._category_lookup(force_refresh=True)
-        payees = self._payee_lookup(force_refresh=True)
+        accounts = self._account_lookup(force_refresh=_force_refresh)
+        categories = self._category_lookup(force_refresh=_force_refresh)
+        payees = self._payee_lookup(force_refresh=_force_refresh)
         result = []
         for source in sources.values():
             self._validate_mixed_use_references(
