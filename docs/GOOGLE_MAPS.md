@@ -117,11 +117,16 @@ read-only **Service Usage Viewer** role
 consumer-quota and time-series read permissions needed for this view; do not
 grant editor/admin roles. If the organization's IAM catalog has renamed or
 split these permissions, use the current read-only equivalents. Enable Service
-Usage API and Cloud Monitoring API in that project. The application requests only the
-`cloud-platform.read-only` OAuth scope. It reads the `routes.googleapis.com`
-and `places.googleapis.com` consumer quota metrics and recent
+Usage API and Cloud Monitoring API in that project. The application requests
+only the `cloud-platform.read-only` and `monitoring.read` OAuth scopes required
+by those read APIs. It reads the `routes.googleapis.com` and
+`places.googleapis.com` consumer quota metrics and recent
 `serviceruntime.googleapis.com/quota/rate/net_usage` data; it does not mutate
 quotas or use this account for Routes/Places requests.
+
+Safe request failures identify Service Usage or Cloud Monitoring and include
+only the HTTP status and remediation guidance. Google response bodies and
+credential material are never displayed.
 
 Cloud Monitoring is sampled data, not a live counter. Reporting can lag several
 minutes, including up to about 240 seconds after sampling. The authenticated

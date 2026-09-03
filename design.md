@@ -224,6 +224,8 @@ also contains a compact, read-only **Google Maps API usage** expander after
 authentication. Routes API and Places API (New) are visibly separate and show
 effective quota, recent Google-reported usage, compatible utilization,
 timestamp, and age. Until configured, the expander reports its setup guidance.
+Read failures identify Service Usage or Cloud Monitoring and provide a safe
+HTTP-status-based remediation hint without displaying Google response bodies.
 It warns that Monitoring may lag several minutes (including up to about 240
 seconds after sampling), and is not a real-time remaining-request or
 billing/spend meter.

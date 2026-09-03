@@ -15,12 +15,17 @@ from tabula_rasa.google_maps_quota import (
     GoogleMapsQuotaReport,
     GoogleMapsQuotaUsage,
     GoogleMapsServiceReport,
+    MONITORING_READ_SCOPE,
     QUOTA_CONFIG_ERROR_CONFIG_KEY,
     QUOTA_CONFIG_ERROR_KEY,
     QUOTA_REPORT_CONFIG_KEY,
     QUOTA_REPORT_FETCHED_AT_KEY,
     QUOTA_REPORT_SESSION_KEY,
+    QUOTA_REQUEST_ERROR_CONFIG_KEY,
+    QUOTA_REQUEST_ERROR_KEY,
     QUOTA_VIEW_REQUESTED_KEY,
+    READ_ONLY_SCOPES,
+    SERVICE_USAGE_READ_SCOPE,
     _format_number,
     _number,
     _quota_config_identity,
@@ -57,6 +62,12 @@ def test_config_requires_explicit_project_and_dedicated_credential() -> None:
     assert config.service_account_info == SERVICE_ACCOUNT
     assert "private-key" not in repr(config)
     assert "private-key" not in _quota_config_identity(config)
+    with patch(
+        "tabula_rasa.google_maps_quota.Credentials.from_service_account_info"
+    ) as from_service_account_info:
+        config.credentials()
+    assert from_service_account_info.call_args.kwargs["scopes"] == READ_ONLY_SCOPES
+    assert READ_ONLY_SCOPES == (SERVICE_USAGE_READ_SCOPE, MONITORING_READ_SCOPE)
 
     with pytest.raises(GoogleMapsQuotaConfigurationError):
         GoogleMapsQuotaMonitoringConfig.from_secrets({"google_maps": {}})
@@ -275,8 +286,12 @@ def test_client_redacts_transport_and_http_failures() -> None:
     session.get.side_effect = None
     session.get.return_value = Mock(status_code=403)
     with pytest.raises(GoogleMapsQuotaRequestError) as error:
-        client._get("https://example.test", {})
+        client._get("https://example.test", {}, api_name="Cloud Monitoring")
     assert "private-key" not in str(error.value)
+    assert str(error.value) == (
+        "Cloud Monitoring request returned HTTP 403. "
+        "Verify the quota-reader OAuth scopes and IAM roles."
+    )
 
 
 def test_sidebar_is_discoverable_but_does_not_call_google_when_unconfigured() -> None:
@@ -454,3 +469,30 @@ def test_sidebar_preserves_sanitized_configuration_error_without_retrying() -> N
     show_error.assert_called_with(str(error))
     assert session_state[QUOTA_CONFIG_ERROR_KEY] == str(error)
     assert QUOTA_CONFIG_ERROR_CONFIG_KEY in session_state
+
+
+def test_sidebar_preserves_sanitized_request_error_without_retrying() -> None:
+    session_state = {QUOTA_VIEW_REQUESTED_KEY: True}
+    error = GoogleMapsQuotaRequestError(
+        "Cloud Monitoring request returned HTTP 403. "
+        "Verify the quota-reader OAuth scopes and IAM roles."
+    )
+    with patch(
+        "tabula_rasa.google_maps_quota.st.expander", return_value=MagicMock()
+    ), patch("tabula_rasa.google_maps_quota.st.caption"), patch(
+        "tabula_rasa.google_maps_quota.st.warning"
+    ) as warning, patch(
+        "tabula_rasa.google_maps_quota.st.button", return_value=False
+    ), patch(
+        "tabula_rasa.google_maps_quota.st.session_state", session_state
+    ), patch(
+        "tabula_rasa.google_maps_quota.load_google_maps_quota_report",
+        side_effect=error,
+    ) as load:
+        render_google_maps_usage_sidebar(secrets())
+        render_google_maps_usage_sidebar(secrets())
+
+    load.assert_called_once()
+    warning.assert_called_with(str(error))
+    assert session_state[QUOTA_REQUEST_ERROR_KEY] == str(error)
+    assert QUOTA_REQUEST_ERROR_CONFIG_KEY in session_state

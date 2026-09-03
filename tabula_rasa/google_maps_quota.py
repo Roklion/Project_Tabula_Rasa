@@ -25,7 +25,9 @@ MONITORING_ENDPOINT = "https://monitoring.googleapis.com/v3"
 MONITORING_METRIC_TYPE = "serviceruntime.googleapis.com/quota/rate/net_usage"
 MONITORING_RESOURCE_TYPE = "consumer_quota"
 MONITORED_SERVICES = ("routes.googleapis.com", "places.googleapis.com")
-READ_ONLY_SCOPE = "https://www.googleapis.com/auth/cloud-platform.read-only"
+SERVICE_USAGE_READ_SCOPE = "https://www.googleapis.com/auth/cloud-platform.read-only"
+MONITORING_READ_SCOPE = "https://www.googleapis.com/auth/monitoring.read"
+READ_ONLY_SCOPES = (SERVICE_USAGE_READ_SCOPE, MONITORING_READ_SCOPE)
 DEFAULT_TIMEOUT_SECONDS = 15.0
 QUOTA_CACHE_TTL_SECONDS = 120
 QUOTA_VIEW_REQUESTED_KEY = "google_maps_quota_view_requested"
@@ -35,6 +37,8 @@ QUOTA_REPORT_CONFIG_KEY = "google_maps_quota_report_config"
 QUOTA_FETCH_ATTEMPTED_KEY = "google_maps_quota_fetch_attempted"
 QUOTA_CONFIG_ERROR_KEY = "google_maps_quota_config_error"
 QUOTA_CONFIG_ERROR_CONFIG_KEY = "google_maps_quota_config_error_config"
+QUOTA_REQUEST_ERROR_KEY = "google_maps_quota_request_error"
+QUOTA_REQUEST_ERROR_CONFIG_KEY = "google_maps_quota_request_error_config"
 
 
 class GoogleMapsQuotaError(RuntimeError):
@@ -124,7 +128,7 @@ class GoogleMapsQuotaMonitoringConfig:
         """Create least-privilege credentials without exposing key material."""
         try:
             return Credentials.from_service_account_info(
-                dict(self.service_account_info), scopes=[READ_ONLY_SCOPE]
+                dict(self.service_account_info), scopes=READ_ONLY_SCOPES
             )
         except Exception as exc:
             raise GoogleMapsQuotaConfigurationError(
@@ -381,26 +385,42 @@ class GoogleMapsQuotaClient:
         self.session = session or AuthorizedSession(config.credentials())
         self.now = now or (lambda: datetime.now(timezone.utc))
 
-    def _get(self, url: str, params: Mapping[str, Any]) -> Mapping[str, Any]:
+    def _get(
+        self,
+        url: str,
+        params: Mapping[str, Any],
+        *,
+        api_name: str = "Google Cloud",
+    ) -> Mapping[str, Any]:
         try:
             response = self.session.get(url, params=dict(params), timeout=self.config.timeout_seconds)
         except Exception:
             raise GoogleMapsQuotaRequestError(
-                "Google Maps quota data is temporarily unavailable. Retry later."
+                f"{api_name} request could not reach Google. Check outbound "
+                "network access and retry."
             ) from None
         if response.status_code != 200:
+            status_code = int(response.status_code)
+            if status_code in (401, 403):
+                guidance = "Verify the quota-reader OAuth scopes and IAM roles."
+            elif status_code == 404:
+                guidance = "Verify the numeric Google Cloud project number."
+            elif status_code == 429:
+                guidance = "Retry after the Google API quota recovers."
+            else:
+                guidance = "Verify the enabled API and quota-reader access."
             raise GoogleMapsQuotaRequestError(
-                "Google Maps quota data could not be read. Verify the monitoring service account and APIs."
+                f"{api_name} request returned HTTP {status_code}. {guidance}"
             )
         try:
             payload = response.json()
         except (ValueError, TypeError):
             raise GoogleMapsQuotaRequestError(
-                "Google Maps quota data could not be read. Retry later."
+                f"{api_name} returned an unreadable response. Retry later."
             ) from None
         if not isinstance(payload, Mapping):
             raise GoogleMapsQuotaRequestError(
-                "Google Maps quota data could not be read. Retry later."
+                f"{api_name} returned an unreadable response. Retry later."
             )
         return payload
 
@@ -412,7 +432,7 @@ class GoogleMapsQuotaClient:
             params: dict[str, Any] = {"view": "FULL", "pageSize": 1000}
             if page_token:
                 params["pageToken"] = page_token
-            payload = self._get(url, params)
+            payload = self._get(url, params, api_name="Service Usage")
             parsed.extend(parse_quota_metrics(payload))
             next_token = _clean_text(payload.get("nextPageToken"))
             if not next_token or next_token == page_token:
@@ -447,7 +467,7 @@ class GoogleMapsQuotaClient:
         while True:
             if page_token:
                 params["pageToken"] = page_token
-            payload = self._get(url, params)
+            payload = self._get(url, params, api_name="Cloud Monitoring")
             for key, usage in parse_usage_time_series(payload, service=service).items():
                 current = result.get(key)
                 if current is None or usage.timestamp > current.timestamp:
@@ -622,6 +642,8 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
             st.session_state.pop(QUOTA_FETCH_ATTEMPTED_KEY, None)
             st.session_state.pop(QUOTA_CONFIG_ERROR_KEY, None)
             st.session_state.pop(QUOTA_CONFIG_ERROR_CONFIG_KEY, None)
+            st.session_state.pop(QUOTA_REQUEST_ERROR_KEY, None)
+            st.session_state.pop(QUOTA_REQUEST_ERROR_CONFIG_KEY, None)
             st.rerun()
         report = st.session_state.get(QUOTA_REPORT_SESSION_KEY)
         current_config_identity = _quota_config_identity(config)
@@ -650,19 +672,31 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
             except GoogleMapsQuotaConfigurationError as exc:
                 st.session_state[QUOTA_CONFIG_ERROR_KEY] = str(exc)
                 st.session_state[QUOTA_CONFIG_ERROR_CONFIG_KEY] = current_config_identity
-            except GoogleMapsQuotaError:
-                pass
+            except GoogleMapsQuotaRequestError as exc:
+                st.session_state[QUOTA_REQUEST_ERROR_KEY] = str(exc)
+                st.session_state[QUOTA_REQUEST_ERROR_CONFIG_KEY] = current_config_identity
             else:
                 st.session_state[QUOTA_REPORT_SESSION_KEY] = report
                 st.session_state[QUOTA_REPORT_FETCHED_AT_KEY] = datetime.now(timezone.utc)
                 st.session_state[QUOTA_REPORT_CONFIG_KEY] = current_config_identity
                 st.session_state.pop(QUOTA_CONFIG_ERROR_KEY, None)
                 st.session_state.pop(QUOTA_CONFIG_ERROR_CONFIG_KEY, None)
+                st.session_state.pop(QUOTA_REQUEST_ERROR_KEY, None)
+                st.session_state.pop(QUOTA_REQUEST_ERROR_CONFIG_KEY, None)
         config_error = st.session_state.get(QUOTA_CONFIG_ERROR_KEY)
         if config_error and st.session_state.get(QUOTA_CONFIG_ERROR_CONFIG_KEY) != current_config_identity:
             st.session_state.pop(QUOTA_CONFIG_ERROR_KEY, None)
             st.session_state.pop(QUOTA_CONFIG_ERROR_CONFIG_KEY, None)
             config_error = None
+        request_error = st.session_state.get(QUOTA_REQUEST_ERROR_KEY)
+        if (
+            request_error
+            and st.session_state.get(QUOTA_REQUEST_ERROR_CONFIG_KEY)
+            != current_config_identity
+        ):
+            st.session_state.pop(QUOTA_REQUEST_ERROR_KEY, None)
+            st.session_state.pop(QUOTA_REQUEST_ERROR_CONFIG_KEY, None)
+            request_error = None
         if config_error:
             st.error(config_error)
             if st.button("Retry", key="retry-config-error-google-maps-usage-sidebar"):
@@ -672,9 +706,15 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
                 st.rerun()
             return
         if report is None:
-            st.warning("Google Maps usage is temporarily unavailable.")
+            st.warning(
+                str(request_error)
+                if request_error
+                else "Google Maps usage is temporarily unavailable."
+            )
             if st.button("Retry", key="retry-fetch-error-google-maps-usage-sidebar"):
                 st.session_state.pop(QUOTA_FETCH_ATTEMPTED_KEY, None)
+                st.session_state.pop(QUOTA_REQUEST_ERROR_KEY, None)
+                st.session_state.pop(QUOTA_REQUEST_ERROR_CONFIG_KEY, None)
                 st.rerun()
             return
         now = datetime.now(timezone.utc)
