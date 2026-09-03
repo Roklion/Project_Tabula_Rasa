@@ -3955,13 +3955,15 @@ class GoogleSheetsStorage:
         reference: Mapping[str, Any] | None = None,
     ) -> dict[str, str]:
         """Attach or refresh one Drive file reference on a transaction."""
-        try:
-            normalized_reference = validate_receipt_reference(
-                reference if reference is not None else {"id": file_id, "name": name}
-            )
-        except ReceiptManifestError as exc:
-            raise StorageValidationError(str(exc)) from exc
         with _MIXED_USE_CREATE_LOCK:
+            current = self._find_row("Transactions", transaction_id)
+            self._reject_mixed_use_projection(current.values)
+            try:
+                normalized_reference = validate_receipt_reference(
+                    reference if reference is not None else {"id": file_id, "name": name}
+                )
+            except ReceiptManifestError as exc:
+                raise StorageValidationError(str(exc)) from exc
             for transaction in self.list_transactions(_force_refresh=True):
                 if transaction["id"] == transaction_id:
                     continue
@@ -3974,8 +3976,6 @@ class GoogleSheetsStorage:
                     raise StorageConflictError(
                         "That receipt is already linked to another transaction"
                     )
-            current = self._find_row("Transactions", transaction_id)
-            self._reject_mixed_use_projection(current.values)
             references = decode_receipt_references(
                 current.values.get("receipt_references", "")
             )
