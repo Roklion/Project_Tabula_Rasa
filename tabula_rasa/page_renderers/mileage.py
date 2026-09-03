@@ -520,7 +520,7 @@ def _render_tag_selector(
     key: str,
     selected_ids: list[str] | tuple[str, ...] = (),
     label: str = "Tags",
-) -> tuple[list[str], str]:
+) -> tuple[list[str], str | None]:
     """Render the shared optional multi-Tag selector for mileage forms."""
     if not isinstance(tags, (list, tuple)):
         return [], ""
