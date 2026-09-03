@@ -3546,6 +3546,17 @@ class GoogleSheetsStorage:
         *,
         references: Sequence[Mapping[str, Any]],
     ) -> dict[str, str]:
+        with _MIXED_USE_CREATE_LOCK:
+            return self._initialize_legacy_transaction_receipts(
+                transaction_id, references=references
+            )
+
+    def _initialize_legacy_transaction_receipts(
+        self,
+        transaction_id: str,
+        *,
+        references: Sequence[Mapping[str, Any]],
+    ) -> dict[str, str]:
         """Populate one still-blank legacy receipt cell with rich references."""
         try:
             normalized = [
@@ -3627,6 +3638,18 @@ class GoogleSheetsStorage:
             )
 
     def remap_transaction_receipt(
+        self,
+        transaction_id: str,
+        *,
+        old_file_id: str,
+        reference: Mapping[str, Any],
+    ) -> dict[str, str]:
+        with _MIXED_USE_CREATE_LOCK:
+            return self._remap_transaction_receipt(
+                transaction_id, old_file_id=old_file_id, reference=reference
+            )
+
+    def _remap_transaction_receipt(
         self,
         transaction_id: str,
         *,
