@@ -1,6 +1,7 @@
 """Mixed-use source workflow for the Transactions page."""
 from __future__ import annotations
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from datetime import date
 import streamlit as st
 from tabula_rasa.mixed_use import MixedUseAllocationError, calculate_allocated_amount
@@ -11,8 +12,52 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     prepare_receipt_uploads,
     render_receipt_creation_recovery,
     render_receipts,
+    receipt_creation_workflow_key,
 )
 from tabula_rasa.storage import StorageError
+
+
+class _MixedUseReceiptStorage:
+    """Narrow receipt-storage capability scoped to one source record."""
+
+    def __init__(self, storage, source_id: str, expected_source: Mapping[str, object]):
+        self._storage = storage
+        self._source_id = source_id
+        self._expected_source = expected_source
+
+    def __getattr__(self, name):
+        return getattr(self._storage, name)
+
+    def link_transaction_receipt(self, transaction_id, *, reference):
+        result = self._storage.link_mixed_use_receipt(
+            self._source_id, reference=reference, expected_source=self._expected_source
+        )
+        self._expected_source = self._storage.get_mixed_use_expense(self._source_id)
+        return result
+
+    def unlink_transaction_receipt(self, transaction_id, *, file_id):
+        result = self._storage.unlink_mixed_use_receipt(
+            self._source_id, file_id=file_id, expected_source=self._expected_source
+        )
+        self._expected_source = self._storage.get_mixed_use_expense(self._source_id)
+        return result
+
+    def set_transaction_receipt_references(self, transaction_id, references):
+        result = self._storage.set_mixed_use_receipt_references(
+            self._source_id, references, expected_source=self._expected_source
+        )
+        self._expected_source = self._storage.get_mixed_use_expense(self._source_id)
+        return result
+
+    def remap_transaction_receipt(self, transaction_id, *, old_file_id, reference):
+        result = self._storage.remap_mixed_use_receipt(
+            self._source_id,
+            old_file_id=old_file_id,
+            reference=reference,
+            expected_source=self._expected_source,
+        )
+        self._expected_source = self._storage.get_mixed_use_expense(self._source_id)
+        return result
 
 def mixed_use_preview(*, txn_date, account, payee, category, description, total_expense, business_use_percentage, allocation_rationale):
     """Build a side-effect-free ledger preview using the canonical calculator."""
@@ -63,6 +108,30 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         context.report_storage_error(error)
         return
     source_by_id = {str(item["id"]): item for item in sources}
+    recovery = st.session_state.get(receipt_creation_workflow_key(profile))
+    if isinstance(recovery, Mapping):
+        recovery_transaction_id = str(recovery.get("transaction_id") or "")
+        linked = next(
+            (
+                item
+                for item in context.storage.list_transactions(_force_refresh=True)
+                if str(item.get("id") or "") == recovery_transaction_id
+            ),
+            None,
+        )
+        recovery_source_id = (
+            str(linked.get("source_id") or "") if linked else ""
+        )
+        recovery_source = source_by_id.get(recovery_source_id)
+        if recovery_source:
+            recovery_context = replace(
+                context,
+                storage=_MixedUseReceiptStorage(
+                    context.storage, recovery_source_id, recovery_source
+                ),
+            )
+            render_receipt_creation_recovery(recovery_context)
+            return
     selected_key = _key(profile, "selected_source_id")
     selected_id = str(st.session_state.get(selected_key, "") or "")
     if selected_id not in source_by_id:
@@ -88,6 +157,17 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
     )
     account_ids = _active_ids(accounts)
     category_ids = [str(item["id"]) for item in categories if item.get("kind") == "Expense"]
+    active_account_ids = [
+        str(item["id"]) for item in accounts if str(item.get("active", "")).upper() == "TRUE"
+    ]
+    active_category_ids = [
+        str(item["id"])
+        for item in categories
+        if item.get("kind") == "Expense"
+        and str(item.get("active", "TRUE")).upper() == "TRUE"
+    ]
+    if not source:
+        account_ids, category_ids = active_account_ids, active_category_ids
     if not account_ids or not category_ids:
         st.warning("Create an active account and an Expense category before recording a mixed-use expense.")
         return
@@ -102,6 +182,11 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         category_id = c2.selectbox("Category", category_ids, index=category_ids.index(str(defaults.get("category_id", category_ids[0]))) if str(defaults.get("category_id", category_ids[0])) in category_ids else 0, format_func=category_paths.get, key=f"mixed_category_{scope}")
         options, payee_by_id = _payee_options(payees)
         current_payee = str(defaults.get("payee_id", ""))
+        if source and current_payee and current_payee not in options:
+            options.append(current_payee)
+            payee_by_id[current_payee] = str(defaults.get("payee", "")) or (
+                f"{current_payee} (inactive)"
+            )
         payee_id = st.selectbox("Payee / customer", options, index=options.index(current_payee) if current_payee in options else 1, format_func=lambda value: payee_by_id.get(value, "No payee" if value == "" else value), key=f"mixed_payee_{scope}")
         new_payee = st.text_input("Payee / customer", value=str(defaults.get("payee", "")), key=f"mixed_new_payee_{scope}") if payee_id == "+ Add new payee" else ""
         c1, c2 = st.columns(2)
@@ -160,7 +245,26 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                     def operation():
                         return context.storage.create_mixed_use_expense(**payload)
                     action, success = "create_mixed_use_expense", "Mixed-use expense saved."
-                context.confirmed_write(action, payload, operation, success, on_success=lambda: context.schedule_widget_reset(_key(profile, "form_reset")), on_confirmed=(lambda result: handle_confirmed_transaction_receipts(context, result, prepared_receipts) if prepared_receipts else None), report_error=save_error.error)
+                def process_mixed_receipts(result):
+                    if not prepared_receipts:
+                        return
+                    receipt_result = {
+                        **result,
+                        "id": result["linked_transaction_id"],
+                    }
+                    receipt_context = replace(
+                        context,
+                        storage=_MixedUseReceiptStorage(
+                            context.storage,
+                            result["id"],
+                            result,
+                        ),
+                    )
+                    handle_confirmed_transaction_receipts(
+                        receipt_context, receipt_result, prepared_receipts
+                    )
+
+                context.confirmed_write(action, payload, operation, success, on_success=lambda: context.schedule_widget_reset(_key(profile, "form_reset")), on_confirmed=process_mixed_receipts, report_error=save_error.error)
     with right:
         st.markdown("#### Mixed-use Expense Log")
         if not sources:
@@ -187,7 +291,12 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                     "Manage receipts here; the linked ledger projection is read-only."
                 )
                 render_receipts(
-                    context,
+                    replace(
+                        context,
+                        storage=_MixedUseReceiptStorage(
+                            context.storage, source["id"], source
+                        ),
+                    ),
                     selected=linked,
                     all_transactions=linked_transactions,
                     edit_id=str(linked["id"]),

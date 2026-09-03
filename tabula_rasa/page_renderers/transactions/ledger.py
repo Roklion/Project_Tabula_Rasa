@@ -799,15 +799,9 @@ def render_ledger(
             if transaction_is_mixed_use(selected):
                 st.info(
                     "This transaction is generated from a mixed-use expense "
-                    "and is managed from the Mixed-use expenses tab."
+                    "and is managed from the Mixed-use expenses tab. Switch "
+                    "to that tab to edit, delete, or manage receipts."
                 )
-                if st.button(
-                    "Open Mixed-use expenses",
-                    key=f"manage_mixed_use_{context.profile_key}_{edit_id}",
-                ):
-                    st.session_state[f"mixed_use_selected_source_id_{context.profile_key}"] = selected.get("source_id", "")
-                    st.session_state["active_page"] = "Transactions"
-                    st.rerun()
                 return
             copy_mode = copy_source_id == edit_id
             copy_generation = st.session_state.get(

@@ -3828,6 +3828,7 @@ class GoogleSheetsStorage:
         """Replace the Drive receipt references attached to one transaction."""
         with _MIXED_USE_CREATE_LOCK:
             current = self._find_row("Transactions", transaction_id)
+            self._reject_mixed_use_projection(current.values)
             encoded_references = _encode_receipt_references(references)
             self._reject_receipt_ownership_conflict(
                 encoded_references, transaction_id=transaction_id
@@ -3835,6 +3836,59 @@ class GoogleSheetsStorage:
             return self._replace_receipt_references(
                 current, encoded_references
             )
+
+    def _mixed_use_receipt_pair(
+        self,
+        source_id: str,
+        *,
+        expected_source: Mapping[str, Any] | None = None,
+    ) -> tuple[_StoredRow, _StoredRow]:
+        """Freshly resolve a source/projection pair for receipt orchestration."""
+        source_id = _clean_text(source_id, "Mixed-use source ID", required=True)
+        source = self._find_row("MixedUseExpenses", source_id)
+        if expected_source is not None and not self._mixed_use_record_matches(
+            "MixedUseExpenses", source.values, expected_source
+        ):
+            raise StorageConflictError(
+                "The mixed-use expense changed; refresh before changing receipts."
+            )
+        transaction_id = _clean_text(
+            source.values.get("linked_transaction_id"),
+            "Linked transaction ID",
+            required=True,
+        )
+        transaction = self._find_row("Transactions", transaction_id)
+        if transaction.values.get("source_type") != MIXED_USE_SOURCE_TYPE or (
+            transaction.values.get("source_id") != source_id
+        ):
+            raise StorageValidationError(
+                "Mixed-use source and projection IDs do not match"
+            )
+        if str(source.values.get("receipt_references") or "") != str(
+            transaction.values.get("receipt_references") or ""
+        ):
+            raise StorageConflictError(
+                "The mixed-use receipt pair changed; refresh before retrying."
+            )
+        return source, transaction
+
+    def set_mixed_use_receipt_references(
+        self,
+        source_id: str,
+        references: Any,
+        *,
+        expected_source: Mapping[str, Any] | None = None,
+    ) -> dict[str, str]:
+        """Replace paired receipt references through a source-aware path."""
+        with _MIXED_USE_CREATE_LOCK:
+            _source, transaction = self._mixed_use_receipt_pair(
+                source_id, expected_source=expected_source
+            )
+            encoded = _encode_receipt_references(references)
+            self._reject_receipt_ownership_conflict(
+                encoded, transaction_id=transaction.values["id"]
+            )
+            return self._replace_receipt_references(transaction, encoded)
 
     def initialize_legacy_transaction_receipts(
         self,
@@ -3883,6 +3937,7 @@ class GoogleSheetsStorage:
                     "That receipt is already linked to another transaction"
                 )
         current = self._find_row("Transactions", transaction_id)
+        self._reject_mixed_use_projection(current.values)
         if str(current.values.get("receipt_references", "")) != "":
             raise StorageConflictError(
                 "The transaction receipt references are already initialized"
@@ -3920,6 +3975,7 @@ class GoogleSheetsStorage:
                         "That receipt is already linked to another transaction"
                     )
             current = self._find_row("Transactions", transaction_id)
+            self._reject_mixed_use_projection(current.values)
             references = decode_receipt_references(
                 current.values.get("receipt_references", "")
             )
@@ -3931,6 +3987,34 @@ class GoogleSheetsStorage:
             references.append(normalized_reference)
             return self._replace_receipt_references(
                 current, _encode_receipt_references(references)
+            )
+
+    def link_mixed_use_receipt(
+        self,
+        source_id: str,
+        *,
+        reference: Mapping[str, Any],
+        expected_source: Mapping[str, Any] | None = None,
+    ) -> dict[str, str]:
+        """Link one receipt while authorizing the mixed-use source pair."""
+        with _MIXED_USE_CREATE_LOCK:
+            normalized = validate_receipt_reference(reference)
+            _source, transaction = self._mixed_use_receipt_pair(
+                source_id, expected_source=expected_source
+            )
+            self._reject_receipt_ownership_conflict(
+                _encode_receipt_references([normalized]),
+                transaction_id=transaction.values["id"],
+            )
+            references = decode_receipt_references(
+                transaction.values.get("receipt_references", "")
+            )
+            references = [
+                item for item in references if item["id"] != normalized["id"]
+            ]
+            references.append(normalized)
+            return self._replace_receipt_references(
+                transaction, _encode_receipt_references(references)
             )
 
     def remap_transaction_receipt(
@@ -3974,6 +4058,7 @@ class GoogleSheetsStorage:
                     "That receipt is already linked to another transaction"
                 )
         current = self._find_row("Transactions", transaction_id)
+        self._reject_mixed_use_projection(current.values)
         references = decode_receipt_references(
             current.values.get("receipt_references", "")
         )
@@ -4000,6 +4085,45 @@ class GoogleSheetsStorage:
         return self._replace_receipt_references(
             current, _encode_receipt_references(retained)
         )
+
+    def remap_mixed_use_receipt(
+        self,
+        source_id: str,
+        *,
+        old_file_id: str,
+        reference: Mapping[str, Any],
+        expected_source: Mapping[str, Any] | None = None,
+    ) -> dict[str, str]:
+        """Replace a recovered receipt through the source-aware path."""
+        with _MIXED_USE_CREATE_LOCK:
+            normalized = validate_receipt_reference(reference, allow_legacy=False)
+            _source, transaction = self._mixed_use_receipt_pair(
+                source_id, expected_source=expected_source
+            )
+            references = decode_receipt_references(
+                transaction.values.get("receipt_references", "")
+            )
+            indexes = [
+                index
+                for index, item in enumerate(references)
+                if item["id"] in {str(old_file_id), normalized["id"]}
+                or (
+                    item.get("receipt_id") == normalized.get("receipt_id")
+                    and item.get("sha256") == normalized.get("sha256")
+                )
+            ]
+            if not indexes:
+                raise StorageNotFoundError(
+                    "The mixed-use receipt is no longer available for recovery"
+                )
+            first = indexes[0]
+            retained = [
+                item for index, item in enumerate(references) if index not in indexes
+            ]
+            retained.insert(first, normalized)
+            return self._replace_receipt_references(
+                transaction, _encode_receipt_references(retained)
+            )
 
     def apply_receipt_recovery_plan(
         self,
@@ -4369,6 +4493,7 @@ class GoogleSheetsStorage:
         """Remove one Drive reference without modifying the Drive file."""
         with _MIXED_USE_CREATE_LOCK:
             current = self._find_row("Transactions", transaction_id)
+            self._reject_mixed_use_projection(current.values)
             references = decode_receipt_references(
                 current.values.get("receipt_references", "")
             )
@@ -4383,6 +4508,28 @@ class GoogleSheetsStorage:
                 return dict(current.values)
             return self._replace_receipt_references(
                 current, _encode_receipt_references(retained)
+            )
+
+    def unlink_mixed_use_receipt(
+        self,
+        source_id: str,
+        *,
+        file_id: str,
+        expected_source: Mapping[str, Any] | None = None,
+    ) -> dict[str, str]:
+        """Remove one receipt reference through the source-aware path."""
+        with _MIXED_USE_CREATE_LOCK:
+            _source, transaction = self._mixed_use_receipt_pair(
+                source_id, expected_source=expected_source
+            )
+            references = decode_receipt_references(
+                transaction.values.get("receipt_references", "")
+            )
+            retained = [
+                item for item in references if item["id"] != str(file_id)
+            ]
+            return self._replace_receipt_references(
+                transaction, _encode_receipt_references(retained)
             )
 
     def delete_transaction(self, transaction_id: str) -> None:
