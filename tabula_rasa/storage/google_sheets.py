@@ -2546,7 +2546,9 @@ class GoogleSheetsStorage:
         """Normalize an optional caller snapshot used by management actions."""
         if expected is None:
             return {}
-        if isinstance(expected, Mapping):
+        if isinstance(expected, Mapping) and "id" in expected:
+            values = [(expected.get("id"), expected)]
+        elif isinstance(expected, Mapping):
             values = expected.items()
         else:
             values = ((None, item) for item in expected)
@@ -2689,8 +2691,13 @@ class GoogleSheetsStorage:
             if target_id not in payees:
                 raise StorageNotFoundError("Payee no longer exists")
             missing = [item for item in source_ids if item not in payees]
+            if missing and len(missing) == len(source_ids):
+                # A retried merge may have already removed every source. Once
+                # the target still exists, this is a safe converged outcome.
+                return {"status": "fully_applied", "count": str(len(source_ids))}
             if missing:
                 raise StorageNotFoundError("A source payee no longer exists")
+
             transaction_rows = self._managed_rows_by_id(snapshot["Transactions"], "Transactions")
             mixed_rows = self._managed_rows_by_id(snapshot["MixedUseExpenses"], "MixedUseExpenses")
             transaction_updates = {
@@ -2931,6 +2938,9 @@ class GoogleSheetsStorage:
             if target_id not in tags:
                 raise StorageNotFoundError("Tag no longer exists")
             if any(item not in tags for item in source_ids):
+                missing = [item for item in source_ids if item not in tags]
+                if len(missing) == len(source_ids):
+                    return {"status": "fully_applied", "count": str(len(source_ids))}
                 raise StorageNotFoundError("A source tag no longer exists")
             update_rows: dict[str, tuple[str, _StoredRow, str]] = {}
             for title in ("Transactions", "Mileage"):
