@@ -302,6 +302,104 @@ def test_mixed_use_edit_shares_mixed_use_creation_lock(
     assert not errors
 
 
+def test_transaction_edit_shares_mixed_use_creation_lock(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    transaction = default_storage.create_transaction(
+        **_expense_inputs(default_storage), kind="Expense", amount="10"
+    )
+    started = threading.Event()
+    finished = threading.Event()
+    errors: list[BaseException] = []
+
+    def edit_transaction() -> None:
+        started.set()
+        try:
+            default_storage.edit_transaction(transaction["id"], description="Updated")
+        except BaseException as error:  # pragma: no cover - assertion below reports it
+            errors.append(error)
+        finally:
+            finished.set()
+
+    worker = threading.Thread(target=edit_transaction)
+    with google_sheets_module._MIXED_USE_CREATE_LOCK:
+        worker.start()
+        assert started.wait(1)
+        assert not finished.wait(0.1)
+    assert finished.wait(1)
+    worker.join(timeout=1)
+    assert not errors
+
+
+def test_bulk_category_change_shares_mixed_use_creation_lock(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    transaction = default_storage.create_transaction(
+        **_expense_inputs(default_storage), kind="Expense", amount="10"
+    )
+    category = next(
+        item
+        for item in default_storage.list_categories()
+        if item["kind"] == "Expense" and item["id"] != transaction["category_id"]
+    )
+    started = threading.Event()
+    finished = threading.Event()
+    errors: list[BaseException] = []
+
+    def change_category() -> None:
+        started.set()
+        try:
+            default_storage.bulk_change_transaction_category(
+                [transaction["id"]],
+                expected_transactions=[transaction],
+                category_id=category["id"],
+            )
+        except BaseException as error:  # pragma: no cover - assertion below reports it
+            errors.append(error)
+        finally:
+            finished.set()
+
+    worker = threading.Thread(target=change_category)
+    with google_sheets_module._MIXED_USE_CREATE_LOCK:
+        worker.start()
+        assert started.wait(1)
+        assert not finished.wait(0.1)
+    assert finished.wait(1)
+    worker.join(timeout=1)
+    assert not errors
+
+
+def test_transaction_receipt_setter_shares_mixed_use_creation_lock(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    transaction = default_storage.create_transaction(
+        **_expense_inputs(default_storage), kind="Expense", amount="10"
+    )
+    started = threading.Event()
+    finished = threading.Event()
+    errors: list[BaseException] = []
+
+    def set_receipt() -> None:
+        started.set()
+        try:
+            default_storage.set_transaction_receipt_references(
+                transaction["id"], []
+            )
+        except BaseException as error:  # pragma: no cover - assertion below reports it
+            errors.append(error)
+        finally:
+            finished.set()
+
+    worker = threading.Thread(target=set_receipt)
+    with google_sheets_module._MIXED_USE_CREATE_LOCK:
+        worker.start()
+        assert started.wait(1)
+        assert not finished.wait(0.1)
+    assert finished.wait(1)
+    worker.join(timeout=1)
+    assert not errors
+
+
 def test_mixed_use_delete_shares_mixed_use_creation_lock(
     default_storage: GoogleSheetsStorage,
 ) -> None:
@@ -473,6 +571,29 @@ def test_generic_transaction_mutations_reject_mixed_use_projections(
     assert default_storage.get_mixed_use_expense(source["id"])["linked_transaction_id"] == projection[
         "id"
     ]
+
+
+def test_mixed_use_create_rejects_transaction_collision_before_creating_payee(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    transaction = default_storage.create_transaction(
+        **_expense_inputs(default_storage), kind="Expense", amount="10"
+    )
+    mixed_use_inputs = _expense_inputs(default_storage)
+    payees_before = default_storage.list_payees(active_only=False)
+    mixed_use_inputs.update(
+        payee_id="",
+        new_payee_name="Should not be created",
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+        linked_transaction_id=transaction["id"],
+    )
+
+    with pytest.raises(StorageConflictError, match="already in use"):
+        default_storage.create_mixed_use_expense(**mixed_use_inputs)
+
+    assert default_storage.list_payees(active_only=False) == payees_before
 
 
 def test_mixed_use_projection_rejects_destination_account(

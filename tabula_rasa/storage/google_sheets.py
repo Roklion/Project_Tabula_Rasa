@@ -1788,6 +1788,20 @@ class GoogleSheetsStorage:
         expected_transactions: Sequence[Mapping[str, Any]],
         category_id: str,
     ) -> dict[str, str]:
+        with _MIXED_USE_CREATE_LOCK:
+            return self._bulk_change_transaction_category(
+                transaction_ids,
+                expected_transactions=expected_transactions,
+                category_id=category_id,
+            )
+
+    def _bulk_change_transaction_category(
+        self,
+        transaction_ids: Sequence[str],
+        *,
+        expected_transactions: Sequence[Mapping[str, Any]],
+        category_id: str,
+    ) -> dict[str, str]:
         """Revalidate and change categories with one atomic minimal-cell batch."""
         selected_rows, current_by_id = self._fresh_bulk_transaction_snapshot(
             transaction_ids, expected_transactions
@@ -2633,6 +2647,10 @@ class GoogleSheetsStorage:
         return record
 
     def edit_transaction(self, transaction_id: str, **changes: Any) -> dict[str, str]:
+        with _MIXED_USE_CREATE_LOCK:
+            return self._edit_transaction(transaction_id, **changes)
+
+    def _edit_transaction(self, transaction_id: str, **changes: Any) -> dict[str, str]:
         transaction_id = _clean_text(transaction_id, "Transaction ID", required=True)
         current = self._find_row("Transactions", transaction_id)
         self._reject_mixed_use_projection(current.values)
@@ -2954,6 +2972,10 @@ class GoogleSheetsStorage:
                 "account_id": existing_source.get("account_id"),
                 "payee_id": existing_source.get("payee_id"),
             }
+        if existing_transaction is not None and existing_source is None:
+            raise StorageConflictError(
+                "The mixed-use source or linked transaction ID is already in use"
+            )
         source, projection = self._prepare_mixed_use_expense(
             data,
             source_id=requested_source_id or None,
@@ -3512,10 +3534,11 @@ class GoogleSheetsStorage:
         references: Any,
     ) -> dict[str, str]:
         """Replace the Drive receipt references attached to one transaction."""
-        current = self._find_row("Transactions", transaction_id)
-        return self._replace_receipt_references(
-            current, _encode_receipt_references(references)
-        )
+        with _MIXED_USE_CREATE_LOCK:
+            current = self._find_row("Transactions", transaction_id)
+            return self._replace_receipt_references(
+                current, _encode_receipt_references(references)
+            )
 
     def initialize_legacy_transaction_receipts(
         self,
