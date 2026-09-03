@@ -20,6 +20,7 @@ from tabula_rasa.maps_routing import GoogleRoutesError
 from tabula_rasa.presentation import render_global_footer, render_page_header
 from tabula_rasa.page_renderers.tag_selector import (
     ADD_NEW_TAG,
+    inline_tag_name_error,
     render_tag_selector,
     schedule_tag_selector_reset,
 )
@@ -914,6 +915,8 @@ def render_mileage(context: MileageContext) -> None:
                     and not new_tag_name.strip()
                 ):
                     save_error.error("Enter a Tag name before saving.")
+                elif (tag_error := inline_tag_name_error(new_tag_name)):
+                    save_error.error(tag_error)
                 elif start.place_id and not recorded_start.strip():
                     save_error.error(
                         "Enter the starting location text to record in the ledger."
@@ -1291,6 +1294,8 @@ def render_mileage(context: MileageContext) -> None:
                             and not edited_new_tag_name.strip()
                         ):
                             edit_error.error("Enter a Tag name before saving.")
+                        elif (tag_error := inline_tag_name_error(edited_new_tag_name)):
+                            edit_error.error(tag_error)
                         else:
                             payload = {
                                 "id": edit_id,
