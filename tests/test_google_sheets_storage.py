@@ -1396,6 +1396,81 @@ class TestGoogleSheetsStorage:
 
         assert self.storage.list_categories() == [category]
 
+    def test_edit_category_refreshes_row_after_mixed_use_guard(self) -> None:
+        category = self.storage.create_category("Editable mixed-use", "Expense")
+        category_sheet = self.workbook.sheets["Categories"]
+        original_snapshot = self.storage._raw_mixed_use_snapshot
+        injected = False
+
+        def inject_category_before_guard() -> object:
+            nonlocal injected
+            if not injected:
+                injected = True
+                category_sheet.rows.insert(
+                    1,
+                    [
+                        "inserted-category",
+                        "Inserted category",
+                        "Expense",
+                        "",
+                    ],
+                )
+                self.storage._invalidate("Categories")
+            return original_snapshot()
+
+        self.storage._raw_mixed_use_snapshot = inject_category_before_guard  # type: ignore[method-assign]
+        edited = self.storage.edit_category(category["id"], kind="Income")
+
+        assert edited["kind"] == "Income"
+        assert next(
+            item
+            for item in self.storage.list_categories()
+            if item["id"] == category["id"]
+        )["kind"] == "Income"
+        assert next(
+            item
+            for item in self.storage.list_categories()
+            if item["id"] == "inserted-category"
+        )["kind"] == "Expense"
+
+    def test_delete_category_refreshes_row_after_mixed_use_guard(self) -> None:
+        category = self.storage.create_category("Unused", "Expense")
+        category_sheet = self.workbook.sheets["Categories"]
+        original_rows = self.storage._rows
+        mixed_use_reads = 0
+
+        def inject_category_during_guard(
+            title: str, *, force_refresh: bool = False
+        ) -> list[object]:
+            nonlocal mixed_use_reads
+            if title == "MixedUseExpenses" and force_refresh:
+                mixed_use_reads += 1
+                if mixed_use_reads == 2:
+                    category_sheet.rows.insert(
+                        1,
+                        [
+                            "inserted-category",
+                            "Inserted category",
+                            "Expense",
+                            "",
+                        ],
+                    )
+                    self.storage._invalidate("Categories")
+            return original_rows(title, force_refresh=force_refresh)
+
+        self.storage._rows = inject_category_during_guard  # type: ignore[method-assign]
+        self.storage.delete_category(category["id"])
+
+        assert next(
+            item
+            for item in self.storage.list_categories()
+            if item["id"] == "inserted-category"
+        )["name"] == "Inserted category"
+        assert all(
+            item["id"] != category["id"]
+            for item in self.storage.list_categories()
+        )
+
     def test_category_hierarchy_transitions_and_validation(self) -> None:
         account = self.storage.create_account("Checking", "Bank")
         travel = self.storage.create_category("Travel", "Expense")

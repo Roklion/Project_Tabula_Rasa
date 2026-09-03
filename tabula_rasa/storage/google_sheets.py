@@ -309,6 +309,13 @@ def _validate_payee_records(records: Iterable[Mapping[str, Any]]) -> None:
         seen_names.add(name_key)
 
 
+def _decimal_values_match(actual: Any, expected: str) -> bool:
+    try:
+        return Decimal(str(actual).strip()) == Decimal(expected)
+    except (InvalidOperation, ValueError):
+        return False
+
+
 def decode_receipt_references(value: Any) -> list[dict[str, Any]]:
     """Return validated Drive receipt references from one transaction cell."""
     try:
@@ -439,15 +446,21 @@ def _validate_mixed_use_tables(
             )
         except MixedUseAllocationError as exc:
             raise StorageValidationError(str(exc)) from exc
-        if (source.get("total_expense") or "") != allocation.total_expense:
+        if not _decimal_values_match(
+            source.get("total_expense"), allocation.total_expense
+        ):
             raise StorageValidationError(
                 "Mixed-use total expense has a non-canonical value"
             )
-        if (source.get("business_use_percentage") or "") != allocation.business_use_percentage:
+        if not _decimal_values_match(
+            source.get("business_use_percentage"), allocation.business_use_percentage
+        ):
             raise StorageValidationError(
                 "Mixed-use business-use percentage has a non-canonical value"
             )
-        if (source.get("allocated_amount") or "") != allocation.allocated_amount:
+        if not _decimal_values_match(
+            source.get("allocated_amount"), allocation.allocated_amount
+        ):
             raise StorageValidationError(
                 "Mixed-use allocated amount does not match its allocation"
             )
@@ -512,7 +525,9 @@ def _validate_mixed_use_tables(
             raise StorageValidationError(
                 "Mixed-use projection description is out of sync"
             )
-        if transaction.get("amount") != source.get("allocated_amount"):
+        if not _decimal_values_match(
+            transaction.get("amount"), source.get("allocated_amount")
+        ):
             raise StorageValidationError(
                 "Mixed-use projection amount does not match its source"
             )
@@ -2144,6 +2159,15 @@ class GoogleSheetsStorage:
                 )
         if kind != updated["kind"]:
             reject_mixed_use_kind_change()
+            current = self._find_row("Categories", normalized_category_id)
+            updated = dict(current.values)
+            existing_categories = self.list_categories()
+            name = _clean_text(
+                changes.get("name", updated["name"]), "Category name", required=True
+            )
+            kind = _clean_text(
+                changes.get("kind", updated["kind"]), "Category kind", required=True
+            ).title()
         if any(
             category["id"] != normalized_category_id
             and category["name"].casefold() == name.casefold()
@@ -2211,7 +2235,6 @@ class GoogleSheetsStorage:
                 "That category has mixed-use expenses and cannot be deleted"
             )
         for attempt in range(self._retry_attempts):
-            current = self._find_row("Categories", category_id)
             mixed_use_sources = self._rows("MixedUseExpenses", force_refresh=True)
             if any(
                 _clean_text(row.values.get("category_id"), "Category") == category_id
@@ -2220,6 +2243,7 @@ class GoogleSheetsStorage:
                 raise StorageConflictError(
                     "That category has mixed-use expenses and cannot be deleted"
                 )
+            current = self._find_row("Categories", category_id)
             worksheet = self._worksheet("Categories")
             try:
                 self._api(
@@ -3145,6 +3169,22 @@ class GoogleSheetsStorage:
             "Linked transaction ID",
             required=True,
         )
+
+        def reject_reappeared_projection() -> None:
+            latest_transactions = self._rows(
+                "Transactions", force_refresh=True
+            )
+            if any(
+                _clean_text(row.values.get("source_type"), "Transaction source type")
+                == MIXED_USE_SOURCE_TYPE
+                and _clean_text(row.values.get("source_id"), "Transaction source ID")
+                == source_id
+                for row in latest_transactions
+            ):
+                raise StorageConflictError(
+                    "The mixed-use expense changed; refresh it before deleting."
+                )
+
         transaction = transactions.get(transaction_id)
         if transaction is None:
             if expected_source is not None and not self._mixed_use_record_matches(
@@ -3167,7 +3207,10 @@ class GoogleSheetsStorage:
                     "The mixed-use expense changed; refresh it before deleting."
                 )
             self._delete_mixed_use_row(
-                "MixedUseExpenses", source_id, expected_record=source
+                "MixedUseExpenses",
+                source_id,
+                expected_record=source,
+                before_retry=reject_reappeared_projection,
             )
             return
         _validate_mixed_use_tables(
@@ -3193,20 +3236,6 @@ class GoogleSheetsStorage:
                 "The mixed-use expense changed; refresh it before deleting."
             )
 
-        def reject_reappeared_projection() -> None:
-            latest_transactions = self._rows(
-                "Transactions", force_refresh=True
-            )
-            if any(
-                _clean_text(row.values.get("source_type"), "Transaction source type")
-                == MIXED_USE_SOURCE_TYPE
-                and _clean_text(row.values.get("source_id"), "Transaction source ID")
-                == source_id
-                for row in latest_transactions
-            ):
-                raise StorageConflictError(
-                    "The mixed-use expense changed; refresh it before deleting."
-                )
         try:
             self._delete_mixed_use_row(
                 "Transactions", transaction_id, expected_record=transaction

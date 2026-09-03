@@ -137,6 +137,31 @@ def test_mixed_use_create_persists_one_allocated_projection(
     )[0].values
 
 
+def test_mixed_use_validation_accepts_insignificant_sheet_number_formatting(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    source_sheet = default_storage._worksheet("MixedUseExpenses")
+    headers = default_storage._headers("MixedUseExpenses")
+    row = source_sheet.rows[1]
+    row[headers.index("total_expense")] = "100"
+    row[headers.index("business_use_percentage")] = "50"
+    row[headers.index("allocated_amount")] = "50"
+    default_storage._invalidate("MixedUseExpenses")
+
+    listed = default_storage.list_mixed_use_expenses()
+
+    assert listed[0]["id"] == source["id"]
+    assert listed[0]["total_expense"] == "100"
+    assert listed[0]["business_use_percentage"] == "50"
+    assert listed[0]["allocated_amount"] == "50"
+
+
 def test_transaction_edit_canonicalizes_padded_id(
     default_storage: GoogleSheetsStorage,
 ) -> None:
@@ -1402,6 +1427,46 @@ def test_mixed_use_delete_rechecks_projection_before_source_only_repair(
         return original_rows(title, force_refresh=force_refresh)
 
     default_storage._rows = restore_projection_before_repair  # type: ignore[method-assign]
+    with pytest.raises(StorageConflictError, match="changed"):
+        default_storage.delete_mixed_use_expense(source["id"])
+
+    assert default_storage.list_mixed_use_expenses() == [source]
+    assert default_storage.list_transactions() == [transaction]
+
+
+def test_mixed_use_delete_rechecks_projection_during_source_only_retry(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    transaction = default_storage.list_transactions()[0]
+    transaction_sheet = default_storage._worksheet("Transactions")
+    transaction_headers = default_storage._headers("Transactions")
+    transaction_sheet.rows.pop(1)
+    default_storage._invalidate("Transactions")
+    source_sheet = default_storage._worksheet("MixedUseExpenses")
+    original_delete = source_sheet.delete_rows
+    delete_calls = 0
+
+    def fail_source_delete_once(row_number: int) -> None:
+        nonlocal delete_calls
+        delete_calls += 1
+        if delete_calls == 1:
+            raise OSError("temporary failure")
+        original_delete(row_number)
+
+    def restore_projection_during_retry(_delay: float) -> None:
+        transaction_sheet.append_row(
+            [transaction.get(header, "") for header in transaction_headers]
+        )
+        default_storage._invalidate("Transactions")
+
+    source_sheet.delete_rows = fail_source_delete_once  # type: ignore[method-assign]
+    default_storage._sleeper = restore_projection_during_retry
     with pytest.raises(StorageConflictError, match="changed"):
         default_storage.delete_mixed_use_expense(source["id"])
 
