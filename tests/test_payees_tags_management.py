@@ -468,3 +468,15 @@ def test_management_display_uses_prefetched_cached_rows() -> None:
     assert "list_mileage_trips()" in management_source
     assert "list_mixed_use_expenses(_force_refresh=True)" not in management_source
     assert "list_mileage_trips(_force_refresh=True)" not in management_source
+    assert "list_payees(active_only=False, _force_refresh=True)" not in management_source
+    assert "list_tags(active_only=False, _force_refresh=True)" not in management_source
+
+
+def test_management_destructive_controls_scope_acknowledgement_and_style_hooks() -> None:
+    management_source = Path(
+        "tabula_rasa/page_renderers/transactions/payees_tags.py"
+    ).read_text(encoding="utf-8")
+    assert "managed_merge_payee_ack_{context.profile_key}_{target_id}_" in management_source
+    assert "managed_merge_tag_ack_{context.profile_key}_{target_id}_" in management_source
+    assert 'key="destructive_managed_payee_remove"' in management_source
+    assert 'key="destructive_managed_tag_remove"' in management_source

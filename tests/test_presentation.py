@@ -50,6 +50,8 @@ def test_global_styles_use_stable_shell_hooks_and_accessible_states() -> None:
     for selector in (
         '.st-key-destructive_category_delete [data-testid="stButton"]',
         '.st-key-destructive_mileage_delete [data-testid="stButton"]',
+        '.st-key-destructive_managed_payee_remove [data-testid="stButton"]',
+        '.st-key-destructive_managed_tag_remove [data-testid="stButton"]',
         '.st-key-destructive_transaction_bulk_delete'
         ' [data-testid="stFormSubmitButton"]',
         '.st-key-destructive_transaction_edit_delete'

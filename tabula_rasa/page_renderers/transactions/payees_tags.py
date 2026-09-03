@@ -111,7 +111,14 @@ def _render_payees(context: PayeesTagsContext, payees: list[dict[str, str]]) -> 
         target_id = st.selectbox("Target payee", ids, format_func=labels, key=f"managed_merge_payee_target_{context.profile_key}")
         source_ids = st.multiselect("Source payees", [item for item in ids if item != target_id], format_func=labels, key=f"managed_merge_payee_sources_{context.profile_key}")
         st.warning("Merging rewrites every transaction and mixed-use source reference, then permanently removes the selected source payees.")
-        acknowledged = st.checkbox("I understand the selected source payees will be permanently removed", key=f"managed_merge_payee_ack_{context.profile_key}")
+        acknowledgment_key = (
+            f"managed_merge_payee_ack_{context.profile_key}_{target_id}_"
+            f"{'_'.join(sorted(source_ids))}"
+        )
+        acknowledged = st.checkbox(
+            "I understand the selected source payees will be permanently removed",
+            key=acknowledgment_key,
+        )
         merge_error = st.empty()
         if st.button("Merge payees", type="primary", key=f"managed_merge_payees_{context.profile_key}"):
             if not source_ids:
@@ -129,7 +136,7 @@ def _render_payees(context: PayeesTagsContext, payees: list[dict[str, str]]) -> 
         st.warning(f"Permanently removing payee {remove_name!r} cannot be undone and is available only when it is unreferenced.")
         remove_ack = st.checkbox(f"I understand payee {remove_name!r} will be permanently removed and cannot be restored", key=f"managed_remove_payee_ack_{context.profile_key}")
         remove_error = st.empty()
-        with st.container(key=f"destructive_managed_payee_remove_{context.profile_key}"):
+        with st.container(key="destructive_managed_payee_remove"):
             if st.button("Permanently remove payee", icon=":material/delete_forever:", key=f"managed_remove_payee_{context.profile_key}"):
                 if not remove_ack:
                     remove_error.error("Acknowledge permanent removal before continuing. No data changed.")
@@ -183,7 +190,14 @@ def _render_tags(context: PayeesTagsContext, tags: list[dict[str, str]]) -> None
         target_id = st.selectbox("Target tag", ids, format_func=labels, key=f"managed_merge_tag_target_{context.profile_key}")
         source_ids = st.multiselect("Source tags", [item for item in ids if item != target_id], format_func=labels, key=f"managed_merge_tag_sources_{context.profile_key}")
         st.warning("Merging rewrites Transactions and Mileage associations, de-duplicates the target association, then permanently removes the selected source tags.")
-        acknowledged = st.checkbox("I understand the selected source tags will be permanently removed", key=f"managed_merge_tag_ack_{context.profile_key}")
+        acknowledgment_key = (
+            f"managed_merge_tag_ack_{context.profile_key}_{target_id}_"
+            f"{'_'.join(sorted(source_ids))}"
+        )
+        acknowledged = st.checkbox(
+            "I understand the selected source tags will be permanently removed",
+            key=acknowledgment_key,
+        )
         merge_error = st.empty()
         if st.button("Merge tags", type="primary", key=f"managed_merge_tags_{context.profile_key}"):
             if not source_ids:
@@ -201,7 +215,7 @@ def _render_tags(context: PayeesTagsContext, tags: list[dict[str, str]]) -> None
         st.warning(f"Permanently removing tag {remove_name!r} cannot be undone and is available only when it is unreferenced.")
         remove_ack = st.checkbox(f"I understand tag {remove_name!r} will be permanently removed and cannot be restored", key=f"managed_remove_tag_ack_{context.profile_key}")
         remove_error = st.empty()
-        with st.container(key=f"destructive_managed_tag_remove_{context.profile_key}"):
+        with st.container(key="destructive_managed_tag_remove"):
             if st.button("Permanently remove tag", icon=":material/delete_forever:", key=f"managed_remove_tag_{context.profile_key}"):
                 if not remove_ack:
                     remove_error.error("Acknowledge permanent removal before continuing. No data changed.")
@@ -213,8 +227,8 @@ def render_payees_tags(context: PayeesTagsContext) -> None:
     """Render separate Payees and Tags management sections for one profile."""
     st.caption(f"Business profile: {context.profile_key} (all values below are profile-local)")
     try:
-        payees = context.storage.list_payees(active_only=False, _force_refresh=True)
-        tags = context.storage.list_tags(active_only=False, _force_refresh=True)
+        payees = context.storage.list_payees(active_only=False)
+        tags = context.storage.list_tags(active_only=False)
     except StorageError as error:
         context.report_storage_error(error)
         return
