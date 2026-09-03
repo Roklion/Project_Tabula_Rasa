@@ -2907,8 +2907,9 @@ class GoogleSheetsStorage:
                 "Linked transaction ID",
                 required=True,
             )
-            if requested_transaction_id is None:
+            if not requested_transaction_id:
                 requested_transaction_id = persisted_transaction_id
+                existing_transaction = transactions.get(requested_transaction_id)
             original_transaction = existing_transaction or {
                 "account_id": existing_source.get("account_id"),
                 "payee_id": existing_source.get("payee_id"),

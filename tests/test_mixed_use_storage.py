@@ -814,8 +814,13 @@ def test_mixed_use_source_only_retry_classifies_missing_projection_as_retryable(
     assert error.value.outcome == "mixed_ambiguous"
 
     default_storage.deactivate_account(inputs["account_id"])
+    retry_inputs = {
+        key: value
+        for key, value in inputs.items()
+        if key != "linked_transaction_id"
+    }
     with pytest.raises(StorageBulkMutationUncertainError) as retry_error:
-        default_storage.create_mixed_use_expense(**inputs)
+        default_storage.create_mixed_use_expense(**retry_inputs)
     assert retry_error.value.outcome == "not_applied"
     assert retry_error.value.retryable is True
     assert calls == 3
@@ -836,7 +841,12 @@ def test_mixed_use_create_retry_reuses_pair_after_account_deactivation(
     default_storage.deactivate_account(inputs["account_id"])
     default_storage.edit_payee(inputs["payee_id"], active=False)
 
-    retried = default_storage.create_mixed_use_expense(**inputs)
+    retry_inputs = {
+        key: value
+        for key, value in inputs.items()
+        if key != "linked_transaction_id"
+    }
+    retried = default_storage.create_mixed_use_expense(**retry_inputs)
 
     assert retried == created
 
