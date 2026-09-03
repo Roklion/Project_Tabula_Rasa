@@ -13,7 +13,7 @@ from tabula_rasa.page_renderers.data_backup.context import DataBackupContext
 from tabula_rasa.page_renderers.mileage import mileage_frame
 from tabula_rasa.receipt_backfill import ReceiptPreparationError
 from tabula_rasa.receipt_manifest import ReceiptManifestError
-from tabula_rasa.storage import StorageError
+from tabula_rasa.storage import GoogleSheetsStorage, StorageError
 
 
 def prepared_exports_key(
@@ -26,6 +26,27 @@ def prepared_exports_key(
         "prepared-live-exports:"
         f"{profile_key}:{configuration_revision}:{workbook_data_revision}"
     )
+
+
+def prepare_csv_exports(storage: GoogleSheetsStorage) -> dict[str, bytes]:
+    """Build profile-local transaction and mileage CSV snapshots with Tags."""
+    accounts = storage.list_accounts(active_only=False)
+    categories = storage.list_categories()
+    tags = storage.list_tags()
+    transactions = storage.list_transactions()
+    mileage_trips = storage.list_mileage_trips()
+    transaction_frame = ledger_frame(
+        transactions,
+        accounts,
+        categories,
+        display_paths=False,
+        tags=tags,
+    )
+    mileage_log = mileage_frame(mileage_trips, tags)
+    return {
+        "transactions": transaction_frame.to_csv(index=False).encode("utf-8"),
+        "mileage": mileage_log.to_csv(index=False).encode("utf-8"),
+    }
 
 
 def render_exports(context: DataBackupContext) -> None:
@@ -63,27 +84,14 @@ def render_exports(context: DataBackupContext) -> None:
                 backup_error = str(error)
                 receipt_manifest = None
             try:
-                accounts = context.storage.list_accounts(active_only=False)
-                categories = context.storage.list_categories()
-                transactions = context.storage.list_transactions()
-                mileage_trips = context.storage.list_mileage_trips()
-                all_transactions = ledger_frame(
-                    transactions,
-                    accounts,
-                    categories,
-                    display_paths=False,
-                )
-                all_mileage = mileage_frame(mileage_trips)
+                csv_exports = prepare_csv_exports(context.storage)
             except StorageError as error:
                 prepare_error.error(str(error))
                 prepared_exports = None
             else:
                 prepared_exports = {
                     "backup_time": datetime.now(timezone.utc).isoformat(),
-                    "transactions": all_transactions.to_csv(index=False).encode(
-                        "utf-8"
-                    ),
-                    "mileage": all_mileage.to_csv(index=False).encode("utf-8"),
+                    **csv_exports,
                 }
                 if receipt_manifest is None:
                     prepared_exports["backup_error"] = backup_error

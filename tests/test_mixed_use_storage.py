@@ -1164,7 +1164,7 @@ def test_writable_initialization_upgrades_pre_mixed_workbook_idempotently() -> N
 
     assert "MixedUseExpenses" in workbook.sheets
     assert workbook.sheets["MixedUseExpenses"].rows == [list(MIXED_USE_WORKSHEET_HEADERS)]
-    assert workbook.sheets["Transactions"].rows[0] == list(
+    assert set(workbook.sheets["Transactions"].rows[0]) == set(
         WORKSHEET_HEADERS["Transactions"]
     )
     assert workbook.sheets["Transactions"].col_count == len(

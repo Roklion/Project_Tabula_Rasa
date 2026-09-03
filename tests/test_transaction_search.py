@@ -14,6 +14,7 @@ SEARCH_FIELDS = (
     "To account",
     "Category",
     "Payee",
+    "Tags",
     "Description",
     "Reference",
     "ID",
@@ -30,6 +31,7 @@ def rows() -> list[dict[str, object]]:
             "To account": "",
             "Category": "Consulting",
             "Payee": "Acme customer",
+            "Tags": "Project Alpha, Client",
             "Description": "January retainer",
             "Amount": 1250.0,
             "Receipt": "📎",
@@ -59,7 +61,7 @@ def test_search_matches_each_supported_field(
     value = next(str(row[field]) for row in rows if row[field])
 
     assert filter_transaction_rows(rows, f"  {value.upper()}  ") == [
-        row for row in rows if value.casefold() in str(row[field]).casefold()
+        row for row in rows if value.casefold() in str(row.get(field, "")).casefold()
     ]
 
 
@@ -110,3 +112,14 @@ def test_search_returns_all_matching_rows_and_does_not_mutate_input(
         "txn-transfer-7",
     ]
     assert rows == original_rows
+
+
+def test_search_matches_any_displayed_tag() -> None:
+    rows = [
+        {"ID": "one", "Tags": "Project Alpha, Client"},
+        {"ID": "two", "Tags": "Internal"},
+    ]
+
+    assert [row["ID"] for row in filter_transaction_rows(rows, "client")] == [
+        "one"
+    ]

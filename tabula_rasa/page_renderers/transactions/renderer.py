@@ -38,11 +38,13 @@ def render_transactions(context: TransactionsContext) -> None:
             "Categories",
             "Payees",
             "Transactions",
+            "Tags",
         )
         accounts = context.storage.list_accounts(active_only=False)
         active_accounts = _ordered_active_accounts(accounts)
         categories = context.storage.list_categories()
         payees = context.storage.list_payees()
+        tags = context.storage.list_tags()
     except StorageError as error:
         context.report_storage_error(error)
         render_error_footer()
@@ -63,6 +65,7 @@ def render_transactions(context: TransactionsContext) -> None:
                 categories=categories,
                 category_paths=category_paths,
                 payees=payees,
+                tags=tags,
             )
 
     with tab_ledger:
@@ -74,5 +77,6 @@ def render_transactions(context: TransactionsContext) -> None:
                 account_paths=account_paths,
                 category_paths=category_paths,
                 payees=payees,
+                tags=tags,
                 render_error_footer=render_error_footer,
             )

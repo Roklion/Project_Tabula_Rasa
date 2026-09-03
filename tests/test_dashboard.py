@@ -79,6 +79,63 @@ def test_dashboard_frames_preserve_visible_table_fields() -> None:
     ]
 
 
+def test_ledger_frame_resolves_multiple_tags_without_changing_category() -> None:
+    activity = ledger_frame(
+        [
+            {
+                "id": "expense-1",
+                "txn_date": "2026-08-01",
+                "kind": "Expense",
+                "amount": "25.00",
+                "account_id": "checking",
+                "to_account_id": "",
+                "category_id": "office",
+                "tag_ids": ["project", "internal"],
+            }
+        ],
+        [
+            {
+                "id": "checking",
+                "name": "Checking",
+                "type": "Bank",
+                "classification": "Asset",
+                "active": True,
+                "opening_balance": "0.00",
+            }
+        ],
+        [{"id": "office", "name": "Office", "kind": "Expense"}],
+        tags=[
+            {"id": "project", "name": "Project"},
+            {"id": "internal", "name": "Internal"},
+        ],
+    )
+
+    assert activity.loc[0, "Category"] == "Office"
+    assert activity.loc[0, "Tags"] == "Project, Internal"
+
+
+def test_ledger_frame_resolves_nested_tag_mappings() -> None:
+    activity = ledger_frame(
+        [
+            {
+                "id": "expense-1",
+                "txn_date": "2026-08-01",
+                "kind": "Expense",
+                "amount": "25.00",
+                "account_id": "checking",
+                "to_account_id": "",
+                "category_id": "office",
+                "tag_ids": ["project"],
+            }
+        ],
+        [],
+        [],
+        tags={"project": {"id": "project", "name": "Project"}},
+    )
+
+    assert activity.loc[0, "Tags"] == "Project"
+
+
 def test_empty_balances_frame_preserves_dashboard_columns() -> None:
     balances = balances_frame([], [])
 

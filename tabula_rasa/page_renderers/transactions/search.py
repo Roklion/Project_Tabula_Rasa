@@ -14,6 +14,7 @@ SEARCHABLE_TRANSACTION_FIELDS = (
     "To account",
     "Category",
     "Payee",
+    "Tags",
     "Description",
     "Reference",
     "ID",

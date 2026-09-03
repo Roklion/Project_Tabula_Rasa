@@ -36,6 +36,7 @@ The current backup format is version 8. Each archive contains:
 - Accounts.csv;
 - Categories.csv;
 - Payees.csv;
+- Tags.csv;
 - Transactions.csv;
 - Mileage.csv;
 - MixedUseExpenses.csv;
@@ -69,7 +70,7 @@ The validator and restore path accept formats 2 through 8:
 | 5 | Adds checksummed receipts.json inventory |
 | 6 | Supported legacy format adding account and category parent_id hierarchy |
 | 7 | Pre-mixed-use format with managed Payees and transaction payee_id references |
-| 8 | Current format with mixed-use sources and transaction provenance fields |
+| 8 | Current format with mixed-use sources, stable Tags, and transaction/mileage tag associations |
 
 MixedUseExpenses.csv is the authoritative source record for each cost-based
 mixed-use expense. Transactions.csv contains one ordinary Expense projection

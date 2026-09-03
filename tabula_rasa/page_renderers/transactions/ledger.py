@@ -28,6 +28,11 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     _receipt_folder,
 )
 from tabula_rasa.page_renderers.transactions.search import filter_transaction_rows
+from tabula_rasa.page_renderers.tag_selector import (
+    inline_tag_name_error,
+    render_tag_selector,
+    schedule_tag_selector_reset,
+)
 from tabula_rasa.storage import StorageError, decode_receipt_references
 
 
@@ -132,9 +137,32 @@ def _editable_account_ids(
     ]
 
 
+def _copyable_tag_ids(
+    tags: Sequence[Mapping[str, object]], tag_ids: Sequence[object]
+) -> list[str]:
+    """Keep only active Tag IDs when starting a new copied transaction."""
+    active_ids = {
+        str(tag.get("id") or "").strip()
+        for tag in tags
+        if str(tag.get("id") or "").strip()
+        and str(tag.get("active", True)).strip().casefold() in {"true", "1"}
+    }
+    result: list[str] = []
+    for value in tag_ids:
+        tag_id = str(value).strip()
+        if tag_id in active_ids and tag_id not in result:
+            result.append(tag_id)
+    return result
+
+
 def _clear_copy_state(profile_key: str) -> None:
     """Leave the source row in normal edit mode without writing anything."""
     st.session_state.pop(_copy_source_key(profile_key), None)
+
+
+def _finish_copy_save(profile_key: str, tag_selector_key: str) -> None:
+    _clear_copy_state(profile_key)
+    schedule_tag_selector_reset(tag_selector_key)
 
 
 def _pending_edit_transaction_key(profile_key: str) -> str:
@@ -166,6 +194,7 @@ def _make_created_copy_visible(
         st.session_state["ledger_end"] = created_date
     st.session_state[f"ledger_filter_type_{profile_key}"] = "All"
     st.session_state[f"ledger_filter_accounts_{profile_key}"] = []
+    st.session_state[f"ledger_filter_tags_{profile_key}"] = []
     for key in tuple(st.session_state):
         if key.startswith(f"ledger_search_{profile_key}_"):
             st.session_state[key] = ""
@@ -180,6 +209,7 @@ def render_ledger(
     account_paths: Mapping[str, str],
     category_paths: Mapping[str, str],
     payees: Sequence[Mapping[str, object]],
+    tags: Sequence[Mapping[str, object]],
     render_error_footer: Callable[[], None],
 ) -> None:
     """Render structured filters, the ledger, and single-row editing."""
@@ -241,6 +271,24 @@ def render_ledger(
     selected_account_ids = [
         ledger_account_map[name] for name in selected_account_names
     ]
+    ledger_tag_map = {
+        str(tag["id"]): str(tag["name"])
+        for tag in tags
+        if str(tag.get("id") or "").strip()
+        and str(tag.get("name") or "").strip()
+    }
+    tag_filter_options = [tag_id for tag_id in ledger_tag_map]
+    selected_tag_ids = st.multiselect(
+        "Tags",
+        tag_filter_options,
+        key=f"ledger_filter_tags_{context.profile_key}",
+        placeholder="All tags",
+        format_func=ledger_tag_map.get,
+        disabled=copy_filters_locked,
+        help="Includes transactions assigned at least one selected Tag.",
+        on_change=_clear_bulk_selection,
+        args=(context.profile_key,),
+    )
     table_generation = st.session_state.get("transaction_ledger_generation", 0)
     search_state_key = (
         f"ledger_search_{context.profile_key}_{table_generation}"
@@ -253,11 +301,11 @@ def render_ledger(
     search_query = st.text_input(
         "Search transactions",
         key=search_state_key,
-        placeholder="Type, account, payee, description, reference, or ID",
+        placeholder="Type, account, payee, Tag, description, reference, or ID",
         disabled=copy_filters_locked,
         help=(
             "Searches Type, Account, To account, Category, Payee, "
-            "Description, Reference, and ID."
+            "Tags, Description, Reference, and ID."
         ),
         on_change=_clear_bulk_selection,
         args=(context.profile_key,),
@@ -302,6 +350,16 @@ def render_ledger(
             kind=None if filter_type == "All" else filter_type,
             account_ids=selected_account_ids or None,
         )
+        if selected_tag_ids:
+            selected_tag_id_set = set(selected_tag_ids)
+            structured_transactions = [
+                transaction
+                for transaction in structured_transactions
+                if selected_tag_id_set.intersection(
+                    str(tag_id)
+                    for tag_id in transaction.get("tag_ids", [])
+                )
+            ]
     except StorageError as error:
         context.report_storage_error(error)
         render_error_footer()
@@ -310,6 +368,7 @@ def render_ledger(
         structured_transactions,
         accounts,
         categories,
+        tags=tags,
     )
     transaction_frame["Receipt"] = [
         "\U0001f4ce" if transaction_has_receipts(transaction) else ""
@@ -329,6 +388,7 @@ def render_ledger(
             "To account",
             "Category",
             "Payee",
+            "Tags",
             "Description",
             "Amount",
             "Receipt",
@@ -362,6 +422,7 @@ def render_ledger(
         end.isoformat(),
         filter_type,
         tuple(sorted(selected_account_ids)),
+        tuple(sorted(selected_tag_ids)),
         search_query.strip(),
         mode,
         tuple(transaction_ids),
@@ -789,6 +850,22 @@ def render_ledger(
                         value=selected.get("payee", "") if copy_mode else "",
                         key=f"edit_transaction_new_payee_{edit_widget_scope}",
                     )
+                source_tag_ids = [
+                    str(tag_id).strip()
+                    for tag_id in selected.get("tag_ids", [])
+                    if str(tag_id).strip()
+                ]
+                if copy_mode:
+                    source_tag_ids = _copyable_tag_ids(tags, source_tag_ids)
+                edited_tag_ids, edited_new_tag_name = render_tag_selector(
+                    tags,
+                    label="Edit tags",
+                    key=f"edit_transaction_tags_{edit_widget_scope}",
+                    selected_ids=source_tag_ids,
+                    preserve_inactive_ids=(
+                        source_tag_ids if not copy_mode else ()
+                    ),
+                )
                 edited_reference = st.text_input(
                     "Edit reference",
                     value=selected.get("reference", ""),
@@ -893,6 +970,8 @@ def render_ledger(
                             if edited_payee_id == "+ Add new payee"
                             else ""
                         ),
+                        "tag_ids": edited_tag_ids,
+                        "new_tag_name": edited_new_tag_name or "",
                         "reference": edited_reference,
                         "description": copy_description,
                     }
@@ -923,6 +1002,8 @@ def render_ledger(
                         and edited_account_id == edited_to_account_id
                     ):
                         edit_error.error("Transfer accounts must be different.")
+                    elif (tag_error := inline_tag_name_error(edited_new_tag_name)):
+                        edit_error.error(tag_error)
                     elif copy_mode:
                         context.confirmed_write(
                             "copy_transaction",
@@ -935,8 +1016,9 @@ def render_ledger(
                                 _pending_edit_transaction_key(context.profile_key),
                                 result,
                             ),
-                            on_success=lambda: _clear_copy_state(
-                                context.profile_key
+                            on_success=lambda: _finish_copy_save(
+                                context.profile_key,
+                                f"edit_transaction_tags_{edit_widget_scope}",
                             ),
                             report_error=edit_error.error,
                         )
@@ -985,6 +1067,8 @@ def render_ledger(
                                         else edited_payee_id
                                     ),
                                     new_payee_name=edited_new_payee,
+                                    tag_ids=edited_tag_ids,
+                                    new_tag_name=edited_new_tag_name or "",
                                     reference=edited_reference,
                                     description=edited_description,
                                 ),
@@ -998,6 +1082,9 @@ def render_ledger(
                                     )
                                     if prepared_receipts and receipt_folder
                                     else None
+                                ),
+                                on_success=lambda: schedule_tag_selector_reset(
+                                    f"edit_transaction_tags_{edit_widget_scope}"
                                 ),
                                 report_error=edit_error.error,
                             )

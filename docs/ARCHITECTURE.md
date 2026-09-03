@@ -87,9 +87,12 @@ Local backup paths and Synology metadata are intentionally excluded.
 ## Ledger source of truth
 
 Google Sheets remains the active ledger and storage source of truth. Accounts,
-categories, transactions, mileage, mixed-use source records, and receipt
-references remain in the selected profile's workbook; local files and backup
-archives are not alternate ledgers.
+categories, Payees, Tags, transactions, mileage, mixed-use source records, and
+receipt references remain in the selected profile's workbook; local files and
+backup archives are not alternate ledgers. Transaction and mileage rows store
+Tag associations as validated lists of stable IDs, while display names resolve
+from the same profile's Tags worksheet so a later rename does not rewrite
+ledger rows.
 
 Cost-based mixed-use expenses use a dedicated `MixedUseExpenses` worksheet as
 the authoritative source collection. Each source contains the normal editable

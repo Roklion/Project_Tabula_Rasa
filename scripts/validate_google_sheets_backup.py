@@ -38,6 +38,8 @@ def validation_report(path: Path, manifest: Mapping[str, Any]) -> str:
         for title in (
             "Accounts",
             "Categories",
+            "Payees",
+            "Tags",
             "Transactions",
             "Mileage",
             "MixedUseExpenses",

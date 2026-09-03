@@ -27,6 +27,7 @@ def populated_workbook() -> FakeWorkbook:
     account = storage.create_account("Checking", "Bank")
     category = storage.create_category("Software", "Expense")
     payee = storage.create_payee("Vendor")
+    tag = storage.create_tag("Client work")
     storage.create_transaction(
         txn_date="2026-07-29",
         kind="Expense",
@@ -34,6 +35,7 @@ def populated_workbook() -> FakeWorkbook:
         account_id=account["id"],
         category_id=category["id"],
         payee_id=payee["id"],
+        tag_ids=[tag["id"]],
     )
     storage.create_mileage_trip(
         trip_date="2026-07-29",
@@ -41,6 +43,7 @@ def populated_workbook() -> FakeWorkbook:
         start_location="Office",
         destination="Client",
         business_purpose="Meeting",
+        tag_ids=[tag["id"]],
     )
     return workbook
 
@@ -83,6 +86,7 @@ def test_explicit_workbook_override_is_read_only_and_reports_counts(
     output = capsys.readouterr().out
     assert "Ledger rows readable: Accounts=1, Categories=1" in output
     assert "Payees=1" in output
+    assert "Tags=1" in output
     assert "Transactions=1, Mileage=1" in output
     assert "Explicit workbook override verified; business profile unchanged" in output
     assert "recovery-workbook" not in output

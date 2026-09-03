@@ -27,6 +27,7 @@ from tabula_rasa.storage.google_sheets import (
     StorageValidationError,
     StorageWorkbookAccessError,
     PRE_MIXED_USE_WORKSHEET_HEADERS,
+    VERSION_7_WORKSHEET_HEADERS,
     VERSION_5_WORKSHEET_HEADERS,
     WORKSHEET_HEADERS,
 )
@@ -198,6 +199,30 @@ def rewrite_backup_tables(
             manifest["worksheet_headers"].pop("Payees", None)
             manifest["row_counts"].pop("Payees", None)
             manifest["sha256"].pop("Payees.csv", None)
+        if format_version is not None and format_version < BACKUP_FORMAT_VERSION:
+            for title in ("Transactions", "Mileage"):
+                filename = f"{title}.csv"
+                rows = list(
+                    csv.reader(io.StringIO(contents[filename].decode("utf-8")))
+                )
+                if "tag_ids" in rows[0]:
+                    tag_index = rows[0].index("tag_ids")
+                    rows = [
+                        [value for index, value in enumerate(row) if index != tag_index]
+                        for row in rows
+                    ]
+                    csv_buffer = io.StringIO(newline="")
+                    csv.writer(csv_buffer, lineterminator="\n").writerows(rows)
+                    contents[filename] = csv_buffer.getvalue().encode("utf-8")
+                    manifest["worksheet_headers"][title] = rows[0]
+                    manifest["row_counts"][title] = len(rows) - 1
+                    manifest["sha256"][filename] = hashlib.sha256(
+                        contents[filename]
+                    ).hexdigest()
+            contents.pop("Tags.csv", None)
+            manifest["worksheet_headers"].pop("Tags", None)
+            manifest["row_counts"].pop("Tags", None)
+            manifest["sha256"].pop("Tags.csv", None)
     for title, transform in transforms.items():
         filename = f"{title}.csv"
         rows = list(
@@ -519,12 +544,9 @@ class TestGoogleSheetsStorage:
                 }
             )
 
-        assert workbook.sheets["Transactions"].rows[0] == [
-            *headers["Transactions"],
-            "receipt_references",
-            "source_type",
-            "source_id",
-        ]
+        assert set(workbook.sheets["Transactions"].rows[0]) == set(
+            WORKSHEET_HEADERS["Transactions"]
+        )
 
     def test_profile_storage_clears_colliding_legacy_provenance_columns(
         self,
@@ -774,6 +796,174 @@ class TestGoogleSheetsStorage:
         assert all(
             item["parent_id"] == "" for item in self.storage.list_categories()
         )
+
+    def test_tags_are_profile_local_and_deduplicated_by_normalized_name(self) -> None:
+        first = self.storage.create_tag("  Client   Visit ")
+        duplicate = self.storage.create_tag("client visit")
+
+        assert duplicate["id"] == first["id"]
+        assert duplicate["name"] == "Client   Visit"
+        assert self.storage.list_tags()[0]["name"] == "Client   Visit"
+
+        inactive = self.storage.create_tag("Internal", active=False)
+        assert self.storage.list_tags(active_only=True) == [first]
+        reactivated = self.storage.create_tag(" internal ")
+        assert reactivated["id"] == inactive["id"]
+        assert reactivated["active"] == "TRUE"
+
+        other = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+        other_tag = other.create_tag("client visit")
+        assert other_tag["id"] != first["id"]
+
+    def test_transaction_and_mileage_tags_round_trip_and_resolve_names(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Office", "Expense")
+        first = self.storage.create_tag("Client")
+        second = self.storage.create_tag("Follow-up")
+        transaction = self.storage.create_transaction(
+            txn_date="2026-09-01",
+            kind="Expense",
+            amount=10,
+            account_id=account["id"],
+            category_id=category["id"],
+            tag_ids=[second["id"], first["id"]],
+        )
+        mileage = self.storage.create_mileage_trip(
+            trip_date="2026-09-01",
+            miles=4.5,
+            start_location="Office",
+            destination="Client",
+            business_purpose="Visit",
+            tag_ids=[first["id"], second["id"]],
+        )
+
+        assert transaction["tag_ids"] == json.dumps(
+            sorted([first["id"], second["id"]]), separators=(",", ":")
+        )
+        listed_transaction = self.storage.list_transactions()[0]
+        listed_mileage = self.storage.list_mileage_trips()[0]
+        assert listed_transaction["tag_ids"] == sorted([first["id"], second["id"]])
+        assert listed_transaction["tags"] == [
+            {first["id"]: "Client", second["id"]: "Follow-up"}[tag_id]
+            for tag_id in listed_transaction["tag_ids"]
+        ]
+        assert listed_mileage["tag_ids"] == sorted([first["id"], second["id"]])
+        assert listed_mileage["tags"] == [
+            {first["id"]: "Client", second["id"]: "Follow-up"}[tag_id]
+            for tag_id in listed_mileage["tag_ids"]
+        ]
+
+        edited = self.storage.edit_transaction(transaction["id"], tag_ids=[first["id"]])
+        edited_mileage = self.storage.edit_mileage_trip(
+            mileage["id"], tag_ids=[second["id"]]
+        )
+        assert edited["tag_ids"] == json.dumps([first["id"]], separators=(",", ":"))
+        assert edited_mileage["tag_ids"] == json.dumps(
+            [second["id"]], separators=(",", ":")
+        )
+
+    @pytest.mark.parametrize("value", ["not-json", "{}", "[1]", '["tag", "tag"]'])
+    def test_tag_ids_reject_invalid_payloads(self, value: str) -> None:
+        with pytest.raises(StorageValidationError):
+            self.storage._prepare_mileage_trip(
+                {
+                    "trip_date": "2026-09-01",
+                    "miles": 1,
+                    "start_location": "A",
+                    "destination": "B",
+                    "business_purpose": "C",
+                    "tag_ids": value,
+                }
+            )
+
+    def test_tag_ids_reject_unknown_references(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Office", "Expense")
+        with pytest.raises(StorageValidationError, match="Tag does not exist"):
+            self.storage.create_transaction(
+                txn_date="2026-09-01",
+                kind="Expense",
+                amount=10,
+                account_id=account["id"],
+                category_id=category["id"],
+                tag_ids=["missing-tag"],
+            )
+
+    def test_invalid_tag_does_not_persist_new_payee(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Office", "Expense")
+
+        with pytest.raises(StorageValidationError, match="Tag does not exist"):
+            self.storage.create_transaction(
+                txn_date="2026-09-01",
+                kind="Expense",
+                amount=10,
+                account_id=account["id"],
+                category_id=category["id"],
+                new_payee_name="Orphan payee",
+                tag_ids=["missing-tag"],
+            )
+
+        assert self.storage.list_payees() == []
+        assert self.storage.list_transactions() == []
+
+    def test_invalid_mileage_does_not_create_inline_tag(self) -> None:
+        with pytest.raises(StorageValidationError, match="Miles must be greater"):
+            self.storage.create_mileage_trip(
+                trip_date="2026-09-01",
+                miles=0,
+                start_location="A",
+                destination="B",
+                business_purpose="C",
+                new_tag_name="Should not persist",
+            )
+
+        assert self.storage.list_tags() == []
+
+    def test_invalid_round_trip_return_does_not_create_inline_tag(self) -> None:
+        with pytest.raises(StorageValidationError, match="Miles must be greater"):
+            self.storage.create_mileage_round_trip(
+                trip_date="2026-09-01",
+                miles=1,
+                return_miles=0,
+                start_location="A",
+                destination="B",
+                business_purpose="C",
+                new_tag_name="Should not persist",
+            )
+
+        assert self.storage.list_tags() == []
+        assert self.storage.list_mileage_trips() == []
+
+    def test_from_secrets_migrates_tag_schema_idempotently(self) -> None:
+        headers = dict(VERSION_7_WORKSHEET_HEADERS)
+        for title in ("Transactions", "Mileage"):
+            headers[title] = tuple(
+                header for header in headers[title] if header != "tag_ids"
+            )
+        workbook = FakeWorkbook(headers)
+        for title in ("Transactions", "Mileage"):
+            workbook.sheets[title].add_cols = Mock(
+                wraps=workbook.sheets[title].add_cols
+            )
+        google_client = Mock()
+        google_client.open_by_key.return_value = workbook
+        with (
+            patch.object(Credentials, "from_service_account_info", return_value=object()),
+            patch.object(gspread, "authorize", return_value=google_client),
+        ):
+            GoogleSheetsStorage.from_secrets(
+                {"spreadsheet_id": "id", "gcp_service_account": {"type": "service_account"}}
+            )
+            GoogleSheetsStorage.from_secrets(
+                {"spreadsheet_id": "id", "gcp_service_account": {"type": "service_account"}}
+            )
+
+        assert "Tags" in workbook.sheets
+        for title in ("Transactions", "Mileage"):
+            assert set(workbook.sheets[title].rows[0]) == set(WORKSHEET_HEADERS[title])
+            expected_migrations = 2 if title == "Transactions" else 1
+            assert workbook.sheets[title].add_cols.call_count == expected_migrations
 
     @pytest.mark.parametrize("field", ["id", "name"])
     def test_list_accounts_rejects_missing_required_display_fields(
@@ -1876,6 +2066,7 @@ class TestGoogleSheetsStorage:
             "destination",
             "business_purpose",
             "notes",
+            "tag_ids",
             "created_at",
         }
         assert not any(
@@ -1986,6 +2177,27 @@ class TestGoogleSheetsStorage:
         imported = self.storage.import_csv_transactions(rows[:1])
         assert len(imported) == 1
         assert len(self.storage.list_transactions()) == 1
+
+    def test_csv_batch_import_reuses_tag_snapshot(self) -> None:
+        self.storage.create_account("Checking", "Bank")
+        self.storage.create_category("Sales", "Income")
+        tags_sheet = self.workbook.sheets["Tags"]
+        tags_sheet.get_all_values = Mock(wraps=tags_sheet.get_all_values)
+        rows = [
+            {
+                "Date": f"2026-07-{index:02d}",
+                "Type": "Income",
+                "Amount": "10",
+                "Account": "Checking",
+                "Category": "Sales",
+            }
+            for index in range(1, 11)
+        ]
+
+        imported = self.storage.import_csv_transactions(rows)
+
+        assert len(imported) == 10
+        assert tags_sheet.get_all_values.call_count == 1
 
     def test_quickbooks_preview_maps_income_expense_transfer_and_duplicates(
         self,
@@ -2276,8 +2488,10 @@ class TestGoogleSheetsStorage:
         self.storage.create_category("Sales", "Income")
         account_sheet = self.workbook.sheets["Accounts"]
         category_sheet = self.workbook.sheets["Categories"]
+        tags_sheet = self.workbook.sheets["Tags"]
         account_sheet.get_all_values = Mock(wraps=account_sheet.get_all_values)
         category_sheet.get_all_values = Mock(wraps=category_sheet.get_all_values)
+        tags_sheet.get_all_values = Mock(wraps=tags_sheet.get_all_values)
         rows = [
             {
                 "Date": "07/01/2026",
@@ -2297,6 +2511,30 @@ class TestGoogleSheetsStorage:
         assert len(imported) == 35
         assert account_sheet.get_all_values.call_count == 1
         assert category_sheet.get_all_values.call_count == 1
+        assert tags_sheet.get_all_values.call_count == 1
+
+    def test_quickbooks_mileage_batch_import_reuses_tag_snapshot(self) -> None:
+        tags_sheet = self.workbook.sheets["Tags"]
+        tags_sheet.get_all_values = Mock(wraps=tags_sheet.get_all_values)
+        rows = [
+            {
+                "Date": f"07/{index:02d}/2026",
+                "Type": "Business",
+                "Trip Purpose": "Client meeting",
+                "Vehicle": "Blue car",
+                "Start Address": "Office",
+                "End Address": "Client site",
+                "Distance": "12.4",
+                "Deduction": "8.68",
+                "Logging Method": "Auto-tracked",
+            }
+            for index in range(1, 11)
+        ]
+
+        imported = self.storage.import_quickbooks_mileage(rows)
+
+        assert len(imported) == 10
+        assert tags_sheet.get_all_values.call_count == 1
 
     def test_general_ledger_export_collapses_double_entries(self) -> None:
         matrix = [
@@ -2397,6 +2635,7 @@ class TestGoogleSheetsStorage:
                 "Transactions.csv",
                 "Mileage.csv",
                 "MixedUseExpenses.csv",
+                "Tags.csv",
                 "manifest.json",
                 "receipts.json",
             }
@@ -2713,6 +2952,7 @@ class TestGoogleSheetsStorage:
             "Payees": 1,
             "Transactions": 1,
             "Mileage": 1,
+            "Tags": 0,
         }
         assert restored_storage.list_accounts()[0]["id"] == account["id"]
         restored_transaction = restored_storage.list_transactions()[0]
@@ -2829,6 +3069,7 @@ class TestGoogleSheetsStorage:
             "Categories": 0,
             "Payees": 0,
             "Transactions": 0,
+            "Tags": 0,
         }
         assert target.list_mileage_trips() == []
 
@@ -3097,6 +3338,34 @@ class TestGoogleSheetsStorage:
         )
 
         assert result == {"status": "fully_applied", "count": "1"}
+
+    def test_bulk_mutations_accept_listed_tag_ids_in_freshness_checks(self) -> None:
+        first, _, replacement = self._bulk_transaction_fixture()
+        tag = self.storage.create_tag("Project")
+        self.storage.edit_transaction(first["id"], tag_ids=[tag["id"]])
+        expected = [
+            item
+            for item in self.storage.list_transactions(_force_refresh=True)
+            if item["id"] == first["id"]
+        ]
+
+        category_result = self.storage.bulk_change_transaction_category(
+            [first["id"]],
+            expected_transactions=expected,
+            category_id=replacement["id"],
+        )
+        assert category_result == {"status": "fully_applied", "count": "1"}
+
+        expected = [
+            item
+            for item in self.storage.list_transactions(_force_refresh=True)
+            if item["id"] == first["id"]
+        ]
+        delete_result = self.storage.bulk_delete_transactions(
+            [first["id"]],
+            expected_transactions=expected,
+        )
+        assert delete_result == {"status": "fully_applied", "count": "1"}
 
     def test_payee_activation_retries_when_batch_update_is_not_applied(self) -> None:
         delays: list[float] = []

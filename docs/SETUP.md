@@ -77,8 +77,9 @@ make the workbook public.
 | Accounts | id, name, type, classification, opening_balance, active, created_at, parent_id |
 | Categories | id, name, kind, parent_id |
 | Payees | id, name, active, created_at |
-| Transactions | id, txn_date, kind, amount, account_id, to_account_id, category_id, payee_id, description, reference, receipt_references, created_at, source_type, source_id |
-| Mileage | id, trip_date, miles, vehicle, start_location, destination, business_purpose, notes, created_at |
+| Tags | id, name, active, created_at |
+| Transactions | id, txn_date, kind, amount, account_id, to_account_id, category_id, payee_id, description, reference, receipt_references, created_at, source_type, source_id, tag_ids |
+| Mileage | id, trip_date, miles, vehicle, start_location, destination, business_purpose, notes, created_at, tag_ids |
 | MixedUseExpenses | id, txn_date, kind, total_expense, business_use_percentage, allocated_amount, account_id, category_id, payee_id, description, reference, receipt_references, allocation_rationale, linked_transaction_id, created_at |
 
 The default Sheet1 tab may remain or be deleted. Existing compatible tabs are
@@ -98,6 +99,10 @@ columns to Transactions when upgrading a pre-mixed-use workbook. Existing rows
 remain ordinary records with no mixed-use linkage. These migrations are
 idempotent. The read-only validation command does not modify legacy headers or
 create the new worksheet.
+
+Normal startup also creates a missing Tags worksheet and appends blank
+`tag_ids` columns to compatible Transactions and Mileage worksheets. This
+upgrade is idempotent, and existing rows remain valid with no Tags.
 
 ## Local profile administration
 
