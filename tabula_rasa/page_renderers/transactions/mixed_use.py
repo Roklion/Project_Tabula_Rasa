@@ -5,7 +5,12 @@ from dataclasses import replace
 from datetime import date
 import streamlit as st
 from tabula_rasa.mixed_use import MixedUseAllocationError, calculate_allocated_amount
-from tabula_rasa.page_renderers.tag_selector import inline_tag_name_error, render_tag_selector
+from tabula_rasa.page_renderers.tag_selector import (
+    inline_tag_name_error,
+    render_tag_selector,
+    tag_selector_error,
+)
+from tabula_rasa.page_renderers.transactions.payee_selector import resolve_payee_selection
 from tabula_rasa.page_renderers.transactions.receipts import (
     RECEIPT_UPLOAD_TYPES,
     handle_confirmed_transaction_receipts,
@@ -85,7 +90,7 @@ def _active_ids(items: Sequence[Mapping[str, object]]) -> list[str]:
 
 def _payee_options(payees: Sequence[Mapping[str, object]]) -> tuple[list[str], dict[str, str]]:
     by_id = {str(item.get("id") or ""): str(item.get("name") or "") for item in payees}
-    options = ["+ Add new payee", ""]
+    options = [""]
     options.extend(str(item["id"]) for item in payees if str(item.get("active", "")).upper() == "TRUE")
     return options, by_id
 
@@ -154,7 +159,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         keys=[
             f"mixed_date_{scope}", f"mixed_account_{scope}",
             f"mixed_category_{scope}", f"mixed_payee_{scope}",
-            f"mixed_new_payee_{scope}", f"mixed_reference_{scope}",
+            f"mixed_reference_{scope}",
             f"mixed_description_{scope}", f"mixed_tags_{scope}",
             f"mixed_tags_{scope}__new_name", f"mixed_total_{scope}",
             f"mixed_percentage_{scope}", f"mixed_rationale_{scope}",
@@ -202,8 +207,10 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             payee_by_id[current_payee] = str(defaults.get("payee", "")) or (
                 f"{current_payee} (inactive)"
             )
-        payee_id = st.selectbox("Payee / customer", options, index=options.index(current_payee) if current_payee in options else 1, format_func=lambda value: payee_by_id.get(value, "No payee" if value == "" else value), key=f"mixed_payee_{scope}")
-        new_payee = st.text_input("Payee / customer", value=str(defaults.get("payee", "")), key=f"mixed_new_payee_{scope}") if payee_id == "+ Add new payee" else ""
+        payee_value = st.selectbox("Payee / customer", options, index=options.index(current_payee) if current_payee in options else 0, format_func=lambda value: payee_by_id.get(value, "No payee" if value == "" else value), key=f"mixed_payee_{scope}", accept_new_options=True)
+        payee_id, new_payee_name = resolve_payee_selection(
+            payee_value, payees, options
+        )
         c1, c2 = st.columns(2)
         reference = c1.text_input("Reference (optional)", value=str(defaults.get("reference", "")), key=f"mixed_reference_{scope}")
         description = c2.text_input("Description / memo", value=str(defaults.get("description", "")), key=f"mixed_description_{scope}")
@@ -227,8 +234,8 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         save_error = st.empty()
         if st.button("Save changes" if source else "Save mixed-use expense", type="primary", key=f"mixed_save_{scope}"):
             tag_error = inline_tag_name_error(new_tag_name)
-            if payee_id == "+ Add new payee" and not new_payee.strip():
-                save_error.error("Enter a payee / customer name before saving.")
+            if (selector_error := tag_selector_error(f"mixed_tags_{scope}")):
+                save_error.error(selector_error)
             elif tag_error:
                 save_error.error(tag_error)
             elif not rationale.strip():
@@ -255,7 +262,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                     # Keep the log and source actions visible after a receipt
                     # validation error; the write is skipped below.
                     pass
-                payload = {"txn_date": txn_date, "account_id": account_id, "category_id": category_id, "payee_id": "" if payee_id == "+ Add new payee" else payee_id, "new_payee_name": new_payee if payee_id == "+ Add new payee" else "", "tag_ids": tag_ids, "new_tag_name": new_tag_name or "", "reference": reference, "description": description, "total_expense": total_expense, "business_use_percentage": business_use_percentage, "allocation_rationale": rationale}
+                payload = {"txn_date": txn_date, "account_id": account_id, "category_id": category_id, "payee_id": payee_id, "new_payee_name": new_payee_name, "tag_ids": tag_ids, "new_tag_name": new_tag_name or "", "reference": reference, "description": description, "total_expense": total_expense, "business_use_percentage": business_use_percentage, "allocation_rationale": rationale}
                 if source:
                     payload["expected_source"] = source
                     def operation():
@@ -289,7 +296,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                 if prepared_receipts is not None:
                     context.confirmed_write(action, payload, operation, success, on_success=lambda: context.schedule_widget_reset(_key(profile, "form_reset")), on_confirmed=process_mixed_receipts, report_error=save_error.error)
     with right:
-        _render_preview(mixed_use_preview(txn_date=txn_date, account=account_paths.get(account_id, account_id), payee=payee_by_id.get(payee_id, new_payee), category=category_paths.get(category_id, category_id), description=description, total_expense=total_expense, business_use_percentage=business_use_percentage, allocation_rationale=rationale))
+        _render_preview(mixed_use_preview(txn_date=txn_date, account=account_paths.get(account_id, account_id), payee=payee_by_id.get(payee_id, new_payee_name), category=category_paths.get(category_id, category_id), description=description, total_expense=total_expense, business_use_percentage=business_use_percentage, allocation_rationale=rationale))
     st.markdown("#### Mixed-use Expense Log")
     if not sources:
         st.info("No mixed-use expenses exist for this business profile.")

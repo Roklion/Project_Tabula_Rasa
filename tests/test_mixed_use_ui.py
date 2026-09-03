@@ -256,6 +256,49 @@ def test_mixed_use_app_test_validation_preserves_inputs(default_storage) -> None
         assert any("Allocation rationale is required" in str(item.value) for item in app.error)
 
 
+def test_mixed_use_app_test_reuses_inline_payee_and_tag_creation(default_storage) -> None:
+    account = next(item for item in default_storage.list_accounts() if item["active"])
+    category = next(item for item in default_storage.list_categories() if item["kind"] == "Expense")
+    with authenticated_app(default_storage) as app:
+        navigate_to(app, "Transactions")
+        tab = _mixed_tab(app)
+        _tab_field(tab, "selectbox", "Account").set_value(account["id"]).run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "selectbox", "Category").set_value(category["id"]).run()
+        tab = _mixed_tab(app)
+        payee_selector = _tab_field(tab, "selectbox", "Payee / customer")
+        payee_selector.options.append("Inline Vendor")
+        payee_selector.set_value("Inline Vendor").run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "selectbox", "Payee / customer").options.append("Inline Vendor")
+        tag_selector = _tab_field(tab, "multiselect", "Tags")
+        tag_selector.options.append("Inline Tag")
+        tag_selector.set_value(["Inline Tag"]).run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "selectbox", "Payee / customer").options.append("Inline Vendor")
+        _tab_field(tab, "multiselect", "Tags").options.append("Inline Tag")
+        _tab_field(tab, "text_input", "Total Expense").set_value("40").run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "selectbox", "Payee / customer").options.append("Inline Vendor")
+        _tab_field(tab, "multiselect", "Tags").options.append("Inline Tag")
+        _tab_field(tab, "text_input", "Business Use %").set_value("50").run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "selectbox", "Payee / customer").options.append("Inline Vendor")
+        _tab_field(tab, "multiselect", "Tags").options.append("Inline Tag")
+        _tab_field(tab, "text_area", "Allocation Rationale (required)").set_value("Inline setup").run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "selectbox", "Payee / customer").options.append("Inline Vendor")
+        _tab_field(tab, "multiselect", "Tags").options.append("Inline Tag")
+        _tab_field(tab, "button", "Save mixed-use expense").click().run()
+
+    source = default_storage.list_mixed_use_expenses()[0]
+    payee = next(item for item in default_storage.list_payees() if item["name"] == "Inline Vendor")
+    tag = next(item for item in default_storage.list_tags() if item["name"] == "Inline Tag")
+    assert source["payee_id"] == payee["id"]
+    assert tag["id"] in source["tag_ids"]
+    assert default_storage.list_transactions()[0]["tag_ids"] == source["tag_ids"]
+
+
 def test_mixed_use_app_test_is_profile_scoped_and_derived_ledger_is_read_only() -> None:
     from tests.app_support import profile_config
     from tests.fakes import FakeWorkbook
