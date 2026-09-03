@@ -112,6 +112,8 @@ duplicate-safe Tag and attach it when the transaction is saved. You can also
 type a new name into the selector and press Enter when searching; the typed
 value is handled as the inline Tag to create. The selector labels "+ Add new
 tag" and "Add new tag" are reserved and cannot be saved as Tag names.
+Enter only one new Tag name at a time; existing Tag names are recognized as
+existing selections even when typed with different capitalization.
 
 The optional receipt uploader accepts PDF, PNG, JPG, JPEG, WEBP, or HEIC.
 Each file must be non-empty and no larger than 20 MB; one selected batch may
@@ -259,7 +261,8 @@ selector and press Enter when searching. The log and CSV display resolved Tag
 names, and the Tags filter includes trips containing any selected Tag. The
 selector labels "+ Add new tag" and "Add new tag" are reserved and cannot be
 saved as Tag names. A round trip applies the same Tags to both independently
-saved legs.
+saved legs. Enter only one new Tag name at a time; existing Tag names are
+recognized as existing selections even when typed with different capitalization.
 
 When Google Maps is configured, Starting location and Destination offer Google
 address suggestions. Select both suggestions, then choose **Calculate mileage**

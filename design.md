@@ -480,6 +480,8 @@ The form presents:
    Tag is stored and selected with the transaction. Typing a new name and
    pressing Enter in the selector is an equivalent inline-create path. The
    selector labels `+ Add new tag` and `Add new tag` are reserved Tag names.
+   Only one new Tag name may be entered per record; typed existing names select
+   the stored Tag case-insensitively.
 9. Description / memo
 10. Receipt (optional)
 11. Save transaction

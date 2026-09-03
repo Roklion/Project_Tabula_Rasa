@@ -18,6 +18,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
 from tabula_rasa.page_renderers.tag_selector import (
     inline_tag_name_error,
     render_tag_selector,
+    tag_selector_error,
 )
 
 
@@ -181,6 +182,8 @@ def render_add_transaction(
                 )
             elif payee_id == "+ Add new payee" and not new_payee_name.strip():
                 save_error.error("Enter a payee / customer name before saving.")
+            elif (tag_error := tag_selector_error("add_transaction_tags")):
+                save_error.error(tag_error)
             elif (tag_error := inline_tag_name_error(new_tag_name)):
                 save_error.error(tag_error)
             else:
