@@ -2885,12 +2885,42 @@ class GoogleSheetsStorage:
             return self._create_mixed_use_expense(**data)
 
     def _create_mixed_use_expense(self, **data: Any) -> dict[str, str]:
-        source, projection = self._prepare_mixed_use_expense(data)
+        requested_source_id = _clean_text(
+            data.get("source_id", data.get("id")), "Mixed-use source ID"
+        )
+        requested_transaction_id = _clean_text(
+            data.get("linked_transaction_id"), "Linked transaction ID"
+        )
         sources, transactions = self._raw_mixed_use_snapshot()
+        existing_source = (
+            sources.get(requested_source_id) if requested_source_id else None
+        )
+        existing_transaction = (
+            transactions.get(requested_transaction_id)
+            if requested_transaction_id
+            else None
+        )
+        original_transaction = existing_transaction
+        if existing_source is not None:
+            persisted_transaction_id = _clean_text(
+                existing_source.get("linked_transaction_id"),
+                "Linked transaction ID",
+                required=True,
+            )
+            if requested_transaction_id is None:
+                requested_transaction_id = persisted_transaction_id
+            original_transaction = existing_transaction or {
+                "account_id": existing_source.get("account_id"),
+                "payee_id": existing_source.get("payee_id"),
+            }
+        source, projection = self._prepare_mixed_use_expense(
+            data,
+            source_id=requested_source_id or None,
+            linked_transaction_id=requested_transaction_id or None,
+            original_transaction=original_transaction,
+        )
         source_id = source["id"]
         transaction_id = projection["id"]
-        existing_source = sources.get(source_id)
-        existing_transaction = transactions.get(transaction_id)
         if existing_source is not None:
             # A source-only retry must compare against the persisted source,
             # including its original timestamp, rather than regenerate it.

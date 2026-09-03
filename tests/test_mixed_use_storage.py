@@ -813,11 +813,32 @@ def test_mixed_use_source_only_retry_classifies_missing_projection_as_retryable(
         default_storage.create_mixed_use_expense(**inputs)
     assert error.value.outcome == "mixed_ambiguous"
 
+    default_storage.deactivate_account(inputs["account_id"])
     with pytest.raises(StorageBulkMutationUncertainError) as retry_error:
         default_storage.create_mixed_use_expense(**inputs)
     assert retry_error.value.outcome == "not_applied"
     assert retry_error.value.retryable is True
     assert calls == 3
+
+
+def test_mixed_use_create_retry_reuses_pair_after_account_deactivation(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    inputs = {
+        **_expense_inputs(default_storage),
+        "total_expense": "100",
+        "business_use_percentage": "50",
+        "allocation_rationale": "Measured use",
+        "source_id": "source-deactivated-retry",
+        "linked_transaction_id": "transaction-deactivated-retry",
+    }
+    created = default_storage.create_mixed_use_expense(**inputs)
+    default_storage.deactivate_account(inputs["account_id"])
+    default_storage.edit_payee(inputs["payee_id"], active=False)
+
+    retried = default_storage.create_mixed_use_expense(**inputs)
+
+    assert retried == created
 
 
 def test_mixed_use_create_verifies_uncertain_source_payload_before_projection(
