@@ -62,13 +62,12 @@ def _write(
     )
 
 
-def _render_payees(context: PayeesTagsContext, payees: list[dict[str, str]]) -> None:
-    try:
-        transactions = context.storage.list_transactions()
-        mixed_sources = context.storage.list_mixed_use_expense_sources()
-    except StorageError as error:
-        context.report_storage_error(error)
-        return
+def _render_payees(
+    context: PayeesTagsContext,
+    payees: list[dict[str, str]],
+    transactions: list[dict[str, str]],
+    mixed_sources: list[dict[str, str]],
+) -> None:
     counts = _payee_reference_counts(transactions, mixed_sources)
     st.subheader("Payees")
     st.caption(
@@ -149,13 +148,12 @@ def _render_payees(context: PayeesTagsContext, payees: list[dict[str, str]]) -> 
                     _write(context, "remove_payee", {"id": remove_id}, lambda: context.storage.remove_payee(remove_id, expected_payee=by_id[remove_id]), "Payee removed.", remove_error)
 
 
-def _render_tags(context: PayeesTagsContext, tags: list[dict[str, str]]) -> None:
-    try:
-        transactions = context.storage.list_transactions()
-        mileage = context.storage.list_mileage_trips()
-    except StorageError as error:
-        context.report_storage_error(error)
-        return
+def _render_tags(
+    context: PayeesTagsContext,
+    tags: list[dict[str, str]],
+    transactions: list[dict[str, Any]],
+    mileage: list[dict[str, Any]],
+) -> None:
     counts = _tag_reference_counts(transactions, mileage)
     st.subheader("Tags")
     st.caption(
@@ -239,11 +237,14 @@ def render_payees_tags(context: PayeesTagsContext) -> None:
     try:
         payees = context.storage.list_payees(active_only=False)
         tags = context.storage.list_tags(active_only=False)
+        transactions = context.storage.list_transactions()
+        mixed_sources = context.storage.list_mixed_use_expense_sources()
+        mileage = context.storage.list_mileage_trips()
     except StorageError as error:
         context.report_storage_error(error)
         return
     payees_tab, tags_tab = st.tabs(["Payees", "Tags"])
     with payees_tab:
-        _render_payees(context, payees)
+        _render_payees(context, payees, transactions, mixed_sources)
     with tags_tab:
-        _render_tags(context, tags)
+        _render_tags(context, tags, transactions, mileage)

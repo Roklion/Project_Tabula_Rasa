@@ -473,6 +473,7 @@ def test_management_display_uses_prefetched_cached_rows() -> None:
     assert "list_mixed_use_expense_sources()" in management_source
     assert "list_transactions()" in management_source
     assert "list_mileage_trips()" in management_source
+    assert management_source.count("context.storage.list_transactions()") == 1
     assert "list_mixed_use_expenses(_force_refresh=True)" not in management_source
     assert "list_mileage_trips(_force_refresh=True)" not in management_source
     assert "list_payees(active_only=False, _force_refresh=True)" not in management_source
