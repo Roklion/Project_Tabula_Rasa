@@ -3723,9 +3723,10 @@ class GoogleSheetsStorage:
                     latest_rows = self._rows("Transactions", force_refresh=True)
                     return False, [dict(row.values) for row in latest_rows]
 
-            latest_transaction_rows = self._rows(
-                "Transactions", force_refresh=True
+            latest_snapshot = self._snapshot(
+                ["Transactions", "MixedUseExpenses"], force_refresh=True
             )
+            latest_transaction_rows = latest_snapshot["Transactions"]
             latest_transactions_by_id: dict[str, _StoredRow] = {}
             for row in latest_transaction_rows:
                 transaction_id = _clean_text(
@@ -3739,19 +3740,23 @@ class GoogleSheetsStorage:
             latest_transactions = [
                 dict(row.values) for row in latest_transaction_rows
             ]
-            if any(
-                latest_transactions_by_id.get(transaction_id) is None
-                or latest_transactions_by_id[transaction_id].values
-                != current_by_id[transaction_id]
-                for transaction_id in intended_values
-            ):
-                return False, latest_transactions
-            latest_source_rows = self._rows(
-                "MixedUseExpenses", force_refresh=True
-            )
-            latest_sources_by_id = {
-                str(row.values["id"]): row for row in latest_source_rows
+            latest_receipts = {
+                transaction_id: str(row.values.get("receipt_references") or "")
+                for transaction_id, row in latest_transactions_by_id.items()
             }
+            if latest_receipts not in (current_receipts, expected_after_updates):
+                return False, latest_transactions
+            latest_source_rows = latest_snapshot["MixedUseExpenses"]
+            latest_sources_by_id: dict[str, _StoredRow] = {}
+            for row in latest_source_rows:
+                source_id = _clean_text(
+                    row.values.get("id"), "Mixed-use source ID", required=True
+                )
+                if source_id in latest_sources_by_id:
+                    raise StorageValidationError(
+                        "Receipt recovery found duplicate mixed-use source IDs."
+                    )
+                latest_sources_by_id[source_id] = row
             for source_id, source_row in mixed_source_rows.items():
                 latest_source = latest_sources_by_id.get(source_id)
                 if latest_source is None or latest_source.values != source_row.values:
