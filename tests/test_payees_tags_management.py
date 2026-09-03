@@ -105,6 +105,13 @@ def test_management_expected_snapshot_rejects_stale_merge(default_storage) -> No
         default_storage.merge_tags(target["id"], [source["id"]], expected_tags=expected)
 
 
+def test_expected_management_snapshot_preserves_falsy_values() -> None:
+    current = {"tag-1": {"id": "tag-1", "active": "False", "count": "0"}}
+    expected = {"id": "tag-1", "active": False, "count": 0}
+
+    GoogleSheetsStorage._assert_expected_managed_records(current, expected)
+
+
 def test_non_applied_management_batch_is_classified(default_storage, monkeypatch) -> None:
     tag = default_storage.create_tag("Unused")
 

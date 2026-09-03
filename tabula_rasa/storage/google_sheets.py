@@ -409,6 +409,17 @@ def _normalize_tag_ids(value: Any) -> list[str]:
     return sorted(normalized)
 
 
+def _raw_tag_ids_may_contain(value: Any, candidates: Iterable[str]) -> bool:
+    """Use a cheap substring check before parsing a stored tag-ID JSON cell."""
+    raw_value = "" if value is None else str(value)
+    return any(candidate in raw_value for candidate in candidates)
+
+
+def _managed_comparison_text(value: Any) -> str:
+    """Preserve falsy expected values while normalizing comparison text."""
+    return "" if value is None else str(value)
+
+
 def _encode_tag_ids(value: Any) -> str:
     return json.dumps(
         _normalize_tag_ids(value), separators=(",", ":"), ensure_ascii=False
@@ -2594,7 +2605,8 @@ class GoogleSheetsStorage:
         ).items():
             actual = current.get(record_id)
             if actual is None or any(
-                str(actual.get(key, "") or "") != str(value or "")
+                _managed_comparison_text(actual.get(key))
+                != _managed_comparison_text(value)
                 for key, value in expected_record.items()
                 if key != "tags"
             ):
@@ -3089,27 +3101,28 @@ class GoogleSheetsStorage:
                     if target_id in expected_records
                     else None,
                 )
-                references = [
-                    row
-                    for row in (*snapshot["Transactions"], *snapshot["Mileage"])
-                    if any(
-                        item in source_ids
-                        for item in _normalize_tag_ids(row.values.get("tag_ids", ""))
-                    )
-                ]
+                references = []
+                for row in (*snapshot["Transactions"], *snapshot["Mileage"]):
+                    raw_tags = row.values.get("tag_ids", "")
+                    if _raw_tag_ids_may_contain(raw_tags, source_ids) and any(
+                        item in source_ids for item in _normalize_tag_ids(raw_tags)
+                    ):
+                        references.append(row)
                 if not references:
                     return {"status": "fully_applied", "count": str(len(source_ids))}
                 raise StorageConflictError(
                     "The selected source tag records are missing but their references remain."
                 )
             if missing:
-                missing = [item for item in source_ids if item not in tags]
                 raise StorageNotFoundError("A source tag no longer exists")
             self._assert_expected_managed_records(tags, expected_tags)
             update_rows: dict[str, tuple[str, _StoredRow, str]] = {}
             for title in ("Transactions", "Mileage"):
                 for record_id, row in self._managed_rows_by_id(snapshot[title], title).items():
-                    tag_ids = _normalize_tag_ids(row.values.get("tag_ids", ""))
+                    raw_tags = row.values.get("tag_ids", "")
+                    if not _raw_tag_ids_may_contain(raw_tags, source_ids):
+                        continue
+                    tag_ids = _normalize_tag_ids(raw_tags)
                     if not any(item in source_ids for item in tag_ids):
                         continue
                     merged_ids = [target_id if item in source_ids else item for item in tag_ids]
@@ -3211,7 +3224,10 @@ class GoogleSheetsStorage:
                 )
             references = 0
             for row in (*snapshot["Transactions"], *snapshot["Mileage"]):
-                if tag_id in _normalize_tag_ids(row.values.get("tag_ids", "")):
+                raw_tags = row.values.get("tag_ids", "")
+                if _raw_tag_ids_may_contain(
+                    raw_tags, (tag_id,)
+                ) and tag_id in _normalize_tag_ids(raw_tags):
                     references += 1
             if references:
                 raise StorageConflictError(
