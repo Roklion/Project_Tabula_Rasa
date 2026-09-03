@@ -3,6 +3,7 @@ from datetime import date
 import pytest
 
 from tabula_rasa.page_renderers.transactions.mixed_use import mixed_use_preview
+from tabula_rasa.page_renderers.transactions.ledger import transaction_is_mixed_use
 from tabula_rasa.storage import StorageValidationError
 
 
@@ -36,6 +37,18 @@ def test_mixed_use_preview_is_safe_for_incomplete_inputs() -> None:
     assert preview["allocated_amount"] == "—"
     assert preview["status"] != "ready"
     assert preview["description"] == "—"
+
+
+def test_only_phase_a_mixed_use_provenance_is_protected() -> None:
+    assert transaction_is_mixed_use(
+        {"source_type": "mixed_use_expense", "source_id": "source-1"}
+    )
+    assert not transaction_is_mixed_use(
+        {"source_type": "transaction_copy", "source_id": "transaction-1"}
+    )
+    assert not transaction_is_mixed_use(
+        {"source_type": "mixed_use_expense", "source_id": ""}
+    )
 
 
 def test_generic_create_rejects_fabricated_mixed_use_projection(default_storage) -> None:
