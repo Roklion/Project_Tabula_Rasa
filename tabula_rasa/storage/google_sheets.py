@@ -1449,8 +1449,13 @@ class GoogleSheetsStorage:
                         for row in self._rows(title, force_refresh=True)
                     ):
                         return
-                except StorageError:
-                    pass
+                except StorageError as read_error:
+                    raise StorageBulkMutationUncertainError(
+                        f"The {title} append completed but its postcondition could not "
+                        "be read. Review the row before retrying.",
+                        outcome="mixed_ambiguous",
+                        retryable=False,
+                    ) from read_error
                 if attempt + 1 >= self._retry_attempts:
                     raise
                 self._sleeper(self._retry_base_delay_seconds * (2**attempt))

@@ -1575,6 +1575,39 @@ def test_mixed_use_delete_confirms_final_delete_after_lost_response(
     assert default_storage.list_transactions() == []
 
 
+def test_mixed_use_append_does_not_replay_when_confirmation_read_fails(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    worksheet = default_storage._worksheet("MixedUseExpenses")
+    original_append_row = worksheet.append_row
+    original_rows = default_storage._rows
+    calls = 0
+
+    def append_then_lose_response(values: list[str], **kwargs: object) -> None:
+        nonlocal calls
+        calls += 1
+        original_append_row(values, **kwargs)
+        raise OSError("response lost after append")
+
+    def rows_unavailable_after_append(
+        title: str, *, force_refresh: bool = False
+    ) -> list[object]:
+        if title == "MixedUseExpenses" and force_refresh:
+            raise StorageUnavailableError("confirmation read unavailable", retryable=True)
+        return original_rows(title, force_refresh=force_refresh)
+
+    worksheet.append_row = append_then_lose_response  # type: ignore[method-assign]
+    default_storage._rows = rows_unavailable_after_append  # type: ignore[method-assign]
+    default_storage._retry_attempts = 2
+
+    with pytest.raises(StorageBulkMutationUncertainError, match="postcondition"):
+        default_storage._append("MixedUseExpenses", {"id": "ambiguous-append"})
+
+    default_storage._rows = original_rows  # type: ignore[method-assign]
+    assert calls == 1
+    assert len(default_storage._rows("MixedUseExpenses", force_refresh=True)) == 1
+
+
 def test_mixed_use_uncertain_edit_classifies_partial_pair_safely(
     default_storage: GoogleSheetsStorage,
 ) -> None:
