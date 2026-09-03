@@ -4,6 +4,7 @@ import pytest
 
 from tabula_rasa.page_renderers.transactions.mixed_use import (
     _MixedUseReceiptStorage,
+    _pending_create_ids,
     mixed_use_preview,
 )
 from tabula_rasa.page_renderers.transactions.ledger import transaction_is_mixed_use
@@ -61,6 +62,17 @@ def test_mixed_use_preview_is_safe_for_incomplete_inputs() -> None:
     assert preview["allocated_amount"] == "—"
     assert preview["status"] != "ready"
     assert preview["description"] == "—"
+
+
+def test_pending_create_ids_remain_stable_for_uncertain_retries() -> None:
+    state: dict[str, object] = {}
+    first = _pending_create_ids(state, "north")
+    second = _pending_create_ids(state, "north")
+
+    assert first == second
+    assert first[0] == state["mixed_use_pending_source_id_north"]
+    assert first[1] == state["mixed_use_pending_transaction_id_north"]
+    assert first != _pending_create_ids(state, "south")
 
 
 def test_only_phase_a_mixed_use_provenance_is_protected() -> None:

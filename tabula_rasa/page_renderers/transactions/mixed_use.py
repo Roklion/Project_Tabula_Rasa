@@ -1,8 +1,9 @@
 """Mixed-use source workflow for the Transactions page."""
 from __future__ import annotations
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import replace
 from datetime import date
+from uuid import uuid4
 import streamlit as st
 from tabula_rasa.mixed_use import MixedUseAllocationError, calculate_allocated_amount
 from tabula_rasa.page_renderers.tag_selector import (
@@ -15,6 +16,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     RECEIPT_UPLOAD_TYPES,
     handle_confirmed_transaction_receipts,
     prepare_receipt_uploads,
+    prepare_editor_receipt_uploads,
     render_receipt_creation_recovery,
     render_receipts,
     receipt_creation_workflow_key,
@@ -85,6 +87,19 @@ def mixed_use_preview(*, txn_date, account, payee, category, description, total_
 def _key(profile: str, suffix: str) -> str:
     return f"mixed_use_{suffix}_{profile}"
 
+
+def _pending_create_ids(
+    state: MutableMapping[str, object], profile: str
+) -> tuple[str, str]:
+    """Keep a create pair stable while an uncertain write is retried."""
+    source_key = _key(profile, "pending_source_id")
+    transaction_key = _key(profile, "pending_transaction_id")
+    source_id = str(state.get(source_key) or uuid4())
+    transaction_id = str(state.get(transaction_key) or uuid4())
+    state[source_key] = source_id
+    state[transaction_key] = transaction_id
+    return source_id, transaction_id
+
 def _active_ids(items: Sequence[Mapping[str, object]]) -> list[str]:
     return [str(item.get("id") or "") for item in items if str(item.get("id") or "")]
 
@@ -144,6 +159,10 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             render_receipt_creation_recovery(recovery_context)
             return
     selected_key = _key(profile, "selected_source_id")
+    baseline_key = _key(profile, "edit_baseline")
+    baseline_id_key = _key(profile, "edit_baseline_source_id")
+    pending_source_key = _key(profile, "pending_source_id")
+    pending_transaction_key = _key(profile, "pending_transaction_id")
     selected_id = str(st.session_state.get(selected_key, "") or "")
     if selected_id not in source_by_id:
         selected_id = ""
@@ -152,6 +171,18 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
     if sources:
         selected_id = st.selectbox("Edit an existing mixed-use expense (optional)", choices, index=choices.index(selected_id), format_func=lambda value: "Create new mixed-use expense" if not value else _source_label(source_by_id[value], account_paths), key=selected_key)
     source = source_by_id.get(selected_id)
+    if source:
+        if st.session_state.get(baseline_id_key) != selected_id:
+            st.session_state[baseline_key] = dict(source)
+            st.session_state[baseline_id_key] = selected_id
+        expected_source = st.session_state.get(baseline_key, source)
+    else:
+        st.session_state.pop(baseline_key, None)
+        st.session_state.pop(baseline_id_key, None)
+        expected_source = None
+        pending_source_id, pending_transaction_id = _pending_create_ids(
+            st.session_state, profile
+        )
     defaults = source or {}
     scope = f"{profile}_{selected_id or 'new'}"
     context.reset_widget_state_if_requested(
@@ -194,8 +225,6 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
     left, right = st.columns([3, 2])
     with left:
         st.markdown("#### Add / edit source")
-        if not source and render_receipt_creation_recovery(context):
-            return
         txn_date = st.date_input("Date", date.fromisoformat(str(defaults.get("txn_date", date.today().isoformat()))), key=f"mixed_date_{scope}")
         c1, c2 = st.columns(2)
         account_id = c1.selectbox("Account", account_ids, index=account_ids.index(str(defaults.get("account_id", account_ids[0]))) if str(defaults.get("account_id", account_ids[0])) in account_ids else 0, format_func=account_paths.get, key=f"mixed_account_{scope}")
@@ -242,7 +271,16 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                 save_error.error("Allocation rationale is required.")
             else:
                 try:
-                    prepared_receipts = prepare_receipt_uploads(receipt_uploads or [])
+                    if source:
+                        prepared_receipts = prepare_editor_receipt_uploads(
+                            context,
+                            str(source["linked_transaction_id"]),
+                            receipt_uploads or [],
+                        )
+                    else:
+                        prepared_receipts = prepare_receipt_uploads(
+                            receipt_uploads or []
+                        )
                 except Exception as error:  # noqa: BLE001 - safe validation message
                     save_error.error(f"Receipt validation failed: {error}")
                     prepared_receipts = None
@@ -264,16 +302,25 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                     pass
                 payload = {"txn_date": txn_date, "account_id": account_id, "category_id": category_id, "payee_id": payee_id, "new_payee_name": new_payee_name, "tag_ids": tag_ids, "new_tag_name": new_tag_name or "", "reference": reference, "description": description, "total_expense": total_expense, "business_use_percentage": business_use_percentage, "allocation_rationale": rationale}
                 if source:
-                    payload["expected_source"] = source
+                    payload["expected_source"] = expected_source
                     def operation():
                         return context.storage.edit_mixed_use_expense(
                             source["id"], **payload
                         )
                     action, success = "edit_mixed_use_expense", "Mixed-use expense updated."
                 else:
+                    payload["source_id"] = pending_source_id
+                    payload["linked_transaction_id"] = pending_transaction_id
                     def operation():
                         return context.storage.create_mixed_use_expense(**payload)
                     action, success = "create_mixed_use_expense", "Mixed-use expense saved."
+
+                def reset_after_success() -> None:
+                    st.session_state.pop(baseline_key, None)
+                    st.session_state.pop(baseline_id_key, None)
+                    st.session_state.pop(pending_source_key, None)
+                    st.session_state.pop(pending_transaction_key, None)
+                    context.schedule_widget_reset(_key(profile, "form_reset"))
                 def process_mixed_receipts(result):
                     if not prepared_receipts:
                         return
@@ -294,7 +341,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                     )
 
                 if prepared_receipts is not None:
-                    context.confirmed_write(action, payload, operation, success, on_success=lambda: context.schedule_widget_reset(_key(profile, "form_reset")), on_confirmed=process_mixed_receipts, report_error=save_error.error)
+                    context.confirmed_write(action, payload, operation, success, on_success=reset_after_success, on_confirmed=process_mixed_receipts, report_error=save_error.error)
     with right:
         _render_preview(mixed_use_preview(txn_date=txn_date, account=account_paths.get(account_id, account_id), payee=payee_by_id.get(payee_id, new_payee_name), category=category_paths.get(category_id, category_id), description=description, total_expense=total_expense, business_use_percentage=business_use_percentage, allocation_rationale=rationale))
     st.markdown("#### Mixed-use Expense Log")
