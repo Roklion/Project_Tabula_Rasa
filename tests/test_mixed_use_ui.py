@@ -27,7 +27,7 @@ def test_mixed_use_preview_uses_decimal_allocation_and_rationale() -> None:
     )
     assert preview["allocated_amount"] == "41.15"
     assert preview["status"] == "ready"
-    assert "Measured workspace use" in preview["description"]
+    assert preview["description"] == "Supplies\nAllocation rationale: Measured workspace use"
 
 
 def test_mixed_use_preview_is_safe_for_incomplete_inputs() -> None:
@@ -126,3 +126,22 @@ def test_source_receipt_adapter_refreshes_snapshot_for_multiple_receipts(
     )
     refreshed = default_storage.get_mixed_use_expense(source["id"])
     assert len(decode_receipt_references(refreshed["receipt_references"])) == 2
+
+
+def test_source_aware_receipt_api_normalizes_invalid_metadata(
+    default_storage,
+) -> None:
+    account = default_storage.create_account("Invalid Receipt Checking", "Bank")
+    category = default_storage.create_category("Invalid Receipt Office", "Expense")
+    source = default_storage.create_mixed_use_expense(
+        txn_date="2026-09-03",
+        total_expense="100",
+        business_use_percentage="50",
+        account_id=account["id"],
+        category_id=category["id"],
+        allocation_rationale="Measured use",
+    )
+    with pytest.raises(StorageValidationError, match="Receipt"):
+        default_storage.link_mixed_use_receipt(
+            source["id"], reference={"id": "", "name": ""}
+        )

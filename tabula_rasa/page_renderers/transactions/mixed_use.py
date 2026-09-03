@@ -15,6 +15,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     receipt_creation_workflow_key,
 )
 from tabula_rasa.storage import StorageError
+from tabula_rasa.storage.google_sheets import mixed_use_ledger_description
 
 
 class _MixedUseReceiptStorage:
@@ -67,9 +68,13 @@ def mixed_use_preview(*, txn_date, account, payee, category, description, total_
     except MixedUseAllocationError as error:
         allocated, status = "—", str(error)
     memo, rationale = str(description or "").strip(), str(allocation_rationale or "").strip()
-    result_description = memo
-    if rationale:
-        result_description = f"{memo} — Mixed-use allocation: {rationale}" if memo else f"Mixed-use allocation: {rationale}"
+    if not rationale:
+        status = "Allocation rationale is required"
+    result_description = (
+        mixed_use_ledger_description(memo, rationale)
+        if rationale
+        else memo
+    )
     return {"date": txn_date.isoformat() if isinstance(txn_date, date) else str(txn_date or "—"), "account": str(account or "—"), "payee": str(payee or "—"), "category": str(category or "—"), "allocated_amount": allocated, "description": result_description or "—", "status": status}
 
 def _key(profile: str, suffix: str) -> str:
@@ -93,7 +98,8 @@ def _render_preview(preview: Mapping[str, str]) -> None:
         st.warning(f"Enter valid allocation inputs: {preview['status']}")
     else:
         st.success("Ready to post one Expense projection")
-    st.write(f"Date: {preview['date']} | Account: {preview['account']} | Payee: {preview['payee']} | Category: {preview['category']} | Allocated amount: {'$'}{preview['allocated_amount']}")
+    st.write(f"Date: {preview['date']} | Account: {preview['account']} | Payee: {preview['payee']} | Category: {preview['category']}")
+    st.metric("Allocated Amount", f"{'$'}{preview['allocated_amount']}")
     st.caption(f"Description: {preview['description']}")
     st.caption("Mixed-use projection • read-only in the regular ledger")
 
@@ -168,6 +174,15 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
     ]
     if not source:
         account_ids, category_ids = active_account_ids, active_category_ids
+    else:
+        current_account = str(defaults.get("account_id") or "")
+        current_category = str(defaults.get("category_id") or "")
+        account_ids = list(active_account_ids)
+        category_ids = list(active_category_ids)
+        if current_account and current_account not in account_ids:
+            account_ids.append(current_account)
+        if current_category and current_category not in category_ids:
+            category_ids.append(current_category)
     if not account_ids or not category_ids:
         st.warning("Create an active account and an Expense category before recording a mixed-use expense.")
         return
@@ -192,7 +207,13 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         c1, c2 = st.columns(2)
         reference = c1.text_input("Reference (optional)", value=str(defaults.get("reference", "")), key=f"mixed_reference_{scope}")
         description = c2.text_input("Description / memo", value=str(defaults.get("description", "")), key=f"mixed_description_{scope}")
-        tag_ids, new_tag_name = render_tag_selector(tags, label="Tags", key=f"mixed_tags_{scope}", selected_ids=defaults.get("tag_ids", ()))
+        tag_ids, new_tag_name = render_tag_selector(
+            tags,
+            label="Tags",
+            key=f"mixed_tags_{scope}",
+            selected_ids=defaults.get("tag_ids", ()),
+            preserve_inactive_ids=defaults.get("tag_ids", ()) if source else (),
+        )
         c1, c2 = st.columns(2)
         total_expense = c1.text_input("Total Expense", value=str(defaults.get("total_expense", "0.00") or "0.00"), key=f"mixed_total_{scope}", help="Enter a positive currency amount.")
         business_use_percentage = c2.text_input("Business Use %", value=str(defaults.get("business_use_percentage", "0") or "0"), key=f"mixed_percentage_{scope}", help="Greater than 0 and no more than 100; up to five decimal places.")
@@ -203,7 +224,6 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             accept_multiple_files=True,
             key=f"mixed_receipts_{scope}",
         )
-        _render_preview(mixed_use_preview(txn_date=txn_date, account=account_paths.get(account_id, account_id), payee=payee_by_id.get(payee_id, new_payee), category=category_paths.get(category_id, category_id), description=description, total_expense=total_expense, business_use_percentage=business_use_percentage, allocation_rationale=rationale))
         save_error = st.empty()
         if st.button("Save changes" if source else "Save mixed-use expense", type="primary", key=f"mixed_save_{scope}"):
             tag_error = inline_tag_name_error(new_tag_name)
@@ -266,47 +286,43 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
 
                 context.confirmed_write(action, payload, operation, success, on_success=lambda: context.schedule_widget_reset(_key(profile, "form_reset")), on_confirmed=process_mixed_receipts, report_error=save_error.error)
     with right:
-        st.markdown("#### Mixed-use Expense Log")
-        if not sources:
-            st.info("No mixed-use expenses exist for this business profile.")
-        else:
-            rows = [{"Date": item["txn_date"], "Payee / description": item.get("payee") or item.get("description", ""), "Account": account_paths.get(item.get("account_id", ""), "Unknown"), "Category": category_paths.get(item.get("category_id", ""), "Unknown"), "Total": f"{'$'}{item['total_expense']}", "Business %": item["business_use_percentage"], "Allocated": f"{'$'}{item['allocated_amount']}", "Rationale": item["allocation_rationale"], "Status": item.get("ledger_status", "linked")} for item in sources]
-            st.dataframe(rows, hide_index=True, width="stretch")
-        if source:
-            linked_transactions = context.storage.list_transactions(
-                _force_refresh=True
-            )
-            linked = next(
-                (
-                    item
-                    for item in linked_transactions
-                    if item.get("id") == source.get("linked_transaction_id")
-                ),
-                None,
-            )
-            if linked is not None:
-                st.divider()
-                st.markdown("#### Receipts")
-                st.caption(
-                    "Manage receipts here; the linked ledger projection is read-only."
-                )
-                render_receipts(
-                    replace(
-                        context,
-                        storage=_MixedUseReceiptStorage(
-                            context.storage, source["id"], source
-                        ),
-                    ),
-                    selected=linked,
-                    all_transactions=linked_transactions,
-                    edit_id=str(linked["id"]),
-                )
+        _render_preview(mixed_use_preview(txn_date=txn_date, account=account_paths.get(account_id, account_id), payee=payee_by_id.get(payee_id, new_payee), category=category_paths.get(category_id, category_id), description=description, total_expense=total_expense, business_use_percentage=business_use_percentage, allocation_rationale=rationale))
+    st.markdown("#### Mixed-use Expense Log")
+    if not sources:
+        st.info("No mixed-use expenses exist for this business profile.")
+    else:
+        rows = [{"Date": item["txn_date"], "Payee / description": item.get("payee") or item.get("description", ""), "Account": account_paths.get(item.get("account_id", ""), "Unknown"), "Category": category_paths.get(item.get("category_id", ""), "Unknown"), "Total": f"{'$'}{item['total_expense']}", "Business %": item["business_use_percentage"], "Allocated": f"{'$'}{item['allocated_amount']}", "Rationale": item["allocation_rationale"], "Status": item.get("ledger_status", "linked")} for item in sources]
+        st.dataframe(rows, hide_index=True, width="stretch")
+    if source:
+        linked_transactions = context.storage.list_transactions(_force_refresh=True)
+        linked = next(
+            (
+                item for item in linked_transactions
+                if item.get("id") == source.get("linked_transaction_id")
+            ),
+            None,
+        )
+        if linked is not None:
             st.divider()
-            st.warning("Deleting this source permanently removes its linked ledger projection. Receipt files remain in Drive as unreferenced files.")
-            confirmed = st.checkbox("I understand this deletion is permanent", key=f"mixed_confirm_delete_{scope}")
-            delete_error = st.empty()
-            if st.button("Permanently delete", type="primary", key=f"mixed_delete_{scope}"):
-                if not confirmed:
-                    delete_error.error("Confirm the permanent deletion before continuing.")
-                else:
-                    context.confirmed_write("delete_mixed_use_expense", {"id": source["id"], "expected_source": source}, lambda: context.storage.delete_mixed_use_expense(source["id"], expected_source=source), "Mixed-use expense deleted.", on_success=lambda: st.session_state.pop(selected_key, None), report_error=delete_error.error)
+            st.markdown("#### Receipts")
+            st.caption("Manage receipts here; the linked ledger projection is read-only.")
+            render_receipts(
+                replace(
+                    context,
+                    storage=_MixedUseReceiptStorage(
+                        context.storage, source["id"], source
+                    ),
+                ),
+                selected=linked,
+                all_transactions=linked_transactions,
+                edit_id=str(linked["id"]),
+            )
+        st.divider()
+        st.warning("Deleting this source permanently removes its linked ledger projection. Receipt files remain in Drive as unreferenced files.")
+        confirmed = st.checkbox("I understand this deletion is permanent", key=f"mixed_confirm_delete_{scope}")
+        delete_error = st.empty()
+        if st.button("Permanently delete", type="primary", key=f"mixed_delete_{scope}"):
+            if not confirmed:
+                delete_error.error("Confirm the permanent deletion before continuing.")
+            else:
+                context.confirmed_write("delete_mixed_use_expense", {"id": source["id"], "expected_source": source}, lambda: context.storage.delete_mixed_use_expense(source["id"], expected_source=source), "Mixed-use expense deleted.", on_success=lambda: st.session_state.pop(selected_key, None), report_error=delete_error.error)

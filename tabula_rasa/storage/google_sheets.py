@@ -3998,7 +3998,10 @@ class GoogleSheetsStorage:
     ) -> dict[str, str]:
         """Link one receipt while authorizing the mixed-use source pair."""
         with _MIXED_USE_CREATE_LOCK:
-            normalized = validate_receipt_reference(reference)
+            try:
+                normalized = validate_receipt_reference(reference)
+            except ReceiptManifestError as exc:
+                raise StorageValidationError(str(exc)) from exc
             _source, transaction = self._mixed_use_receipt_pair(
                 source_id, expected_source=expected_source
             )
@@ -4096,7 +4099,12 @@ class GoogleSheetsStorage:
     ) -> dict[str, str]:
         """Replace a recovered receipt through the source-aware path."""
         with _MIXED_USE_CREATE_LOCK:
-            normalized = validate_receipt_reference(reference, allow_legacy=False)
+            try:
+                normalized = validate_receipt_reference(
+                    reference, allow_legacy=False
+                )
+            except ReceiptManifestError as exc:
+                raise StorageValidationError(str(exc)) from exc
             _source, transaction = self._mixed_use_receipt_pair(
                 source_id, expected_source=expected_source
             )
