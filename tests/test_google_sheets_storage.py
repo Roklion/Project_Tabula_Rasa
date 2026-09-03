@@ -1934,6 +1934,27 @@ class TestGoogleSheetsStorage:
         assert len(imported) == 1
         assert len(self.storage.list_transactions()) == 1
 
+    def test_csv_batch_import_reuses_tag_snapshot(self) -> None:
+        self.storage.create_account("Checking", "Bank")
+        self.storage.create_category("Sales", "Income")
+        tags_sheet = self.workbook.sheets["Tags"]
+        tags_sheet.get_all_values = Mock(wraps=tags_sheet.get_all_values)
+        rows = [
+            {
+                "Date": f"2026-07-{index:02d}",
+                "Type": "Income",
+                "Amount": "10",
+                "Account": "Checking",
+                "Category": "Sales",
+            }
+            for index in range(1, 11)
+        ]
+
+        imported = self.storage.import_csv_transactions(rows)
+
+        assert len(imported) == 10
+        assert tags_sheet.get_all_values.call_count == 1
+
     def test_quickbooks_preview_maps_income_expense_transfer_and_duplicates(
         self,
     ) -> None:
@@ -2223,8 +2244,10 @@ class TestGoogleSheetsStorage:
         self.storage.create_category("Sales", "Income")
         account_sheet = self.workbook.sheets["Accounts"]
         category_sheet = self.workbook.sheets["Categories"]
+        tags_sheet = self.workbook.sheets["Tags"]
         account_sheet.get_all_values = Mock(wraps=account_sheet.get_all_values)
         category_sheet.get_all_values = Mock(wraps=category_sheet.get_all_values)
+        tags_sheet.get_all_values = Mock(wraps=tags_sheet.get_all_values)
         rows = [
             {
                 "Date": "07/01/2026",
@@ -2244,6 +2267,30 @@ class TestGoogleSheetsStorage:
         assert len(imported) == 35
         assert account_sheet.get_all_values.call_count == 1
         assert category_sheet.get_all_values.call_count == 1
+        assert tags_sheet.get_all_values.call_count == 1
+
+    def test_quickbooks_mileage_batch_import_reuses_tag_snapshot(self) -> None:
+        tags_sheet = self.workbook.sheets["Tags"]
+        tags_sheet.get_all_values = Mock(wraps=tags_sheet.get_all_values)
+        rows = [
+            {
+                "Date": f"07/{index:02d}/2026",
+                "Type": "Business",
+                "Trip Purpose": "Client meeting",
+                "Vehicle": "Blue car",
+                "Start Address": "Office",
+                "End Address": "Client site",
+                "Distance": "12.4",
+                "Deduction": "8.68",
+                "Logging Method": "Auto-tracked",
+            }
+            for index in range(1, 11)
+        ]
+
+        imported = self.storage.import_quickbooks_mileage(rows)
+
+        assert len(imported) == 10
+        assert tags_sheet.get_all_values.call_count == 1
 
     def test_general_ledger_export_collapses_double_entries(self) -> None:
         matrix = [

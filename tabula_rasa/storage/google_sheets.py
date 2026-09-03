@@ -2677,6 +2677,7 @@ class GoogleSheetsStorage:
         trip_id: str | None = None,
         created_at: str | None = None,
         original_tag_ids: Any = "",
+        tags: Mapping[str, Mapping[str, str]] | None = None,
     ) -> dict[str, str]:
         trip_date = _iso_date(data.get("trip_date"))
         miles = _positive_miles(data.get("miles"))
@@ -2691,7 +2692,7 @@ class GoogleSheetsStorage:
             data.get("business_purpose"), "Business purpose", required=True
         )
         notes = _clean_text(data.get("notes"), "Notes")
-        tags = self._tag_lookup(force_refresh=True)
+        tags = dict(tags) if tags is not None else self._tag_lookup(force_refresh=True)
         tag_ids = _normalize_tag_ids(data.get("tag_ids", ""))
         original_tag_ids = _normalize_tag_ids(original_tag_ids)
         for tag_id in tag_ids:
@@ -2913,8 +2914,9 @@ class GoogleSheetsStorage:
         )
         if preview["errors"]:
             raise StorageValidationError("\n".join(preview["errors"]))
+        tags = self._tag_lookup()
         prepared = [
-            self._prepare_mileage_trip(item) for item in preview["rows"]
+            self._prepare_mileage_trip(item, tags=tags) for item in preview["rows"]
         ]
         self._append_many("Mileage", prepared)
         return prepared
@@ -2934,6 +2936,7 @@ class GoogleSheetsStorage:
             for category in categories.values()
         }
         payees = self._payee_lookup(force_refresh=True)
+        tags = self._tag_lookup(force_refresh=True)
         prepared: list[dict[str, str]] = []
         payee_names: list[str] = []
         for index, row in enumerate(rows, start=2):
@@ -2966,6 +2969,7 @@ class GoogleSheetsStorage:
                     accounts=accounts,
                     categories=categories,
                     payees=payees,
+                    tags=tags,
                 )
             )
             payee_names.append(_clean_text(row.get("Payee", ""), "New payee"))
@@ -3119,6 +3123,7 @@ class GoogleSheetsStorage:
             normalize_payee_name(item["name"]): item["id"]
             for item in payees.values()
         }
+        tags = self._tag_lookup()
         prepared = [
             self._prepare_transaction(
                 {
@@ -3132,6 +3137,7 @@ class GoogleSheetsStorage:
                 accounts=accounts,
                 categories=categories,
                 payees=payees,
+                tags=tags,
             )
             for item in preview["rows"]
         ]
