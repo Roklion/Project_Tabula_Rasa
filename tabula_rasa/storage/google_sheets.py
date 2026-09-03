@@ -2716,6 +2716,30 @@ class GoogleSheetsStorage:
         decode_receipt_references(source.get("receipt_references", ""))
         _iso_date(source.get("txn_date"))
 
+    def _reject_receipt_ownership_conflict(
+        self,
+        references: Any,
+        *,
+        transaction_id: str | None = None,
+    ) -> None:
+        receipt_ids = {
+            item["id"] for item in decode_receipt_references(references)
+        }
+        if not receipt_ids:
+            return
+        for transaction in self.list_transactions(_force_refresh=True):
+            if transaction["id"] == transaction_id:
+                continue
+            if receipt_ids.intersection(
+                item["id"]
+                for item in decode_receipt_references(
+                    transaction.get("receipt_references", "")
+                )
+            ):
+                raise StorageConflictError(
+                    "That receipt is already linked to another transaction"
+                )
+
     @staticmethod
     def _mixed_use_record_matches(
         title: str,
@@ -2976,6 +3000,7 @@ class GoogleSheetsStorage:
             raise StorageConflictError(
                 "The mixed-use source or linked transaction ID is already in use"
             )
+        self._reject_receipt_ownership_conflict(data.get("receipt_references", ""))
         source, projection = self._prepare_mixed_use_expense(
             data,
             source_id=requested_source_id or None,
@@ -3139,6 +3164,10 @@ class GoogleSheetsStorage:
         if "id" in changes or "source_id" in changes or "linked_transaction_id" in changes:
             raise StorageValidationError("Mixed-use source IDs cannot be edited")
         merged = {**current_source, **changes}
+        if "receipt_references" in changes:
+            self._reject_receipt_ownership_conflict(
+                merged.get("receipt_references", ""), transaction_id=transaction_id
+            )
         updated_source, updated_transaction = self._prepare_mixed_use_expense(
             merged,
             source_id=source_id,

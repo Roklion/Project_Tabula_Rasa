@@ -717,6 +717,37 @@ def test_mixed_use_create_rejects_transaction_collision_before_creating_payee(
     assert default_storage.list_payees(active_only=False) == payees_before
 
 
+def test_mixed_use_writes_reject_receipts_owned_by_another_transaction(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    owner = default_storage.create_transaction(
+        **_expense_inputs(default_storage), kind="Expense", amount="10"
+    )
+    reference = {"id": "ownedreceipt01", "name": "Receipt.pdf"}
+    default_storage.set_transaction_receipt_references(owner["id"], [reference])
+    mixed_inputs = _expense_inputs(default_storage)
+    mixed_inputs["receipt_references"] = [reference]
+
+    with pytest.raises(StorageConflictError, match="already linked"):
+        default_storage.create_mixed_use_expense(
+            **mixed_inputs,
+            total_expense="100",
+            business_use_percentage="50",
+            allocation_rationale="Measured use",
+        )
+
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    with pytest.raises(StorageConflictError, match="already linked"):
+        default_storage.edit_mixed_use_expense(
+            source["id"], receipt_references=[reference]
+        )
+
+
 def test_mixed_use_projection_rejects_destination_account(
     default_storage: GoogleSheetsStorage,
 ) -> None:
