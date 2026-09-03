@@ -2879,6 +2879,11 @@ class GoogleSheetsStorage:
         )
 
     def create_transaction(self, **data: Any) -> dict[str, str]:
+        # Generic transaction creation cannot manufacture a derived
+        # projection.  Mixed-use projections are created only as the paired
+        # result of create_mixed_use_expense.
+        if data.get("source_type") or data.get("source_id"):
+            self._reject_mixed_use_projection(data)
         record = self._prepare_transaction(data)
         self._append("Transactions", record)
         return record
@@ -3159,6 +3164,15 @@ class GoogleSheetsStorage:
             )
             item = dict(source)
             item["payee"] = payees.get(item["payee_id"], {}).get("name", "")
+            # Tags are transaction metadata in the current worksheet schema.
+            # Expose the linked projection's IDs on the source view so the
+            # mixed-use editor can preserve the same normal Expense surface.
+            linked_transaction = transactions.get(
+                str(item.get("linked_transaction_id") or "")
+            )
+            item["tag_ids"] = _normalize_tag_ids(
+                linked_transaction.get("tag_ids", "") if linked_transaction else ""
+            )
             item["ledger_status"] = "linked"
             result.append(item)
         return sorted(

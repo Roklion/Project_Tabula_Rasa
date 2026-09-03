@@ -8,6 +8,7 @@ from tabula_rasa.hierarchy import hierarchy_paths, ordered_hierarchy
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
 from tabula_rasa.page_renderers.transactions.creation import render_add_transaction
 from tabula_rasa.page_renderers.transactions.ledger import render_ledger
+from tabula_rasa.page_renderers.transactions.mixed_use import render_mixed_use_expenses
 from tabula_rasa.presentation import render_global_footer, render_page_header
 from tabula_rasa.storage import StorageError
 
@@ -25,7 +26,9 @@ def render_transactions(context: TransactionsContext) -> None:
         "Transactions",
         "Record activity, manage the ledger, and keep receipt links with each row.",
     )
-    tab_add, tab_ledger = st.tabs(["Add transaction", "View & edit ledger"])
+    tab_add, tab_ledger, tab_mixed = st.tabs(
+        ["Add transaction", "View & edit ledger", "Mixed-use expenses"]
+    )
     page_footer = st.empty()
 
     def render_error_footer() -> None:
@@ -39,6 +42,7 @@ def render_transactions(context: TransactionsContext) -> None:
             "Payees",
             "Transactions",
             "Tags",
+            "MixedUseExpenses",
         )
         accounts = context.storage.list_accounts(active_only=False)
         active_accounts = _ordered_active_accounts(accounts)
@@ -79,4 +83,15 @@ def render_transactions(context: TransactionsContext) -> None:
                 payees=payees,
                 tags=tags,
                 render_error_footer=render_error_footer,
+            )
+    with tab_mixed:
+        with st.container(key="transactions_mixed_use_surface"):
+            render_mixed_use_expenses(
+                context,
+                accounts=accounts,
+                categories=categories,
+                account_paths=account_paths,
+                category_paths=category_paths,
+                payees=payees,
+                tags=tags,
             )
