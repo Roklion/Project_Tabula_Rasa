@@ -100,9 +100,18 @@ def render_tag_selector(
         placeholder="No Tag",
         disabled=disabled,
         help="Tags are optional and independent of Category.",
+        accept_new_options=True,
     )
-    chosen_ids = [value for value in chosen if value != ADD_NEW_TAG]
-    new_name: str | None = None
+    chosen_ids = [value for value in chosen if value in by_id]
+    typed_names = [
+        value.strip()
+        for value in chosen
+        if isinstance(value, str)
+        and value != ADD_NEW_TAG
+        and value not in by_id
+        and value.strip()
+    ]
+    new_name: str | None = typed_names[0] if typed_names else None
     if ADD_NEW_TAG in chosen:
         new_name = st.text_input(
             "New tag",
