@@ -118,6 +118,20 @@ def test_non_applied_management_batch_is_classified(default_storage, monkeypatch
     assert raised.value.retryable is True
 
 
+def test_non_applied_tag_merge_is_retryable(default_storage, monkeypatch) -> None:
+    target = default_storage.create_tag("Target")
+    source = default_storage.create_tag("Source")
+
+    def fail(_requests):
+        raise StorageUnavailableError("temporary", retryable=True)
+
+    monkeypatch.setattr(default_storage, "_batch_update_spreadsheet", fail)
+    with pytest.raises(StorageBulkMutationUncertainError) as raised:
+        default_storage.merge_tags(target["id"], [source["id"]])
+    assert raised.value.outcome == "not_applied"
+    assert raised.value.retryable is True
+
+
 def test_partial_source_delete_is_ambiguous_not_retryable(default_storage, monkeypatch) -> None:
     first = default_storage.create_tag("First")
     second = default_storage.create_tag("Second")

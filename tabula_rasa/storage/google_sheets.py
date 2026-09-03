@@ -3130,7 +3130,7 @@ class GoogleSheetsStorage:
                 current_tags, current_transactions, current_mileage = state
                 if any(
                     record_id not in current_tags
-                    or current_tags[record_id] != row.values
+                    or current_tags[record_id].values != row.values
                     for record_id, row in tag_rows.items()
                 ):
                     return False
