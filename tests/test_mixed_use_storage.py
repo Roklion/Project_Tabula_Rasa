@@ -216,6 +216,26 @@ def test_mixed_use_edit_updates_same_projection_and_detects_stale_source(
         )
 
 
+def test_mixed_use_edit_preserves_projection_tags_when_omitted(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    tag = default_storage.create_tag("Project")
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured business use",
+        tag_ids=[tag["id"]],
+    )
+
+    default_storage.edit_mixed_use_expense(
+        source["id"], allocation_rationale="Updated measurement"
+    )
+
+    projection = default_storage.list_transactions()[0]
+    assert projection["tag_ids"] == [tag["id"]]
+
+
 def test_category_kind_change_rejects_mixed_use_references(
     default_storage: GoogleSheetsStorage,
 ) -> None:

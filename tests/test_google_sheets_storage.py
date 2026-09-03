@@ -14,6 +14,8 @@ from google.oauth2.service_account import Credentials
 
 from tabula_rasa.storage.google_sheets import (
     BACKUP_FORMAT_VERSION,
+    TAGS_BACKUP_FORMAT_VERSION,
+    TAGS_WORKSHEET_HEADERS,
     decode_receipt_references,
     GoogleSheetsStorage,
     SHEETS_SCOPE,
@@ -120,6 +122,7 @@ HISTORICAL_BACKUP_HEADERS = {
         ),
         "Mileage": HISTORICAL_MILEAGE_HEADERS,
     },
+    TAGS_BACKUP_FORMAT_VERSION: TAGS_WORKSHEET_HEADERS,
 }
 
 
@@ -2877,6 +2880,36 @@ class TestGoogleSheetsStorage:
             restored_categories[category_child["id"]]["parent_id"]
             == category_parent["id"]
         )
+
+    def test_format_8_backup_remains_readable_after_mixed_use_schema_bump(
+        self,
+    ) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Office", "Expense")
+        tag = self.storage.create_tag("Project")
+        transaction = self.storage.create_transaction(
+            txn_date="2026-09-01",
+            kind="Expense",
+            amount=10,
+            account_id=account["id"],
+            category_id=category["id"],
+            tag_ids=[tag["id"]],
+        )
+        current_backup = self.storage.export_backup_zip(
+            backup_receipt_manifest(self.storage)
+        )
+        version_8_backup = downgrade_backup(
+            current_backup, TAGS_BACKUP_FORMAT_VERSION
+        )
+        target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+
+        validated = target.validate_backup_zip(version_8_backup)
+        target.restore_backup_zip(version_8_backup)
+
+        assert validated["format_version"] == TAGS_BACKUP_FORMAT_VERSION
+        restored = target.list_transactions()[0]
+        assert restored["id"] == transaction["id"]
+        assert restored["tag_ids"] == [tag["id"]]
 
     def test_backup_uses_one_multi_range_values_request(self) -> None:
         class BatchWorkbook(FakeWorkbook):
