@@ -9,6 +9,10 @@ from tabula_rasa.page_renderers.transactions.context import TransactionsContext
 from tabula_rasa.page_renderers.transactions.creation import render_add_transaction
 from tabula_rasa.page_renderers.transactions.ledger import render_ledger
 from tabula_rasa.page_renderers.transactions.mixed_use import render_mixed_use_expenses
+from tabula_rasa.page_renderers.transactions.payees_tags import (
+    PayeesTagsContext,
+    render_payees_tags,
+)
 from tabula_rasa.presentation import render_global_footer, render_page_header
 from tabula_rasa.storage import StorageError
 
@@ -26,8 +30,13 @@ def render_transactions(context: TransactionsContext) -> None:
         "Transactions",
         "Record activity, manage the ledger, and keep receipt links with each row.",
     )
-    tab_add, tab_ledger, tab_mixed = st.tabs(
-        ["Add transaction", "View & edit ledger", "Mixed-use expenses"]
+    tab_add, tab_ledger, tab_mixed, tab_payees_tags = st.tabs(
+        [
+            "Add transaction",
+            "View & edit ledger",
+            "Mixed-use expenses",
+            "Payees & Tags",
+        ]
     )
     page_footer = st.empty()
 
@@ -43,6 +52,7 @@ def render_transactions(context: TransactionsContext) -> None:
             "Transactions",
             "Tags",
             "MixedUseExpenses",
+            "Mileage",
         )
         accounts = context.storage.list_accounts(active_only=False)
         active_accounts = _ordered_active_accounts(accounts)
@@ -94,4 +104,15 @@ def render_transactions(context: TransactionsContext) -> None:
                 category_paths=category_paths,
                 payees=payees,
                 tags=tags,
+            )
+
+    with tab_payees_tags:
+        with st.container(key="transactions_payees_tags_surface"):
+            render_payees_tags(
+                PayeesTagsContext(
+                    profile_key=context.profile_key,
+                    storage=context.storage,
+                    confirmed_write=context.confirmed_write,
+                    report_storage_error=context.report_storage_error,
+                )
             )

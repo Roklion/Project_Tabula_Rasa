@@ -73,10 +73,31 @@ routes_api_key = "RESTRICTED_SERVER_KEY"
 routes_timeout_seconds = 15
 # Optional two-letter region restriction, for example "us".
 autocomplete_region_code = "us"
+
+[google_maps.quota_monitoring]
+project_number = "123456789"
+timeout_seconds = 15
+
+[google_maps.quota_monitoring.service_account]
+type = "service_account"
+project_id = "maps-project-id"
+private_key_id = "..."
+private_key = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+client_email = "maps-quota-reader@maps-project-id.iam.gserviceaccount.com"
+client_id = "..."
+auth_uri = "https://accounts.google.com/o/oauth2/auth"
+token_uri = "https://oauth2.googleapis.com/token"
+auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
+client_x509_cert_url = "..."
 ```
 
+`project_number` is the numeric Google Cloud project number (not the project
+ID). Service Usage's consumer-quota endpoint requires the number; keep the
+service-account JSON's own `project_id` field unchanged.
+
 Omit `autocomplete_region_code` when the deployment has no clear country rule.
-Do not copy Maps keys into a `business_profiles` entry. The local hosted-Secrets
+Do not copy Maps keys or the quota-monitoring credential into a
+`business_profiles` entry. The local hosted-Secrets
 export preserves the app-wide `google_maps` table; regenerate the complete
 export with:
 
@@ -87,6 +108,26 @@ python scripts\export_streamlit_secrets.py
 Paste the generated document into Streamlit App settings > Secrets, save it,
 delete the generated file, and validate the deployed app. Local Secrets do not
 automatically update the hosted store.
+
+The quota reader is a separate service account from every profile's Sheets
+service account and from the human Drive OAuth account. Grant it only the
+read-only **Service Usage Viewer** role
+(`roles/serviceusage.serviceUsageViewer`) and **Monitoring Viewer** role
+(`roles/monitoring.viewer`) in the Maps project. These grant the documented
+consumer-quota and time-series read permissions needed for this view; do not
+grant editor/admin roles. If the organization's IAM catalog has renamed or
+split these permissions, use the current read-only equivalents. Enable Service
+Usage API and Cloud Monitoring API in that project. The application requests only the
+`cloud-platform.read-only` OAuth scope. It reads the `routes.googleapis.com`
+and `places.googleapis.com` consumer quota metrics and recent
+`serviceruntime.googleapis.com/quota/rate/net_usage` data; it does not mutate
+quotas or use this account for Routes/Places requests.
+
+Cloud Monitoring is sampled data, not a live counter. Reporting can lag several
+minutes, including up to about 240 seconds after sampling. The authenticated
+sidebar expander reports the Google timestamp and data age. It does not claim
+to show remaining requests or billing/spend in real time. Missing or incompatible
+usage is shown as unavailable rather than as zero.
 
 ## Controlled validation
 

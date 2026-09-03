@@ -176,7 +176,7 @@ def test_source_aware_receipt_api_normalizes_invalid_metadata(
         )
 
 
-def test_mixed_use_app_test_create_edit_delete_and_three_tabs(default_storage) -> None:
+def test_mixed_use_app_test_create_edit_delete_and_transactions_tabs(default_storage) -> None:
     account = default_storage.create_account("App Mixed Checking", "Bank")
     category = default_storage.create_category("App Mixed Office", "Expense")
     payee = default_storage.create_payee("App Mixed Vendor")
@@ -188,6 +188,9 @@ def test_mixed_use_app_test_create_edit_delete_and_three_tabs(default_storage) -
             "Add transaction",
             "View & edit ledger",
             "Mixed-use expenses",
+            "Payees & Tags",
+            "Payees",
+            "Tags",
         ]
         tab = _mixed_tab(app)
         tab.selectbox[0].set_value(account["id"]).run()

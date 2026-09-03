@@ -452,6 +452,8 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
 
     .st-key-destructive_category_delete [data-testid="stButton"] button,
     .st-key-destructive_mileage_delete [data-testid="stButton"] button,
+    .st-key-destructive_managed_payee_remove [data-testid="stButton"] button,
+    .st-key-destructive_managed_tag_remove [data-testid="stButton"] button,
     .st-key-destructive_transaction_bulk_delete [data-testid="stFormSubmitButton"] button,
     .st-key-destructive_transaction_edit_delete [data-testid="stFormSubmitButton"] button {{
         background: var(--tr-negative-text) !important;
@@ -461,6 +463,8 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
 
     .st-key-destructive_category_delete [data-testid="stButton"] button:hover,
     .st-key-destructive_mileage_delete [data-testid="stButton"] button:hover,
+    .st-key-destructive_managed_payee_remove [data-testid="stButton"] button:hover,
+    .st-key-destructive_managed_tag_remove [data-testid="stButton"] button:hover,
     .st-key-destructive_transaction_bulk_delete [data-testid="stFormSubmitButton"] button:hover,
     .st-key-destructive_transaction_edit_delete [data-testid="stFormSubmitButton"] button:hover {{
         background: var(--tr-negative-hover) !important;

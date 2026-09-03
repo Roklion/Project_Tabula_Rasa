@@ -25,6 +25,18 @@ The current application password grants access to every configured profile. It
 does not provide per-profile user permissions. Select **Log out** to clear the
 authenticated session.
 
+## Google Maps API usage
+
+The bottom of the authenticated sidebar contains a compact **Google Maps API
+usage** expander. Routes API and Places API (New) are shown separately with
+effective quota, recent Google-reported usage, compatible utilization, and the
+Google point timestamp/data age. If monitoring is not configured, the expander
+shows setup guidance; missing Google data is shown as unavailable rather than
+zero. Cloud Monitoring sampling/reporting can lag several minutes, including up
+to about 240 seconds after sampling, so this is not a real-time remaining-
+request or billing/spend meter. The refresh action clears only this view's
+120-second cache.
+
 ## Dashboard
 
 The Dashboard shows:
@@ -218,6 +230,27 @@ than blindly repeating an ambiguous write.
 No bulk changes are available for dates, amounts, payees, Tags, descriptions,
 references, accounts, transfer fields, or receipts. Reconciliation,
 receipt-content search, and cash-flow reporting are not part of this workflow.
+
+### Payees & Tags
+
+The third Transactions tab, **Payees & Tags**, manages the stored values for
+the selected business profile. Its separate **Payees** and **Tags** subtabs
+show active and inactive records and provide **Add**, **Rename**, **Merge**, and
+**Remove** workflows. Names are normalized case-insensitively, while renaming
+preserves the stable ID and all references.
+
+Merging requires an explicit target, one or more source values, and an
+acknowledgement. Payee merges update transaction references and both sides of
+each MixedUseExpenses source/projection pair. Tag merges update Transactions
+and Mileage and remove duplicate associations when a row already has both the
+source and target tag. Other fields and associations are preserved.
+
+Removal is permanent and allowed only for an unreferenced value. If a Payee or
+Tag is still used, the page shows the fresh reference count and blocks removal;
+unassign it in the relevant transaction or mileage editor or merge it instead.
+Every operation is scoped to the selected profile, confirms the Sheets write
+before reporting success, and reports an uncertain write for review rather
+than silently retrying an ambiguous mutation.
 
 ### Edit and delete
 
