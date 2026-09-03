@@ -2989,6 +2989,13 @@ class GoogleSheetsStorage:
                 "Linked transaction ID",
                 required=True,
             )
+            if (
+                requested_transaction_id
+                and requested_transaction_id != persisted_transaction_id
+            ):
+                raise StorageConflictError(
+                    "The mixed-use source is already linked to another transaction ID"
+                )
             if not requested_transaction_id:
                 requested_transaction_id = persisted_transaction_id
                 existing_transaction = transactions.get(requested_transaction_id)

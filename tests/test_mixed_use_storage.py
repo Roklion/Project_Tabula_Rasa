@@ -748,6 +748,35 @@ def test_mixed_use_writes_reject_receipts_owned_by_another_transaction(
         )
 
 
+def test_mixed_use_create_rejects_source_link_mismatch_before_payee_creation(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    inputs = _expense_inputs(default_storage)
+    inputs.update(
+        payee_id="",
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+        source_id="source-link-mismatch",
+        linked_transaction_id="transaction-link-mismatch",
+    )
+    source = default_storage.create_mixed_use_expense(**inputs)
+    payees_before = default_storage.list_payees(active_only=False)
+    retry_inputs = {
+        **inputs,
+        "linked_transaction_id": "different-linked-transaction",
+        "new_payee_name": "Should not be created",
+    }
+
+    with pytest.raises(StorageConflictError, match="another transaction ID"):
+        default_storage.create_mixed_use_expense(**retry_inputs)
+
+    assert default_storage.list_payees(active_only=False) == payees_before
+    assert default_storage.get_mixed_use_expense(source["id"])[
+        "linked_transaction_id"
+    ] == "transaction-link-mismatch"
+
+
 def test_mixed_use_projection_rejects_destination_account(
     default_storage: GoogleSheetsStorage,
 ) -> None:
