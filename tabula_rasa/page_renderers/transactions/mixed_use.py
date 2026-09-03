@@ -74,6 +74,18 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
     source = source_by_id.get(selected_id)
     defaults = source or {}
     scope = f"{profile}_{selected_id or 'new'}"
+    context.reset_widget_state_if_requested(
+        _key(profile, "form_reset"),
+        keys=[
+            f"mixed_date_{scope}", f"mixed_account_{scope}",
+            f"mixed_category_{scope}", f"mixed_payee_{scope}",
+            f"mixed_new_payee_{scope}", f"mixed_reference_{scope}",
+            f"mixed_description_{scope}", f"mixed_tags_{scope}",
+            f"mixed_tags_{scope}__new_name", f"mixed_total_{scope}",
+            f"mixed_percentage_{scope}", f"mixed_rationale_{scope}",
+            f"mixed_receipts_{scope}",
+        ],
+    )
     account_ids = _active_ids(accounts)
     category_ids = [str(item["id"]) for item in categories if item.get("kind") == "Expense"]
     if not account_ids or not category_ids:
@@ -97,8 +109,8 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         description = c2.text_input("Description / memo", value=str(defaults.get("description", "")), key=f"mixed_description_{scope}")
         tag_ids, new_tag_name = render_tag_selector(tags, label="Tags", key=f"mixed_tags_{scope}", selected_ids=defaults.get("tag_ids", ()))
         c1, c2 = st.columns(2)
-        total_expense = c1.number_input("Total Expense", min_value=0.0, value=float(defaults.get("total_expense", 0) or 0), step=0.01, format="%.2f", key=f"mixed_total_{scope}")
-        business_use_percentage = c2.number_input("Business Use %", min_value=0.0, max_value=100.0, value=float(defaults.get("business_use_percentage", 0) or 0), step=0.00001, format="%.5f", key=f"mixed_percentage_{scope}")
+        total_expense = c1.text_input("Total Expense", value=str(defaults.get("total_expense", "0.00") or "0.00"), key=f"mixed_total_{scope}", help="Enter a positive currency amount.")
+        business_use_percentage = c2.text_input("Business Use %", value=str(defaults.get("business_use_percentage", "0") or "0"), key=f"mixed_percentage_{scope}", help="Greater than 0 and no more than 100; up to five decimal places.")
         rationale = st.text_area("Allocation Rationale (required)", value=str(defaults.get("allocation_rationale", "")), key=f"mixed_rationale_{scope}")
         receipt_uploads = st.file_uploader(
             "Receipt (optional)",

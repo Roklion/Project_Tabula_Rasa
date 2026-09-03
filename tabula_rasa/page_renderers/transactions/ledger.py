@@ -38,6 +38,7 @@ from tabula_rasa.page_renderers.tag_selector import (
     tag_selector_error,
 )
 from tabula_rasa.storage import StorageError, decode_receipt_references
+from tabula_rasa.storage import MIXED_USE_SOURCE_TYPE
 
 
 def transaction_has_receipts(transaction: Mapping[str, object]) -> bool:
@@ -55,7 +56,7 @@ def transaction_has_receipts(transaction: Mapping[str, object]) -> bool:
 def transaction_is_mixed_use(transaction: Mapping[str, object]) -> bool:
     """Return whether durable provenance makes this projection read-only."""
     return bool(
-        str(transaction.get("source_type") or "").strip()
+        str(transaction.get("source_type") or "").strip() == MIXED_USE_SOURCE_TYPE
         and str(transaction.get("source_id") or "").strip()
     )
 
@@ -572,11 +573,20 @@ def render_ledger(
         ) + 1
         st.session_state["edit_transaction_id"] = source_id
         st.rerun()
-    filtered_recovery_ids = set(editor_receipt_recovery_transaction_ids(context)) - set(
-        transaction_ids
+    derived_ids = {
+        str(transaction.get("id") or "")
+        for transaction in all_transactions
+        if transaction_is_mixed_use(transaction)
+    }
+    filtered_recovery_ids = (
+        set(editor_receipt_recovery_transaction_ids(context))
+        - set(transaction_ids)
+        - derived_ids
     )
-    filtered_notice_ids = set(editor_receipt_notice_transaction_ids(context)) - set(
-        transaction_ids
+    filtered_notice_ids = (
+        set(editor_receipt_notice_transaction_ids(context))
+        - set(transaction_ids)
+        - derived_ids
     )
     if filtered_recovery_ids or filtered_notice_ids:
         with st.expander(
