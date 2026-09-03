@@ -357,7 +357,10 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                         ),
                     )
                     handle_confirmed_transaction_receipts(
-                        receipt_context, receipt_result, prepared_receipts
+                        receipt_context,
+                        receipt_result,
+                        prepared_receipts,
+                        mixed_use_source_id=str(result["id"]),
                     )
 
                 if prepared_receipts is not None:

@@ -35,6 +35,13 @@ def render_add_transaction(
     tags: Sequence[Mapping[str, object]],
 ) -> None:
     """Render the existing profile-scoped transaction creation workflow."""
+    recovery = st.session_state.get(
+        receipt_creation_workflow_key(context.profile_key)
+    )
+    if isinstance(recovery, Mapping) and recovery.get("mixed_use_source_id"):
+        # Mixed-use recovery is rendered by its source-aware tab; rendering it
+        # here as well would register the same retry widget twice.
+        return
     if render_receipt_creation_recovery(context):
         return
     st.subheader("Add transaction")
