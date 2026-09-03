@@ -662,6 +662,7 @@ def test_mileage_tag_ux_is_profile_scoped_and_persisted_through_add_edit() -> No
     assert '"tag_ids": edited_tag_ids' in source
     assert '"new_tag_name": new_tag_name' in source
     assert '"new_tag_name": edited_new_tag_name' in source
+    assert 'if str(tag_id).strip() and str(item.get("name") or "").strip()' in source
 
 
 def test_blank_inline_tag_name_is_detected_before_a_mileage_write(monkeypatch) -> None:

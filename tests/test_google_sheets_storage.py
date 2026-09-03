@@ -792,6 +792,21 @@ class TestGoogleSheetsStorage:
 
         assert self.storage.list_tags() == []
 
+    def test_invalid_round_trip_return_does_not_create_inline_tag(self) -> None:
+        with pytest.raises(StorageValidationError, match="Miles must be greater"):
+            self.storage.create_mileage_round_trip(
+                trip_date="2026-09-01",
+                miles=1,
+                return_miles=0,
+                start_location="A",
+                destination="B",
+                business_purpose="C",
+                new_tag_name="Should not persist",
+            )
+
+        assert self.storage.list_tags() == []
+        assert self.storage.list_mileage_trips() == []
+
     def test_from_secrets_migrates_tag_schema_idempotently(self) -> None:
         headers = dict(VERSION_7_WORKSHEET_HEADERS)
         for title in ("Transactions", "Mileage"):

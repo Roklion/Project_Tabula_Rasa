@@ -2776,8 +2776,14 @@ class GoogleSheetsStorage:
         only for the reversed return entry.
         """
         created_at = _utc_now()
-        outbound = self._prepare_mileage_trip(data, created_at=created_at)
-        return_data = dict(data)
+        new_tag_name = _clean_text(data.get("new_tag_name"), "New tag")
+        prepared_data = dict(data)
+        prepared_data["new_tag_name"] = ""
+        outbound = self._prepare_mileage_trip(
+            prepared_data,
+            created_at=created_at,
+        )
+        return_data = dict(prepared_data)
         return_data.update(
             {
                 "start_location": data.get("destination"),
@@ -2790,6 +2796,13 @@ class GoogleSheetsStorage:
             return_data,
             created_at=created_at,
         )
+        if new_tag_name:
+            new_tag = self.create_tag(new_tag_name)
+            for trip in (outbound, return_trip):
+                tag_ids = _normalize_tag_ids(trip["tag_ids"])
+                if new_tag["id"] not in tag_ids:
+                    tag_ids.append(new_tag["id"])
+                trip["tag_ids"] = _encode_tag_ids(tag_ids)
         # Keep the public return value in semantic outbound/return order, but
         # write the rows in the order the log should display for a new pair.
         # Existing rows are not rewritten or migrated.

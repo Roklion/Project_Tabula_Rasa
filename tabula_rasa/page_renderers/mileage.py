@@ -987,7 +987,7 @@ def render_mileage(context: MileageContext) -> None:
             [
                 tag_id
                 for tag_id, item in tag_by_id.items()
-                if item.get("active") in (True, "TRUE", "true", 1, "1")
+                if str(tag_id).strip() and str(item.get("name") or "").strip()
             ],
             format_func=lambda value: _tag_name(value, tag_by_id),
             key=f"mileage_filter_tags_{context.profile_key}",
