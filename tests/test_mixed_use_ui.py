@@ -12,6 +12,15 @@ from tabula_rasa.storage import (
     StorageConflictError,
     StorageValidationError,
 )
+from tests.app_support import authenticated_app, by_label, navigate_to
+
+
+def _mixed_tab(app):
+    return next(tab for tab in app.tabs if tab.label == "Mixed-use expenses")
+
+
+def _tab_field(tab, collection: str, label: str):
+    return next(item for item in getattr(tab, collection) if item.label == label)
 
 
 def test_mixed_use_preview_uses_decimal_allocation_and_rationale() -> None:
@@ -145,3 +154,151 @@ def test_source_aware_receipt_api_normalizes_invalid_metadata(
         default_storage.link_mixed_use_receipt(
             source["id"], reference={"id": "", "name": ""}
         )
+
+
+def test_mixed_use_app_test_create_edit_delete_and_three_tabs(default_storage) -> None:
+    account = default_storage.create_account("App Mixed Checking", "Bank")
+    category = default_storage.create_category("App Mixed Office", "Expense")
+    payee = default_storage.create_payee("App Mixed Vendor")
+    tag = default_storage.create_tag("App Mixed Tag")
+
+    with authenticated_app(default_storage) as app:
+        navigate_to(app, "Transactions")
+        assert [tab.label for tab in app.tabs] == [
+            "Add transaction",
+            "View & edit ledger",
+            "Mixed-use expenses",
+        ]
+        tab = _mixed_tab(app)
+        tab.selectbox[0].set_value(account["id"]).run()
+        tab.selectbox[1].set_value(category["id"]).run()
+        tab.selectbox[2].set_value(payee["id"]).run()
+        tab.multiselect[0].set_value([tag["id"]]).run()
+        _tab_field(tab, "text_input", "Total Expense").set_value("100.00").run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "text_input", "Business Use %").set_value("25").run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "text_area", "Allocation Rationale (required)").set_value("Measured workspace use").run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "button", "Save mixed-use expense").click().run()
+
+        sources = default_storage.list_mixed_use_expenses()
+        projections = default_storage.list_transactions()
+        assert len(sources) == len(projections) == 1
+        source = sources[0]
+        projection = projections[0]
+        assert source["linked_transaction_id"] == projection["id"]
+        assert projection["amount"] == "25.00"
+        assert projection["description"] == (
+            "Allocation rationale: Measured workspace use"
+        )
+        assert source["payee_id"] == payee["id"]
+        assert tag["id"] in source["tag_ids"]
+        assert tag["id"] in projection["tag_ids"]
+        assert any("Mixed-use expense saved." in str(item.value) for item in app.success)
+        reset_tab = _mixed_tab(app)
+        assert _tab_field(reset_tab, "text_input", "Total Expense").value == "0.00"
+        assert _tab_field(reset_tab, "text_input", "Business Use %").value == "0"
+        assert _tab_field(reset_tab, "text_area", "Allocation Rationale (required)").value == ""
+
+        # Selecting the source rehydrates the edit surface with stable IDs.
+        tab = _mixed_tab(app)
+        tab.selectbox[0].set_value(source["id"]).run()
+        tab = _mixed_tab(app)
+        assert _tab_field(tab, "text_input", "Total Expense").value == "100.00"
+        _tab_field(tab, "text_input", "Business Use %").set_value("50").run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "button", "Save changes").click().run()
+        updated = default_storage.get_mixed_use_expense(source["id"])
+        assert updated["id"] == source["id"]
+        assert updated["linked_transaction_id"] == projection["id"]
+        assert updated["allocated_amount"] == "50.00"
+
+        tab = _mixed_tab(app)
+        assert tab.checkbox
+        _tab_field(tab, "button", "Permanently delete").click().run()
+        assert any("Confirm the permanent deletion" in str(item.value) for item in app.error)
+        tab = _mixed_tab(app)
+        tab.checkbox[0].set_value(True).run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "button", "Permanently delete").click().run()
+        assert default_storage.list_mixed_use_expenses() == []
+        assert default_storage.list_transactions() == []
+
+
+def test_mixed_use_app_test_validation_preserves_inputs(default_storage) -> None:
+    account = next(item for item in default_storage.list_accounts() if item["active"])
+    category = next(item for item in default_storage.list_categories() if item["kind"] == "Expense")
+    with authenticated_app(default_storage) as app:
+        navigate_to(app, "Transactions")
+        tab = _mixed_tab(app)
+        _tab_field(tab, "selectbox", "Account").set_value(account["id"]).run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "selectbox", "Category").set_value(category["id"]).run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "text_input", "Total Expense").set_value("17.25").run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "text_input", "Business Use %").set_value("33.33333").run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "button", "Save mixed-use expense").click().run()
+        assert default_storage.list_transactions() == []
+        tab = _mixed_tab(app)
+        assert _tab_field(tab, "text_input", "Total Expense").value == "17.25"
+        assert _tab_field(tab, "text_input", "Business Use %").value == "33.33333"
+        assert any("Allocation rationale is required" in str(item.value) for item in app.error)
+
+
+def test_mixed_use_app_test_is_profile_scoped_and_derived_ledger_is_read_only() -> None:
+    from tests.app_support import profile_config
+    from tests.fakes import FakeWorkbook
+    from tabula_rasa.storage import GoogleSheetsStorage
+
+    north = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    south = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    for storage, prefix in ((north, "North"), (south, "South")):
+        storage.ensure_defaults()
+        account = next(item for item in storage.list_accounts() if item["name"] == "Checking")
+        category = next(item for item in storage.list_categories() if item["name"] == "Office")
+        storage.create_mixed_use_expense(
+            txn_date="2026-09-03",
+            total_expense="80",
+            business_use_percentage="50",
+            account_id=account["id"],
+            category_id=category["id"],
+            allocation_rationale=f"{prefix} use",
+        )
+
+    with authenticated_app(
+        storages={"north-sheet": north, "south-sheet": south},
+        profiles={
+            "north": profile_config(name="North", spreadsheet_id="north-sheet"),
+            "south": profile_config(name="South", spreadsheet_id="south-sheet"),
+        },
+    ) as app:
+        navigate_to(app, "Transactions")
+        source = north.list_mixed_use_expenses()[0]
+        app.session_state["mixed_use_selected_source_id_north"] = source["id"]
+        app.run()
+        assert app.session_state["mixed_use_selected_source_id_north"] == source["id"]
+        by_label(app.selectbox, "Business").set_value("south").run()
+        assert app.session_state["mixed_use_selected_source_id_south"] == ""
+        tab = _mixed_tab(app)
+        assert south.list_mixed_use_expenses()[0]["allocation_rationale"] == "South use"
+        assert all(
+            str(item.value) != north.list_mixed_use_expenses()[0]["allocation_rationale"]
+            for item in tab.caption
+        )
+
+        projection = south.list_transactions()[0]
+        app.session_state["edit_transaction_id"] = projection["id"]
+        app.run()
+        assert any(
+            "managed from the Mixed-use expenses tab" in str(item.value)
+            for item in app.info
+        )
+        ledger_tab = next(tab for tab in app.tabs if tab.label == "View & edit ledger")
+        ledger_labels = {item.label for item in ledger_tab.button}
+        assert "Save changes" not in ledger_labels
+        assert "Permanently delete" not in ledger_labels
+        assert "Remove receipt" not in ledger_labels
+        assert "Link selected receipt" not in ledger_labels

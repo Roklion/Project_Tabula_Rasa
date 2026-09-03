@@ -252,7 +252,9 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                     )
                     prepared_receipts = None
                 if prepared_receipts is None:
-                    return
+                    # Keep the log and source actions visible after a receipt
+                    # validation error; the write is skipped below.
+                    pass
                 payload = {"txn_date": txn_date, "account_id": account_id, "category_id": category_id, "payee_id": "" if payee_id == "+ Add new payee" else payee_id, "new_payee_name": new_payee if payee_id == "+ Add new payee" else "", "tag_ids": tag_ids, "new_tag_name": new_tag_name or "", "reference": reference, "description": description, "total_expense": total_expense, "business_use_percentage": business_use_percentage, "allocation_rationale": rationale}
                 if source:
                     payload["expected_source"] = source
@@ -284,7 +286,8 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                         receipt_context, receipt_result, prepared_receipts
                     )
 
-                context.confirmed_write(action, payload, operation, success, on_success=lambda: context.schedule_widget_reset(_key(profile, "form_reset")), on_confirmed=process_mixed_receipts, report_error=save_error.error)
+                if prepared_receipts is not None:
+                    context.confirmed_write(action, payload, operation, success, on_success=lambda: context.schedule_widget_reset(_key(profile, "form_reset")), on_confirmed=process_mixed_receipts, report_error=save_error.error)
     with right:
         _render_preview(mixed_use_preview(txn_date=txn_date, account=account_paths.get(account_id, account_id), payee=payee_by_id.get(payee_id, new_payee), category=category_paths.get(category_id, category_id), description=description, total_expense=total_expense, business_use_percentage=business_use_percentage, allocation_rationale=rationale))
     st.markdown("#### Mixed-use Expense Log")
