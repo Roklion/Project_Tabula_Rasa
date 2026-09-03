@@ -148,6 +148,19 @@ WORKSHEET_HEADERS = {
     ),
 }
 _TAG_WRITE_LOCK = threading.RLock()
+TAGS_BACKUP_FORMAT_VERSION = 8
+TAGS_WORKSHEET_HEADERS = {
+    **PRE_MIXED_USE_WORKSHEET_HEADERS,
+    "Tags": ("id", "name", "active", "created_at"),
+    "Transactions": (
+        *PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"],
+        "tag_ids",
+    ),
+    "Mileage": (
+        *PRE_MIXED_USE_WORKSHEET_HEADERS["Mileage"],
+        "tag_ids",
+    ),
+}
 VERSION_3_WORKSHEET_HEADERS = {
     title: (
         tuple(header for header in headers if header != "receipt_references")
@@ -182,7 +195,7 @@ TRANSACTION_KINDS = {"Income", "Expense", "Transfer"}
 LEDGER_ONLY_BACKUP_FORMAT_VERSION = 4
 RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION = 5
 PAYEE_BACKUP_FORMAT_VERSION = 7
-BACKUP_FORMAT_VERSION = 8
+BACKUP_FORMAT_VERSION = 9
 BACKUP_HEADERS_BY_VERSION = {
     2: LEGACY_BACKUP_HEADERS,
     3: VERSION_3_WORKSHEET_HEADERS,
@@ -191,6 +204,7 @@ BACKUP_HEADERS_BY_VERSION = {
     LEDGER_ONLY_BACKUP_FORMAT_VERSION: PRE_PAYEE_WORKSHEET_HEADERS,
     RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION: PRE_PAYEE_WORKSHEET_HEADERS,
     PAYEE_BACKUP_FORMAT_VERSION: PRE_MIXED_USE_WORKSHEET_HEADERS,
+    TAGS_BACKUP_FORMAT_VERSION: TAGS_WORKSHEET_HEADERS,
     BACKUP_FORMAT_VERSION: WORKSHEET_HEADERS,
 }
 SUPPORTED_BACKUP_FORMAT_VERSIONS = set(BACKUP_HEADERS_BY_VERSION)
@@ -3397,6 +3411,8 @@ class GoogleSheetsStorage:
         if "id" in changes or "source_id" in changes or "linked_transaction_id" in changes:
             raise StorageValidationError("Mixed-use source IDs cannot be edited")
         merged = {**current_source, **changes}
+        if "tag_ids" not in changes:
+            merged["tag_ids"] = current_transaction.get("tag_ids", "")
         if "receipt_references" in changes:
             self._reject_receipt_ownership_conflict(
                 merged.get("receipt_references", ""), transaction_id=transaction_id
