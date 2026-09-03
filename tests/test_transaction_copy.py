@@ -13,6 +13,7 @@ from tests.fakes import FakeWorkbook
 from tabula_rasa.page_renderers.transactions.ledger import (
     _change_ledger_mode,
     _editable_account_ids,
+    _make_created_copy_visible,
     copied_transaction_description,
 )
 from tabula_rasa.storage import GoogleSheetsStorage
@@ -121,6 +122,27 @@ def test_switching_ledger_mode_preserves_copy_editor_target() -> None:
         _change_ledger_mode("test")
 
     assert state["edit_transaction_id"] == "source-id"
+
+
+def test_copy_save_clears_tag_filter_before_reopening_copy() -> None:
+    state = {
+        "ledger_start": date(2026, 1, 1),
+        "ledger_end": date(2026, 12, 31),
+        "ledger_filter_type_test": "Expense",
+        "ledger_filter_accounts_test": ["checking"],
+        "ledger_filter_tags_test": ["project"],
+        "ledger_search_test_0": "Project",
+    }
+
+    with patch(
+        "tabula_rasa.page_renderers.transactions.ledger.st.session_state", state
+    ):
+        _make_created_copy_visible(
+            "test",
+            {"id": "copy-id", "txn_date": "2026-07-19"},
+        )
+
+    assert state["ledger_filter_tags_test"] == []
 
 
 def test_copy_form_can_be_canceled_without_creating_or_mutating_transaction() -> None:

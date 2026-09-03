@@ -1398,14 +1398,21 @@ class GoogleSheetsStorage:
                 raise StorageConflictError(
                     "A selected transaction no longer exists; select the rows again."
                 )
-            expected = {
-                str(key): (str(value) if value is not None else "")
-                for key, value in expected_by_id[transaction_id].items()
-                if str(key) in self._headers("Transactions")
-            }
+            expected = {}
+            for key, value in expected_by_id[transaction_id].items():
+                key = str(key)
+                if key not in self._headers("Transactions"):
+                    continue
+                expected[key] = (
+                    _encode_tag_ids(value)
+                    if key == "tag_ids"
+                    else (str(value) if value is not None else "")
+                )
             current = dict(row.values)
             if "payee_id" in current:
                 current["payee_id"] = _clean_text(current.get("payee_id"), "Payee")
+            if "tag_ids" in current:
+                current["tag_ids"] = _encode_tag_ids(current.get("tag_ids", ""))
             if {key: current.get(key, "") for key in expected} != expected:
                 raise StorageConflictError(
                     "A selected transaction changed; review the current rows and try again."

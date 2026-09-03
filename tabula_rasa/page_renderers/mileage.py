@@ -19,7 +19,7 @@ from tabula_rasa.address_autocomplete import (
 from tabula_rasa.maps_routing import GoogleRoutesError
 from tabula_rasa.presentation import render_global_footer, render_page_header
 from tabula_rasa.page_renderers.tag_selector import ADD_NEW_TAG, render_tag_selector
-from tabula_rasa.storage import GoogleSheetsStorage, StorageError
+from tabula_rasa.storage import GoogleSheetsStorage, StorageError, normalize_tag_name
 
 
 @dataclass(frozen=True)
@@ -468,12 +468,15 @@ def _trip_tag_ids(
     if isinstance(raw_tags, str):
         raw_tags = [raw_tags]
     names_to_ids = {
-        str(item.get("name") or ""): tag_id for tag_id, item in tag_by_id.items()
+        normalize_tag_name(item.get("name") or ""): tag_id
+        for tag_id, item in tag_by_id.items()
     }
     return (
         list(
             dict.fromkeys(
-                names_to_ids.get(str(value), str(value)).strip()
+                names_to_ids.get(
+                    normalize_tag_name(value), str(value).strip()
+                )
                 for value in raw_tags
                 if str(value).strip()
             )

@@ -188,6 +188,7 @@ def _make_created_copy_visible(
         st.session_state["ledger_end"] = created_date
     st.session_state[f"ledger_filter_type_{profile_key}"] = "All"
     st.session_state[f"ledger_filter_accounts_{profile_key}"] = []
+    st.session_state[f"ledger_filter_tags_{profile_key}"] = []
     for key in tuple(st.session_state):
         if key.startswith(f"ledger_search_{profile_key}_"):
             st.session_state[key] = ""

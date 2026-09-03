@@ -16,7 +16,7 @@ def money(value: float) -> str:
 
 def _tag_names(
     transaction: Mapping[str, object],
-    tags: Sequence[Mapping[str, object]] | Mapping[str, str] | None,
+    tags: Sequence[Mapping[str, object]] | Mapping[str, object] | None,
 ) -> str:
     """Return a compact display value for a transaction's optional Tags."""
     raw_names = transaction.get("tags")
@@ -32,14 +32,19 @@ def _tag_names(
         return ", ".join(name for name in names if name)
     if not tags:
         return ""
-    by_id = (
-        dict(tags)
-        if isinstance(tags, Mapping)
-        else {
+    by_id = {}
+    if isinstance(tags, Mapping):
+        for tag_id, tag in tags.items():
+            by_id[str(tag_id).strip()] = (
+                str(tag.get("name") or "").strip()
+                if isinstance(tag, Mapping)
+                else str(tag).strip()
+            )
+    else:
+        by_id = {
             str(tag.get("id") or "").strip(): str(tag.get("name") or "").strip()
             for tag in tags
         }
-    )
     raw_ids = transaction.get("tag_ids", ())
     if isinstance(raw_ids, str):
         return ""
@@ -58,7 +63,7 @@ def ledger_frame(
     categories: list[dict],
     *,
     display_paths: bool = True,
-    tags: Sequence[Mapping[str, object]] | Mapping[str, str] | None = None,
+    tags: Sequence[Mapping[str, object]] | Mapping[str, object] | None = None,
 ) -> pd.DataFrame:
     account_names = (
         hierarchy_paths(accounts)

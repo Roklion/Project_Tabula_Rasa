@@ -2980,6 +2980,34 @@ class TestGoogleSheetsStorage:
 
         assert result == {"status": "fully_applied", "count": "1"}
 
+    def test_bulk_mutations_accept_listed_tag_ids_in_freshness_checks(self) -> None:
+        first, _, replacement = self._bulk_transaction_fixture()
+        tag = self.storage.create_tag("Project")
+        self.storage.edit_transaction(first["id"], tag_ids=[tag["id"]])
+        expected = [
+            item
+            for item in self.storage.list_transactions(_force_refresh=True)
+            if item["id"] == first["id"]
+        ]
+
+        category_result = self.storage.bulk_change_transaction_category(
+            [first["id"]],
+            expected_transactions=expected,
+            category_id=replacement["id"],
+        )
+        assert category_result == {"status": "fully_applied", "count": "1"}
+
+        expected = [
+            item
+            for item in self.storage.list_transactions(_force_refresh=True)
+            if item["id"] == first["id"]
+        ]
+        delete_result = self.storage.bulk_delete_transactions(
+            [first["id"]],
+            expected_transactions=expected,
+        )
+        assert delete_result == {"status": "fully_applied", "count": "1"}
+
     def test_payee_activation_retries_when_batch_update_is_not_applied(self) -> None:
         delays: list[float] = []
         storage = GoogleSheetsStorage(

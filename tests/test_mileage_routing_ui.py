@@ -54,6 +54,14 @@ def test_round_trip_calculation_uses_reversed_place_ids() -> None:
     ]
 
 
+def test_trip_tag_ids_normalize_legacy_tag_names() -> None:
+    tags = {
+        "tax": {"id": "tax", "name": "Tax"},
+    }
+
+    assert _trip_tag_ids({"tags": ["  tAx  "]}, tags) == ["tax"]
+
+
 def test_calculation_rejects_missing_or_identical_place_ids() -> None:
     def route(*_args: str) -> float:
         pytest.fail("route should not be called")
