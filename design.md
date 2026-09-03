@@ -477,6 +477,22 @@ they do not expose a mixed-use page or workflow in Phase A. Current-format
 backups include the source collection and reject orphaned or inconsistent
 relationships; older backup formats restore with no mixed-use records.
 
+The Transactions page also provides a **Mixed-use expenses** tab. Its
+profile-scoped source editor exposes normal Expense fields plus Total Expense,
+Business Use %, and required Allocation Rationale. A live, side-effect-free
+Ledger Result preview uses the canonical Decimal allocation calculation; Save
+is the only persistence action and there is no Draft mode. Sources can be
+edited or permanently deleted only from this tab, preserving stable IDs and
+updating/removing the existing projection.
+
+The linked projection remains visible in the ordinary ledger at the allocated
+amount and is marked **Mixed-use**. It is read-only there; edit, delete, copy,
+bulk mutation, and receipt actions are managed from the Mixed-use expenses tab.
+Receipt operations use the same profile receipt folder and Drive recovery
+workflow as ordinary transactions. Mixed-use source copy and bulk source
+editing are intentionally not implemented; they are follow-up work tracked by
+#149.
+
 #### Add transaction contract
 
 The form presents:

@@ -132,6 +132,27 @@ identity rather than blindly uploaded again. A completed workflow resets the
 form intentionally; a failed validation or transaction write does not upload
 receipts.
 
+### Mixed-use expenses
+
+Open **Mixed-use expenses** as the third tab on Transactions to record an
+expense used partly for business. Enter **Total Expense**, **Business Use %**
+(greater than 0 and no more than 100, with up to five decimal places), and a
+required **Allocation Rationale**. Allocation is total × percentage ÷ 100,
+rounded using the normal currency convention; amounts rounding to $0.00 cannot
+be saved.
+
+The live **Ledger Result** preview updates without storage writes. Save
+immediately creates the source and exactly one linked Expense projection; there
+is no Draft workflow. Edit and permanent deletion are available only from this
+tab and preserve the linked transaction identity. Receipts use the same
+configured Drive folder and retry-safe workflow as ordinary transactions.
+
+The allocated projection remains in the normal ledger for balances, reports,
+search, filters, and exports, but is marked **Mixed-use** and read-only.
+Normal Edit, Delete, Copy, bulk actions, and receipt mutation cannot change it.
+Mixed-use source copy and bulk source editing are not part of #119; they are
+follow-up work tracked by #149.
+
 ### View and edit the ledger
 
 The ledger opens latest-date-first. Its controls appear in this order:
