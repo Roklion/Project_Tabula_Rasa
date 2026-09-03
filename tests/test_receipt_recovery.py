@@ -305,10 +305,17 @@ def test_recovery_preserves_conflict_check_before_skipping_reused_file() -> None
         account_id=accounts[0]["id"],
         category_id=categories[0]["id"],
     )
-    target.set_transaction_receipt_references(
-        other_transaction["id"],
-        [reference],
+    # Seed the deliberately invalid duplicate-reference state directly.  The
+    # public setter now correctly rejects creating this conflict.
+    transaction_sheet = target._workbook.worksheet("Transactions")
+    headers = transaction_sheet.rows[0]
+    receipt_column = headers.index("receipt_references")
+    id_column = headers.index("id")
+    other_row = next(
+        row for row in transaction_sheet.rows[1:] if row[id_column] == other_transaction["id"]
     )
+    other_row[receipt_column] = json.dumps([reference], separators=(",", ":"))
+    target._invalidate("Transactions")
     drive = Mock()
     drive.restore_receipt.return_value = (_drive_file(reference), True)
 

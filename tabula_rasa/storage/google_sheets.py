@@ -3575,8 +3575,12 @@ class GoogleSheetsStorage:
         """Replace the Drive receipt references attached to one transaction."""
         with _MIXED_USE_CREATE_LOCK:
             current = self._find_row("Transactions", transaction_id)
+            encoded_references = _encode_receipt_references(references)
+            self._reject_receipt_ownership_conflict(
+                encoded_references, transaction_id=transaction_id
+            )
             return self._replace_receipt_references(
-                current, _encode_receipt_references(references)
+                current, encoded_references
             )
 
     def initialize_legacy_transaction_receipts(

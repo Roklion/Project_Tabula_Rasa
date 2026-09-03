@@ -748,6 +748,27 @@ def test_mixed_use_writes_reject_receipts_owned_by_another_transaction(
         )
 
 
+def test_generic_receipt_setter_rejects_receipts_owned_by_another_transaction(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    owner = default_storage.create_transaction(
+        **_expense_inputs(default_storage), kind="Expense", amount="10"
+    )
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    reference = {"id": "setterowned01", "name": "Receipt.pdf"}
+    default_storage.set_transaction_receipt_references(owner["id"], [reference])
+
+    with pytest.raises(StorageConflictError, match="already linked"):
+        default_storage.set_transaction_receipt_references(
+            source["linked_transaction_id"], [reference]
+        )
+
+
 def test_mixed_use_create_rejects_source_link_mismatch_before_payee_creation(
     default_storage: GoogleSheetsStorage,
 ) -> None:
