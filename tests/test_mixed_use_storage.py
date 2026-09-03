@@ -400,6 +400,37 @@ def test_transaction_receipt_setter_shares_mixed_use_creation_lock(
     assert not errors
 
 
+def test_transaction_receipt_unlink_shares_mixed_use_creation_lock(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    transaction = default_storage.create_transaction(
+        **_expense_inputs(default_storage), kind="Expense", amount="10"
+    )
+    started = threading.Event()
+    finished = threading.Event()
+    errors: list[BaseException] = []
+
+    def unlink_receipt() -> None:
+        started.set()
+        try:
+            default_storage.unlink_transaction_receipt(
+                transaction["id"], file_id="missing-file"
+            )
+        except BaseException as error:  # pragma: no cover - assertion below reports it
+            errors.append(error)
+        finally:
+            finished.set()
+
+    worker = threading.Thread(target=unlink_receipt)
+    with google_sheets_module._MIXED_USE_CREATE_LOCK:
+        worker.start()
+        assert started.wait(1)
+        assert not finished.wait(0.1)
+    assert finished.wait(1)
+    worker.join(timeout=1)
+    assert not errors
+
+
 def test_mixed_use_delete_shares_mixed_use_creation_lock(
     default_storage: GoogleSheetsStorage,
 ) -> None:
@@ -1981,9 +2012,15 @@ def test_mixed_use_delete_rechecks_projection_before_source_delete(
         record_id: str,
         *,
         expected_record: object = None,
+        before_retry: object = None,
     ) -> None:
         nonlocal injected
-        original_delete(title, record_id, expected_record=expected_record)  # type: ignore[arg-type]
+        original_delete(  # type: ignore[arg-type]
+            title,
+            record_id,
+            expected_record=expected_record,
+            before_retry=before_retry,
+        )
         if title == "Transactions" and not injected:
             injected = True
             transaction_sheet = default_storage._worksheet("Transactions")

@@ -4048,22 +4048,23 @@ class GoogleSheetsStorage:
         file_id: str,
     ) -> dict[str, str]:
         """Remove one Drive reference without modifying the Drive file."""
-        current = self._find_row("Transactions", transaction_id)
-        references = decode_receipt_references(
-            current.values.get("receipt_references", "")
-        )
-        retained = [
-            item for item in references if item["id"] != str(file_id)
-        ]
-        if retained == references:
-            if _clean_text(current.values.get("source_type"), "Transaction source type"):
-                return self._replace_receipt_references(
-                    current, _encode_receipt_references(references)
-                )
-            return dict(current.values)
-        return self._replace_receipt_references(
-            current, _encode_receipt_references(retained)
-        )
+        with _MIXED_USE_CREATE_LOCK:
+            current = self._find_row("Transactions", transaction_id)
+            references = decode_receipt_references(
+                current.values.get("receipt_references", "")
+            )
+            retained = [
+                item for item in references if item["id"] != str(file_id)
+            ]
+            if retained == references:
+                if _clean_text(current.values.get("source_type"), "Transaction source type"):
+                    return self._replace_receipt_references(
+                        current, _encode_receipt_references(references)
+                    )
+                return dict(current.values)
+            return self._replace_receipt_references(
+                current, _encode_receipt_references(retained)
+            )
 
     def delete_transaction(self, transaction_id: str) -> None:
         with _MIXED_USE_CREATE_LOCK:
