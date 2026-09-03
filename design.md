@@ -487,12 +487,15 @@ The form presents:
 4. Amount for Transfer
 5. From Account
 6. To account for Transfer
-7. Payee / customer dropdown and Reference. The first payee option is
-   `+ Add new payee`; new values are stored in the managed Payees table before
-   they are referenced by a transaction.
+7. Payee / customer selector and Reference. The selector lists active managed
+   Payees and accepts a new name typed and confirmed with Enter; typed existing
+   names select the stored Payee case-insensitively. New values are stored in
+   the managed Payees table before they are referenced by a transaction.
 8. Tags (optional). The multi-select lists profile-local stored Tags, lets each
-   selection be removed independently, and offers `+ Add new tag`; a valid new
-   Tag is stored and selected with the transaction.
+   selection be removed independently. Typing a new name and pressing Enter in
+   the selector creates and selects the inline Tag. Only one new Tag name may
+   be entered per record; typed existing names select the stored Tag
+   case-insensitively.
 9. Description / memo
 10. Receipt (optional)
 11. Save transaction
@@ -629,10 +632,11 @@ matches a trip when it contains any selected Tag. It provides single-row
 selection and an Edit mileage trip section with all fields, save, and permanent
 delete.
 
-Mileage Tags use the same profile-local stored Tag list and inline `+ Add new
-tag` behavior as Transactions. Zero, one, or multiple Tags are valid; each is
-independently removable. Round-trip creation applies the same selected Tags to
-both independent rows.
+Mileage Tags use the same profile-local stored Tag list and type-and-Enter
+creation behavior as Transactions. Zero, one, or multiple Tags are valid; each
+is independently removable. Only one new Tag name may be entered per record,
+and typed existing names select the stored Tag case-insensitively. Round-trip
+creation applies the same selected Tags to both independent rows.
 
 When app-wide Google Maps configuration is available, Starting location and
 Destination use a narrowly scoped address-lookup component. The Google lookup

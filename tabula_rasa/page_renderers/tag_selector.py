@@ -8,14 +8,18 @@ from typing import Any
 import streamlit as st
 
 
-ADD_NEW_TAG = "+ Add new tag"
-
-
 def inline_tag_name_error(new_name: str | None) -> str | None:
-    """Return the validation message for an explicitly requested new Tag."""
-    if new_name is not None and not new_name.strip():
-        return "Enter a Tag name before saving."
+    """Return the validation message for a typed new Tag name."""
+    if new_name is not None:
+        stripped = new_name.strip()
+        if not stripped:
+            return "Enter a Tag name before saving."
     return None
+
+
+def tag_selector_error(key: str) -> str | None:
+    """Return a validation error for the selector's current custom values."""
+    return st.session_state.get(f"{key}__error")
 
 
 def _tag_id(tag: Mapping[str, Any]) -> str:
@@ -54,14 +58,14 @@ def render_tag_selector(
 ) -> tuple[list[str], str | None]:
     """Render an optional multi-Tag selector and return stable IDs plus new name.
 
-    The ``+ Add new tag`` sentinel is never returned in ``tag_ids``. Existing
-    inactive Tags are offered only when they belong to the selected record, so
-    historical associations can be retained while editing. The new Tag name
-    is submitted alongside the record and is created by the storage write.
+    Existing inactive Tags are offered only when they belong to the selected
+    record, so historical associations can be retained while editing. A typed
+    new Tag name is submitted alongside the record and created by the storage
+    write.
     """
     if st.session_state.pop(f"{key}__reset", False):
         st.session_state.pop(key, None)
-        st.session_state.pop(f"{key}__new_name", None)
+    st.session_state.pop(f"{key}__error", None)
     by_id = {
         tag_id: tag
         for tag in tags
@@ -79,10 +83,15 @@ def render_tag_selector(
         if _tag_is_active(tag) or tag_id in preserved or tag_id in selected
     ]
     # Keep the shared selector's order stable while avoiding duplicate IDs.
-    options = [ADD_NEW_TAG, *available_ids]
+    options = available_ids
     options_by_id = {
         tag_id: _tag_label(by_id[tag_id], inactive=not _tag_is_active(by_id[tag_id]))
         for tag_id in available_ids
+    }
+    by_name = {
+        _tag_name(tag).casefold(): tag_id
+        for tag_id, tag in by_id.items()
+        if tag_id in available_ids
     }
     if key not in st.session_state:
         initial_ids: list[str] = []
@@ -95,19 +104,29 @@ def render_tag_selector(
         options,
         key=key,
         format_func=lambda value: (
-            options_by_id.get(value, value) if value != ADD_NEW_TAG else value
+            options_by_id.get(value, value)
         ),
         placeholder="No Tag",
         disabled=disabled,
         help="Tags are optional and independent of Category.",
+        accept_new_options=True,
     )
-    chosen_ids = [value for value in chosen if value != ADD_NEW_TAG]
-    new_name: str | None = None
-    if ADD_NEW_TAG in chosen:
-        new_name = st.text_input(
-            "New tag",
-            key=f"{key}__new_name",
-            disabled=disabled,
-            help="The new Tag is created and selected when the record is saved.",
-        )
+    chosen_ids: list[str] = []
+    typed_names: list[str] = []
+    for value in chosen:
+        if value in by_id:
+            if value not in chosen_ids:
+                chosen_ids.append(value)
+            continue
+        if isinstance(value, str) and value.strip():
+            stripped = value.strip()
+            existing_id = by_name.get(stripped.casefold())
+            if existing_id is not None:
+                if existing_id not in chosen_ids:
+                    chosen_ids.append(existing_id)
+            else:
+                typed_names.append(stripped)
+    new_name: str | None = typed_names[0] if len(typed_names) == 1 else None
+    if len(typed_names) > 1:
+        st.session_state[f"{key}__error"] = "Enter one new Tag name at a time."
     return chosen_ids, new_name

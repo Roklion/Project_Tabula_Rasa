@@ -13,6 +13,9 @@ from tabula_rasa.hierarchy import ordered_hierarchy
 from tabula_rasa.ledger_presentation import ledger_frame, money
 from tabula_rasa.google_drive import GoogleDriveAccessError
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
+from tabula_rasa.page_renderers.transactions.payee_selector import (
+    resolve_payee_selection,
+)
 from tabula_rasa.page_renderers.transactions.receipts import (
     clear_receipt_creation_recovery,
     clear_missing_editor_receipt_recoveries,
@@ -32,6 +35,7 @@ from tabula_rasa.page_renderers.tag_selector import (
     inline_tag_name_error,
     render_tag_selector,
     schedule_tag_selector_reset,
+    tag_selector_error,
 )
 from tabula_rasa.storage import StorageError, decode_receipt_references
 
@@ -821,8 +825,8 @@ def render_ledger(
                     key=f"edit_transaction_amount_{edit_widget_scope}",
                 )
                 payee_by_id = {str(item["id"]): str(item["name"]) for item in payees}
-                payee_options = ["+ Add new payee", ""] + [
-                    str(item["id"])
+                available_payees = [
+                    item
                     for item in payees
                     if item.get("active") == "TRUE"
                     or (
@@ -830,26 +834,26 @@ def render_ledger(
                         and item.get("id") == selected.get("payee_id")
                     )
                 ]
-                edited_payee_id = st.selectbox(
+                payee_options = [""] + [
+                    str(item["id"]) for item in available_payees
+                ]
+                payee_value = st.selectbox(
                     "Edit payee / customer",
                     payee_options,
                     index=(
                         payee_options.index(selected.get("payee_id", ""))
                         if selected.get("payee_id", "") in payee_options
-                        else 1
+                        else 0
                     ),
                     format_func=lambda value: payee_by_id.get(
                         value, "No payee" if value == "" else value
                     ),
                     key=f"edit_transaction_payee_{edit_widget_scope}",
+                    accept_new_options=True,
                 )
-                edited_new_payee = ""
-                if edited_payee_id == "+ Add new payee":
-                    edited_new_payee = st.text_input(
-                        "Edit payee / customer",
-                        value=selected.get("payee", "") if copy_mode else "",
-                        key=f"edit_transaction_new_payee_{edit_widget_scope}",
-                    )
+                edited_payee_id, edited_new_payee = resolve_payee_selection(
+                    payee_value, available_payees, payee_options
+                )
                 source_tag_ids = [
                     str(tag_id).strip()
                     for tag_id in selected.get("tag_ids", [])
@@ -962,14 +966,8 @@ def render_ledger(
                         "account_id": edited_account_id,
                         "to_account_id": edited_to_account_id,
                         "category_id": edited_category_id,
-                        "payee_id": (
-                            "" if edited_payee_id == "+ Add new payee" else edited_payee_id
-                        ),
-                        "new_payee_name": (
-                            edited_new_payee
-                            if edited_payee_id == "+ Add new payee"
-                            else ""
-                        ),
+                        "payee_id": edited_payee_id,
+                        "new_payee_name": edited_new_payee,
                         "tag_ids": edited_tag_ids,
                         "new_tag_name": edited_new_tag_name or "",
                         "reference": edited_reference,
@@ -991,17 +989,16 @@ def render_ledger(
                             "Choose active account(s) before saving this copied transaction."
                         )
                     elif (
-                        edited_payee_id == "+ Add new payee"
-                        and not edited_new_payee.strip()
-                    ):
-                        edit_error.error(
-                            "Enter a payee / customer name before saving."
-                        )
-                    elif (
                         selected["kind"] == "Transfer"
                         and edited_account_id == edited_to_account_id
                     ):
                         edit_error.error("Transfer accounts must be different.")
+                    elif (
+                        tag_error := tag_selector_error(
+                            f"edit_transaction_tags_{edit_widget_scope}"
+                        )
+                    ):
+                        edit_error.error(tag_error)
                     elif (tag_error := inline_tag_name_error(edited_new_tag_name)):
                         edit_error.error(tag_error)
                     elif copy_mode:
@@ -1061,11 +1058,7 @@ def render_ledger(
                                     account_id=edited_account_id,
                                     to_account_id=edited_to_account_id,
                                     category_id=edited_category_id,
-                                    payee_id=(
-                                        ""
-                                        if edited_payee_id == "+ Add new payee"
-                                        else edited_payee_id
-                                    ),
+                                    payee_id=edited_payee_id,
                                     new_payee_name=edited_new_payee,
                                     tag_ids=edited_tag_ids,
                                     new_tag_name=edited_new_tag_name or "",
