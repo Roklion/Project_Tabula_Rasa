@@ -417,7 +417,12 @@ def _raw_tag_ids_may_contain(value: Any, candidates: Iterable[str]) -> bool:
 
 def _managed_comparison_text(value: Any) -> str:
     """Preserve falsy expected values while normalizing comparison text."""
-    return "" if value is None else str(value)
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    text = str(value).strip()
+    return text.upper() if text.upper() in {"TRUE", "FALSE"} else text
 
 
 def _encode_tag_ids(value: Any) -> str:

@@ -106,7 +106,7 @@ def test_management_expected_snapshot_rejects_stale_merge(default_storage) -> No
 
 
 def test_expected_management_snapshot_preserves_falsy_values() -> None:
-    current = {"tag-1": {"id": "tag-1", "active": "False", "count": "0"}}
+    current = {"tag-1": {"id": "tag-1", "active": "FALSE", "count": "0"}}
     expected = {"id": "tag-1", "active": False, "count": 0}
 
     GoogleSheetsStorage._assert_expected_managed_records(current, expected)
@@ -489,5 +489,6 @@ def test_management_destructive_controls_scope_acknowledgement_and_style_hooks()
     assert "managed_remove_payee_ack_{context.profile_key}_{remove_id}" in management_source
     assert "managed_remove_tag_ack_{context.profile_key}_{remove_id}" in management_source
     assert "disabled=is_referenced" in management_source
+    assert management_source.count('str(item["active"]).upper() == "TRUE"') == 2
     assert 'key="destructive_managed_payee_remove"' in management_source
     assert 'key="destructive_managed_tag_remove"' in management_source

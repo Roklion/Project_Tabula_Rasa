@@ -76,7 +76,7 @@ def _render_payees(
     )
     frame = pd.DataFrame(
         [
-            {"Payee": item["name"], "Active": item["active"], "References": counts.get(item["id"], 0)}
+            {"Payee": item["name"], "Active": str(item["active"]).upper() == "TRUE", "References": counts.get(item["id"], 0)}
             for item in payees
         ],
         columns=["Payee", "Active", "References"],
@@ -161,7 +161,7 @@ def _render_tags(
         "Renaming keeps the stable ID and existing associations."
     )
     frame = pd.DataFrame(
-        [{"Tag": item["name"], "Active": item["active"], "References": counts.get(item["id"], 0)} for item in tags],
+        [{"Tag": item["name"], "Active": str(item["active"]).upper() == "TRUE", "References": counts.get(item["id"], 0)} for item in tags],
         columns=["Tag", "Active", "References"],
     )
     if frame.empty:
