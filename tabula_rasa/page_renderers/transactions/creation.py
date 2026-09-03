@@ -15,6 +15,9 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     receipt_creation_workflow_key,
     render_receipt_creation_recovery,
 )
+from tabula_rasa.page_renderers.transactions.payee_selector import (
+    resolve_payee_selection,
+)
 from tabula_rasa.page_renderers.tag_selector import (
     inline_tag_name_error,
     render_tag_selector,
@@ -46,9 +49,7 @@ def render_add_transaction(
         "add_transaction_category_income",
         "add_transaction_category_expense",
         "add_transaction_payee",
-        "add_transaction_new_payee",
         "add_transaction_tags",
-        "add_transaction_tags__new_name",
         "add_transaction_reference",
         "add_transaction_description",
         "add_transaction_receipts",
@@ -129,24 +130,23 @@ def render_add_transaction(
                 else None
             )
         c1, c2 = st.columns(2)
-        payee_options = ["+ Add new payee", ""] + [
-            str(payee["id"]) for payee in payees if payee.get("active") == "TRUE"
+        active_payees = [
+            payee for payee in payees if payee.get("active") == "TRUE"
         ]
+        payee_options = [""] + [str(payee["id"]) for payee in active_payees]
         payee_by_id = {str(payee["id"]): str(payee["name"]) for payee in payees}
-        payee_id = c1.selectbox(
+        payee_value = c1.selectbox(
             "Payee / customer",
             payee_options,
             format_func=lambda value: payee_by_id.get(
                 value, "No payee" if value == "" else value
             ),
             key="add_transaction_payee",
+            accept_new_options=True,
         )
-        new_payee_name = ""
-        if payee_id == "+ Add new payee":
-            new_payee_name = c1.text_input(
-                "Payee / customer",
-                key="add_transaction_new_payee",
-            )
+        payee_id, new_payee_name = resolve_payee_selection(
+            payee_value, active_payees, payee_options
+        )
         reference = c2.text_input(
             "Reference (optional)",
             key="add_transaction_reference",
@@ -180,8 +180,6 @@ def render_add_transaction(
                 save_error.error(
                     "Create a second active account before recording a transfer."
                 )
-            elif payee_id == "+ Add new payee" and not new_payee_name.strip():
-                save_error.error("Enter a payee / customer name before saving.")
             elif (tag_error := tag_selector_error("add_transaction_tags")):
                 save_error.error(tag_error)
             elif (tag_error := inline_tag_name_error(new_tag_name)):
@@ -194,10 +192,8 @@ def render_add_transaction(
                     "account_id": account_map[source],
                     "to_account_id": account_map.get(to_account, ""),
                     "category_id": category_id or "",
-                    "payee_id": "" if payee_id == "+ Add new payee" else payee_id,
-                    "new_payee_name": (
-                        new_payee_name if payee_id == "+ Add new payee" else ""
-                    ),
+                    "payee_id": payee_id,
+                    "new_payee_name": new_payee_name,
                     "tag_ids": tag_ids,
                     "new_tag_name": new_tag_name or "",
                     "description": description,

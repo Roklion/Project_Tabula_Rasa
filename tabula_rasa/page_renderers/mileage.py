@@ -19,7 +19,6 @@ from tabula_rasa.address_autocomplete import (
 from tabula_rasa.maps_routing import GoogleRoutesError
 from tabula_rasa.presentation import render_global_footer, render_page_header
 from tabula_rasa.page_renderers.tag_selector import (
-    ADD_NEW_TAG,
     inline_tag_name_error,
     render_tag_selector,
     schedule_tag_selector_reset,
@@ -535,12 +534,6 @@ def _render_tag_selector(
     )
 
 
-def _inline_tag_creation_requested(key: str) -> bool:
-    """Identify an inline-create selection before its name is validated."""
-    selected = st.session_state.get(key, ())
-    return isinstance(selected, (list, tuple, set)) and ADD_NEW_TAG in selected
-
-
 def mileage_frame(
     trips: list[dict],
     tags: object = None,
@@ -603,7 +596,6 @@ def render_mileage(context: MileageContext) -> None:
             "add_mileage_purpose",
             "add_mileage_notes",
             "add_mileage_tag_ids",
-            "add_mileage_tag_ids__new_name",
             "add_mileage_return_miles",
             "add_mileage_start__selection",
             "add_mileage_destination__selection",
@@ -911,11 +903,6 @@ def render_mileage(context: MileageContext) -> None:
                     save_error.error(
                         "Starting location and destination must be different."
                     )
-                elif (
-                    _inline_tag_creation_requested("add_mileage_tag_ids")
-                    and not new_tag_name.strip()
-                ):
-                    save_error.error("Enter a Tag name before saving.")
                 elif (tag_error := tag_selector_error("add_mileage_tag_ids")):
                     save_error.error(tag_error)
                 elif (tag_error := inline_tag_name_error(new_tag_name)):
@@ -1290,13 +1277,6 @@ def render_mileage(context: MileageContext) -> None:
                             edit_error.error(
                                 "Starting location and destination must be different."
                             )
-                        elif (
-                            _inline_tag_creation_requested(
-                                f"edit_mileage_trip_tag_ids_{edit_widget_scope}"
-                            )
-                            and not edited_new_tag_name.strip()
-                        ):
-                            edit_error.error("Enter a Tag name before saving.")
                         elif (
                             tag_error := tag_selector_error(
                                 f"edit_mileage_trip_tag_ids_{edit_widget_scope}"

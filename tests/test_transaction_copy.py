@@ -147,6 +147,7 @@ def test_copy_save_clears_tag_filter_before_reopening_copy() -> None:
 
 def test_copy_form_can_be_canceled_without_creating_or_mutating_transaction() -> None:
     storage, source = _transaction_fixture()
+    storage.create_payee("New vendor")
     original_rows = storage.list_transactions()
     original_source = next(
         item for item in original_rows if item["id"] == source["id"]
@@ -184,10 +185,7 @@ def test_copy_form_can_be_canceled_without_creating_or_mutating_transaction() ->
         app.session_state["transaction_bulk_selected_ids_test"] = (source["id"],)
         app.run()
         by_label(app.button, "Copy transaction").click().run()
-        by_label(app.selectbox, "Edit payee / customer").set_value(
-            "+ Add new payee"
-        ).run()
-        by_label(app.text_input, "Edit payee / customer").set_value("New vendor")
+        by_label(app.selectbox, "Edit payee / customer").set_value("New vendor").run()
         by_label(app.button, "Save copied transaction").click().run()
         copied = next(
             item for item in storage.list_transactions() if item["id"] != source["id"]
@@ -208,30 +206,6 @@ def test_copy_form_can_be_canceled_without_creating_or_mutating_transaction() ->
     assert next(item for item in transactions if item["id"] == source["id"]) == (
         original_source
     )
-
-
-def test_copy_rejects_blank_new_payee_before_the_conditional_input_reruns() -> None:
-    storage, source = _transaction_fixture()
-
-    with authenticated_app(storage) as app:
-        navigate_to(app, "Transactions")
-        by_label(app.segmented_control, "Ledger mode").set_value("Bulk").run()
-        app.session_state["transaction_bulk_selected_ids_test"] = (source["id"],)
-        app.run()
-        by_label(app.button, "Copy transaction").click().run()
-
-        # The first form submit after selecting the add-new sentinel can carry
-        # an empty name; model that payload after the conditional input exists.
-        payee_selector = by_label(app.selectbox, "Edit payee / customer")
-        payee_selector.set_value("+ Add new payee").run()
-        by_label(app.text_input, "Edit payee / customer").set_value("")
-        by_label(app.button, "Save copied transaction").click().run()
-
-        assert len(storage.list_transactions()) == 1
-        assert any(
-            "Enter a payee / customer name before saving." in str(error.value)
-            for error in app.error
-        )
 
 
 def test_copy_uses_selected_existing_payee() -> None:
@@ -278,22 +252,24 @@ def test_copy_does_not_preselect_inactive_source_payee() -> None:
     assert copied["payee_id"] == ""
 
 
-def test_new_payee_name_separates_duplicate_submission_fingerprints() -> None:
+def test_payee_selection_separates_duplicate_submission_fingerprints() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     storage.create_account("Checking", "Bank")
     storage.create_category("Office", "Expense")
+    storage.create_payee("First vendor")
+    storage.create_payee("Second vendor")
 
     with authenticated_app(storage) as app:
         navigate_to(app, "Transactions")
         by_label(app.number_input, "Amount").set_value(10).run()
         by_label(app.selectbox, "From Account").set_value("Checking").run()
         by_label(app.selectbox, "Category").set_value("Office").run()
-        by_label(app.text_input, "Payee / customer").input("First vendor")
+        by_label(app.selectbox, "Payee / customer").set_value("First vendor").run()
         by_label(app.button, "Save transaction").click().run()
         by_label(app.number_input, "Amount").set_value(10).run()
         by_label(app.selectbox, "From Account").set_value("Checking").run()
         by_label(app.selectbox, "Category").set_value("Office").run()
-        by_label(app.text_input, "Payee / customer").input("Second vendor")
+        by_label(app.selectbox, "Payee / customer").set_value("Second vendor").run()
         by_label(app.button, "Save transaction").click().run()
 
     assert {item["payee"] for item in storage.list_transactions()} == {

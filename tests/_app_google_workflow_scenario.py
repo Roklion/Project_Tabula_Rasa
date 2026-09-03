@@ -40,6 +40,8 @@ def ledger_controls(app: AppTest) -> list[tuple[str, str | None]]:
 
 def main() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook())
+    for payee_name in ("Test vendor", "Test customer", "Test transfer"):
+        storage.create_payee(payee_name)
     with authenticated_app(storage) as app:
 
         navigate_to(app, "Accounts")
@@ -149,8 +151,8 @@ def main() -> None:
             "Testing expense renamed"
         )
         payee_selector = by_label(app.selectbox, "Payee / customer")
-        assert payee_selector.options[0] == "+ Add new payee"
-        by_label(app.text_input, "Payee / customer").input("Test vendor")
+        assert payee_selector.options[0] == "No payee"
+        payee_selector.set_value("Test vendor").run()
         by_label(app.text_input, "Description / memo").input("Keep this memo")
         with patch.object(
             storage,
@@ -168,7 +170,11 @@ def main() -> None:
             by_label(app.selectbox, "Category").value
             == "Testing expense renamed"
         )
-        assert by_label(app.text_input, "Payee / customer").value == "Test vendor"
+        assert by_label(app.selectbox, "Payee / customer").value == next(
+            item["id"]
+            for item in storage.list_payees()
+            if item["name"] == "Test vendor"
+        )
         assert (
             by_label(app.text_input, "Description / memo").value
             == "Keep this memo"
@@ -177,7 +183,7 @@ def main() -> None:
         by_label(app.button, "Save transaction").click().run()
         assert len(app.exception) == 0
         assert by_label(app.number_input, "Amount").value == 0.0
-        assert by_label(app.text_input, "Payee / customer").value == ""
+        assert by_label(app.selectbox, "Payee / customer").value == ""
         assert by_label(app.text_input, "Description / memo").value == ""
         assert "Transaction saved." in success_values(app)
         owner_expense = next(
@@ -206,14 +212,14 @@ def main() -> None:
         by_label(app.number_input, "Amount").set_value(75)
         by_label(app.selectbox, "From Account").set_value("Checking")
         by_label(app.selectbox, "Category").set_value("Sales")
-        by_label(app.text_input, "Payee / customer").input("Test customer")
+        by_label(app.selectbox, "Payee / customer").set_value("Test customer").run()
         by_label(app.button, "Save transaction").click().run()
 
         by_label(app.segmented_control, "Transaction type").set_value("Transfer").run()
         by_label(app.number_input, "Amount").set_value(10)
         by_label(app.selectbox, "From Account").set_value("Checking").run()
         by_label(app.selectbox, "To account").set_value("Primary savings")
-        by_label(app.text_input, "Payee / customer").input("Test transfer")
+        by_label(app.selectbox, "Payee / customer").set_value("Test transfer").run()
         by_label(app.button, "Save transaction").click().run()
         assert {item["kind"] for item in storage.list_transactions()} == {
             "Expense",

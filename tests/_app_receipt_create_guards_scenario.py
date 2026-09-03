@@ -15,6 +15,8 @@ from tests.fakes import FakeWorkbook
 def main() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook())
     storage.ensure_defaults()
+    storage.create_payee("Guard vendor")
+    storage.create_payee("Guard vendor invalid")
     upload_calls: list[str] = []
     uploaded_transaction_ids: list[str] = []
     created_transaction_ids: list[str] = []
@@ -85,7 +87,7 @@ def main() -> None:
         by_label(app.number_input, "Amount").set_value(25)
         by_label(app.selectbox, "From Account").set_value("Checking")
         by_label(app.selectbox, "Category").set_value("Office")
-        by_label(app.text_input, "Payee / customer").input("Guard vendor")
+        by_label(app.selectbox, "Payee / customer").set_value("Guard vendor").run()
 
         by_label(app.button, "Save transaction").click().run()
         assert len(storage.list_transactions()) == 1
@@ -97,7 +99,7 @@ def main() -> None:
         by_label(app.file_uploader, "Receipt (optional)").set_value(
             ("bad.pdf", b"", "application/pdf")
         ).run()
-        by_label(app.text_input, "Payee / customer").input("Guard vendor invalid")
+        by_label(app.selectbox, "Payee / customer").set_value("Guard vendor invalid").run()
         by_label(app.button, "Save transaction").click().run()
         assert len(storage.list_transactions()) == 1
         assert upload_calls == []

@@ -487,16 +487,15 @@ The form presents:
 4. Amount for Transfer
 5. From Account
 6. To account for Transfer
-7. Payee / customer dropdown and Reference. The first payee option is
-   `+ Add new payee`; new values are stored in the managed Payees table before
-   they are referenced by a transaction.
+7. Payee / customer selector and Reference. The selector lists active managed
+   Payees and accepts a new name typed and confirmed with Enter; typed existing
+   names select the stored Payee case-insensitively. New values are stored in
+   the managed Payees table before they are referenced by a transaction.
 8. Tags (optional). The multi-select lists profile-local stored Tags, lets each
-   selection be removed independently, and offers `+ Add new tag`; a valid new
-   Tag is stored and selected with the transaction. Typing a new name and
-   pressing Enter in the selector is an equivalent inline-create path. The
-   selector labels `+ Add new tag` and `Add new tag` are reserved Tag names.
-   Only one new Tag name may be entered per record; typed existing names select
-   the stored Tag case-insensitively.
+   selection be removed independently. Typing a new name and pressing Enter in
+   the selector creates and selects the inline Tag. Only one new Tag name may
+   be entered per record; typed existing names select the stored Tag
+   case-insensitively.
 9. Description / memo
 10. Receipt (optional)
 11. Save transaction

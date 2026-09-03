@@ -51,6 +51,12 @@ def main() -> None:
         "alpha-sheet": GoogleSheetsStorage(FakeWorkbook()),
         "beta-sheet": GoogleSheetsStorage(FakeWorkbook()),
     }
+    for payee_name in (
+        "Hierarchy vendor",
+        "Hierarchy transfer",
+        "Hierarchy income",
+    ):
+        storages["alpha-sheet"].create_payee(payee_name)
 
     profiles = {
         "alpha": profile_config(name="Alpha Business", spreadsheet_id="alpha-sheet"),
@@ -222,7 +228,7 @@ def main() -> None:
             "Operations › Petty cash"
         )
         by_label(app.selectbox, "Category").set_value("Travel › Flights")
-        by_label(app.text_input, "Payee / customer").input("Hierarchy vendor")
+        by_label(app.selectbox, "Payee / customer").set_value("Hierarchy vendor").run()
         by_label(app.button, "Save transaction").click().run()
         transaction = alpha.list_transactions()[0]
         assert transaction["account_id"] == petty_cash["id"]
@@ -236,7 +242,7 @@ def main() -> None:
             "Operations › Petty cash"
         ).run()
         by_label(app.selectbox, "To account").set_value("Payables")
-        by_label(app.text_input, "Payee / customer").input("Hierarchy transfer")
+        by_label(app.selectbox, "Payee / customer").set_value("Hierarchy transfer").run()
         by_label(app.button, "Save transaction").click().run()
         transfer = next(
             item for item in alpha.list_transactions() if item["kind"] == "Transfer"
@@ -254,7 +260,7 @@ def main() -> None:
         by_label(app.number_input, "Amount").set_value(20)
         by_label(app.selectbox, "From Account").set_value("Operations")
         by_label(app.selectbox, "Category").set_value("Sales")
-        by_label(app.text_input, "Payee / customer").input("Hierarchy income")
+        by_label(app.selectbox, "Payee / customer").set_value("Hierarchy income").run()
         by_label(app.button, "Save transaction").click().run()
 
         navigate_to(app, "Accounts")

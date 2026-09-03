@@ -105,15 +105,18 @@ and Expense require a same-kind category. Transfer requires two different
 active accounts and has no category. New transaction amounts start at **0.00**;
 the amount must be greater than zero when you save.
 
+Payee / customer is optional. Select an existing active managed Payee or type
+a new name into the selector and press Enter to create it inline. Existing
+Payee names are recognized case-insensitively, and a new Payee is stored before
+the transaction references it.
+
 Tags are optional profile-local labels that remain separate from accounting
 Categories. Select zero, one, or multiple stored Tags; remove any selection
-without clearing the others. Choose **+ Add new tag** to create a normalized,
-duplicate-safe Tag and attach it when the transaction is saved. You can also
-type a new name into the selector and press Enter when searching; the typed
-value is handled as the inline Tag to create. The selector labels "+ Add new
-tag" and "Add new tag" are reserved and cannot be saved as Tag names.
-Enter only one new Tag name at a time; existing Tag names are recognized as
-existing selections even when typed with different capitalization.
+without clearing the others. Type a new name into the selector and press Enter
+when searching to create a normalized, duplicate-safe Tag and attach it when
+the transaction is saved. Enter only one new Tag name at a time; existing Tag
+names are recognized as existing selections even when typed with different
+capitalization.
 
 The optional receipt uploader accepts PDF, PNG, JPG, JPEG, WEBP, or HEIC.
 Each file must be non-empty and no larger than 20 MB; one selected batch may
@@ -254,15 +257,13 @@ supports date filtering, trip and mile totals, filtered CSV export, editing,
 and permanent deletion. New mileage entries start at zero miles; a positive
 distance is required when saving.
 
-Mileage uses the same profile-local Tag list and inline **+ Add new tag** flow
-as Transactions. Select zero, one, or multiple Tags, and remove individual
-selections without affecting the others. You can also type a new name into the
-selector and press Enter when searching. The log and CSV display resolved Tag
-names, and the Tags filter includes trips containing any selected Tag. The
-selector labels "+ Add new tag" and "Add new tag" are reserved and cannot be
-saved as Tag names. A round trip applies the same Tags to both independently
-saved legs. Enter only one new Tag name at a time; existing Tag names are
-recognized as existing selections even when typed with different capitalization.
+Mileage uses the same profile-local Tag list and inline type-and-Enter flow as
+Transactions. Select zero, one, or multiple Tags, and remove individual
+selections without affecting the others. The log and CSV display resolved Tag
+names, and the Tags filter includes trips containing any selected Tag. A round
+trip applies the same Tags to both independently saved legs. Enter only one
+new Tag name at a time; existing Tag names are recognized as existing
+selections even when typed with different capitalization.
 
 When Google Maps is configured, Starting location and Destination offer Google
 address suggestions. Select both suggestions, then choose **Calculate mileage**
@@ -346,7 +347,8 @@ workbook. See [Backup and recovery](BACKUP_RECOVERY.md) for the operator
 workflow.
 
 Payees are managed values. Transaction forms offer existing active payees and
-start with **+ Add new payee**. Existing workbooks must be upgraded once with
+support inline creation by typing a new name into the selector and pressing
+Enter. Existing workbooks must be upgraded once with
 `scripts/migrate_payees.py` before using the new transaction schema.
 
 Tags are managed, profile-local values referenced by stable IDs from both

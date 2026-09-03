@@ -12,6 +12,13 @@ from tests.fakes import FakeWorkbook
 def main() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook())
     storage.ensure_defaults()
+    for payee_name in (
+        "Receipt vendor one",
+        "Receipt vendor two",
+        "Receipt vendor three",
+        "Receipt vendor four",
+    ):
+        storage.create_payee(payee_name)
     upload_calls: list[str] = []
     link_calls: list[str] = []
     fail_second_upload = {"value": True}
@@ -97,7 +104,7 @@ def main() -> None:
         by_label(app.number_input, "Amount").set_value(25)
         by_label(app.selectbox, "From Account").set_value("Checking")
         by_label(app.selectbox, "Category").set_value("Office")
-        by_label(app.text_input, "Payee / customer").input("Receipt vendor one")
+        by_label(app.selectbox, "Payee / customer").set_value("Receipt vendor one").run()
         by_label(app.file_uploader, "Receipt (optional)").set_value(
             [
                 ("receipt.pdf", b"first receipt", "application/pdf"),
@@ -141,7 +148,7 @@ def main() -> None:
         ), [str(success.value) for success in app.success]
 
         by_label(app.number_input, "Amount").set_value(30)
-        by_label(app.text_input, "Payee / customer").input("Receipt vendor two")
+        by_label(app.selectbox, "Payee / customer").set_value("Receipt vendor two").run()
         by_label(app.button, "Save transaction").click().run()
         assert len(storage.list_transactions()) == 2
         assert len(upload_calls) == 3
@@ -202,7 +209,7 @@ def main() -> None:
                 ("other.png", b"fifth receipt", "image/png"),
             ]
         )
-        by_label(app.text_input, "Payee / customer").input("Receipt vendor three")
+        by_label(app.selectbox, "Payee / customer").set_value("Receipt vendor three").run()
         by_label(app.button, "Save transaction").click().run()
         assert len(storage.list_transactions()) == 3
         assert len(upload_calls) == 9
@@ -213,7 +220,7 @@ def main() -> None:
         ) == 8
 
         by_label(app.number_input, "Amount").set_value(41)
-        by_label(app.text_input, "Payee / customer").input("Receipt vendor four")
+        by_label(app.selectbox, "Payee / customer").set_value("Receipt vendor four").run()
         by_label(app.button, "Save transaction").click().run()
         assert len(storage.list_transactions()) == 4
         assert len(upload_calls) == 9

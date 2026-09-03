@@ -26,7 +26,6 @@ from tabula_rasa.page_renderers.mileage import (
     _set_widget_default,
     _acknowledge_recorded_location_text,
     _save_round_trip,
-    _inline_tag_creation_requested,
     _tag_names_for_trip,
     _trip_tag_ids,
     mileage_frame,
@@ -665,24 +664,12 @@ def test_mileage_tag_ux_is_profile_scoped_and_persisted_through_add_edit() -> No
     assert 'if str(tag_id).strip() and str(item.get("name") or "").strip()' in source
 
 
-def test_blank_inline_tag_name_is_detected_before_a_mileage_write(monkeypatch) -> None:
-    import streamlit as st
-
-    monkeypatch.setattr(st, "session_state", {"tag-key": ["+ Add new tag"]})
-
-    assert _inline_tag_creation_requested("tag-key")
-    assert not _inline_tag_creation_requested("missing-key")
-
-
 def test_mileage_save_paths_validate_blank_inline_tag_names() -> None:
     source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
 
-    assert source.count('save_error.error("Enter a Tag name before saving.")') == 1
-    assert source.count('edit_error.error("Enter a Tag name before saving.")') == 1
-    assert source.index(
-        '_inline_tag_creation_requested("add_mileage_tag_ids")'
-    ) < source.index("context.confirmed_write(")
-    edit_guard = source.index("_inline_tag_creation_requested(\n")
+    assert "inline_tag_name_error(new_tag_name)" in source
+    assert "inline_tag_name_error(edited_new_tag_name)" in source
+    edit_guard = source.index("inline_tag_name_error(edited_new_tag_name)")
     edit_write = source.index("context.confirmed_write(", edit_guard)
     assert edit_guard < edit_write
 
