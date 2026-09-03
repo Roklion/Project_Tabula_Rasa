@@ -2539,6 +2539,298 @@ class GoogleSheetsStorage:
             self._replace_row("Payees", current, updated)
             return updated
 
+    @staticmethod
+    def _expected_managed_records(
+        expected: Iterable[Mapping[str, Any]] | Mapping[str, Mapping[str, Any]] | None,
+    ) -> dict[str, Mapping[str, Any]]:
+        """Normalize an optional caller snapshot used by management actions."""
+        if expected is None:
+            return {}
+        if isinstance(expected, Mapping):
+            values = expected.items()
+        else:
+            values = ((None, item) for item in expected)
+        result: dict[str, Mapping[str, Any]] = {}
+        for mapping_id, item in values:
+            record_id = _clean_text(
+                item.get("id", mapping_id), "Managed record ID", required=True
+            )
+            result[record_id] = item
+        return result
+
+    @staticmethod
+    def _assert_expected_managed_records(
+        current: Mapping[str, Mapping[str, str]],
+        expected: Iterable[Mapping[str, Any]] | Mapping[str, Mapping[str, Any]] | None,
+    ) -> None:
+        for record_id, expected_record in GoogleSheetsStorage._expected_managed_records(
+            expected
+        ).items():
+            actual = current.get(record_id)
+            if actual is None or any(
+                str(actual.get(key, "") or "") != str(value or "")
+                for key, value in expected_record.items()
+                if key != "tags"
+            ):
+                raise StorageConflictError(
+                    "A payee or tag changed; refresh the management list and try again."
+                )
+
+    @staticmethod
+    def _managed_rows_by_id(
+        rows: Iterable[_StoredRow], title: str
+    ) -> dict[str, _StoredRow]:
+        result: dict[str, _StoredRow] = {}
+        for row in rows:
+            record_id = _clean_text(row.values.get("id"), f"{title} ID", required=True)
+            if record_id in result:
+                raise StorageValidationError(f"Duplicate ID detected in {title}")
+            result[record_id] = row
+        return result
+
+    def _managed_batch_result(
+        self,
+        *,
+        operation: str,
+        error: StorageUnavailableError | None,
+        fully_applied: Callable[[], bool],
+        not_applied: Callable[[], bool],
+        invalidate: Iterable[str],
+    ) -> dict[str, str] | None:
+        """Classify a cross-sheet batch response using a fresh postcondition read."""
+        try:
+            applied = fully_applied()
+            untouched = not_applied()
+        except StorageError as read_error:
+            for title in invalidate:
+                self._invalidate(title)
+            raise StorageBulkMutationUncertainError(
+                f"The {operation} completed but its postcondition could not be read. "
+                "Review the affected records before retrying.",
+                outcome="mixed_ambiguous",
+                retryable=False,
+            ) from read_error
+        if applied:
+            for title in invalidate:
+                self._invalidate(title)
+            return {"status": "fully_applied"}
+        if untouched:
+            retryable = bool(error and error.retryable)
+            raise StorageBulkMutationUncertainError(
+                f"The {operation} was not applied. Review the affected records before retrying.",
+                outcome="not_applied",
+                retryable=retryable,
+            ) from error
+        for title in invalidate:
+            self._invalidate(title)
+        raise StorageBulkMutationUncertainError(
+            f"The {operation} outcome is ambiguous. Do not retry until the affected "
+            "records are reviewed.",
+            outcome="mixed_ambiguous",
+            retryable=False,
+        ) from error
+
+    def _managed_update_request(
+        self, title: str, row: _StoredRow, column: str, value: str
+    ) -> dict[str, Any]:
+        headers = self._headers(title)
+        column_index = self._sheet_column_index(headers, column)
+        return {
+            "updateCells": {
+                "range": {
+                    "sheetId": self._sheet_id(title),
+                    "startRowIndex": row.row_number - 1,
+                    "endRowIndex": row.row_number,
+                    "startColumnIndex": column_index,
+                    "endColumnIndex": column_index + 1,
+                },
+                "rows": [{"values": [{"userEnteredValue": {"stringValue": value}}]}],
+                "fields": "userEnteredValue",
+            }
+        }
+
+    def _managed_delete_request(self, title: str, row: _StoredRow) -> dict[str, Any]:
+        return {
+            "deleteDimension": {
+                "range": {
+                    "sheetId": self._sheet_id(title),
+                    "dimension": "ROWS",
+                    "startIndex": row.row_number - 1,
+                    "endIndex": row.row_number,
+                }
+            }
+        }
+
+    def merge_payees(
+        self,
+        target_payee_id: str,
+        source_payee_ids: Sequence[str],
+        *,
+        expected_payees: Iterable[Mapping[str, Any]]
+        | Mapping[str, Mapping[str, Any]]
+        | None = None,
+    ) -> dict[str, str]:
+        """Merge source payees into one target while preserving all references."""
+        target_id = _clean_text(target_payee_id, "Target payee", required=True)
+        source_ids = list(dict.fromkeys(
+            _clean_text(item, "Source payee", required=True) for item in source_payee_ids
+        ))
+        if not source_ids:
+            raise StorageValidationError("Select at least one source payee")
+        if target_id in source_ids:
+            raise StorageValidationError("The target payee cannot also be a source")
+        with _MIXED_USE_CREATE_LOCK, _PAYEE_WRITE_LOCK:
+            snapshot = self._snapshot(
+                ["Payees", "Transactions", "MixedUseExpenses"], force_refresh=True
+            )
+            payee_rows = self._managed_rows_by_id(snapshot["Payees"], "Payees")
+            payees = {record_id: dict(row.values) for record_id, row in payee_rows.items()}
+            self._assert_expected_managed_records(payees, expected_payees)
+            if target_id not in payees:
+                raise StorageNotFoundError("Payee no longer exists")
+            missing = [item for item in source_ids if item not in payees]
+            if missing:
+                raise StorageNotFoundError("A source payee no longer exists")
+            transaction_rows = self._managed_rows_by_id(snapshot["Transactions"], "Transactions")
+            mixed_rows = self._managed_rows_by_id(snapshot["MixedUseExpenses"], "MixedUseExpenses")
+            transaction_updates = {
+                record_id: row
+                for record_id, row in transaction_rows.items()
+                if _clean_text(row.values.get("payee_id"), "Payee") in source_ids
+            }
+            mixed_updates = {
+                record_id: row
+                for record_id, row in mixed_rows.items()
+                if _clean_text(row.values.get("payee_id"), "Payee") in source_ids
+            }
+            requests: list[dict[str, Any]] = []
+            for row in transaction_updates.values():
+                requests.append(
+                    self._managed_update_request(
+                        "Transactions", row, "payee_id", target_id
+                    )
+                )
+            for row in mixed_updates.values():
+                requests.append(
+                    self._managed_update_request(
+                        "MixedUseExpenses", row, "payee_id", target_id
+                    )
+                )
+            for source_id in sorted(source_ids, key=lambda item: payee_rows[item].row_number, reverse=True):
+                requests.append(self._managed_delete_request("Payees", payee_rows[source_id]))
+            if not requests:
+                raise StorageValidationError("The selected payees have no mergeable changes")
+
+            def fresh_state() -> tuple[dict[str, dict[str, str]], dict[str, _StoredRow], dict[str, _StoredRow]]:
+                current = self._snapshot(
+                    ["Payees", "Transactions", "MixedUseExpenses"], force_refresh=True
+                )
+                return (
+                    {record_id: dict(row.values) for record_id, row in self._managed_rows_by_id(current["Payees"], "Payees").items()},
+                    self._managed_rows_by_id(current["Transactions"], "Transactions"),
+                    self._managed_rows_by_id(current["MixedUseExpenses"], "MixedUseExpenses"),
+                )
+
+            def fully_applied() -> bool:
+                current_payees, current_transactions, current_mixed = fresh_state()
+                return (
+                    target_id in current_payees
+                    and not any(item in current_payees for item in source_ids)
+                    and all(
+                        _clean_text(row.values.get("payee_id"), "Payee") == target_id
+                        for record_id, row in current_transactions.items()
+                        if record_id in transaction_updates
+                    )
+                    and all(
+                        _clean_text(row.values.get("payee_id"), "Payee") == target_id
+                        for record_id, row in current_mixed.items()
+                        if record_id in mixed_updates
+                    )
+                )
+
+            def not_applied() -> bool:
+                _, current_transactions, current_mixed = fresh_state()
+                return all(
+                    record_id in current_transactions
+                    and current_transactions[record_id].values == row.values
+                    for record_id, row in transaction_updates.items()
+                ) and all(
+                    record_id in current_mixed and current_mixed[record_id].values == row.values
+                    for record_id, row in mixed_updates.items()
+                )
+
+            try:
+                self._batch_update_spreadsheet(requests)
+            except StorageUnavailableError as error:
+                result = self._managed_batch_result(
+                    operation="payee merge", error=error, fully_applied=fully_applied,
+                    not_applied=not_applied,
+                    invalidate=("Payees", "Transactions", "MixedUseExpenses"),
+                )
+                if result is not None:
+                    return {**result, "count": str(len(source_ids))}
+                raise AssertionError("managed batch classification did not return")
+            if not fully_applied():
+                for title in ("Payees", "Transactions", "MixedUseExpenses"):
+                    self._invalidate(title)
+                raise StorageBulkMutationUncertainError(
+                    "The payee merge completed but its postcondition is ambiguous. Review the affected records before retrying.",
+                    outcome="mixed_ambiguous", retryable=False,
+                )
+            for title in ("Payees", "Transactions", "MixedUseExpenses"):
+                self._invalidate(title)
+            return {"status": "fully_applied", "count": str(len(source_ids))}
+
+    merge_payee = merge_payees
+
+    def remove_payee(self, payee_id: str) -> dict[str, str]:
+        """Permanently remove one unreferenced payee after a fresh check."""
+        payee_id = _clean_text(payee_id, "Payee", required=True)
+        with _MIXED_USE_CREATE_LOCK, _PAYEE_WRITE_LOCK:
+            snapshot = self._snapshot(
+                ["Payees", "Transactions", "MixedUseExpenses"], force_refresh=True
+            )
+            payee_rows = self._managed_rows_by_id(snapshot["Payees"], "Payees")
+            if payee_id not in payee_rows:
+                raise StorageNotFoundError("Payee no longer exists")
+            references = sum(
+                _clean_text(row.values.get("payee_id"), "Payee") == payee_id
+                for row in (*snapshot["Transactions"], *snapshot["MixedUseExpenses"])
+            )
+            if references:
+                raise StorageConflictError(
+                    f"This payee is referenced by {references} records. Merge it or unassign it first."
+                )
+            request = self._managed_delete_request("Payees", payee_rows[payee_id])
+            try:
+                self._batch_update_spreadsheet([request])
+            except StorageUnavailableError as error:
+                def is_gone() -> bool:
+                    return payee_id not in self._managed_rows_by_id(
+                        self._rows("Payees", force_refresh=True), "Payees"
+                    )
+                def remains() -> bool:
+                    return payee_id in self._managed_rows_by_id(
+                        self._rows("Payees", force_refresh=True), "Payees"
+                    )
+                result = self._managed_batch_result(
+                    operation="payee removal", error=error, fully_applied=is_gone,
+                    not_applied=remains, invalidate=("Payees",),
+                )
+                if result is not None:
+                    return result
+                raise AssertionError("managed batch classification did not return")
+            if payee_id in self._managed_rows_by_id(self._rows("Payees", force_refresh=True), "Payees"):
+                self._invalidate("Payees")
+                raise StorageBulkMutationUncertainError(
+                    "The payee removal completed but its postcondition is ambiguous. Review the payee before retrying.",
+                    outcome="mixed_ambiguous", retryable=False,
+                )
+            self._invalidate("Payees")
+            return {"status": "fully_applied"}
+
+    delete_payee = remove_payee
+
     def list_tags(
         self, *, active_only: bool = False, _force_refresh: bool = False
     ) -> list[dict[str, str]]:
@@ -2588,6 +2880,178 @@ class GoogleSheetsStorage:
             }
             self._append("Tags", record)
             return record
+
+    def edit_tag(self, tag_id: str, **changes: Any) -> dict[str, str]:
+        """Rename or activate/deactivate a tag while retaining its stable ID."""
+        tag_id = _clean_text(tag_id, "Tag", required=True)
+        with _TAG_WRITE_LOCK:
+            current = self._find_row("Tags", tag_id)
+            updated = dict(current.values)
+            name = _clean_text(changes.get("name", updated.get("name")), "Tag name", required=True)
+            if normalize_tag_name(name) != normalize_tag_name(updated.get("name", "")):
+                existing = self.list_tags(_force_refresh=True)
+                if any(
+                    item["id"] != tag_id
+                    and normalize_tag_name(item["name"]) == normalize_tag_name(name)
+                    for item in existing
+                ):
+                    raise StorageConflictError("That tag already exists")
+            updated.update({
+                "name": name,
+                "active": "TRUE"
+                if _as_bool(changes.get("active", updated.get("active")), "Tag active")
+                else "FALSE",
+            })
+            self._replace_row("Tags", current, updated)
+            return updated
+
+    def merge_tags(
+        self,
+        target_tag_id: str,
+        source_tag_ids: Sequence[str],
+        *,
+        expected_tags: Iterable[Mapping[str, Any]]
+        | Mapping[str, Mapping[str, Any]]
+        | None = None,
+    ) -> dict[str, str]:
+        """Merge source tags into a target across transaction and mileage rows."""
+        target_id = _clean_text(target_tag_id, "Target tag", required=True)
+        source_ids = list(dict.fromkeys(
+            _clean_text(item, "Source tag", required=True) for item in source_tag_ids
+        ))
+        if not source_ids:
+            raise StorageValidationError("Select at least one source tag")
+        if target_id in source_ids:
+            raise StorageValidationError("The target tag cannot also be a source")
+        with _MIXED_USE_CREATE_LOCK, _TAG_WRITE_LOCK:
+            snapshot = self._snapshot(["Tags", "Transactions", "Mileage"], force_refresh=True)
+            tag_rows = self._managed_rows_by_id(snapshot["Tags"], "Tags")
+            tags = {record_id: dict(row.values) for record_id, row in tag_rows.items()}
+            self._assert_expected_managed_records(tags, expected_tags)
+            if target_id not in tags:
+                raise StorageNotFoundError("Tag no longer exists")
+            if any(item not in tags for item in source_ids):
+                raise StorageNotFoundError("A source tag no longer exists")
+            update_rows: dict[str, tuple[str, _StoredRow, str]] = {}
+            for title in ("Transactions", "Mileage"):
+                for record_id, row in self._managed_rows_by_id(snapshot[title], title).items():
+                    tag_ids = _normalize_tag_ids(row.values.get("tag_ids", ""))
+                    if not any(item in source_ids for item in tag_ids):
+                        continue
+                    merged_ids = [target_id if item in source_ids else item for item in tag_ids]
+                    merged_ids = list(dict.fromkeys(merged_ids))
+                    update_rows[f"{title}:{record_id}"] = (
+                        title, row, _encode_tag_ids(merged_ids)
+                    )
+            requests = [
+                self._managed_update_request(title, row, "tag_ids", value)
+                for title, row, value in update_rows.values()
+            ]
+            for source_id in sorted(source_ids, key=lambda item: tag_rows[item].row_number, reverse=True):
+                requests.append(self._managed_delete_request("Tags", tag_rows[source_id]))
+
+            def fresh_state() -> tuple[dict[str, _StoredRow], dict[str, _StoredRow], dict[str, _StoredRow]]:
+                current = self._snapshot(["Tags", "Transactions", "Mileage"], force_refresh=True)
+                return (
+                    self._managed_rows_by_id(current["Tags"], "Tags"),
+                    self._managed_rows_by_id(current["Transactions"], "Transactions"),
+                    self._managed_rows_by_id(current["Mileage"], "Mileage"),
+                )
+
+            def fully_applied() -> bool:
+                current_tags, current_transactions, current_mileage = fresh_state()
+                if target_id not in current_tags or any(item in current_tags for item in source_ids):
+                    return False
+                for title, row, expected_value in update_rows.values():
+                    current_rows = current_transactions if title == "Transactions" else current_mileage
+                    record_id = _clean_text(row.values.get("id"), "ID", required=True)
+                    if record_id not in current_rows:
+                        return False
+                    if str(current_rows[record_id].values.get("tag_ids", "")) != expected_value:
+                        return False
+                return True
+
+            def not_applied() -> bool:
+                _, current_transactions, current_mileage = fresh_state()
+                for title, row, _ in update_rows.values():
+                    current_rows = current_transactions if title == "Transactions" else current_mileage
+                    current = current_rows.get(
+                        _clean_text(row.values.get("id"), "ID", required=True)
+                    )
+                    if current is None or current.values != row.values:
+                        return False
+                return True
+
+            try:
+                self._batch_update_spreadsheet(requests)
+            except StorageUnavailableError as error:
+                result = self._managed_batch_result(
+                    operation="tag merge", error=error, fully_applied=fully_applied,
+                    not_applied=not_applied,
+                    invalidate=("Tags", "Transactions", "Mileage"),
+                )
+                if result is not None:
+                    return {**result, "count": str(len(source_ids))}
+                raise AssertionError("managed batch classification did not return")
+            if not fully_applied():
+                for title in ("Tags", "Transactions", "Mileage"):
+                    self._invalidate(title)
+                raise StorageBulkMutationUncertainError(
+                    "The tag merge completed but its postcondition is ambiguous. Review the affected records before retrying.",
+                    outcome="mixed_ambiguous", retryable=False,
+                )
+            for title in ("Tags", "Transactions", "Mileage"):
+                self._invalidate(title)
+            return {"status": "fully_applied", "count": str(len(source_ids))}
+
+    merge_tag = merge_tags
+
+    def remove_tag(self, tag_id: str) -> dict[str, str]:
+        """Permanently remove one tag only when no transaction or trip uses it."""
+        tag_id = _clean_text(tag_id, "Tag", required=True)
+        with _MIXED_USE_CREATE_LOCK, _TAG_WRITE_LOCK:
+            snapshot = self._snapshot(["Tags", "Transactions", "Mileage"], force_refresh=True)
+            tag_rows = self._managed_rows_by_id(snapshot["Tags"], "Tags")
+            if tag_id not in tag_rows:
+                raise StorageNotFoundError("Tag no longer exists")
+            references = 0
+            for row in (*snapshot["Transactions"], *snapshot["Mileage"]):
+                if tag_id in _normalize_tag_ids(row.values.get("tag_ids", "")):
+                    references += 1
+            if references:
+                raise StorageConflictError(
+                    f"This tag is referenced by {references} records. Merge it or unassign it first."
+                )
+            try:
+                self._batch_update_spreadsheet([
+                    self._managed_delete_request("Tags", tag_rows[tag_id])
+                ])
+            except StorageUnavailableError as error:
+                def is_gone() -> bool:
+                    return tag_id not in self._managed_rows_by_id(
+                        self._rows("Tags", force_refresh=True), "Tags"
+                    )
+                def remains() -> bool:
+                    return tag_id in self._managed_rows_by_id(
+                        self._rows("Tags", force_refresh=True), "Tags"
+                    )
+                result = self._managed_batch_result(
+                    operation="tag removal", error=error, fully_applied=is_gone,
+                    not_applied=remains, invalidate=("Tags",),
+                )
+                if result is not None:
+                    return result
+                raise AssertionError("managed batch classification did not return")
+            if tag_id in self._managed_rows_by_id(self._rows("Tags", force_refresh=True), "Tags"):
+                self._invalidate("Tags")
+                raise StorageBulkMutationUncertainError(
+                    "The tag removal completed but its postcondition is ambiguous. Review the tag before retrying.",
+                    outcome="mixed_ambiguous", retryable=False,
+                )
+            self._invalidate("Tags")
+            return {"status": "fully_applied"}
+
+    delete_tag = remove_tag
 
     def _payee_lookup(self, *, force_refresh: bool = False) -> dict[str, dict[str, str]]:
         return {item["id"]: item for item in self.list_payees(_force_refresh=force_refresh)}
