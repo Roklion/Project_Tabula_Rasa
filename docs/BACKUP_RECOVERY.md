@@ -79,7 +79,7 @@ for each source, with source_type=mixed_use_expense and source_id set to the
 source ID; its amount is the allocated business amount only. The source's
 linked_transaction_id must point back to that projection. Current-format
 backup validation rejects missing, orphaned, duplicated, or inconsistent
-source/projection relationships. Formats 2 through 7 restore with no
+source/projection relationships. Formats 2 through 8 restore with no
 mixed-use source records or linkage.
 
 Before upgrading an existing workbook, run the one-time payee migration:
