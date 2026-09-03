@@ -1161,6 +1161,28 @@ def test_mixed_use_uncertain_create_never_retries_projection_blindly(
     assert len(default_storage.list_transactions()) == 1
 
 
+def test_mixed_use_retry_ignores_its_persisted_receipt_owner(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    inputs = {
+        **_expense_inputs(default_storage),
+        "total_expense": "100",
+        "business_use_percentage": "50",
+        "allocation_rationale": "Measured use",
+        "source_id": "source-receipt-retry",
+        "linked_transaction_id": "transaction-receipt-retry",
+        "receipt_references": [{"id": "retryreceipt01", "name": "Receipt.pdf"}],
+    }
+
+    created = default_storage.create_mixed_use_expense(**inputs)
+    retried = default_storage.create_mixed_use_expense(**inputs)
+
+    assert retried["id"] == created["id"]
+    assert retried["linked_transaction_id"] == created["linked_transaction_id"]
+    assert len(default_storage._rows("MixedUseExpenses", force_refresh=True)) == 1
+    assert len(default_storage._rows("Transactions", force_refresh=True)) == 1
+
+
 def test_mixed_use_source_only_retry_classifies_missing_projection_as_retryable(
     default_storage: GoogleSheetsStorage,
 ) -> None:

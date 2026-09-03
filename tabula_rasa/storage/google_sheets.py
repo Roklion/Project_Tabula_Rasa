@@ -3000,7 +3000,10 @@ class GoogleSheetsStorage:
             raise StorageConflictError(
                 "The mixed-use source or linked transaction ID is already in use"
             )
-        self._reject_receipt_ownership_conflict(data.get("receipt_references", ""))
+        self._reject_receipt_ownership_conflict(
+            data.get("receipt_references", ""),
+            transaction_id=requested_transaction_id,
+        )
         source, projection = self._prepare_mixed_use_expense(
             data,
             source_id=requested_source_id or None,
