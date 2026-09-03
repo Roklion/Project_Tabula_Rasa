@@ -4108,6 +4108,10 @@ class GoogleSheetsStorage:
             _source, transaction = self._mixed_use_receipt_pair(
                 source_id, expected_source=expected_source
             )
+            self._reject_receipt_ownership_conflict(
+                _encode_receipt_references([normalized]),
+                transaction_id=transaction.values["id"],
+            )
             references = decode_receipt_references(
                 transaction.values.get("receipt_references", "")
             )

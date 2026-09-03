@@ -768,6 +768,54 @@ def test_mixed_use_writes_reject_receipts_owned_by_another_transaction(
         )
 
 
+def test_mixed_use_receipt_remap_rejects_receipt_owned_by_another_transaction(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    old_reference = {
+        "id": "remap-old-receipt",
+        "name": "Old.pdf",
+        "receipt_id": "0123456789abcdef0123456789abcdef",
+        "original_filename": "Old.pdf",
+        "mime_type": "application/pdf",
+        "byte_size": 1,
+        "sha256": "a" * 64,
+    }
+    replacement = {
+        **old_reference,
+        "id": "remap-owned-receipt",
+        "name": "Replacement.pdf",
+        "receipt_id": "fedcba9876543210fedcba9876543210",
+        "original_filename": "Replacement.pdf",
+        "sha256": "b" * 64,
+    }
+    default_storage.set_mixed_use_receipt_references(
+        source["id"], [old_reference], expected_source=source
+    )
+    owner = default_storage.create_transaction(
+        **_expense_inputs(default_storage), kind="Expense", amount="10"
+    )
+    default_storage.set_transaction_receipt_references(owner["id"], [replacement])
+    refreshed_source = default_storage.get_mixed_use_expense(source["id"])
+
+    with pytest.raises(StorageConflictError, match="already linked"):
+        default_storage.remap_mixed_use_receipt(
+            source["id"],
+            old_file_id=old_reference["id"],
+            reference=replacement,
+            expected_source=refreshed_source,
+        )
+
+    assert default_storage.get_mixed_use_expense(source["id"])[
+        "receipt_references"
+    ] == refreshed_source["receipt_references"]
+
+
 def test_generic_receipt_setter_rejects_receipts_owned_by_another_transaction(
     default_storage: GoogleSheetsStorage,
 ) -> None:
