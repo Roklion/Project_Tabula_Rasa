@@ -31,7 +31,7 @@ storage as the active ledger.
 
 ## Archive format and safety
 
-The current backup format is version 8. Each archive contains:
+The current backup format is version 9. Each archive contains:
 
 - Accounts.csv;
 - Categories.csv;
