@@ -19,6 +19,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
+from functools import wraps
 from typing import Any, Callable, TypeVar
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
@@ -281,6 +282,17 @@ class _StoredRow:
 
 
 T = TypeVar("T")
+
+
+def _active_ledger_mutation_lock(operation: Callable[..., T]) -> Callable[..., T]:
+    """Serialize writes that can create or change Payee/Tag references."""
+
+    @wraps(operation)
+    def locked(*args: Any, **kwargs: Any) -> T:
+        with _MIXED_USE_CREATE_LOCK:
+            return operation(*args, **kwargs)
+
+    return locked
 
 
 def _utc_now() -> str:
@@ -2876,32 +2888,59 @@ class GoogleSheetsStorage:
                     f"This payee is referenced by {references} records. Merge it or unassign it first."
                 )
             request = self._managed_delete_request("Payees", payee_rows[payee_id])
+
+            def read_state() -> tuple[dict[str, _StoredRow], dict[str, _StoredRow], dict[str, _StoredRow]]:
+                current = self._snapshot(
+                    ["Payees", "Transactions", "MixedUseExpenses"],
+                    force_refresh=True,
+                )
+                return (
+                    self._managed_rows_by_id(current["Payees"], "Payees"),
+                    self._managed_rows_by_id(current["Transactions"], "Transactions"),
+                    self._managed_rows_by_id(current["MixedUseExpenses"], "MixedUseExpenses"),
+                )
+
+            def references_present(state: Any) -> bool:
+                _, current_transactions, current_mixed = state
+                return any(
+                    _clean_text(row.values.get("payee_id"), "Payee") == payee_id
+                    for row in (*current_transactions.values(), *current_mixed.values())
+                )
+
+            def fully_applied(state: Any) -> bool:
+                current_payees, _, _ = state
+                return payee_id not in current_payees and not references_present(state)
+
+            def not_applied(state: Any) -> bool:
+                current_payees, _, _ = state
+                return (
+                    payee_id in current_payees
+                    and current_payees[payee_id].values == payee_rows[payee_id].values
+                    and not references_present(state)
+                )
+
             try:
                 self._batch_update_spreadsheet([request])
             except StorageUnavailableError as error:
-                def read_state() -> dict[str, _StoredRow]:
-                    return self._managed_rows_by_id(
-                        self._rows("Payees", force_refresh=True), "Payees"
-                    )
-                def is_gone(state: Any) -> bool:
-                    return payee_id not in state
-                def remains(state: Any) -> bool:
-                    return payee_id in state
                 result = self._managed_batch_result(
-                    operation="payee removal", error=error, fully_applied=is_gone,
+                    operation="payee removal", error=error, fully_applied=fully_applied,
                     read_state=read_state,
-                    not_applied=remains, invalidate=("Payees",),
+                    not_applied=not_applied,
+                    invalidate=("Payees", "Transactions", "MixedUseExpenses"),
                 )
                 if result is not None:
                     return result
                 raise AssertionError("managed batch classification did not return")
-            if payee_id in self._managed_rows_by_id(self._rows("Payees", force_refresh=True), "Payees"):
-                self._invalidate("Payees")
+            state = read_state()
+            if not fully_applied(state):
+                for title in ("Payees", "Transactions", "MixedUseExpenses"):
+                    self._invalidate(title)
                 raise StorageBulkMutationUncertainError(
                     "The payee removal completed but its postcondition is ambiguous. Review the payee before retrying.",
                     outcome="mixed_ambiguous", retryable=False,
                 )
-            self._invalidate("Payees")
+            for title in ("Payees", "Transactions", "MixedUseExpenses"):
+                self._invalidate(title)
             return {"status": "fully_applied"}
 
     delete_payee = remove_payee
@@ -3156,34 +3195,53 @@ class GoogleSheetsStorage:
                 raise StorageConflictError(
                     f"This tag is referenced by {references} records. Merge it or unassign it first."
                 )
+            def read_state() -> tuple[dict[str, _StoredRow], dict[str, _StoredRow], dict[str, _StoredRow]]:
+                current = self._snapshot(
+                    ["Tags", "Transactions", "Mileage"], force_refresh=True
+                )
+                return (
+                    self._managed_rows_by_id(current["Tags"], "Tags"),
+                    self._managed_rows_by_id(current["Transactions"], "Transactions"),
+                    self._managed_rows_by_id(current["Mileage"], "Mileage"),
+                )
+            def references_present(state: Any) -> bool:
+                _, current_transactions, current_mileage = state
+                return any(
+                    tag_id in _normalize_tag_ids(row.values.get("tag_ids", ""))
+                    for row in (*current_transactions.values(), *current_mileage.values())
+                )
+            def is_gone(state: Any) -> bool:
+                return tag_id not in state[0] and not references_present(state)
+            def remains(state: Any) -> bool:
+                return (
+                    tag_id in state[0]
+                    and state[0][tag_id].values == tag_rows[tag_id].values
+                    and not references_present(state)
+                )
             try:
                 self._batch_update_spreadsheet([
                     self._managed_delete_request("Tags", tag_rows[tag_id])
                 ])
             except StorageUnavailableError as error:
-                def read_state() -> dict[str, _StoredRow]:
-                    return self._managed_rows_by_id(
-                        self._rows("Tags", force_refresh=True), "Tags"
-                    )
-                def is_gone(state: Any) -> bool:
-                    return tag_id not in state
-                def remains(state: Any) -> bool:
-                    return tag_id in state
                 result = self._managed_batch_result(
                     operation="tag removal", error=error, fully_applied=is_gone,
                     read_state=read_state,
-                    not_applied=remains, invalidate=("Tags",),
+                    not_applied=remains,
+                    invalidate=("Tags", "Transactions", "Mileage"),
                 )
                 if result is not None:
                     return result
                 raise AssertionError("managed batch classification did not return")
-            if tag_id in self._managed_rows_by_id(self._rows("Tags", force_refresh=True), "Tags"):
-                self._invalidate("Tags")
+            state = read_state()
+            if not is_gone(state):
+                for title in ("Tags", "Transactions", "Mileage"):
+                    self._invalidate(title)
                 raise StorageBulkMutationUncertainError(
                     "The tag removal completed but its postcondition is ambiguous. Review the tag before retrying.",
                     outcome="mixed_ambiguous", retryable=False,
                 )
-            self._invalidate("Tags")
+            for title in ("Tags", "Transactions", "Mileage"):
+                self._invalidate(title)
             return {"status": "fully_applied"}
 
     delete_tag = remove_tag
@@ -3478,9 +3536,10 @@ class GoogleSheetsStorage:
         )
 
     def create_transaction(self, **data: Any) -> dict[str, str]:
-        record = self._prepare_transaction(data)
-        self._append("Transactions", record)
-        return record
+        with _MIXED_USE_CREATE_LOCK:
+            record = self._prepare_transaction(data)
+            self._append("Transactions", record)
+            return record
 
     def edit_transaction(self, transaction_id: str, **changes: Any) -> dict[str, str]:
         with _MIXED_USE_CREATE_LOCK:
@@ -5085,9 +5144,10 @@ class GoogleSheetsStorage:
         )
 
     def create_mileage_trip(self, **data: Any) -> dict[str, str]:
-        record = self._prepare_mileage_trip(data)
-        self._append("Mileage", record)
-        return record
+        with _MIXED_USE_CREATE_LOCK:
+            record = self._prepare_mileage_trip(data)
+            self._append("Mileage", record)
+            return record
 
     def create_mileage_round_trip(
         self,
@@ -5101,69 +5161,72 @@ class GoogleSheetsStorage:
         one distance for both legs.  When supplied, it is validated and used
         only for the reversed return entry.
         """
-        created_at = _utc_now()
-        new_tag_name = _clean_text(data.get("new_tag_name"), "New tag")
-        prepared_data = dict(data)
-        prepared_data["new_tag_name"] = ""
-        outbound = self._prepare_mileage_trip(
-            prepared_data,
-            created_at=created_at,
-        )
-        return_data = dict(prepared_data)
-        return_data.update(
-            {
-                "start_location": data.get("destination"),
-                "destination": data.get("start_location"),
-            }
-        )
-        if return_miles is not None:
-            return_data["miles"] = return_miles
-        return_trip = self._prepare_mileage_trip(
-            return_data,
-            created_at=created_at,
-        )
-        if new_tag_name:
-            new_tag = self.create_tag(new_tag_name)
-            for trip in (outbound, return_trip):
-                tag_ids = _normalize_tag_ids(trip["tag_ids"])
-                if new_tag["id"] not in tag_ids:
-                    tag_ids.append(new_tag["id"])
-                trip["tag_ids"] = _encode_tag_ids(tag_ids)
-        # Keep the public return value in semantic outbound/return order, but
-        # write the rows in the order the log should display for a new pair.
-        # Existing rows are not rewritten or migrated.
-        records = [outbound, return_trip]
-        self._append_many("Mileage", [return_trip, outbound])
-        return records
+        with _MIXED_USE_CREATE_LOCK:
+            created_at = _utc_now()
+            new_tag_name = _clean_text(data.get("new_tag_name"), "New tag")
+            prepared_data = dict(data)
+            prepared_data["new_tag_name"] = ""
+            outbound = self._prepare_mileage_trip(
+                prepared_data,
+                created_at=created_at,
+            )
+            return_data = dict(prepared_data)
+            return_data.update(
+                {
+                    "start_location": data.get("destination"),
+                    "destination": data.get("start_location"),
+                }
+            )
+            if return_miles is not None:
+                return_data["miles"] = return_miles
+            return_trip = self._prepare_mileage_trip(
+                return_data,
+                created_at=created_at,
+            )
+            if new_tag_name:
+                new_tag = self.create_tag(new_tag_name)
+                for trip in (outbound, return_trip):
+                    tag_ids = _normalize_tag_ids(trip["tag_ids"])
+                    if new_tag["id"] not in tag_ids:
+                        tag_ids.append(new_tag["id"])
+                    trip["tag_ids"] = _encode_tag_ids(tag_ids)
+            # Keep the public return value in semantic outbound/return order, but
+            # write the rows in the order the log should display for a new pair.
+            # Existing rows are not rewritten or migrated.
+            records = [outbound, return_trip]
+            self._append_many("Mileage", [return_trip, outbound])
+            return records
 
     def edit_mileage_trip(self, trip_id: str, **changes: Any) -> dict[str, str]:
-        current = self._find_row("Mileage", trip_id)
-        merged = dict(current.values)
-        merged.update(changes)
-        updated = self._prepare_mileage_trip(
-            merged,
-            trip_id=trip_id,
-            created_at=current.values["created_at"],
-            original_tag_ids=current.values.get("tag_ids", ""),
-        )
-        self._replace_row("Mileage", current, updated)
-        return updated
+        with _MIXED_USE_CREATE_LOCK:
+            current = self._find_row("Mileage", trip_id)
+            merged = dict(current.values)
+            merged.update(changes)
+            updated = self._prepare_mileage_trip(
+                merged,
+                trip_id=trip_id,
+                created_at=current.values["created_at"],
+                original_tag_ids=current.values.get("tag_ids", ""),
+            )
+            self._replace_row("Mileage", current, updated)
+            return updated
 
     def delete_mileage_trip(self, trip_id: str) -> None:
-        for attempt in range(self._retry_attempts):
-            current = self._find_row("Mileage", trip_id)
-            worksheet = self._worksheet("Mileage")
-            try:
-                self._api(
-                    lambda: worksheet.delete_rows(current.row_number),
-                    retry_safe=False,
-                )
-                self._invalidate("Mileage")
-                return
-            except StorageUnavailableError as error:
-                self._invalidate("Mileage")
-                if not error.retryable:
-                    raise
+        with _MIXED_USE_CREATE_LOCK:
+            for attempt in range(self._retry_attempts):
+                current = self._find_row("Mileage", trip_id)
+                worksheet = self._worksheet("Mileage")
+                try:
+                    self._api(
+                        lambda: worksheet.delete_rows(current.row_number),
+                        retry_safe=False,
+                    )
+                    self._invalidate("Mileage")
+                    return
+                except StorageUnavailableError as error:
+                    self._invalidate("Mileage")
+                    if not error.retryable:
+                        raise
                 try:
                     self._find_row("Mileage", trip_id)
                 except StorageNotFoundError:
@@ -5229,6 +5292,7 @@ class GoogleSheetsStorage:
             },
         }
 
+    @_active_ledger_mutation_lock
     def import_quickbooks_mileage(
         self, rows: Iterable[Mapping[str, Any]]
     ) -> list[dict[str, str]]:
@@ -5246,6 +5310,7 @@ class GoogleSheetsStorage:
         self._append_many("Mileage", prepared)
         return prepared
 
+    @_active_ledger_mutation_lock
     def import_csv_transactions(
         self, rows: Iterable[Mapping[str, Any]]
     ) -> list[dict[str, str]]:
@@ -5381,6 +5446,7 @@ class GoogleSheetsStorage:
             "summary": {"ready": len(ready), "duplicates": len(duplicate_rows), **counts},
         }
 
+    @_active_ledger_mutation_lock
     def import_quickbooks_transactions(
         self, rows: Iterable[Mapping[str, Any]], *, auto_create: bool = False
     ) -> list[dict[str, str]]:

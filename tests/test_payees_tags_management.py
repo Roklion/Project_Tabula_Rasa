@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from threading import Event, Thread
 
 from tabula_rasa.storage import (
     StorageBulkMutationUncertainError,
@@ -226,6 +227,160 @@ def test_management_operations_are_isolated_between_profiles() -> None:
     ]
     assert second.list_transactions()[0]["payee_id"] == second_transaction["payee_id"]
     assert second_unused["id"] in {item["id"] for item in second.list_tags(active_only=False)}
+
+
+def test_create_transaction_cannot_interleave_management_remove(default_storage) -> None:
+    account, category = _ledger_setup(default_storage)
+    tag = default_storage.create_tag("In-flight")
+    entered = Event()
+    release = Event()
+    original = default_storage._prepare_transaction
+
+    def blocked_prepare(*args, **kwargs):
+        entered.set()
+        release.wait(timeout=5)
+        return original(*args, **kwargs)
+
+    default_storage._prepare_transaction = blocked_prepare
+    writer = Thread(
+        target=lambda: default_storage.create_transaction(
+            txn_date="2026-01-01", kind="Expense", amount="10",
+            account_id=account["id"], category_id=category["id"], tag_ids=[tag["id"]],
+        )
+    )
+    writer.start()
+    assert entered.wait(timeout=5)
+    management_done = Event()
+    def remove_after_writer() -> None:
+        try:
+            default_storage.remove_tag(tag["id"])
+        except StorageConflictError:
+            pass
+        finally:
+            management_done.set()
+
+    management = Thread(target=remove_after_writer)
+    management.start()
+    assert not management_done.wait(timeout=0.1)
+    release.set()
+    writer.join(timeout=5)
+    management.join(timeout=5)
+    assert not management.is_alive()
+    assert tag["id"] in {item["id"] for item in default_storage.list_tags(active_only=False)}
+
+
+def test_mileage_edit_cannot_interleave_tag_merge(default_storage) -> None:
+    tag = default_storage.create_tag("In-flight")
+    trip = default_storage.create_mileage_trip(
+        trip_date="2026-01-01", miles="2", start_location="A", destination="B",
+        business_purpose="Visit", vehicle="Car", tag_ids=[tag["id"]],
+    )
+    entered = Event()
+    release = Event()
+    original = default_storage._prepare_mileage_trip
+
+    def blocked_prepare(*args, **kwargs):
+        entered.set()
+        release.wait(timeout=5)
+        return original(*args, **kwargs)
+
+    default_storage._prepare_mileage_trip = blocked_prepare
+    writer = Thread(
+        target=lambda: default_storage.edit_mileage_trip(
+            trip["id"], notes="edited", tag_ids=[tag["id"]]
+        )
+    )
+    writer.start()
+    assert entered.wait(timeout=5)
+    source = default_storage.create_tag("Other")
+    done = Event()
+    management = Thread(
+        target=lambda: (default_storage.merge_tags(source["id"], [tag["id"]]), done.set())
+    )
+    management.start()
+    assert not done.wait(timeout=0.1)
+    release.set()
+    writer.join(timeout=5)
+    management.join(timeout=5)
+    assert done.is_set()
+
+
+def test_mileage_import_cannot_interleave_management_remove(default_storage) -> None:
+    tag = default_storage.create_tag("Import lock")
+    entered = Event()
+    release = Event()
+    original = default_storage._prepare_mileage_trip
+
+    def blocked_prepare(*args, **kwargs):
+        entered.set()
+        release.wait(timeout=5)
+        return original(*args, **kwargs)
+
+    default_storage._prepare_mileage_trip = blocked_prepare
+    rows = [
+        {
+            "Trip Date": "07/20/2026",
+            "Trip Type": "Business",
+            "Business Purpose": "Client meeting",
+            "Vehicle Used": "Blue car",
+            "Starting Point": "Office",
+            "Ending Point": "Client site",
+            "Distance (km)": "10 km",
+        }
+    ]
+    writer = Thread(target=lambda: default_storage.import_quickbooks_mileage(rows))
+    writer.start()
+    assert entered.wait(timeout=5)
+    done = Event()
+    management = Thread(
+        target=lambda: (default_storage.remove_tag(tag["id"]), done.set())
+    )
+    management.start()
+    assert not done.wait(timeout=0.1)
+    release.set()
+    writer.join(timeout=5)
+    management.join(timeout=5)
+    assert not management.is_alive()
+    assert tag["id"] not in {item["id"] for item in default_storage.list_tags(active_only=False)}
+
+
+def test_removal_row_gone_with_new_reference_is_ambiguous(default_storage, monkeypatch) -> None:
+    tag = default_storage.create_tag("Race")
+
+    def delete_and_reference(_requests):
+        default_storage.create_mileage_trip(
+            trip_date="2026-01-01", miles="2", start_location="A", destination="B",
+            business_purpose="Race", vehicle="Car", tag_ids=[tag["id"]],
+        )
+        row = default_storage._find_row("Tags", tag["id"])
+        default_storage._worksheet("Tags").delete_rows(row.row_number)
+        raise StorageUnavailableError("response lost", retryable=True)
+
+    monkeypatch.setattr(default_storage, "_batch_update_spreadsheet", delete_and_reference)
+    with pytest.raises(StorageBulkMutationUncertainError) as raised:
+        default_storage.remove_tag(tag["id"])
+    assert raised.value.outcome == "mixed_ambiguous"
+    assert raised.value.retryable is False
+
+
+def test_payee_removal_row_gone_with_new_reference_is_ambiguous(default_storage, monkeypatch) -> None:
+    account, category = _ledger_setup(default_storage)
+    payee = default_storage.create_payee("Race payee")
+
+    def delete_and_reference(_requests):
+        default_storage.create_transaction(
+            txn_date="2026-01-01", kind="Expense", amount="2",
+            account_id=account["id"], category_id=category["id"], payee_id=payee["id"],
+        )
+        row = default_storage._find_row("Payees", payee["id"])
+        default_storage._worksheet("Payees").delete_rows(row.row_number)
+        raise StorageUnavailableError("response lost", retryable=True)
+
+    monkeypatch.setattr(default_storage, "_batch_update_spreadsheet", delete_and_reference)
+    with pytest.raises(StorageBulkMutationUncertainError) as raised:
+        default_storage.remove_payee(payee["id"])
+    assert raised.value.outcome == "mixed_ambiguous"
+    assert raised.value.retryable is False
 
 
 def test_transactions_exposes_profile_local_management_tab() -> None:
