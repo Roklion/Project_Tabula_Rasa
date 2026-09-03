@@ -66,6 +66,21 @@ def test_tag_selector_maps_typed_existing_name_case_insensitively(monkeypatch) -
     assert new_name is None
 
 
+def test_tag_selector_treats_unavailable_inactive_name_as_inline_creation(monkeypatch) -> None:
+    state: dict[str, object] = {}
+    monkeypatch.setattr(st, "session_state", state)
+    monkeypatch.setattr(st, "multiselect", Mock(return_value=["Old tag"]))
+
+    selected, new_name = render_tag_selector(
+        [{"id": "old", "name": "Old tag", "active": "FALSE"}],
+        label="Tags",
+        key="tags",
+    )
+
+    assert selected == []
+    assert new_name == "Old tag"
+
+
 def test_tag_selector_rejects_multiple_typed_new_names(monkeypatch) -> None:
     state: dict[str, object] = {}
     monkeypatch.setattr(st, "session_state", state)

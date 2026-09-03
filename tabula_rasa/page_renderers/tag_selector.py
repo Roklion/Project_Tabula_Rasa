@@ -91,6 +91,7 @@ def render_tag_selector(
     by_name = {
         _tag_name(tag).casefold(): tag_id
         for tag_id, tag in by_id.items()
+        if tag_id in available_ids
     }
     if key not in st.session_state:
         initial_ids: list[str] = []
