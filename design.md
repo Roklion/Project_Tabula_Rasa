@@ -632,10 +632,11 @@ matches a trip when it contains any selected Tag. It provides single-row
 selection and an Edit mileage trip section with all fields, save, and permanent
 delete.
 
-Mileage Tags use the same profile-local stored Tag list and inline `+ Add new
-tag` behavior as Transactions. Zero, one, or multiple Tags are valid; each is
-independently removable. Round-trip creation applies the same selected Tags to
-both independent rows.
+Mileage Tags use the same profile-local stored Tag list and type-and-Enter
+creation behavior as Transactions. Zero, one, or multiple Tags are valid; each
+is independently removable. Only one new Tag name may be entered per record,
+and typed existing names select the stored Tag case-insensitively. Round-trip
+creation applies the same selected Tags to both independent rows.
 
 When app-wide Google Maps configuration is available, Starting location and
 Destination use a narrowly scoped address-lookup component. The Google lookup
