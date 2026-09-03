@@ -4,6 +4,8 @@ from unittest.mock import Mock
 
 import streamlit as st
 
+from tests.app_support import authenticated_app, by_label, navigate_to
+from tests.fakes import FakeWorkbook
 from tabula_rasa.page_renderers.tag_selector import (
     inline_tag_name_error,
     render_tag_selector,
@@ -11,6 +13,7 @@ from tabula_rasa.page_renderers.tag_selector import (
     tag_selector_error,
 )
 from tabula_rasa.page_renderers.transactions.ledger import _copyable_tag_ids
+from tabula_rasa.storage import GoogleSheetsStorage
 
 
 def test_tag_selector_keeps_each_selection_and_exposes_inline_creation(monkeypatch) -> None:
@@ -154,3 +157,27 @@ def test_copy_drops_inactive_source_tags() -> None:
         ],
         ["active", "old", "active"],
     ) == ["active"]
+
+
+def test_add_transaction_can_create_inline_tag_through_form() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    storage.create_account("Checking", "Bank")
+    storage.create_category("Office", "Expense")
+
+    with authenticated_app(storage) as app:
+        navigate_to(app, "Transactions")
+        by_label(app.number_input, "Amount").set_value(25).run()
+        by_label(app.selectbox, "From Account").set_value("Checking").run()
+        by_label(app.selectbox, "Category").set_value("Office").run()
+        tag_selector = by_label(app.multiselect, "Tags")
+        # AppTest cannot type into Streamlit's accepted custom multiselect value;
+        # append the submitted display value to its test representation.
+        tag_selector.options.append("Client work")
+        tag_selector.set_value(["Client work"]).run()
+        by_label(app.multiselect, "Tags").options.append("Client work")
+        by_label(app.button, "Save transaction").click().run()
+
+    transaction = storage.list_transactions()[0]
+    tag = storage.list_tags()[0]
+    assert tag["name"] == "Client work"
+    assert transaction["tag_ids"] == [tag["id"]]
