@@ -968,6 +968,209 @@ class TestGoogleSheetsStorage:
             expected_migrations = 2 if title == "Transactions" else 1
             assert workbook.sheets[title].add_cols.call_count == expected_migrations
 
+    def test_mixed_use_tag_migration_resumes_after_interrupted_backfill(self) -> None:
+        headers = dict(WORKSHEET_HEADERS)
+        headers["MixedUseExpenses"] = tuple(
+            header
+            for header in headers["MixedUseExpenses"]
+            if header != "tag_ids"
+        )
+        workbook = FakeWorkbook(headers)
+
+        def add_row(title: str, values: dict[str, str]) -> None:
+            row = [""] * len(workbook.sheets[title].rows[0])
+            for field, value in values.items():
+                row[workbook.sheets[title].rows[0].index(field)] = value
+            workbook.sheets[title].rows.append(row)
+
+        add_row(
+            "Accounts",
+            {
+                "id": "account-1",
+                "name": "Checking",
+                "type": "Bank",
+                "classification": "Asset",
+                "opening_balance": "0.00",
+                "active": "TRUE",
+                "created_at": "2026-09-01T00:00:00Z",
+            },
+        )
+        add_row(
+            "Categories",
+            {"id": "category-1", "name": "Office", "kind": "Expense"},
+        )
+        add_row(
+            "Tags",
+            {
+                "id": "tag-1",
+                "name": "Business",
+                "active": "TRUE",
+                "created_at": "2026-09-01T00:00:00Z",
+            },
+        )
+        add_row(
+            "Transactions",
+            {
+                "id": "transaction-1",
+                "txn_date": "2026-09-01",
+                "kind": "Expense",
+                "amount": "50.00",
+                "account_id": "account-1",
+                "category_id": "category-1",
+                "description": "Allocation rationale: Measured use",
+                "tag_ids": '["tag-1"]',
+                "source_type": "mixed_use_expense",
+                "source_id": "source-1",
+                "created_at": "2026-09-01T00:00:00Z",
+            },
+        )
+        add_row(
+            "MixedUseExpenses",
+            {
+                "id": "source-1",
+                "txn_date": "2026-09-01",
+                "kind": "Expense",
+                "total_expense": "100.00",
+                "business_use_percentage": "50",
+                "allocated_amount": "50.00",
+                "account_id": "account-1",
+                "category_id": "category-1",
+                "allocation_rationale": "Measured use",
+                "linked_transaction_id": "transaction-1",
+                "created_at": "2026-09-01T00:00:00Z",
+            },
+        )
+
+        google_client = Mock()
+        google_client.open_by_key.return_value = workbook
+        transaction_sheet = workbook.sheets["Transactions"]
+        original_transaction_get_all_values = transaction_sheet.get_all_values
+        initial_transaction_values = original_transaction_get_all_values()
+        transaction_sheet.get_all_values = Mock(
+            side_effect=[initial_transaction_values, OSError("read lost")]
+        )
+
+        with (
+            patch.object(Credentials, "from_service_account_info", return_value=object()),
+            patch.object(gspread, "authorize", return_value=google_client),
+            pytest.raises(StorageInitializationError, match="initialization failed"),
+        ):
+            GoogleSheetsStorage.from_secrets(
+                {
+                    "spreadsheet_id": "id",
+                    "gcp_service_account": {"type": "service_account"},
+                }
+            )
+
+        assert "tag_ids__migration_pending" in workbook.sheets[
+            "MixedUseExpenses"
+        ].rows[0]
+
+        transaction_sheet.get_all_values = Mock(
+            wraps=original_transaction_get_all_values
+        )
+        with (
+            patch.object(Credentials, "from_service_account_info", return_value=object()),
+            patch.object(gspread, "authorize", return_value=google_client),
+        ):
+            storage = GoogleSheetsStorage.from_secrets(
+                {
+                    "spreadsheet_id": "id",
+                    "gcp_service_account": {"type": "service_account"},
+                }
+            )
+
+        source_sheet = workbook.sheets["MixedUseExpenses"]
+        assert set(source_sheet.rows[0]) == set(WORKSHEET_HEADERS["MixedUseExpenses"])
+        assert source_sheet.rows[1][source_sheet.rows[0].index("tag_ids")] == '["tag-1"]'
+        assert storage.list_mixed_use_expenses()[0]["tag_ids"] == ["tag-1"]
+
+    def test_current_mixed_use_schema_mismatch_is_not_migrated(self) -> None:
+        workbook = FakeWorkbook()
+
+        def add_row(title: str, values: dict[str, str]) -> None:
+            row = [""] * len(WORKSHEET_HEADERS[title])
+            for field, value in values.items():
+                row[WORKSHEET_HEADERS[title].index(field)] = value
+            workbook.sheets[title].rows.append(row)
+
+        add_row(
+            "Accounts",
+            {
+                "id": "account-1",
+                "name": "Checking",
+                "type": "Bank",
+                "classification": "Asset",
+                "opening_balance": "0.00",
+                "active": "TRUE",
+                "created_at": "2026-09-01T00:00:00Z",
+            },
+        )
+        add_row(
+            "Categories",
+            {
+                "id": "category-1",
+                "name": "Office",
+                "kind": "Expense",
+            },
+        )
+        add_row(
+            "Transactions",
+            {
+                "id": "transaction-1",
+                "txn_date": "2026-09-01",
+                "kind": "Expense",
+                "amount": "50.00",
+                "account_id": "account-1",
+                "category_id": "category-1",
+                "description": "Office\nAllocation rationale: Measured use",
+                "source_type": "mixed_use_expense",
+                "source_id": "source-1",
+                "tag_ids": '["tag-1"]',
+                "created_at": "2026-09-01T00:00:00Z",
+            },
+        )
+        add_row(
+            "MixedUseExpenses",
+            {
+                "id": "source-1",
+                "txn_date": "2026-09-01",
+                "kind": "Expense",
+                "total_expense": "100.00",
+                "business_use_percentage": "50.00",
+                "allocated_amount": "50.00",
+                "account_id": "account-1",
+                "category_id": "category-1",
+                "description": "Office",
+                "allocation_rationale": "Measured use",
+                "linked_transaction_id": "transaction-1",
+                "created_at": "2026-09-01T00:00:00Z",
+            },
+        )
+        google_client = Mock()
+        google_client.open_by_key.return_value = workbook
+
+        with (
+            patch.object(
+                Credentials,
+                "from_service_account_info",
+                return_value=object(),
+            ),
+            patch.object(gspread, "authorize", return_value=google_client),
+            pytest.raises(StorageValidationError, match="tags do not match"),
+        ):
+            storage = GoogleSheetsStorage.from_secrets(
+                {
+                    "spreadsheet_id": "given-spreadsheet-id",
+                    "gcp_service_account": {"type": "service_account"},
+                }
+            )
+            storage.list_mixed_use_expenses()
+
+        source_sheet = workbook.sheets["MixedUseExpenses"]
+        source_tag_index = source_sheet.rows[0].index("tag_ids")
+        assert source_sheet.rows[1][source_tag_index] == ""
+
     @pytest.mark.parametrize("field", ["id", "name"])
     def test_list_accounts_rejects_missing_required_display_fields(
         self, field: str

@@ -14,6 +14,8 @@ from tabula_rasa.receipt_manifest import (
 from tabula_rasa.storage import (
     decode_receipt_references,
     GoogleSheetsStorage,
+    MIXED_USE_SOURCE_TYPE,
+    StorageConflictError,
     StorageError,
 )
 
@@ -107,11 +109,20 @@ def prepare_profile_receipts(
         if current_reference == reference:
             continue
         try:
-            storage.remap_transaction_receipt(
-                transaction_id,
-                old_file_id=file_id,
-                reference=reference,
-            )
+            source_type = str(current_transaction.get("source_type") or "")
+            source_id = str(current_transaction.get("source_id") or "")
+            if source_type == MIXED_USE_SOURCE_TYPE and source_id:
+                storage.remap_mixed_use_receipt(
+                    source_id,
+                    old_file_id=file_id,
+                    reference=reference,
+                )
+            else:
+                storage.remap_transaction_receipt(
+                    transaction_id,
+                    old_file_id=file_id,
+                    reference=reference,
+                )
         except StorageError as error:
             report["errors"].append(
                 {"file_id": file_id, "error": str(error)}
@@ -120,10 +131,44 @@ def prepare_profile_receipts(
         report["references_updated"] += 1
     for transaction_id, references in pending_initializations.items():
         try:
-            storage.initialize_legacy_transaction_receipts(
-                transaction_id,
-                references=references,
-            )
+            transaction = transactions_by_id[transaction_id]
+            source_type = str(transaction.get("source_type") or "")
+            source_id = str(transaction.get("source_id") or "")
+            if source_type == MIXED_USE_SOURCE_TYPE and source_id:
+                expected_receipt_references = str(
+                    transaction.get("receipt_references") or ""
+                )
+                expected_source = next(
+                    (
+                        source
+                        for source in storage.list_mixed_use_expenses(
+                            _force_refresh=True
+                        )
+                        if source["id"] == source_id
+                    ),
+                    None,
+                )
+                if expected_source is None:
+                    raise StorageConflictError(
+                        "The mixed-use receipt pair changed; refresh before retrying."
+                    )
+                if (
+                    str(expected_source.get("receipt_references") or "")
+                    != expected_receipt_references
+                ):
+                    raise StorageConflictError(
+                        "The mixed-use receipt pair changed; refresh before retrying."
+                    )
+                storage.set_mixed_use_receipt_references(
+                    source_id,
+                    references,
+                    expected_source=expected_source,
+                )
+            else:
+                storage.initialize_legacy_transaction_receipts(
+                    transaction_id,
+                    references=references,
+                )
         except StorageError as error:
             report["errors"].extend(
                 {

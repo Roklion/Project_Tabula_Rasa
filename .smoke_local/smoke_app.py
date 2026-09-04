@@ -24,13 +24,14 @@ fake_storage = GoogleSheetsStorage(FakeWorkbook())
 fake_storage.ensure_defaults()
 smoke_account = fake_storage.list_accounts()[0]
 smoke_category = fake_storage.list_categories(kind="Expense")[0]
+smoke_payee = fake_storage.create_payee("Viewport smoke vendor")
 fake_storage.create_transaction(
     txn_date=date.today().isoformat(),
     kind="Expense",
     amount="25.00",
     account_id=smoke_account["id"],
     category_id=smoke_category["id"],
-    payee="Viewport smoke vendor",
+    payee_id=smoke_payee["id"],
 )
 
 

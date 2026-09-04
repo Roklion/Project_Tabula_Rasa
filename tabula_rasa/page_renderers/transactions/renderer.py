@@ -8,6 +8,7 @@ from tabula_rasa.hierarchy import hierarchy_paths, ordered_hierarchy
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
 from tabula_rasa.page_renderers.transactions.creation import render_add_transaction
 from tabula_rasa.page_renderers.transactions.ledger import render_ledger
+from tabula_rasa.page_renderers.transactions.mixed_use import render_mixed_use_expenses
 from tabula_rasa.page_renderers.transactions.payees_tags import (
     PayeesTagsContext,
     render_payees_tags,
@@ -29,8 +30,13 @@ def render_transactions(context: TransactionsContext) -> None:
         "Transactions",
         "Record activity, manage the ledger, and keep receipt links with each row.",
     )
-    tab_add, tab_ledger, tab_payees_tags = st.tabs(
-        ["Add transaction", "View & edit ledger", "Payees & Tags"]
+    tab_add, tab_ledger, tab_mixed, tab_payees_tags = st.tabs(
+        [
+            "Add transaction",
+            "View & edit ledger",
+            "Mixed-use expenses",
+            "Payees & Tags",
+        ]
     )
     page_footer = st.empty()
 
@@ -87,6 +93,17 @@ def render_transactions(context: TransactionsContext) -> None:
                 payees=payees,
                 tags=tags,
                 render_error_footer=render_error_footer,
+            )
+    with tab_mixed:
+        with st.container(key="transactions_mixed_use_surface"):
+            render_mixed_use_expenses(
+                context,
+                accounts=accounts,
+                categories=categories,
+                account_paths=account_paths,
+                category_paths=category_paths,
+                payees=payees,
+                tags=tags,
             )
 
     with tab_payees_tags:

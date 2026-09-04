@@ -38,6 +38,7 @@ from tabula_rasa.page_renderers.tag_selector import (
     tag_selector_error,
 )
 from tabula_rasa.storage import StorageError, decode_receipt_references
+from tabula_rasa.storage import MIXED_USE_SOURCE_TYPE
 
 
 def transaction_has_receipts(transaction: Mapping[str, object]) -> bool:
@@ -50,6 +51,25 @@ def transaction_has_receipts(transaction: Mapping[str, object]) -> bool:
         return bool(decode_receipt_references(references))
     except StorageError:
         return False
+
+
+def transaction_is_mixed_use(transaction: Mapping[str, object]) -> bool:
+    """Return whether durable provenance makes this projection read-only."""
+    return bool(
+        str(transaction.get("source_type") or "").strip() == MIXED_USE_SOURCE_TYPE
+        and str(transaction.get("source_id") or "").strip()
+    )
+
+
+def _mixed_use_transaction_ids(
+    transactions: Sequence[Mapping[str, object]],
+) -> set[str]:
+    """Return mixed-use projection IDs from an unfiltered transaction snapshot."""
+    return {
+        str(transaction.get("id") or "")
+        for transaction in transactions
+        if transaction_is_mixed_use(transaction)
+    }
 
 
 def _bulk_selection_key(profile_key: str) -> str:
@@ -374,6 +394,22 @@ def render_ledger(
         categories,
         tags=tags,
     )
+    transaction_by_id = {
+        str(transaction.get("id") or ""): transaction
+        for transaction in structured_transactions
+    }
+    transaction_frame["Type"] = [
+        (
+            f"{value} · Mixed-use"
+            if transaction_is_mixed_use(transaction_by_id.get(str(row_id), {}))
+            else value
+        )
+        for value, row_id in zip(
+            transaction_frame["Type"],
+            transaction_frame["ID"],
+            strict=False,
+        )
+    ]
     transaction_frame["Receipt"] = [
         "\U0001f4ce" if transaction_has_receipts(transaction) else ""
         for transaction in structured_transactions
@@ -518,15 +554,25 @@ def render_ledger(
         if mode == "Bulk"
         else _selection_ids(transaction_ids, selected_rows)
     )
+    selected_protected = any(
+        transaction_is_mixed_use(transaction_by_id.get(transaction_id, {}))
+        for transaction_id in selected_for_copy
+    )
     copy_button = st.button(
         "Copy transaction",
-        disabled=bool(copy_source_id) or len(selected_for_copy) != 1,
+        disabled=(
+            bool(copy_source_id)
+            or len(selected_for_copy) != 1
+            or selected_protected
+        ),
         key=(
             "transaction_copy_"
             f"{context.profile_key}_{st.session_state.get('transaction_ledger_generation', 0)}"
         ),
         help=(
-            "Select exactly one transaction to open a prefilled copy form."
+            "Mixed-use projections are managed from the Mixed-use expenses tab."
+            if selected_protected
+            else "Select exactly one transaction to open a prefilled copy form."
         ),
     )
     if copy_button and len(selected_for_copy) == 1:
@@ -538,11 +584,16 @@ def render_ledger(
         ) + 1
         st.session_state["edit_transaction_id"] = source_id
         st.rerun()
-    filtered_recovery_ids = set(editor_receipt_recovery_transaction_ids(context)) - set(
-        transaction_ids
+    derived_ids = _mixed_use_transaction_ids(all_transactions)
+    filtered_recovery_ids = (
+        set(editor_receipt_recovery_transaction_ids(context))
+        - set(transaction_ids)
+        - derived_ids
     )
-    filtered_notice_ids = set(editor_receipt_notice_transaction_ids(context)) - set(
-        transaction_ids
+    filtered_notice_ids = (
+        set(editor_receipt_notice_transaction_ids(context))
+        - set(transaction_ids)
+        - derived_ids
     )
     if filtered_recovery_ids or filtered_notice_ids:
         with st.expander(
@@ -573,6 +624,12 @@ def render_ledger(
                 for transaction in transactions
             }
             expected_selected = [selected_by_id[item] for item in selected_ids]
+            if any(transaction_is_mixed_use(item) for item in expected_selected):
+                st.error(
+                    "This selection includes a mixed-use projection. Bulk "
+                    "category changes and deletion are disabled; manage it "
+                    "from the Mixed-use expenses tab."
+                )
             selected_snapshot_key = hashlib.sha256(
                 repr(
                     tuple(
@@ -602,7 +659,12 @@ def render_ledger(
             )
             selected_kinds = {item["kind"] for item in expected_selected}
             category_eligible = selected_kinds in ({"Income"}, {"Expense"})
-            if not category_eligible:
+            if selected_protected:
+                st.info(
+                    "Change category is disabled for selections containing a "
+                    "mixed-use projection."
+                )
+            elif not category_eligible:
                 st.info(
                     "Change category is disabled because Bulk category changes require "
                     "a homogeneous Income or Expense selection; transfers are not eligible."
@@ -681,7 +743,12 @@ def render_ledger(
                         type="primary",
                         width="stretch",
                     )
-            if delete_requested:
+            if delete_requested and selected_protected:
+                delete_error.error(
+                    "Bulk deletion is disabled because the selection includes "
+                    "a mixed-use projection. Manage it from the Mixed-use expenses tab."
+                )
+            elif delete_requested:
                 if not confirm_delete:
                     delete_error.error(
                         "Confirm the permanent deletion before continuing."
@@ -736,6 +803,13 @@ def render_ledger(
             selected = next(
                 transaction for transaction in transactions if transaction["id"] == edit_id
             )
+            if transaction_is_mixed_use(selected):
+                st.info(
+                    "This transaction is generated from a mixed-use expense "
+                    "and is managed from the Mixed-use expenses tab. Switch "
+                    "to that tab to edit, delete, or manage receipts."
+                )
+                return
             copy_mode = copy_source_id == edit_id
             copy_generation = st.session_state.get(
                 _copy_generation_key(context.profile_key),

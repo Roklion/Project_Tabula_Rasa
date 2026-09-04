@@ -264,25 +264,26 @@ def test_mixed_use_receipt_mutation_apis_update_source_and_projection() -> None:
         description="Shared office",
         allocation_rationale="Measured use",
     )
-    transaction_id = source["linked_transaction_id"]
     first = _reference(1, b"first receipt")
     second = _reference(2, b"second receipt")
-    transaction_sheet = storage._workbook.sheets["Transactions"]
-    source_sheet = storage._workbook.sheets["MixedUseExpenses"]
-    transaction_sheet.rows[1][transaction_sheet.rows[0].index("receipt_references")] = ""
-    source_sheet.rows[1][source_sheet.rows[0].index("receipt_references")] = ""
 
-    storage.initialize_legacy_transaction_receipts(
-        transaction_id, references=[first]
+    storage.set_mixed_use_receipt_references(
+        source["id"], [first], expected_source=source
     )
-    storage.link_transaction_receipt(transaction_id, reference=second)
-    storage.remap_transaction_receipt(
-        transaction_id,
+    refreshed_source = storage.get_mixed_use_expense(source["id"])
+    storage.link_mixed_use_receipt(
+        source["id"], reference=second, expected_source=refreshed_source
+    )
+    refreshed_source = storage.get_mixed_use_expense(source["id"])
+    storage.remap_mixed_use_receipt(
+        source["id"],
         old_file_id=str(first["id"]),
         reference=second,
+        expected_source=refreshed_source,
     )
-    storage.unlink_transaction_receipt(
-        transaction_id, file_id=str(second["id"])
+    refreshed_source = storage.get_mixed_use_expense(source["id"])
+    storage.unlink_mixed_use_receipt(
+        source["id"], file_id=str(second["id"]), expected_source=refreshed_source
     )
 
     assert decode_receipt_references(

@@ -31,7 +31,7 @@ storage as the active ledger.
 
 ## Archive format and safety
 
-The current backup format is version 9. Each archive contains:
+The current backup format is version 10. Each archive contains:
 
 - Accounts.csv;
 - Categories.csv;
@@ -60,7 +60,7 @@ empty-string legacy receipt associations, and reconcile active references.
 An explicit empty list remains intentionally unlinked. If preparation or
 validation is incomplete, no backup is created.
 
-The validator and restore path accept formats 2 through 9:
+The validator and restore path accept formats 2 through 10:
 
 | Format | Meaning |
 | --- | --- |
@@ -71,10 +71,11 @@ The validator and restore path accept formats 2 through 9:
 | 6 | Supported legacy format adding account and category parent_id hierarchy |
 | 7 | Pre-mixed-use format with managed Payees and transaction payee_id references |
 | 8 | Tags-era format with managed Tags and transaction/mileage tag associations |
-| 9 | Current format adding mixed-use sources and transaction provenance |
+| 9 | Mixed-use sources and transaction provenance |
+| 10 | Current format adding durable mixed-use source tag associations |
 
 MixedUseExpenses.csv is the authoritative source record for each cost-based
-mixed-use expense. Transactions.csv contains one ordinary Expense projection
+mixed-use expense, including its durable `tag_ids` metadata. Transactions.csv contains one ordinary Expense projection
 for each source, with source_type=mixed_use_expense and source_id set to the
 source ID; its amount is the allocated business amount only. The source's
 linked_transaction_id must point back to that projection. Current-format

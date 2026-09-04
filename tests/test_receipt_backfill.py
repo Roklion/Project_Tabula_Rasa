@@ -21,10 +21,11 @@ from tests.fakes import FakeWorkbook
 def _set_raw_receipt_references(
     workbook: FakeWorkbook,
     *,
+    worksheet_title: str = "Transactions",
     transaction_id: str,
     value: str,
 ) -> None:
-    worksheet = workbook.worksheet("Transactions")
+    worksheet = workbook.worksheet(worksheet_title)
     headers = worksheet.rows[0]
     id_index = headers.index("id")
     references_index = headers.index("receipt_references")
@@ -122,6 +123,54 @@ def test_preparation_updates_drive_and_active_transaction_reference(
     assert reference["sha256"] == hashlib.sha256(b"receipt").hexdigest()
 
 
+def test_preparation_routes_mixed_use_receipt_remaps_through_source_api(
+    storage: GoogleSheetsStorage,
+) -> None:
+    storage.ensure_defaults()
+    payee = storage.create_payee("Mixed-use vendor")
+    source = storage.create_mixed_use_expense(
+        txn_date="2026-07-31",
+        account_id=storage.list_accounts(active_only=False)[0]["id"],
+        category_id=next(
+            category
+            for category in storage.list_categories()
+            if category["kind"] == "Expense"
+        )["id"],
+        payee_id=payee["id"],
+        description="Shared service",
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    storage.set_mixed_use_receipt_references(
+        source["id"],
+        [{"id": "receipt123456", "name": "old-name.pdf"}],
+        expected_source=source,
+    )
+    drive = Mock()
+    drive.list_profile_receipts.return_value = [_backfilled_drive_receipt("north")]
+    mixed_remap = Mock(wraps=storage.remap_mixed_use_receipt)
+    generic_remap = Mock(wraps=storage.remap_transaction_receipt)
+    storage.remap_mixed_use_receipt = mixed_remap  # type: ignore[method-assign]
+    storage.remap_transaction_receipt = generic_remap  # type: ignore[method-assign]
+
+    report = prepare_profile_receipts(
+        storage,
+        drive,
+        profile_key="north",
+        folder_id="folder123456",
+    )
+
+    assert report["references_updated"] == 1
+    mixed_remap.assert_called_once()
+    assert mixed_remap.call_args.args == (source["id"],)
+    assert mixed_remap.call_args.kwargs["old_file_id"] == "receipt123456"
+    assert mixed_remap.call_args.kwargs["reference"]["id"] == "receipt123456"
+    assert mixed_remap.call_args.kwargs["reference"]["receipt_id"] == "a" * 32
+    generic_remap.assert_not_called()
+    assert storage.get_mixed_use_expense(source["id"])["receipt_references"]
+
+
 def test_preparation_migrates_a_drive_only_transaction_association() -> None:
     workbook = FakeWorkbook()
     storage = GoogleSheetsStorage(workbook, sleeper=lambda _delay: None)
@@ -164,6 +213,137 @@ def test_preparation_migrates_a_drive_only_transaction_association() -> None:
     reference = decode_receipt_references(current["receipt_references"])[0]
     assert reference["id"] == "receipt123456"
     assert reference["receipt_id"] == "a" * 32
+
+
+def test_preparation_routes_drive_only_mixed_use_association_through_source_api(
+    storage: GoogleSheetsStorage,
+) -> None:
+    storage.ensure_defaults()
+    payee = storage.create_payee("Mixed-use vendor")
+    source = storage.create_mixed_use_expense(
+        txn_date="2026-07-31",
+        account_id=storage.list_accounts(active_only=False)[0]["id"],
+        category_id=next(
+            category
+            for category in storage.list_categories()
+            if category["kind"] == "Expense"
+        )["id"],
+        payee_id=payee["id"],
+        description="Shared service",
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    projection_id = source["linked_transaction_id"]
+    _set_raw_receipt_references(
+        storage._workbook,
+        transaction_id=projection_id,
+        value="",
+    )
+    _set_raw_receipt_references(
+        storage._workbook,
+        worksheet_title="MixedUseExpenses",
+        transaction_id=source["id"],
+        value="",
+    )
+    drive = Mock()
+    drive.list_profile_receipts.return_value = [
+        _legacy_drive_receipt("north", transaction_id=projection_id)
+    ]
+    drive.backfill_receipt_checksum.return_value = _backfilled_drive_receipt(
+        "north",
+        transaction_id=projection_id,
+    )
+
+    report = prepare_profile_receipts(
+        storage,
+        drive,
+        profile_key="north",
+        folder_id="folder123456",
+    )
+
+    assert report == {
+        "examined": 1,
+        "drive_backfilled": 1,
+        "references_updated": 1,
+        "errors": [],
+    }
+    updated_source = storage.get_mixed_use_expense(source["id"])
+    updated_projection = next(
+        transaction
+        for transaction in storage.list_transactions(_force_refresh=True)
+        if transaction["id"] == projection_id
+    )
+    assert decode_receipt_references(updated_source["receipt_references"])[0][
+        "id"
+    ] == "receipt123456"
+    assert updated_source["receipt_references"] == updated_projection[
+        "receipt_references"
+    ]
+
+
+def test_preparation_does_not_overwrite_concurrent_mixed_use_receipt_change(
+    storage: GoogleSheetsStorage,
+) -> None:
+    storage.ensure_defaults()
+    payee = storage.create_payee("Mixed-use vendor")
+    source = storage.create_mixed_use_expense(
+        txn_date="2026-07-31",
+        account_id=storage.list_accounts(active_only=False)[0]["id"],
+        category_id=next(
+            category
+            for category in storage.list_categories()
+            if category["kind"] == "Expense"
+        )["id"],
+        payee_id=payee["id"],
+        description="Shared service",
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    projection_id = source["linked_transaction_id"]
+    _set_raw_receipt_references(
+        storage._workbook,
+        transaction_id=projection_id,
+        value="",
+    )
+    _set_raw_receipt_references(
+        storage._workbook,
+        worksheet_title="MixedUseExpenses",
+        transaction_id=source["id"],
+        value="",
+    )
+    drive = Mock()
+    drive.list_profile_receipts.return_value = [
+        _legacy_drive_receipt("north", transaction_id=projection_id)
+    ]
+
+    def unlink_before_initialization(**_scope: str) -> dict[str, object]:
+        storage.set_mixed_use_receipt_references(source["id"], [])
+        return _backfilled_drive_receipt(
+            "north",
+            transaction_id=projection_id,
+        )
+
+    drive.backfill_receipt_checksum.side_effect = unlink_before_initialization
+
+    report = prepare_profile_receipts(
+        storage,
+        drive,
+        profile_key="north",
+        folder_id="folder123456",
+    )
+
+    assert report["references_updated"] == 0
+    assert len(report["errors"]) == 1
+    assert storage.get_mixed_use_expense(source["id"])[
+        "receipt_references"
+    ] == "[]"
+    assert next(
+        transaction
+        for transaction in storage.list_transactions(_force_refresh=True)
+        if transaction["id"] == projection_id
+    )["receipt_references"] == "[]"
 
 
 def test_preparation_does_not_override_a_concurrent_explicit_unlink() -> None:

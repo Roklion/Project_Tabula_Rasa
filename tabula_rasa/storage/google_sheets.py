@@ -123,8 +123,10 @@ MIXED_USE_WORKSHEET_HEADERS = (
     "receipt_references",
     "allocation_rationale",
     "linked_transaction_id",
+    "tag_ids",
     "created_at",
 )
+MIXED_USE_TAG_MIGRATION_HEADER = "tag_ids__migration_pending"
 WORKSHEET_HEADERS = {
     **PRE_MIXED_USE_WORKSHEET_HEADERS,
     "Transactions": (
@@ -148,6 +150,7 @@ WORKSHEET_HEADERS = {
         "tag_ids",
     ),
 }
+VERSION_9_WORKSHEET_HEADERS = WORKSHEET_HEADERS
 _TAG_WRITE_LOCK = threading.RLock()
 TAGS_BACKUP_FORMAT_VERSION = 8
 TAGS_WORKSHEET_HEADERS = {
@@ -196,7 +199,8 @@ TRANSACTION_KINDS = {"Income", "Expense", "Transfer"}
 LEDGER_ONLY_BACKUP_FORMAT_VERSION = 4
 RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION = 5
 PAYEE_BACKUP_FORMAT_VERSION = 7
-BACKUP_FORMAT_VERSION = 9
+MIXED_USE_BACKUP_FORMAT_VERSION = 9
+BACKUP_FORMAT_VERSION = 10
 BACKUP_HEADERS_BY_VERSION = {
     2: LEGACY_BACKUP_HEADERS,
     3: VERSION_3_WORKSHEET_HEADERS,
@@ -206,6 +210,14 @@ BACKUP_HEADERS_BY_VERSION = {
     RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION: PRE_PAYEE_WORKSHEET_HEADERS,
     PAYEE_BACKUP_FORMAT_VERSION: PRE_MIXED_USE_WORKSHEET_HEADERS,
     TAGS_BACKUP_FORMAT_VERSION: TAGS_WORKSHEET_HEADERS,
+    MIXED_USE_BACKUP_FORMAT_VERSION: {
+        **VERSION_9_WORKSHEET_HEADERS,
+        "MixedUseExpenses": tuple(
+            header
+            for header in VERSION_9_WORKSHEET_HEADERS["MixedUseExpenses"]
+            if header != "tag_ids"
+        ),
+    },
     BACKUP_FORMAT_VERSION: WORKSHEET_HEADERS,
 }
 SUPPORTED_BACKUP_FORMAT_VERSIONS = set(BACKUP_HEADERS_BY_VERSION)
@@ -577,6 +589,7 @@ def _validate_mixed_use_tables(
             )
         _clean_text(source.get("allocation_rationale"), "Allocation rationale", required=True)
         decode_receipt_references(source.get("receipt_references", ""))
+        _normalize_tag_ids(source.get("tag_ids", ""))
 
     transactions_by_id = {
         _clean_text(transaction.get("id"), "Transaction ID", required=True): transaction
@@ -647,6 +660,15 @@ def _validate_mixed_use_tables(
         ):
             raise StorageValidationError(
                 "Mixed-use source and projection receipt references do not match"
+            )
+        if (
+            "tag_ids" in source
+            and "tag_ids" in transaction
+            and _normalize_tag_ids(source.get("tag_ids", ""))
+            != _normalize_tag_ids(transaction.get("tag_ids", ""))
+        ):
+            raise StorageValidationError(
+                "Mixed-use source and projection tags do not match"
             )
     for source in sources:
         linked_id = source.get("linked_transaction_id")
@@ -814,7 +836,7 @@ def _parse_backup_zip(
             [],
         )
 
-    if format_version < BACKUP_FORMAT_VERSION:
+    if format_version < MIXED_USE_BACKUP_FORMAT_VERSION:
         transaction_headers, transactions = tables["Transactions"]
         transaction_headers = list(transaction_headers)
         for header in ("source_type", "source_id"):
@@ -832,7 +854,7 @@ def _parse_backup_zip(
     # columns, so restore them as an empty, valid tag state.
     if "Tags" not in tables:
         tables["Tags"] = (list(WORKSHEET_HEADERS["Tags"]), [])
-    for title in ("Transactions", "Mileage"):
+    for title in ("Transactions", "Mileage", "MixedUseExpenses"):
         if title not in tables:
             continue
         headers, records = tables[title]
@@ -840,6 +862,23 @@ def _parse_backup_zip(
             headers = [*headers, "tag_ids"]
             records = [{**record, "tag_ids": "[]"} for record in records]
             tables[title] = (headers, records)
+    if format_version < BACKUP_FORMAT_VERSION and "MixedUseExpenses" in tables:
+        transactions_by_id = {
+            str(record.get("id") or ""): record
+            for record in tables["Transactions"][1]
+        }
+        mixed_headers, mixed_sources = tables["MixedUseExpenses"]
+        for source in mixed_sources:
+            if _normalize_tag_ids(source.get("tag_ids", "")):
+                continue
+            linked_transaction = transactions_by_id.get(
+                str(source.get("linked_transaction_id") or "")
+            )
+            if linked_transaction is not None:
+                source["tag_ids"] = _encode_tag_ids(
+                    linked_transaction.get("tag_ids", "")
+                )
+        tables["MixedUseExpenses"] = (mixed_headers, mixed_sources)
 
     _validate_hierarchy_records(
         tables["Accounts"][1],
@@ -864,15 +903,20 @@ def _parse_backup_zip(
     category_ids = {record["id"] for record in tables["Categories"][1]}
     payee_ids = {record["id"] for record in tables["Payees"][1]}
     tag_ids = {record["id"] for record in tables["Tags"][1]}
-    for title in ("Transactions", "Mileage"):
+    for title in ("Transactions", "Mileage", "MixedUseExpenses"):
         if title not in tables:
             continue
         for record in tables[title][1]:
             normalized_tag_ids = _normalize_tag_ids(record.get("tag_ids", ""))
             if any(tag_id not in tag_ids for tag_id in normalized_tag_ids):
+                item_label = {
+                    "Transactions": "transaction",
+                    "Mileage": "mileage",
+                    "MixedUseExpenses": "mixed-use source",
+                }[title]
                 raise StorageValidationError(
                     "Backup contains an unknown "
-                    f"{'transaction' if title == 'Transactions' else 'mileage'} tag"
+                    f"{item_label} tag"
                 )
             record["tag_ids"] = _encode_tag_ids(normalized_tag_ids)
     for transaction in tables["Transactions"][1]:
@@ -910,7 +954,7 @@ def _parse_backup_zip(
         if payee_id and payee_id not in payee_ids:
             raise StorageValidationError("Backup contains an unknown mixed-use payee")
 
-    if format_version >= BACKUP_FORMAT_VERSION:
+    if format_version >= MIXED_USE_BACKUP_FORMAT_VERSION:
         _validate_mixed_use_tables(tables)
 
     receipt_manifest: dict[str, Any] | None = None
@@ -1099,6 +1143,7 @@ class GoogleSheetsStorage:
                 worksheet.title: worksheet for worksheet in workbook.worksheets()
             }
             pre_mixed_use_workbook = "MixedUseExpenses" not in actual_worksheets
+            mixed_use_tag_migration_needed = False
             initial_values: dict[str, list[list[Any]]] = {}
             for title, headers in WORKSHEET_HEADERS.items():
                 worksheet = actual_worksheets.get(title)
@@ -1163,20 +1208,50 @@ class GoogleSheetsStorage:
                     existing_headers = [
                         str(value).strip() for value in values[0]
                     ]
+                    migration_marker_present = (
+                        MIXED_USE_TAG_MIGRATION_HEADER in existing_headers
+                    )
+                    mixed_use_headers_without_metadata = set(
+                        MIXED_USE_WORKSHEET_HEADERS
+                    ) - {"receipt_references", "tag_ids"}
+                    missing_mixed_use_metadata = [
+                        header
+                        for header in ("receipt_references", "tag_ids")
+                        if header not in existing_headers
+                        and not (
+                            header == "tag_ids" and migration_marker_present
+                        )
+                    ]
                     if (
-                        "receipt_references" not in existing_headers
-                        and set(MIXED_USE_WORKSHEET_HEADERS) - {"receipt_references"}
-                        <= set(existing_headers)
+                        missing_mixed_use_metadata
+                        and mixed_use_headers_without_metadata <= set(existing_headers)
                         and len(existing_headers) == len(set(existing_headers))
                     ):
-                        worksheet.add_cols(1)
-                        migrated_headers = [*existing_headers, "receipt_references"]
+                        mixed_use_tag_migration_needed = (
+                            migration_marker_present
+                            or "tag_ids" in missing_mixed_use_metadata
+                        )
+                        headers_to_add = [
+                            (
+                                MIXED_USE_TAG_MIGRATION_HEADER
+                                if header == "tag_ids"
+                                else header
+                            )
+                            for header in missing_mixed_use_metadata
+                        ]
+                        worksheet.add_cols(len(headers_to_add))
+                        migrated_headers = [
+                            *existing_headers,
+                            *headers_to_add,
+                        ]
                         worksheet.update(
                             [migrated_headers],
                             range_name="A1",
                             raw=True,
                         )
                         values[0] = migrated_headers
+                    elif migration_marker_present:
+                        mixed_use_tag_migration_needed = True
                 if title in {"Transactions", "Mileage"} and values:
                     existing_headers = [
                         str(value).strip() for value in values[0]
@@ -1291,6 +1366,131 @@ class GoogleSheetsStorage:
                     )
                     values = [list(headers)]
                 initial_values[title] = values
+            source_values = initial_values.get("MixedUseExpenses")
+            transaction_values = initial_values.get("Transactions")
+            if (
+                mixed_use_tag_migration_needed
+                and source_values
+                and transaction_values
+            ):
+                source_headers = [str(value).strip() for value in source_values[0]]
+                transaction_headers = [
+                    str(value).strip() for value in transaction_values[0]
+                ]
+                source_tag_index = next(
+                    (
+                        source_headers.index(header)
+                        for header in (
+                            "tag_ids",
+                            MIXED_USE_TAG_MIGRATION_HEADER,
+                        )
+                        if header in source_headers
+                    ),
+                    None,
+                )
+                linked_transaction_index = (
+                    source_headers.index("linked_transaction_id")
+                    if "linked_transaction_id" in source_headers
+                    else None
+                )
+                transaction_id_index = (
+                    transaction_headers.index("id")
+                    if "id" in transaction_headers
+                    else None
+                )
+                transaction_tag_index = (
+                    transaction_headers.index("tag_ids")
+                    if "tag_ids" in transaction_headers
+                    else None
+                )
+                if None not in {
+                    source_tag_index,
+                    linked_transaction_index,
+                    transaction_id_index,
+                    transaction_tag_index,
+                }:
+                    transaction_worksheet = actual_worksheets["Transactions"]
+                    fresh_transaction_values = transaction_worksheet.get_all_values()
+                    transaction_tags_by_id = {
+                        str(row[transaction_id_index]).strip(): str(
+                            row[transaction_tag_index]
+                        ).strip()
+                        for row in fresh_transaction_values[1:]
+                        if len(row) > transaction_id_index
+                        and len(row) > transaction_tag_index
+                        and str(row[transaction_id_index]).strip()
+                    }
+                    # Re-read immediately before migration writes so the
+                    # backfill cannot overwrite edits made after startup's
+                    # initial workbook snapshot.
+                    source_worksheet = actual_worksheets["MixedUseExpenses"]
+                    fresh_source_values = source_worksheet.get_all_values()
+                    fresh_source_headers = [
+                        str(value).strip() for value in fresh_source_values[0]
+                    ] if fresh_source_values else []
+                    if fresh_source_headers != source_headers:
+                        source_values = fresh_source_values
+                        source_headers = fresh_source_headers
+                        source_tag_index = (
+                            next(
+                                (
+                                    source_headers.index(header)
+                                    for header in (
+                                        "tag_ids",
+                                        MIXED_USE_TAG_MIGRATION_HEADER,
+                                    )
+                                    if header in source_headers
+                                ),
+                                None,
+                            )
+                        )
+                        linked_transaction_index = (
+                            source_headers.index("linked_transaction_id")
+                            if "linked_transaction_id" in source_headers
+                            else None
+                        )
+                    backfilled_source_tags = False
+                    tag_updates = []
+                    for row_number, row in enumerate(fresh_source_values[1:], start=2):
+                        if source_tag_index is None or linked_transaction_index is None:
+                            break
+                        if len(row) < len(source_headers):
+                            row.extend([""] * (len(source_headers) - len(row)))
+                        if str(row[source_tag_index]).strip():
+                            continue
+                        linked_id = str(row[linked_transaction_index]).strip()
+                        transaction_tags = transaction_tags_by_id.get(linked_id, "")
+                        if transaction_tags:
+                            row[source_tag_index] = transaction_tags
+                            backfilled_source_tags = True
+                            tag_updates.append(
+                                {
+                                    "range": gspread.utils.rowcol_to_a1(
+                                        row_number, source_tag_index + 1
+                                    ),
+                                    "values": [[transaction_tags]],
+                                }
+                            )
+                    if backfilled_source_tags:
+                        source_worksheet.batch_update(tag_updates, raw=True)
+                        source_values = fresh_source_values
+                        initial_values["MixedUseExpenses"] = source_values
+                    if MIXED_USE_TAG_MIGRATION_HEADER in source_headers:
+                        source_headers = [
+                            (
+                                "tag_ids"
+                                if header == MIXED_USE_TAG_MIGRATION_HEADER
+                                else header
+                            )
+                            for header in source_headers
+                        ]
+                        fresh_source_values[0] = source_headers
+                        source_worksheet.update(
+                            [source_headers],
+                            range_name="A1",
+                            raw=True,
+                        )
+                        initial_values["MixedUseExpenses"] = fresh_source_values
         except (
             GoogleAuthError,
         ) as exc:
@@ -1767,6 +1967,48 @@ class GoogleSheetsStorage:
                 continue
             self._invalidate(title)
             return
+
+    def _replace_rows_atomically(
+        self,
+        updates: Sequence[tuple[str, _StoredRow, Mapping[str, Any]]],
+    ) -> None:
+        """Replace rows across worksheets in one spreadsheet-level batch."""
+        if not updates:
+            return
+        requests: list[dict[str, Any]] = []
+        titles: set[str] = set()
+        for title, row, record in updates:
+            headers = self._headers(title)
+            titles.add(title)
+            requests.append(
+                {
+                    "updateCells": {
+                        "range": {
+                            "sheetId": self._sheet_id(title),
+                            "startRowIndex": row.row_number - 1,
+                            "endRowIndex": row.row_number,
+                            "startColumnIndex": 0,
+                            "endColumnIndex": len(headers),
+                        },
+                        "rows": [
+                            {
+                                "values": [
+                                    {
+                                        "userEnteredValue": {
+                                            "stringValue": str(record.get(header, ""))
+                                        }
+                                    }
+                                    for header in headers
+                                ]
+                            }
+                        ],
+                        "fields": "userEnteredValue",
+                    }
+                }
+            )
+        self._batch_update_spreadsheet(requests)
+        for title in titles:
+            self._invalidate(title)
 
     @staticmethod
     def _sheet_column_index(headers: Sequence[str], column: str) -> int:
@@ -3082,7 +3324,7 @@ class GoogleSheetsStorage:
         | Mapping[str, Mapping[str, Any]]
         | None = None,
     ) -> dict[str, str]:
-        """Merge source tags into a target across transaction and mileage rows."""
+        """Merge source tags into a target across tagged worksheet rows."""
         target_id = _clean_text(target_tag_id, "Target tag", required=True)
         source_ids = list(dict.fromkeys(
             _clean_text(item, "Source tag", required=True) for item in source_tag_ids
@@ -3092,7 +3334,10 @@ class GoogleSheetsStorage:
         if target_id in source_ids:
             raise StorageValidationError("The target tag cannot also be a source")
         with _MIXED_USE_CREATE_LOCK, _TAG_WRITE_LOCK:
-            snapshot = self._snapshot(["Tags", "Transactions", "Mileage"], force_refresh=True)
+            snapshot = self._snapshot(
+                ["Tags", "Transactions", "Mileage", "MixedUseExpenses"],
+                force_refresh=True,
+            )
             tag_rows = self._managed_rows_by_id(snapshot["Tags"], "Tags")
             tags = {record_id: dict(row.values) for record_id, row in tag_rows.items()}
             if target_id not in tags:
@@ -3107,7 +3352,11 @@ class GoogleSheetsStorage:
                     else None,
                 )
                 references = []
-                for row in (*snapshot["Transactions"], *snapshot["Mileage"]):
+                for row in (
+                    *snapshot["Transactions"],
+                    *snapshot["Mileage"],
+                    *snapshot["MixedUseExpenses"],
+                ):
                     raw_tags = row.values.get("tag_ids", "")
                     if _raw_tag_ids_may_contain(raw_tags, source_ids) and any(
                         item in source_ids for item in _normalize_tag_ids(raw_tags)
@@ -3122,7 +3371,7 @@ class GoogleSheetsStorage:
                 raise StorageNotFoundError("A source tag no longer exists")
             self._assert_expected_managed_records(tags, expected_tags)
             update_rows: dict[str, tuple[str, _StoredRow, str]] = {}
-            for title in ("Transactions", "Mileage"):
+            for title in ("Transactions", "Mileage", "MixedUseExpenses"):
                 for record_id, row in self._managed_rows_by_id(snapshot[title], title).items():
                     raw_tags = row.values.get("tag_ids", "")
                     if not _raw_tag_ids_may_contain(raw_tags, source_ids):
@@ -3142,26 +3391,50 @@ class GoogleSheetsStorage:
             for source_id in sorted(source_ids, key=lambda item: tag_rows[item].row_number, reverse=True):
                 requests.append(self._managed_delete_request("Tags", tag_rows[source_id]))
 
-            def fresh_state() -> tuple[dict[str, _StoredRow], dict[str, _StoredRow], dict[str, _StoredRow]]:
-                current = self._snapshot(["Tags", "Transactions", "Mileage"], force_refresh=True)
+            def fresh_state() -> tuple[
+                dict[str, _StoredRow],
+                dict[str, _StoredRow],
+                dict[str, _StoredRow],
+                dict[str, _StoredRow],
+            ]:
+                current = self._snapshot(
+                    ["Tags", "Transactions", "Mileage", "MixedUseExpenses"],
+                    force_refresh=True,
+                )
                 return (
                     self._managed_rows_by_id(current["Tags"], "Tags"),
                     self._managed_rows_by_id(current["Transactions"], "Transactions"),
                     self._managed_rows_by_id(current["Mileage"], "Mileage"),
+                    self._managed_rows_by_id(
+                        current["MixedUseExpenses"], "MixedUseExpenses"
+                    ),
                 )
 
             def fully_applied(state: Any) -> bool:
-                current_tags, current_transactions, current_mileage = state
+                (
+                    current_tags,
+                    current_transactions,
+                    current_mileage,
+                    current_sources,
+                ) = state
                 if target_id not in current_tags or any(item in current_tags for item in source_ids):
                     return False
                 if any(
                     item in _normalize_tag_ids(row.values.get("tag_ids", ""))
                     for item in source_ids
-                    for row in (*current_transactions.values(), *current_mileage.values())
+                    for row in (
+                        *current_transactions.values(),
+                        *current_mileage.values(),
+                        *current_sources.values(),
+                    )
                 ):
                     return False
                 for title, row, expected_value in update_rows.values():
-                    current_rows = current_transactions if title == "Transactions" else current_mileage
+                    current_rows = {
+                        "Transactions": current_transactions,
+                        "Mileage": current_mileage,
+                        "MixedUseExpenses": current_sources,
+                    }[title]
                     record_id = _clean_text(row.values.get("id"), "ID", required=True)
                     if record_id not in current_rows:
                         return False
@@ -3170,7 +3443,12 @@ class GoogleSheetsStorage:
                 return True
 
             def not_applied(state: Any) -> bool:
-                current_tags, current_transactions, current_mileage = state
+                (
+                    current_tags,
+                    current_transactions,
+                    current_mileage,
+                    current_sources,
+                ) = state
                 if any(
                     record_id not in current_tags
                     or current_tags[record_id].values != row.values
@@ -3178,7 +3456,11 @@ class GoogleSheetsStorage:
                 ):
                     return False
                 for title, row, _ in update_rows.values():
-                    current_rows = current_transactions if title == "Transactions" else current_mileage
+                    current_rows = {
+                        "Transactions": current_transactions,
+                        "Mileage": current_mileage,
+                        "MixedUseExpenses": current_sources,
+                    }[title]
                     current = current_rows.get(
                         _clean_text(row.values.get("id"), "ID", required=True)
                     )
@@ -3193,7 +3475,7 @@ class GoogleSheetsStorage:
                     operation="tag merge", error=error, fully_applied=fully_applied,
                     read_state=fresh_state,
                     not_applied=not_applied,
-                    invalidate=("Tags", "Transactions", "Mileage"),
+                    invalidate=("Tags", "Transactions", "Mileage", "MixedUseExpenses"),
                 )
                 if result is not None:
                     return {**result, "count": str(len(source_ids))}
@@ -3202,7 +3484,7 @@ class GoogleSheetsStorage:
                 operation="tag merge",
                 read_state=fresh_state,
                 fully_applied=fully_applied,
-                invalidate=("Tags", "Transactions", "Mileage"),
+                invalidate=("Tags", "Transactions", "Mileage", "MixedUseExpenses"),
             )
             return {"status": "fully_applied", "count": str(len(source_ids))}
 
@@ -3215,10 +3497,13 @@ class GoogleSheetsStorage:
         expected_tag: Mapping[str, Any] | None = None,
         expected: Mapping[str, Any] | None = None,
     ) -> dict[str, str]:
-        """Permanently remove one tag only when no transaction or trip uses it."""
+        """Permanently remove one tag only when no tagged row uses it."""
         tag_id = _clean_text(tag_id, "Tag", required=True)
         with _MIXED_USE_CREATE_LOCK, _TAG_WRITE_LOCK:
-            snapshot = self._snapshot(["Tags", "Transactions", "Mileage"], force_refresh=True)
+            snapshot = self._snapshot(
+                ["Tags", "Transactions", "Mileage", "MixedUseExpenses"],
+                force_refresh=True,
+            )
             tag_rows = self._managed_rows_by_id(snapshot["Tags"], "Tags")
             if tag_id not in tag_rows:
                 raise StorageNotFoundError("Tag no longer exists")
@@ -3228,7 +3513,11 @@ class GoogleSheetsStorage:
                     {tag_id: dict(tag_rows[tag_id].values)}, expected_record
                 )
             references = 0
-            for row in (*snapshot["Transactions"], *snapshot["Mileage"]):
+            for row in (
+                *snapshot["Transactions"],
+                *snapshot["Mileage"],
+                *snapshot["MixedUseExpenses"],
+            ):
                 raw_tags = row.values.get("tag_ids", "")
                 if _raw_tag_ids_may_contain(
                     raw_tags, (tag_id,)
@@ -3238,20 +3527,33 @@ class GoogleSheetsStorage:
                 raise StorageConflictError(
                     f"This tag is referenced by {references} records. Merge it or unassign it first."
                 )
-            def read_state() -> tuple[dict[str, _StoredRow], dict[str, _StoredRow], dict[str, _StoredRow]]:
+            def read_state() -> tuple[
+                dict[str, _StoredRow],
+                dict[str, _StoredRow],
+                dict[str, _StoredRow],
+                dict[str, _StoredRow],
+            ]:
                 current = self._snapshot(
-                    ["Tags", "Transactions", "Mileage"], force_refresh=True
+                    ["Tags", "Transactions", "Mileage", "MixedUseExpenses"],
+                    force_refresh=True,
                 )
                 return (
                     self._managed_rows_by_id(current["Tags"], "Tags"),
                     self._managed_rows_by_id(current["Transactions"], "Transactions"),
                     self._managed_rows_by_id(current["Mileage"], "Mileage"),
+                    self._managed_rows_by_id(
+                        current["MixedUseExpenses"], "MixedUseExpenses"
+                    ),
                 )
             def references_present(state: Any) -> bool:
-                _, current_transactions, current_mileage = state
+                _, current_transactions, current_mileage, current_sources = state
                 return any(
                     tag_id in _normalize_tag_ids(row.values.get("tag_ids", ""))
-                    for row in (*current_transactions.values(), *current_mileage.values())
+                    for row in (
+                        *current_transactions.values(),
+                        *current_mileage.values(),
+                        *current_sources.values(),
+                    )
                 )
             def is_gone(state: Any) -> bool:
                 return tag_id not in state[0] and not references_present(state)
@@ -3270,7 +3572,7 @@ class GoogleSheetsStorage:
                     operation="tag removal", error=error, fully_applied=is_gone,
                     read_state=read_state,
                     not_applied=remains,
-                    invalidate=("Tags", "Transactions", "Mileage"),
+                    invalidate=("Tags", "Transactions", "Mileage", "MixedUseExpenses"),
                 )
                 if result is not None:
                     return result
@@ -3279,7 +3581,7 @@ class GoogleSheetsStorage:
                 operation="tag removal",
                 read_state=read_state,
                 fully_applied=is_gone,
-                invalidate=("Tags", "Transactions", "Mileage"),
+                invalidate=("Tags", "Transactions", "Mileage", "MixedUseExpenses"),
             )
             return {"status": "fully_applied"}
 
@@ -3576,6 +3878,11 @@ class GoogleSheetsStorage:
 
     def create_transaction(self, **data: Any) -> dict[str, str]:
         with _MIXED_USE_CREATE_LOCK:
+            # Generic transaction creation cannot manufacture a derived
+            # projection. Mixed-use projections are created only as the paired
+            # result of create_mixed_use_expense.
+            if data.get("source_type") or data.get("source_id"):
+                self._reject_mixed_use_projection(data)
             record = self._prepare_transaction(data)
             self._append("Transactions", record)
             return record
@@ -3601,9 +3908,11 @@ class GoogleSheetsStorage:
 
     def _raw_mixed_use_snapshot(
         self,
+        *,
+        force_refresh: bool = True,
     ) -> tuple[dict[str, dict[str, str]], dict[str, dict[str, str]]]:
         snapshot = self._snapshot(
-            ["MixedUseExpenses", "Transactions"], force_refresh=True
+            ["MixedUseExpenses", "Transactions"], force_refresh=force_refresh
         )
         sources: dict[str, dict[str, str]] = {}
         for row in snapshot["MixedUseExpenses"]:
@@ -3683,8 +3992,31 @@ class GoogleSheetsStorage:
         if actual is None:
             return False
         return all(
-            str(actual.get(header, "") or "") == str(expected.get(header, "") or "")
+            (
+                _normalize_tag_ids(actual.get(header, ""))
+                == _normalize_tag_ids(expected.get(header, ""))
+                if header == "tag_ids"
+                else str(actual.get(header, "") or "")
+                == str(expected.get(header, "") or "")
+            )
             for header in WORKSHEET_HEADERS[title]
+        )
+
+    @staticmethod
+    def _mixed_use_source_matches(
+        actual_source: Mapping[str, Any] | None,
+        expected_source: Mapping[str, Any],
+        actual_transaction: Mapping[str, Any] | None = None,
+    ) -> bool:
+        """Match source fields and, when available, its displayed tag baseline."""
+        if not GoogleSheetsStorage._mixed_use_record_matches(
+            "MixedUseExpenses", actual_source, expected_source
+        ):
+            return False
+        if actual_transaction is None or "tag_ids" not in expected_source:
+            return True
+        return _normalize_tag_ids(actual_transaction.get("tag_ids", "")) == _normalize_tag_ids(
+            expected_source.get("tag_ids", "")
         )
 
     def _mixed_use_mutation_result(
@@ -3817,6 +4149,7 @@ class GoogleSheetsStorage:
             "receipt_references": transaction["receipt_references"],
             "allocation_rationale": rationale,
             "linked_transaction_id": linked_transaction_id,
+            "tag_ids": transaction["tag_ids"],
             "created_at": created_at or _utc_now(),
         }
         projection = {
@@ -3833,8 +4166,9 @@ class GoogleSheetsStorage:
     def list_mixed_use_expenses(
         self, *, _force_refresh: bool = False
     ) -> list[dict[str, str]]:
-        del _force_refresh  # Mixed-use relationships always require a fresh read.
-        sources, transactions = self._raw_mixed_use_snapshot()
+        sources, transactions = self._raw_mixed_use_snapshot(
+            force_refresh=_force_refresh
+        )
         tables = {
             "MixedUseExpenses": (MIXED_USE_WORKSHEET_HEADERS, list(sources.values())),
             "Transactions": (
@@ -3843,9 +4177,9 @@ class GoogleSheetsStorage:
             ),
         }
         _validate_mixed_use_tables(tables)
-        accounts = self._account_lookup(force_refresh=True)
-        categories = self._category_lookup(force_refresh=True)
-        payees = self._payee_lookup(force_refresh=True)
+        accounts = self._account_lookup(force_refresh=_force_refresh)
+        categories = self._category_lookup(force_refresh=_force_refresh)
+        payees = self._payee_lookup(force_refresh=_force_refresh)
         result = []
         for source in sources.values():
             self._validate_mixed_use_references(
@@ -3856,6 +4190,18 @@ class GoogleSheetsStorage:
             )
             item = dict(source)
             item["payee"] = payees.get(item["payee_id"], {}).get("name", "")
+            linked_transaction = transactions.get(
+                str(item.get("linked_transaction_id") or "")
+            )
+            source_has_tag_metadata = "tag_ids" in item
+            source_tag_ids = _normalize_tag_ids(item.get("tag_ids", ""))
+            if not source_has_tag_metadata and linked_transaction is not None:
+                # Sources written before tag persistence was introduced can
+                # still recover their tags from the linked projection.
+                source_tag_ids = _normalize_tag_ids(
+                    linked_transaction.get("tag_ids", "")
+                )
+            item["tag_ids"] = source_tag_ids
             item["ledger_status"] = "linked"
             result.append(item)
         return sorted(
@@ -3945,6 +4291,7 @@ class GoogleSheetsStorage:
             original_transaction = existing_transaction or {
                 "account_id": existing_source.get("account_id"),
                 "payee_id": existing_source.get("payee_id"),
+                "tag_ids": existing_source.get("tag_ids", ""),
             }
         if existing_transaction is not None and existing_source is None:
             raise StorageConflictError(
@@ -3991,6 +4338,22 @@ class GoogleSheetsStorage:
                 # A source-only result is an incomplete operation, not a new
                 # create. Reusing the caller's stable IDs safely resumes the
                 # missing projection without creating a second source.
+                _, fresh_transactions = self._raw_mixed_use_snapshot()
+                conflicting_projection = next(
+                    (
+                        transaction
+                        for transaction in fresh_transactions.values()
+                        if str(transaction.get("source_type") or "").strip()
+                        == MIXED_USE_SOURCE_TYPE
+                        and str(transaction.get("source_id") or "").strip()
+                        == source_id
+                    ),
+                    None,
+                )
+                if conflicting_projection is not None:
+                    raise StorageConflictError(
+                        "The mixed-use source already has a linked transaction"
+                    )
                 try:
                     self._append("Transactions", projection)
                 except StorageUnavailableError as error:
@@ -4096,6 +4459,12 @@ class GoogleSheetsStorage:
             raise StorageValidationError(
                 "Mixed-use source has no linked projection transaction"
             )
+        if expected_source is not None and not self._mixed_use_source_matches(
+            current_source, expected_source, current_transaction
+        ):
+            raise StorageConflictError(
+                "The mixed-use expense changed; refresh it before editing."
+            )
         _validate_mixed_use_tables(
             {
                 "MixedUseExpenses": (
@@ -4108,12 +4477,6 @@ class GoogleSheetsStorage:
                 ),
             }
         )
-        if expected_source is not None and not self._mixed_use_record_matches(
-            "MixedUseExpenses", current_source, expected_source
-        ):
-            raise StorageConflictError(
-                "The mixed-use expense changed; refresh it before editing."
-            )
         if "id" in changes or "source_id" in changes or "linked_transaction_id" in changes:
             raise StorageValidationError("Mixed-use source IDs cannot be edited")
         merged = {**current_source, **changes}
@@ -4141,23 +4504,11 @@ class GoogleSheetsStorage:
                 "The mixed-use expense changed; refresh it before editing."
             )
         try:
-            self._replace_rows(
-                "Transactions",
+            self._replace_rows_atomically(
                 [
-                    (
-                        fresh_transaction,
-                        updated_transaction,
-                    )
-                ],
-            )
-            self._replace_rows(
-                "MixedUseExpenses",
-                [
-                    (
-                        fresh_source,
-                        updated_source,
-                    )
-                ],
+                    ("Transactions", fresh_transaction, updated_transaction),
+                    ("MixedUseExpenses", fresh_source, updated_source),
+                ]
             )
         except StorageUnavailableError as error:
             self._mixed_use_mutation_result(
@@ -4295,18 +4646,18 @@ class GoogleSheetsStorage:
                 before_retry=reject_reappeared_projection,
             )
             return
+        if expected_source is not None and not self._mixed_use_source_matches(
+            source, expected_source, transaction
+        ):
+            raise StorageConflictError(
+                "The mixed-use expense changed; refresh it before deleting."
+            )
         _validate_mixed_use_tables(
             {
                 "MixedUseExpenses": (MIXED_USE_WORKSHEET_HEADERS, list(sources.values())),
                 "Transactions": (WORKSHEET_HEADERS["Transactions"], list(transactions.values())),
             }
         )
-        if expected_source is not None and not self._mixed_use_record_matches(
-            "MixedUseExpenses", source, expected_source
-        ):
-            raise StorageConflictError(
-                "The mixed-use expense changed; refresh it before deleting."
-            )
         fresh_transaction = self._find_row("Transactions", transaction_id)
         fresh_source = self._find_row("MixedUseExpenses", source_id)
         if not self._mixed_use_record_matches(
@@ -4520,6 +4871,7 @@ class GoogleSheetsStorage:
         """Replace the Drive receipt references attached to one transaction."""
         with _MIXED_USE_CREATE_LOCK:
             current = self._find_row("Transactions", transaction_id)
+            self._reject_mixed_use_projection(current.values)
             encoded_references = _encode_receipt_references(references)
             self._reject_receipt_ownership_conflict(
                 encoded_references, transaction_id=transaction_id
@@ -4527,6 +4879,59 @@ class GoogleSheetsStorage:
             return self._replace_receipt_references(
                 current, encoded_references
             )
+
+    def _mixed_use_receipt_pair(
+        self,
+        source_id: str,
+        *,
+        expected_source: Mapping[str, Any] | None = None,
+    ) -> tuple[_StoredRow, _StoredRow]:
+        """Freshly resolve a source/projection pair for receipt orchestration."""
+        source_id = _clean_text(source_id, "Mixed-use source ID", required=True)
+        source = self._find_row("MixedUseExpenses", source_id)
+        transaction_id = _clean_text(
+            source.values.get("linked_transaction_id"),
+            "Linked transaction ID",
+            required=True,
+        )
+        transaction = self._find_row("Transactions", transaction_id)
+        if transaction.values.get("source_type") != MIXED_USE_SOURCE_TYPE or (
+            transaction.values.get("source_id") != source_id
+        ):
+            raise StorageValidationError(
+                "Mixed-use source and projection IDs do not match"
+            )
+        if expected_source is not None and not self._mixed_use_source_matches(
+            source.values, expected_source, transaction.values
+        ):
+            raise StorageConflictError(
+                "The mixed-use expense changed; refresh before changing receipts."
+            )
+        if str(source.values.get("receipt_references") or "") != str(
+            transaction.values.get("receipt_references") or ""
+        ):
+            raise StorageConflictError(
+                "The mixed-use receipt pair changed; refresh before retrying."
+            )
+        return source, transaction
+
+    def set_mixed_use_receipt_references(
+        self,
+        source_id: str,
+        references: Any,
+        *,
+        expected_source: Mapping[str, Any] | None = None,
+    ) -> dict[str, str]:
+        """Replace paired receipt references through a source-aware path."""
+        with _MIXED_USE_CREATE_LOCK:
+            _source, transaction = self._mixed_use_receipt_pair(
+                source_id, expected_source=expected_source
+            )
+            encoded = _encode_receipt_references(references)
+            self._reject_receipt_ownership_conflict(
+                encoded, transaction_id=transaction.values["id"]
+            )
+            return self._replace_receipt_references(transaction, encoded)
 
     def initialize_legacy_transaction_receipts(
         self,
@@ -4546,6 +4951,8 @@ class GoogleSheetsStorage:
         references: Sequence[Mapping[str, Any]],
     ) -> dict[str, str]:
         """Populate one still-blank legacy receipt cell with rich references."""
+        current = self._find_row("Transactions", transaction_id)
+        self._reject_mixed_use_projection(current.values)
         try:
             normalized = [
                 validate_receipt_reference(reference, allow_legacy=False)
@@ -4574,7 +4981,6 @@ class GoogleSheetsStorage:
                 raise StorageConflictError(
                     "That receipt is already linked to another transaction"
                 )
-        current = self._find_row("Transactions", transaction_id)
         if str(current.values.get("receipt_references", "")) != "":
             raise StorageConflictError(
                 "The transaction receipt references are already initialized"
@@ -4592,13 +4998,15 @@ class GoogleSheetsStorage:
         reference: Mapping[str, Any] | None = None,
     ) -> dict[str, str]:
         """Attach or refresh one Drive file reference on a transaction."""
-        try:
-            normalized_reference = validate_receipt_reference(
-                reference if reference is not None else {"id": file_id, "name": name}
-            )
-        except ReceiptManifestError as exc:
-            raise StorageValidationError(str(exc)) from exc
         with _MIXED_USE_CREATE_LOCK:
+            current = self._find_row("Transactions", transaction_id)
+            self._reject_mixed_use_projection(current.values)
+            try:
+                normalized_reference = validate_receipt_reference(
+                    reference if reference is not None else {"id": file_id, "name": name}
+                )
+            except ReceiptManifestError as exc:
+                raise StorageValidationError(str(exc)) from exc
             for transaction in self.list_transactions(_force_refresh=True):
                 if transaction["id"] == transaction_id:
                     continue
@@ -4611,7 +5019,6 @@ class GoogleSheetsStorage:
                     raise StorageConflictError(
                         "That receipt is already linked to another transaction"
                     )
-            current = self._find_row("Transactions", transaction_id)
             references = decode_receipt_references(
                 current.values.get("receipt_references", "")
             )
@@ -4623,6 +5030,37 @@ class GoogleSheetsStorage:
             references.append(normalized_reference)
             return self._replace_receipt_references(
                 current, _encode_receipt_references(references)
+            )
+
+    def link_mixed_use_receipt(
+        self,
+        source_id: str,
+        *,
+        reference: Mapping[str, Any],
+        expected_source: Mapping[str, Any] | None = None,
+    ) -> dict[str, str]:
+        """Link one receipt while authorizing the mixed-use source pair."""
+        with _MIXED_USE_CREATE_LOCK:
+            try:
+                normalized = validate_receipt_reference(reference)
+            except ReceiptManifestError as exc:
+                raise StorageValidationError(str(exc)) from exc
+            _source, transaction = self._mixed_use_receipt_pair(
+                source_id, expected_source=expected_source
+            )
+            self._reject_receipt_ownership_conflict(
+                _encode_receipt_references([normalized]),
+                transaction_id=transaction.values["id"],
+            )
+            references = decode_receipt_references(
+                transaction.values.get("receipt_references", "")
+            )
+            references = [
+                item for item in references if item["id"] != normalized["id"]
+            ]
+            references.append(normalized)
+            return self._replace_receipt_references(
+                transaction, _encode_receipt_references(references)
             )
 
     def remap_transaction_receipt(
@@ -4645,6 +5083,8 @@ class GoogleSheetsStorage:
         reference: Mapping[str, Any],
     ) -> dict[str, str]:
         """Replace one recovered old Drive ID with a verified new reference."""
+        current = self._find_row("Transactions", transaction_id)
+        self._reject_mixed_use_projection(current.values)
         try:
             normalized_reference = validate_receipt_reference(
                 reference,
@@ -4665,7 +5105,6 @@ class GoogleSheetsStorage:
                 raise StorageConflictError(
                     "That receipt is already linked to another transaction"
                 )
-        current = self._find_row("Transactions", transaction_id)
         references = decode_receipt_references(
             current.values.get("receipt_references", "")
         )
@@ -4692,6 +5131,54 @@ class GoogleSheetsStorage:
         return self._replace_receipt_references(
             current, _encode_receipt_references(retained)
         )
+
+    def remap_mixed_use_receipt(
+        self,
+        source_id: str,
+        *,
+        old_file_id: str,
+        reference: Mapping[str, Any],
+        expected_source: Mapping[str, Any] | None = None,
+    ) -> dict[str, str]:
+        """Replace a recovered receipt through the source-aware path."""
+        with _MIXED_USE_CREATE_LOCK:
+            try:
+                normalized = validate_receipt_reference(
+                    reference, allow_legacy=False
+                )
+            except ReceiptManifestError as exc:
+                raise StorageValidationError(str(exc)) from exc
+            _source, transaction = self._mixed_use_receipt_pair(
+                source_id, expected_source=expected_source
+            )
+            self._reject_receipt_ownership_conflict(
+                _encode_receipt_references([normalized]),
+                transaction_id=transaction.values["id"],
+            )
+            references = decode_receipt_references(
+                transaction.values.get("receipt_references", "")
+            )
+            indexes = [
+                index
+                for index, item in enumerate(references)
+                if item["id"] in {str(old_file_id), normalized["id"]}
+                or (
+                    item.get("receipt_id") == normalized.get("receipt_id")
+                    and item.get("sha256") == normalized.get("sha256")
+                )
+            ]
+            if not indexes:
+                raise StorageNotFoundError(
+                    "The mixed-use receipt is no longer available for recovery"
+                )
+            first = indexes[0]
+            retained = [
+                item for index, item in enumerate(references) if index not in indexes
+            ]
+            retained.insert(first, normalized)
+            return self._replace_receipt_references(
+                transaction, _encode_receipt_references(retained)
+            )
 
     def apply_receipt_recovery_plan(
         self,
@@ -5061,6 +5548,7 @@ class GoogleSheetsStorage:
         """Remove one Drive reference without modifying the Drive file."""
         with _MIXED_USE_CREATE_LOCK:
             current = self._find_row("Transactions", transaction_id)
+            self._reject_mixed_use_projection(current.values)
             references = decode_receipt_references(
                 current.values.get("receipt_references", "")
             )
@@ -5075,6 +5563,28 @@ class GoogleSheetsStorage:
                 return dict(current.values)
             return self._replace_receipt_references(
                 current, _encode_receipt_references(retained)
+            )
+
+    def unlink_mixed_use_receipt(
+        self,
+        source_id: str,
+        *,
+        file_id: str,
+        expected_source: Mapping[str, Any] | None = None,
+    ) -> dict[str, str]:
+        """Remove one receipt reference through the source-aware path."""
+        with _MIXED_USE_CREATE_LOCK:
+            _source, transaction = self._mixed_use_receipt_pair(
+                source_id, expected_source=expected_source
+            )
+            references = decode_receipt_references(
+                transaction.values.get("receipt_references", "")
+            )
+            retained = [
+                item for item in references if item["id"] != str(file_id)
+            ]
+            return self._replace_receipt_references(
+                transaction, _encode_receipt_references(retained)
             )
 
     def delete_transaction(self, transaction_id: str) -> None:
@@ -5636,12 +6146,17 @@ class GoogleSheetsStorage:
             writer.writerow(headers)
             for row in rows:
                 values = dict(row.values)
-                if title in {"Transactions", "Mileage"}:
+                if title in {"Transactions", "Mileage", "MixedUseExpenses"}:
                     normalized_tag_ids = _normalize_tag_ids(values.get("tag_ids", ""))
                     if any(tag_id not in known_tag_ids for tag_id in normalized_tag_ids):
+                        item_label = {
+                            "Transactions": "transaction",
+                            "Mileage": "mileage",
+                            "MixedUseExpenses": "mixed-use source",
+                        }[title]
                         raise StorageValidationError(
                             "Backup contains an unknown "
-                            f"{'transaction' if title == 'Transactions' else 'mileage'} tag"
+                            f"{item_label} tag"
                         )
                     values["tag_ids"] = _encode_tag_ids(normalized_tag_ids)
                 elif title == "Tags":

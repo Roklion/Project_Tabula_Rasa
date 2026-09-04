@@ -44,6 +44,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     _start_editor_receipt_workflow,
     receipt_editor_workflow_key,
 )
+from tabula_rasa.page_renderers.transactions.creation import render_add_transaction
 from tabula_rasa.receipt_manifest import receipt_reference_from_drive_file
 from tabula_rasa.storage import StorageError
 
@@ -223,6 +224,34 @@ def test_receipt_recovery_state_is_scoped_to_profile() -> None:
     )
     assert session_state[receipt_creation_workflow_key("north")] is north
     assert session_state[receipt_creation_workflow_key("south")] is south
+
+
+def test_mixed_use_recovery_is_owned_by_mixed_tab() -> None:
+    workflow = new_receipt_creation_workflow(
+        "txn-1", [], profile_key="north", mixed_use_source_id="source-1"
+    )
+    assert workflow["mixed_use_source_id"] == "source-1"
+
+    with (
+        patch.object(
+            st,
+            "session_state",
+            {receipt_creation_workflow_key("north"): workflow},
+        ),
+        patch(
+            "tabula_rasa.page_renderers.transactions.creation.render_receipt_creation_recovery"
+        ) as render_recovery,
+    ):
+        render_add_transaction(
+            SimpleNamespace(profile_key="north"),
+            account_map={},
+            categories=[],
+            category_paths={},
+            payees=[],
+            tags=[],
+        )
+
+    render_recovery.assert_not_called()
 
 
 def test_confirmed_upload_metadata_failure_does_not_upload_again() -> None:

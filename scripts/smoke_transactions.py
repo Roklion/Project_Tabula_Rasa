@@ -273,6 +273,22 @@ def check_viewport(page: Page, url: str, viewport: tuple[int, int]) -> None:
         )
     assert_no_page_overflow(page)
 
+    mixed_tab = page.get_by_role(
+        "tab", name="Mixed-use expenses", exact=True
+    ).first
+    try:
+        mixed_tab.wait_for(state="visible", timeout=10000)
+    except PlaywrightTimeoutError as error:
+        raise SmokeCheckFailure("Expected the Mixed-use expenses tab.") from error
+    mixed_tab.click()
+    require_visible_text(page, "Mixed-use expenses")
+    require_input(page, "Total Expense")
+    require_input(page, "Business Use %")
+    require_input(page, "Allocation Rationale (required)")
+    require_visible_text(page, "Ledger Result (read-only)")
+    require_visible_text(page, "Mixed-use Expense Log")
+    assert_no_page_overflow(page)
+
 
 def capture_failure_screenshot(
     page: Page, screenshots_dir: Path, viewport: tuple[int, int]

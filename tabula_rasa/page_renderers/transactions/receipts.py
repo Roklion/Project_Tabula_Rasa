@@ -124,9 +124,10 @@ def new_receipt_creation_workflow(
     configuration_revision: str = "",
     spreadsheet_id: str = "",
     receipt_folder_id: str = "",
+    mixed_use_source_id: str = "",
 ) -> dict[str, Any]:
     """Create session-only recovery state after a confirmed Sheets write."""
-    return {
+    workflow = {
         "profile_key": profile_key,
         "transaction_id": transaction_id,
         "configuration_revision": configuration_revision,
@@ -134,6 +135,9 @@ def new_receipt_creation_workflow(
         "receipt_folder_id": receipt_folder_id,
         "receipts": [dict(receipt) for receipt in receipts],
     }
+    if mixed_use_source_id:
+        workflow["mixed_use_source_id"] = mixed_use_source_id
+    return workflow
 
 
 def process_receipt_recovery(
@@ -1222,6 +1226,8 @@ def handle_confirmed_transaction_receipts(
     context: TransactionsContext,
     transaction: Mapping[str, Any],
     receipts: Sequence[Mapping[str, Any]],
+    *,
+    mixed_use_source_id: str = "",
 ) -> None:
     """Upload/link selected receipts after the Sheets write is confirmed."""
     workflow = new_receipt_creation_workflow(
@@ -1233,6 +1239,7 @@ def handle_confirmed_transaction_receipts(
         receipt_folder_id=str(
             (_receipt_folder(context) or {}).get("id", "")
         ),
+        mixed_use_source_id=mixed_use_source_id,
     )
     st.session_state[receipt_creation_workflow_key(context.profile_key)] = workflow
     receipt_folder = _receipt_folder(context)
