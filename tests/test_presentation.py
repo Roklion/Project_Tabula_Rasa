@@ -210,6 +210,10 @@ def test_profile_switch_clears_unscoped_presentation_state() -> None:
         "transaction_bulk_scope": ("north",),
         "transaction_bulk_selection_generation": 4,
         "transaction_ledger_mode_north": "Bulk",
+        "mixed_use_selected_source_id_north": "north-source",
+        "mixed_use_selection_scope_north": ("north", ("north-source",), 1, ()),
+        "mixed_use_table_generation_north": 2,
+        "mixed_use_edit_baseline_north": {"id": "north-source"},
         "mileage_log_north_0": "selected-rows",
         "account_table_north_0": "selected-rows",
         "category_table_north_0": "selected-rows",
@@ -252,6 +256,10 @@ def test_profile_switch_clears_unscoped_presentation_state() -> None:
     assert "transaction_bulk_scope" not in session_state
     assert "transaction_bulk_selection_generation" not in session_state
     assert "transaction_ledger_mode_north" not in session_state
+    assert "mixed_use_selected_source_id_north" not in session_state
+    assert "mixed_use_selection_scope_north" not in session_state
+    assert "mixed_use_table_generation_north" not in session_state
+    assert "mixed_use_edit_baseline_north" not in session_state
     assert "mileage_log_north_0" not in session_state
     assert "account_table_north_0" not in session_state
     assert "category_table_north_0" not in session_state

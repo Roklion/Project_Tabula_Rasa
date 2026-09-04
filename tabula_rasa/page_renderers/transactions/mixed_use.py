@@ -423,6 +423,8 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             selected = _mixed_use_selection_ids(source_ids, selected_rows)
             if selected:
                 st.session_state[selected_key] = selected[0]
+            else:
+                _clear_mixed_use_selection(st.session_state, profile)
 
         st.dataframe(
             _mixed_use_log_rows(sources, account_paths, category_paths),
