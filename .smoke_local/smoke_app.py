@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import runpy
 import sys
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import streamlit as st
@@ -34,7 +34,7 @@ fake_storage.create_transaction(
     payee_id=smoke_payee["id"],
 )
 fake_storage.create_mixed_use_expense(
-    txn_date=date.today().isoformat(),
+    txn_date=(date.today() - timedelta(days=1)).isoformat(),
     total_expense="40.00",
     business_use_percentage="50",
     account_id=smoke_account["id"],
