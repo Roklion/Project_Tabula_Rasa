@@ -407,6 +407,39 @@ def test_mixed_use_app_test_clears_recovery_after_source_deletion(default_storag
         assert any("source and projection no longer exist" in str(item.value) for item in app.warning)
 
 
+def test_mixed_use_app_test_ignores_ordinary_receipt_recovery(default_storage) -> None:
+    transaction = default_storage.create_transaction(
+        txn_date="2026-09-03",
+        kind="Expense",
+        amount="10.00",
+        account_id=next(
+            item for item in default_storage.list_accounts() if item["active"]
+        )["id"],
+        category_id=next(
+            item
+            for item in default_storage.list_categories()
+            if item["kind"] == "Expense"
+        )["id"],
+    )
+
+    with authenticated_app(default_storage) as app:
+        navigate_to(app, "Transactions")
+        app.session_state[receipt_creation_workflow_key("test")] = (
+            new_receipt_creation_workflow(
+                transaction["id"],
+                [],
+                profile_key="test",
+            )
+        )
+        app.run()
+
+        assert receipt_creation_workflow_key("test") in app.session_state
+        assert not any(
+            "source and projection no longer exist" in str(item.value)
+            for item in app.warning
+        )
+
+
 def test_mixed_use_app_test_validation_preserves_inputs(default_storage) -> None:
     account = next(item for item in default_storage.list_accounts() if item["active"])
     category = next(item for item in default_storage.list_categories() if item["kind"] == "Expense")

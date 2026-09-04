@@ -284,8 +284,8 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             return
         if recovery.get("mixed_use_source_id"):
             clear_receipt_creation_recovery(context, recovery_transaction_id)
-        st.warning(
-            "The mixed-use source and projection no longer exist. "
+            st.warning(
+                "The mixed-use source and projection no longer exist. "
                 "Receipt recovery was cleared; any uploaded files remain in "
                 "Drive as unreferenced files."
             )
