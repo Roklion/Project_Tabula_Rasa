@@ -130,10 +130,19 @@ def prepare_profile_receipts(
         report["references_updated"] += 1
     for transaction_id, references in pending_initializations.items():
         try:
-            storage.initialize_legacy_transaction_receipts(
-                transaction_id,
-                references=references,
-            )
+            transaction = transactions_by_id[transaction_id]
+            source_type = str(transaction.get("source_type") or "")
+            source_id = str(transaction.get("source_id") or "")
+            if source_type == MIXED_USE_SOURCE_TYPE and source_id:
+                storage.set_mixed_use_receipt_references(
+                    source_id,
+                    references,
+                )
+            else:
+                storage.initialize_legacy_transaction_receipts(
+                    transaction_id,
+                    references=references,
+                )
         except StorageError as error:
             report["errors"].extend(
                 {
