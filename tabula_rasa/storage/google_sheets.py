@@ -4290,6 +4290,22 @@ class GoogleSheetsStorage:
                 # A source-only result is an incomplete operation, not a new
                 # create. Reusing the caller's stable IDs safely resumes the
                 # missing projection without creating a second source.
+                _, fresh_transactions = self._raw_mixed_use_snapshot()
+                conflicting_projection = next(
+                    (
+                        transaction
+                        for transaction in fresh_transactions.values()
+                        if str(transaction.get("source_type") or "").strip()
+                        == MIXED_USE_SOURCE_TYPE
+                        and str(transaction.get("source_id") or "").strip()
+                        == source_id
+                    ),
+                    None,
+                )
+                if conflicting_projection is not None:
+                    raise StorageConflictError(
+                        "The mixed-use source already has a linked transaction"
+                    )
                 try:
                     self._append("Transactions", projection)
                 except StorageUnavailableError as error:

@@ -1474,6 +1474,58 @@ def test_mixed_use_source_only_repair_preserves_receipt_references(
     ]
 
 
+def test_mixed_use_source_only_retry_rejects_new_conflicting_projection(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    inputs = {
+        **_expense_inputs(default_storage),
+        "total_expense": "100",
+        "business_use_percentage": "50",
+        "allocation_rationale": "Measured use",
+        "source_id": "source-conflicting-repair",
+        "linked_transaction_id": "transaction-conflicting-repair",
+    }
+    original_append = default_storage._append
+
+    def fail_projection(title: str, record: dict[str, str]) -> None:
+        if title == "Transactions":
+            raise StorageUnavailableError("projection unavailable", retryable=True)
+        original_append(title, record)
+
+    default_storage._append = fail_projection  # type: ignore[method-assign]
+    with pytest.raises(StorageBulkMutationUncertainError):
+        default_storage.create_mixed_use_expense(**inputs)
+    default_storage._append = original_append  # type: ignore[method-assign]
+
+    original_snapshot = default_storage._raw_mixed_use_snapshot
+    calls = 0
+
+    def add_conflicting_projection_before_repair() -> tuple[
+        dict[str, dict[str, str]], dict[str, dict[str, str]]
+    ]:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            _, conflicting_projection = default_storage._prepare_mixed_use_expense(
+                inputs,
+                source_id=inputs["source_id"],
+                linked_transaction_id="transaction-conflict",
+            )
+            original_append("Transactions", conflicting_projection)
+        return original_snapshot()
+
+    default_storage._raw_mixed_use_snapshot = (  # type: ignore[method-assign]
+        add_conflicting_projection_before_repair
+    )
+    with pytest.raises(StorageConflictError, match="already has a linked transaction"):
+        default_storage.create_mixed_use_expense(**inputs)
+
+    transactions = default_storage.list_transactions()
+    assert len(transactions) == 1
+    assert transactions[0]["source_id"] == inputs["source_id"]
+    assert transactions[0]["id"] == "transaction-conflict"
+
+
 def test_mixed_use_source_only_retry_preserves_deactivated_source_tag(
     default_storage: GoogleSheetsStorage,
 ) -> None:
