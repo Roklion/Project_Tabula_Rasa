@@ -1655,17 +1655,13 @@ def test_mixed_use_edit_returns_success_when_final_response_is_lost(
         business_use_percentage="50",
         allocation_rationale="Measured use",
     )
-    original_replace = default_storage._replace_rows
-    calls = 0
+    original_replace = default_storage._replace_rows_atomically
 
-    def replace_then_lose_final_result(title: str, updates: object) -> None:
-        nonlocal calls
-        original_replace(title, updates)  # type: ignore[arg-type]
-        calls += 1
-        if calls == 2:
-            raise StorageUnavailableError("response lost")
+    def replace_then_lose_final_result(updates: object) -> None:
+        original_replace(updates)  # type: ignore[arg-type]
+        raise StorageUnavailableError("response lost")
 
-    default_storage._replace_rows = replace_then_lose_final_result  # type: ignore[method-assign]
+    default_storage._replace_rows_atomically = replace_then_lose_final_result  # type: ignore[method-assign]
     result = default_storage.edit_mixed_use_expense(
         source["id"],
         total_expense="200",
@@ -1674,6 +1670,43 @@ def test_mixed_use_edit_returns_success_when_final_response_is_lost(
     )
 
     assert result["allocated_amount"] == "50.00"
+
+
+def test_mixed_use_edit_replaces_pair_in_one_spreadsheet_batch(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    original_batch = default_storage._batch_update_spreadsheet
+    batches: list[object] = []
+
+    def record_batch(requests: object) -> None:
+        batches.append(requests)
+        original_batch(requests)  # type: ignore[arg-type]
+
+    default_storage._batch_update_spreadsheet = record_batch  # type: ignore[method-assign]
+    default_storage.edit_mixed_use_expense(
+        source["id"],
+        total_expense="200",
+        business_use_percentage="25",
+        allocation_rationale="Updated use",
+    )
+
+    assert len(batches) == 1
+    requests = batches[0]
+    assert isinstance(requests, list)
+    assert len(requests) == 2
+    assert {
+        request["updateCells"]["range"]["sheetId"]
+        for request in requests
+    } == {
+        default_storage._sheet_id("Transactions"),
+        default_storage._sheet_id("MixedUseExpenses"),
+    }
 
 
 def test_mixed_use_edit_rejects_receipt_drift_before_replacing_rows(
@@ -2140,17 +2173,14 @@ def test_mixed_use_uncertain_edit_classifies_partial_pair_safely(
         business_use_percentage="50",
         allocation_rationale="Measured use",
     )
-    original_replace = default_storage._replace_rows
-    calls = 0
+    original_batch = default_storage._batch_update_spreadsheet
 
-    def replace_then_lose_first_result(title: str, updates: object) -> None:
-        nonlocal calls
-        original_replace(title, updates)  # type: ignore[arg-type]
-        calls += 1
-        if calls == 1:
-            raise StorageUnavailableError("uncertain", retryable=False)
+    def replace_then_lose_first_result(requests: object) -> None:
+        assert isinstance(requests, list)
+        original_batch(requests[:1])
+        raise StorageUnavailableError("uncertain", retryable=False)
 
-    default_storage._replace_rows = replace_then_lose_first_result  # type: ignore[method-assign]
+    default_storage._batch_update_spreadsheet = replace_then_lose_first_result  # type: ignore[method-assign]
     with pytest.raises(StorageBulkMutationUncertainError, match="ambiguous"):
         default_storage.edit_mixed_use_expense(
             source["id"],
@@ -2170,10 +2200,10 @@ def test_mixed_use_edit_classifies_unchanged_pair_as_retryable_not_applied(
         allocation_rationale="Measured use",
     )
 
-    def fail_before_replace(_title: str, _updates: object) -> None:
+    def fail_before_replace(_updates: object) -> None:
         raise StorageUnavailableError("temporary", retryable=True)
 
-    default_storage._replace_rows = fail_before_replace  # type: ignore[method-assign]
+    default_storage._replace_rows_atomically = fail_before_replace  # type: ignore[method-assign]
     with pytest.raises(StorageBulkMutationUncertainError) as error:
         default_storage.edit_mixed_use_expense(
             source["id"], allocation_rationale="Updated use"

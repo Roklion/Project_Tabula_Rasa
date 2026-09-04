@@ -97,12 +97,14 @@ class FakeWorkbook:
                 )
                 row = update["range"]["startRowIndex"]
                 column = update["range"]["startColumnIndex"]
-                value = update["rows"][0]["values"][0]["userEnteredValue"]["stringValue"]
                 while len(sheet.rows) <= row:
                     sheet.rows.append([])
-                while len(sheet.rows[row]) <= column:
-                    sheet.rows[row].append("")
-                sheet.rows[row][column] = value
+                for column_offset, cell in enumerate(update["rows"][0]["values"]):
+                    value = cell["userEnteredValue"]["stringValue"]
+                    target_column = column + column_offset
+                    while len(sheet.rows[row]) <= target_column:
+                        sheet.rows[row].append("")
+                    sheet.rows[row][target_column] = value
             elif "deleteDimension" in request:
                 deletion = request["deleteDimension"]["range"]
                 sheet = next(

@@ -1880,6 +1880,48 @@ class GoogleSheetsStorage:
             self._invalidate(title)
             return
 
+    def _replace_rows_atomically(
+        self,
+        updates: Sequence[tuple[str, _StoredRow, Mapping[str, Any]]],
+    ) -> None:
+        """Replace rows across worksheets in one spreadsheet-level batch."""
+        if not updates:
+            return
+        requests: list[dict[str, Any]] = []
+        titles: set[str] = set()
+        for title, row, record in updates:
+            headers = self._headers(title)
+            titles.add(title)
+            requests.append(
+                {
+                    "updateCells": {
+                        "range": {
+                            "sheetId": self._sheet_id(title),
+                            "startRowIndex": row.row_number - 1,
+                            "endRowIndex": row.row_number,
+                            "startColumnIndex": 0,
+                            "endColumnIndex": len(headers),
+                        },
+                        "rows": [
+                            {
+                                "values": [
+                                    {
+                                        "userEnteredValue": {
+                                            "stringValue": str(record.get(header, ""))
+                                        }
+                                    }
+                                    for header in headers
+                                ]
+                            }
+                        ],
+                        "fields": "userEnteredValue",
+                    }
+                }
+            )
+        self._batch_update_spreadsheet(requests)
+        for title in titles:
+            self._invalidate(title)
+
     @staticmethod
     def _sheet_column_index(headers: Sequence[str], column: str) -> int:
         try:
@@ -4357,23 +4399,11 @@ class GoogleSheetsStorage:
                 "The mixed-use expense changed; refresh it before editing."
             )
         try:
-            self._replace_rows(
-                "Transactions",
+            self._replace_rows_atomically(
                 [
-                    (
-                        fresh_transaction,
-                        updated_transaction,
-                    )
-                ],
-            )
-            self._replace_rows(
-                "MixedUseExpenses",
-                [
-                    (
-                        fresh_source,
-                        updated_source,
-                    )
-                ],
+                    ("Transactions", fresh_transaction, updated_transaction),
+                    ("MixedUseExpenses", fresh_source, updated_source),
+                ]
             )
         except StorageUnavailableError as error:
             self._mixed_use_mutation_result(
