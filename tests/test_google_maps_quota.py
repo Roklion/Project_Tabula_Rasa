@@ -27,7 +27,8 @@ from tabula_rasa.google_maps_quota import (
     READ_ONLY_SCOPES,
     SERVICE_USAGE_PAGE_SIZE,
     SERVICE_USAGE_READ_SCOPE,
-    _format_quota_unit,
+    _format_quota_endpoint,
+    _format_quota_period,
     _format_number,
     _number,
     _quota_config_identity,
@@ -197,11 +198,16 @@ def test_number_and_rate_formatting_preserve_zero_and_exact_periods() -> None:
     assert _number("-2") is None
     assert _format_number(-1.0) == "Unlimited"
     assert _format_number(float(2**63 - 1)) == "Unlimited"
-    assert _format_quota_unit("1/min/{project}") == "per minute, per project"
-    assert _format_quota_unit("1/min/{project}/{user}") == (
-        "per minute, per project and user"
-    )
-    assert _format_quota_unit("1/d/{project}") == "per day, per project"
+    assert _format_quota_period("1/min/{project}") == "per minute"
+    assert _format_quota_period("1/min/{project}/{user}") == "per minute"
+    assert _format_quota_period("1/d/{project}") == "per day"
+    assert _format_quota_period("1/session") == ""
+    assert _format_quota_endpoint(
+        "DistanceMatrix - ComputeRouteMatrix per-element quota"
+    ) == "ComputeRouteMatrix"
+    assert _format_quota_endpoint(
+        "Directions - ComputeRoutes per request quota"
+    ) == "ComputeRoutes"
     assert _rate_period_seconds("1/session") is None
     assert _rate_period_seconds("1/min/{project}") == 60.0
     assert _rate_in_minutes(2.0, "1/s") == 120.0
@@ -316,11 +322,12 @@ def test_sidebar_is_discoverable_but_does_not_call_google_when_unconfigured() ->
         render_google_maps_usage_sidebar({})
 
     assert "up to about 240 seconds after sampling" in caption.call_args.args[0]
+    assert "covers the last 15 minutes" in caption.call_args.args[0]
     info.assert_called_once()
     load.assert_not_called()
 
 
-def test_sidebar_shows_google_timestamp_with_recent_usage() -> None:
+def test_sidebar_shows_concise_endpoint_usage_with_recent_data() -> None:
     report = GoogleMapsQuotaReport(
         project_number="123456789",
         services=(
@@ -335,7 +342,7 @@ def test_sidebar_shows_google_timestamp_with_recent_usage() -> None:
                         limits=(
                             GoogleMapsQuotaLimit(
                                 name="limit-resource",
-                                display_name="Requests per minute",
+                                display_name="Directions - ComputeRoutes per request quota",
                                 metric="routes.googleapis.com/requests",
                                 unit="1/min/{project}",
                                 effective_limit=10,
@@ -369,9 +376,9 @@ def test_sidebar_shows_google_timestamp_with_recent_usage() -> None:
         render_google_maps_usage_sidebar(secrets())
 
     rendered = "\n".join(str(call.args[0]) for call in caption.call_args_list)
-    assert "4 of 10 per minute, per project" in rendered
-    assert "Google timestamp: 2026-09-01 12:01:00 UTC" in rendered
-    assert "Google data age:" in rendered
+    assert "ComputeRoutes: 4/10 (per minute)" in rendered
+    assert "Google timestamp:" not in rendered
+    assert "Google data age:" not in rendered
 
 
 def test_sidebar_shows_zero_for_successful_monitoring_response_without_points() -> None:
@@ -418,8 +425,8 @@ def test_sidebar_shows_zero_for_successful_monitoring_response_without_points() 
         render_google_maps_usage_sidebar(secrets())
 
     rendered = "\n".join(str(call.args[0]) for call in caption.call_args_list)
-    assert "0 of Unlimited per minute, per project and user" in rendered
-    assert "no Google-reported usage in the last 15 minutes" in rendered
+    assert "Autocomplete requests: 0/Unlimited (per minute)" in rendered
+    assert "no Google-reported usage" not in rendered
     assert "usage unavailable" not in rendered
 
 

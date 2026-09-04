@@ -566,31 +566,32 @@ def _format_number(value: float | None) -> str:
     return formatted if formatted else "0"
 
 
-def _format_quota_unit(unit: str) -> str:
-    """Translate Google's quota-unit grammar into compact user-facing text."""
+def _format_quota_period(unit: str) -> str:
+    """Return only the readable time period from Google's quota-unit grammar."""
     raw = _clean_text(unit)
     parts = [part.strip() for part in raw.split("/") if part.strip()]
     if len(parts) < 2 or parts[0] != "1":
-        return raw.replace("{", "").replace("}", "") or "unit unavailable"
+        return ""
 
     period = {
         "s": "second",
         "min": "minute",
         "h": "hour",
         "d": "day",
-    }.get(parts[1].casefold(), parts[1].replace("_", " "))
-    dimensions = [
-        part.removeprefix("{").removesuffix("}").replace("_", " ")
-        for part in parts[2:]
-    ]
-    dimensions = [dimension for dimension in dimensions if dimension]
-    if not dimensions:
-        return f"per {period}"
-    if len(dimensions) == 1:
-        scope = dimensions[0]
-    else:
-        scope = f"{', '.join(dimensions[:-1])} and {dimensions[-1]}"
-    return f"per {period}, per {scope}"
+    }.get(parts[1].casefold())
+    return f"per {period}" if period else ""
+
+
+def _format_quota_endpoint(value: str) -> str:
+    """Reduce Google's quota display name to its endpoint name."""
+    name = _clean_text(value)
+    if " - " in name:
+        name = name.rsplit(" - ", 1)[-1]
+    for suffix in (" per-element quota", " per request quota", " quota"):
+        if name.casefold().endswith(suffix):
+            name = name[: -len(suffix)].rstrip()
+            break
+    return name or "Quota"
 
 
 def _rate_in_minutes(value: float, unit: str) -> float | None:
@@ -652,9 +653,10 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
     """Render a compact quota summary at the bottom of the authenticated sidebar."""
     with st.expander("Google Maps API usage", expanded=False):
         st.caption(
-            "Routes and Places usage is sampled by Google and can lag several "
-            "minutes, including up to about 240 seconds after sampling. This is "
-            "not a real-time remaining-request or billing/spend meter."
+            f"Routes and Places usage covers the last {MONITORING_LOOKBACK_MINUTES} "
+            "minutes. It is sampled by Google and can lag several minutes, "
+            "including up to about 240 seconds after sampling. This is not a "
+            "real-time remaining-request or billing/spend meter."
         )
         try:
             config = GoogleMapsQuotaMonitoringConfig.from_secrets(secrets_mapping)
@@ -750,7 +752,6 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
                 st.session_state.pop(QUOTA_REQUEST_ERROR_CONFIG_KEY, None)
                 st.rerun()
             return
-        now = datetime.now(timezone.utc)
         for service_report in report.services:
             title = (
                 "Routes API"
@@ -762,6 +763,9 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
             for metric in service_report.quota_metrics:
                 for limit in metric.limits:
                     shown = True
+                    endpoint = _format_quota_endpoint(
+                        limit.display_name or metric.display_name or metric.metric
+                    )
                     usage = service_report.usage.get(limit.metric or metric.metric)
                     effective = (
                         limit.effective_limit_for(usage.dimensions)
@@ -776,34 +780,11 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
                             if converted is not None
                             else _format_number(usage.value)
                         )
-                        if converted is not None:
-                            summary = (
-                                f"{recent} of {quota} "
-                                f"{_format_quota_unit(limit.unit)}"
-                            )
-                        else:
-                            summary = (
-                                f"usage {recent} {_format_quota_unit(usage.unit)} · "
-                                f"quota {quota} {_format_quota_unit(limit.unit)}"
-                            )
-                        ratio = _utilization(usage, limit)
-                        utilization = f" · {ratio:.1%}" if ratio is not None else ""
-                        age = (
-                            " · Google timestamp: "
-                            f"{_format_google_timestamp(usage.timestamp)}"
-                            " · Google data age: "
-                            f"{max(0, int((now - usage.timestamp).total_seconds()))}s"
-                        )
-                        st.caption(
-                            f"{limit.display_name or metric.display_name or metric.metric}: "
-                            f"{summary}{utilization}{age}"
-                        )
+                        summary = f"{recent}/{quota}"
                     else:
-                        st.caption(
-                            f"{limit.display_name or metric.display_name or metric.metric}: "
-                            f"0 of {quota} {_format_quota_unit(limit.unit)} · "
-                            "no Google-reported usage in the last "
-                            f"{MONITORING_LOOKBACK_MINUTES} minutes"
-                        )
+                        summary = f"0/{quota}"
+                    period = _format_quota_period(limit.unit)
+                    suffix = f" ({period})" if period else ""
+                    st.caption(f"{endpoint}: {summary}{suffix}")
             if not shown:
                 st.caption("No Google-reported quota metrics.")
