@@ -8,7 +8,10 @@ from tabula_rasa.page_renderers.transactions.mixed_use import (
     _pending_create_ids,
     mixed_use_preview,
 )
-from tabula_rasa.page_renderers.transactions.ledger import transaction_is_mixed_use
+from tabula_rasa.page_renderers.transactions.ledger import (
+    _mixed_use_transaction_ids,
+    transaction_is_mixed_use,
+)
 from tabula_rasa.ledger_presentation import ledger_frame
 from tabula_rasa.ledger_reporting import (
     account_balances,
@@ -103,6 +106,19 @@ def test_only_phase_a_mixed_use_provenance_is_protected() -> None:
     assert not transaction_is_mixed_use(
         {"source_type": "mixed_use_expense", "source_id": ""}
     )
+
+
+def test_mixed_use_transaction_ids_can_be_derived_from_unfiltered_snapshot() -> None:
+    mixed_projection = {
+        "id": "projection-1",
+        "source_type": "mixed_use_expense",
+        "source_id": "source-1",
+    }
+    ordinary_transaction = {"id": "transaction-1"}
+
+    assert _mixed_use_transaction_ids(
+        [ordinary_transaction, mixed_projection]
+    ) == {"projection-1"}
 
 
 def test_generic_create_rejects_fabricated_mixed_use_projection(default_storage) -> None:

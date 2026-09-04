@@ -15,6 +15,7 @@ from tabula_rasa.storage import (
     decode_receipt_references,
     GoogleSheetsStorage,
     MIXED_USE_SOURCE_TYPE,
+    StorageConflictError,
     StorageError,
 )
 
@@ -134,9 +135,34 @@ def prepare_profile_receipts(
             source_type = str(transaction.get("source_type") or "")
             source_id = str(transaction.get("source_id") or "")
             if source_type == MIXED_USE_SOURCE_TYPE and source_id:
+                expected_receipt_references = str(
+                    transaction.get("receipt_references") or ""
+                )
+                expected_source = next(
+                    (
+                        source
+                        for source in storage.list_mixed_use_expenses(
+                            _force_refresh=True
+                        )
+                        if source["id"] == source_id
+                    ),
+                    None,
+                )
+                if expected_source is None:
+                    raise StorageConflictError(
+                        "The mixed-use receipt pair changed; refresh before retrying."
+                    )
+                if (
+                    str(expected_source.get("receipt_references") or "")
+                    != expected_receipt_references
+                ):
+                    raise StorageConflictError(
+                        "The mixed-use receipt pair changed; refresh before retrying."
+                    )
                 storage.set_mixed_use_receipt_references(
                     source_id,
                     references,
+                    expected_source=expected_source,
                 )
             else:
                 storage.initialize_legacy_transaction_receipts(

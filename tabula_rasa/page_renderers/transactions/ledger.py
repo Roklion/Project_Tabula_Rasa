@@ -61,6 +61,17 @@ def transaction_is_mixed_use(transaction: Mapping[str, object]) -> bool:
     )
 
 
+def _mixed_use_transaction_ids(
+    transactions: Sequence[Mapping[str, object]],
+) -> set[str]:
+    """Return mixed-use projection IDs from an unfiltered transaction snapshot."""
+    return {
+        str(transaction.get("id") or "")
+        for transaction in transactions
+        if transaction_is_mixed_use(transaction)
+    }
+
+
 def _bulk_selection_key(profile_key: str) -> str:
     return f"transaction_bulk_selected_ids_{profile_key}"
 
@@ -573,11 +584,7 @@ def render_ledger(
         ) + 1
         st.session_state["edit_transaction_id"] = source_id
         st.rerun()
-    derived_ids = {
-        str(transaction.get("id") or "")
-        for transaction in transactions
-        if transaction_is_mixed_use(transaction)
-    }
+    derived_ids = _mixed_use_transaction_ids(all_transactions)
     filtered_recovery_ids = (
         set(editor_receipt_recovery_transaction_ids(context))
         - set(transaction_ids)
