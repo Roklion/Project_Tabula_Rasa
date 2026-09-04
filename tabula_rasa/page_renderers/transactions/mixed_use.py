@@ -22,7 +22,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     render_receipts,
     receipt_creation_workflow_key,
 )
-from tabula_rasa.storage import StorageError
+from tabula_rasa.storage import StorageError, decode_receipt_references
 from tabula_rasa.storage.google_sheets import (
     _normalize_tag_ids,
     mixed_use_ledger_description,
@@ -422,7 +422,16 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                         )
                     else:
                         prepared_receipts = prepare_receipt_uploads(
-                            receipt_uploads or []
+                            receipt_uploads or [],
+                            existing_reference_count=(
+                                len(
+                                    decode_receipt_references(
+                                        source.get("receipt_references", "")
+                                    )
+                                )
+                                if source_incomplete and source
+                                else 0
+                            ),
                         )
                 except Exception as error:  # noqa: BLE001 - safe validation message
                     save_error.error(f"Receipt validation failed: {error}")
@@ -464,6 +473,9 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                     )
                     if source_incomplete:
                         payload["expected_source"] = expected_source
+                        payload["receipt_references"] = source.get(
+                            "receipt_references", ""
+                        )
                     def operation():
                         return context.storage.create_mixed_use_expense(**payload)
                     action, success = "create_mixed_use_expense", "Mixed-use expense saved."

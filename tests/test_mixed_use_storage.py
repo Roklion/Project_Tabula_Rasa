@@ -1450,6 +1450,30 @@ def test_mixed_use_source_only_retry_classifies_missing_projection_as_retryable(
     assert calls == 3
 
 
+def test_mixed_use_source_only_repair_preserves_receipt_references(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    inputs = {
+        **_expense_inputs(default_storage),
+        "total_expense": "100",
+        "business_use_percentage": "50",
+        "allocation_rationale": "Measured use",
+        "source_id": "source-repair-receipts",
+        "linked_transaction_id": "transaction-repair-receipts",
+        "receipt_references": [{"id": "receipt-repair", "name": "receipt.pdf"}],
+    }
+    created = default_storage.create_mixed_use_expense(**inputs)
+    default_storage._worksheet("Transactions").rows.pop(1)
+    default_storage._invalidate("Transactions")
+
+    repaired = default_storage.create_mixed_use_expense(**inputs)
+
+    assert repaired["receipt_references"] == created["receipt_references"]
+    assert default_storage.list_transactions()[0]["receipt_references"] == created[
+        "receipt_references"
+    ]
+
+
 def test_mixed_use_source_only_retry_preserves_deactivated_source_tag(
     default_storage: GoogleSheetsStorage,
 ) -> None:
