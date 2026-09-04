@@ -1377,11 +1377,13 @@ class GoogleSheetsStorage:
                     transaction_id_index,
                     transaction_tag_index,
                 }:
+                    transaction_worksheet = actual_worksheets["Transactions"]
+                    fresh_transaction_values = transaction_worksheet.get_all_values()
                     transaction_tags_by_id = {
                         str(row[transaction_id_index]).strip(): str(
                             row[transaction_tag_index]
                         ).strip()
-                        for row in transaction_values[1:]
+                        for row in fresh_transaction_values[1:]
                         if len(row) > transaction_id_index
                         and len(row) > transaction_tag_index
                         and str(row[transaction_id_index]).strip()

@@ -4,6 +4,7 @@ import pytest
 
 from tabula_rasa.page_renderers.transactions.mixed_use import (
     _MixedUseReceiptStorage,
+    _incomplete_source_ids,
     _pending_create_ids,
     mixed_use_preview,
 )
@@ -77,6 +78,19 @@ def test_pending_create_ids_remain_stable_for_uncertain_retries() -> None:
     assert first[0] == state["mixed_use_pending_source_id_north"]
     assert first[1] == state["mixed_use_pending_transaction_id_north"]
     assert first != _pending_create_ids(state, "south")
+
+
+def test_projection_provenance_blocks_source_only_repair() -> None:
+    assert _incomplete_source_ids(
+        [{"id": "source-1", "linked_transaction_id": "missing"}],
+        [
+            {
+                "id": "projection-2",
+                "source_type": "mixed_use_expense",
+                "source_id": "source-1",
+            }
+        ],
+    ) == set()
 
 
 def test_only_phase_a_mixed_use_provenance_is_protected() -> None:

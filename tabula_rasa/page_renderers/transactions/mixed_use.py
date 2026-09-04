@@ -158,6 +158,19 @@ def _incomplete_source_ids(
     }
 
 
+def _recovery_configuration_matches(
+    context, recovery: Mapping[str, object]
+) -> bool:
+    """Keep mixed-use recovery bound to the workbook that created it."""
+    expected_spreadsheet = str(recovery.get("spreadsheet_id") or "")
+    if not expected_spreadsheet:
+        return True
+    profile_secrets = getattr(context, "profile_secrets", {})
+    if not isinstance(profile_secrets, Mapping):
+        return False
+    return expected_spreadsheet == str(profile_secrets.get("spreadsheet_id") or "")
+
+
 def _render_preview(preview: Mapping[str, str]) -> None:
     st.markdown("#### Ledger Result (read-only)")
     if preview["status"] != "ready":
@@ -224,6 +237,13 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
     source_by_id = {str(item["id"]): item for item in sources}
     recovery = st.session_state.get(receipt_creation_workflow_key(profile))
     if isinstance(recovery, Mapping):
+        if not _recovery_configuration_matches(context, recovery):
+            st.warning(
+                "Receipt recovery is waiting on the profile's previous Google "
+                "Sheets workbook. Restore that workbook configuration before "
+                "resuming recovery."
+            )
+            return
         recovery_transaction_id = str(recovery.get("transaction_id") or "")
         recovery_source_id = str(recovery.get("mixed_use_source_id") or "")
         if not recovery_source_id:
@@ -506,7 +526,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                     storage=_MixedUseReceiptStorage(
                         context.storage,
                         source["id"],
-                        source,
+                        expected_source,
                         on_source_changed=update_receipt_baseline,
                     ),
                 ),
