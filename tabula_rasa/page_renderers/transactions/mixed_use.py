@@ -145,26 +145,6 @@ def _mixed_use_receipt_recovery_active(
         )
     )
 
-def _source_label(source: Mapping[str, object], account_paths: Mapping[str, str]) -> str:
-    return f"{source.get('txn_date', '')} — {source.get('payee', '') or source.get('description', '') or 'No payee'} — {account_paths.get(str(source.get('account_id')), 'Unknown account')} — {'$'}{source.get('total_expense', '0.00')} — {str(source.get('id', ''))[:8]}"
-
-
-def _mixed_use_selection_scope(
-    profile: str,
-    visible_source_ids: Sequence[str],
-    *,
-    workbook_data_revision: int = 0,
-    filters: Sequence[object] = (),
-) -> tuple[object, ...]:
-    """Describe the exact source set a mixed-use table selection belongs to."""
-    return (
-        profile,
-        tuple(str(source_id) for source_id in visible_source_ids),
-        int(workbook_data_revision),
-        tuple(filters),
-    )
-
-
 def _mixed_use_selection_ids(
     source_ids: Sequence[str], selected_rows: Sequence[int]
 ) -> tuple[str, ...]:
@@ -189,40 +169,6 @@ def _clear_mixed_use_selection(
         state.pop(_key(profile, "edit_baseline_source_id"), None)
     generation_key = _key(profile, "table_generation")
     state[generation_key] = int(state.get(generation_key, 0)) + 1
-
-
-def _synchronize_mixed_use_selection(
-    state: MutableMapping[str, object],
-    profile: str,
-    visible_source_ids: Sequence[str],
-    *,
-    workbook_data_revision: int = 0,
-    filters: Sequence[object] = (),
-) -> tuple[str, tuple[object, ...]]:
-    """Reconcile a table selection with its current profile-scoped scope."""
-    selection_scope = _mixed_use_selection_scope(
-        profile,
-        visible_source_ids,
-        workbook_data_revision=workbook_data_revision,
-        filters=filters,
-    )
-    scope_key = _key(profile, "selection_scope")
-    previous_scope = state.get(scope_key)
-    if previous_scope is None:
-        state[scope_key] = selection_scope
-    elif previous_scope != selection_scope:
-        _clear_mixed_use_selection(state, profile)
-        state[scope_key] = selection_scope
-
-    selected_key = _key(profile, "selected_source_id")
-    state.setdefault(selected_key, "")
-    selected_id = str(state.get(selected_key, "") or "")
-    if selected_id and selected_id not in {
-        str(source_id) for source_id in visible_source_ids
-    }:
-        _clear_mixed_use_selection(state, profile)
-        selected_id = ""
-    return selected_id, selection_scope
 
 
 def _mixed_use_log_rows(
@@ -397,15 +343,20 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
     pending_source_key = _key(profile, "pending_source_id")
     pending_transaction_key = _key(profile, "pending_transaction_id")
     source_ids = [str(item["id"]) for item in sources]
-    selected_id, selection_scope = _synchronize_mixed_use_selection(
-        st.session_state,
-        profile,
-        source_ids,
-        workbook_data_revision=int(
-            st.session_state.get("workbook_data_revision", 0)
-        ),
-    )
     selection_scope_key = _key(profile, "selection_scope")
+    selection_scope = (
+        profile,
+        tuple(source_ids),
+        int(st.session_state.get("workbook_data_revision", 0)),
+    )
+    if st.session_state.get(selection_scope_key) != selection_scope:
+        _clear_mixed_use_selection(st.session_state, profile)
+        st.session_state[selection_scope_key] = selection_scope
+    st.session_state.setdefault(selected_key, "")
+    selected_id = str(st.session_state.get(selected_key, "") or "")
+    if selected_id and selected_id not in source_by_id:
+        _clear_mixed_use_selection(st.session_state, profile)
+        selected_id = ""
 
     st.markdown("#### Mixed-use Expense Log")
     if sources:

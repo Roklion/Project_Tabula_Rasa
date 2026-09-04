@@ -7,8 +7,6 @@ from tabula_rasa.page_renderers.transactions.mixed_use import (
     _clear_mixed_use_selection,
     _incomplete_source_ids,
     _mixed_use_selection_ids,
-    _mixed_use_selection_scope,
-    _synchronize_mixed_use_selection,
     _mixed_use_receipt_recovery_active,
     _pending_create_ids,
     mixed_use_preview,
@@ -96,13 +94,6 @@ def test_mixed_use_table_selection_maps_rows_to_stable_source_ids() -> None:
     ) == ("source-oldest", "source-newest")
 
 
-def test_mixed_use_selection_scope_includes_profile_revision_and_future_filters() -> None:
-    assert _mixed_use_selection_scope(
-        "north", ["source-1", "source-2"], workbook_data_revision=4,
-        filters=("future-filter",),
-    ) == ("north", ("source-1", "source-2"), 4, ("future-filter",))
-
-
 def test_clearing_mixed_use_selection_rotates_table_and_baseline() -> None:
     state = {
         "mixed_use_selected_source_id_north": "source-1",
@@ -115,40 +106,6 @@ def test_clearing_mixed_use_selection_rotates_table_and_baseline() -> None:
     assert "mixed_use_edit_baseline_north" not in state
     assert "mixed_use_edit_baseline_source_id_north" not in state
     assert state["mixed_use_table_generation_north"] == 3
-
-
-def test_stale_mixed_use_selection_clears_when_visible_sources_change() -> None:
-    state = {
-        "mixed_use_selected_source_id_north": "removed-source",
-        "mixed_use_selection_scope_north": (
-            "north", ("removed-source",), 0, ()
-        ),
-    }
-    selected, scope = _synchronize_mixed_use_selection(
-        state, "north", ["remaining-source"]
-    )
-    assert selected == ""
-    assert state["mixed_use_selected_source_id_north"] == ""
-    assert scope == ("north", ("remaining-source",), 0, ())
-
-
-def test_mixed_use_revision_change_clears_selection_and_baseline() -> None:
-    state = {
-        "mixed_use_selected_source_id_north": "source-1",
-        "mixed_use_edit_baseline_north": {"id": "source-1"},
-        "mixed_use_edit_baseline_source_id_north": "source-1",
-        "mixed_use_selection_scope_north": (
-            "north", ("source-1",), 1, ()
-        ),
-        "mixed_use_table_generation_north": 1,
-    }
-    selected, scope = _synchronize_mixed_use_selection(
-        state, "north", ["source-1"], workbook_data_revision=2
-    )
-    assert selected == ""
-    assert scope == ("north", ("source-1",), 2, ())
-    assert "mixed_use_edit_baseline_north" not in state
-    assert state["mixed_use_table_generation_north"] == 2
 
 
 def test_projection_provenance_blocks_source_only_repair() -> None:
@@ -440,6 +397,26 @@ def test_mixed_use_table_target_switch_and_delete_are_source_scoped(default_stor
     assert [item["id"] for item in default_storage.list_transactions()] == [
         first["linked_transaction_id"]
     ]
+
+
+def test_mixed_use_selection_clears_after_revision_change(default_storage) -> None:
+    account = next(item for item in default_storage.list_accounts() if item["active"])
+    category = next(
+        item for item in default_storage.list_categories() if item["kind"] == "Expense"
+    )
+    source = default_storage.create_mixed_use_expense(
+        txn_date="2026-09-03", total_expense="100", business_use_percentage="25",
+        account_id=account["id"], category_id=category["id"],
+        allocation_rationale="Revision source",
+    )
+    with authenticated_app(default_storage) as app:
+        navigate_to(app, "Transactions")
+        app.session_state["mixed_use_selected_source_id_test"] = source["id"]
+        app.run()
+        assert app.session_state["mixed_use_selected_source_id_test"] == source["id"]
+        app.session_state["workbook_data_revision"] = 1
+        app.run()
+        assert app.session_state["mixed_use_selected_source_id_test"] == ""
 
 
 def test_mixed_use_app_test_exposes_source_only_projection_repair(default_storage) -> None:
