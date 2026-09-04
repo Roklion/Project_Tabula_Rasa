@@ -226,7 +226,8 @@ quota row is compact: `Endpoint: usage/limit (time period)`. Raw project and
 user dimensions, utilization, and per-row timestamps are omitted. Google's
 maximum-integer quota sentinel is shown as **Unlimited**. After a successful
 Monitoring response with no data points, the matching usage is shown as zero;
-the expander-level caption retains the sampling and real-time caveats. Until
+the expander-level caption explains that each row shows Google's latest sampled
+rate from the lookback and retains the sampling and real-time caveats. Until
 configured, the expander reports its setup guidance.
 Read failures identify Service Usage or Cloud Monitoring and provide a safe
 HTTP-status-based remediation hint without displaying Google response bodies.

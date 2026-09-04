@@ -322,7 +322,8 @@ def test_sidebar_is_discoverable_but_does_not_call_google_when_unconfigured() ->
         render_google_maps_usage_sidebar({})
 
     assert "up to about 240 seconds after sampling" in caption.call_args.args[0]
-    assert "covers the last 15 minutes" in caption.call_args.args[0]
+    assert "sampled within a 15-minute lookback" in caption.call_args.args[0]
+    assert "latest sampled rate in the quota's limit units" in caption.call_args.args[0]
     info.assert_called_once()
     load.assert_not_called()
 

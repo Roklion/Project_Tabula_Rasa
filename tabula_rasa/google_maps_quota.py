@@ -306,7 +306,7 @@ def parse_usage_time_series(
     *,
     service: str,
 ) -> dict[str, GoogleMapsQuotaUsage]:
-    """Aggregate newest aligned points by Google's returned quota_metric label."""
+    """Select the newest aligned point by Google's quota_metric label."""
     raw_series = payload.get("timeSeries", ())
     result: dict[str, GoogleMapsQuotaUsage] = {}
     if not isinstance(raw_series, list):
@@ -653,10 +653,11 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
     """Render a compact quota summary at the bottom of the authenticated sidebar."""
     with st.expander("Google Maps API usage", expanded=False):
         st.caption(
-            f"Routes and Places usage covers the last {MONITORING_LOOKBACK_MINUTES} "
-            "minutes. It is sampled by Google and can lag several minutes, "
-            "including up to about 240 seconds after sampling. This is not a "
-            "real-time remaining-request or billing/spend meter."
+            f"Routes and Places usage is sampled within a {MONITORING_LOOKBACK_MINUTES}-minute "
+            "lookback. Each row shows Google's latest sampled rate in the quota's "
+            "limit units and can lag several minutes, including up to about 240 "
+            "seconds after sampling. This is not a real-time remaining-request or "
+            "billing/spend meter."
         )
         try:
             config = GoogleMapsQuotaMonitoringConfig.from_secrets(secrets_mapping)

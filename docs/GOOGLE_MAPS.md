@@ -134,9 +134,9 @@ the compact format `Endpoint: usage/limit (time period)`; raw project/user
 dimensions, utilization, and per-row timestamps are omitted. Google's
 maximum-integer quota sentinel is shown as **Unlimited**. When a successful
 Monitoring request has no time-series points for a quota, the view shows zero.
-The expander-level caption retains the 15-minute sampling and real-time caveats,
-so zero is not a guarantee that Google has finished sampling every recent
-request.
+The 15-minute query is a lookback; each row shows Google's latest sampled rate
+in the quota's limit units, so zero is not a guarantee that Google has finished
+sampling every recent request.
 
 ## Controlled validation
 

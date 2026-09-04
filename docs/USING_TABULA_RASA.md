@@ -29,13 +29,12 @@ authenticated session.
 
 The bottom of the authenticated sidebar contains a compact **Google Maps API
 usage** expander. Routes API and Places API (New) are shown separately with
-effective quota, recent Google-reported usage, compatible utilization, and the
-Google point timestamp/data age. If monitoring is not configured, the expander
-shows setup guidance; missing Google data is shown as unavailable rather than
-zero. Cloud Monitoring sampling/reporting can lag several minutes, including up
-to about 240 seconds after sampling, so this is not a real-time remaining-
-request or billing/spend meter. The refresh action clears only this view's
-120-second cache.
+effective quota and the latest Google-sampled rate in the quota's limit units.
+If monitoring is not configured, the expander shows setup guidance; a
+successful response with no Google data shows zero. Cloud Monitoring
+sampling/reporting can lag several minutes, including up to about 240 seconds
+after sampling, so this is not a real-time remaining-request or billing/spend
+meter. The refresh action clears only this view's 120-second cache.
 
 ## Dashboard
 
