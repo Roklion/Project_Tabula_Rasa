@@ -45,7 +45,11 @@ class _MixedUseReceiptStorage:
         self._on_source_changed = on_source_changed
 
     def _refresh_expected_source(self) -> None:
-        self._expected_source = self._storage.get_mixed_use_expense(self._source_id)
+        refreshed_source = self._storage.get_mixed_use_expense(self._source_id)
+        self._expected_source = {
+            **self._expected_source,
+            "receipt_references": refreshed_source.get("receipt_references", ""),
+        }
         if self._on_source_changed is not None:
             self._on_source_changed(self._expected_source)
 

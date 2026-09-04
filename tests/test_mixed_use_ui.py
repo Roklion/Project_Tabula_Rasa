@@ -168,6 +168,41 @@ def test_source_receipt_adapter_refreshes_snapshot_for_multiple_receipts(
     assert updated_sources[-1]["receipt_references"] == refreshed["receipt_references"]
 
 
+def test_source_receipt_adapter_refreshes_only_receipt_baseline(
+    default_storage, monkeypatch
+) -> None:
+    source = {
+        "id": "source-baseline",
+        "description": "Original description",
+        "receipt_references": "[]",
+    }
+    refreshed_source = {
+        **source,
+        "description": "Concurrent description",
+        "receipt_references": '[{"id":"receipt"}]',
+    }
+    monkeypatch.setattr(
+        default_storage,
+        "get_mixed_use_expense",
+        lambda _source_id: refreshed_source,
+    )
+    updated_sources = []
+    adapter = _MixedUseReceiptStorage(
+        default_storage,
+        source["id"],
+        source,
+        on_source_changed=updated_sources.append,
+    )
+
+    adapter._refresh_expected_source()
+
+    assert adapter._expected_source["description"] == "Original description"
+    assert adapter._expected_source["receipt_references"] == (
+        '[{"id":"receipt"}]'
+    )
+    assert updated_sources == [adapter._expected_source]
+
+
 def test_source_aware_receipt_api_normalizes_invalid_metadata(
     default_storage,
 ) -> None:

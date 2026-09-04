@@ -1450,6 +1450,38 @@ def test_mixed_use_source_only_retry_classifies_missing_projection_as_retryable(
     assert calls == 3
 
 
+def test_mixed_use_source_only_retry_preserves_deactivated_source_tag(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    tag = default_storage.create_tag("Historical tag")
+    inputs = {
+        **_expense_inputs(default_storage),
+        "total_expense": "100",
+        "business_use_percentage": "50",
+        "allocation_rationale": "Measured use",
+        "tag_ids": [tag["id"]],
+        "source_id": "source-inactive-tag-retry",
+        "linked_transaction_id": "transaction-inactive-tag-retry",
+    }
+    original_append = default_storage._append
+
+    def fail_projection(title: str, record: dict[str, str]) -> None:
+        if title == "Transactions":
+            raise StorageUnavailableError("projection unavailable", retryable=True)
+        original_append(title, record)
+
+    default_storage._append = fail_projection  # type: ignore[method-assign]
+    with pytest.raises(StorageBulkMutationUncertainError):
+        default_storage.create_mixed_use_expense(**inputs)
+
+    default_storage._append = original_append  # type: ignore[method-assign]
+    default_storage.edit_tag(tag["id"], active=False)
+    retried = default_storage.create_mixed_use_expense(**inputs)
+
+    assert retried["tag_ids"] == [tag["id"]]
+    assert default_storage.list_transactions()[0]["tag_ids"] == [tag["id"]]
+
+
 def test_mixed_use_source_only_retry_resolves_generated_source_from_linked_id(
     default_storage: GoogleSheetsStorage,
 ) -> None:

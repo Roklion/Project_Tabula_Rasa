@@ -4203,6 +4203,7 @@ class GoogleSheetsStorage:
             original_transaction = existing_transaction or {
                 "account_id": existing_source.get("account_id"),
                 "payee_id": existing_source.get("payee_id"),
+                "tag_ids": existing_source.get("tag_ids", ""),
             }
         if existing_transaction is not None and existing_source is None:
             raise StorageConflictError(
