@@ -21,6 +21,10 @@ from tabula_rasa.storage import (
     StorageConflictError,
     StorageValidationError,
 )
+from tabula_rasa.page_renderers.transactions.receipts import (
+    new_receipt_creation_workflow,
+    receipt_creation_workflow_key,
+)
 from tests.app_support import authenticated_app, by_label, navigate_to
 
 
@@ -272,6 +276,39 @@ def test_mixed_use_app_test_exposes_source_only_projection_repair(default_storag
 
     assert len(default_storage.list_transactions()) == 1
     assert default_storage.list_mixed_use_expenses()[0]["id"] == source["id"]
+
+
+def test_mixed_use_app_test_clears_recovery_after_source_deletion(default_storage) -> None:
+    account = next(item for item in default_storage.list_accounts() if item["active"])
+    category = next(
+        item
+        for item in default_storage.list_categories()
+        if item["kind"] == "Expense"
+    )
+    source = default_storage.create_mixed_use_expense(
+        txn_date="2026-09-03",
+        total_expense="100",
+        business_use_percentage="50",
+        account_id=account["id"],
+        category_id=category["id"],
+        allocation_rationale="Measured use",
+    )
+    transaction = default_storage.list_transactions()[0]
+    default_storage.delete_mixed_use_expense(source["id"])
+
+    with authenticated_app(default_storage) as app:
+        navigate_to(app, "Transactions")
+        app.session_state[receipt_creation_workflow_key("test")] = (
+            new_receipt_creation_workflow(
+                transaction["id"],
+                [],
+                profile_key="test",
+                mixed_use_source_id=source["id"],
+            )
+        )
+        app.run()
+        assert receipt_creation_workflow_key("test") not in app.session_state
+        assert any("source and projection no longer exist" in str(item.value) for item in app.warning)
 
 
 def test_mixed_use_app_test_validation_preserves_inputs(default_storage) -> None:

@@ -3694,6 +3694,23 @@ class GoogleSheetsStorage:
             for header in WORKSHEET_HEADERS[title]
         )
 
+    @staticmethod
+    def _mixed_use_source_matches(
+        actual_source: Mapping[str, Any] | None,
+        expected_source: Mapping[str, Any],
+        actual_transaction: Mapping[str, Any] | None = None,
+    ) -> bool:
+        """Match source fields and, when available, its displayed tag baseline."""
+        if not GoogleSheetsStorage._mixed_use_record_matches(
+            "MixedUseExpenses", actual_source, expected_source
+        ):
+            return False
+        if actual_transaction is None or "tag_ids" not in expected_source:
+            return True
+        return _normalize_tag_ids(actual_transaction.get("tag_ids", "")) == _normalize_tag_ids(
+            expected_source.get("tag_ids", "")
+        )
+
     def _mixed_use_mutation_result(
         self,
         *,
@@ -4125,8 +4142,8 @@ class GoogleSheetsStorage:
                 ),
             }
         )
-        if expected_source is not None and not self._mixed_use_record_matches(
-            "MixedUseExpenses", current_source, expected_source
+        if expected_source is not None and not self._mixed_use_source_matches(
+            current_source, expected_source, current_transaction
         ):
             raise StorageConflictError(
                 "The mixed-use expense changed; refresh it before editing."
@@ -4318,8 +4335,8 @@ class GoogleSheetsStorage:
                 "Transactions": (WORKSHEET_HEADERS["Transactions"], list(transactions.values())),
             }
         )
-        if expected_source is not None and not self._mixed_use_record_matches(
-            "MixedUseExpenses", source, expected_source
+        if expected_source is not None and not self._mixed_use_source_matches(
+            source, expected_source, transaction
         ):
             raise StorageConflictError(
                 "The mixed-use expense changed; refresh it before deleting."
@@ -4555,12 +4572,6 @@ class GoogleSheetsStorage:
         """Freshly resolve a source/projection pair for receipt orchestration."""
         source_id = _clean_text(source_id, "Mixed-use source ID", required=True)
         source = self._find_row("MixedUseExpenses", source_id)
-        if expected_source is not None and not self._mixed_use_record_matches(
-            "MixedUseExpenses", source.values, expected_source
-        ):
-            raise StorageConflictError(
-                "The mixed-use expense changed; refresh before changing receipts."
-            )
         transaction_id = _clean_text(
             source.values.get("linked_transaction_id"),
             "Linked transaction ID",
@@ -4572,6 +4583,12 @@ class GoogleSheetsStorage:
         ):
             raise StorageValidationError(
                 "Mixed-use source and projection IDs do not match"
+            )
+        if expected_source is not None and not self._mixed_use_source_matches(
+            source.values, expected_source, transaction.values
+        ):
+            raise StorageConflictError(
+                "The mixed-use expense changed; refresh before changing receipts."
             )
         if str(source.values.get("receipt_references") or "") != str(
             transaction.values.get("receipt_references") or ""

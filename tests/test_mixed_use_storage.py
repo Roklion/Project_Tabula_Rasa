@@ -1097,6 +1097,38 @@ def test_mixed_use_delete_rejects_stale_source_baseline(
     assert len(default_storage.list_transactions()) == 1
 
 
+def test_mixed_use_source_baseline_includes_projection_tags(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    first_tag = default_storage.create_tag("Original tag")
+    second_tag = default_storage.create_tag("Concurrent tag")
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured business use",
+        tag_ids=[first_tag["id"]],
+    )
+    transaction_sheet = default_storage._worksheet("Transactions")
+    headers = default_storage._headers("Transactions")
+    transaction_sheet.rows[1][headers.index("tag_ids")] = (
+        f'["{second_tag["id"]}"]'
+    )
+    default_storage._invalidate("Transactions")
+
+    with pytest.raises(StorageConflictError, match="changed"):
+        default_storage.edit_mixed_use_expense(
+            source["id"],
+            expected_source=source,
+            allocation_rationale="Updated business use",
+        )
+
+    with pytest.raises(StorageConflictError, match="changed"):
+        default_storage.delete_mixed_use_expense(
+            source["id"], expected_source=source
+        )
+
+
 def test_sheet_id_validation_is_consistent_for_mixed_use_worksheets(
     default_storage: GoogleSheetsStorage,
 ) -> None:

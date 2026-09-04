@@ -14,6 +14,7 @@ from tabula_rasa.page_renderers.tag_selector import (
 from tabula_rasa.page_renderers.transactions.payee_selector import resolve_payee_selection
 from tabula_rasa.page_renderers.transactions.receipts import (
     RECEIPT_UPLOAD_TYPES,
+    clear_receipt_creation_recovery,
     handle_confirmed_transaction_receipts,
     prepare_receipt_uploads,
     prepare_editor_receipt_uploads,
@@ -193,17 +194,17 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
     recovery = st.session_state.get(receipt_creation_workflow_key(profile))
     if isinstance(recovery, Mapping):
         recovery_transaction_id = str(recovery.get("transaction_id") or "")
-        linked = next(
-            (
-                item
-                for item in context.storage.list_transactions(_force_refresh=True)
-                if str(item.get("id") or "") == recovery_transaction_id
-            ),
-            None,
-        )
-        recovery_source_id = (
-            str(linked.get("source_id") or "") if linked else ""
-        )
+        recovery_source_id = str(recovery.get("mixed_use_source_id") or "")
+        if not recovery_source_id:
+            linked = next(
+                (
+                    item
+                    for item in context.storage.list_transactions(_force_refresh=True)
+                    if str(item.get("id") or "") == recovery_transaction_id
+                ),
+                None,
+            )
+            recovery_source_id = str(linked.get("source_id") or "") if linked else ""
         recovery_source = source_by_id.get(recovery_source_id)
         if recovery_source:
             recovery_context = replace(
@@ -214,6 +215,13 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             )
             render_receipt_creation_recovery(recovery_context)
             return
+        if recovery.get("mixed_use_source_id"):
+            clear_receipt_creation_recovery(context, recovery_transaction_id)
+            st.warning(
+                "The mixed-use source and projection no longer exist. "
+                "Receipt recovery was cleared; any uploaded files remain in "
+                "Drive as unreferenced files."
+            )
     selected_key = _key(profile, "selected_source_id")
     baseline_key = _key(profile, "edit_baseline")
     baseline_id_key = _key(profile, "edit_baseline_source_id")
