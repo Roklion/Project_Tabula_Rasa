@@ -82,8 +82,8 @@ website plus API restrictions. The Routes key remains server-side and is sent
 only to the Routes API. Neither key is sourced from or grants access to a
 business profile, workbook, service account, or Drive authorization. Quota
 monitoring uses a separate app-wide service-account JSON mapping and the
-`cloud-platform.read-only` scope; it never reuses profile Sheets credentials or
-human Drive OAuth. The
+`cloud-platform.read-only` and `monitoring.read` scopes; it never reuses profile
+Sheets credentials or human Drive OAuth. The
 ledger persists only the existing visible address and user-confirmed mileage;
 it does not retain complete Google responses or polylines.
 

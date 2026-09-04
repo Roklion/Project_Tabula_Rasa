@@ -15,12 +15,20 @@ from tabula_rasa.google_maps_quota import (
     GoogleMapsQuotaReport,
     GoogleMapsQuotaUsage,
     GoogleMapsServiceReport,
+    MONITORING_READ_SCOPE,
     QUOTA_CONFIG_ERROR_CONFIG_KEY,
     QUOTA_CONFIG_ERROR_KEY,
     QUOTA_REPORT_CONFIG_KEY,
     QUOTA_REPORT_FETCHED_AT_KEY,
     QUOTA_REPORT_SESSION_KEY,
+    QUOTA_REQUEST_ERROR_CONFIG_KEY,
+    QUOTA_REQUEST_ERROR_KEY,
     QUOTA_VIEW_REQUESTED_KEY,
+    READ_ONLY_SCOPES,
+    SERVICE_USAGE_PAGE_SIZE,
+    SERVICE_USAGE_READ_SCOPE,
+    _format_quota_endpoint,
+    _format_quota_period,
     _format_number,
     _number,
     _quota_config_identity,
@@ -57,6 +65,12 @@ def test_config_requires_explicit_project_and_dedicated_credential() -> None:
     assert config.service_account_info == SERVICE_ACCOUNT
     assert "private-key" not in repr(config)
     assert "private-key" not in _quota_config_identity(config)
+    with patch(
+        "tabula_rasa.google_maps_quota.Credentials.from_service_account_info"
+    ) as from_service_account_info:
+        config.credentials()
+    assert from_service_account_info.call_args.kwargs["scopes"] == READ_ONLY_SCOPES
+    assert READ_ONLY_SCOPES == (SERVICE_USAGE_READ_SCOPE, MONITORING_READ_SCOPE)
 
     with pytest.raises(GoogleMapsQuotaConfigurationError):
         GoogleMapsQuotaMonitoringConfig.from_secrets({"google_maps": {}})
@@ -183,6 +197,17 @@ def test_number_and_rate_formatting_preserve_zero_and_exact_periods() -> None:
     assert _number("-1") == -1.0
     assert _number("-2") is None
     assert _format_number(-1.0) == "Unlimited"
+    assert _format_number(float(2**63 - 1)) == "Unlimited"
+    assert _format_quota_period("1/min/{project}") == "per minute"
+    assert _format_quota_period("1/min/{project}/{user}") == "per minute"
+    assert _format_quota_period("1/d/{project}") == "per day"
+    assert _format_quota_period("1/session") == ""
+    assert _format_quota_endpoint(
+        "DistanceMatrix - ComputeRouteMatrix per-element quota"
+    ) == "ComputeRouteMatrix"
+    assert _format_quota_endpoint(
+        "Directions - ComputeRoutes per request quota"
+    ) == "ComputeRoutes"
     assert _rate_period_seconds("1/session") is None
     assert _rate_period_seconds("1/min/{project}") == 60.0
     assert _rate_in_minutes(2.0, "1/s") == 120.0
@@ -216,6 +241,11 @@ def test_client_paginates_service_usage_and_queries_both_services() -> None:
         "places.googleapis.com",
     ]
     assert session.get.call_args_list[0].kwargs["params"]["view"] == "FULL"
+    assert (
+        session.get.call_args_list[0].kwargs["params"]["pageSize"]
+        == SERVICE_USAGE_PAGE_SIZE
+        == 200
+    )
     assert session.get.call_args_list[1].kwargs["params"]["pageToken"] == "next"
     assert session.get.call_args_list[2].kwargs["params"]["aggregation.groupByFields"] == (
         "metric.labels.quota_metric"
@@ -275,8 +305,12 @@ def test_client_redacts_transport_and_http_failures() -> None:
     session.get.side_effect = None
     session.get.return_value = Mock(status_code=403)
     with pytest.raises(GoogleMapsQuotaRequestError) as error:
-        client._get("https://example.test", {})
+        client._get("https://example.test", {}, api_name="Cloud Monitoring")
     assert "private-key" not in str(error.value)
+    assert str(error.value) == (
+        "Cloud Monitoring request returned HTTP 403. "
+        "Verify the quota-reader OAuth scopes and IAM roles."
+    )
 
 
 def test_sidebar_is_discoverable_but_does_not_call_google_when_unconfigured() -> None:
@@ -288,11 +322,13 @@ def test_sidebar_is_discoverable_but_does_not_call_google_when_unconfigured() ->
         render_google_maps_usage_sidebar({})
 
     assert "up to about 240 seconds after sampling" in caption.call_args.args[0]
+    assert "sampled within a 15-minute lookback" in caption.call_args.args[0]
+    assert "latest sampled rate in the quota's limit units" in caption.call_args.args[0]
     info.assert_called_once()
     load.assert_not_called()
 
 
-def test_sidebar_shows_google_timestamp_with_recent_usage() -> None:
+def test_sidebar_shows_concise_endpoint_usage_with_recent_data() -> None:
     report = GoogleMapsQuotaReport(
         project_number="123456789",
         services=(
@@ -307,7 +343,7 @@ def test_sidebar_shows_google_timestamp_with_recent_usage() -> None:
                         limits=(
                             GoogleMapsQuotaLimit(
                                 name="limit-resource",
-                                display_name="Requests per minute",
+                                display_name="Directions - ComputeRoutes per request quota",
                                 metric="routes.googleapis.com/requests",
                                 unit="1/min/{project}",
                                 effective_limit=10,
@@ -341,8 +377,58 @@ def test_sidebar_shows_google_timestamp_with_recent_usage() -> None:
         render_google_maps_usage_sidebar(secrets())
 
     rendered = "\n".join(str(call.args[0]) for call in caption.call_args_list)
-    assert "Google timestamp: 2026-09-01 12:01:00 UTC" in rendered
-    assert "Google data age:" in rendered
+    assert "ComputeRoutes: 4/10 (per minute)" in rendered
+    assert "Google timestamp:" not in rendered
+    assert "Google data age:" not in rendered
+
+
+def test_sidebar_shows_zero_for_successful_monitoring_response_without_points() -> None:
+    report = GoogleMapsQuotaReport(
+        project_number="123456789",
+        services=(
+            GoogleMapsServiceReport(
+                service="places.googleapis.com",
+                quota_metrics=(
+                    GoogleMapsQuotaMetric(
+                        name="metric-resource",
+                        display_name="Autocomplete requests",
+                        metric="places.googleapis.com/autocomplete_requests",
+                        unit="1/min/{project}/{user}",
+                        limits=(
+                            GoogleMapsQuotaLimit(
+                                name="limit-resource",
+                                display_name="Autocomplete requests",
+                                metric="places.googleapis.com/autocomplete_requests",
+                                unit="1/min/{project}/{user}",
+                                effective_limit=float(2**63 - 1),
+                                default_limit=float(2**63 - 1),
+                            ),
+                        ),
+                    ),
+                ),
+                usage={},
+            ),
+        ),
+    )
+    with patch(
+        "tabula_rasa.google_maps_quota.st.expander", return_value=MagicMock()
+    ), patch("tabula_rasa.google_maps_quota.st.caption") as caption, patch(
+        "tabula_rasa.google_maps_quota.st.markdown"
+    ), patch(
+        "tabula_rasa.google_maps_quota.st.button", return_value=False
+    ), patch(
+        "tabula_rasa.google_maps_quota.load_google_maps_quota_report",
+        return_value=report,
+    ), patch(
+        "tabula_rasa.google_maps_quota.st.session_state",
+        {QUOTA_VIEW_REQUESTED_KEY: True},
+    ):
+        render_google_maps_usage_sidebar(secrets())
+
+    rendered = "\n".join(str(call.args[0]) for call in caption.call_args_list)
+    assert "Autocomplete requests: 0/Unlimited (per minute)" in rendered
+    assert "no Google-reported usage" not in rendered
+    assert "usage unavailable" not in rendered
 
 
 def test_sidebar_does_not_query_google_until_usage_is_loaded() -> None:
@@ -454,3 +540,30 @@ def test_sidebar_preserves_sanitized_configuration_error_without_retrying() -> N
     show_error.assert_called_with(str(error))
     assert session_state[QUOTA_CONFIG_ERROR_KEY] == str(error)
     assert QUOTA_CONFIG_ERROR_CONFIG_KEY in session_state
+
+
+def test_sidebar_preserves_sanitized_request_error_without_retrying() -> None:
+    session_state = {QUOTA_VIEW_REQUESTED_KEY: True}
+    error = GoogleMapsQuotaRequestError(
+        "Cloud Monitoring request returned HTTP 403. "
+        "Verify the quota-reader OAuth scopes and IAM roles."
+    )
+    with patch(
+        "tabula_rasa.google_maps_quota.st.expander", return_value=MagicMock()
+    ), patch("tabula_rasa.google_maps_quota.st.caption"), patch(
+        "tabula_rasa.google_maps_quota.st.warning"
+    ) as warning, patch(
+        "tabula_rasa.google_maps_quota.st.button", return_value=False
+    ), patch(
+        "tabula_rasa.google_maps_quota.st.session_state", session_state
+    ), patch(
+        "tabula_rasa.google_maps_quota.load_google_maps_quota_report",
+        side_effect=error,
+    ) as load:
+        render_google_maps_usage_sidebar(secrets())
+        render_google_maps_usage_sidebar(secrets())
+
+    load.assert_called_once()
+    warning.assert_called_with(str(error))
+    assert session_state[QUOTA_REQUEST_ERROR_KEY] == str(error)
+    assert QUOTA_REQUEST_ERROR_CONFIG_KEY in session_state

@@ -25,7 +25,12 @@ MONITORING_ENDPOINT = "https://monitoring.googleapis.com/v3"
 MONITORING_METRIC_TYPE = "serviceruntime.googleapis.com/quota/rate/net_usage"
 MONITORING_RESOURCE_TYPE = "consumer_quota"
 MONITORED_SERVICES = ("routes.googleapis.com", "places.googleapis.com")
-READ_ONLY_SCOPE = "https://www.googleapis.com/auth/cloud-platform.read-only"
+MONITORING_LOOKBACK_MINUTES = 15
+SERVICE_USAGE_PAGE_SIZE = 200
+GOOGLE_UNLIMITED_QUOTA_THRESHOLD = float(2**63 - 1)
+SERVICE_USAGE_READ_SCOPE = "https://www.googleapis.com/auth/cloud-platform.read-only"
+MONITORING_READ_SCOPE = "https://www.googleapis.com/auth/monitoring.read"
+READ_ONLY_SCOPES = (SERVICE_USAGE_READ_SCOPE, MONITORING_READ_SCOPE)
 DEFAULT_TIMEOUT_SECONDS = 15.0
 QUOTA_CACHE_TTL_SECONDS = 120
 QUOTA_VIEW_REQUESTED_KEY = "google_maps_quota_view_requested"
@@ -35,6 +40,8 @@ QUOTA_REPORT_CONFIG_KEY = "google_maps_quota_report_config"
 QUOTA_FETCH_ATTEMPTED_KEY = "google_maps_quota_fetch_attempted"
 QUOTA_CONFIG_ERROR_KEY = "google_maps_quota_config_error"
 QUOTA_CONFIG_ERROR_CONFIG_KEY = "google_maps_quota_config_error_config"
+QUOTA_REQUEST_ERROR_KEY = "google_maps_quota_request_error"
+QUOTA_REQUEST_ERROR_CONFIG_KEY = "google_maps_quota_request_error_config"
 
 
 class GoogleMapsQuotaError(RuntimeError):
@@ -124,7 +131,7 @@ class GoogleMapsQuotaMonitoringConfig:
         """Create least-privilege credentials without exposing key material."""
         try:
             return Credentials.from_service_account_info(
-                dict(self.service_account_info), scopes=[READ_ONLY_SCOPE]
+                dict(self.service_account_info), scopes=READ_ONLY_SCOPES
             )
         except Exception as exc:
             raise GoogleMapsQuotaConfigurationError(
@@ -299,7 +306,7 @@ def parse_usage_time_series(
     *,
     service: str,
 ) -> dict[str, GoogleMapsQuotaUsage]:
-    """Aggregate newest aligned points by Google's returned quota_metric label."""
+    """Select the newest aligned point by Google's quota_metric label."""
     raw_series = payload.get("timeSeries", ())
     result: dict[str, GoogleMapsQuotaUsage] = {}
     if not isinstance(raw_series, list):
@@ -381,26 +388,42 @@ class GoogleMapsQuotaClient:
         self.session = session or AuthorizedSession(config.credentials())
         self.now = now or (lambda: datetime.now(timezone.utc))
 
-    def _get(self, url: str, params: Mapping[str, Any]) -> Mapping[str, Any]:
+    def _get(
+        self,
+        url: str,
+        params: Mapping[str, Any],
+        *,
+        api_name: str = "Google Cloud",
+    ) -> Mapping[str, Any]:
         try:
             response = self.session.get(url, params=dict(params), timeout=self.config.timeout_seconds)
         except Exception:
             raise GoogleMapsQuotaRequestError(
-                "Google Maps quota data is temporarily unavailable. Retry later."
+                f"{api_name} request could not reach Google. Check outbound "
+                "network access and retry."
             ) from None
         if response.status_code != 200:
+            status_code = int(response.status_code)
+            if status_code in (401, 403):
+                guidance = "Verify the quota-reader OAuth scopes and IAM roles."
+            elif status_code == 404:
+                guidance = "Verify the numeric Google Cloud project number."
+            elif status_code == 429:
+                guidance = "Retry after the Google API quota recovers."
+            else:
+                guidance = "Verify the enabled API and quota-reader access."
             raise GoogleMapsQuotaRequestError(
-                "Google Maps quota data could not be read. Verify the monitoring service account and APIs."
+                f"{api_name} request returned HTTP {status_code}. {guidance}"
             )
         try:
             payload = response.json()
         except (ValueError, TypeError):
             raise GoogleMapsQuotaRequestError(
-                "Google Maps quota data could not be read. Retry later."
+                f"{api_name} returned an unreadable response. Retry later."
             ) from None
         if not isinstance(payload, Mapping):
             raise GoogleMapsQuotaRequestError(
-                "Google Maps quota data could not be read. Retry later."
+                f"{api_name} returned an unreadable response. Retry later."
             )
         return payload
 
@@ -409,10 +432,13 @@ class GoogleMapsQuotaClient:
         page_token = ""
         parsed: list[GoogleMapsQuotaMetric] = []
         while True:
-            params: dict[str, Any] = {"view": "FULL", "pageSize": 1000}
+            params: dict[str, Any] = {
+                "view": "FULL",
+                "pageSize": SERVICE_USAGE_PAGE_SIZE,
+            }
             if page_token:
                 params["pageToken"] = page_token
-            payload = self._get(url, params)
+            payload = self._get(url, params, api_name="Service Usage")
             parsed.extend(parse_quota_metrics(payload))
             next_token = _clean_text(payload.get("nextPageToken"))
             if not next_token or next_token == page_token:
@@ -426,7 +452,7 @@ class GoogleMapsQuotaClient:
             end = end.replace(tzinfo=timezone.utc)
         else:
             end = end.astimezone(timezone.utc)
-        start = end - timedelta(minutes=15)
+        start = end - timedelta(minutes=MONITORING_LOOKBACK_MINUTES)
         url = f"{MONITORING_ENDPOINT}/projects/{self.config.project_number}/timeSeries"
         params: dict[str, Any] = {
             "filter": (
@@ -447,7 +473,7 @@ class GoogleMapsQuotaClient:
         while True:
             if page_token:
                 params["pageToken"] = page_token
-            payload = self._get(url, params)
+            payload = self._get(url, params, api_name="Cloud Monitoring")
             for key, usage in parse_usage_time_series(payload, service=service).items():
                 current = result.get(key)
                 if current is None or usage.timestamp > current.timestamp:
@@ -534,10 +560,38 @@ def clear_google_maps_quota_cache() -> None:
 def _format_number(value: float | None) -> str:
     if value is None:
         return "Unavailable"
-    if value < 0:
+    if value < 0 or value >= GOOGLE_UNLIMITED_QUOTA_THRESHOLD:
         return "Unlimited"
     formatted = f"{value:,.2f}".rstrip("0").rstrip(".")
     return formatted if formatted else "0"
+
+
+def _format_quota_period(unit: str) -> str:
+    """Return only the readable time period from Google's quota-unit grammar."""
+    raw = _clean_text(unit)
+    parts = [part.strip() for part in raw.split("/") if part.strip()]
+    if len(parts) < 2 or parts[0] != "1":
+        return ""
+
+    period = {
+        "s": "second",
+        "min": "minute",
+        "h": "hour",
+        "d": "day",
+    }.get(parts[1].casefold())
+    return f"per {period}" if period else ""
+
+
+def _format_quota_endpoint(value: str) -> str:
+    """Reduce Google's quota display name to its endpoint name."""
+    name = _clean_text(value)
+    if " - " in name:
+        name = name.rsplit(" - ", 1)[-1]
+    for suffix in (" per-element quota", " per request quota", " quota"):
+        if name.casefold().endswith(suffix):
+            name = name[: -len(suffix)].rstrip()
+            break
+    return name or "Quota"
 
 
 def _rate_in_minutes(value: float, unit: str) -> float | None:
@@ -599,9 +653,11 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
     """Render a compact quota summary at the bottom of the authenticated sidebar."""
     with st.expander("Google Maps API usage", expanded=False):
         st.caption(
-            "Routes and Places usage is sampled by Google and can lag several "
-            "minutes, including up to about 240 seconds after sampling. This is "
-            "not a real-time remaining-request or billing/spend meter."
+            f"Routes and Places usage is sampled within a {MONITORING_LOOKBACK_MINUTES}-minute "
+            "lookback. Each row shows Google's latest sampled rate in the quota's "
+            "limit units and can lag several minutes, including up to about 240 "
+            "seconds after sampling. This is not a real-time remaining-request or "
+            "billing/spend meter."
         )
         try:
             config = GoogleMapsQuotaMonitoringConfig.from_secrets(secrets_mapping)
@@ -622,6 +678,8 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
             st.session_state.pop(QUOTA_FETCH_ATTEMPTED_KEY, None)
             st.session_state.pop(QUOTA_CONFIG_ERROR_KEY, None)
             st.session_state.pop(QUOTA_CONFIG_ERROR_CONFIG_KEY, None)
+            st.session_state.pop(QUOTA_REQUEST_ERROR_KEY, None)
+            st.session_state.pop(QUOTA_REQUEST_ERROR_CONFIG_KEY, None)
             st.rerun()
         report = st.session_state.get(QUOTA_REPORT_SESSION_KEY)
         current_config_identity = _quota_config_identity(config)
@@ -650,19 +708,31 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
             except GoogleMapsQuotaConfigurationError as exc:
                 st.session_state[QUOTA_CONFIG_ERROR_KEY] = str(exc)
                 st.session_state[QUOTA_CONFIG_ERROR_CONFIG_KEY] = current_config_identity
-            except GoogleMapsQuotaError:
-                pass
+            except GoogleMapsQuotaRequestError as exc:
+                st.session_state[QUOTA_REQUEST_ERROR_KEY] = str(exc)
+                st.session_state[QUOTA_REQUEST_ERROR_CONFIG_KEY] = current_config_identity
             else:
                 st.session_state[QUOTA_REPORT_SESSION_KEY] = report
                 st.session_state[QUOTA_REPORT_FETCHED_AT_KEY] = datetime.now(timezone.utc)
                 st.session_state[QUOTA_REPORT_CONFIG_KEY] = current_config_identity
                 st.session_state.pop(QUOTA_CONFIG_ERROR_KEY, None)
                 st.session_state.pop(QUOTA_CONFIG_ERROR_CONFIG_KEY, None)
+                st.session_state.pop(QUOTA_REQUEST_ERROR_KEY, None)
+                st.session_state.pop(QUOTA_REQUEST_ERROR_CONFIG_KEY, None)
         config_error = st.session_state.get(QUOTA_CONFIG_ERROR_KEY)
         if config_error and st.session_state.get(QUOTA_CONFIG_ERROR_CONFIG_KEY) != current_config_identity:
             st.session_state.pop(QUOTA_CONFIG_ERROR_KEY, None)
             st.session_state.pop(QUOTA_CONFIG_ERROR_CONFIG_KEY, None)
             config_error = None
+        request_error = st.session_state.get(QUOTA_REQUEST_ERROR_KEY)
+        if (
+            request_error
+            and st.session_state.get(QUOTA_REQUEST_ERROR_CONFIG_KEY)
+            != current_config_identity
+        ):
+            st.session_state.pop(QUOTA_REQUEST_ERROR_KEY, None)
+            st.session_state.pop(QUOTA_REQUEST_ERROR_CONFIG_KEY, None)
+            request_error = None
         if config_error:
             st.error(config_error)
             if st.button("Retry", key="retry-config-error-google-maps-usage-sidebar"):
@@ -672,12 +742,17 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
                 st.rerun()
             return
         if report is None:
-            st.warning("Google Maps usage is temporarily unavailable.")
+            st.warning(
+                str(request_error)
+                if request_error
+                else "Google Maps usage is temporarily unavailable."
+            )
             if st.button("Retry", key="retry-fetch-error-google-maps-usage-sidebar"):
                 st.session_state.pop(QUOTA_FETCH_ATTEMPTED_KEY, None)
+                st.session_state.pop(QUOTA_REQUEST_ERROR_KEY, None)
+                st.session_state.pop(QUOTA_REQUEST_ERROR_CONFIG_KEY, None)
                 st.rerun()
             return
-        now = datetime.now(timezone.utc)
         for service_report in report.services:
             title = (
                 "Routes API"
@@ -689,6 +764,9 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
             for metric in service_report.quota_metrics:
                 for limit in metric.limits:
                     shown = True
+                    endpoint = _format_quota_endpoint(
+                        limit.display_name or metric.display_name or metric.metric
+                    )
                     usage = service_report.usage.get(limit.metric or metric.metric)
                     effective = (
                         limit.effective_limit_for(usage.dimensions)
@@ -703,23 +781,11 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
                             if converted is not None
                             else _format_number(usage.value)
                         )
-                        recent_unit = converted[1] if converted else usage.unit
-                        ratio = _utilization(usage, limit)
-                        utilization = f" · {ratio:.1%}" if ratio is not None else ""
-                        age = (
-                            " · Google timestamp: "
-                            f"{_format_google_timestamp(usage.timestamp)}"
-                            " · Google data age: "
-                            f"{max(0, int((now - usage.timestamp).total_seconds()))}s"
-                        )
-                        st.caption(
-                            f"{limit.display_name or metric.display_name or metric.metric}: "
-                            f"{recent} {recent_unit} / {quota} {limit.unit}{utilization}{age}"
-                        )
+                        summary = f"{recent}/{quota}"
                     else:
-                        st.caption(
-                            f"{limit.display_name or metric.display_name or metric.metric}: "
-                            f"{quota} {limit.unit} · usage unavailable"
-                        )
+                        summary = f"0/{quota}"
+                    period = _format_quota_period(limit.unit)
+                    suffix = f" ({period})" if period else ""
+                    st.caption(f"{endpoint}: {summary}{suffix}")
             if not shown:
                 st.caption("No Google-reported quota metrics.")

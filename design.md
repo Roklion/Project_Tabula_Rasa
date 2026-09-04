@@ -221,9 +221,16 @@ surface, sidebar, and documentation. The authenticated sidebar is ordered:
 
 Below the workbook metadata and utility controls, the authenticated sidebar
 also contains a compact, read-only **Google Maps API usage** expander after
-authentication. Routes API and Places API (New) are visibly separate and show
-effective quota, recent Google-reported usage, compatible utilization,
-timestamp, and age. Until configured, the expander reports its setup guidance.
+authentication. Routes API and Places API (New) are visibly separate. Each
+quota row is compact: `Endpoint: usage/limit (time period)`. Raw project and
+user dimensions, utilization, and per-row timestamps are omitted. Google's
+maximum-integer quota sentinel is shown as **Unlimited**. After a successful
+Monitoring response with no data points, the matching usage is shown as zero;
+the expander-level caption explains that each row shows Google's latest sampled
+rate from the lookback and retains the sampling and real-time caveats. Until
+configured, the expander reports its setup guidance.
+Read failures identify Service Usage or Cloud Monitoring and provide a safe
+HTTP-status-based remediation hint without displaying Google response bodies.
 It warns that Monitoring may lag several minutes (including up to about 240
 seconds after sampling), and is not a real-time remaining-request or
 billing/spend meter.
