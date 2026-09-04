@@ -143,11 +143,18 @@ def _incomplete_source_ids(
         for item in transactions
         if str(item.get("id") or "")
     }
+    projected_source_ids = {
+        str(item.get("source_id") or "")
+        for item in transactions
+        if str(item.get("source_type") or "") == "mixed_use_expense"
+        and str(item.get("source_id") or "")
+    }
     return {
         str(source.get("id") or "")
         for source in sources
         if str(source.get("id") or "")
         and str(source.get("linked_transaction_id") or "") not in transaction_ids
+        and str(source.get("id") or "") not in projected_source_ids
     }
 
 

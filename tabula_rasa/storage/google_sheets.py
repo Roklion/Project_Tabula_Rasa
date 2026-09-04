@@ -1386,8 +1386,32 @@ class GoogleSheetsStorage:
                         and len(row) > transaction_tag_index
                         and str(row[transaction_id_index]).strip()
                     }
+                    # Re-read immediately before migration writes so the
+                    # backfill cannot overwrite edits made after startup's
+                    # initial workbook snapshot.
+                    source_worksheet = actual_worksheets["MixedUseExpenses"]
+                    fresh_source_values = source_worksheet.get_all_values()
+                    fresh_source_headers = [
+                        str(value).strip() for value in fresh_source_values[0]
+                    ] if fresh_source_values else []
+                    if fresh_source_headers != source_headers:
+                        source_values = fresh_source_values
+                        source_headers = fresh_source_headers
+                        source_tag_index = (
+                            source_headers.index("tag_ids")
+                            if "tag_ids" in source_headers
+                            else None
+                        )
+                        linked_transaction_index = (
+                            source_headers.index("linked_transaction_id")
+                            if "linked_transaction_id" in source_headers
+                            else None
+                        )
                     backfilled_source_tags = False
-                    for row in source_values[1:]:
+                    tag_updates = []
+                    for row_number, row in enumerate(fresh_source_values[1:], start=2):
+                        if source_tag_index is None or linked_transaction_index is None:
+                            break
                         if len(row) < len(source_headers):
                             row.extend([""] * (len(source_headers) - len(row)))
                         if str(row[source_tag_index]).strip():
@@ -1397,12 +1421,17 @@ class GoogleSheetsStorage:
                         if transaction_tags:
                             row[source_tag_index] = transaction_tags
                             backfilled_source_tags = True
+                            tag_updates.append(
+                                {
+                                    "range": gspread.utils.rowcol_to_a1(
+                                        row_number, source_tag_index + 1
+                                    ),
+                                    "values": [[transaction_tags]],
+                                }
+                            )
                     if backfilled_source_tags:
-                        actual_worksheets["MixedUseExpenses"].update(
-                            source_values,
-                            range_name="A1",
-                            raw=True,
-                        )
+                        source_worksheet.batch_update(tag_updates, raw=True)
+                        source_values = fresh_source_values
         except (
             GoogleAuthError,
         ) as exc:
