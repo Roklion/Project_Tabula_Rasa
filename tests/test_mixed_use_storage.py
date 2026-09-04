@@ -1122,6 +1122,9 @@ def test_mixed_use_source_baseline_includes_projection_tags(
     )
     default_storage._invalidate("Transactions")
 
+    with pytest.raises(StorageValidationError, match="tags do not match"):
+        default_storage.list_mixed_use_expenses()
+
     with pytest.raises(StorageConflictError, match="changed"):
         default_storage.edit_mixed_use_expense(
             source["id"],

@@ -148,7 +148,13 @@ def test_source_receipt_adapter_refreshes_snapshot_for_multiple_receipts(
         category_id=category["id"],
         allocation_rationale="Measured use",
     )
-    adapter = _MixedUseReceiptStorage(default_storage, source["id"], source)
+    updated_sources = []
+    adapter = _MixedUseReceiptStorage(
+        default_storage,
+        source["id"],
+        source,
+        on_source_changed=updated_sources.append,
+    )
     adapter.link_transaction_receipt(
         source["linked_transaction_id"],
         reference={"id": "c" * 32, "name": "one.pdf"},
@@ -159,6 +165,7 @@ def test_source_receipt_adapter_refreshes_snapshot_for_multiple_receipts(
     )
     refreshed = default_storage.get_mixed_use_expense(source["id"])
     assert len(decode_receipt_references(refreshed["receipt_references"])) == 2
+    assert updated_sources[-1]["receipt_references"] == refreshed["receipt_references"]
 
 
 def test_source_aware_receipt_api_normalizes_invalid_metadata(

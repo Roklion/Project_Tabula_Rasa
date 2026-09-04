@@ -32,10 +32,22 @@ from tabula_rasa.storage.google_sheets import (
 class _MixedUseReceiptStorage:
     """Narrow receipt-storage capability scoped to one source record."""
 
-    def __init__(self, storage, source_id: str, expected_source: Mapping[str, object]):
+    def __init__(
+        self,
+        storage,
+        source_id: str,
+        expected_source: Mapping[str, object],
+        on_source_changed=None,
+    ):
         self._storage = storage
         self._source_id = source_id
         self._expected_source = expected_source
+        self._on_source_changed = on_source_changed
+
+    def _refresh_expected_source(self) -> None:
+        self._expected_source = self._storage.get_mixed_use_expense(self._source_id)
+        if self._on_source_changed is not None:
+            self._on_source_changed(self._expected_source)
 
     def __getattr__(self, name):
         return getattr(self._storage, name)
@@ -44,21 +56,21 @@ class _MixedUseReceiptStorage:
         result = self._storage.link_mixed_use_receipt(
             self._source_id, reference=reference, expected_source=self._expected_source
         )
-        self._expected_source = self._storage.get_mixed_use_expense(self._source_id)
+        self._refresh_expected_source()
         return result
 
     def unlink_transaction_receipt(self, transaction_id, *, file_id):
         result = self._storage.unlink_mixed_use_receipt(
             self._source_id, file_id=file_id, expected_source=self._expected_source
         )
-        self._expected_source = self._storage.get_mixed_use_expense(self._source_id)
+        self._refresh_expected_source()
         return result
 
     def set_transaction_receipt_references(self, transaction_id, references):
         result = self._storage.set_mixed_use_receipt_references(
             self._source_id, references, expected_source=self._expected_source
         )
-        self._expected_source = self._storage.get_mixed_use_expense(self._source_id)
+        self._refresh_expected_source()
         return result
 
     def remap_transaction_receipt(self, transaction_id, *, old_file_id, reference):
@@ -68,7 +80,7 @@ class _MixedUseReceiptStorage:
             reference=reference,
             expected_source=self._expected_source,
         )
-        self._expected_source = self._storage.get_mixed_use_expense(self._source_id)
+        self._refresh_expected_source()
         return result
 
 def mixed_use_preview(*, txn_date, account, payee, category, description, total_expense, business_use_percentage, allocation_rationale):
@@ -250,11 +262,6 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         if st.session_state.get(baseline_id_key) != selected_id:
             st.session_state[baseline_key] = dict(source)
             st.session_state[baseline_id_key] = selected_id
-        elif isinstance(st.session_state.get(baseline_key), Mapping):
-            baseline = dict(st.session_state[baseline_key])
-            if baseline.get("receipt_references") != source.get("receipt_references"):
-                baseline["receipt_references"] = source.get("receipt_references", "")
-                st.session_state[baseline_key] = baseline
         expected_source = st.session_state.get(baseline_key, source)
     else:
         st.session_state.pop(baseline_key, None)
@@ -263,6 +270,11 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         pending_source_id, pending_transaction_id = _pending_create_ids(
             st.session_state, profile
         )
+
+    def update_receipt_baseline(updated_source):
+        if st.session_state.get(baseline_id_key) == selected_id:
+            st.session_state[baseline_key] = dict(updated_source)
+
     defaults = source or {}
     scope = f"{profile}_{selected_id or 'new'}"
     context.reset_widget_state_if_requested(
@@ -444,6 +456,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                             context.storage,
                             result["id"],
                             result,
+                            on_source_changed=update_receipt_baseline,
                         ),
                     )
                     handle_confirmed_transaction_receipts(
@@ -480,7 +493,10 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                 replace(
                     context,
                     storage=_MixedUseReceiptStorage(
-                        context.storage, source["id"], source
+                        context.storage,
+                        source["id"],
+                        source,
+                        on_source_changed=update_receipt_baseline,
                     ),
                 ),
                 selected=linked,

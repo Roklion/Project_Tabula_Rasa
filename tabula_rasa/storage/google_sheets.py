@@ -660,6 +660,15 @@ def _validate_mixed_use_tables(
             raise StorageValidationError(
                 "Mixed-use source and projection receipt references do not match"
             )
+        if (
+            "tag_ids" in source
+            and "tag_ids" in transaction
+            and _normalize_tag_ids(source.get("tag_ids", ""))
+            != _normalize_tag_ids(transaction.get("tag_ids", ""))
+        ):
+            raise StorageValidationError(
+                "Mixed-use source and projection tags do not match"
+            )
     for source in sources:
         linked_id = source.get("linked_transaction_id")
         if linked_id not in transactions_by_id or _clean_text(
@@ -4303,6 +4312,12 @@ class GoogleSheetsStorage:
             raise StorageValidationError(
                 "Mixed-use source has no linked projection transaction"
             )
+        if expected_source is not None and not self._mixed_use_source_matches(
+            current_source, expected_source, current_transaction
+        ):
+            raise StorageConflictError(
+                "The mixed-use expense changed; refresh it before editing."
+            )
         _validate_mixed_use_tables(
             {
                 "MixedUseExpenses": (
@@ -4315,12 +4330,6 @@ class GoogleSheetsStorage:
                 ),
             }
         )
-        if expected_source is not None and not self._mixed_use_source_matches(
-            current_source, expected_source, current_transaction
-        ):
-            raise StorageConflictError(
-                "The mixed-use expense changed; refresh it before editing."
-            )
         if "id" in changes or "source_id" in changes or "linked_transaction_id" in changes:
             raise StorageValidationError("Mixed-use source IDs cannot be edited")
         merged = {**current_source, **changes}
@@ -4502,18 +4511,18 @@ class GoogleSheetsStorage:
                 before_retry=reject_reappeared_projection,
             )
             return
-        _validate_mixed_use_tables(
-            {
-                "MixedUseExpenses": (MIXED_USE_WORKSHEET_HEADERS, list(sources.values())),
-                "Transactions": (WORKSHEET_HEADERS["Transactions"], list(transactions.values())),
-            }
-        )
         if expected_source is not None and not self._mixed_use_source_matches(
             source, expected_source, transaction
         ):
             raise StorageConflictError(
                 "The mixed-use expense changed; refresh it before deleting."
             )
+        _validate_mixed_use_tables(
+            {
+                "MixedUseExpenses": (MIXED_USE_WORKSHEET_HEADERS, list(sources.values())),
+                "Transactions": (WORKSHEET_HEADERS["Transactions"], list(transactions.values())),
+            }
+        )
         fresh_transaction = self._find_row("Transactions", transaction_id)
         fresh_source = self._find_row("MixedUseExpenses", source_id)
         if not self._mixed_use_record_matches(
