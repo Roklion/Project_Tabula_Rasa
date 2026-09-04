@@ -1142,6 +1142,7 @@ class GoogleSheetsStorage:
                 worksheet.title: worksheet for worksheet in workbook.worksheets()
             }
             pre_mixed_use_workbook = "MixedUseExpenses" not in actual_worksheets
+            mixed_use_tag_migration_needed = False
             initial_values: dict[str, list[list[Any]]] = {}
             for title, headers in WORKSHEET_HEADERS.items():
                 worksheet = actual_worksheets.get(title)
@@ -1219,6 +1220,9 @@ class GoogleSheetsStorage:
                         and mixed_use_headers_without_metadata <= set(existing_headers)
                         and len(existing_headers) == len(set(existing_headers))
                     ):
+                        mixed_use_tag_migration_needed = (
+                            "tag_ids" in missing_mixed_use_metadata
+                        )
                         worksheet.add_cols(len(missing_mixed_use_metadata))
                         migrated_headers = [
                             *existing_headers,
@@ -1346,7 +1350,11 @@ class GoogleSheetsStorage:
                 initial_values[title] = values
             source_values = initial_values.get("MixedUseExpenses")
             transaction_values = initial_values.get("Transactions")
-            if source_values and transaction_values:
+            if (
+                mixed_use_tag_migration_needed
+                and source_values
+                and transaction_values
+            ):
                 source_headers = [str(value).strip() for value in source_values[0]]
                 transaction_headers = [
                     str(value).strip() for value in transaction_values[0]
