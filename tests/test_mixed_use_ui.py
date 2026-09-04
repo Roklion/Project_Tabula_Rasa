@@ -5,6 +5,7 @@ import pytest
 from tabula_rasa.page_renderers.transactions.mixed_use import (
     _MixedUseReceiptStorage,
     _incomplete_source_ids,
+    _mixed_use_receipt_recovery_active,
     _pending_create_ids,
     mixed_use_preview,
 )
@@ -26,8 +27,10 @@ from tabula_rasa.storage import (
     StorageValidationError,
 )
 from tabula_rasa.page_renderers.transactions.receipts import (
+    editor_receipt_link_recovery_key,
     new_receipt_creation_workflow,
     receipt_creation_workflow_key,
+    receipt_editor_workflow_key,
 )
 from tests.app_support import authenticated_app, by_label, navigate_to
 
@@ -119,6 +122,23 @@ def test_mixed_use_transaction_ids_can_be_derived_from_unfiltered_snapshot() -> 
     assert _mixed_use_transaction_ids(
         [ordinary_transaction, mixed_projection]
     ) == {"projection-1"}
+
+
+def test_mixed_use_upload_is_blocked_during_linked_editor_recovery() -> None:
+    profile = "north"
+    transaction_id = "projection-1"
+
+    assert _mixed_use_receipt_recovery_active(
+        {receipt_editor_workflow_key(profile, transaction_id): {}},
+        profile,
+        transaction_id,
+    )
+    assert _mixed_use_receipt_recovery_active(
+        {editor_receipt_link_recovery_key(profile, transaction_id): {}},
+        profile,
+        transaction_id,
+    )
+    assert not _mixed_use_receipt_recovery_active({}, profile, transaction_id)
 
 
 def test_generic_create_rejects_fabricated_mixed_use_projection(default_storage) -> None:

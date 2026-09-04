@@ -21,6 +21,8 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     render_receipt_creation_recovery,
     render_receipts,
     receipt_creation_workflow_key,
+    editor_receipt_link_recovery_key,
+    receipt_editor_workflow_key,
 )
 from tabula_rasa.storage import StorageError, decode_receipt_references
 from tabula_rasa.storage.google_sheets import (
@@ -128,6 +130,20 @@ def _payee_options(payees: Sequence[Mapping[str, object]]) -> tuple[list[str], d
     options = [""]
     options.extend(str(item["id"]) for item in payees if str(item.get("active", "")).upper() == "TRUE")
     return options, by_id
+
+def _mixed_use_receipt_recovery_active(
+    state: Mapping[str, object], profile: str, transaction_id: str
+) -> bool:
+    """Prevent a second mixed-use upload while the linked editor recovers."""
+    if not transaction_id:
+        return False
+    return any(
+        isinstance(state.get(key), Mapping)
+        for key in (
+            receipt_editor_workflow_key(profile, transaction_id),
+            editor_receipt_link_recovery_key(profile, transaction_id),
+        )
+    )
 
 def _source_label(source: Mapping[str, object], account_paths: Mapping[str, str]) -> str:
     return f"{source.get('txn_date', '')} — {source.get('payee', '') or source.get('description', '') or 'No payee'} — {account_paths.get(str(source.get('account_id')), 'Unknown account')} — {'$'}{source.get('total_expense', '0.00')} — {str(source.get('id', ''))[:8]}"
@@ -268,8 +284,8 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             return
         if recovery.get("mixed_use_source_id"):
             clear_receipt_creation_recovery(context, recovery_transaction_id)
-            st.warning(
-                "The mixed-use source and projection no longer exist. "
+        st.warning(
+            "The mixed-use source and projection no longer exist. "
                 "Receipt recovery was cleared; any uploaded files remain in "
                 "Drive as unreferenced files."
             )
@@ -286,6 +302,11 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
     if sources:
         selected_id = st.selectbox("Edit an existing mixed-use expense (optional)", choices, index=choices.index(selected_id), format_func=lambda value: "Create new mixed-use expense" if not value else _source_label(source_by_id[value], account_paths), key=selected_key)
     source = source_by_id.get(selected_id)
+    mixed_use_receipt_recovery = _mixed_use_receipt_recovery_active(
+        st.session_state,
+        profile,
+        str(source.get("linked_transaction_id") or "") if source else "",
+    )
     source_incomplete = bool(
         source and str(source.get("id") or "") in incomplete_source_ids
     )
@@ -385,10 +406,14 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             disabled=bool(
                 isinstance(recovery, Mapping)
                 and not recovery_source
+                or mixed_use_receipt_recovery
             ),
             help=(
-                "Resolve the pending receipt recovery in Add transaction before "
-                "uploading receipts here."
+                "Resolve the pending receipt recovery in the transaction editor "
+                "before uploading receipts here."
+                if mixed_use_receipt_recovery
+                else "Resolve the pending receipt recovery in Add transaction "
+                "before uploading receipts here."
                 if isinstance(recovery, Mapping) and not recovery_source
                 else None
             ),
@@ -411,6 +436,11 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                 save_error.error(
                     "Resolve the pending receipt recovery in Add transaction "
                     "before saving mixed-use receipts."
+                )
+            elif mixed_use_receipt_recovery and receipt_uploads:
+                save_error.error(
+                    "Resolve the pending receipt recovery in the transaction "
+                    "editor before saving mixed-use receipts."
                 )
             else:
                 try:

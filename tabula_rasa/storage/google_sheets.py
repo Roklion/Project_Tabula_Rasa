@@ -126,6 +126,7 @@ MIXED_USE_WORKSHEET_HEADERS = (
     "tag_ids",
     "created_at",
 )
+MIXED_USE_TAG_MIGRATION_HEADER = "tag_ids__migration_pending"
 WORKSHEET_HEADERS = {
     **PRE_MIXED_USE_WORKSHEET_HEADERS,
     "Transactions": (
@@ -1207,6 +1208,9 @@ class GoogleSheetsStorage:
                     existing_headers = [
                         str(value).strip() for value in values[0]
                     ]
+                    migration_marker_present = (
+                        MIXED_USE_TAG_MIGRATION_HEADER in existing_headers
+                    )
                     mixed_use_headers_without_metadata = set(
                         MIXED_USE_WORKSHEET_HEADERS
                     ) - {"receipt_references", "tag_ids"}
@@ -1214,6 +1218,9 @@ class GoogleSheetsStorage:
                         header
                         for header in ("receipt_references", "tag_ids")
                         if header not in existing_headers
+                        and not (
+                            header == "tag_ids" and migration_marker_present
+                        )
                     ]
                     if (
                         missing_mixed_use_metadata
@@ -1221,12 +1228,21 @@ class GoogleSheetsStorage:
                         and len(existing_headers) == len(set(existing_headers))
                     ):
                         mixed_use_tag_migration_needed = (
-                            "tag_ids" in missing_mixed_use_metadata
+                            migration_marker_present
+                            or "tag_ids" in missing_mixed_use_metadata
                         )
-                        worksheet.add_cols(len(missing_mixed_use_metadata))
+                        headers_to_add = [
+                            (
+                                MIXED_USE_TAG_MIGRATION_HEADER
+                                if header == "tag_ids"
+                                else header
+                            )
+                            for header in missing_mixed_use_metadata
+                        ]
+                        worksheet.add_cols(len(headers_to_add))
                         migrated_headers = [
                             *existing_headers,
-                            *missing_mixed_use_metadata,
+                            *headers_to_add,
                         ]
                         worksheet.update(
                             [migrated_headers],
@@ -1234,6 +1250,8 @@ class GoogleSheetsStorage:
                             raw=True,
                         )
                         values[0] = migrated_headers
+                    elif migration_marker_present:
+                        mixed_use_tag_migration_needed = True
                 if title in {"Transactions", "Mileage"} and values:
                     existing_headers = [
                         str(value).strip() for value in values[0]
@@ -1359,10 +1377,16 @@ class GoogleSheetsStorage:
                 transaction_headers = [
                     str(value).strip() for value in transaction_values[0]
                 ]
-                source_tag_index = (
-                    source_headers.index("tag_ids")
-                    if "tag_ids" in source_headers
-                    else None
+                source_tag_index = next(
+                    (
+                        source_headers.index(header)
+                        for header in (
+                            "tag_ids",
+                            MIXED_USE_TAG_MIGRATION_HEADER,
+                        )
+                        if header in source_headers
+                    ),
+                    None,
                 )
                 linked_transaction_index = (
                     source_headers.index("linked_transaction_id")
@@ -1408,9 +1432,17 @@ class GoogleSheetsStorage:
                         source_values = fresh_source_values
                         source_headers = fresh_source_headers
                         source_tag_index = (
-                            source_headers.index("tag_ids")
-                            if "tag_ids" in source_headers
-                            else None
+                            next(
+                                (
+                                    source_headers.index(header)
+                                    for header in (
+                                        "tag_ids",
+                                        MIXED_USE_TAG_MIGRATION_HEADER,
+                                    )
+                                    if header in source_headers
+                                ),
+                                None,
+                            )
                         )
                         linked_transaction_index = (
                             source_headers.index("linked_transaction_id")
@@ -1443,6 +1475,22 @@ class GoogleSheetsStorage:
                         source_worksheet.batch_update(tag_updates, raw=True)
                         source_values = fresh_source_values
                         initial_values["MixedUseExpenses"] = source_values
+                    if MIXED_USE_TAG_MIGRATION_HEADER in source_headers:
+                        source_headers = [
+                            (
+                                "tag_ids"
+                                if header == MIXED_USE_TAG_MIGRATION_HEADER
+                                else header
+                            )
+                            for header in source_headers
+                        ]
+                        fresh_source_values[0] = source_headers
+                        source_worksheet.update(
+                            [source_headers],
+                            range_name="A1",
+                            raw=True,
+                        )
+                        initial_values["MixedUseExpenses"] = fresh_source_values
         except (
             GoogleAuthError,
         ) as exc:
