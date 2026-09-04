@@ -288,7 +288,7 @@ def check_viewport(page: Page, url: str, viewport: tuple[int, int]) -> None:
     require_visible_text(page, "Ledger Result (read-only)")
     require_visible_text(page, "Mixed-use Expense Log")
     require_visible_text(page, "Add mixed-use expense")
-    mixed_log = page.locator('[data-testid="stDataFrameResizable"]').last
+    mixed_log = page.get_by_role("grid").last
     try:
         mixed_log.wait_for(state="visible", timeout=10000)
     except PlaywrightTimeoutError as error:
