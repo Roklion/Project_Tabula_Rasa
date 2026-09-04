@@ -241,9 +241,10 @@ preserves the stable ID and all references.
 
 Merging requires an explicit target, one or more source values, and an
 acknowledgement. Payee merges update transaction references and both sides of
-each MixedUseExpenses source/projection pair. Tag merges update Transactions
-and Mileage and remove duplicate associations when a row already has both the
-source and target tag. Other fields and associations are preserved.
+each MixedUseExpenses source/projection pair. Tag merges update Transactions,
+Mileage, and MixedUseExpenses and remove duplicate associations when a row
+already has both the source and target tag. Other fields and associations are
+preserved.
 
 Removal is permanent and allowed only for an unreferenced value. If a Payee or
 Tag is still used, the page shows the fresh reference count and blocks removal;

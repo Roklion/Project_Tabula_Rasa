@@ -123,6 +123,7 @@ MIXED_USE_WORKSHEET_HEADERS = (
     "receipt_references",
     "allocation_rationale",
     "linked_transaction_id",
+    "tag_ids",
     "created_at",
 )
 WORKSHEET_HEADERS = {
@@ -148,6 +149,7 @@ WORKSHEET_HEADERS = {
         "tag_ids",
     ),
 }
+VERSION_9_WORKSHEET_HEADERS = WORKSHEET_HEADERS
 _TAG_WRITE_LOCK = threading.RLock()
 TAGS_BACKUP_FORMAT_VERSION = 8
 TAGS_WORKSHEET_HEADERS = {
@@ -196,7 +198,8 @@ TRANSACTION_KINDS = {"Income", "Expense", "Transfer"}
 LEDGER_ONLY_BACKUP_FORMAT_VERSION = 4
 RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION = 5
 PAYEE_BACKUP_FORMAT_VERSION = 7
-BACKUP_FORMAT_VERSION = 9
+MIXED_USE_BACKUP_FORMAT_VERSION = 9
+BACKUP_FORMAT_VERSION = 10
 BACKUP_HEADERS_BY_VERSION = {
     2: LEGACY_BACKUP_HEADERS,
     3: VERSION_3_WORKSHEET_HEADERS,
@@ -206,6 +209,14 @@ BACKUP_HEADERS_BY_VERSION = {
     RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION: PRE_PAYEE_WORKSHEET_HEADERS,
     PAYEE_BACKUP_FORMAT_VERSION: PRE_MIXED_USE_WORKSHEET_HEADERS,
     TAGS_BACKUP_FORMAT_VERSION: TAGS_WORKSHEET_HEADERS,
+    MIXED_USE_BACKUP_FORMAT_VERSION: {
+        **VERSION_9_WORKSHEET_HEADERS,
+        "MixedUseExpenses": tuple(
+            header
+            for header in VERSION_9_WORKSHEET_HEADERS["MixedUseExpenses"]
+            if header != "tag_ids"
+        ),
+    },
     BACKUP_FORMAT_VERSION: WORKSHEET_HEADERS,
 }
 SUPPORTED_BACKUP_FORMAT_VERSIONS = set(BACKUP_HEADERS_BY_VERSION)
@@ -577,6 +588,7 @@ def _validate_mixed_use_tables(
             )
         _clean_text(source.get("allocation_rationale"), "Allocation rationale", required=True)
         decode_receipt_references(source.get("receipt_references", ""))
+        _normalize_tag_ids(source.get("tag_ids", ""))
 
     transactions_by_id = {
         _clean_text(transaction.get("id"), "Transaction ID", required=True): transaction
@@ -814,7 +826,7 @@ def _parse_backup_zip(
             [],
         )
 
-    if format_version < BACKUP_FORMAT_VERSION:
+    if format_version < MIXED_USE_BACKUP_FORMAT_VERSION:
         transaction_headers, transactions = tables["Transactions"]
         transaction_headers = list(transaction_headers)
         for header in ("source_type", "source_id"):
@@ -832,7 +844,7 @@ def _parse_backup_zip(
     # columns, so restore them as an empty, valid tag state.
     if "Tags" not in tables:
         tables["Tags"] = (list(WORKSHEET_HEADERS["Tags"]), [])
-    for title in ("Transactions", "Mileage"):
+    for title in ("Transactions", "Mileage", "MixedUseExpenses"):
         if title not in tables:
             continue
         headers, records = tables[title]
@@ -840,6 +852,23 @@ def _parse_backup_zip(
             headers = [*headers, "tag_ids"]
             records = [{**record, "tag_ids": "[]"} for record in records]
             tables[title] = (headers, records)
+    if format_version < BACKUP_FORMAT_VERSION and "MixedUseExpenses" in tables:
+        transactions_by_id = {
+            str(record.get("id") or ""): record
+            for record in tables["Transactions"][1]
+        }
+        mixed_headers, mixed_sources = tables["MixedUseExpenses"]
+        for source in mixed_sources:
+            if _normalize_tag_ids(source.get("tag_ids", "")):
+                continue
+            linked_transaction = transactions_by_id.get(
+                str(source.get("linked_transaction_id") or "")
+            )
+            if linked_transaction is not None:
+                source["tag_ids"] = _encode_tag_ids(
+                    linked_transaction.get("tag_ids", "")
+                )
+        tables["MixedUseExpenses"] = (mixed_headers, mixed_sources)
 
     _validate_hierarchy_records(
         tables["Accounts"][1],
@@ -864,15 +893,20 @@ def _parse_backup_zip(
     category_ids = {record["id"] for record in tables["Categories"][1]}
     payee_ids = {record["id"] for record in tables["Payees"][1]}
     tag_ids = {record["id"] for record in tables["Tags"][1]}
-    for title in ("Transactions", "Mileage"):
+    for title in ("Transactions", "Mileage", "MixedUseExpenses"):
         if title not in tables:
             continue
         for record in tables[title][1]:
             normalized_tag_ids = _normalize_tag_ids(record.get("tag_ids", ""))
             if any(tag_id not in tag_ids for tag_id in normalized_tag_ids):
+                item_label = {
+                    "Transactions": "transaction",
+                    "Mileage": "mileage",
+                    "MixedUseExpenses": "mixed-use source",
+                }[title]
                 raise StorageValidationError(
                     "Backup contains an unknown "
-                    f"{'transaction' if title == 'Transactions' else 'mileage'} tag"
+                    f"{item_label} tag"
                 )
             record["tag_ids"] = _encode_tag_ids(normalized_tag_ids)
     for transaction in tables["Transactions"][1]:
@@ -910,7 +944,7 @@ def _parse_backup_zip(
         if payee_id and payee_id not in payee_ids:
             raise StorageValidationError("Backup contains an unknown mixed-use payee")
 
-    if format_version >= BACKUP_FORMAT_VERSION:
+    if format_version >= MIXED_USE_BACKUP_FORMAT_VERSION:
         _validate_mixed_use_tables(tables)
 
     receipt_manifest: dict[str, Any] | None = None
@@ -1163,14 +1197,24 @@ class GoogleSheetsStorage:
                     existing_headers = [
                         str(value).strip() for value in values[0]
                     ]
+                    mixed_use_headers_without_metadata = set(
+                        MIXED_USE_WORKSHEET_HEADERS
+                    ) - {"receipt_references", "tag_ids"}
+                    missing_mixed_use_metadata = [
+                        header
+                        for header in ("receipt_references", "tag_ids")
+                        if header not in existing_headers
+                    ]
                     if (
-                        "receipt_references" not in existing_headers
-                        and set(MIXED_USE_WORKSHEET_HEADERS) - {"receipt_references"}
-                        <= set(existing_headers)
+                        missing_mixed_use_metadata
+                        and mixed_use_headers_without_metadata <= set(existing_headers)
                         and len(existing_headers) == len(set(existing_headers))
                     ):
-                        worksheet.add_cols(1)
-                        migrated_headers = [*existing_headers, "receipt_references"]
+                        worksheet.add_cols(len(missing_mixed_use_metadata))
+                        migrated_headers = [
+                            *existing_headers,
+                            *missing_mixed_use_metadata,
+                        ]
                         worksheet.update(
                             [migrated_headers],
                             range_name="A1",
@@ -1291,6 +1335,65 @@ class GoogleSheetsStorage:
                     )
                     values = [list(headers)]
                 initial_values[title] = values
+            source_values = initial_values.get("MixedUseExpenses")
+            transaction_values = initial_values.get("Transactions")
+            if source_values and transaction_values:
+                source_headers = [str(value).strip() for value in source_values[0]]
+                transaction_headers = [
+                    str(value).strip() for value in transaction_values[0]
+                ]
+                source_tag_index = (
+                    source_headers.index("tag_ids")
+                    if "tag_ids" in source_headers
+                    else None
+                )
+                linked_transaction_index = (
+                    source_headers.index("linked_transaction_id")
+                    if "linked_transaction_id" in source_headers
+                    else None
+                )
+                transaction_id_index = (
+                    transaction_headers.index("id")
+                    if "id" in transaction_headers
+                    else None
+                )
+                transaction_tag_index = (
+                    transaction_headers.index("tag_ids")
+                    if "tag_ids" in transaction_headers
+                    else None
+                )
+                if None not in {
+                    source_tag_index,
+                    linked_transaction_index,
+                    transaction_id_index,
+                    transaction_tag_index,
+                }:
+                    transaction_tags_by_id = {
+                        str(row[transaction_id_index]).strip(): str(
+                            row[transaction_tag_index]
+                        ).strip()
+                        for row in transaction_values[1:]
+                        if len(row) > transaction_id_index
+                        and len(row) > transaction_tag_index
+                        and str(row[transaction_id_index]).strip()
+                    }
+                    backfilled_source_tags = False
+                    for row in source_values[1:]:
+                        if len(row) < len(source_headers):
+                            row.extend([""] * (len(source_headers) - len(row)))
+                        if str(row[source_tag_index]).strip():
+                            continue
+                        linked_id = str(row[linked_transaction_index]).strip()
+                        transaction_tags = transaction_tags_by_id.get(linked_id, "")
+                        if transaction_tags:
+                            row[source_tag_index] = transaction_tags
+                            backfilled_source_tags = True
+                    if backfilled_source_tags:
+                        actual_worksheets["MixedUseExpenses"].update(
+                            source_values,
+                            range_name="A1",
+                            raw=True,
+                        )
         except (
             GoogleAuthError,
         ) as exc:
@@ -3082,7 +3185,7 @@ class GoogleSheetsStorage:
         | Mapping[str, Mapping[str, Any]]
         | None = None,
     ) -> dict[str, str]:
-        """Merge source tags into a target across transaction and mileage rows."""
+        """Merge source tags into a target across tagged worksheet rows."""
         target_id = _clean_text(target_tag_id, "Target tag", required=True)
         source_ids = list(dict.fromkeys(
             _clean_text(item, "Source tag", required=True) for item in source_tag_ids
@@ -3092,7 +3195,10 @@ class GoogleSheetsStorage:
         if target_id in source_ids:
             raise StorageValidationError("The target tag cannot also be a source")
         with _MIXED_USE_CREATE_LOCK, _TAG_WRITE_LOCK:
-            snapshot = self._snapshot(["Tags", "Transactions", "Mileage"], force_refresh=True)
+            snapshot = self._snapshot(
+                ["Tags", "Transactions", "Mileage", "MixedUseExpenses"],
+                force_refresh=True,
+            )
             tag_rows = self._managed_rows_by_id(snapshot["Tags"], "Tags")
             tags = {record_id: dict(row.values) for record_id, row in tag_rows.items()}
             if target_id not in tags:
@@ -3107,7 +3213,11 @@ class GoogleSheetsStorage:
                     else None,
                 )
                 references = []
-                for row in (*snapshot["Transactions"], *snapshot["Mileage"]):
+                for row in (
+                    *snapshot["Transactions"],
+                    *snapshot["Mileage"],
+                    *snapshot["MixedUseExpenses"],
+                ):
                     raw_tags = row.values.get("tag_ids", "")
                     if _raw_tag_ids_may_contain(raw_tags, source_ids) and any(
                         item in source_ids for item in _normalize_tag_ids(raw_tags)
@@ -3122,7 +3232,7 @@ class GoogleSheetsStorage:
                 raise StorageNotFoundError("A source tag no longer exists")
             self._assert_expected_managed_records(tags, expected_tags)
             update_rows: dict[str, tuple[str, _StoredRow, str]] = {}
-            for title in ("Transactions", "Mileage"):
+            for title in ("Transactions", "Mileage", "MixedUseExpenses"):
                 for record_id, row in self._managed_rows_by_id(snapshot[title], title).items():
                     raw_tags = row.values.get("tag_ids", "")
                     if not _raw_tag_ids_may_contain(raw_tags, source_ids):
@@ -3142,26 +3252,50 @@ class GoogleSheetsStorage:
             for source_id in sorted(source_ids, key=lambda item: tag_rows[item].row_number, reverse=True):
                 requests.append(self._managed_delete_request("Tags", tag_rows[source_id]))
 
-            def fresh_state() -> tuple[dict[str, _StoredRow], dict[str, _StoredRow], dict[str, _StoredRow]]:
-                current = self._snapshot(["Tags", "Transactions", "Mileage"], force_refresh=True)
+            def fresh_state() -> tuple[
+                dict[str, _StoredRow],
+                dict[str, _StoredRow],
+                dict[str, _StoredRow],
+                dict[str, _StoredRow],
+            ]:
+                current = self._snapshot(
+                    ["Tags", "Transactions", "Mileage", "MixedUseExpenses"],
+                    force_refresh=True,
+                )
                 return (
                     self._managed_rows_by_id(current["Tags"], "Tags"),
                     self._managed_rows_by_id(current["Transactions"], "Transactions"),
                     self._managed_rows_by_id(current["Mileage"], "Mileage"),
+                    self._managed_rows_by_id(
+                        current["MixedUseExpenses"], "MixedUseExpenses"
+                    ),
                 )
 
             def fully_applied(state: Any) -> bool:
-                current_tags, current_transactions, current_mileage = state
+                (
+                    current_tags,
+                    current_transactions,
+                    current_mileage,
+                    current_sources,
+                ) = state
                 if target_id not in current_tags or any(item in current_tags for item in source_ids):
                     return False
                 if any(
                     item in _normalize_tag_ids(row.values.get("tag_ids", ""))
                     for item in source_ids
-                    for row in (*current_transactions.values(), *current_mileage.values())
+                    for row in (
+                        *current_transactions.values(),
+                        *current_mileage.values(),
+                        *current_sources.values(),
+                    )
                 ):
                     return False
                 for title, row, expected_value in update_rows.values():
-                    current_rows = current_transactions if title == "Transactions" else current_mileage
+                    current_rows = {
+                        "Transactions": current_transactions,
+                        "Mileage": current_mileage,
+                        "MixedUseExpenses": current_sources,
+                    }[title]
                     record_id = _clean_text(row.values.get("id"), "ID", required=True)
                     if record_id not in current_rows:
                         return False
@@ -3170,7 +3304,12 @@ class GoogleSheetsStorage:
                 return True
 
             def not_applied(state: Any) -> bool:
-                current_tags, current_transactions, current_mileage = state
+                (
+                    current_tags,
+                    current_transactions,
+                    current_mileage,
+                    current_sources,
+                ) = state
                 if any(
                     record_id not in current_tags
                     or current_tags[record_id].values != row.values
@@ -3178,7 +3317,11 @@ class GoogleSheetsStorage:
                 ):
                     return False
                 for title, row, _ in update_rows.values():
-                    current_rows = current_transactions if title == "Transactions" else current_mileage
+                    current_rows = {
+                        "Transactions": current_transactions,
+                        "Mileage": current_mileage,
+                        "MixedUseExpenses": current_sources,
+                    }[title]
                     current = current_rows.get(
                         _clean_text(row.values.get("id"), "ID", required=True)
                     )
@@ -3193,7 +3336,7 @@ class GoogleSheetsStorage:
                     operation="tag merge", error=error, fully_applied=fully_applied,
                     read_state=fresh_state,
                     not_applied=not_applied,
-                    invalidate=("Tags", "Transactions", "Mileage"),
+                    invalidate=("Tags", "Transactions", "Mileage", "MixedUseExpenses"),
                 )
                 if result is not None:
                     return {**result, "count": str(len(source_ids))}
@@ -3202,7 +3345,7 @@ class GoogleSheetsStorage:
                 operation="tag merge",
                 read_state=fresh_state,
                 fully_applied=fully_applied,
-                invalidate=("Tags", "Transactions", "Mileage"),
+                invalidate=("Tags", "Transactions", "Mileage", "MixedUseExpenses"),
             )
             return {"status": "fully_applied", "count": str(len(source_ids))}
 
@@ -3215,10 +3358,13 @@ class GoogleSheetsStorage:
         expected_tag: Mapping[str, Any] | None = None,
         expected: Mapping[str, Any] | None = None,
     ) -> dict[str, str]:
-        """Permanently remove one tag only when no transaction or trip uses it."""
+        """Permanently remove one tag only when no tagged row uses it."""
         tag_id = _clean_text(tag_id, "Tag", required=True)
         with _MIXED_USE_CREATE_LOCK, _TAG_WRITE_LOCK:
-            snapshot = self._snapshot(["Tags", "Transactions", "Mileage"], force_refresh=True)
+            snapshot = self._snapshot(
+                ["Tags", "Transactions", "Mileage", "MixedUseExpenses"],
+                force_refresh=True,
+            )
             tag_rows = self._managed_rows_by_id(snapshot["Tags"], "Tags")
             if tag_id not in tag_rows:
                 raise StorageNotFoundError("Tag no longer exists")
@@ -3228,7 +3374,11 @@ class GoogleSheetsStorage:
                     {tag_id: dict(tag_rows[tag_id].values)}, expected_record
                 )
             references = 0
-            for row in (*snapshot["Transactions"], *snapshot["Mileage"]):
+            for row in (
+                *snapshot["Transactions"],
+                *snapshot["Mileage"],
+                *snapshot["MixedUseExpenses"],
+            ):
                 raw_tags = row.values.get("tag_ids", "")
                 if _raw_tag_ids_may_contain(
                     raw_tags, (tag_id,)
@@ -3238,20 +3388,33 @@ class GoogleSheetsStorage:
                 raise StorageConflictError(
                     f"This tag is referenced by {references} records. Merge it or unassign it first."
                 )
-            def read_state() -> tuple[dict[str, _StoredRow], dict[str, _StoredRow], dict[str, _StoredRow]]:
+            def read_state() -> tuple[
+                dict[str, _StoredRow],
+                dict[str, _StoredRow],
+                dict[str, _StoredRow],
+                dict[str, _StoredRow],
+            ]:
                 current = self._snapshot(
-                    ["Tags", "Transactions", "Mileage"], force_refresh=True
+                    ["Tags", "Transactions", "Mileage", "MixedUseExpenses"],
+                    force_refresh=True,
                 )
                 return (
                     self._managed_rows_by_id(current["Tags"], "Tags"),
                     self._managed_rows_by_id(current["Transactions"], "Transactions"),
                     self._managed_rows_by_id(current["Mileage"], "Mileage"),
+                    self._managed_rows_by_id(
+                        current["MixedUseExpenses"], "MixedUseExpenses"
+                    ),
                 )
             def references_present(state: Any) -> bool:
-                _, current_transactions, current_mileage = state
+                _, current_transactions, current_mileage, current_sources = state
                 return any(
                     tag_id in _normalize_tag_ids(row.values.get("tag_ids", ""))
-                    for row in (*current_transactions.values(), *current_mileage.values())
+                    for row in (
+                        *current_transactions.values(),
+                        *current_mileage.values(),
+                        *current_sources.values(),
+                    )
                 )
             def is_gone(state: Any) -> bool:
                 return tag_id not in state[0] and not references_present(state)
@@ -3270,7 +3433,7 @@ class GoogleSheetsStorage:
                     operation="tag removal", error=error, fully_applied=is_gone,
                     read_state=read_state,
                     not_applied=remains,
-                    invalidate=("Tags", "Transactions", "Mileage"),
+                    invalidate=("Tags", "Transactions", "Mileage", "MixedUseExpenses"),
                 )
                 if result is not None:
                     return result
@@ -3279,7 +3442,7 @@ class GoogleSheetsStorage:
                 operation="tag removal",
                 read_state=read_state,
                 fully_applied=is_gone,
-                invalidate=("Tags", "Transactions", "Mileage"),
+                invalidate=("Tags", "Transactions", "Mileage", "MixedUseExpenses"),
             )
             return {"status": "fully_applied"}
 
@@ -3690,7 +3853,13 @@ class GoogleSheetsStorage:
         if actual is None:
             return False
         return all(
-            str(actual.get(header, "") or "") == str(expected.get(header, "") or "")
+            (
+                _normalize_tag_ids(actual.get(header, ""))
+                == _normalize_tag_ids(expected.get(header, ""))
+                if header == "tag_ids"
+                else str(actual.get(header, "") or "")
+                == str(expected.get(header, "") or "")
+            )
             for header in WORKSHEET_HEADERS[title]
         )
 
@@ -3841,6 +4010,7 @@ class GoogleSheetsStorage:
             "receipt_references": transaction["receipt_references"],
             "allocation_rationale": rationale,
             "linked_transaction_id": linked_transaction_id,
+            "tag_ids": transaction["tag_ids"],
             "created_at": created_at or _utc_now(),
         }
         projection = {
@@ -3881,15 +4051,18 @@ class GoogleSheetsStorage:
             )
             item = dict(source)
             item["payee"] = payees.get(item["payee_id"], {}).get("name", "")
-            # Tags are transaction metadata in the current worksheet schema.
-            # Expose the linked projection's IDs on the source view so the
-            # mixed-use editor can preserve the same normal Expense surface.
             linked_transaction = transactions.get(
                 str(item.get("linked_transaction_id") or "")
             )
-            item["tag_ids"] = _normalize_tag_ids(
-                linked_transaction.get("tag_ids", "") if linked_transaction else ""
-            )
+            source_has_tag_metadata = "tag_ids" in item
+            source_tag_ids = _normalize_tag_ids(item.get("tag_ids", ""))
+            if not source_has_tag_metadata and linked_transaction is not None:
+                # Sources written before tag persistence was introduced can
+                # still recover their tags from the linked projection.
+                source_tag_ids = _normalize_tag_ids(
+                    linked_transaction.get("tag_ids", "")
+                )
+            item["tag_ids"] = source_tag_ids
             item["ledger_status"] = "linked"
             result.append(item)
         return sorted(
@@ -5829,12 +6002,17 @@ class GoogleSheetsStorage:
             writer.writerow(headers)
             for row in rows:
                 values = dict(row.values)
-                if title in {"Transactions", "Mileage"}:
+                if title in {"Transactions", "Mileage", "MixedUseExpenses"}:
                     normalized_tag_ids = _normalize_tag_ids(values.get("tag_ids", ""))
                     if any(tag_id not in known_tag_ids for tag_id in normalized_tag_ids):
+                        item_label = {
+                            "Transactions": "transaction",
+                            "Mileage": "mileage",
+                            "MixedUseExpenses": "mixed-use source",
+                        }[title]
                         raise StorageValidationError(
                             "Backup contains an unknown "
-                            f"{'transaction' if title == 'Transactions' else 'mileage'} tag"
+                            f"{item_label} tag"
                         )
                     values["tag_ids"] = _encode_tag_ids(normalized_tag_ids)
                 elif title == "Tags":

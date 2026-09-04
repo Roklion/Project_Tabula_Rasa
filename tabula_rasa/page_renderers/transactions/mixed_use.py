@@ -23,7 +23,10 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     receipt_creation_workflow_key,
 )
 from tabula_rasa.storage import StorageError
-from tabula_rasa.storage.google_sheets import mixed_use_ledger_description
+from tabula_rasa.storage.google_sheets import (
+    _normalize_tag_ids,
+    mixed_use_ledger_description,
+)
 
 
 class _MixedUseReceiptStorage:
@@ -176,7 +179,12 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             linked = transaction_by_id.get(
                 str(item.get("linked_transaction_id") or "")
             )
-            item["tag_ids"] = list(linked.get("tag_ids", ())) if linked else []
+            source_has_tag_metadata = "tag_ids" in item
+            item["tag_ids"] = _normalize_tag_ids(item.get("tag_ids", ""))
+            if not source_has_tag_metadata and linked:
+                # Keep source rows created before durable source tag metadata
+                # recoverable from their linked projection.
+                item["tag_ids"] = _normalize_tag_ids(linked.get("tag_ids", ""))
             item["ledger_status"] = (
                 "incomplete"
                 if str(item.get("id") or "") in incomplete_source_ids

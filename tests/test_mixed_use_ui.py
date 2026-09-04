@@ -254,6 +254,7 @@ def test_mixed_use_app_test_create_edit_delete_and_transactions_tabs(default_sto
 
 
 def test_mixed_use_app_test_exposes_source_only_projection_repair(default_storage) -> None:
+    tag = default_storage.create_tag("Repair tag")
     source = default_storage.create_mixed_use_expense(
         txn_date="2026-09-03",
         total_expense="100",
@@ -261,6 +262,7 @@ def test_mixed_use_app_test_exposes_source_only_projection_repair(default_storag
         account_id=next(item for item in default_storage.list_accounts() if item["active"])["id"],
         category_id=next(item for item in default_storage.list_categories() if item["kind"] == "Expense")["id"],
         allocation_rationale="Measured use",
+        tag_ids=[tag["id"]],
     )
     transaction_sheet = default_storage._worksheet("Transactions")
     transaction_sheet.rows.pop(1)
@@ -276,6 +278,8 @@ def test_mixed_use_app_test_exposes_source_only_projection_repair(default_storag
 
     assert len(default_storage.list_transactions()) == 1
     assert default_storage.list_mixed_use_expenses()[0]["id"] == source["id"]
+    assert default_storage.list_mixed_use_expenses()[0]["tag_ids"] == [tag["id"]]
+    assert default_storage.list_transactions()[0]["tag_ids"] == [tag["id"]]
 
 
 def test_mixed_use_app_test_clears_recovery_after_source_deletion(default_storage) -> None:

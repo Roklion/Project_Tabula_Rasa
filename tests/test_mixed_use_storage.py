@@ -114,11 +114,13 @@ def test_allocation_rejects_values_that_exceed_decimal_context() -> None:
 def test_mixed_use_create_persists_one_allocated_projection(
     default_storage: GoogleSheetsStorage,
 ) -> None:
+    tag = default_storage.create_tag("Project")
     source = default_storage.create_mixed_use_expense(
         **_expense_inputs(default_storage),
         total_expense="125.00",
         business_use_percentage="40.00000",
         allocation_rationale="Dedicated office percentage",
+        tag_ids=[tag["id"]],
     )
 
     transactions = default_storage.list_transactions()
@@ -132,6 +134,10 @@ def test_mixed_use_create_persists_one_allocated_projection(
     )
     assert source["linked_transaction_id"] == transactions[0]["id"]
     assert source["allocated_amount"] == "50.00"
+    assert source["tag_ids"] == [tag["id"]]
+    assert default_storage._rows("MixedUseExpenses", force_refresh=True)[0].values[
+        "tag_ids"
+    ] == f'["{tag["id"]}"]'
     assert "payee" not in default_storage._rows(
         "MixedUseExpenses", force_refresh=True
     )[0].values
