@@ -597,6 +597,7 @@ def reset_profile_presentation_state(
         f"mixed_use_selected_source_id_{previous_profile_key}",
         f"mixed_use_selection_scope_{previous_profile_key}",
         f"mixed_use_table_generation_{previous_profile_key}",
+        f"mixed_use_edit_baseline_source_id_{previous_profile_key}",
         f"mixed_use_clear_selection_{previous_profile_key}",
         f"mixed_use_form_reset_{previous_profile_key}",
     }
