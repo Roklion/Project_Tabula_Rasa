@@ -1434,6 +1434,7 @@ class GoogleSheetsStorage:
                     if backfilled_source_tags:
                         source_worksheet.batch_update(tag_updates, raw=True)
                         source_values = fresh_source_values
+                        initial_values["MixedUseExpenses"] = source_values
         except (
             GoogleAuthError,
         ) as exc:
