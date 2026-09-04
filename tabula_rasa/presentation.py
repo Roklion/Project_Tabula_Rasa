@@ -603,7 +603,7 @@ def reset_profile_presentation_state(
     mixed_use_prefixes = (
         f"mixed_use_log_{previous_profile_key}_",
         f"mixed_use_edit_baseline_{previous_profile_key}",
-        f"mixed_use_confirm_delete_{previous_profile_key}_",
+        f"mixed_confirm_delete_{previous_profile_key}_",
         f"mixed_date_{previous_profile_key}_",
         f"mixed_account_{previous_profile_key}_",
         f"mixed_category_{previous_profile_key}_",

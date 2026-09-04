@@ -218,6 +218,7 @@ def test_profile_switch_clears_unscoped_presentation_state() -> None:
         "mixed_use_pending_transaction_id_north": "pending-transaction",
         "mixed_date_north_north-source": "stale-date",
         "mixed_total_north_north-source": "stale-total",
+        "mixed_confirm_delete_north_north-source": True,
         "mixed_use_receipt_recovery_north": {"pending": True},
         "mileage_log_north_0": "selected-rows",
         "account_table_north_0": "selected-rows",
@@ -269,6 +270,7 @@ def test_profile_switch_clears_unscoped_presentation_state() -> None:
     assert session_state["mixed_use_pending_transaction_id_north"] == "pending-transaction"
     assert "mixed_date_north_north-source" not in session_state
     assert "mixed_total_north_north-source" not in session_state
+    assert "mixed_confirm_delete_north_north-source" not in session_state
     assert session_state["mixed_use_receipt_recovery_north"] == {"pending": True}
     assert "mileage_log_north_0" not in session_state
     assert "account_table_north_0" not in session_state
