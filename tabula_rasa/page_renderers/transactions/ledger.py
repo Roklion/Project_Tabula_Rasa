@@ -575,7 +575,7 @@ def render_ledger(
         st.rerun()
     derived_ids = {
         str(transaction.get("id") or "")
-        for transaction in all_transactions
+        for transaction in transactions
         if transaction_is_mixed_use(transaction)
     }
     filtered_recovery_ids = (
