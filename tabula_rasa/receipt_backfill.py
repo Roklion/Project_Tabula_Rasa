@@ -14,6 +14,7 @@ from tabula_rasa.receipt_manifest import (
 from tabula_rasa.storage import (
     decode_receipt_references,
     GoogleSheetsStorage,
+    MIXED_USE_SOURCE_TYPE,
     StorageError,
 )
 
@@ -107,11 +108,20 @@ def prepare_profile_receipts(
         if current_reference == reference:
             continue
         try:
-            storage.remap_transaction_receipt(
-                transaction_id,
-                old_file_id=file_id,
-                reference=reference,
-            )
+            source_type = str(current_transaction.get("source_type") or "")
+            source_id = str(current_transaction.get("source_id") or "")
+            if source_type == MIXED_USE_SOURCE_TYPE and source_id:
+                storage.remap_mixed_use_receipt(
+                    source_id,
+                    old_file_id=file_id,
+                    reference=reference,
+                )
+            else:
+                storage.remap_transaction_receipt(
+                    transaction_id,
+                    old_file_id=file_id,
+                    reference=reference,
+                )
         except StorageError as error:
             report["errors"].append(
                 {"file_id": file_id, "error": str(error)}

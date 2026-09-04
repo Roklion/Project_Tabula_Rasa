@@ -122,6 +122,54 @@ def test_preparation_updates_drive_and_active_transaction_reference(
     assert reference["sha256"] == hashlib.sha256(b"receipt").hexdigest()
 
 
+def test_preparation_routes_mixed_use_receipt_remaps_through_source_api(
+    storage: GoogleSheetsStorage,
+) -> None:
+    storage.ensure_defaults()
+    payee = storage.create_payee("Mixed-use vendor")
+    source = storage.create_mixed_use_expense(
+        txn_date="2026-07-31",
+        account_id=storage.list_accounts(active_only=False)[0]["id"],
+        category_id=next(
+            category
+            for category in storage.list_categories()
+            if category["kind"] == "Expense"
+        )["id"],
+        payee_id=payee["id"],
+        description="Shared service",
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    storage.set_mixed_use_receipt_references(
+        source["id"],
+        [{"id": "receipt123456", "name": "old-name.pdf"}],
+        expected_source=source,
+    )
+    drive = Mock()
+    drive.list_profile_receipts.return_value = [_backfilled_drive_receipt("north")]
+    mixed_remap = Mock(wraps=storage.remap_mixed_use_receipt)
+    generic_remap = Mock(wraps=storage.remap_transaction_receipt)
+    storage.remap_mixed_use_receipt = mixed_remap  # type: ignore[method-assign]
+    storage.remap_transaction_receipt = generic_remap  # type: ignore[method-assign]
+
+    report = prepare_profile_receipts(
+        storage,
+        drive,
+        profile_key="north",
+        folder_id="folder123456",
+    )
+
+    assert report["references_updated"] == 1
+    mixed_remap.assert_called_once()
+    assert mixed_remap.call_args.args == (source["id"],)
+    assert mixed_remap.call_args.kwargs["old_file_id"] == "receipt123456"
+    assert mixed_remap.call_args.kwargs["reference"]["id"] == "receipt123456"
+    assert mixed_remap.call_args.kwargs["reference"]["receipt_id"] == "a" * 32
+    generic_remap.assert_not_called()
+    assert storage.get_mixed_use_expense(source["id"])["receipt_references"]
+
+
 def test_preparation_migrates_a_drive_only_transaction_association() -> None:
     workbook = FakeWorkbook()
     storage = GoogleSheetsStorage(workbook, sleeper=lambda _delay: None)
