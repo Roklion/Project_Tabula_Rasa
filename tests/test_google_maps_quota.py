@@ -27,6 +27,7 @@ from tabula_rasa.google_maps_quota import (
     READ_ONLY_SCOPES,
     SERVICE_USAGE_PAGE_SIZE,
     SERVICE_USAGE_READ_SCOPE,
+    _format_quota_unit,
     _format_number,
     _number,
     _quota_config_identity,
@@ -195,6 +196,12 @@ def test_number_and_rate_formatting_preserve_zero_and_exact_periods() -> None:
     assert _number("-1") == -1.0
     assert _number("-2") is None
     assert _format_number(-1.0) == "Unlimited"
+    assert _format_number(float(2**63 - 1)) == "Unlimited"
+    assert _format_quota_unit("1/min/{project}") == "per minute, per project"
+    assert _format_quota_unit("1/min/{project}/{user}") == (
+        "per minute, per project and user"
+    )
+    assert _format_quota_unit("1/d/{project}") == "per day, per project"
     assert _rate_period_seconds("1/session") is None
     assert _rate_period_seconds("1/min/{project}") == 60.0
     assert _rate_in_minutes(2.0, "1/s") == 120.0
@@ -362,8 +369,58 @@ def test_sidebar_shows_google_timestamp_with_recent_usage() -> None:
         render_google_maps_usage_sidebar(secrets())
 
     rendered = "\n".join(str(call.args[0]) for call in caption.call_args_list)
+    assert "4 of 10 per minute, per project" in rendered
     assert "Google timestamp: 2026-09-01 12:01:00 UTC" in rendered
     assert "Google data age:" in rendered
+
+
+def test_sidebar_shows_zero_for_successful_monitoring_response_without_points() -> None:
+    report = GoogleMapsQuotaReport(
+        project_number="123456789",
+        services=(
+            GoogleMapsServiceReport(
+                service="places.googleapis.com",
+                quota_metrics=(
+                    GoogleMapsQuotaMetric(
+                        name="metric-resource",
+                        display_name="Autocomplete requests",
+                        metric="places.googleapis.com/autocomplete_requests",
+                        unit="1/min/{project}/{user}",
+                        limits=(
+                            GoogleMapsQuotaLimit(
+                                name="limit-resource",
+                                display_name="Autocomplete requests",
+                                metric="places.googleapis.com/autocomplete_requests",
+                                unit="1/min/{project}/{user}",
+                                effective_limit=float(2**63 - 1),
+                                default_limit=float(2**63 - 1),
+                            ),
+                        ),
+                    ),
+                ),
+                usage={},
+            ),
+        ),
+    )
+    with patch(
+        "tabula_rasa.google_maps_quota.st.expander", return_value=MagicMock()
+    ), patch("tabula_rasa.google_maps_quota.st.caption") as caption, patch(
+        "tabula_rasa.google_maps_quota.st.markdown"
+    ), patch(
+        "tabula_rasa.google_maps_quota.st.button", return_value=False
+    ), patch(
+        "tabula_rasa.google_maps_quota.load_google_maps_quota_report",
+        return_value=report,
+    ), patch(
+        "tabula_rasa.google_maps_quota.st.session_state",
+        {QUOTA_VIEW_REQUESTED_KEY: True},
+    ):
+        render_google_maps_usage_sidebar(secrets())
+
+    rendered = "\n".join(str(call.args[0]) for call in caption.call_args_list)
+    assert "0 of Unlimited per minute, per project and user" in rendered
+    assert "no Google-reported usage in the last 15 minutes" in rendered
+    assert "usage unavailable" not in rendered
 
 
 def test_sidebar_does_not_query_google_until_usage_is_loaded() -> None:

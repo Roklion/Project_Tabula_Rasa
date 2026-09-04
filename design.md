@@ -224,6 +224,11 @@ also contains a compact, read-only **Google Maps API usage** expander after
 authentication. Routes API and Places API (New) are visibly separate and show
 effective quota, recent Google-reported usage, compatible utilization,
 timestamp, and age. Until configured, the expander reports its setup guidance.
+Raw quota dimensions are presented as readable per-minute or per-day and
+per-project or per-user labels, and Google's maximum-integer quota sentinel is
+shown as **Unlimited**. After a successful Monitoring response with no data
+points, the matching usage is shown as zero with the 15-minute lookback stated
+explicitly.
 Read failures identify Service Usage or Cloud Monitoring and provide a safe
 HTTP-status-based remediation hint without displaying Google response bodies.
 It warns that Monitoring may lag several minutes (including up to about 240

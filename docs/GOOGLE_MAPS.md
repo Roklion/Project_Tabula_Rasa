@@ -131,8 +131,12 @@ credential material are never displayed.
 Cloud Monitoring is sampled data, not a live counter. Reporting can lag several
 minutes, including up to about 240 seconds after sampling. The authenticated
 sidebar expander reports the Google timestamp and data age. It does not claim
-to show remaining requests or billing/spend in real time. Missing or incompatible
-usage is shown as unavailable rather than as zero.
+to show remaining requests or billing/spend in real time. Raw Google units such
+as `1/min/{project}/{user}` are rendered as readable time periods and scopes,
+and Google's maximum-integer quota sentinel is shown as **Unlimited**. When a
+successful Monitoring request has no time-series points for a quota, the view
+shows zero Google-reported usage and states the 15-minute lookback explicitly;
+this is not a guarantee that Google has finished sampling every recent request.
 
 ## Controlled validation
 

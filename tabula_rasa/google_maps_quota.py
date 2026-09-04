@@ -25,7 +25,9 @@ MONITORING_ENDPOINT = "https://monitoring.googleapis.com/v3"
 MONITORING_METRIC_TYPE = "serviceruntime.googleapis.com/quota/rate/net_usage"
 MONITORING_RESOURCE_TYPE = "consumer_quota"
 MONITORED_SERVICES = ("routes.googleapis.com", "places.googleapis.com")
+MONITORING_LOOKBACK_MINUTES = 15
 SERVICE_USAGE_PAGE_SIZE = 200
+GOOGLE_UNLIMITED_QUOTA_THRESHOLD = float(2**63 - 1)
 SERVICE_USAGE_READ_SCOPE = "https://www.googleapis.com/auth/cloud-platform.read-only"
 MONITORING_READ_SCOPE = "https://www.googleapis.com/auth/monitoring.read"
 READ_ONLY_SCOPES = (SERVICE_USAGE_READ_SCOPE, MONITORING_READ_SCOPE)
@@ -450,7 +452,7 @@ class GoogleMapsQuotaClient:
             end = end.replace(tzinfo=timezone.utc)
         else:
             end = end.astimezone(timezone.utc)
-        start = end - timedelta(minutes=15)
+        start = end - timedelta(minutes=MONITORING_LOOKBACK_MINUTES)
         url = f"{MONITORING_ENDPOINT}/projects/{self.config.project_number}/timeSeries"
         params: dict[str, Any] = {
             "filter": (
@@ -558,10 +560,37 @@ def clear_google_maps_quota_cache() -> None:
 def _format_number(value: float | None) -> str:
     if value is None:
         return "Unavailable"
-    if value < 0:
+    if value < 0 or value >= GOOGLE_UNLIMITED_QUOTA_THRESHOLD:
         return "Unlimited"
     formatted = f"{value:,.2f}".rstrip("0").rstrip(".")
     return formatted if formatted else "0"
+
+
+def _format_quota_unit(unit: str) -> str:
+    """Translate Google's quota-unit grammar into compact user-facing text."""
+    raw = _clean_text(unit)
+    parts = [part.strip() for part in raw.split("/") if part.strip()]
+    if len(parts) < 2 or parts[0] != "1":
+        return raw.replace("{", "").replace("}", "") or "unit unavailable"
+
+    period = {
+        "s": "second",
+        "min": "minute",
+        "h": "hour",
+        "d": "day",
+    }.get(parts[1].casefold(), parts[1].replace("_", " "))
+    dimensions = [
+        part.removeprefix("{").removesuffix("}").replace("_", " ")
+        for part in parts[2:]
+    ]
+    dimensions = [dimension for dimension in dimensions if dimension]
+    if not dimensions:
+        return f"per {period}"
+    if len(dimensions) == 1:
+        scope = dimensions[0]
+    else:
+        scope = f"{', '.join(dimensions[:-1])} and {dimensions[-1]}"
+    return f"per {period}, per {scope}"
 
 
 def _rate_in_minutes(value: float, unit: str) -> float | None:
@@ -747,7 +776,16 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
                             if converted is not None
                             else _format_number(usage.value)
                         )
-                        recent_unit = converted[1] if converted else usage.unit
+                        if converted is not None:
+                            summary = (
+                                f"{recent} of {quota} "
+                                f"{_format_quota_unit(limit.unit)}"
+                            )
+                        else:
+                            summary = (
+                                f"usage {recent} {_format_quota_unit(usage.unit)} · "
+                                f"quota {quota} {_format_quota_unit(limit.unit)}"
+                            )
                         ratio = _utilization(usage, limit)
                         utilization = f" · {ratio:.1%}" if ratio is not None else ""
                         age = (
@@ -758,12 +796,14 @@ def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None
                         )
                         st.caption(
                             f"{limit.display_name or metric.display_name or metric.metric}: "
-                            f"{recent} {recent_unit} / {quota} {limit.unit}{utilization}{age}"
+                            f"{summary}{utilization}{age}"
                         )
                     else:
                         st.caption(
                             f"{limit.display_name or metric.display_name or metric.metric}: "
-                            f"{quota} {limit.unit} · usage unavailable"
+                            f"0 of {quota} {_format_quota_unit(limit.unit)} · "
+                            "no Google-reported usage in the last "
+                            f"{MONITORING_LOOKBACK_MINUTES} minutes"
                         )
             if not shown:
                 st.caption("No Google-reported quota metrics.")
