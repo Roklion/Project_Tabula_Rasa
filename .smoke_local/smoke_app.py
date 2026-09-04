@@ -33,6 +33,14 @@ fake_storage.create_transaction(
     category_id=smoke_category["id"],
     payee_id=smoke_payee["id"],
 )
+fake_storage.create_mixed_use_expense(
+    txn_date=date.today().isoformat(),
+    total_expense="40.00",
+    business_use_percentage="50",
+    account_id=smoke_account["id"],
+    category_id=smoke_category["id"],
+    allocation_rationale="Viewport smoke allocation",
+)
 
 
 def fake_from_secrets(cls, secrets):

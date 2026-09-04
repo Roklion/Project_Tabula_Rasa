@@ -8,6 +8,7 @@ from tabula_rasa.page_renderers.transactions.mixed_use import (
     _incomplete_source_ids,
     _mixed_use_selection_ids,
     _mixed_use_selection_scope,
+    _synchronize_mixed_use_selection,
     _mixed_use_receipt_recovery_active,
     _pending_create_ids,
     mixed_use_preview,
@@ -114,6 +115,40 @@ def test_clearing_mixed_use_selection_rotates_table_and_baseline() -> None:
     assert "mixed_use_edit_baseline_north" not in state
     assert "mixed_use_edit_baseline_source_id_north" not in state
     assert state["mixed_use_table_generation_north"] == 3
+
+
+def test_stale_mixed_use_selection_clears_when_visible_sources_change() -> None:
+    state = {
+        "mixed_use_selected_source_id_north": "removed-source",
+        "mixed_use_selection_scope_north": (
+            "north", ("removed-source",), 0, ()
+        ),
+    }
+    selected, scope = _synchronize_mixed_use_selection(
+        state, "north", ["remaining-source"]
+    )
+    assert selected == ""
+    assert state["mixed_use_selected_source_id_north"] == ""
+    assert scope == ("north", ("remaining-source",), 0, ())
+
+
+def test_mixed_use_revision_change_clears_selection_and_baseline() -> None:
+    state = {
+        "mixed_use_selected_source_id_north": "source-1",
+        "mixed_use_edit_baseline_north": {"id": "source-1"},
+        "mixed_use_edit_baseline_source_id_north": "source-1",
+        "mixed_use_selection_scope_north": (
+            "north", ("source-1",), 1, ()
+        ),
+        "mixed_use_table_generation_north": 1,
+    }
+    selected, scope = _synchronize_mixed_use_selection(
+        state, "north", ["source-1"], workbook_data_revision=2
+    )
+    assert selected == ""
+    assert scope == ("north", ("source-1",), 2, ())
+    assert "mixed_use_edit_baseline_north" not in state
+    assert state["mixed_use_table_generation_north"] == 2
 
 
 def test_projection_provenance_blocks_source_only_repair() -> None:
@@ -366,6 +401,45 @@ def test_mixed_use_app_test_create_edit_delete_and_transactions_tabs(default_sto
         # A fresh render after the confirmed edit starts in Add mode. Deletion
         # remains source-aware and is exercised by the storage/API coverage.
         assert not _mixed_tab(app).checkbox
+
+
+def test_mixed_use_table_target_switch_and_delete_are_source_scoped(default_storage) -> None:
+    account = next(item for item in default_storage.list_accounts() if item["active"])
+    category = next(
+        item for item in default_storage.list_categories() if item["kind"] == "Expense"
+    )
+    first = default_storage.create_mixed_use_expense(
+        txn_date="2026-09-03", total_expense="100", business_use_percentage="25",
+        account_id=account["id"], category_id=category["id"],
+        allocation_rationale="First source",
+    )
+    second = default_storage.create_mixed_use_expense(
+        txn_date="2026-09-04", total_expense="200", business_use_percentage="50",
+        account_id=account["id"], category_id=category["id"],
+        allocation_rationale="Second source",
+    )
+
+    with authenticated_app(default_storage) as app:
+        navigate_to(app, "Transactions")
+        app.session_state["mixed_use_selected_source_id_test"] = first["id"]
+        app.run()
+        tab = _mixed_tab(app)
+        assert _tab_field(tab, "text_input", "Total Expense").value == "100.00"
+
+        app.session_state["mixed_use_selected_source_id_test"] = second["id"]
+        app.run()
+        tab = _mixed_tab(app)
+        assert _tab_field(tab, "text_input", "Total Expense").value == "200.00"
+        _tab_field(tab, "checkbox", "I understand this deletion is permanent").set_value(True)
+        tab = _mixed_tab(app)
+        _tab_field(tab, "button", "Permanently delete").click().run()
+
+    assert [item["id"] for item in default_storage.list_mixed_use_expenses()] == [
+        first["id"]
+    ]
+    assert [item["id"] for item in default_storage.list_transactions()] == [
+        first["linked_transaction_id"]
+    ]
 
 
 def test_mixed_use_app_test_exposes_source_only_projection_repair(default_storage) -> None:
