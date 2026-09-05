@@ -316,7 +316,10 @@ def _looks_like_partial_blank_workbook(
             continue
         if title not in WORKSHEET_HEADERS or not rows:
             return False
-        if rows[0] != list(WORKSHEET_HEADERS[title]):
+        headers = [str(value).strip() for value in rows[0]]
+        while headers and not headers[-1]:
+            headers.pop()
+        if headers != list(WORKSHEET_HEADERS[title]):
             return False
         if any(str(value).strip() for row in rows[1:] for value in row):
             return False
@@ -5470,9 +5473,14 @@ class GoogleSheetsStorage:
         start_text = _iso_date(start) if start is not None else None
         end_text = _iso_date(end) if end is not None else None
         trips = []
+        trip_ids: set[str] = set()
         tags = self._tag_lookup(force_refresh=_force_refresh)
         for row in self._rows("Mileage", force_refresh=_force_refresh):
             item = dict(row.values)
+            item["id"] = _clean_text(item.get("id"), "Mileage ID", required=True)
+            if item["id"] in trip_ids:
+                raise StorageValidationError("Mileage IDs must be unique")
+            trip_ids.add(item["id"])
             item["trip_date"] = _iso_date(item.get("trip_date"))
             item["miles"] = _positive_miles(item.get("miles"))
             item["vehicle"] = _clean_text(item.get("vehicle"), "Vehicle")

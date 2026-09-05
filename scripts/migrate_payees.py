@@ -206,6 +206,19 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
             ],
             value_input_option="RAW",
         )
+        expected_payee_values = [
+            *expected_payee_values,
+            *[
+                [item.get(header, "") for header in payee_headers]
+                for item in new_payees
+            ],
+        ]
+    latest_payee_values = payee_sheet.get_all_values()
+    if latest_payee_values != expected_payee_values:
+        raise ValueError(
+            "Payees worksheet changed during payee migration; "
+            "aborting before replacing it"
+        )
     latest_transaction_values = transactions_sheet.get_all_values()
     if latest_transaction_values != transaction_values:
         raise ValueError(

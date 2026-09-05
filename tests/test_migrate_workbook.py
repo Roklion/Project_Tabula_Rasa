@@ -469,6 +469,27 @@ def test_migration_validates_mileage_domains_before_success() -> None:
         migrate_workbook(workbook)
 
 
+def test_migration_rejects_duplicate_mileage_ids_before_success() -> None:
+    workbook = FakeWorkbook()
+    for _ in range(2):
+        _append_record(
+            workbook,
+            "Mileage",
+            {
+                "id": "mileage-1",
+                "trip_date": "2026-01-01",
+                "miles": "10.0",
+                "start_location": "Office",
+                "destination": "Client",
+                "business_purpose": "Visit",
+                "created_at": "2026-01-01T00:00:00Z",
+            },
+        )
+
+    with pytest.raises(StorageValidationError, match="Mileage IDs must be unique"):
+        migrate_workbook(workbook)
+
+
 def test_migration_rejects_missing_core_tab_before_creating_any_tab() -> None:
     workbook = FakeWorkbook(VERSION_7_WORKSHEET_HEADERS)
     del workbook.sheets["Transactions"]

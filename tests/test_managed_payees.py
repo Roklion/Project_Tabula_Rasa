@@ -372,6 +372,39 @@ def test_migration_aborts_when_payees_change_before_rewrite() -> None:
     assert payee_sheet.rows == initial
 
 
+def test_migration_aborts_when_payee_changes_after_append() -> None:
+    workbook = FakeWorkbook()
+    transaction_sheet = workbook.worksheet("Transactions")
+    payee_index = transaction_sheet.rows[0].index("payee_id")
+    transaction_sheet.rows[0][payee_index] = "payee"
+    transaction_sheet.rows.append(
+        [
+            "txn",
+            "2026-09-01",
+            "Expense",
+            "10.00",
+            "account",
+            "",
+            "category",
+            "Legacy vendor",
+            "",
+            "",
+            "",
+            "now",
+        ]
+    )
+    payee_sheet = workbook.worksheet("Payees")
+    initial = payee_sheet.get_all_values()
+    payee_sheet.get_all_values = Mock(
+        side_effect=[initial, initial, initial, initial]
+    )
+
+    with pytest.raises(ValueError, match="Payees worksheet changed"):
+        migrate_workbook(workbook)
+
+    assert transaction_sheet.rows[1][payee_index] == "Legacy vendor"
+
+
 def test_migration_accepts_short_existing_payee_rows() -> None:
     workbook = FakeWorkbook()
     payee_sheet = workbook.worksheet("Payees")
