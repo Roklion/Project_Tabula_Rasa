@@ -32,6 +32,7 @@ from tabula_rasa.storage.google_sheets import (  # noqa: E402
     VERSION_7_WORKSHEET_HEADERS,
     WORKSHEET_HEADERS,
     GoogleSheetsStorage,
+    _looks_like_partial_blank_workbook,
     _validate_hierarchy_records,
 )
 from scripts.migrate_payees import migrate_workbook as migrate_payees  # noqa: E402
@@ -252,12 +253,13 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     """Upgrade one recognized standard historical workbook in place."""
     initial = _preflight(workbook)
     worksheets = workbook.worksheets()
-    if not any(
+    is_blank = not any(
         str(value).strip()
         for rows in initial.values()
         for row in rows
         for value in row
-    ):
+    )
+    if is_blank or _looks_like_partial_blank_workbook(initial):
         for title, headers in WORKSHEET_HEADERS.items():
             worksheet = _ensure_sheet(workbook, title, worksheets)
             _ensure_headers(worksheet, headers, rows=initial.get(title))

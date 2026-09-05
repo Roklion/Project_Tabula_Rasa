@@ -3592,7 +3592,7 @@ class GoogleSheetsStorage:
             ).title()
             if item["kind"] not in TRANSACTION_KINDS:
                 raise StorageValidationError("Unknown transaction kind")
-            _positive_amount(item.get("amount"))
+            item["amount"] = _positive_amount(item.get("amount"))
             item["account_id"] = _clean_text(
                 item.get("account_id"), "Account", required=True
             )

@@ -490,6 +490,19 @@ def test_migration_rejects_duplicate_mileage_ids_before_success() -> None:
         migrate_workbook(workbook)
 
 
+def test_migration_resumes_partial_blank_initialization() -> None:
+    workbook = FakeWorkbook()
+    for worksheet in workbook.sheets.values():
+        worksheet.rows = []
+    workbook.sheets["Accounts"].rows = [list(WORKSHEET_HEADERS["Accounts"])]
+
+    result = migrate_workbook(workbook)
+
+    assert result == {"worksheets": len(WORKSHEET_HEADERS), "source_tags": 0}
+    for title, headers in WORKSHEET_HEADERS.items():
+        assert workbook.sheets[title].rows == [list(headers)]
+
+
 def test_migration_rejects_missing_core_tab_before_creating_any_tab() -> None:
     workbook = FakeWorkbook(VERSION_7_WORKSHEET_HEADERS)
     del workbook.sheets["Transactions"]
