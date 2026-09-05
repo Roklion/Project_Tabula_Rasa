@@ -405,6 +405,33 @@ def test_migration_aborts_when_payee_changes_after_append() -> None:
     assert transaction_sheet.rows[1][payee_index] == "Legacy vendor"
 
 
+def test_migration_persists_payee_normalization_before_noop_return() -> None:
+    workbook = FakeWorkbook()
+    payee_sheet = workbook.worksheet("Payees")
+    payee_sheet.rows.append(["payee-1", "Existing vendor", "", "now"])
+    transaction_sheet = workbook.worksheet("Transactions")
+    transaction_sheet.rows.append(
+        [
+            "txn",
+            "2026-09-01",
+            "Expense",
+            "10.00",
+            "account",
+            "",
+            "category",
+            "payee-1",
+            "",
+            "",
+            "[]",
+            "now",
+        ]
+    )
+
+    migrate_workbook(workbook)
+
+    assert payee_sheet.rows[1][2] == "TRUE"
+
+
 def test_migration_accepts_short_existing_payee_rows() -> None:
     workbook = FakeWorkbook()
     payee_sheet = workbook.worksheet("Payees")

@@ -76,6 +76,15 @@ def migrate_payee_rows(
 
 def migrate_workbook(workbook: Any) -> dict[str, int]:
     """Migrate one legacy workbook in place; safe to rerun."""
+    def assert_unchanged(
+        worksheet: Any, expected: list[list[str]], label: str
+    ) -> None:
+        if worksheet.get_all_values() != expected:
+            raise ValueError(
+                f"{label} worksheet changed during payee migration; "
+                "aborting before replacing it"
+            )
+
     transactions_sheet = workbook.worksheet("Transactions")
     transaction_values = transactions_sheet.get_all_values()
     if not transaction_values:
@@ -164,7 +173,7 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
                 legacy_rows.append(row)
                 row["payee"] = value
                 row["payee_id"] = ""
-        if not legacy_rows:
+        if not legacy_rows and not payees_changed:
             return {
                 "payees": 0,
                 "transactions": 0,
@@ -173,18 +182,8 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     new_headers = ["payee_id" if header == "payee" else header for header in headers]
     existing_ids = {str(item.get("id", "")).strip() for item in existing}
     new_payees = [item for item in payees if item["id"] not in existing_ids]
-    latest_transaction_values = transactions_sheet.get_all_values()
-    if latest_transaction_values != transaction_values:
-        raise ValueError(
-            "Transactions worksheet changed during payee migration; "
-            "aborting before replacing it"
-        )
-    latest_payee_values = payee_sheet.get_all_values()
-    if latest_payee_values != payee_values:
-        raise ValueError(
-            "Payees worksheet changed during payee migration; "
-            "aborting before replacing it"
-        )
+    assert_unchanged(transactions_sheet, transaction_values, "Transactions")
+    assert_unchanged(payee_sheet, payee_values, "Payees")
     expected_payee_values = payee_values
     if payees_changed:
         expected_payee_values = [
@@ -193,12 +192,7 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
         ]
         payee_sheet.update(expected_payee_values, range_name="A1", raw=True)
     if new_payees:
-        latest_payee_values = payee_sheet.get_all_values()
-        if latest_payee_values != expected_payee_values:
-            raise ValueError(
-                "Payees worksheet changed during payee migration; "
-                "aborting before replacing it"
-            )
+        assert_unchanged(payee_sheet, expected_payee_values, "Payees")
         payee_sheet.append_rows(
             [
                 [item.get(header, "") for header in payee_headers]
@@ -213,18 +207,8 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
                 for item in new_payees
             ],
         ]
-    latest_payee_values = payee_sheet.get_all_values()
-    if latest_payee_values != expected_payee_values:
-        raise ValueError(
-            "Payees worksheet changed during payee migration; "
-            "aborting before replacing it"
-        )
-    latest_transaction_values = transactions_sheet.get_all_values()
-    if latest_transaction_values != transaction_values:
-        raise ValueError(
-            "Transactions worksheet changed during payee migration; "
-            "aborting before replacing it"
-        )
+    assert_unchanged(payee_sheet, expected_payee_values, "Payees")
+    assert_unchanged(transactions_sheet, transaction_values, "Transactions")
     transactions_sheet.update(
         [new_headers]
         + [[row.get(header, "") for header in new_headers] for row in migrated],
