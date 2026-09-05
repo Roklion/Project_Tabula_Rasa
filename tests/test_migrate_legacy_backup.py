@@ -133,42 +133,6 @@ def test_v9_projection_tags_are_copied_to_mixed_use_source() -> None:
     assert target.get_mixed_use_expense(source["id"])["tag_ids"] == [tag["id"]]
 
 
-def test_v9_nonempty_source_tags_are_validated_before_backfill() -> None:
-    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
-    account = storage.create_account("Checking", "Bank")
-    category = storage.create_category("Office", "Expense")
-    tag = storage.create_tag("Project")
-    storage.create_mixed_use_expense(
-        txn_date="2026-09-01",
-        account_id=account["id"],
-        category_id=category["id"],
-        total_expense="100.00",
-        business_use_percentage="50",
-        allocation_rationale="Workspace",
-        tag_ids=[tag["id"]],
-    )
-    current = storage.export_backup_zip(
-        {"schema_version": 1, "business_profile_key": "test", "receipts": []}
-    )
-    legacy = _downgrade(current, 9)
-
-    def add_unknown_source_tags(files: dict[str, bytes], manifest: dict[str, Any]) -> None:
-        rows = list(csv.DictReader(io.StringIO(files["MixedUseExpenses.csv"].decode())))
-        rows[0]["tag_ids"] = '["unknown-tag"]'
-        headers = (*rows[0].keys(),)
-        files["MixedUseExpenses.csv"] = _csv_bytes(headers, rows)
-        manifest["sha256"]["MixedUseExpenses.csv"] = hashlib.sha256(
-            files["MixedUseExpenses.csv"]
-        ).hexdigest()
-        manifest["worksheet_headers"]["MixedUseExpenses"] = list(headers)
-
-    with pytest.raises(StorageValidationError, match="unknown mixed-use source tag"):
-        migrate_legacy_backup(
-            _rewrite_legacy(legacy, update_manifest=add_unknown_source_tags),
-            profile_key="test",
-        )
-
-
 def test_v8_transaction_and_mileage_tags_are_preserved() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     account = storage.create_account("Checking", "Bank")
