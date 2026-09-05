@@ -105,6 +105,8 @@ def _preflight(workbook: Any) -> dict[str, list[list[Any]]]:
         for value in row
     ):
         return values
+    if _looks_like_partial_blank_workbook(values):
+        return values
     missing_core = sorted(
         {"Accounts", "Categories", "Transactions"} - set(values)
     )
@@ -289,7 +291,9 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     # than an implicit production-startup migration.
     payee_result = migrate_payees(workbook)
     transactions = workbook.worksheet("Transactions")
-    transaction_headers = _headers(transactions.get_all_values())
+    transaction_headers = [
+        str(value).strip() for value in transactions.row_values(1)
+    ]
     _append_columns(transactions, transaction_headers, ["source_type", "source_id", "tag_ids"])
 
     mileage = _ensure_sheet(workbook, "Mileage", worksheets)
@@ -320,8 +324,9 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     # This read-only validation also checks current relationship, domain, and
     # reference invariants before success is reported.
     storage = GoogleSheetsStorage(workbook)
-    accounts = storage.list_accounts(active_only=False, _force_refresh=True)
-    categories = storage.list_categories(_force_refresh=True)
+    storage.prefetch_worksheets(*WORKSHEET_HEADERS, force_refresh=True)
+    accounts = storage.list_accounts(active_only=False)
+    categories = storage.list_categories()
     _validate_hierarchy_records(
         accounts,
         compatibility_field="classification",
@@ -332,11 +337,11 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
         compatibility_field="kind",
         item_label="Category",
     )
-    storage.list_payees(_force_refresh=True)
-    storage.list_tags(_force_refresh=True)
-    storage.list_transactions(_force_refresh=True)
-    storage.list_mileage_trips(_force_refresh=True)
-    storage.list_mixed_use_expenses(_force_refresh=True)
+    storage.list_payees()
+    storage.list_tags()
+    storage.list_transactions()
+    storage.list_mileage_trips()
+    storage.list_mixed_use_expenses()
     return {
         "payees": int(payee_result.get("payees", 0)),
         "transactions": int(payee_result.get("transactions", 0)),
