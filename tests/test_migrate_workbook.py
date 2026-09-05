@@ -145,6 +145,16 @@ def test_empty_worksheet_not_in_historical_layout_is_not_historical() -> None:
     assert not _looks_like_historical_workbook(values)
 
 
+def test_historical_detection_handles_missing_mixed_use_tab() -> None:
+    values = {
+        title: [list(headers)]
+        for title, headers in WORKSHEET_HEADERS.items()
+        if title != "MixedUseExpenses"
+    }
+
+    assert not _looks_like_historical_workbook(values)
+
+
 def test_migration_validates_hierarchy_before_reporting_success() -> None:
     workbook = FakeWorkbook(WORKSHEET_HEADERS)
     _append_record(
@@ -386,6 +396,57 @@ def test_populated_v9_startup_is_read_only_and_actionable() -> None:
         worksheet.add_cols.assert_not_called()
         worksheet.update.assert_not_called()
         worksheet.append_rows.assert_not_called()
+
+
+def test_partial_blank_startup_resumes_current_headers() -> None:
+    workbook = FakeWorkbook()
+    for worksheet in workbook.sheets.values():
+        worksheet.rows = []
+    workbook.sheets["Accounts"].rows = [list(WORKSHEET_HEADERS["Accounts"])]
+    client = Mock()
+    client.open_by_key.return_value = workbook
+
+    with (
+        patch(
+            "tabula_rasa.storage.google_sheets.Credentials.from_service_account_info",
+            return_value=object(),
+        ),
+        patch("tabula_rasa.storage.google_sheets.gspread.authorize", return_value=client),
+    ):
+        GoogleSheetsStorage.from_secrets(
+            {
+                "spreadsheet_id": "sheet-1",
+                "gcp_service_account": {"type": "service_account"},
+            }
+        )
+
+    for title, headers in WORKSHEET_HEADERS.items():
+        assert workbook.sheets[title].rows == [list(headers)]
+
+
+def test_migration_validates_transaction_domains_before_success() -> None:
+    workbook = FakeWorkbook()
+    _append_record(
+        workbook,
+        "Categories",
+        {"id": "category-1", "name": "Office", "kind": "Expense"},
+    )
+    _append_record(
+        workbook,
+        "Transactions",
+        {
+            "id": "transaction-1",
+            "txn_date": "2026-01-01",
+            "kind": "Expense",
+            "amount": "50.00",
+            "account_id": "missing-account",
+            "category_id": "category-1",
+            "created_at": "2026-01-01T00:00:00Z",
+        },
+    )
+
+    with pytest.raises(StorageValidationError, match="Source account does not exist"):
+        migrate_workbook(workbook)
 
 
 def test_migration_rejects_missing_core_tab_before_creating_any_tab() -> None:

@@ -298,12 +298,30 @@ def _looks_like_historical_workbook(
         transactions = values.get("Transactions", [])
         if transactions:
             transaction_headers = {str(value).strip() for value in transactions[0]}
-            if transaction_headers in {
+            if transaction_headers in (
                 set(VERSION_7_WORKSHEET_HEADERS["Transactions"]),
                 set(LEGACY_TAGS_WORKBOOK_HEADERS["Transactions"]),
-            }:
+            ):
                 return True
     return False
+
+
+def _looks_like_partial_blank_workbook(
+    values: Mapping[str, list[list[Any]]],
+) -> bool:
+    """Return whether only current headers exist in a partial new workbook."""
+    found_header = False
+    for title, rows in values.items():
+        if not any(str(value).strip() for row in rows for value in row):
+            continue
+        if title not in WORKSHEET_HEADERS or not rows:
+            return False
+        if rows[0] != list(WORKSHEET_HEADERS[title]):
+            return False
+        if any(str(value).strip() for row in rows[1:] for value in row):
+            return False
+        found_header = True
+    return found_header
 
 
 class StorageError(RuntimeError):
@@ -1219,7 +1237,7 @@ class GoogleSheetsStorage:
                 for row in rows
                 for value in row
             )
-            if is_blank:
+            if is_blank or _looks_like_partial_blank_workbook(values):
                 for title, headers in WORKSHEET_HEADERS.items():
                     worksheet = worksheets.get(title)
                     if worksheet is None:
@@ -3558,19 +3576,49 @@ class GoogleSheetsStorage:
             if kind not in TRANSACTION_KINDS:
                 raise StorageValidationError("Unknown transaction kind")
         transactions = []
+        accounts = self._account_lookup(force_refresh=_force_refresh)
+        categories = self._category_lookup(force_refresh=_force_refresh)
         payees = self._payee_lookup(force_refresh=_force_refresh)
         tags = self._tag_lookup(force_refresh=_force_refresh)
         for row in self._rows("Transactions", force_refresh=_force_refresh):
             item = dict(row.values)
             item["id"] = _clean_text(item.get("id"), "Transaction ID", required=True)
             item["txn_date"] = _iso_date(item.get("txn_date"))
+            item["kind"] = _clean_text(
+                item.get("kind"), "Transaction kind", required=True
+            ).title()
+            if item["kind"] not in TRANSACTION_KINDS:
+                raise StorageValidationError("Unknown transaction kind")
+            _positive_amount(item.get("amount"))
             item["account_id"] = _clean_text(
                 item.get("account_id"), "Account", required=True
             )
+            if item["account_id"] not in accounts:
+                raise StorageValidationError("Source account does not exist")
             item["to_account_id"] = _clean_text(
                 item.get("to_account_id"), "Destination account"
             )
             item["category_id"] = _clean_text(item.get("category_id"), "Category")
+            if item["kind"] == "Transfer":
+                if not item["to_account_id"]:
+                    raise StorageValidationError("Destination account does not exist")
+                if item["to_account_id"] not in accounts:
+                    raise StorageValidationError("Destination account does not exist")
+                if item["to_account_id"] == item["account_id"]:
+                    raise StorageValidationError("Transfer accounts must be different")
+                if item["category_id"]:
+                    raise StorageValidationError("Transfers cannot have a category")
+            else:
+                if item["to_account_id"]:
+                    raise StorageValidationError(
+                        "Only transfers can have a destination account"
+                    )
+                if item["category_id"] not in categories:
+                    raise StorageValidationError("Category does not exist")
+                if categories[item["category_id"]]["kind"] != item["kind"]:
+                    raise StorageValidationError(
+                        "Category kind does not match transaction kind"
+                    )
             item["payee_id"] = _clean_text(item.get("payee_id"), "Payee")
             item["source_type"] = _clean_text(
                 item.get("source_type"), "Transaction source type"
@@ -3597,6 +3645,7 @@ class GoogleSheetsStorage:
                 raise StorageValidationError("Tag does not exist")
             item["tag_ids"] = normalized_tag_ids
             item["tags"] = [tags[tag_id]["name"] for tag_id in normalized_tag_ids]
+            decode_receipt_references(item.get("receipt_references", ""))
             if start_text and item["txn_date"] < start_text:
                 continue
             if end_text and item["txn_date"] > end_text:

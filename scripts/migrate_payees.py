@@ -171,6 +171,12 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
             }
     payees, migrated = migrate_payee_rows(rows, existing)
     new_headers = ["payee_id" if header == "payee" else header for header in headers]
+    latest_transaction_values = transactions_sheet.get_all_values()
+    if latest_transaction_values != transaction_values:
+        raise ValueError(
+            "Transactions worksheet changed during payee migration; "
+            "aborting before replacing it"
+        )
     existing_ids = {str(item.get("id", "")).strip() for item in existing}
     new_payees = [item for item in payees if item["id"] not in existing_ids]
     if new_payees:
@@ -180,6 +186,12 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
                 for item in new_payees
             ],
             value_input_option="RAW",
+        )
+    latest_transaction_values = transactions_sheet.get_all_values()
+    if latest_transaction_values != transaction_values:
+        raise ValueError(
+            "Transactions worksheet changed during payee migration; "
+            "aborting before replacing it"
         )
     transactions_sheet.update(
         [new_headers]
