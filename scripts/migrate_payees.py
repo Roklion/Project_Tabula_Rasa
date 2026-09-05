@@ -118,6 +118,8 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     else:
         payee_values = payee_sheet.get_all_values()
     if not payee_values:
+        # The initial read found no rows, but re-read immediately before the
+        # header write so a concurrent edit cannot be overwritten.
         latest_payee_values = payee_sheet.get_all_values()
         if latest_payee_values:
             payee_values = latest_payee_values

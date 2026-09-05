@@ -32,6 +32,7 @@ from tabula_rasa.storage.google_sheets import (  # noqa: E402
     VERSION_7_WORKSHEET_HEADERS,
     WORKSHEET_HEADERS,
     GoogleSheetsStorage,
+    decode_receipt_references,
     _looks_like_partial_blank_workbook,
     _validate_hierarchy_records,
 )
@@ -93,6 +94,20 @@ def _append_columns(worksheet: Any, headers: list[str], additions: list[str]) ->
     headers = [*headers, *additions]
     worksheet.update([headers], range_name="A1", raw=True)
     return headers
+
+
+def _validate_receipt_ownership(transactions: list[dict[str, Any]]) -> None:
+    owners: dict[str, str] = {}
+    for transaction in transactions:
+        transaction_id = str(transaction["id"])
+        for reference in decode_receipt_references(
+            transaction.get("receipt_references", "")
+        ):
+            receipt_id = str(reference["id"])
+            previous_owner = owners.get(receipt_id)
+            if previous_owner is not None and previous_owner != transaction_id:
+                raise ValueError("A receipt is referenced by more than one transaction")
+            owners[receipt_id] = transaction_id
 
 
 def _preflight(workbook: Any) -> dict[str, list[list[Any]]]:
@@ -285,13 +300,15 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
         PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"],
         rows=initial.get("Transactions"),
     )
-    _append_columns(transactions, transaction_headers, ["receipt_references"])
+    transaction_headers = _append_columns(
+        transactions, transaction_headers, ["receipt_references"]
+    )
 
     # Managed payees are part of the standard historical conversion, rather
     # than an implicit production-startup migration.
     payee_result = migrate_payees(workbook)
     transaction_headers = [
-        str(value).strip() for value in transactions.row_values(1)
+        "payee_id" if header == "payee" else header for header in transaction_headers
     ]
     _append_columns(transactions, transaction_headers, ["source_type", "source_id", "tag_ids"])
 
@@ -316,8 +333,17 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     )
     if LEGACY_MIXED_USE_TAG_MIGRATION_HEADER in mixed_headers:
         mixed_headers[mixed_headers.index(LEGACY_MIXED_USE_TAG_MIGRATION_HEADER)] = "tag_ids"
+        missing_columns = [
+            header
+            for header in ("receipt_references", "tag_ids")
+            if header not in mixed_headers
+        ]
+        if missing_columns:
+            mixed.add_cols(len(missing_columns))
+            mixed_headers.extend(missing_columns)
         mixed.update([mixed_headers], range_name="A1", raw=True)
-    _append_columns(mixed, mixed_headers, ["receipt_references", "tag_ids"])
+    else:
+        _append_columns(mixed, mixed_headers, ["receipt_references", "tag_ids"])
 
     source_tags = _backfill_mixed_use_source_tags(workbook)
     # This read-only validation also checks current relationship, domain, and
@@ -338,7 +364,8 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     )
     storage.list_payees()
     storage.list_tags()
-    storage.list_transactions()
+    transactions = storage.list_transactions()
+    _validate_receipt_ownership(transactions)
     storage.list_mileage_trips()
     storage.list_mixed_use_expenses()
     return {

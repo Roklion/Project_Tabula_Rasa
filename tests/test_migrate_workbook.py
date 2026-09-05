@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from unittest.mock import Mock, patch
 
@@ -231,6 +232,56 @@ def test_migration_validates_relationships_before_reporting_success() -> None:
     )
 
     with pytest.raises(StorageValidationError, match="unknown source"):
+        migrate_workbook(workbook)
+
+
+def test_migration_rejects_receipts_shared_by_transactions() -> None:
+    workbook = FakeWorkbook()
+    _append_record(
+        workbook,
+        "Accounts",
+        {
+            "id": "account-1",
+            "name": "Checking",
+            "type": "Bank",
+            "classification": "Asset",
+            "opening_balance": "0.00",
+            "active": "TRUE",
+            "created_at": "2026-01-01T00:00:00Z",
+            "parent_id": "",
+        },
+    )
+    _append_record(
+        workbook,
+        "Categories",
+        {"id": "category-1", "name": "Office", "kind": "Expense", "parent_id": ""},
+    )
+    reference = {
+        "id": "receipt123456",
+        "name": "receipt.pdf",
+        "receipt_id": "a" * 32,
+        "original_filename": "receipt.pdf",
+        "mime_type": "application/pdf",
+        "byte_size": 7,
+        "sha256": "b" * 64,
+    }
+    for transaction_id in ("transaction-1", "transaction-2"):
+        _append_record(
+            workbook,
+            "Transactions",
+            {
+                "id": transaction_id,
+                "txn_date": "2026-01-01",
+                "kind": "Expense",
+                "amount": "50.00",
+                "account_id": "account-1",
+                "category_id": "category-1",
+                "receipt_references": json.dumps([reference]),
+                "created_at": "2026-01-01T00:00:00Z",
+            },
+        )
+
+    with pytest.raises(ValueError, match="receipt is referenced by more than one"):
         migrate_workbook(workbook)
 
 
