@@ -308,9 +308,14 @@ def _encode_csv(headers: list[str], records: list[dict[str, str]]) -> bytes:
     return buffer.getvalue().encode("utf-8")
 
 
-def migrate_legacy_backup(backup: bytes, *, profile_key: str = "legacy") -> bytes:
+def migrate_legacy_backup(backup: bytes, *, profile_key: str | None = None) -> bytes:
     """Return a validated v10 archive converted from a v1-v9 archive."""
     version, source_manifest, source_tables, source_receipts = _read_source(backup)
+    if version < 5 and profile_key is None:
+        raise StorageValidationError(
+            "Ledger-only legacy migrations require an explicit profile key"
+        )
+    profile_key = profile_key or "legacy"
     tables = _current_tables(version, source_manifest, source_tables)
     csv_files = {
         f"{title}.csv": _encode_csv(headers, records)
@@ -358,7 +363,12 @@ def default_output_path(source: Path) -> Path:
     return source.with_name(f"{source.stem}-format10.zip")
 
 
-def migrate_backup_file(source: Path, output: Path | None = None, *, profile_key: str = "legacy") -> Path:
+def migrate_backup_file(
+    source: Path,
+    output: Path | None = None,
+    *,
+    profile_key: str | None = None,
+) -> Path:
     source = source.resolve()
     destination = (output or default_output_path(source)).resolve()
     if source == destination:

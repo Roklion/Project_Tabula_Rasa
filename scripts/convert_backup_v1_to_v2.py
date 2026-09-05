@@ -16,14 +16,23 @@ from scripts.migrate_legacy_backup import (
 )
 
 
-def convert_backup_v1_to_v2(backup: bytes) -> bytes:
+def convert_backup_v1_to_v2(
+    backup: bytes,
+    *,
+    profile_key: str | None = None,
+) -> bytes:
     """Deprecated alias; migrate the format-1 archive directly to v10."""
-    return migrate_legacy_backup(backup)
+    return migrate_legacy_backup(backup, profile_key=profile_key)
 
 
-def convert_backup_file(source: Path, output: Path | None = None) -> Path:
+def convert_backup_file(
+    source: Path,
+    output: Path | None = None,
+    *,
+    profile_key: str | None = None,
+) -> Path:
     """Deprecated alias for :func:`migrate_backup_file`."""
-    return migrate_backup_file(source, output)
+    return migrate_backup_file(source, output, profile_key=profile_key)
 
 
 __all__ = [

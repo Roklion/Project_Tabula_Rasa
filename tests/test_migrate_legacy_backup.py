@@ -290,6 +290,18 @@ def test_application_rejects_legacy_archive_before_restore_writes() -> None:
     assert target.list_accounts(active_only=False) == []
 
 
+def test_ledger_only_migration_api_requires_profile_key() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    legacy = _downgrade(
+        storage.export_backup_zip(
+            {"schema_version": 1, "business_profile_key": "test", "receipts": []}
+        ),
+        1,
+    )
+    with pytest.raises(StorageValidationError, match="explicit profile key"):
+        migrate_legacy_backup(legacy)
+
+
 def test_v1_account_normalization_and_source_checksum_are_preserved() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     account = storage.create_account("Equipment loan", "Other")
@@ -346,7 +358,7 @@ def test_migration_rejects_tampered_csv_and_never_overwrites_source() -> None:
         destination = default_output_path(source_path)
         destination.write_bytes(b"existing")
         with pytest.raises(FileExistsError):
-            migrate_backup_file(source_path)
+            migrate_backup_file(source_path, profile_key="test")
         assert source_path.read_bytes() == legacy
         assert destination.read_bytes() == b"existing"
 
@@ -487,7 +499,9 @@ def test_migration_accepts_reordered_legacy_headers() -> None:
         manifest["worksheet_headers"]["Accounts"] = list(headers)
 
     legacy = _rewrite_legacy(legacy, update_manifest=reorder_accounts)
-    assert GoogleSheetsStorage.validate_backup_zip(migrate_legacy_backup(legacy))[
+    assert GoogleSheetsStorage.validate_backup_zip(
+        migrate_legacy_backup(legacy, profile_key="test")
+    )[
         "format_version"
     ] == 10
 
@@ -552,7 +566,8 @@ def test_migration_strips_legacy_header_whitespace() -> None:
         manifest["worksheet_headers"]["Accounts"] = [header.strip() for header in rows[0]]
 
     converted = migrate_legacy_backup(
-        _rewrite_legacy(legacy, update_manifest=add_header_whitespace)
+        _rewrite_legacy(legacy, update_manifest=add_header_whitespace),
+        profile_key="test",
     )
     assert GoogleSheetsStorage.validate_backup_zip(converted)["format_version"] == 10
 
