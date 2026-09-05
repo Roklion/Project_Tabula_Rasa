@@ -212,6 +212,52 @@ def test_v5_receipt_inventory_is_carried_into_v10() -> None:
     assert manifest["receipt_count"] == 1
 
 
+def test_v4_receipt_references_are_unlinked_without_inventory() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    account = storage.create_account("Checking", "Bank")
+    category = storage.create_category("Office", "Expense")
+    storage.create_transaction(
+        txn_date="2026-09-01",
+        kind="Expense",
+        amount="10.00",
+        account_id=account["id"],
+        category_id=category["id"],
+    )
+    current = storage.export_backup_zip(
+        {"schema_version": 1, "business_profile_key": "test", "receipts": []}
+    )
+    legacy = _downgrade(current, 4)
+    with zipfile.ZipFile(io.BytesIO(legacy)) as source:
+        files = {name: source.read(name) for name in source.namelist()}
+    rows = list(csv.reader(io.StringIO(files["Transactions.csv"].decode())))
+    rows[1][rows[0].index("receipt_references")] = json.dumps(
+        [{"id": "oldreceipt12345", "name": "legacy-receipt.pdf"}]
+    )
+    files["Transactions.csv"] = _csv_bytes(
+        tuple(rows[0]), [dict(zip(rows[0], row)) for row in rows[1:]]
+    )
+    manifest = json.loads(files["manifest.json"])
+    manifest["sha256"]["Transactions.csv"] = hashlib.sha256(
+        files["Transactions.csv"]
+    ).hexdigest()
+    files["manifest.json"] = json.dumps(manifest).encode()
+    source_archive = io.BytesIO()
+    with zipfile.ZipFile(source_archive, "w") as destination:
+        for name, content in files.items():
+            destination.writestr(name, content)
+    legacy = source_archive.getvalue()
+
+    source_copy = legacy
+    converted = migrate_legacy_backup(legacy, profile_key="test")
+    GoogleSheetsStorage.validate_backup_zip(converted)
+    with zipfile.ZipFile(io.BytesIO(converted)) as archive:
+        converted_rows = list(
+            csv.DictReader(io.StringIO(archive.read("Transactions.csv").decode()))
+        )
+    assert converted_rows[0]["receipt_references"] == ""
+    assert legacy == source_copy
+
+
 def test_application_rejects_legacy_archive_before_restore_writes() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     current = storage.export_backup_zip(

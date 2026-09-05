@@ -223,6 +223,11 @@ def _current_tables(version: int, manifest: dict[str, Any], source: dict[str, li
         tables["MixedUseExpenses"] = []
 
     for row in tables["Transactions"]:
+        if version < 5:
+            # Pre-inventory archives cannot prove receipt identity or retain
+            # the integrity metadata required by v10. Keep the source archive
+            # intact, but unlink those historical associations in the output.
+            row["receipt_references"] = ""
         row.setdefault("receipt_references", "")
         row.setdefault("source_type", "")
         row.setdefault("source_id", "")

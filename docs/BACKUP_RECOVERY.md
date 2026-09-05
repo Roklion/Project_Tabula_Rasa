@@ -81,6 +81,12 @@ in the setup and architecture guides. Payee text embedded in a legacy backup
 is converted by the archive migration command above; it is not resolved during
 application restore.
 
+Pre-inventory formats 1–4 may contain legacy receipt-reference cells but do
+not contain the receipt inventory and integrity metadata required by v10. The
+offline migration therefore clears those associations in the new archive;
+the original archive is preserved for separate receipt recovery or manual
+inspection through the Unreferenced Receipts workflow.
+
 The migration command preserves the source archive and never overwrites it.
 Migration is intentionally an operator-run conversion for standard historical
 archives, not a repair mechanism for hand-edited or corrupt ZIP files.
