@@ -226,16 +226,35 @@ def test_application_rejects_legacy_archive_before_restore_writes() -> None:
 
 def test_v1_account_normalization_and_source_checksum_are_preserved() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
-    account = storage.create_account("Loan", "Short-term debt")
+    account = storage.create_account("Equipment loan", "Other")
     current = storage.export_backup_zip(
         {"schema_version": 1, "business_profile_key": "test", "receipts": []}
     )
     legacy = _downgrade(current, 1)
+    with zipfile.ZipFile(io.BytesIO(legacy)) as source:
+        files = {name: source.read(name) for name in source.namelist()}
+    account_rows = list(csv.reader(io.StringIO(files["Accounts.csv"].decode())))
+    account_rows[1][account_rows[0].index("type")] = "Loan"
+    files["Accounts.csv"] = _csv_bytes(
+        tuple(account_rows[0]),
+        [dict(zip(account_rows[0], row)) for row in account_rows[1:]],
+    )
+    source_manifest = json.loads(files["manifest.json"])
+    source_manifest["sha256"]["Accounts.csv"] = hashlib.sha256(
+        files["Accounts.csv"]
+    ).hexdigest()
+    files["manifest.json"] = json.dumps(source_manifest).encode()
+    legacy_output = io.BytesIO()
+    with zipfile.ZipFile(legacy_output, "w") as destination:
+        for name, content in files.items():
+            destination.writestr(name, content)
+    legacy = legacy_output.getvalue()
     converted = migrate_legacy_backup(legacy, profile_key="test")
     with zipfile.ZipFile(io.BytesIO(converted)) as archive:
         accounts = list(csv.DictReader(io.StringIO(archive.read("Accounts.csv").decode())))
         manifest = json.loads(archive.read("manifest.json"))
     assert accounts[0]["id"] == account["id"]
+    assert accounts[0]["type"] == "Short-term debt"
     assert accounts[0]["classification"] == "Liability"
     assert manifest["conversion"]["source_archive_sha256"] == hashlib.sha256(legacy).hexdigest()
 
