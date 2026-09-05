@@ -25,7 +25,7 @@ from tabula_rasa.storage.google_sheets import (  # noqa: E402
     MIXED_USE_WORKSHEET_HEADERS,
     PRE_MIXED_USE_WORKSHEET_HEADERS,
     SHEETS_SCOPE,
-    TAGS_WORKSHEET_HEADERS,
+    LEGACY_TAGS_WORKBOOK_HEADERS,
     VERSION_5_WORKSHEET_HEADERS,
     VERSION_6_WORKSHEET_HEADERS,
     VERSION_7_WORKSHEET_HEADERS,
@@ -114,13 +114,13 @@ def _preflight(workbook: Any) -> dict[str, list[list[Any]]]:
             frozenset(VERSION_5_WORKSHEET_HEADERS["Transactions"]),
             frozenset(VERSION_6_WORKSHEET_HEADERS["Transactions"]),
             frozenset(VERSION_7_WORKSHEET_HEADERS["Transactions"]),
-            frozenset(TAGS_WORKSHEET_HEADERS["Transactions"]),
+            frozenset(LEGACY_TAGS_WORKBOOK_HEADERS["Transactions"]),
             frozenset(PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"]),
             frozenset(WORKSHEET_HEADERS["Transactions"]),
         },
         "Mileage": {
             frozenset(VERSION_5_WORKSHEET_HEADERS["Mileage"]),
-            frozenset(TAGS_WORKSHEET_HEADERS["Mileage"]),
+            frozenset(LEGACY_TAGS_WORKBOOK_HEADERS["Mileage"]),
             frozenset(WORKSHEET_HEADERS["Mileage"]),
         },
         "Payees": {frozenset(WORKSHEET_HEADERS["Payees"])},
@@ -251,7 +251,7 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     _append_columns(mileage, mileage_headers, ["tag_ids"])
 
     tags = _ensure_sheet(workbook, "Tags")
-    _ensure_headers(tags, TAGS_WORKSHEET_HEADERS["Tags"])
+    _ensure_headers(tags, LEGACY_TAGS_WORKBOOK_HEADERS["Tags"])
 
     mixed = _ensure_sheet(workbook, "MixedUseExpenses")
     mixed_headers = _ensure_headers(mixed, MIXED_USE_WORKSHEET_HEADERS)

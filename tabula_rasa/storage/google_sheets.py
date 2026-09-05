@@ -241,6 +241,22 @@ DEFAULT_CATEGORIES = {
     ),
 }
 
+# Workbook migration recognizes the v8 tags layout independently from the
+# backup-format constants. The backup-only TAGS_WORKSHEET_HEADERS definition
+# can therefore be retired by the legacy-backup migration work.
+LEGACY_TAGS_WORKBOOK_HEADERS = {
+    **PRE_MIXED_USE_WORKSHEET_HEADERS,
+    "Tags": WORKSHEET_HEADERS["Tags"],
+    "Transactions": (
+        *PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"],
+        "tag_ids",
+    ),
+    "Mileage": (
+        *PRE_MIXED_USE_WORKSHEET_HEADERS["Mileage"],
+        "tag_ids",
+    ),
+}
+
 
 def _looks_like_historical_workbook(
     values: Mapping[str, list[list[Any]]],
@@ -250,7 +266,7 @@ def _looks_like_historical_workbook(
         PRE_PAYEE_WORKSHEET_HEADERS,
         VERSION_6_WORKSHEET_HEADERS,
         VERSION_7_WORKSHEET_HEADERS,
-        TAGS_WORKSHEET_HEADERS,
+        LEGACY_TAGS_WORKBOOK_HEADERS,
     )
     for rows in values.values():
         if not rows:
@@ -284,7 +300,7 @@ def _looks_like_historical_workbook(
             transaction_headers = {str(value).strip() for value in transactions[0]}
             if transaction_headers in {
                 set(VERSION_7_WORKSHEET_HEADERS["Transactions"]),
-                set(TAGS_WORKSHEET_HEADERS["Transactions"]),
+                set(LEGACY_TAGS_WORKBOOK_HEADERS["Transactions"]),
             }:
                 return True
     return False
