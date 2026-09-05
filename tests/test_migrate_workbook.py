@@ -298,6 +298,24 @@ def test_header_append_aborts_when_the_worksheet_changed() -> None:
     assert worksheet.get_all_values() == before
 
 
+def test_marker_header_update_aborts_when_the_worksheet_changed() -> None:
+    headers = dict(WORKSHEET_HEADERS)
+    headers["MixedUseExpenses"] = tuple(
+        "tag_ids__migration_pending" if header == "tag_ids" else header
+        for header in headers["MixedUseExpenses"]
+    )
+    workbook = FakeWorkbook(headers)
+    mixed = workbook.worksheet("MixedUseExpenses")
+    mixed.row_values = Mock(wraps=mixed.row_values)  # type: ignore[method-assign]
+    mixed.row_values.return_value = list(WORKSHEET_HEADERS["MixedUseExpenses"])
+    before = mixed.get_all_values()
+
+    with pytest.raises(ValueError, match="headers changed during migration"):
+        migrate_workbook(workbook)
+
+    assert mixed.get_all_values() == before
+
+
 def test_v9_migration_backfills_source_tags_from_linked_projection() -> None:
     headers = dict(WORKSHEET_HEADERS)
     headers["MixedUseExpenses"] = tuple(
