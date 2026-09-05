@@ -84,7 +84,7 @@ def _read_csv(
         rows = list(csv.reader(io.StringIO(content.decode("utf-8"), newline="")))
     except (UnicodeDecodeError, csv.Error) as exc:
         raise StorageValidationError(f"{title} backup CSV is invalid") from exc
-    actual_headers = tuple(rows[0]) if rows else ()
+    actual_headers = tuple(header.strip() for header in rows[0]) if rows else ()
     required_headers = set(expected)
     if not rows or not actual_headers or any(not header for header in actual_headers):
         raise StorageValidationError(f"{title} backup headers are invalid")
@@ -375,10 +375,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("backup", type=Path, help="Legacy v1-v9 backup ZIP")
     parser.add_argument("--output", type=Path, help="Separate v10 output ZIP (never overwritten)")
-    parser.add_argument("--profile", default="legacy", help="Profile key for a ledger-only archive's empty receipt inventory")
+    parser.add_argument("--profile", help="Profile key for a ledger-only archive's empty receipt inventory")
     args = parser.parse_args()
     try:
-        destination = migrate_backup_file(args.backup, args.output, profile_key=args.profile)
+        profile_key = args.profile
+        if profile_key is None:
+            version, _, _, _ = _read_source(args.backup.read_bytes())
+            if version < 5:
+                raise StorageValidationError(
+                    "Ledger-only legacy migrations require --profile PROFILE_KEY"
+                )
+            profile_key = "legacy"
+        destination = migrate_backup_file(args.backup, args.output, profile_key=profile_key)
     except (OSError, StorageValidationError) as error:
         raise SystemExit(f"Migration failed: {error}") from error
     print(f"Validated format-10 backup created: {destination}")

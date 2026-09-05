@@ -5,6 +5,7 @@ import hashlib
 import io
 import json
 from pathlib import Path
+import sys
 from tempfile import TemporaryDirectory
 from typing import Any, Callable
 import zipfile
@@ -14,6 +15,7 @@ import pytest
 from scripts.migrate_legacy_backup import (
     SOURCE_HEADERS,
     default_output_path,
+    main,
     migrate_backup_file,
     migrate_legacy_backup,
 )
@@ -526,3 +528,46 @@ def test_pre_v9_provenance_columns_are_cleared_during_migration() -> None:
         rows = list(csv.DictReader(io.StringIO(archive.read("Transactions.csv").decode())))
     assert rows[0]["source_type"] == ""
     assert rows[0]["source_id"] == ""
+
+
+def test_migration_strips_legacy_header_whitespace() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    storage.create_account("Checking", "Bank")
+    legacy = _downgrade(
+        storage.export_backup_zip(
+            {"schema_version": 1, "business_profile_key": "test", "receipts": []}
+        ),
+        1,
+    )
+
+    def add_header_whitespace(files: dict[str, bytes], manifest: dict[str, Any]) -> None:
+        rows = list(csv.reader(io.StringIO(files["Accounts.csv"].decode())))
+        rows[0] = [f" {header} " for header in rows[0]]
+        buffer = io.StringIO(newline="")
+        csv.writer(buffer, lineterminator="\n").writerows(rows)
+        files["Accounts.csv"] = buffer.getvalue().encode()
+        manifest["sha256"]["Accounts.csv"] = hashlib.sha256(
+            files["Accounts.csv"]
+        ).hexdigest()
+        manifest["worksheet_headers"]["Accounts"] = [header.strip() for header in rows[0]]
+
+    converted = migrate_legacy_backup(
+        _rewrite_legacy(legacy, update_manifest=add_header_whitespace)
+    )
+    assert GoogleSheetsStorage.validate_backup_zip(converted)["format_version"] == 10
+
+
+def test_cli_requires_profile_for_ledger_only_migrations(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    legacy_path = tmp_path / "legacy.zip"
+    legacy_path.write_bytes(
+        _downgrade(
+            storage.export_backup_zip(
+                {"schema_version": 1, "business_profile_key": "test", "receipts": []}
+            ),
+            1,
+        )
+    )
+    monkeypatch.setattr(sys, "argv", ["migrate_legacy_backup.py", str(legacy_path)])
+    with pytest.raises(SystemExit, match="--profile PROFILE_KEY"):
+        main()
