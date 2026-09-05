@@ -109,10 +109,14 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     else:
         payee_values = payee_sheet.get_all_values()
     if not payee_values:
-        payee_sheet.update(
-            [list(WORKSHEET_HEADERS["Payees"])], range_name="A1", raw=True
-        )
-        payee_values = [list(WORKSHEET_HEADERS["Payees"])]
+        latest_payee_values = payee_sheet.get_all_values()
+        if latest_payee_values:
+            payee_values = latest_payee_values
+        else:
+            payee_sheet.update(
+                [list(WORKSHEET_HEADERS["Payees"])], range_name="A1", raw=True
+            )
+            payee_values = [list(WORKSHEET_HEADERS["Payees"])]
     payee_headers = [str(value).strip() for value in payee_values[0]]
     if any(not header for header in payee_headers):
         raise ValueError("Payees worksheet has a blank header")
@@ -138,10 +142,6 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
         if any(str(value).strip() for value in row)
     ]
     _validate_payee_records(existing)
-    if payees_changed:
-        payee_sheet.update(
-            [payee_headers, *payee_rows], range_name="A1", raw=True
-        )
     rows = [dict(zip(headers, row + [""] * (len(headers) - len(row)))) for row in transaction_values[1:]]
     if "payee" not in headers:
         known_payee_ids = {str(item.get("id", "")).strip() for item in existing}
@@ -171,15 +171,34 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
             }
     payees, migrated = migrate_payee_rows(rows, existing)
     new_headers = ["payee_id" if header == "payee" else header for header in headers]
+    existing_ids = {str(item.get("id", "")).strip() for item in existing}
+    new_payees = [item for item in payees if item["id"] not in existing_ids]
     latest_transaction_values = transactions_sheet.get_all_values()
     if latest_transaction_values != transaction_values:
         raise ValueError(
             "Transactions worksheet changed during payee migration; "
             "aborting before replacing it"
         )
-    existing_ids = {str(item.get("id", "")).strip() for item in existing}
-    new_payees = [item for item in payees if item["id"] not in existing_ids]
+    latest_payee_values = payee_sheet.get_all_values()
+    if latest_payee_values != payee_values:
+        raise ValueError(
+            "Payees worksheet changed during payee migration; "
+            "aborting before replacing it"
+        )
+    expected_payee_values = payee_values
+    if payees_changed:
+        expected_payee_values = [
+            payee_headers,
+            *payee_rows,
+        ]
+        payee_sheet.update(expected_payee_values, range_name="A1", raw=True)
     if new_payees:
+        latest_payee_values = payee_sheet.get_all_values()
+        if latest_payee_values != expected_payee_values:
+            raise ValueError(
+                "Payees worksheet changed during payee migration; "
+                "aborting before replacing it"
+            )
         payee_sheet.append_rows(
             [
                 [item.get(header, "") for header in payee_headers]

@@ -449,6 +449,26 @@ def test_migration_validates_transaction_domains_before_success() -> None:
         migrate_workbook(workbook)
 
 
+def test_migration_validates_mileage_domains_before_success() -> None:
+    workbook = FakeWorkbook()
+    _append_record(
+        workbook,
+        "Mileage",
+        {
+            "id": "mileage-1",
+            "trip_date": "not-a-date",
+            "miles": "10.0",
+            "start_location": "Office",
+            "destination": "Client",
+            "business_purpose": "Visit",
+            "created_at": "2026-01-01T00:00:00Z",
+        },
+    )
+
+    with pytest.raises(StorageValidationError, match="Date must use"):
+        migrate_workbook(workbook)
+
+
 def test_migration_rejects_missing_core_tab_before_creating_any_tab() -> None:
     workbook = FakeWorkbook(VERSION_7_WORKSHEET_HEADERS)
     del workbook.sheets["Transactions"]

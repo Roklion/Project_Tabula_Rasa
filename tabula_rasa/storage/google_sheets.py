@@ -5473,6 +5473,19 @@ class GoogleSheetsStorage:
         tags = self._tag_lookup(force_refresh=_force_refresh)
         for row in self._rows("Mileage", force_refresh=_force_refresh):
             item = dict(row.values)
+            item["trip_date"] = _iso_date(item.get("trip_date"))
+            item["miles"] = _positive_miles(item.get("miles"))
+            item["vehicle"] = _clean_text(item.get("vehicle"), "Vehicle")
+            item["start_location"] = _clean_text(
+                item.get("start_location"), "Starting location", required=True
+            )
+            item["destination"] = _clean_text(
+                item.get("destination"), "Destination", required=True
+            )
+            item["business_purpose"] = _clean_text(
+                item.get("business_purpose"), "Business purpose", required=True
+            )
+            item["notes"] = _clean_text(item.get("notes"), "Notes")
             if start_text and item["trip_date"] < start_text:
                 continue
             if end_text and item["trip_date"] > end_text:

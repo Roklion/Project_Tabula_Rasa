@@ -290,8 +290,7 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     if LEGACY_MIXED_USE_TAG_MIGRATION_HEADER in mixed_headers:
         mixed_headers[mixed_headers.index(LEGACY_MIXED_USE_TAG_MIGRATION_HEADER)] = "tag_ids"
         mixed.update([mixed_headers], range_name="A1", raw=True)
-    else:
-        _append_columns(mixed, mixed_headers, ["receipt_references", "tag_ids"])
+    _append_columns(mixed, mixed_headers, ["receipt_references", "tag_ids"])
 
     source_tags = _backfill_mixed_use_source_tags(workbook)
     # This read-only validation also checks current relationship, domain, and
