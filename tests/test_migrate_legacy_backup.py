@@ -300,6 +300,8 @@ def test_ledger_only_migration_api_requires_profile_key() -> None:
     )
     with pytest.raises(StorageValidationError, match="explicit profile key"):
         migrate_legacy_backup(legacy)
+    with pytest.raises(StorageValidationError, match="explicit profile key"):
+        migrate_legacy_backup(legacy, profile_key="")
 
 
 def test_v1_account_normalization_and_source_checksum_are_preserved() -> None:

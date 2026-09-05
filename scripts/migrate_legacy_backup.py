@@ -313,7 +313,7 @@ def _encode_csv(headers: list[str], records: list[dict[str, str]]) -> bytes:
 def migrate_legacy_backup(backup: bytes, *, profile_key: str | None = None) -> bytes:
     """Return a validated v10 archive converted from a v1-v9 archive."""
     version, source_manifest, source_tables, source_receipts = _read_source(backup)
-    if version < 5 and profile_key is None:
+    if version < 5 and not profile_key:
         raise StorageValidationError(
             "Ledger-only legacy migrations require an explicit profile key"
         )
