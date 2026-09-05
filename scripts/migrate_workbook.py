@@ -290,7 +290,6 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     # Managed payees are part of the standard historical conversion, rather
     # than an implicit production-startup migration.
     payee_result = migrate_payees(workbook)
-    transactions = workbook.worksheet("Transactions")
     transaction_headers = [
         str(value).strip() for value in transactions.row_values(1)
     ]

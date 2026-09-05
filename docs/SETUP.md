@@ -83,9 +83,9 @@ make the workbook public.
 | MixedUseExpenses | id, txn_date, kind, total_expense, business_use_percentage, allocated_amount, account_id, category_id, payee_id, description, reference, receipt_references, allocation_rationale, linked_transaction_id, tag_ids, created_at |
 
 The default Sheet1 tab may remain or be deleted. Existing compatible tabs are
-preserved. Empty required tabs receive headers; populated incompatible tabs
-cause validation to fail rather than being overwritten. Defaults are seeded
-only in a blank workbook.
+preserved. Blank-workbook initialization creates the required tabs and headers;
+populated workbooks with empty or incompatible required tabs fail validation
+rather than being overwritten. Defaults are seeded only in a blank workbook.
 
 Existing workbooks that still store transaction payee text must be upgraded
 with the one-time combined workbook migration before using the managed

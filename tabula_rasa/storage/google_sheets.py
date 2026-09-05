@@ -1261,7 +1261,11 @@ class GoogleSheetsStorage:
                 )
 
             try:
-                return cls(workbook, _initial_worksheets=worksheets)
+                return cls(
+                    workbook,
+                    _initial_worksheets=worksheets,
+                    _initial_values=values,
+                )
             except StorageValidationError as exc:
                 if _looks_like_historical_workbook(values):
                     raise StorageInitializationError(
