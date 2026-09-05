@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import sys
 from unittest.mock import Mock, patch
 
 import gspread
 import pytest
 
+import scripts.migrate_workbook as migration_script
 from scripts.migrate_workbook import migrate_workbook
 from tabula_rasa.storage.google_sheets import (
     StorageInitializationError,
@@ -140,6 +142,113 @@ def test_populated_legacy_startup_is_read_only_and_actionable() -> None:
     for worksheet in workbook.sheets.values():
         worksheet.add_cols.assert_not_called()
         worksheet.update.assert_not_called()
+
+
+def test_populated_v9_startup_is_read_only_and_actionable() -> None:
+    headers = dict(WORKSHEET_HEADERS)
+    headers["MixedUseExpenses"] = tuple(
+        header
+        for header in headers["MixedUseExpenses"]
+        if header != "tag_ids"
+    )
+    workbook = FakeWorkbook(headers)
+    _append_record(
+        workbook,
+        "Accounts",
+        {
+            "id": "account-1",
+            "name": "Checking",
+            "type": "Bank",
+            "classification": "Asset",
+            "opening_balance": "0.00",
+            "active": "TRUE",
+            "created_at": "2026-01-01T00:00:00Z",
+            "parent_id": "",
+        },
+    )
+    before = {title: worksheet.get_all_values() for title, worksheet in workbook.sheets.items()}
+    for worksheet in workbook.sheets.values():
+        worksheet.add_cols = Mock(wraps=worksheet.add_cols)
+        worksheet.update = Mock(wraps=worksheet.update)
+        worksheet.append_rows = Mock(wraps=worksheet.append_rows)
+    client = Mock()
+    client.open_by_key.return_value = workbook
+
+    with (
+        patch("tabula_rasa.storage.google_sheets.Credentials.from_service_account_info", return_value=object()),
+        patch.object(gspread, "authorize", return_value=client),
+        pytest.raises(StorageInitializationError, match="migrate_workbook.py"),
+    ):
+        GoogleSheetsStorage.from_secrets(
+            {"spreadsheet_id": "sheet-1", "gcp_service_account": {"type": "service_account"}}
+        )
+
+    assert before == {
+        title: worksheet.get_all_values() for title, worksheet in workbook.sheets.items()
+    }
+    for worksheet in workbook.sheets.values():
+        worksheet.add_cols.assert_not_called()
+        worksheet.update.assert_not_called()
+        worksheet.append_rows.assert_not_called()
+
+
+def test_migration_rejects_missing_core_tab_before_creating_any_tab() -> None:
+    workbook = FakeWorkbook(VERSION_7_WORKSHEET_HEADERS)
+    del workbook.sheets["Transactions"]
+    _append_record(workbook, "Accounts", {"id": "account-1", "name": "Checking"})
+    before = {title: worksheet.get_all_values() for title, worksheet in workbook.sheets.items()}
+    workbook.add_worksheet = Mock(wraps=workbook.add_worksheet)
+    for worksheet in workbook.sheets.values():
+        worksheet.update = Mock(wraps=worksheet.update)
+
+    with pytest.raises(ValueError, match="missing core worksheets: Transactions"):
+        migrate_workbook(workbook)
+
+    assert before == {
+        title: worksheet.get_all_values() for title, worksheet in workbook.sheets.items()
+    }
+    workbook.add_worksheet.assert_not_called()
+    for worksheet in workbook.sheets.values():
+        worksheet.update.assert_not_called()
+
+
+def test_cli_profile_selection_isolated_to_selected_workbook() -> None:
+    document = {"business_profiles": {"north": {}, "south": {}}}
+    south_secrets = {
+        "spreadsheet_id": "south-sheet",
+        "gcp_service_account": {"client_email": "south@example.invalid"},
+    }
+    client = Mock()
+    workbook = FakeWorkbook()
+    client.open_by_key.return_value = workbook
+
+    with (
+        patch.object(migration_script, "load_business_profile_document", return_value=document),
+        patch.object(
+            migration_script,
+            "select_profile_secrets",
+            side_effect=lambda selected_document, profile: (
+                south_secrets
+                if selected_document is document and profile == "south"
+                else AssertionError(f"unexpected profile: {profile}")
+            ),
+        ) as select_profile,
+        patch.object(migration_script.Credentials, "from_service_account_info", return_value=object()) as credentials,
+        patch.object(gspread, "authorize", return_value=client),
+        patch.object(migration_script, "migrate_workbook", return_value={}),
+        patch.object(
+            sys,
+            "argv",
+            ["migrate_workbook.py", "--secrets", "profiles.toml", "--profile", "south"],
+        ),
+    ):
+        migration_script.main()
+
+    select_profile.assert_called_once_with(document, "south")
+    credentials.assert_called_once_with(
+        south_secrets["gcp_service_account"], scopes=[migration_script.SHEETS_SCOPE]
+    )
+    client.open_by_key.assert_called_once_with("south-sheet")
 
 
 def test_migration_preflights_malformed_tabs_before_writing() -> None:

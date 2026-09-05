@@ -91,6 +91,14 @@ def _preflight(workbook: Any) -> dict[str, list[list[Any]]]:
         for value in row
     ):
         return values
+    missing_core = sorted(
+        {"Accounts", "Categories", "Transactions"} - set(values)
+    )
+    if missing_core:
+        raise ValueError(
+            "Cannot migrate a partial workbook; missing core worksheets: "
+            + ", ".join(missing_core)
+        )
     allowed: dict[str, set[frozenset[str]]] = {
         "Accounts": {
             frozenset(VERSION_5_WORKSHEET_HEADERS["Accounts"]),

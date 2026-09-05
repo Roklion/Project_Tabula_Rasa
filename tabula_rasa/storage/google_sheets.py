@@ -258,6 +258,14 @@ def _looks_like_historical_workbook(
         headers = [str(value).strip() for value in rows[0]]
         if "tag_ids__migration_pending" in headers:
             return True
+        if (
+            "MixedUseExpenses" in values
+            and set(headers)
+            == set(MIXED_USE_WORKSHEET_HEADERS) - {"tag_ids"}
+            and len(headers) == len(set(headers))
+        ):
+            # Version 9 mixed-use sources predate durable source tag IDs.
+            return True
         if any(
             title in values
             and set(headers) == set(layout.get(title, ()))
