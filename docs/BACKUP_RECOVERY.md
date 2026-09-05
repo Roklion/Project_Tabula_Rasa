@@ -201,11 +201,12 @@ Validate every copied or downloaded archive before relying on it:
 python scripts\validate_google_sheets_backup.py "C:\Safe-Recovery\tabula-rasa-backup-YYYYMMDDTHHMMSSZ.zip"
 ```
 
-Successful validation confirms supported format, exact ZIP structure, manifest
-integrity, headers, checksums, row counts, IDs, ledger relationships, and the
-receipt inventory's profile, identities, filenames, sizes, checksums,
-duplicates, and transaction associations. It also identifies older
-ledger-only sources.
+The current validator accepts only format 10. Successful validation confirms a
+format-10 archive's exact ZIP structure, manifest integrity, headers,
+checksums, row counts, IDs, ledger relationships,
+and the receipt inventory's profile, identities, filenames, sizes, checksums,
+duplicates, and transaction associations. Convert older v1-v9 archives with
+`scripts/migrate_legacy_backup.py` before validating them.
 
 Do not modify a failed archive. Preserve it privately, choose another
 generation, and validate again.
