@@ -29,6 +29,7 @@ from tabula_rasa.storage.google_sheets import (
     FIXED_TYPE_CLASSIFICATIONS,
     WORKSHEET_HEADERS,
     _legacy_payee_id,
+    _validate_payee_records,
     normalize_payee_name,
 )
 
@@ -208,22 +209,6 @@ def _accounts(records: list[dict[str, str]]) -> list[dict[str, str]]:
     return output
 
 
-def _validate_optional_legacy_payees(records: list[dict[str, str]]) -> None:
-    seen_ids: set[str] = set()
-    seen_names: set[str] = set()
-    for source in records:
-        payee_id = str(source.get("id", "")).strip()
-        name = " ".join(str(source.get("name", "")).split())
-        name_key = normalize_payee_name(name)
-        if not payee_id or not name_key:
-            raise StorageValidationError("Legacy Payees contain a blank ID or name")
-        _active(source.get("active", ""), "Payee")
-        if payee_id in seen_ids or name_key in seen_names:
-            raise StorageValidationError("Legacy Payee IDs and names must be unique")
-        seen_ids.add(payee_id)
-        seen_names.add(name_key)
-
-
 def _payees_and_transactions(
     tables: dict[str, list[dict[str, str]]], version: int, manifest: dict[str, Any]
 ) -> None:
@@ -235,7 +220,7 @@ def _payees_and_transactions(
         for row in tables["Payees"]:
             row["active"] = _active(row.get("active", "TRUE"), "Payee")
         return
-    _validate_optional_legacy_payees(tables.get("Payees", []))
+    _validate_payee_records(tables.get("Payees", []))
     payees: dict[str, dict[str, str]] = {}
     for source in tables.get("Payees", []):
         name = " ".join(str(source.get("name", "")).split())
