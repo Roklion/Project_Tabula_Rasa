@@ -7,6 +7,8 @@ the old module, but now produces a v10 archive.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from scripts.migrate_legacy_backup import (
     default_output_path,
     migrate_backup_file,
@@ -19,7 +21,7 @@ def convert_backup_v1_to_v2(backup: bytes) -> bytes:
     return migrate_legacy_backup(backup)
 
 
-def convert_backup_file(source, output=None):
+def convert_backup_file(source: Path, output: Path | None = None) -> Path:
     """Deprecated alias for :func:`migrate_backup_file`."""
     return migrate_backup_file(source, output)
 
