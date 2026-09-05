@@ -426,10 +426,12 @@ def test_migration_persists_payee_normalization_before_noop_return() -> None:
             "now",
         ]
     )
+    transaction_sheet.update = Mock(wraps=transaction_sheet.update)  # type: ignore[method-assign]
 
     migrate_workbook(workbook)
 
     assert payee_sheet.rows[1][2] == "TRUE"
+    transaction_sheet.update.assert_not_called()
 
 
 def test_migration_accepts_short_existing_payee_rows() -> None:

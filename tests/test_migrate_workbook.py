@@ -298,6 +298,22 @@ def test_header_append_aborts_when_the_worksheet_changed() -> None:
     assert worksheet.get_all_values() == before
 
 
+def test_header_append_rechecks_after_adding_columns() -> None:
+    workbook = FakeWorkbook()
+    worksheet = workbook.worksheet("Transactions")
+    expected_headers = list(WORKSHEET_HEADERS["Transactions"])
+    original_add_cols = worksheet.add_cols
+
+    def add_cols_then_change(columns: int) -> None:
+        original_add_cols(columns)
+        worksheet.rows[0][0] = "changed"
+
+    worksheet.add_cols = add_cols_then_change  # type: ignore[method-assign]
+
+    with pytest.raises(ValueError, match="headers changed during migration"):
+        _append_columns(worksheet, expected_headers, ["extra"])
+
+
 def test_marker_header_update_aborts_when_the_worksheet_changed() -> None:
     headers = dict(WORKSHEET_HEADERS)
     headers["MixedUseExpenses"] = tuple(

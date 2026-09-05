@@ -210,6 +210,8 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
             ],
         ]
     assert_unchanged(payee_sheet, expected_payee_values, "Payees")
+    if "payee" not in headers and not legacy_rows:
+        return {"payees": len(new_payees), "transactions": 0}
     assert_unchanged(transactions_sheet, transaction_values, "Transactions")
     transactions_sheet.update(
         [new_headers]

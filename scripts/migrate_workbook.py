@@ -98,12 +98,20 @@ def _append_columns(worksheet: Any, headers: list[str], additions: list[str]) ->
     _assert_headers_unchanged(worksheet, headers)
     worksheet.add_cols(len(additions))
     headers = [*headers, *additions]
+    _assert_headers_unchanged(
+        worksheet, [*headers[:-len(additions)], *([""] * len(additions))]
+    )
     worksheet.update([headers], range_name="A1", raw=True)
     return headers
 
 
 def _assert_headers_unchanged(worksheet: Any, expected: list[str]) -> None:
     current = [str(value).strip() for value in worksheet.row_values(1)]
+    while current and not current[-1]:
+        current.pop()
+    expected = list(expected)
+    while expected and not expected[-1]:
+        expected.pop()
     if current != expected:
         raise ValueError(
             f"{worksheet.title} worksheet headers changed during migration; "
@@ -348,6 +356,7 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     )
     if LEGACY_MIXED_USE_TAG_MIGRATION_HEADER in mixed_headers:
         original_mixed_headers = list(mixed_headers)
+        _assert_headers_unchanged(mixed, original_mixed_headers)
         mixed_headers[mixed_headers.index(LEGACY_MIXED_USE_TAG_MIGRATION_HEADER)] = "tag_ids"
         missing_columns = [
             header
@@ -357,7 +366,13 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
         if missing_columns:
             mixed.add_cols(len(missing_columns))
             mixed_headers.extend(missing_columns)
-        _assert_headers_unchanged(mixed, original_mixed_headers)
+            _assert_headers_unchanged(
+                mixed,
+                [
+                    *mixed_headers[:-len(missing_columns)],
+                    *([""] * len(missing_columns)),
+                ],
+            )
         mixed.update([mixed_headers], range_name="A1", raw=True)
     else:
         _append_columns(mixed, mixed_headers, ["receipt_references", "tag_ids"])
