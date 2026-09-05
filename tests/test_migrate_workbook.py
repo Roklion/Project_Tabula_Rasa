@@ -10,6 +10,7 @@ import pytest
 import scripts.migrate_workbook as migration_script
 from scripts.migrate_workbook import (
     _backfill_mixed_use_source_tags,
+    _append_columns,
     migrate_workbook,
 )
 from tabula_rasa.storage.google_sheets import (
@@ -283,6 +284,18 @@ def test_migration_rejects_receipts_shared_by_transactions() -> None:
 
     with pytest.raises(ValueError, match="receipt is referenced by more than one"):
         migrate_workbook(workbook)
+
+
+def test_header_append_aborts_when_the_worksheet_changed() -> None:
+    workbook = FakeWorkbook()
+    worksheet = workbook.worksheet("Transactions")
+    expected_headers = ["id", "txn_date"]
+    before = worksheet.get_all_values()
+
+    with pytest.raises(ValueError, match="headers changed during migration"):
+        _append_columns(worksheet, expected_headers, ["receipt_references"])
+
+    assert worksheet.get_all_values() == before
 
 
 def test_v9_migration_backfills_source_tags_from_linked_projection() -> None:

@@ -95,6 +95,12 @@ def _append_columns(worksheet: Any, headers: list[str], additions: list[str]) ->
     additions = [header for header in additions if header not in headers]
     if not additions:
         return headers
+    current_headers = [str(value).strip() for value in worksheet.row_values(1)]
+    if current_headers != headers:
+        raise ValueError(
+            f"{worksheet.title} worksheet headers changed during migration; "
+            "aborting before header update"
+        )
     worksheet.add_cols(len(additions))
     headers = [*headers, *additions]
     worksheet.update([headers], range_name="A1", raw=True)
