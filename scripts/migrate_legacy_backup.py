@@ -315,7 +315,8 @@ def migrate_legacy_backup(backup: bytes, *, profile_key: str | None = None) -> b
     version, source_manifest, source_tables, source_receipts = _read_source(backup)
     if version < 5 and not profile_key:
         raise StorageValidationError(
-            "Ledger-only legacy migrations require an explicit profile key"
+            "Ledger-only legacy migrations require an explicit profile key "
+            "(use --profile PROFILE_KEY)"
         )
     profile_key = profile_key or "legacy"
     tables = _current_tables(version, source_manifest, source_tables)
@@ -379,7 +380,6 @@ def migrate_backup_file(
     destination.parent.mkdir(parents=True, exist_ok=True)
     with destination.open("xb") as output_file:
         output_file.write(converted)
-    GoogleSheetsStorage.validate_backup_zip(destination.read_bytes())
     return destination
 
 
@@ -390,15 +390,11 @@ def main() -> None:
     parser.add_argument("--profile", help="Profile key for a ledger-only archive's empty receipt inventory")
     args = parser.parse_args()
     try:
-        profile_key = args.profile
-        if profile_key is None:
-            version, _, _, _ = _read_source(args.backup.read_bytes())
-            if version < 5:
-                raise StorageValidationError(
-                    "Ledger-only legacy migrations require --profile PROFILE_KEY"
-                )
-            profile_key = "legacy"
-        destination = migrate_backup_file(args.backup, args.output, profile_key=profile_key)
+        destination = migrate_backup_file(
+            args.backup,
+            args.output,
+            profile_key=args.profile,
+        )
     except (OSError, StorageValidationError) as error:
         raise SystemExit(f"Migration failed: {error}") from error
     print(f"Validated format-10 backup created: {destination}")
