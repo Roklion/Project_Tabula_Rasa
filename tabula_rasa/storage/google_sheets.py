@@ -150,34 +150,7 @@ WORKSHEET_HEADERS = {
         "tag_ids",
     ),
 }
-VERSION_9_WORKSHEET_HEADERS = WORKSHEET_HEADERS
 _TAG_WRITE_LOCK = threading.RLock()
-TAGS_BACKUP_FORMAT_VERSION = 8
-TAGS_WORKSHEET_HEADERS = {
-    **PRE_MIXED_USE_WORKSHEET_HEADERS,
-    "Tags": ("id", "name", "active", "created_at"),
-    "Transactions": (
-        *PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"],
-        "tag_ids",
-    ),
-    "Mileage": (
-        *PRE_MIXED_USE_WORKSHEET_HEADERS["Mileage"],
-        "tag_ids",
-    ),
-}
-VERSION_3_WORKSHEET_HEADERS = {
-    title: (
-        tuple(header for header in headers if header != "receipt_references")
-        if title == "Transactions"
-        else headers
-    )
-    for title, headers in PRE_PAYEE_WORKSHEET_HEADERS.items()
-}
-LEGACY_BACKUP_HEADERS = {
-    title: headers
-    for title, headers in VERSION_3_WORKSHEET_HEADERS.items()
-    if title != "Mileage"
-}
 ACCOUNT_TYPES = {
     "Bank",
     "Cash",
@@ -196,31 +169,7 @@ FIXED_TYPE_CLASSIFICATIONS = {
 }
 CATEGORY_KINDS = {"Income", "Expense"}
 TRANSACTION_KINDS = {"Income", "Expense", "Transfer"}
-LEDGER_ONLY_BACKUP_FORMAT_VERSION = 4
-RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION = 5
-PAYEE_BACKUP_FORMAT_VERSION = 7
-MIXED_USE_BACKUP_FORMAT_VERSION = 9
 BACKUP_FORMAT_VERSION = 10
-BACKUP_HEADERS_BY_VERSION = {
-    2: LEGACY_BACKUP_HEADERS,
-    3: VERSION_3_WORKSHEET_HEADERS,
-    6: VERSION_6_WORKSHEET_HEADERS,
-    7: VERSION_7_WORKSHEET_HEADERS,
-    LEDGER_ONLY_BACKUP_FORMAT_VERSION: PRE_PAYEE_WORKSHEET_HEADERS,
-    RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION: PRE_PAYEE_WORKSHEET_HEADERS,
-    PAYEE_BACKUP_FORMAT_VERSION: PRE_MIXED_USE_WORKSHEET_HEADERS,
-    TAGS_BACKUP_FORMAT_VERSION: TAGS_WORKSHEET_HEADERS,
-    MIXED_USE_BACKUP_FORMAT_VERSION: {
-        **VERSION_9_WORKSHEET_HEADERS,
-        "MixedUseExpenses": tuple(
-            header
-            for header in VERSION_9_WORKSHEET_HEADERS["MixedUseExpenses"]
-            if header != "tag_ids"
-        ),
-    },
-    BACKUP_FORMAT_VERSION: WORKSHEET_HEADERS,
-}
-SUPPORTED_BACKUP_FORMAT_VERSIONS = set(BACKUP_HEADERS_BY_VERSION)
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 SHEETS_READONLY_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly"
 DEFAULT_ACCOUNTS = (("Checking", "Bank"), ("Cash", "Cash"))
@@ -705,32 +654,24 @@ def _parse_backup_zip(
             if not isinstance(manifest, dict):
                 raise StorageValidationError("Backup manifest fields are invalid")
             format_version = manifest.get("format_version")
-            if format_version not in SUPPORTED_BACKUP_FORMAT_VERSIONS:
-                raise StorageValidationError("Backup format version is unsupported")
-            backup_headers = BACKUP_HEADERS_BY_VERSION[format_version]
+            if format_version != BACKUP_FORMAT_VERSION:
+                raise StorageValidationError(
+                    "Backup format version is not supported by the application; "
+                    "convert it with scripts/migrate_legacy_backup.py first."
+                )
+            backup_headers = WORKSHEET_HEADERS
             required_files = {
                 f"{title}.csv" for title in backup_headers
             } | {"manifest.json"}
-            if format_version >= RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION:
-                required_files.add("receipts.json")
-            optional_legacy_payees = (
-                format_version < PAYEE_BACKUP_FORMAT_VERSION
-                and "Payees.csv" in names
-            )
-            if set(names) not in (required_files, required_files | {"Payees.csv"}):
+            required_files.add("receipts.json")
+            if set(names) != required_files:
                 raise StorageValidationError(
                     "Backup must contain exactly the expected ledger and manifest files"
                 )
             csv_files = {
                 title: archive.read(f"{title}.csv") for title in backup_headers
             }
-            if optional_legacy_payees:
-                csv_files["Payees"] = archive.read("Payees.csv")
-            receipt_manifest_bytes = (
-                archive.read("receipts.json")
-                if format_version >= RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION
-                else None
-            )
+            receipt_manifest_bytes = archive.read("receipts.json")
     except (zipfile.BadZipFile, OSError, RuntimeError) as exc:
         raise StorageValidationError("Backup is not a readable ZIP archive") from exc
 
@@ -739,11 +680,9 @@ def _parse_backup_zip(
     worksheet_headers = manifest.get("worksheet_headers")
     if not all(isinstance(value, dict) for value in (row_counts, file_hashes, worksheet_headers)):
         raise StorageValidationError("Backup manifest is missing validation metadata")
-    expected_hash_names = {f"{title}.csv" for title in backup_headers}
-    if "Payees" in csv_files and "Payees.csv" not in expected_hash_names:
-        expected_hash_names.add("Payees.csv")
-    if format_version >= RECEIPT_INVENTORY_BACKUP_FORMAT_VERSION:
-        expected_hash_names.add("receipts.json")
+    expected_hash_names = {
+        f"{title}.csv" for title in backup_headers
+    } | {"receipts.json"}
     if set(file_hashes) != expected_hash_names:
         raise StorageValidationError("Backup manifest checksum entries are invalid")
 
@@ -758,9 +697,7 @@ def _parse_backup_zip(
         if not parsed_rows:
             raise StorageValidationError(f"{title} backup has no header row")
         headers = [value.strip() for value in parsed_rows[0]]
-        required_headers = set(
-            backup_headers.get(title, WORKSHEET_HEADERS[title])
-        )
+        required_headers = set(backup_headers[title])
         if (
             any(not value for value in headers)
             or len(headers) != len(set(headers))
@@ -785,100 +722,10 @@ def _parse_backup_zip(
         if title == "Payees":
             for record in records:
                 record["id"] = record["id"].strip()
-        elif title == "Transactions" and "payee_id" in headers:
+        elif title == "Transactions":
             for record in records:
                 record["payee_id"] = _clean_text(record.get("payee_id"), "Payee")
         tables[title] = (headers, records)
-
-    if "Payees" not in tables:
-        tables["Payees"] = (list(WORKSHEET_HEADERS["Payees"]), [])
-
-    if format_version < LEDGER_ONLY_BACKUP_FORMAT_VERSION:
-        transaction_headers, transactions = tables["Transactions"]
-        if "receipt_references" not in transaction_headers:
-            migrated_headers = [
-                *transaction_headers,
-                "receipt_references",
-            ]
-            migrated_transactions = [
-                {**transaction, "receipt_references": ""}
-                for transaction in transactions
-            ]
-            tables["Transactions"] = (
-                migrated_headers,
-                migrated_transactions,
-            )
-
-    if format_version < PAYEE_BACKUP_FORMAT_VERSION:
-        for title in ("Accounts", "Categories"):
-            legacy_headers, legacy_records = tables[title]
-            if "parent_id" not in legacy_headers:
-                legacy_headers = [*legacy_headers, "parent_id"]
-                legacy_records = [
-                    {**record, "parent_id": ""} for record in legacy_records
-                ]
-            tables[title] = (legacy_headers, legacy_records)
-
-        # Formats through version 6 stored arbitrary payee text on each
-        # transaction. Resolve that legacy text once while loading the backup;
-        # unmatched text is intentionally discarded.
-        for transaction in tables["Transactions"][1]:
-            legacy_name = _clean_text(transaction.get("payee"), "Payee")
-            transaction["legacy_payee"] = legacy_name
-            transaction["payee_id"] = ""
-            transaction.pop("payee", None)
-        tables["Transactions"] = (
-            list(WORKSHEET_HEADERS["Transactions"]),
-            tables["Transactions"][1],
-        )
-        tables["Payees"] = (
-            list(WORKSHEET_HEADERS["Payees"]),
-            [],
-        )
-
-    if format_version < MIXED_USE_BACKUP_FORMAT_VERSION:
-        transaction_headers, transactions = tables["Transactions"]
-        transaction_headers = list(transaction_headers)
-        for header in ("source_type", "source_id"):
-            if header not in transaction_headers:
-                transaction_headers.append(header)
-        for transaction in transactions:
-            # Provenance was introduced with the mixed-use backup format. A
-            # legacy archive cannot carry a trusted MixedUseExpenses table,
-            # so discard even user-supplied extra provenance columns rather
-            # than restoring orphaned projections.
-            transaction["source_type"] = ""
-            transaction["source_id"] = ""
-        tables["Transactions"] = (transaction_headers, transactions)
-    # Tags were added in format 8. Older backups have no tag worksheet or
-    # columns, so restore them as an empty, valid tag state.
-    if "Tags" not in tables:
-        tables["Tags"] = (list(WORKSHEET_HEADERS["Tags"]), [])
-    for title in ("Transactions", "Mileage", "MixedUseExpenses"):
-        if title not in tables:
-            continue
-        headers, records = tables[title]
-        if "tag_ids" not in headers:
-            headers = [*headers, "tag_ids"]
-            records = [{**record, "tag_ids": "[]"} for record in records]
-            tables[title] = (headers, records)
-    if format_version < BACKUP_FORMAT_VERSION and "MixedUseExpenses" in tables:
-        transactions_by_id = {
-            str(record.get("id") or ""): record
-            for record in tables["Transactions"][1]
-        }
-        mixed_headers, mixed_sources = tables["MixedUseExpenses"]
-        for source in mixed_sources:
-            if _normalize_tag_ids(source.get("tag_ids", "")):
-                continue
-            linked_transaction = transactions_by_id.get(
-                str(source.get("linked_transaction_id") or "")
-            )
-            if linked_transaction is not None:
-                source["tag_ids"] = _encode_tag_ids(
-                    linked_transaction.get("tag_ids", "")
-                )
-        tables["MixedUseExpenses"] = (mixed_headers, mixed_sources)
 
     _validate_hierarchy_records(
         tables["Accounts"][1],
@@ -954,8 +801,7 @@ def _parse_backup_zip(
         if payee_id and payee_id not in payee_ids:
             raise StorageValidationError("Backup contains an unknown mixed-use payee")
 
-    if format_version >= MIXED_USE_BACKUP_FORMAT_VERSION:
-        _validate_mixed_use_tables(tables)
+    _validate_mixed_use_tables(tables)
 
     receipt_manifest: dict[str, Any] | None = None
     if receipt_manifest_bytes is not None:
@@ -6229,27 +6075,13 @@ class GoogleSheetsStorage:
     def restore_backup_zip(self, backup: bytes) -> dict[str, int]:
         """Restore a validated backup into a blank initialized workbook."""
         manifest, tables, _ = _parse_backup_zip(backup)
-        legacy_payees = manifest["format_version"] < PAYEE_BACKUP_FORMAT_VERSION
-        existing_payees = self.list_payees(_force_refresh=True)
-        payees_by_key = {
-            normalize_payee_name(item["name"]): item["id"] for item in existing_payees
-        }
-        if legacy_payees:
-            for transaction in tables["Transactions"][1]:
-                transaction["payee_id"] = payees_by_key.get(
-                    normalize_payee_name(transaction.pop("legacy_payee", "")), ""
-                )
         for title in WORKSHEET_HEADERS:
             target_headers = self._headers(title)
-            if title in tables and not (legacy_payees and title == "Payees") and set(
-                target_headers
-            ) != set(tables[title][0]):
+            if set(target_headers) != set(tables[title][0]):
                 raise StorageValidationError(
                     f"{title} target headers do not match the backup"
                 )
-            if self._rows(title, force_refresh=True) and not (
-                title == "Payees" and legacy_payees
-            ):
+            if self._rows(title, force_refresh=True):
                 raise StorageConflictError(
                     "Restore target must have empty ledger worksheets"
                 )
@@ -6260,9 +6092,6 @@ class GoogleSheetsStorage:
                 continue
             _, records = tables[title]
             if title == "MixedUseExpenses" and not records:
-                continue
-            if not records and title == "Payees" and legacy_payees:
-                counts[title] = 0
                 continue
             self._append_many(title, records)
             restored = self._rows(title, force_refresh=True)
