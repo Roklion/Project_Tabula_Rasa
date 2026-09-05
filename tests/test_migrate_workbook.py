@@ -13,10 +13,12 @@ from scripts.migrate_workbook import (
 )
 from tabula_rasa.storage.google_sheets import (
     StorageInitializationError,
+    StorageValidationError,
     VERSION_3_WORKSHEET_HEADERS,
     VERSION_7_WORKSHEET_HEADERS,
     WORKSHEET_HEADERS,
     GoogleSheetsStorage,
+    _looks_like_historical_workbook,
 )
 from tests.fakes import FakeWorkbook
 
@@ -125,6 +127,73 @@ def test_tag_backfill_rechecks_fresh_source_and_projection_before_writing() -> N
     source.batch_update.assert_not_called()
 
 
+def test_historical_detection_matches_headers_to_their_worksheet() -> None:
+    values = {
+        "Accounts": [list(VERSION_3_WORKSHEET_HEADERS["Categories"])],
+        "Categories": [list(WORKSHEET_HEADERS["Categories"])],
+    }
+
+    assert not _looks_like_historical_workbook(values)
+
+
+def test_migration_validates_relationships_before_reporting_success() -> None:
+    workbook = FakeWorkbook(WORKSHEET_HEADERS)
+    _append_record(
+        workbook,
+        "Accounts",
+        {
+            "id": "account-1",
+            "name": "Checking",
+            "type": "Bank",
+            "classification": "Asset",
+            "opening_balance": "0.00",
+            "active": "TRUE",
+            "created_at": "2026-01-01T00:00:00Z",
+            "parent_id": "",
+        },
+    )
+    _append_record(
+        workbook,
+        "Categories",
+        {"id": "category-1", "name": "Office", "kind": "Expense", "parent_id": ""},
+    )
+    _append_record(
+        workbook,
+        "Transactions",
+        {
+            "id": "projection-1",
+            "txn_date": "2026-01-01",
+            "kind": "Expense",
+            "amount": "50.00",
+            "account_id": "account-1",
+            "category_id": "category-1",
+            "source_type": "mixed_use_expense",
+            "source_id": "missing-source",
+            "created_at": "2026-01-01T00:00:00Z",
+        },
+    )
+    _append_record(
+        workbook,
+        "MixedUseExpenses",
+        {
+            "id": "source-1",
+            "txn_date": "2026-01-01",
+            "kind": "Expense",
+            "total_expense": "100.00",
+            "business_use_percentage": "50",
+            "allocated_amount": "50.00",
+            "account_id": "account-1",
+            "category_id": "category-1",
+            "allocation_rationale": "Rationale",
+            "linked_transaction_id": "projection-1",
+            "created_at": "2026-01-01T00:00:00Z",
+        },
+    )
+
+    with pytest.raises(StorageValidationError, match="unknown source"):
+        migrate_workbook(workbook)
+
+
 def test_v9_migration_backfills_source_tags_from_linked_projection() -> None:
     headers = dict(WORKSHEET_HEADERS)
     headers["MixedUseExpenses"] = tuple(
@@ -176,6 +245,7 @@ def test_v9_migration_backfills_source_tags_from_linked_projection() -> None:
             "source_type": "mixed_use_expense",
             "source_id": "source-1",
             "tag_ids": '["tag-1"]',
+            "description": "Allocation rationale: Rationale",
             "created_at": "2026-01-01T00:00:00Z",
         },
     )
@@ -192,6 +262,7 @@ def test_v9_migration_backfills_source_tags_from_linked_projection() -> None:
             "account_id": "account-1",
             "category_id": "category-1",
             "receipt_references": "",
+            "allocation_rationale": "Rationale",
             "linked_transaction_id": "projection-1",
             "created_at": "2026-01-01T00:00:00Z",
         },

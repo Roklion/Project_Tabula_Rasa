@@ -289,7 +289,14 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     source_tags = _backfill_mixed_use_source_tags(workbook)
     # This read-only validation also checks current relationship, domain, and
     # reference invariants before success is reported.
-    GoogleSheetsStorage(workbook)
+    storage = GoogleSheetsStorage(workbook)
+    storage.list_accounts(active_only=False, _force_refresh=True)
+    storage.list_categories(_force_refresh=True)
+    storage.list_payees(_force_refresh=True)
+    storage.list_tags(_force_refresh=True)
+    storage.list_transactions(_force_refresh=True)
+    storage.list_mileage_trips(_force_refresh=True)
+    storage.list_mixed_use_expenses(_force_refresh=True)
     return {
         "payees": int(payee_result.get("payees", 0)),
         "transactions": int(payee_result.get("transactions", 0)),

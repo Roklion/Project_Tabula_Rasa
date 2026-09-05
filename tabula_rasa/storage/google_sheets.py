@@ -269,14 +269,14 @@ def _looks_like_historical_workbook(
         VERSION_7_WORKSHEET_HEADERS,
         LEGACY_TAGS_WORKBOOK_HEADERS,
     )
-    for rows in values.values():
+    for title, rows in values.items():
         if not rows:
             continue
         headers = [str(value).strip() for value in rows[0]]
         if "tag_ids__migration_pending" in headers:
             return True
         if (
-            "MixedUseExpenses" in values
+            title == "MixedUseExpenses"
             and set(headers)
             == set(MIXED_USE_WORKSHEET_HEADERS) - {"tag_ids"}
             and len(headers) == len(set(headers))
@@ -284,12 +284,10 @@ def _looks_like_historical_workbook(
             # Version 9 mixed-use sources predate durable source tag IDs.
             return True
         if any(
-            title in values
-            and set(headers) == set(layout.get(title, ()))
+            set(headers) == set(layout.get(title, ()))
             and set(headers) != set(WORKSHEET_HEADERS.get(title, ()))
             and len(headers) == len(set(headers))
             for layout in historical_headers
-            for title in values
         ):
             return True
     # Legacy workbooks commonly omit one or more worksheets entirely. Their
