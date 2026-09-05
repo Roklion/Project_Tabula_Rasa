@@ -332,6 +332,21 @@ def test_marker_header_update_aborts_when_the_worksheet_changed() -> None:
     assert mixed.get_all_values() == before
 
 
+def test_marker_header_update_uses_original_header_snapshot() -> None:
+    headers = dict(WORKSHEET_HEADERS)
+    headers["MixedUseExpenses"] = tuple(
+        "tag_ids__migration_pending" if header == "tag_ids" else header
+        for header in headers["MixedUseExpenses"]
+    )
+    workbook = FakeWorkbook(headers)
+
+    migrate_workbook(workbook)
+
+    assert workbook.worksheet("MixedUseExpenses").rows[0] == list(
+        WORKSHEET_HEADERS["MixedUseExpenses"]
+    )
+
+
 def test_v9_migration_backfills_source_tags_from_linked_projection() -> None:
     headers = dict(WORKSHEET_HEADERS)
     headers["MixedUseExpenses"] = tuple(

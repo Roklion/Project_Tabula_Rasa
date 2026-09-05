@@ -97,12 +97,12 @@ def _append_columns(worksheet: Any, headers: list[str], additions: list[str]) ->
         return headers
     _assert_headers_unchanged(worksheet, headers)
     worksheet.add_cols(len(additions))
-    headers = [*headers, *additions]
+    updated_headers = [*headers, *additions]
     _assert_headers_unchanged(
-        worksheet, [*headers[:-len(additions)], *([""] * len(additions))]
+        worksheet, [*headers, *([""] * len(additions))]
     )
-    worksheet.update([headers], range_name="A1", raw=True)
-    return headers
+    worksheet.update([updated_headers], range_name="A1", raw=True)
+    return updated_headers
 
 
 def _assert_headers_unchanged(worksheet: Any, expected: list[str]) -> None:
@@ -369,7 +369,7 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
             _assert_headers_unchanged(
                 mixed,
                 [
-                    *mixed_headers[:-len(missing_columns)],
+                    *original_mixed_headers,
                     *([""] * len(missing_columns)),
                 ],
             )
