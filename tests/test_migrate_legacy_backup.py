@@ -462,6 +462,39 @@ def test_migration_validates_optional_payee_checksum() -> None:
         migrate_legacy_backup(legacy)
 
 
+def test_migration_rejects_colliding_optional_legacy_payees() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    legacy = _downgrade(
+        storage.export_backup_zip(
+            {"schema_version": 1, "business_profile_key": "test", "receipts": []}
+        ),
+        6,
+    )
+
+    def add_colliding_payees(files: dict[str, bytes], manifest: dict[str, Any]) -> None:
+        files["Payees.csv"] = _csv_bytes(
+            ("id", "name", "active", "created_at"),
+            [
+                {"id": "payee-1", "name": "Vendor", "active": "TRUE"},
+                {"id": "payee-2", "name": " vendor ", "active": "TRUE"},
+            ],
+        )
+        manifest["sha256"]["Payees.csv"] = hashlib.sha256(
+            files["Payees.csv"]
+        ).hexdigest()
+        manifest["row_counts"]["Payees"] = 2
+        manifest["worksheet_headers"]["Payees"] = [
+            "id",
+            "name",
+            "active",
+            "created_at",
+        ]
+
+    legacy = _rewrite_legacy(legacy, update_manifest=add_colliding_payees)
+    with pytest.raises(StorageValidationError, match="IDs and names must be unique"):
+        migrate_legacy_backup(legacy, profile_key="test")
+
+
 def test_migration_validates_legacy_receipt_checksum() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     legacy = _downgrade(
