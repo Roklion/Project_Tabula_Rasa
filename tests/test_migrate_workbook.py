@@ -7,9 +7,13 @@ import gspread
 import pytest
 
 import scripts.migrate_workbook as migration_script
-from scripts.migrate_workbook import migrate_workbook
+from scripts.migrate_workbook import (
+    _backfill_mixed_use_source_tags,
+    migrate_workbook,
+)
 from tabula_rasa.storage.google_sheets import (
     StorageInitializationError,
+    VERSION_3_WORKSHEET_HEADERS,
     VERSION_7_WORKSHEET_HEADERS,
     WORKSHEET_HEADERS,
     GoogleSheetsStorage,
@@ -34,6 +38,91 @@ def test_migrates_standard_pre_mixed_layout_to_current_headers() -> None:
     for title, headers in WORKSHEET_HEADERS.items():
         assert workbook.sheets[title].rows[0] == list(headers)
     GoogleSheetsStorage(workbook)
+
+
+def test_migrates_pre_receipt_v3_layout_to_current_headers() -> None:
+    workbook = FakeWorkbook(VERSION_3_WORKSHEET_HEADERS)
+    _append_record(
+        workbook,
+        "Accounts",
+        {
+            "id": "account-1",
+            "name": "Checking",
+            "type": "Bank",
+            "classification": "Asset",
+            "opening_balance": "0.00",
+            "active": "TRUE",
+            "created_at": "2026-01-01T00:00:00Z",
+        },
+    )
+    _append_record(
+        workbook,
+        "Categories",
+        {"id": "category-1", "name": "Office", "kind": "Expense"},
+    )
+    _append_record(
+        workbook,
+        "Transactions",
+        {
+            "id": "transaction-1",
+            "txn_date": "2026-01-01",
+            "kind": "Expense",
+            "amount": "50.00",
+            "account_id": "account-1",
+            "category_id": "category-1",
+            "payee": "Acme",
+            "description": "Supplies",
+            "reference": "ref-1",
+            "created_at": "2026-01-01T00:00:00Z",
+        },
+    )
+
+    result = migrate_workbook(workbook)
+
+    assert result["payees"] == 1
+    transaction_headers = workbook.sheets["Transactions"].rows[0]
+    assert set(transaction_headers) == set(WORKSHEET_HEADERS["Transactions"])
+    transaction = dict(
+        zip(transaction_headers, workbook.sheets["Transactions"].rows[1])
+    )
+    assert transaction["payee_id"]
+    assert transaction["description"] == "Supplies"
+    assert workbook.sheets["Payees"].rows[1][1] == "Acme"
+    GoogleSheetsStorage(workbook)
+
+
+def test_tag_backfill_rechecks_fresh_source_and_projection_before_writing() -> None:
+    workbook = FakeWorkbook(WORKSHEET_HEADERS)
+    source = workbook.sheets["MixedUseExpenses"]
+    transaction = workbook.sheets["Transactions"]
+    _append_record(
+        workbook,
+        "Transactions",
+        {"id": "projection-1", "tag_ids": '["tag-old"]'},
+    )
+    _append_record(
+        workbook,
+        "MixedUseExpenses",
+        {"id": "source-1", "linked_transaction_id": "projection-1"},
+    )
+    initial_source = source.get_all_values()
+    initial_transaction = transaction.get_all_values()
+    fresh_source = [list(row) for row in initial_source]
+    fresh_transaction = [list(row) for row in initial_transaction]
+    fresh_source[1][fresh_source[0].index("tag_ids")] = '["tag-new"]'
+    fresh_transaction[1][fresh_transaction[0].index("tag_ids")] = '["tag-new"]'
+    source.rows = fresh_source
+    source.batch_update = Mock(wraps=source.batch_update)
+    source.get_all_values = Mock(side_effect=[initial_source, fresh_source])
+    transaction.get_all_values = Mock(
+        side_effect=[initial_transaction, fresh_transaction]
+    )
+
+    result = _backfill_mixed_use_source_tags(workbook)
+
+    assert result == 0
+    assert source.rows[1][source.rows[0].index("tag_ids")] == '["tag-new"]'
+    source.batch_update.assert_not_called()
 
 
 def test_v9_migration_backfills_source_tags_from_linked_projection() -> None:
@@ -130,7 +219,10 @@ def test_populated_legacy_startup_is_read_only_and_actionable() -> None:
     with (
         patch("tabula_rasa.storage.google_sheets.Credentials.from_service_account_info", return_value=object()),
         patch.object(gspread, "authorize", return_value=client),
-        pytest.raises(StorageInitializationError, match="migrate_workbook.py"),
+        pytest.raises(
+            StorageInitializationError,
+            match=r"migrate_workbook\.py --profile PROFILE_KEY",
+        ),
     ):
         GoogleSheetsStorage.from_secrets(
             {"spreadsheet_id": "sheet-1", "gcp_service_account": {"type": "service_account"}}
@@ -177,7 +269,10 @@ def test_populated_v9_startup_is_read_only_and_actionable() -> None:
     with (
         patch("tabula_rasa.storage.google_sheets.Credentials.from_service_account_info", return_value=object()),
         patch.object(gspread, "authorize", return_value=client),
-        pytest.raises(StorageInitializationError, match="migrate_workbook.py"),
+        pytest.raises(
+            StorageInitializationError,
+            match=r"migrate_workbook\.py --profile PROFILE_KEY",
+        ),
     ):
         GoogleSheetsStorage.from_secrets(
             {"spreadsheet_id": "sheet-1", "gcp_service_account": {"type": "service_account"}}

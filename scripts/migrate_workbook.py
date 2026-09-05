@@ -26,6 +26,7 @@ from tabula_rasa.storage.google_sheets import (  # noqa: E402
     PRE_MIXED_USE_WORKSHEET_HEADERS,
     SHEETS_SCOPE,
     LEGACY_TAGS_WORKBOOK_HEADERS,
+    VERSION_3_WORKSHEET_HEADERS,
     VERSION_5_WORKSHEET_HEADERS,
     VERSION_6_WORKSHEET_HEADERS,
     VERSION_7_WORKSHEET_HEADERS,
@@ -111,6 +112,7 @@ def _preflight(workbook: Any) -> dict[str, list[list[Any]]]:
             frozenset(WORKSHEET_HEADERS["Categories"]),
         },
         "Transactions": {
+            frozenset(VERSION_3_WORKSHEET_HEADERS["Transactions"]),
             frozenset(VERSION_5_WORKSHEET_HEADERS["Transactions"]),
             frozenset(VERSION_6_WORKSHEET_HEADERS["Transactions"]),
             frozenset(VERSION_7_WORKSHEET_HEADERS["Transactions"]),
@@ -119,6 +121,7 @@ def _preflight(workbook: Any) -> dict[str, list[list[Any]]]:
             frozenset(WORKSHEET_HEADERS["Transactions"]),
         },
         "Mileage": {
+            frozenset(VERSION_3_WORKSHEET_HEADERS["Mileage"]),
             frozenset(VERSION_5_WORKSHEET_HEADERS["Mileage"]),
             frozenset(LEGACY_TAGS_WORKBOOK_HEADERS["Mileage"]),
             frozenset(WORKSHEET_HEADERS["Mileage"]),
@@ -158,54 +161,76 @@ def _preflight(workbook: Any) -> dict[str, list[list[Any]]]:
 def _backfill_mixed_use_source_tags(workbook: Any) -> int:
     source_sheet = workbook.worksheet("MixedUseExpenses")
     transaction_sheet = workbook.worksheet("Transactions")
-    source_values = source_sheet.get_all_values()
-    transaction_values = transaction_sheet.get_all_values()
-    source_headers = _headers(source_values)
-    transaction_headers = _headers(transaction_values)
-    source_tag_header = (
-        "tag_ids"
-        if "tag_ids" in source_headers
-        else LEGACY_MIXED_USE_TAG_MIGRATION_HEADER
+    def collect_updates(
+        source_values: list[list[Any]],
+        transaction_values: list[list[Any]],
+    ) -> tuple[str, list[str], list[dict[str, object]]] | None:
+        source_headers = _headers(source_values)
+        transaction_headers = _headers(transaction_values)
+        source_tag_header = (
+            "tag_ids"
+            if "tag_ids" in source_headers
+            else LEGACY_MIXED_USE_TAG_MIGRATION_HEADER
+        )
+        required = {
+            source_tag_header,
+            "linked_transaction_id",
+            "id",
+        }
+        if not required.issubset(source_headers) or not {
+            "id",
+            "tag_ids",
+        }.issubset(transaction_headers):
+            return None
+        source_tag_index = source_headers.index(source_tag_header)
+        linked_index = source_headers.index("linked_transaction_id")
+        transaction_id_index = transaction_headers.index("id")
+        transaction_tag_index = transaction_headers.index("tag_ids")
+        transaction_tags = {
+            str(row[transaction_id_index]).strip(): str(
+                row[transaction_tag_index]
+            ).strip()
+            for row in transaction_values[1:]
+            if len(row) > transaction_id_index
+            and len(row) > transaction_tag_index
+            and str(row[transaction_id_index]).strip()
+        }
+        updates: list[dict[str, object]] = []
+        for row_number, row in enumerate(source_values[1:], start=2):
+            padded = list(row) + [""] * (len(source_headers) - len(row))
+            if str(padded[source_tag_index]).strip():
+                continue
+            tags = transaction_tags.get(str(padded[linked_index]).strip(), "")
+            if tags:
+                updates.append(
+                    {
+                        "range": gspread.utils.rowcol_to_a1(
+                            row_number, source_tag_index + 1
+                        ),
+                        "values": [[tags]],
+                    }
+                )
+        return source_tag_header, source_headers, updates
+
+    collected = collect_updates(
+        source_sheet.get_all_values(), transaction_sheet.get_all_values()
     )
-    required = {
-        source_tag_header,
-        "linked_transaction_id",
-        "id",
-    }
-    if not required.issubset(source_headers) or not {
-        "id",
-        "tag_ids",
-    }.issubset(transaction_headers):
+    if collected is None:
         return 0
-    source_tag_index = source_headers.index(source_tag_header)
-    linked_index = source_headers.index("linked_transaction_id")
-    transaction_id_index = transaction_headers.index("id")
-    transaction_tag_index = transaction_headers.index("tag_ids")
-    transaction_tags = {
-        str(row[transaction_id_index]).strip(): str(row[transaction_tag_index]).strip()
-        for row in transaction_values[1:]
-        if len(row) > transaction_id_index
-        and len(row) > transaction_tag_index
-        and str(row[transaction_id_index]).strip()
-    }
-    updates: list[dict[str, object]] = []
-    for row_number, row in enumerate(source_values[1:], start=2):
-        padded = list(row) + [""] * (len(source_headers) - len(row))
-        if str(padded[source_tag_index]).strip():
-            continue
-        tags = transaction_tags.get(str(padded[linked_index]).strip(), "")
-        if tags:
-            updates.append(
-                {
-                    "range": gspread.utils.rowcol_to_a1(
-                        row_number, source_tag_index + 1
-                    ),
-                    "values": [[tags]],
-                }
-            )
+    source_tag_header, source_headers, updates = collected
+    if updates:
+        # Re-read both worksheets immediately before writing so an edit made
+        # after the initial snapshot cannot be overwritten by stale backfill.
+        collected = collect_updates(
+            source_sheet.get_all_values(), transaction_sheet.get_all_values()
+        )
+        if collected is None:
+            return 0
+        source_tag_header, source_headers, updates = collected
     if updates:
         source_sheet.batch_update(updates, raw=True)
     if source_tag_header == LEGACY_MIXED_USE_TAG_MIGRATION_HEADER:
+        source_tag_index = source_headers.index(source_tag_header)
         source_headers[source_tag_index] = "tag_ids"
         source_sheet.update([source_headers], range_name="A1", raw=True)
     return len(updates)

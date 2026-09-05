@@ -263,6 +263,7 @@ def _looks_like_historical_workbook(
 ) -> bool:
     """Return whether headers match a supported pre-current workbook layout."""
     historical_headers = (
+        VERSION_3_WORKSHEET_HEADERS,
         PRE_PAYEE_WORKSHEET_HEADERS,
         VERSION_6_WORKSHEET_HEADERS,
         VERSION_7_WORKSHEET_HEADERS,
@@ -1245,8 +1246,10 @@ class GoogleSheetsStorage:
                 if _looks_like_historical_workbook(values):
                     raise StorageInitializationError(
                         "This workbook uses an older Tabula Rasa schema. "
-                        "Run `python scripts/migrate_workbook.py` for the "
-                        "selected workbook, then restart the application."
+                        "Run `python scripts/migrate_workbook.py --profile "
+                        "PROFILE_KEY` for the selected workbook, replacing "
+                        "PROFILE_KEY with its business-profile key, then "
+                        "restart the application."
                     ) from exc
                 raise
         except GoogleAuthError as exc:
