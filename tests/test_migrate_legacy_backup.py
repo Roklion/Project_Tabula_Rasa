@@ -4,11 +4,18 @@ import csv
 import hashlib
 import io
 import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import zipfile
 
 import pytest
 
-from scripts.migrate_legacy_backup import SOURCE_HEADERS, migrate_legacy_backup
+from scripts.migrate_legacy_backup import (
+    SOURCE_HEADERS,
+    default_output_path,
+    migrate_backup_file,
+    migrate_legacy_backup,
+)
 from tabula_rasa.receipt_manifest import build_receipt_manifest
 from tabula_rasa.storage import GoogleSheetsStorage, StorageValidationError
 from tabula_rasa.storage.google_sheets import WORKSHEET_HEADERS
@@ -106,6 +113,39 @@ def test_v9_projection_tags_are_copied_to_mixed_use_source() -> None:
     assert target.get_mixed_use_expense(source["id"])["tag_ids"] == [tag["id"]]
 
 
+def test_v8_transaction_and_mileage_tags_are_preserved() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    account = storage.create_account("Checking", "Bank")
+    category = storage.create_category("Office", "Expense")
+    tag = storage.create_tag("Project")
+    transaction = storage.create_transaction(
+        txn_date="2026-09-01",
+        kind="Expense",
+        amount="10.00",
+        account_id=account["id"],
+        category_id=category["id"],
+        tag_ids=[tag["id"]],
+    )
+    mileage = storage.create_mileage_trip(
+        trip_date="2026-09-02",
+        miles="5.0",
+        start_location="Office",
+        destination="Client",
+        business_purpose="Visit",
+        tag_ids=[tag["id"]],
+    )
+    current = storage.export_backup_zip(
+        {"schema_version": 1, "business_profile_key": "test", "receipts": []}
+    )
+    converted = migrate_legacy_backup(_downgrade(current, 8), profile_key="test")
+    target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    target.restore_backup_zip(converted)
+    assert target.list_transactions()[0]["id"] == transaction["id"]
+    assert target.list_transactions()[0]["tag_ids"] == [tag["id"]]
+    assert target.list_mileage_trips()[0]["id"] == mileage["id"]
+    assert target.list_mileage_trips()[0]["tag_ids"] == [tag["id"]]
+
+
 def test_v6_payee_text_and_hierarchy_become_current_records() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     parent = storage.create_account("Operating", "Bank")
@@ -182,3 +222,45 @@ def test_application_rejects_legacy_archive_before_restore_writes() -> None:
     with pytest.raises(StorageValidationError, match="migrate_legacy_backup"):
         target.restore_backup_zip(legacy)
     assert target.list_accounts(active_only=False) == []
+
+
+def test_v1_account_normalization_and_source_checksum_are_preserved() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    account = storage.create_account("Loan", "Short-term debt")
+    current = storage.export_backup_zip(
+        {"schema_version": 1, "business_profile_key": "test", "receipts": []}
+    )
+    legacy = _downgrade(current, 1)
+    converted = migrate_legacy_backup(legacy, profile_key="test")
+    with zipfile.ZipFile(io.BytesIO(converted)) as archive:
+        accounts = list(csv.DictReader(io.StringIO(archive.read("Accounts.csv").decode())))
+        manifest = json.loads(archive.read("manifest.json"))
+    assert accounts[0]["id"] == account["id"]
+    assert accounts[0]["classification"] == "Liability"
+    assert manifest["conversion"]["source_archive_sha256"] == hashlib.sha256(legacy).hexdigest()
+
+
+def test_migration_rejects_tampered_csv_and_never_overwrites_source() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    current = storage.export_backup_zip(
+        {"schema_version": 1, "business_profile_key": "test", "receipts": []}
+    )
+    legacy = _downgrade(current, 1)
+    output = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(legacy)) as source, zipfile.ZipFile(output, "w") as destination:
+        for name in source.namelist():
+            content = source.read(name)
+            if name == "Accounts.csv":
+                content += b"tampered,row\n"
+            destination.writestr(name, content)
+    with pytest.raises(StorageValidationError, match="checksum"):
+        migrate_legacy_backup(output.getvalue())
+    with TemporaryDirectory() as directory:
+        source_path = Path(directory) / "backup.zip"
+        source_path.write_bytes(legacy)
+        destination = default_output_path(source_path)
+        destination.write_bytes(b"existing")
+        with pytest.raises(FileExistsError):
+            migrate_backup_file(source_path)
+        assert source_path.read_bytes() == legacy
+        assert destination.read_bytes() == b"existing"

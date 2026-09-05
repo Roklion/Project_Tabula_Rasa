@@ -462,4 +462,4 @@ retry; identity and checksum rules prevent unnecessary duplicate uploads.
 | Workbook restore | scripts/restore_google_sheets_backup.py |
 | Receipt preparation and manifest | tabula_rasa/receipt_backfill.py and tabula_rasa/receipt_manifest.py |
 | Receipt recovery and Drive-ID remapping | scripts/recover_synology_receipts.py and tabula_rasa/receipt_recovery.py |
-| Format-1 conversion | scripts/convert_backup_v1_to_v2.py |
+| Legacy archive migration (v1–v9 to v10) | scripts/migrate_legacy_backup.py |
