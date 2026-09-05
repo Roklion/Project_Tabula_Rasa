@@ -74,15 +74,21 @@ SOURCE_HEADERS: dict[int, dict[str, tuple[str, ...]]] = {
 }
 
 
-def _read_csv(content: bytes, title: str, expected: tuple[str, ...]) -> list[dict[str, str]]:
+def _read_csv(
+    content: bytes,
+    title: str,
+    expected: tuple[str, ...],
+    alternatives: tuple[tuple[str, ...], ...] = (),
+) -> list[dict[str, str]]:
     try:
         rows = list(csv.reader(io.StringIO(content.decode("utf-8"), newline="")))
     except (UnicodeDecodeError, csv.Error) as exc:
         raise StorageValidationError(f"{title} backup CSV is invalid") from exc
-    if not rows or tuple(rows[0]) != expected:
+    actual_headers = tuple(rows[0]) if rows else ()
+    if not rows or actual_headers not in (expected, *alternatives):
         raise StorageValidationError(f"{title} backup headers are invalid")
     return [
-        dict(zip(expected, row + [""] * (len(expected) - len(row))))
+        dict(zip(actual_headers, row + [""] * (len(actual_headers) - len(row))))
         for row in rows[1:]
         if any(value.strip() for value in row)
     ]
@@ -98,10 +104,13 @@ def _read_source(backup: bytes) -> tuple[int, dict[str, Any], dict[str, list[dic
             if version not in SOURCE_HEADERS:
                 raise StorageValidationError("Only backup formats 1 through 9 can be migrated")
             schemas = SOURCE_HEADERS[version]
+            names = set(archive.namelist())
             expected_names = {f"{title}.csv" for title in schemas} | {"manifest.json"}
+            optional_payees = version < 7 and "Payees.csv" in names
+            if optional_payees:
+                expected_names.add("Payees.csv")
             if version >= 5:
                 expected_names.add("receipts.json")
-            names = set(archive.namelist())
             if names != expected_names:
                 raise StorageValidationError("Backup contains unexpected legacy files")
             tables = {}
@@ -112,10 +121,16 @@ def _read_source(backup: bytes) -> tuple[int, dict[str, Any], dict[str, list[dic
                 expected_hash = checksums.get(f"{title}.csv")
                 if expected_hash and hashlib.sha256(content).hexdigest() != expected_hash:
                     raise StorageValidationError(f"{title} backup checksum does not match")
-                rows = _read_csv(content, title, headers)
+                alternatives = ()
+                if version in (4, 5) and title in {"Accounts", "Categories"}:
+                    alternatives = ((*headers, "parent_id"),)
+                rows = _read_csv(content, title, headers, alternatives)
                 if row_counts.get(title) is not None and row_counts[title] != len(rows):
                     raise StorageValidationError(f"{title} backup row count does not match")
                 tables[title] = rows
+            if optional_payees:
+                content = archive.read("Payees.csv")
+                tables["Payees"] = _read_csv(content, "Payees", _PAYEES)
             receipts = archive.read("receipts.json") if version >= 5 else None
     except (KeyError, json.JSONDecodeError, UnicodeDecodeError, zipfile.BadZipFile, OSError) as exc:
         raise StorageValidationError("Backup is not a readable legacy ZIP archive") from exc
@@ -163,6 +178,16 @@ def _payees_and_transactions(
             row["active"] = _active(row.get("active", "TRUE"), "Payee")
         return
     payees: dict[str, dict[str, str]] = {}
+    for source in tables.get("Payees", []):
+        name = " ".join(str(source.get("name", "")).split())
+        key = normalize_payee_name(name)
+        if key:
+            payees[key] = {
+                "id": str(source.get("id", "")).strip(),
+                "name": name,
+                "active": _active(source.get("active", "TRUE"), "Payee"),
+                "created_at": str(source.get("created_at") or ""),
+            }
     fallback_created_at = str(manifest.get("backup_time") or "1970-01-01T00:00:00+00:00")
     for row in tables["Transactions"]:
         name = str(row.pop("payee", "")).strip()

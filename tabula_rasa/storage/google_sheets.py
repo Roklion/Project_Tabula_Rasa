@@ -672,6 +672,8 @@ def _parse_backup_zip(
                 title: archive.read(f"{title}.csv") for title in backup_headers
             }
             receipt_manifest_bytes = archive.read("receipts.json")
+    except StorageValidationError:
+        raise
     except (zipfile.BadZipFile, OSError, RuntimeError) as exc:
         raise StorageValidationError("Backup is not a readable ZIP archive") from exc
 

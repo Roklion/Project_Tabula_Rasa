@@ -72,19 +72,14 @@ for each source, with source_type=mixed_use_expense and source_id set to the
 source ID; its amount is the allocated business amount only. The source's
 linked_transaction_id must point back to that projection. Current-format
 backup validation rejects missing, orphaned, duplicated, or inconsistent
-source/projection relationships. Formats 2 through 8 restore with no
-mixed-use source records or linkage.
+source/projection relationships. Legacy formats 2 through 8 contain no
+mixed-use source records or linkage; convert them to v10 before application
+restore.
 
-Before upgrading an existing workbook, run the one-time payee migration:
-
-```text
-python scripts/migrate_payees.py --secrets .streamlit/secrets.toml --profile PROFILE_KEY
-```
-
-It deduplicates legacy payee text using normalized Unicode and whitespace,
-updates transaction references, and is safe to rerun. Older backups are
-accepted during restore; their payee text is mapped only to payees already in
-the target workbook, otherwise the reference is left unset.
+For a legacy workbook schema, follow the explicit workbook migration procedure
+in the setup and architecture guides. Payee text embedded in a legacy backup
+is converted by the archive migration command above; it is not resolved during
+application restore.
 
 The migration command preserves the source archive and never overwrites it.
 Migration is intentionally an operator-run conversion for standard historical
@@ -277,8 +272,9 @@ The recovery order is:
 4. Verify referenced receipts through remapped Drive IDs.
 5. Verify unreferenced receipts remain available without automatic attachment.
 
-Formats 2, 3, and pre-inventory format 4 can restore ledger data but are
-identified as ledger-only sources for receipt recovery.
+Formats 2, 3, and pre-inventory format 4 are ledger-only migration sources;
+they must first be converted to v10 before any application restore or receipt
+recovery operation.
 
 ## Convert a legacy archive
 

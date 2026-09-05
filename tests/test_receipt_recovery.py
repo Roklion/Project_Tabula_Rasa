@@ -1174,7 +1174,7 @@ def test_recovery_reports_drive_conflict_and_continues() -> None:
     assert report["skipped"] == 1
 
 
-def test_recovery_identifies_pre_manifest_v4_as_ledger_only() -> None:
+def test_recovery_rejects_pre_manifest_v4_until_migrated() -> None:
     content = b"receipt"
     reference = _reference(1, content)
     backup, target, _ = _backup_with_receipts([reference])
@@ -1244,8 +1244,8 @@ def test_recovery_identifies_pre_manifest_v4_as_ledger_only() -> None:
             )
     drive = Mock()
     with TemporaryDirectory() as directory, pytest.raises(
-        ReceiptRecoveryError,
-        match="ledger-only",
+        StorageError,
+        match="migrate_legacy_backup",
     ):
         recover_receipts_from_synology(
             ledger_only.getvalue(),
