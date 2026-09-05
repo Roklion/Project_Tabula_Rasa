@@ -164,6 +164,14 @@ Normal Edit, Delete, Copy, bulk actions, and receipt mutation cannot change it.
 Mixed-use source copy and bulk source editing are not part of #119; they are
 follow-up work tracked by #149.
 
+The **Mixed-use Expense Log** is a single-row-selectable table above the
+editor. Select a row to edit that source; the table selection is tied to the
+source's stable ID, not to a displayed row value. The selection is scoped to
+the active business profile and current workbook revision, so a changed,
+removed, or stale selection is cleared safely. The tab starts in **Add
+mixed-use expense** mode. Use **Add new mixed-use expense** to clear an edit
+selection and return to Add mode.
+
 ### View and edit the ledger
 
 The ledger opens latest-date-first. Its controls appear in this order:

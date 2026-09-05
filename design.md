@@ -510,6 +510,17 @@ workflow as ordinary transactions. Mixed-use source copy and bulk source
 editing are intentionally not implemented; they are follow-up work tracked by
 #149.
 
+The Mixed-use expenses tab shows a single-row-selectable **Mixed-use Expense
+Log** before its editor. The table's displayed row position is translated to
+the selected source's stable ID; no displayed value is used as an edit or
+delete key. The selected source ID and its table scope are profile-local and
+include the visible source IDs and workbook data revision. A changed or
+invalid scope clears the selection and edit baseline, and a new table
+generation prevents an old table selection from being replayed. The tab opens
+in clearly labeled **Add mixed-use expense** mode. Selecting a row changes to
+**Edit mixed-use expense**; **Add new mixed-use expense** clears the selection
+and returns to Add mode.
+
 #### Add transaction contract
 
 The form presents:

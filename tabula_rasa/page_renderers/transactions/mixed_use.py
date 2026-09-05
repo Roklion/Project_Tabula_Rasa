@@ -145,8 +145,56 @@ def _mixed_use_receipt_recovery_active(
         )
     )
 
-def _source_label(source: Mapping[str, object], account_paths: Mapping[str, str]) -> str:
-    return f"{source.get('txn_date', '')} — {source.get('payee', '') or source.get('description', '') or 'No payee'} — {account_paths.get(str(source.get('account_id')), 'Unknown account')} — {'$'}{source.get('total_expense', '0.00')} — {str(source.get('id', ''))[:8]}"
+def _mixed_use_selection_ids(
+    source_ids: Sequence[str], selected_rows: Sequence[int]
+) -> tuple[str, ...]:
+    """Map dataframe row positions to stable mixed-use source IDs."""
+    return tuple(
+        str(source_ids[row])
+        for row in selected_rows
+        if isinstance(row, int) and 0 <= row < len(source_ids)
+    )
+
+
+def _clear_mixed_use_selection(
+    state: MutableMapping[str, object],
+    profile: str,
+    *,
+    clear_baseline: bool = True,
+) -> None:
+    """Clear the selected source and rotate the dataframe widget identity."""
+    state[_key(profile, "selected_source_id")] = ""
+    if clear_baseline:
+        state.pop(_key(profile, "edit_baseline"), None)
+        state.pop(_key(profile, "edit_baseline_source_id"), None)
+    generation_key = _key(profile, "table_generation")
+    state[generation_key] = int(state.get(generation_key, 0)) + 1
+
+
+def _mixed_use_log_rows(
+    sources: Sequence[Mapping[str, object]],
+    account_paths: Mapping[str, str],
+    category_paths: Mapping[str, str],
+) -> list[dict[str, str]]:
+    """Build display-only rows while keeping source IDs out of the table."""
+    return [
+        {
+            "Date": str(item.get("txn_date", "")),
+            "Payee / description": str(
+                item.get("payee") or item.get("description", "")
+            ),
+            "Account": account_paths.get(str(item.get("account_id", "")), "Unknown"),
+            "Category": category_paths.get(
+                str(item.get("category_id", "")), "Unknown"
+            ),
+            "Total": f"${item.get('total_expense', '0.00')}",
+            "Business %": str(item.get("business_use_percentage", "")),
+            "Allocated": f"${item.get('allocated_amount', '0.00')}",
+            "Rationale": str(item.get("allocation_rationale", "")),
+            "Status": str(item.get("ledger_status", "linked")),
+        }
+        for item in sources
+    ]
 
 
 def _incomplete_source_ids(
@@ -294,13 +342,60 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
     baseline_id_key = _key(profile, "edit_baseline_source_id")
     pending_source_key = _key(profile, "pending_source_id")
     pending_transaction_key = _key(profile, "pending_transaction_id")
+    source_ids = [str(item["id"]) for item in sources]
+    selection_scope_key = _key(profile, "selection_scope")
+    selection_scope = (
+        profile,
+        tuple(source_ids),
+        int(st.session_state.get("workbook_data_revision", 0)),
+    )
+    if st.session_state.get(selection_scope_key) != selection_scope:
+        _clear_mixed_use_selection(st.session_state, profile)
+        st.session_state[selection_scope_key] = selection_scope
+    st.session_state.setdefault(selected_key, "")
     selected_id = str(st.session_state.get(selected_key, "") or "")
-    if selected_id not in source_by_id:
+    if selected_id and selected_id not in source_by_id:
+        _clear_mixed_use_selection(st.session_state, profile)
         selected_id = ""
-        st.session_state.pop(selected_key, None)
-    choices = [""] + list(source_by_id)
+
+    st.markdown("#### Mixed-use Expense Log")
     if sources:
-        selected_id = st.selectbox("Edit an existing mixed-use expense (optional)", choices, index=choices.index(selected_id), format_func=lambda value: "Create new mixed-use expense" if not value else _source_label(source_by_id[value], account_paths), key=selected_key)
+        st.caption(
+            "Select one row to edit it. The table is the source of truth for "
+            "the edit target."
+        )
+        table_key = (
+            f"mixed_use_log_{profile}_"
+            f"{st.session_state.get(_key(profile, 'table_generation'), 0)}"
+        )
+
+        def select_mixed_use_source() -> None:
+            selected_rows = st.session_state[table_key].selection.rows
+            selected = _mixed_use_selection_ids(source_ids, selected_rows)
+            if selected:
+                st.session_state[selected_key] = selected[0]
+            else:
+                _clear_mixed_use_selection(st.session_state, profile)
+
+        st.dataframe(
+            _mixed_use_log_rows(sources, account_paths, category_paths),
+            hide_index=True,
+            width="stretch",
+            key=table_key,
+            on_select=select_mixed_use_source,
+            selection_mode="single-row",
+        )
+        selected_id = str(st.session_state.get(selected_key, "") or "")
+        if selected_id:
+            if st.button(
+                "Add new mixed-use expense",
+                key=_key(profile, "clear_selection"),
+            ):
+                _clear_mixed_use_selection(st.session_state, profile)
+                st.session_state[selection_scope_key] = selection_scope
+                st.rerun()
+    else:
+        st.info("No mixed-use expenses exist for this business profile.")
     source = source_by_id.get(selected_id)
     mixed_use_receipt_recovery = _mixed_use_receipt_recovery_active(
         st.session_state,
@@ -368,7 +463,18 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         return
     left, right = st.columns([3, 2])
     with left:
-        st.markdown("#### Add / edit source")
+        if source:
+            st.markdown("#### Edit mixed-use expense")
+            st.caption(
+                "Editing the selected source updates its existing ledger "
+                "projection."
+            )
+        else:
+            st.markdown("#### Add mixed-use expense")
+            st.caption(
+                "Add mode creates a new source and one linked ledger "
+                "projection."
+            )
         txn_date = st.date_input("Date", date.fromisoformat(str(defaults.get("txn_date", date.today().isoformat()))), key=f"mixed_date_{scope}")
         c1, c2 = st.columns(2)
         account_id = c1.selectbox("Account", account_ids, index=account_ids.index(str(defaults.get("account_id", account_ids[0]))) if str(defaults.get("account_id", account_ids[0])) in account_ids else 0, format_func=account_paths.get, key=f"mixed_account_{scope}")
@@ -543,12 +649,6 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                     context.confirmed_write(action, payload, operation, success, on_success=reset_after_success, on_confirmed=process_mixed_receipts, report_error=save_error.error)
     with right:
         _render_preview(mixed_use_preview(txn_date=txn_date, account=account_paths.get(account_id, account_id), payee=payee_by_id.get(payee_id, new_payee_name), category=category_paths.get(category_id, category_id), description=description, total_expense=total_expense, business_use_percentage=business_use_percentage, allocation_rationale=rationale))
-    st.markdown("#### Mixed-use Expense Log")
-    if not sources:
-        st.info("No mixed-use expenses exist for this business profile.")
-    else:
-        rows = [{"Date": item["txn_date"], "Payee / description": item.get("payee") or item.get("description", ""), "Account": account_paths.get(item.get("account_id", ""), "Unknown"), "Category": category_paths.get(item.get("category_id", ""), "Unknown"), "Total": f"{'$'}{item['total_expense']}", "Business %": item["business_use_percentage"], "Allocated": f"{'$'}{item['allocated_amount']}", "Rationale": item["allocation_rationale"], "Status": item.get("ledger_status", "linked")} for item in sources]
-        st.dataframe(rows, hide_index=True, width="stretch")
     if source:
         linked_transactions = context.storage.list_transactions()
         linked = next(

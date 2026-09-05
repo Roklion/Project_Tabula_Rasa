@@ -593,6 +593,30 @@ def reset_profile_presentation_state(
         "transaction_bulk_selection_generation",
         "transaction_ledger_mode_generation",
     }
+    mixed_use_keys = {
+        f"mixed_use_selected_source_id_{previous_profile_key}",
+        f"mixed_use_selection_scope_{previous_profile_key}",
+        f"mixed_use_table_generation_{previous_profile_key}",
+        f"mixed_use_edit_baseline_source_id_{previous_profile_key}",
+        f"mixed_use_clear_selection_{previous_profile_key}",
+        f"mixed_use_form_reset_{previous_profile_key}",
+    }
+    mixed_use_prefixes = (
+        f"mixed_use_log_{previous_profile_key}_",
+        f"mixed_use_edit_baseline_{previous_profile_key}",
+        f"mixed_confirm_delete_{previous_profile_key}_",
+        f"mixed_date_{previous_profile_key}_",
+        f"mixed_account_{previous_profile_key}_",
+        f"mixed_category_{previous_profile_key}_",
+        f"mixed_payee_{previous_profile_key}_",
+        f"mixed_reference_{previous_profile_key}_",
+        f"mixed_description_{previous_profile_key}_",
+        f"mixed_tags_{previous_profile_key}_",
+        f"mixed_total_{previous_profile_key}_",
+        f"mixed_percentage_{previous_profile_key}_",
+        f"mixed_rationale_{previous_profile_key}_",
+        f"mixed_receipts_{previous_profile_key}_",
+    )
     prefixes = (
         "add_transaction_",
         "add_mileage_",
@@ -630,7 +654,12 @@ def reset_profile_presentation_state(
         "transaction_copy_generation_",
     )
     for key in list(session_state):
-        if key in keys or key.startswith(prefixes):
+        if (
+            key in keys
+            or key in mixed_use_keys
+            or key.startswith(prefixes)
+            or key.startswith(mixed_use_prefixes)
+        ):
             session_state.pop(key, None)
 
 
