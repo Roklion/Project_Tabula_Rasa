@@ -29,6 +29,7 @@ from tabula_rasa.storage.google_sheets import (
     FIXED_TYPE_CLASSIFICATIONS,
     WORKSHEET_HEADERS,
     _legacy_payee_id,
+    _normalize_tag_ids,
     _validate_payee_records,
     normalize_payee_name,
 )
@@ -289,6 +290,8 @@ def _current_tables(version: int, manifest: dict[str, Any], source: dict[str, li
 
     transactions_by_id = {str(row.get("id")): row for row in tables["Transactions"]}
     for source_row in tables["MixedUseExpenses"]:
+        if _normalize_tag_ids(source_row.get("tag_ids", "")):
+            continue
         linked = transactions_by_id.get(str(source_row.get("linked_transaction_id")))
         if linked is not None:
             source_row["tag_ids"] = linked.get("tag_ids", "[]")
