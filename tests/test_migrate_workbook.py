@@ -136,6 +136,36 @@ def test_historical_detection_matches_headers_to_their_worksheet() -> None:
     assert not _looks_like_historical_workbook(values)
 
 
+def test_empty_worksheet_not_in_historical_layout_is_not_historical() -> None:
+    values = {
+        "Accounts": [list(WORKSHEET_HEADERS["Accounts"])],
+        "MixedUseExpenses": [[]],
+    }
+
+    assert not _looks_like_historical_workbook(values)
+
+
+def test_migration_validates_hierarchy_before_reporting_success() -> None:
+    workbook = FakeWorkbook(WORKSHEET_HEADERS)
+    _append_record(
+        workbook,
+        "Accounts",
+        {
+            "id": "account-1",
+            "name": "Checking",
+            "type": "Bank",
+            "classification": "Asset",
+            "opening_balance": "0.00",
+            "active": "TRUE",
+            "created_at": "2026-01-01T00:00:00Z",
+            "parent_id": "missing-parent",
+        },
+    )
+
+    with pytest.raises(StorageValidationError, match="does not exist"):
+        migrate_workbook(workbook)
+
+
 def test_migration_validates_relationships_before_reporting_success() -> None:
     workbook = FakeWorkbook(WORKSHEET_HEADERS)
     _append_record(

@@ -32,6 +32,7 @@ from tabula_rasa.storage.google_sheets import (  # noqa: E402
     VERSION_7_WORKSHEET_HEADERS,
     WORKSHEET_HEADERS,
     GoogleSheetsStorage,
+    _validate_hierarchy_records,
 )
 from scripts.migrate_payees import migrate_workbook as migrate_payees  # noqa: E402
 
@@ -49,13 +50,18 @@ def _headers(rows: list[list[Any]]) -> list[str]:
     return [str(value).strip() for value in rows[0]] if rows else []
 
 
-def _ensure_sheet(workbook: Any, title: str) -> Any:
-    for worksheet in workbook.worksheets():
+def _ensure_sheet(
+    workbook: Any, title: str, worksheets: list[Any] | None = None
+) -> Any:
+    sheets = worksheets if worksheets is not None else workbook.worksheets()
+    for worksheet in sheets:
         if worksheet.title == title:
             return worksheet
     headers = WORKSHEET_HEADERS[title]
     worksheet = workbook.add_worksheet(title=title, rows=1000, cols=len(headers))
     worksheet.update([list(headers)], range_name="A1", raw=True)
+    if worksheets is not None:
+        worksheets.append(worksheet)
     return worksheet
 
 
@@ -239,6 +245,7 @@ def _backfill_mixed_use_source_tags(workbook: Any) -> int:
 def migrate_workbook(workbook: Any) -> dict[str, int]:
     """Upgrade one recognized standard historical workbook in place."""
     initial = _preflight(workbook)
+    worksheets = workbook.worksheets()
     if not any(
         str(value).strip()
         for rows in initial.values()
@@ -246,7 +253,7 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
         for value in row
     ):
         for title, headers in WORKSHEET_HEADERS.items():
-            worksheet = _ensure_sheet(workbook, title)
+            worksheet = _ensure_sheet(workbook, title, worksheets)
             _ensure_headers(worksheet, headers)
         GoogleSheetsStorage(workbook)
         return {"worksheets": len(WORKSHEET_HEADERS), "source_tags": 0}
@@ -254,11 +261,11 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     # Core hierarchy columns were introduced together in the standard v6
     # layout. Existing rows are extended by Sheets when columns are appended.
     for title in ("Accounts", "Categories"):
-        worksheet = _ensure_sheet(workbook, title)
+        worksheet = _ensure_sheet(workbook, title, worksheets)
         headers = _ensure_headers(worksheet, VERSION_5_WORKSHEET_HEADERS[title])
         _append_columns(worksheet, headers, ["parent_id"])
 
-    transactions = _ensure_sheet(workbook, "Transactions")
+    transactions = _ensure_sheet(workbook, "Transactions", worksheets)
     transaction_headers = _ensure_headers(
         transactions, PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"]
     )
@@ -271,14 +278,14 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     transaction_headers = _headers(transactions.get_all_values())
     _append_columns(transactions, transaction_headers, ["source_type", "source_id", "tag_ids"])
 
-    mileage = _ensure_sheet(workbook, "Mileage")
+    mileage = _ensure_sheet(workbook, "Mileage", worksheets)
     mileage_headers = _ensure_headers(mileage, WORKSHEET_HEADERS["Mileage"])
     _append_columns(mileage, mileage_headers, ["tag_ids"])
 
-    tags = _ensure_sheet(workbook, "Tags")
+    tags = _ensure_sheet(workbook, "Tags", worksheets)
     _ensure_headers(tags, LEGACY_TAGS_WORKBOOK_HEADERS["Tags"])
 
-    mixed = _ensure_sheet(workbook, "MixedUseExpenses")
+    mixed = _ensure_sheet(workbook, "MixedUseExpenses", worksheets)
     mixed_headers = _ensure_headers(mixed, MIXED_USE_WORKSHEET_HEADERS)
     if LEGACY_MIXED_USE_TAG_MIGRATION_HEADER in mixed_headers:
         mixed_headers[mixed_headers.index(LEGACY_MIXED_USE_TAG_MIGRATION_HEADER)] = "tag_ids"
@@ -290,8 +297,18 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     # This read-only validation also checks current relationship, domain, and
     # reference invariants before success is reported.
     storage = GoogleSheetsStorage(workbook)
-    storage.list_accounts(active_only=False, _force_refresh=True)
-    storage.list_categories(_force_refresh=True)
+    accounts = storage.list_accounts(active_only=False, _force_refresh=True)
+    categories = storage.list_categories(_force_refresh=True)
+    _validate_hierarchy_records(
+        accounts,
+        compatibility_field="classification",
+        item_label="Account",
+    )
+    _validate_hierarchy_records(
+        categories,
+        compatibility_field="kind",
+        item_label="Category",
+    )
     storage.list_payees(_force_refresh=True)
     storage.list_tags(_force_refresh=True)
     storage.list_transactions(_force_refresh=True)

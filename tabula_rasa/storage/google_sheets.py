@@ -284,7 +284,8 @@ def _looks_like_historical_workbook(
             # Version 9 mixed-use sources predate durable source tag IDs.
             return True
         if any(
-            set(headers) == set(layout.get(title, ()))
+            title in layout
+            and set(headers) == set(layout[title])
             and set(headers) != set(WORKSHEET_HEADERS.get(title, ()))
             and len(headers) == len(set(headers))
             for layout in historical_headers
