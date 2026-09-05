@@ -65,8 +65,14 @@ def _ensure_sheet(
     return worksheet
 
 
-def _ensure_headers(worksheet: Any, expected: tuple[str, ...]) -> list[str]:
-    rows = worksheet.get_all_values()
+def _ensure_headers(
+    worksheet: Any,
+    expected: tuple[str, ...],
+    *,
+    rows: list[list[Any]] | None = None,
+) -> list[str]:
+    if rows is None:
+        rows = worksheet.get_all_values()
     if not rows or not any(str(value).strip() for row in rows for value in row):
         worksheet.update([list(expected)], range_name="A1", raw=True)
         return list(expected)
@@ -254,7 +260,7 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     ):
         for title, headers in WORKSHEET_HEADERS.items():
             worksheet = _ensure_sheet(workbook, title, worksheets)
-            _ensure_headers(worksheet, headers)
+            _ensure_headers(worksheet, headers, rows=initial.get(title))
         GoogleSheetsStorage(workbook)
         return {"worksheets": len(WORKSHEET_HEADERS), "source_tags": 0}
 
@@ -262,12 +268,18 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     # layout. Existing rows are extended by Sheets when columns are appended.
     for title in ("Accounts", "Categories"):
         worksheet = _ensure_sheet(workbook, title, worksheets)
-        headers = _ensure_headers(worksheet, VERSION_5_WORKSHEET_HEADERS[title])
+        headers = _ensure_headers(
+            worksheet,
+            VERSION_5_WORKSHEET_HEADERS[title],
+            rows=initial.get(title),
+        )
         _append_columns(worksheet, headers, ["parent_id"])
 
     transactions = _ensure_sheet(workbook, "Transactions", worksheets)
     transaction_headers = _ensure_headers(
-        transactions, PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"]
+        transactions,
+        PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"],
+        rows=initial.get("Transactions"),
     )
     _append_columns(transactions, transaction_headers, ["receipt_references"])
 
@@ -279,14 +291,24 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     _append_columns(transactions, transaction_headers, ["source_type", "source_id", "tag_ids"])
 
     mileage = _ensure_sheet(workbook, "Mileage", worksheets)
-    mileage_headers = _ensure_headers(mileage, WORKSHEET_HEADERS["Mileage"])
+    mileage_headers = _ensure_headers(
+        mileage, WORKSHEET_HEADERS["Mileage"], rows=initial.get("Mileage")
+    )
     _append_columns(mileage, mileage_headers, ["tag_ids"])
 
     tags = _ensure_sheet(workbook, "Tags", worksheets)
-    _ensure_headers(tags, LEGACY_TAGS_WORKBOOK_HEADERS["Tags"])
+    _ensure_headers(
+        tags,
+        LEGACY_TAGS_WORKBOOK_HEADERS["Tags"],
+        rows=initial.get("Tags"),
+    )
 
     mixed = _ensure_sheet(workbook, "MixedUseExpenses", worksheets)
-    mixed_headers = _ensure_headers(mixed, MIXED_USE_WORKSHEET_HEADERS)
+    mixed_headers = _ensure_headers(
+        mixed,
+        MIXED_USE_WORKSHEET_HEADERS,
+        rows=initial.get("MixedUseExpenses"),
+    )
     if LEGACY_MIXED_USE_TAG_MIGRATION_HEADER in mixed_headers:
         mixed_headers[mixed_headers.index(LEGACY_MIXED_USE_TAG_MIGRATION_HEADER)] = "tag_ids"
         mixed.update([mixed_headers], range_name="A1", raw=True)

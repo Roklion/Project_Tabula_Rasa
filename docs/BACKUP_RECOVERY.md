@@ -83,16 +83,18 @@ backup validation rejects missing, orphaned, duplicated, or inconsistent
 source/projection relationships. Formats 2 through 8 restore with no
 mixed-use source records or linkage.
 
-Before upgrading an existing workbook, run the one-time payee migration:
+Before upgrading an existing workbook, run the one-time combined workbook
+migration:
 
 ```text
-python scripts/migrate_payees.py --secrets .streamlit/secrets.toml --profile PROFILE_KEY
+python scripts/migrate_workbook.py --secrets .streamlit/secrets.toml --profile PROFILE_KEY
 ```
 
-It deduplicates legacy payee text using normalized Unicode and whitespace,
-updates transaction references, and is safe to rerun. Older backups are
-accepted during restore; their payee text is mapped only to payees already in
-the target workbook, otherwise the reference is left unset.
+It upgrades recognized historical schemas, deduplicates legacy payee text using
+normalized Unicode and whitespace, updates transaction references, and is safe
+to rerun. Older backups are accepted during restore; their payee text is mapped
+only to payees already in the target workbook, otherwise the reference is left
+unset.
 
 Older compatible archives restore records at Layer 1 when hierarchy columns
 are absent. A format-1 archive must first be converted to format 2.

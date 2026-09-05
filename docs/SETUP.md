@@ -88,9 +88,15 @@ cause validation to fail rather than being overwritten. Defaults are seeded
 only in a blank workbook.
 
 Existing workbooks that still store transaction payee text must be upgraded
-with the one-time payee migration before using the managed `Payees` and
-`Transactions.payee_id` schema. See [Backup and recovery](BACKUP_RECOVERY.md)
-for the migration command and legacy-backup compatibility details.
+with the one-time combined workbook migration before using the managed
+`Payees` and `Transactions.payee_id` schema:
+
+```text
+python scripts/migrate_workbook.py --secrets .streamlit/secrets.toml --profile PROFILE_KEY
+```
+
+See [Backup and recovery](BACKUP_RECOVERY.md) for migration behavior and
+legacy-backup compatibility details.
 
 Normal startup validates populated workbooks against the current headers only;
 it never upgrades historical worksheet schemas or creates migration markers.
