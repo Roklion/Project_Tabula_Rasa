@@ -79,7 +79,7 @@ def _read_csv(
     content: bytes,
     title: str,
     expected: tuple[str, ...],
-) -> list[dict[str, str]]:
+) -> tuple[tuple[str, ...], list[dict[str, str]]]:
     try:
         rows = list(csv.reader(io.StringIO(content.decode("utf-8"), newline="")))
     except (UnicodeDecodeError, csv.Error) as exc:
@@ -97,7 +97,7 @@ def _read_csv(
         padded = row + [""] * (len(actual_headers) - len(row))
         if any(value.strip() for value in padded):
             records.append(dict(zip(actual_headers, padded)))
-    return records
+    return actual_headers, records
 
 
 def _read_source(backup: bytes) -> tuple[int, dict[str, Any], dict[str, list[dict[str, str]]], bytes | None]:
@@ -127,7 +127,11 @@ def _read_source(backup: bytes) -> tuple[int, dict[str, Any], dict[str, list[dic
             tables = {}
             checksums = manifest.get("sha256")
             row_counts = manifest.get("row_counts")
-            if not isinstance(checksums, dict) or not isinstance(row_counts, dict):
+            worksheet_headers = manifest.get("worksheet_headers")
+            if not all(
+                isinstance(value, dict)
+                for value in (checksums, row_counts, worksheet_headers)
+            ):
                 raise StorageValidationError("Backup manifest is missing validation metadata")
             expected_checksum_names = {f"{title}.csv" for title in schemas}
             if optional_payees:
@@ -136,13 +140,20 @@ def _read_source(backup: bytes) -> tuple[int, dict[str, Any], dict[str, list[dic
                 expected_checksum_names.add("receipts.json")
             if set(checksums) != expected_checksum_names:
                 raise StorageValidationError("Backup manifest checksum entries are invalid")
+            expected_row_count_names = {title for title in schemas}
+            if optional_payees:
+                expected_row_count_names.add("Payees")
+            if not expected_row_count_names.issubset(row_counts):
+                raise StorageValidationError("Backup manifest row count entries are invalid")
             for title, headers in schemas.items():
                 content = archive.read(f"{title}.csv")
                 expected_hash = checksums.get(f"{title}.csv")
                 if not expected_hash or hashlib.sha256(content).hexdigest() != expected_hash:
                     raise StorageValidationError(f"{title} backup checksum does not match")
-                rows = _read_csv(content, title, headers)
-                if row_counts.get(title) is not None and row_counts[title] != len(rows):
+                actual_headers, rows = _read_csv(content, title, headers)
+                if worksheet_headers.get(title) != list(actual_headers):
+                    raise StorageValidationError(f"{title} backup headers are invalid")
+                if row_counts[title] != len(rows):
                     raise StorageValidationError(f"{title} backup row count does not match")
                 tables[title] = rows
             if optional_payees:
@@ -150,7 +161,12 @@ def _read_source(backup: bytes) -> tuple[int, dict[str, Any], dict[str, list[dic
                 expected_hash = checksums.get("Payees.csv")
                 if not expected_hash or hashlib.sha256(content).hexdigest() != expected_hash:
                     raise StorageValidationError("Payees backup checksum does not match")
-                tables["Payees"] = _read_csv(content, "Payees", _PAYEES)
+                actual_headers, payees = _read_csv(content, "Payees", _PAYEES)
+                if worksheet_headers.get("Payees") != list(actual_headers):
+                    raise StorageValidationError("Payees backup headers are invalid")
+                if row_counts["Payees"] != len(payees):
+                    raise StorageValidationError("Payees backup row count does not match")
+                tables["Payees"] = payees
             receipts = archive.read("receipts.json") if version >= 5 else None
             if receipts is not None:
                 expected_hash = checksums.get("receipts.json")

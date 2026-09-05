@@ -434,6 +434,13 @@ def test_migration_validates_optional_payee_checksum() -> None:
         manifest["sha256"]["Payees.csv"] = hashlib.sha256(
             files["Payees.csv"]
         ).hexdigest()
+        manifest["row_counts"]["Payees"] = 1
+        manifest["worksheet_headers"]["Payees"] = [
+            "id",
+            "name",
+            "active",
+            "created_at",
+        ]
         files["Payees.csv"] += b"tampered"
 
     legacy = _rewrite_legacy(legacy, update_manifest=add_tampered_payees)
@@ -475,6 +482,7 @@ def test_migration_accepts_reordered_legacy_headers() -> None:
         manifest["sha256"]["Accounts.csv"] = hashlib.sha256(
             files["Accounts.csv"]
         ).hexdigest()
+        manifest["worksheet_headers"]["Accounts"] = list(headers)
 
     legacy = _rewrite_legacy(legacy, update_manifest=reorder_accounts)
     assert GoogleSheetsStorage.validate_backup_zip(migrate_legacy_backup(legacy))[
