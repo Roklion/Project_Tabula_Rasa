@@ -271,8 +271,14 @@ def _current_tables(version: int, manifest: dict[str, Any], source: dict[str, li
             # intact, but unlink those historical associations in the output.
             row["receipt_references"] = ""
         row.setdefault("receipt_references", "")
-        row.setdefault("source_type", "")
-        row.setdefault("source_id", "")
+        if version < 9:
+            # Provenance was introduced with the mixed-use backup format.
+            # Discard extra legacy columns rather than restoring untrusted links.
+            row["source_type"] = ""
+            row["source_id"] = ""
+        else:
+            row.setdefault("source_type", "")
+            row.setdefault("source_id", "")
         row.setdefault("tag_ids", "[]")
     for row in tables["Mileage"]:
         row.setdefault("tag_ids", "[]")

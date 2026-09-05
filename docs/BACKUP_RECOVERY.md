@@ -240,13 +240,13 @@ representative relationships, then delete or clearly label the drill workbook.
 
 ## Recover receipt bytes and remap Drive IDs
 
-Ledger restoration does not restore receipt bytes. For a format 5, 6, 7, or 8
-archive, copy the matching profile Receipts directory from the protected
-Synology recovery set to a safe local path, then recover against the new
-workbook:
+Ledger restoration does not restore receipt bytes. After converting a legacy
+format 5 through 9 archive to v10, copy the matching profile Receipts
+directory from the protected Synology recovery set to a safe local path, then
+recover against the new workbook using the converted archive:
 
 ```powershell
-python scripts\recover_synology_receipts.py "C:\Safe-Recovery\tabula-rasa-backup-YYYYMMDDTHHMMSSZ.zip" "C:\Safe-Recovery\Receipts" --profile PROFILE_KEY --target-spreadsheet-id NEW_SPREADSHEET_ID
+python scripts\recover_synology_receipts.py "C:\Safe-Recovery\tabula-rasa-backup-YYYYMMDDTHHMMSSZ-format10.zip" "C:\Safe-Recovery\Receipts" --profile PROFILE_KEY --target-spreadsheet-id NEW_SPREADSHEET_ID
 ```
 
 The command refuses every configured live workbook. Before a Drive change it

@@ -488,3 +488,41 @@ def test_migration_accepts_reordered_legacy_headers() -> None:
     assert GoogleSheetsStorage.validate_backup_zip(migrate_legacy_backup(legacy))[
         "format_version"
     ] == 10
+
+
+def test_pre_v9_provenance_columns_are_cleared_during_migration() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    account = storage.create_account("Checking", "Bank")
+    category = storage.create_category("Office", "Expense")
+    storage.create_transaction(
+        txn_date="2026-09-01",
+        kind="Expense",
+        amount="10.00",
+        account_id=account["id"],
+        category_id=category["id"],
+    )
+    legacy = _downgrade(
+        storage.export_backup_zip(
+            {"schema_version": 1, "business_profile_key": "test", "receipts": []}
+        ),
+        8,
+    )
+
+    def add_untrusted_provenance(files: dict[str, bytes], manifest: dict[str, Any]) -> None:
+        rows = list(csv.DictReader(io.StringIO(files["Transactions.csv"].decode())))
+        rows[0]["source_type"] = "mixed_use_expense"
+        rows[0]["source_id"] = "untrusted-source"
+        headers = (*rows[0].keys(),)
+        files["Transactions.csv"] = _csv_bytes(headers, rows)
+        manifest["sha256"]["Transactions.csv"] = hashlib.sha256(
+            files["Transactions.csv"]
+        ).hexdigest()
+        manifest["worksheet_headers"]["Transactions"] = list(headers)
+
+    converted = migrate_legacy_backup(
+        _rewrite_legacy(legacy, update_manifest=add_untrusted_provenance)
+    )
+    with zipfile.ZipFile(io.BytesIO(converted)) as archive:
+        rows = list(csv.DictReader(io.StringIO(archive.read("Transactions.csv").decode())))
+    assert rows[0]["source_type"] == ""
+    assert rows[0]["source_id"] == ""
