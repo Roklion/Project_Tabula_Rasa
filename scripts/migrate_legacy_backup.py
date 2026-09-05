@@ -60,6 +60,7 @@ _TRANSACTIONS_V9 = (*_TRANSACTIONS_V7, "source_type", "source_id", "tag_ids")
 _MIXED_USE_V9 = tuple(
     header for header in WORKSHEET_HEADERS["MixedUseExpenses"] if header != "tag_ids"
 )
+_MAX_ARCHIVE_EXPANSION_BYTES = 100 * 1024 * 1024
 
 SOURCE_HEADERS: dict[int, dict[str, tuple[str, ...]]] = {
     1: {"Accounts": _V1_ACCOUNTS, "Categories": _CATEGORIES, "Transactions": _TRANSACTIONS_V2},
@@ -78,25 +79,35 @@ def _read_csv(
     content: bytes,
     title: str,
     expected: tuple[str, ...],
-    alternatives: tuple[tuple[str, ...], ...] = (),
 ) -> list[dict[str, str]]:
     try:
         rows = list(csv.reader(io.StringIO(content.decode("utf-8"), newline="")))
     except (UnicodeDecodeError, csv.Error) as exc:
         raise StorageValidationError(f"{title} backup CSV is invalid") from exc
     actual_headers = tuple(rows[0]) if rows else ()
-    if not rows or actual_headers not in (expected, *alternatives):
+    required_headers = set(expected)
+    if not rows or not actual_headers or any(not header for header in actual_headers):
         raise StorageValidationError(f"{title} backup headers are invalid")
-    return [
-        dict(zip(actual_headers, row + [""] * (len(actual_headers) - len(row))))
-        for row in rows[1:]
-        if any(value.strip() for value in row)
-    ]
+    if len(actual_headers) != len(set(actual_headers)) or not required_headers.issubset(actual_headers):
+        raise StorageValidationError(f"{title} backup headers are invalid")
+    records = []
+    for row in rows[1:]:
+        if len(row) > len(actual_headers):
+            raise StorageValidationError(f"{title} backup has an over-wide row")
+        padded = row + [""] * (len(actual_headers) - len(row))
+        if any(value.strip() for value in padded):
+            records.append(dict(zip(actual_headers, padded)))
+    return records
 
 
 def _read_source(backup: bytes) -> tuple[int, dict[str, Any], dict[str, list[dict[str, str]]], bytes | None]:
     try:
         with zipfile.ZipFile(io.BytesIO(backup)) as archive:
+            names = archive.namelist()
+            if len(names) != len(set(names)):
+                raise StorageValidationError("Backup files are duplicated")
+            if sum(item.file_size for item in archive.infolist()) > _MAX_ARCHIVE_EXPANSION_BYTES:
+                raise StorageValidationError("Backup is too large to migrate safely")
             manifest = json.loads(archive.read("manifest.json").decode("utf-8"))
             if not isinstance(manifest, dict):
                 raise StorageValidationError("Backup manifest must be a JSON object")
@@ -104,7 +115,7 @@ def _read_source(backup: bytes) -> tuple[int, dict[str, Any], dict[str, list[dic
             if version not in SOURCE_HEADERS:
                 raise StorageValidationError("Only backup formats 1 through 9 can be migrated")
             schemas = SOURCE_HEADERS[version]
-            names = set(archive.namelist())
+            names = set(names)
             expected_names = {f"{title}.csv" for title in schemas} | {"manifest.json"}
             optional_payees = version < 7 and "Payees.csv" in names
             if optional_payees:
@@ -114,25 +125,40 @@ def _read_source(backup: bytes) -> tuple[int, dict[str, Any], dict[str, list[dic
             if names != expected_names:
                 raise StorageValidationError("Backup contains unexpected legacy files")
             tables = {}
-            checksums = manifest.get("sha256", {})
-            row_counts = manifest.get("row_counts", {})
+            checksums = manifest.get("sha256")
+            row_counts = manifest.get("row_counts")
+            if not isinstance(checksums, dict) or not isinstance(row_counts, dict):
+                raise StorageValidationError("Backup manifest is missing validation metadata")
+            expected_checksum_names = {f"{title}.csv" for title in schemas}
+            if optional_payees:
+                expected_checksum_names.add("Payees.csv")
+            if version >= 5:
+                expected_checksum_names.add("receipts.json")
+            if set(checksums) != expected_checksum_names:
+                raise StorageValidationError("Backup manifest checksum entries are invalid")
             for title, headers in schemas.items():
                 content = archive.read(f"{title}.csv")
                 expected_hash = checksums.get(f"{title}.csv")
-                if expected_hash and hashlib.sha256(content).hexdigest() != expected_hash:
+                if not expected_hash or hashlib.sha256(content).hexdigest() != expected_hash:
                     raise StorageValidationError(f"{title} backup checksum does not match")
-                alternatives = ()
-                if version in (4, 5) and title in {"Accounts", "Categories"}:
-                    alternatives = ((*headers, "parent_id"),)
-                rows = _read_csv(content, title, headers, alternatives)
+                rows = _read_csv(content, title, headers)
                 if row_counts.get(title) is not None and row_counts[title] != len(rows):
                     raise StorageValidationError(f"{title} backup row count does not match")
                 tables[title] = rows
             if optional_payees:
                 content = archive.read("Payees.csv")
+                expected_hash = checksums.get("Payees.csv")
+                if not expected_hash or hashlib.sha256(content).hexdigest() != expected_hash:
+                    raise StorageValidationError("Payees backup checksum does not match")
                 tables["Payees"] = _read_csv(content, "Payees", _PAYEES)
             receipts = archive.read("receipts.json") if version >= 5 else None
-    except (KeyError, json.JSONDecodeError, UnicodeDecodeError, zipfile.BadZipFile, OSError) as exc:
+            if receipts is not None:
+                expected_hash = checksums.get("receipts.json")
+                if not expected_hash or hashlib.sha256(receipts).hexdigest() != expected_hash:
+                    raise StorageValidationError("receipts.json backup checksum does not match")
+    except StorageValidationError:
+        raise
+    except (KeyError, json.JSONDecodeError, UnicodeDecodeError, zipfile.BadZipFile, OSError, RuntimeError) as exc:
         raise StorageValidationError("Backup is not a readable legacy ZIP archive") from exc
     return version, manifest, tables, receipts
 
