@@ -53,7 +53,10 @@ def _headers(rows: list[list[Any]]) -> list[str]:
 
 
 def _ensure_sheet(
-    workbook: Any, title: str, worksheets: list[Any] | None = None
+    workbook: Any,
+    title: str,
+    worksheets: list[Any] | None = None,
+    initial: dict[str, list[list[Any]]] | None = None,
 ) -> Any:
     sheets = worksheets if worksheets is not None else workbook.worksheets()
     for worksheet in sheets:
@@ -64,6 +67,8 @@ def _ensure_sheet(
     worksheet.update([list(headers)], range_name="A1", raw=True)
     if worksheets is not None:
         worksheets.append(worksheet)
+    if initial is not None:
+        initial[title] = [list(headers)]
     return worksheet
 
 
@@ -278,7 +283,7 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     )
     if is_blank or _looks_like_partial_blank_workbook(initial):
         for title, headers in WORKSHEET_HEADERS.items():
-            worksheet = _ensure_sheet(workbook, title, worksheets)
+            worksheet = _ensure_sheet(workbook, title, worksheets, initial)
             _ensure_headers(worksheet, headers, rows=initial.get(title))
         GoogleSheetsStorage(workbook)
         return {"worksheets": len(WORKSHEET_HEADERS), "source_tags": 0}
@@ -286,7 +291,7 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     # Core hierarchy columns were introduced together in the standard v6
     # layout. Existing rows are extended by Sheets when columns are appended.
     for title in ("Accounts", "Categories"):
-        worksheet = _ensure_sheet(workbook, title, worksheets)
+        worksheet = _ensure_sheet(workbook, title, worksheets, initial)
         headers = _ensure_headers(
             worksheet,
             VERSION_5_WORKSHEET_HEADERS[title],
@@ -294,7 +299,7 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
         )
         _append_columns(worksheet, headers, ["parent_id"])
 
-    transactions = _ensure_sheet(workbook, "Transactions", worksheets)
+    transactions = _ensure_sheet(workbook, "Transactions", worksheets, initial)
     transaction_headers = _ensure_headers(
         transactions,
         PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"],
@@ -312,20 +317,20 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     ]
     _append_columns(transactions, transaction_headers, ["source_type", "source_id", "tag_ids"])
 
-    mileage = _ensure_sheet(workbook, "Mileage", worksheets)
+    mileage = _ensure_sheet(workbook, "Mileage", worksheets, initial)
     mileage_headers = _ensure_headers(
         mileage, WORKSHEET_HEADERS["Mileage"], rows=initial.get("Mileage")
     )
     _append_columns(mileage, mileage_headers, ["tag_ids"])
 
-    tags = _ensure_sheet(workbook, "Tags", worksheets)
+    tags = _ensure_sheet(workbook, "Tags", worksheets, initial)
     _ensure_headers(
         tags,
         LEGACY_TAGS_WORKBOOK_HEADERS["Tags"],
         rows=initial.get("Tags"),
     )
 
-    mixed = _ensure_sheet(workbook, "MixedUseExpenses", worksheets)
+    mixed = _ensure_sheet(workbook, "MixedUseExpenses", worksheets, initial)
     mixed_headers = _ensure_headers(
         mixed,
         MIXED_USE_WORKSHEET_HEADERS,
