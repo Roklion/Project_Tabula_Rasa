@@ -14,8 +14,6 @@ from google.oauth2.service_account import Credentials
 
 from tabula_rasa.storage.google_sheets import (
     BACKUP_FORMAT_VERSION,
-    TAGS_BACKUP_FORMAT_VERSION,
-    TAGS_WORKSHEET_HEADERS,
     decode_receipt_references,
     GoogleSheetsStorage,
     SHEETS_SCOPE,
@@ -33,6 +31,7 @@ from tabula_rasa.storage.google_sheets import (
     VERSION_5_WORKSHEET_HEADERS,
     WORKSHEET_HEADERS,
 )
+from scripts.migrate_legacy_backup import SOURCE_HEADERS
 from tabula_rasa.quickbooks_import import (
     general_ledger_rows,
     suggested_account_classification,
@@ -122,7 +121,7 @@ HISTORICAL_BACKUP_HEADERS = {
         ),
         "Mileage": HISTORICAL_MILEAGE_HEADERS,
     },
-    TAGS_BACKUP_FORMAT_VERSION: TAGS_WORKSHEET_HEADERS,
+    8: SOURCE_HEADERS[8],
 }
 
 

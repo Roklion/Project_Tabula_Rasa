@@ -125,19 +125,20 @@ def _format1_backup(*, tamper_accounts: bool = False) -> bytes:
     return output.getvalue()
 
 
-class TestConvertBackupV1ToV2:
+class TestLegacyBackupMigration:
     def test_converts_and_normalizes_legacy_account_schema(self) -> None:
         source = _format1_backup()
 
         converted = convert_backup_v1_to_v2(source)
 
         manifest = GoogleSheetsStorage.validate_backup_zip(converted)
-        assert manifest["format_version"] == 2
+        assert manifest["format_version"] == 10
         assert (
             manifest["conversion"]["source_archive_sha256"]
             == hashlib.sha256(source).hexdigest()
         )
         with zipfile.ZipFile(io.BytesIO(converted)) as archive:
+            assert "receipts.json" in archive.namelist()
             accounts = list(
                 csv.DictReader(
                     io.StringIO(archive.read("Accounts.csv").decode("utf-8"))

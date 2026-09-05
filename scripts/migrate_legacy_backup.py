@@ -104,10 +104,18 @@ def _read_source(backup: bytes) -> tuple[int, dict[str, Any], dict[str, list[dic
             names = set(archive.namelist())
             if names != expected_names:
                 raise StorageValidationError("Backup contains unexpected legacy files")
-            tables = {
-                title: _read_csv(archive.read(f"{title}.csv"), title, headers)
-                for title, headers in schemas.items()
-            }
+            tables = {}
+            checksums = manifest.get("sha256", {})
+            row_counts = manifest.get("row_counts", {})
+            for title, headers in schemas.items():
+                content = archive.read(f"{title}.csv")
+                expected_hash = checksums.get(f"{title}.csv")
+                if expected_hash and hashlib.sha256(content).hexdigest() != expected_hash:
+                    raise StorageValidationError(f"{title} backup checksum does not match")
+                rows = _read_csv(content, title, headers)
+                if row_counts.get(title) is not None and row_counts[title] != len(rows):
+                    raise StorageValidationError(f"{title} backup row count does not match")
+                tables[title] = rows
             receipts = archive.read("receipts.json") if version >= 5 else None
     except (KeyError, json.JSONDecodeError, UnicodeDecodeError, zipfile.BadZipFile, OSError) as exc:
         raise StorageValidationError("Backup is not a readable legacy ZIP archive") from exc
