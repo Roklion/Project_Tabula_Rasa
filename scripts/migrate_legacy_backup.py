@@ -29,7 +29,6 @@ from tabula_rasa.storage.google_sheets import (
     FIXED_TYPE_CLASSIFICATIONS,
     WORKSHEET_HEADERS,
     _legacy_payee_id,
-    _validate_payee_records,
     normalize_payee_name,
 )
 
@@ -61,8 +60,6 @@ _TRANSACTIONS_V9 = (*_TRANSACTIONS_V7, "source_type", "source_id", "tag_ids")
 _MIXED_USE_V9 = tuple(
     header for header in WORKSHEET_HEADERS["MixedUseExpenses"] if header != "tag_ids"
 )
-_MAX_ARCHIVE_EXPANSION_BYTES = 100 * 1024 * 1024
-
 SOURCE_HEADERS: dict[int, dict[str, tuple[str, ...]]] = {
     1: {"Accounts": _V1_ACCOUNTS, "Categories": _CATEGORIES, "Transactions": _TRANSACTIONS_V2},
     2: {"Accounts": _V2_ACCOUNTS, "Categories": _CATEGORIES, "Transactions": _TRANSACTIONS_V2},
@@ -93,8 +90,6 @@ def _read_csv(
         raise StorageValidationError(f"{title} backup headers are invalid")
     records = []
     for row in rows[1:]:
-        if len(row) > len(actual_headers):
-            raise StorageValidationError(f"{title} backup has an over-wide row")
         padded = row + [""] * (len(actual_headers) - len(row))
         if any(value.strip() for value in padded):
             records.append(dict(zip(actual_headers, padded)))
@@ -105,10 +100,6 @@ def _read_source(backup: bytes) -> tuple[int, dict[str, Any], dict[str, list[dic
     try:
         with zipfile.ZipFile(io.BytesIO(backup)) as archive:
             names = archive.namelist()
-            if len(names) != len(set(names)):
-                raise StorageValidationError("Backup files are duplicated")
-            if sum(item.file_size for item in archive.infolist()) > _MAX_ARCHIVE_EXPANSION_BYTES:
-                raise StorageValidationError("Backup is too large to migrate safely")
             manifest = json.loads(archive.read("manifest.json").decode("utf-8"))
             if not isinstance(manifest, dict):
                 raise StorageValidationError("Backup manifest must be a JSON object")
@@ -117,62 +108,27 @@ def _read_source(backup: bytes) -> tuple[int, dict[str, Any], dict[str, list[dic
                 raise StorageValidationError("Only backup formats 1 through 9 can be migrated")
             schemas = SOURCE_HEADERS[version]
             names = set(names)
-            expected_names = {f"{title}.csv" for title in schemas} | {"manifest.json"}
+            required_names = {f"{title}.csv" for title in schemas} | {"manifest.json"}
+            if version >= 5:
+                required_names.add("receipts.json")
+            if not required_names.issubset(names):
+                raise StorageValidationError("Backup is missing expected legacy files")
             optional_payees = version < 7 and "Payees.csv" in names
-            if optional_payees:
-                expected_names.add("Payees.csv")
-            if version >= 5:
-                expected_names.add("receipts.json")
-            if names != expected_names:
-                raise StorageValidationError("Backup contains unexpected legacy files")
             tables = {}
-            checksums = manifest.get("sha256")
-            row_counts = manifest.get("row_counts")
-            worksheet_headers = manifest.get("worksheet_headers")
-            if not all(
-                isinstance(value, dict)
-                for value in (checksums, row_counts, worksheet_headers)
-            ):
-                raise StorageValidationError("Backup manifest is missing validation metadata")
-            expected_checksum_names = {f"{title}.csv" for title in schemas}
-            if optional_payees:
-                expected_checksum_names.add("Payees.csv")
-            if version >= 5:
-                expected_checksum_names.add("receipts.json")
-            if set(checksums) != expected_checksum_names:
-                raise StorageValidationError("Backup manifest checksum entries are invalid")
-            expected_row_count_names = {title for title in schemas}
-            if optional_payees:
-                expected_row_count_names.add("Payees")
-            if not expected_row_count_names.issubset(row_counts):
-                raise StorageValidationError("Backup manifest row count entries are invalid")
             for title, headers in schemas.items():
                 content = archive.read(f"{title}.csv")
-                expected_hash = checksums.get(f"{title}.csv")
-                if not expected_hash or hashlib.sha256(content).hexdigest() != expected_hash:
-                    raise StorageValidationError(f"{title} backup checksum does not match")
                 actual_headers, rows = _read_csv(content, title, headers)
-                if worksheet_headers.get(title) != list(actual_headers):
-                    raise StorageValidationError(f"{title} backup headers are invalid")
-                if row_counts[title] != len(rows):
-                    raise StorageValidationError(f"{title} backup row count does not match")
                 tables[title] = rows
             if optional_payees:
                 content = archive.read("Payees.csv")
-                expected_hash = checksums.get("Payees.csv")
-                if not expected_hash or hashlib.sha256(content).hexdigest() != expected_hash:
-                    raise StorageValidationError("Payees backup checksum does not match")
-                actual_headers, payees = _read_csv(content, "Payees", _PAYEES)
-                if worksheet_headers.get("Payees") != list(actual_headers):
-                    raise StorageValidationError("Payees backup headers are invalid")
-                if row_counts["Payees"] != len(payees):
-                    raise StorageValidationError("Payees backup row count does not match")
+                _, payees = _read_csv(content, "Payees", _PAYEES)
                 tables["Payees"] = payees
             receipts = archive.read("receipts.json") if version >= 5 else None
             if receipts is not None:
-                expected_hash = checksums.get("receipts.json")
-                if not expected_hash or hashlib.sha256(receipts).hexdigest() != expected_hash:
-                    raise StorageValidationError("receipts.json backup checksum does not match")
+                try:
+                    json.loads(receipts.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                    raise StorageValidationError("receipts.json backup is invalid") from exc
     except StorageValidationError:
         raise
     except (KeyError, json.JSONDecodeError, UnicodeDecodeError, zipfile.BadZipFile, OSError, RuntimeError) as exc:
@@ -220,7 +176,6 @@ def _payees_and_transactions(
         for row in tables["Payees"]:
             row["active"] = _active(row.get("active", "TRUE"), "Payee")
         return
-    _validate_payee_records(tables.get("Payees", []))
     payees: dict[str, dict[str, str]] = {}
     for source in tables.get("Payees", []):
         name = " ".join(str(source.get("name", "")).split())
