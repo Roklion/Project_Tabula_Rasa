@@ -1482,14 +1482,28 @@ class GoogleSheetsStorage:
                     return
                 if state == "unchanged" and not retried:
                     retried = True
+                    self._sleeper(self._retry_base_delay_seconds)
                     if before_retry is not None:
                         try:
                             before_retry()
-                        except (StorageError, OSError):
+                        except StorageConflictError:
                             for title in invalidate:
                                 self._invalidate(title)
                             raise
-                    self._sleeper(self._retry_base_delay_seconds)
+                        except (StorageUnavailableError, OSError) as refresh_error:
+                            for title in invalidate:
+                                self._invalidate(title)
+                            raise StorageUnavailableError(
+                                _mutation_guidance(operation), retryable=False
+                            ) from refresh_error
+                        except StorageError:
+                            for title in invalidate:
+                                self._invalidate(title)
+                            raise
+                        except Exception:
+                            for title in invalidate:
+                                self._invalidate(title)
+                            raise
                     continue
                 for title in invalidate:
                     self._invalidate(title)
@@ -1626,6 +1640,10 @@ class GoogleSheetsStorage:
         }
         if len(originals) != len(updates):
             raise StorageValidationError(f"Duplicate ID detected in {title}")
+        updates_by_id = {
+            _clean_text(record.get("id"), "ID", required=True): record
+            for _, record in updates
+        }
 
         def write() -> None:
             batch = [
@@ -1686,10 +1704,8 @@ class GoogleSheetsStorage:
                     f"A row in {title} changed unexpectedly during a write retry."
                 )
             current_updates = [
-                (retry_by_id[record_id], record)
-                for record_id, (_, record) in zip(
-                    originals, updates
-                )
+                (retry_by_id[record_id], updates_by_id[record_id])
+                for record_id in originals
             ]
 
         self._write_with_confirmation(
@@ -1813,17 +1829,9 @@ class GoogleSheetsStorage:
                     if key == "tag_ids"
                     else (str(value) if value is not None else "")
                 )
-            current = dict(row.values)
-            if "payee_id" in current:
-                current["payee_id"] = _clean_text(current.get("payee_id"), "Payee")
-            if "tag_ids" in current:
-                current["tag_ids"] = _encode_tag_ids(current.get("tag_ids", ""))
+            current = self._normalized_transaction_values(row.values)
             if any(
-                (
-                    not _decimal_values_match(current.get(key), value)
-                    if key == "amount"
-                    else current.get(key, "") != value
-                )
+                not self._transaction_value_matches(key, current.get(key), value)
                 for key, value in expected.items()
             ):
                 raise StorageConflictError(
@@ -1832,6 +1840,49 @@ class GoogleSheetsStorage:
             selected_rows[transaction_id] = row
             current_by_id_values[transaction_id] = current
         return selected_rows, current_by_id_values
+
+    @staticmethod
+    def _transaction_value_matches(key: str, actual: Any, expected: Any) -> bool:
+        if key == "amount":
+            return _decimal_values_match(actual, str(expected))
+        if key == "payee_id":
+            return _clean_text(actual, "Payee") == _clean_text(expected, "Payee")
+        if key == "tag_ids":
+            return _normalize_tag_ids(actual) == _normalize_tag_ids(expected)
+        return str(actual or "") == str(expected or "")
+
+    @classmethod
+    def _normalized_transaction_values(
+        cls, values: Mapping[str, Any]
+    ) -> dict[str, str]:
+        normalized: dict[str, str] = {}
+        for header in WORKSHEET_HEADERS["Transactions"]:
+            value = values.get(header, "")
+            if header == "amount":
+                try:
+                    normalized[header] = format(
+                        Decimal(str(value).strip()).normalize(), "f"
+                    )
+                except (InvalidOperation, ValueError):
+                    normalized[header] = str(value or "")
+            elif header == "payee_id":
+                normalized[header] = _clean_text(value, "Payee")
+            elif header == "tag_ids":
+                normalized[header] = _encode_tag_ids(value)
+            else:
+                normalized[header] = str(value or "")
+        return normalized
+
+    @classmethod
+    def _transaction_rows_match(
+        cls, actual: Mapping[str, Any], expected: Mapping[str, Any]
+    ) -> bool:
+        return all(
+            cls._transaction_value_matches(
+                header, actual.get(header), expected.get(header)
+            )
+            for header in WORKSHEET_HEADERS["Transactions"]
+        )
 
     @staticmethod
     def _reject_mixed_use_projection(transaction: Mapping[str, Any]) -> None:
@@ -1935,7 +1986,7 @@ class GoogleSheetsStorage:
 
         def state() -> str:
             current = {
-                str(row.values["id"]): dict(row.values)
+                str(row.values["id"]): self._normalized_transaction_values(row.values)
                 for row in self._rows("Transactions", force_refresh=True)
             }
             if all(
@@ -1944,7 +1995,8 @@ class GoogleSheetsStorage:
             ):
                 return "applied"
             if all(
-                item in current and current[item] == pending_by_id[item]
+                item in current
+                and self._transaction_rows_match(current[item], pending_by_id[item])
                 for item in pending_by_id
             ):
                 return "unchanged"
@@ -2001,12 +2053,16 @@ class GoogleSheetsStorage:
 
             def state() -> str:
                 current = {
-                    str(row.values["id"]): dict(row.values)
+                    str(row.values["id"]): self._normalized_transaction_values(row.values)
                     for row in self._rows("Transactions", force_refresh=True)
                 }
                 if not any(item in current for item in original_by_id):
                     return "applied"
-                if all(current.get(item) == value for item, value in original_by_id.items()):
+                if all(
+                    item in current
+                    and self._transaction_rows_match(current[item], value)
+                    for item, value in original_by_id.items()
+                ):
                     return "unchanged"
                 return "ambiguous"
 
@@ -2771,6 +2827,24 @@ class GoogleSheetsStorage:
                     ["Payees", "Transactions", "MixedUseExpenses"],
                     force_refresh=True,
                 )
+                current_state = (
+                    {
+                        record_id: dict(row.values)
+                        for record_id, row in self._managed_rows_by_id(
+                            current["Payees"], "Payees"
+                        ).items()
+                    },
+                    self._managed_rows_by_id(
+                        current["Transactions"], "Transactions"
+                    ),
+                    self._managed_rows_by_id(
+                        current["MixedUseExpenses"], "MixedUseExpenses"
+                    ),
+                )
+                if not is_unchanged(current_state):
+                    raise StorageConflictError(
+                        "Payee records or references changed while the merge was being retried."
+                    )
                 current_payees = self._managed_rows_by_id(current["Payees"], "Payees")
                 current_transactions = self._managed_rows_by_id(
                     current["Transactions"], "Transactions"
@@ -2875,7 +2949,12 @@ class GoogleSheetsStorage:
                 )
 
             def refresh_request() -> None:
-                current_payees, _, _ = read_state()
+                state = read_state()
+                if not is_unchanged(state):
+                    raise StorageConflictError(
+                        "The payee changed or became referenced while removal was being retried."
+                    )
+                current_payees, _, _ = state
                 refreshed = self._managed_delete_request(
                     "Payees", current_payees[payee_id]
                 )
@@ -3138,6 +3217,16 @@ class GoogleSheetsStorage:
                 current_tags, current_transactions, current_mileage, current_sources = (
                     fresh_state()
                 )
+                current_state = (
+                    current_tags,
+                    current_transactions,
+                    current_mileage,
+                    current_sources,
+                )
+                if not is_unchanged(current_state):
+                    raise StorageConflictError(
+                        "Tag records or references changed while the merge was being retried."
+                    )
                 current_rows_by_title = {
                     "Transactions": current_transactions,
                     "Mileage": current_mileage,
@@ -3254,7 +3343,12 @@ class GoogleSheetsStorage:
 
             def refresh_request() -> None:
                 nonlocal tag_rows, request
-                tag_rows = read_state()[0]
+                state = read_state()
+                if not is_unchanged(state):
+                    raise StorageConflictError(
+                        "The tag changed or became referenced while removal was being retried."
+                    )
+                tag_rows = state[0]
                 request = self._managed_delete_request("Tags", tag_rows[tag_id])
 
             requests = [request]
@@ -4052,10 +4146,14 @@ class GoogleSheetsStorage:
                 )
             self._append("Transactions", projection)
         except StorageConflictError:
+            self._invalidate("MixedUseExpenses")
+            self._invalidate("Transactions")
             raise
         except (StorageError, OSError) as error:
             if isinstance(error, StorageUnavailableError):
                 if not error.retryable:
+                    self._invalidate("MixedUseExpenses")
+                    self._invalidate("Transactions")
                     raise
                 try:
                     state = self._mixed_use_mutation_state(
@@ -4072,9 +4170,13 @@ class GoogleSheetsStorage:
                     ) from read_error
                 if state == "applied":
                     return self.get_mixed_use_expense(source_id)
+                self._invalidate("MixedUseExpenses")
+                self._invalidate("Transactions")
                 raise StorageUnavailableError(
                     _mutation_guidance("mixed-use create"), retryable=False
                 ) from error
+            self._invalidate("MixedUseExpenses")
+            self._invalidate("Transactions")
             raise
         return self.get_mixed_use_expense(source_id)
 
@@ -4174,6 +4276,14 @@ class GoogleSheetsStorage:
             nonlocal fresh_transaction, fresh_source
             fresh_transaction = self._find_row("Transactions", transaction_id)
             fresh_source = self._find_row("MixedUseExpenses", source_id)
+            if not self._mixed_use_record_matches(
+                "Transactions", fresh_transaction.values, current_transaction
+            ) or not self._mixed_use_record_matches(
+                "MixedUseExpenses", fresh_source.values, current_source
+            ):
+                raise StorageConflictError(
+                    "The mixed-use expense changed while the edit was being retried."
+                )
 
         self._write_with_confirmation(
             "mixed-use edit",
@@ -4268,6 +4378,14 @@ class GoogleSheetsStorage:
             nonlocal requests, fresh_transaction, fresh_source
             fresh_transaction = self._find_row("Transactions", transaction_id)
             fresh_source = self._find_row("MixedUseExpenses", source_id)
+            if not self._mixed_use_record_matches(
+                "Transactions", fresh_transaction.values, transaction
+            ) or not self._mixed_use_record_matches(
+                "MixedUseExpenses", fresh_source.values, source
+            ):
+                raise StorageConflictError(
+                    "The mixed-use expense changed while deletion was being retried."
+                )
             requests = [
                 self._managed_delete_request("Transactions", fresh_transaction),
                 self._managed_delete_request("MixedUseExpenses", fresh_source),
@@ -4352,6 +4470,8 @@ class GoogleSheetsStorage:
         original_source_receipts = str(
             source.values.get("receipt_references") or ""
         )
+        original_transaction = dict(transaction)
+        original_source = dict(source.values)
 
         def build_requests(
             transaction_row: _StoredRow, source_row: _StoredRow
@@ -4377,6 +4497,14 @@ class GoogleSheetsStorage:
             nonlocal current, source, requests
             current = self._find_row("Transactions", transaction_id)
             source = self._find_row("MixedUseExpenses", source_id)
+            if not self._mixed_use_record_matches(
+                "Transactions", current.values, original_transaction
+            ) or not self._mixed_use_record_matches(
+                "MixedUseExpenses", source.values, original_source
+            ):
+                raise StorageConflictError(
+                    "The mixed-use receipt pair changed while the update was being retried."
+                )
             requests = build_requests(current, source)
 
         def state() -> str:
