@@ -304,18 +304,6 @@ def _mutation_guidance(operation: str) -> str:
     )
 
 
-class StorageBulkMutationUncertainError(StorageUnavailableError):
-    """Deprecated compatibility error; mutations now raise StorageUnavailableError.
-
-    Kept importable for integrations upgrading from the old outcome matrix. No
-    Sheets mutation path raises this type anymore.
-    """
-
-    def __init__(self, message: str, *, outcome: str, retryable: bool):
-        super().__init__(message, retryable=retryable)
-        self.outcome = outcome
-
-
 class StorageAuthenticationError(StorageUnavailableError):
     """Raised when Google rejects a service-account credential."""
 
@@ -3943,12 +3931,19 @@ class GoogleSheetsStorage:
             if isinstance(error, StorageUnavailableError):
                 if not error.retryable:
                     raise
-                state = self._mixed_use_mutation_state(
-                    source_id=source_id,
-                    transaction_id=transaction_id,
-                    expected_source=source,
-                    expected_transaction=projection,
-                )
+                try:
+                    state = self._mixed_use_mutation_state(
+                        source_id=source_id,
+                        transaction_id=transaction_id,
+                        expected_source=source,
+                        expected_transaction=projection,
+                    )
+                except StorageError as read_error:
+                    self._invalidate("MixedUseExpenses")
+                    self._invalidate("Transactions")
+                    raise StorageUnavailableError(
+                        _mutation_guidance("mixed-use create"), retryable=False
+                    ) from read_error
                 if state == "applied":
                     return self.get_mixed_use_expense(source_id)
                 raise StorageUnavailableError(
@@ -4253,8 +4248,17 @@ class GoogleSheetsStorage:
             },
         ]
         def state() -> str:
-            confirmed_transaction = self._find_row("Transactions", transaction_id)
-            confirmed_source = self._find_row("MixedUseExpenses", source_id)
+            snapshot = self._snapshot(
+                ["Transactions", "MixedUseExpenses"], force_refresh=True
+            )
+            confirmed_transaction = self._managed_rows_by_id(
+                snapshot["Transactions"], "Transactions"
+            ).get(transaction_id)
+            confirmed_source = self._managed_rows_by_id(
+                snapshot["MixedUseExpenses"], "MixedUseExpenses"
+            ).get(source_id)
+            if confirmed_transaction is None or confirmed_source is None:
+                return "ambiguous"
             transaction_receipts = str(
                 confirmed_transaction.values.get("receipt_references") or ""
             )
