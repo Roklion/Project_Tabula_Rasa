@@ -296,6 +296,14 @@ class StorageUnavailableError(StorageError):
         self.retryable = retryable
 
 
+def _mutation_guidance(operation: str) -> str:
+    """Return the common user-facing guidance for an unconfirmed write."""
+    return (
+        f"Google Sheets could not confirm the {operation}. Refresh the affected "
+        "records and inspect them before trying again; no success was reported."
+    )
+
+
 class StorageBulkMutationUncertainError(StorageUnavailableError):
     """Raised when a bulk write's postcondition is not safely complete."""
 
@@ -1412,38 +1420,87 @@ class GoogleSheetsStorage:
             raise StorageValidationError(f"Duplicate ID detected in {title}")
         return matches[0]
 
+    def _write_with_confirmation(
+        self,
+        operation: str,
+        write: Callable[[], None],
+        readback: Callable[[], str],
+        *,
+        before_retry: Callable[[], None] | None = None,
+        invalidate: Iterable[str] = (),
+    ) -> None:
+        """Perform one mutation, confirming uncertain responses before retrying.
+
+        ``readback`` returns ``"applied"`` when the requested postcondition is
+        present, ``"unchanged"`` when the complete precondition is still
+        present, and ``"ambiguous"`` for every partial or conflicting state.
+        A write is never retried more than once and only an unchanged state is
+        safe to retry.  Cache invalidation happens before every failure leaves
+        this method so callers cannot continue using a stale snapshot.
+        """
+        retried = False
+        while True:
+            try:
+                write()
+            except StorageUnavailableError as error:
+                if not error.retryable:
+                    for title in invalidate:
+                        self._invalidate(title)
+                    raise
+                try:
+                    state = readback()
+                except StorageError as read_error:
+                    for title in invalidate:
+                        self._invalidate(title)
+                    raise StorageUnavailableError(
+                        _mutation_guidance(operation), retryable=False
+                    ) from read_error
+                if state == "applied":
+                    for title in invalidate:
+                        self._invalidate(title)
+                    return
+                if state == "unchanged" and not retried:
+                    retried = True
+                    if before_retry is not None:
+                        before_retry()
+                    self._sleeper(self._retry_base_delay_seconds)
+                    continue
+                for title in invalidate:
+                    self._invalidate(title)
+                raise StorageUnavailableError(
+                    _mutation_guidance(operation), retryable=False
+                ) from error
+            else:
+                for title in invalidate:
+                    self._invalidate(title)
+                return
+
     def _append(self, title: str, record: Mapping[str, Any]) -> None:
         headers = self._headers(title)
         values = [str(record.get(header, "")) for header in headers]
         worksheet = self._worksheet(title)
-        record_id = str(record.get("id", ""))
-        for attempt in range(self._retry_attempts):
-            try:
-                self._api(
-                    lambda: worksheet.append_row(values, value_input_option="RAW"),
-                    retry_safe=False,
-                )
-                self._invalidate(title)
-                return
-            except StorageUnavailableError as error:
-                if not error.retryable:
-                    raise
-                try:
-                    if record_id and any(
-                        _clean_text(row.values.get("id"), "ID") == record_id
-                        for row in self._rows(title, force_refresh=True)
-                    ):
-                        return
-                except StorageError as read_error:
-                    raise StorageBulkMutationUncertainError(
-                        f"The {title} append completed but its postcondition could not "
-                        "be read. Review the row before retrying.",
-                        outcome="mixed_ambiguous",
-                        retryable=False,
-                    ) from read_error
-                if attempt + 1 >= self._retry_attempts:
-                    raise
-                self._sleeper(self._retry_base_delay_seconds * (2**attempt))
+        record_id = _clean_text(record.get("id"), "ID")
+
+        def state() -> str:
+            rows = self._rows(title, force_refresh=True)
+            matches = [
+                row for row in rows
+                if _clean_text(row.values.get("id"), "ID") == record_id
+            ]
+            if not matches:
+                return "unchanged"
+            expected = {header: str(record.get(header, "")) for header in headers}
+            return "applied" if matches[0].values == expected else "ambiguous"
+
+        self._write_with_confirmation(
+            f"{title} append",
+            lambda: self._api(
+                lambda: worksheet.append_row(values, value_input_option="RAW"),
+                retry_safe=False,
+            ),
+            state,
+            invalidate=(title,),
+        )
 
     def _append_many(self, title: str, records: Iterable[Mapping[str, Any]]) -> None:
         records = list(records)
@@ -1454,46 +1511,71 @@ class GoogleSheetsStorage:
             [str(record.get(header, "")) for header in headers] for record in records
         ]
         worksheet = self._worksheet(title)
-        record_ids = {str(record.get("id", "")) for record in records}
-        for attempt in range(self._retry_attempts):
-            try:
-                self._api(
-                    lambda: worksheet.append_rows(values, value_input_option="RAW"),
-                    retry_safe=False,
-                )
-                self._invalidate(title)
-                return
-            except StorageUnavailableError as error:
-                if not error.retryable:
-                    raise
-                try:
-                    existing_ids = {
-                        row.values.get("id", "")
-                        for row in self._rows(title, force_refresh=True)
-                    }
-                    present = record_ids & existing_ids
-                    if present == record_ids:
-                        return
-                    if present:
-                        raise StorageConflictError(
-                            "Batch write completion could not be confirmed safely"
-                        )
-                except StorageUnavailableError:
-                    pass
-                if attempt + 1 >= self._retry_attempts:
-                    raise
-                self._sleeper(self._retry_base_delay_seconds * (2**attempt))
+        record_ids = {
+            _clean_text(record.get("id"), "ID") for record in records
+        }
+
+        def state() -> str:
+            rows = self._rows(title, force_refresh=True)
+            by_id = {
+                _clean_text(row.values.get("id"), "ID"): row.values for row in rows
+            }
+            expected = {
+                _clean_text(record.get("id"), "ID"): {
+                    header: str(record.get(header, "")) for header in headers
+                }
+                for record in records
+            }
+            if all(by_id.get(record_id) == item for record_id, item in expected.items()):
+                return "applied"
+            if not any(record_id in by_id for record_id in record_ids):
+                return "unchanged"
+            return "ambiguous"
+
+        self._write_with_confirmation(
+            f"{title} batch append",
+            lambda: self._api(
+                lambda: worksheet.append_rows(values, value_input_option="RAW"),
+                retry_safe=False,
+            ),
+            state,
+            invalidate=(title,),
+        )
 
     def _replace_row(self, title: str, row: _StoredRow, record: Mapping[str, Any]) -> None:
         headers = self._headers(title)
         values = [str(record.get(header, "")) for header in headers]
         worksheet = self._worksheet(title)
-        self._api(
-            lambda: worksheet.update(
-                [values], range_name=f"A{row.row_number}", raw=True
+        record_id = _clean_text(record.get("id"), "ID", required=True)
+        original = dict(row.values)
+        current_row = row
+
+        def write() -> None:
+            self._api(
+                lambda: worksheet.update(
+                    [values], range_name=f"A{current_row.row_number}", raw=True
+                ),
+                retry_safe=False,
             )
+
+        def state() -> str:
+            latest = self._find_row(title, record_id)
+            if latest.values == {header: str(record.get(header, "")) for header in headers}:
+                return "applied"
+            return "unchanged" if latest.values == original else "ambiguous"
+
+        def refresh() -> None:
+            nonlocal current_row
+            latest = self._find_row(title, record_id)
+            if latest.values != original:
+                raise StorageConflictError(
+                    f"The {title} row changed while the write was being retried."
+                )
+            current_row = latest
+
+        self._write_with_confirmation(
+            f"{title} update", write, state, before_retry=refresh, invalidate=(title,)
         )
-        self._invalidate(title)
 
     def _replace_rows(
         self,
@@ -1507,7 +1589,12 @@ class GoogleSheetsStorage:
         headers = self._headers(title)
         worksheet = self._worksheet(title)
         current_updates = list(updates)
-        for attempt in range(self._retry_attempts):
+        originals = {
+            _clean_text(record.get("id"), "ID", required=True): dict(row.values)
+            for row, record in updates
+        }
+
+        def write() -> None:
             batch = [
                 {
                     "range": f"A{row.row_number}",
@@ -1515,81 +1602,68 @@ class GoogleSheetsStorage:
                 }
                 for row, record in current_updates
             ]
-            try:
-                self._api(
-                    lambda: worksheet.batch_update(batch, raw=True),
-                    retry_safe=False,
+            self._api(
+                lambda: worksheet.batch_update(batch, raw=True),
+                retry_safe=False,
+            )
+
+        intended_by_id = {
+            _clean_text(record.get("id"), "ID", required=True): {
+                header: str(record.get(header, "")) for header in headers
+            }
+            for _, record in updates
+        }
+
+        def state() -> str:
+            current_rows = self._rows(title, force_refresh=True)
+            current_by_id = {
+                _clean_text(item.values.get("id"), "ID", required=True): item
+                for item in current_rows
+            }
+            if all(
+                current_by_id.get(record_id, _StoredRow(0, {})).values == intended
+                for record_id, intended in intended_by_id.items()
+            ):
+                return "applied"
+            if all(
+                current_by_id.get(record_id, _StoredRow(0, {})).values
+                == originals[record_id]
+                for record_id in originals
+            ):
+                return "unchanged"
+            return "ambiguous"
+
+        def refresh() -> None:
+            nonlocal current_updates
+            if before_retry is not None:
+                before_retry()
+            retry_rows = self._rows(title, force_refresh=True)
+            retry_by_id = {
+                _clean_text(item.values.get("id"), "ID", required=True): item
+                for item in retry_rows
+            }
+            if any(
+                retry_by_id.get(record_id, _StoredRow(0, {})).values
+                != originals[record_id]
+                for record_id in originals
+            ):
+                raise StorageConflictError(
+                    f"A row in {title} changed unexpectedly during a write retry."
                 )
-            except StorageUnavailableError as error:
-                current_rows = self._rows(title, force_refresh=True)
-                current_by_id: dict[str, _StoredRow] = {}
-                for row in current_rows:
-                    row_id = _clean_text(row.values.get("id"), "ID", required=True)
-                    if row_id in current_by_id:
-                        raise StorageValidationError(f"Duplicate ID detected in {title}")
-                    current_by_id[row_id] = row
-                intended_by_id = {
-                    _clean_text(record.get("id"), "ID", required=True): {
-                        header: str(record.get(header, "")) for header in headers
-                    }
-                    for _, record in updates
-                }
-                if all(
-                    current_by_id.get(record_id, _StoredRow(0, {})).values == intended
-                    for record_id, intended in intended_by_id.items()
-                ):
-                    return
-                if not error.retryable or attempt + 1 >= self._retry_attempts:
-                    raise
-                if not all(
-                    current_by_id.get(
-                        _clean_text(row.values.get("id"), "ID", required=True),
-                        _StoredRow(0, {}),
-                    ).values
-                    == row.values
-                    for row, _ in current_updates
-                ):
-                    raise StorageConflictError(
-                        f"A row in {title} changed unexpectedly during a write retry."
-                    ) from error
-                self._sleeper(self._retry_base_delay_seconds * (2**attempt))
-                if before_retry is not None:
-                    before_retry()
-                retry_rows = self._rows(title, force_refresh=True)
-                retry_by_id: dict[str, _StoredRow] = {}
-                for row in retry_rows:
-                    row_id = _clean_text(row.values.get("id"), "ID", required=True)
-                    if row_id in retry_by_id:
-                        raise StorageValidationError(f"Duplicate ID detected in {title}")
-                    retry_by_id[row_id] = row
-                if all(
-                    retry_by_id.get(record_id, _StoredRow(0, {})).values == intended
-                    for record_id, intended in intended_by_id.items()
-                ):
-                    return
-                if not all(
-                    retry_by_id.get(
-                        _clean_text(row.values.get("id"), "ID", required=True),
-                        _StoredRow(0, {}),
-                    ).values
-                    == row.values
-                    for row, _ in current_updates
-                ):
-                    raise StorageConflictError(
-                        f"A row in {title} changed unexpectedly during a write retry."
-                    ) from error
-                current_updates = [
-                    (
-                        retry_by_id[
-                            _clean_text(row.values.get("id"), "ID", required=True)
-                        ],
-                        record,
-                    )
-                    for row, record in current_updates
-                ]
-                continue
-            self._invalidate(title)
-            return
+            current_updates = [
+                (retry_by_id[record_id], record)
+                for record_id, (_, record) in zip(
+                    originals, updates
+                )
+            ]
+
+        self._write_with_confirmation(
+            f"{title} batch update",
+            write,
+            state,
+            before_retry=refresh,
+            invalidate=(title,),
+        )
 
     def _replace_rows_atomically(
         self,
