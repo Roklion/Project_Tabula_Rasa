@@ -1438,10 +1438,14 @@ class GoogleSheetsStorage:
                 if not error.retryable:
                     for title in invalidate:
                         self._invalidate(title)
+                    if retried:
+                        raise StorageUnavailableError(
+                            _mutation_guidance(operation), retryable=False
+                        ) from error
                     raise
                 try:
                     state = readback()
-                except StorageError as read_error:
+                except (StorageError, OSError) as read_error:
                     for title in invalidate:
                         self._invalidate(title)
                     raise StorageUnavailableError(
@@ -1456,7 +1460,7 @@ class GoogleSheetsStorage:
                     if before_retry is not None:
                         try:
                             before_retry()
-                        except StorageError:
+                        except (StorageError, OSError):
                             for title in invalidate:
                                 self._invalidate(title)
                             raise
