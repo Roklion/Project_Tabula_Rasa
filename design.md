@@ -893,7 +893,8 @@ unrelated Drive or Synology controls. Preserve:
 - optional local backup folder;
 - complete service-account JSON upload;
 - Validate and save;
-- workbook validation, required-sheet initialization, and default seeding;
+- validation and initialization for genuinely blank workbooks; populated
+  legacy or incompatible workbooks require the explicit migration command;
 - edit of business name, spreadsheet, and local backup folder; and
 - separate replacement-key upload and Validate and rotate credential action.
 
