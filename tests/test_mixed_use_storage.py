@@ -1867,6 +1867,37 @@ def test_mixed_use_delete_confirms_final_delete_after_lost_response(
     assert default_storage.list_transactions() == []
 
 
+def test_mixed_use_delete_partial_pair_stops_without_retry(
+    default_storage: GoogleSheetsStorage,
+    monkeypatch,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    original_batch_update = default_storage._workbook.batch_update
+    calls = 0
+
+    def partial_then_lose_response(body: dict[str, object]) -> None:
+        nonlocal calls
+        calls += 1
+        original_batch_update({"requests": body["requests"][:1]})
+        raise OSError("response lost after partial deletion")
+
+    monkeypatch.setattr(
+        default_storage._workbook, "batch_update", partial_then_lose_response
+    )
+
+    with pytest.raises(StorageUnavailableError, match="could not confirm"):
+        default_storage.delete_mixed_use_expense(source["id"])
+
+    assert calls == 1
+    assert "Transactions" not in default_storage._row_cache
+    assert "MixedUseExpenses" not in default_storage._row_cache
+
+
 def test_mixed_use_append_does_not_replay_when_confirmation_read_fails(
     default_storage: GoogleSheetsStorage,
 ) -> None:
