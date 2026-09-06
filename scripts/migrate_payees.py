@@ -169,13 +169,12 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     new_headers = ["payee_id" if header == "payee" else header for header in headers]
     existing_ids = {str(item.get("id", "")).strip() for item in existing}
     new_payees = [item for item in payees if item["id"] not in existing_ids]
-    expected_payee_values = payee_values
     if payees_changed:
-        expected_payee_values = [
+        payee_values = [
             payee_headers,
             *payee_rows,
         ]
-        payee_sheet.update(expected_payee_values, range_name="A1", raw=True)
+        payee_sheet.update(payee_values, range_name="A1", raw=True)
     if new_payees:
         payee_sheet.append_rows(
             [
@@ -184,13 +183,6 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
             ],
             value_input_option="RAW",
         )
-        expected_payee_values = [
-            *expected_payee_values,
-            *[
-                [item.get(header, "") for header in payee_headers]
-                for item in new_payees
-            ],
-        ]
     if "payee" not in headers and not legacy_rows:
         return {"payees": len(new_payees), "transactions": 0}
     transactions_sheet.update(
