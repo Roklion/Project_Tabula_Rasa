@@ -309,7 +309,15 @@ def _mutation_guidance(operation: str) -> str:
         inspection_area = (
             "Tag management and the Transactions, Mileage, and MixedUseExpenses tables"
         )
-    elif any(keyword in operation_key for keyword in ("bulk", "transaction", "category")):
+    elif "category" in operation_key:
+        inspection_area = "Categories and the Transactions ledger"
+    elif "account" in operation_key:
+        inspection_area = (
+            "Accounts and the Transactions, Mileage, and MixedUseExpenses tables"
+        )
+    elif "mileage" in operation_key:
+        inspection_area = "the Mileage log"
+    elif any(keyword in operation_key for keyword in ("bulk", "transaction")):
         inspection_area = "the Transactions ledger"
     elif "receipt" in operation_key:
         inspection_area = "the receipt records and linked ledger rows"

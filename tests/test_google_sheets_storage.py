@@ -185,6 +185,9 @@ def rewrite_backup_tables(
         ("transaction deletion", "Transactions ledger"),
         ("payee merge", "Payee management"),
         ("tag removal", "Tag management"),
+        ("category deletion", "Categories and the Transactions ledger"),
+        ("account update", "Accounts and the Transactions, Mileage, and MixedUseExpenses tables"),
+        ("Mileage batch update", "Mileage log"),
     ],
 )
 def test_mutation_guidance_names_operation_inspection_area(
