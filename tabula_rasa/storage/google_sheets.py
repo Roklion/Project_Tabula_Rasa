@@ -305,7 +305,11 @@ def _mutation_guidance(operation: str) -> str:
 
 
 class StorageBulkMutationUncertainError(StorageUnavailableError):
-    """Raised when a bulk write's postcondition is not safely complete."""
+    """Deprecated compatibility error; mutations now raise StorageUnavailableError.
+
+    Kept importable for integrations upgrading from the old outcome matrix. No
+    Sheets mutation path raises this type anymore.
+    """
 
     def __init__(self, message: str, *, outcome: str, retryable: bool):
         super().__init__(message, retryable=retryable)
@@ -1494,6 +1498,8 @@ class GoogleSheetsStorage:
             ]
             if not matches:
                 return "unchanged"
+            if len(matches) != 1:
+                return "ambiguous"
             expected = {header: str(record.get(header, "")) for header in headers}
             return "applied" if matches[0].values == expected else "ambiguous"
 
@@ -1522,9 +1528,12 @@ class GoogleSheetsStorage:
 
         def state() -> str:
             rows = self._rows(title, force_refresh=True)
-            by_id = {
-                _clean_text(row.values.get("id"), "ID"): row.values for row in rows
-            }
+            by_id: dict[str, dict[str, str]] = {}
+            for row in rows:
+                record_id = _clean_text(row.values.get("id"), "ID")
+                if record_id in by_id:
+                    return "ambiguous"
+                by_id[record_id] = row.values
             expected = {
                 _clean_text(record.get("id"), "ID"): {
                     header: str(record.get(header, "")) for header in headers
@@ -1598,6 +1607,8 @@ class GoogleSheetsStorage:
             _clean_text(record.get("id"), "ID", required=True): dict(row.values)
             for row, record in updates
         }
+        if len(originals) != len(updates):
+            raise StorageValidationError(f"Duplicate ID detected in {title}")
 
         def write() -> None:
             batch = [
@@ -1618,6 +1629,8 @@ class GoogleSheetsStorage:
             }
             for _, record in updates
         }
+        if len(intended_by_id) != len(updates):
+            raise StorageValidationError(f"Duplicate ID detected in {title}")
 
         def state() -> str:
             current_rows = self._rows(title, force_refresh=True)
@@ -2531,17 +2544,17 @@ class GoogleSheetsStorage:
         operation: str,
         requests: Sequence[Mapping[str, Any]],
         read_state: Callable[[], Any],
-        fully_applied: Callable[[Any], bool],
-        not_applied: Callable[[Any], bool],
+        applied: Callable[[Any], bool],
+        unchanged: Callable[[Any], bool],
         invalidate: Iterable[str],
     ) -> None:
         """Write one managed batch with one fresh readback and safe retry."""
 
         def state() -> str:
             current = read_state()
-            if fully_applied(current):
+            if applied(current):
                 return "applied"
-            if not_applied(current):
+            if unchanged(current):
                 return "unchanged"
             return "ambiguous"
 
@@ -2688,7 +2701,7 @@ class GoogleSheetsStorage:
                     self._managed_rows_by_id(current["MixedUseExpenses"], "MixedUseExpenses"),
                 )
 
-            def fully_applied(state: Any) -> bool:
+            def is_applied(state: Any) -> bool:
                 current_payees, current_transactions, current_mixed = state
                 return (
                     target_id in current_payees
@@ -2710,7 +2723,7 @@ class GoogleSheetsStorage:
                     )
                 )
 
-            def not_applied(state: Any) -> bool:
+            def is_unchanged(state: Any) -> bool:
                 current_payees, current_transactions, current_mixed = state
                 if any(
                     record_id not in current_payees
@@ -2731,8 +2744,8 @@ class GoogleSheetsStorage:
                 operation="payee merge",
                 requests=requests,
                 read_state=fresh_state,
-                fully_applied=fully_applied,
-                not_applied=not_applied,
+                applied=is_applied,
+                unchanged=is_unchanged,
                 invalidate=("Payees", "Transactions", "MixedUseExpenses"),
             )
             return {"status": "fully_applied", "count": str(len(source_ids))}
@@ -2788,11 +2801,11 @@ class GoogleSheetsStorage:
                     for row in (*current_transactions.values(), *current_mixed.values())
                 )
 
-            def fully_applied(state: Any) -> bool:
+            def is_applied(state: Any) -> bool:
                 current_payees, _, _ = state
                 return payee_id not in current_payees and not references_present(state)
 
-            def not_applied(state: Any) -> bool:
+            def is_unchanged(state: Any) -> bool:
                 current_payees, _, _ = state
                 return (
                     payee_id in current_payees
@@ -2804,8 +2817,8 @@ class GoogleSheetsStorage:
                 operation="payee removal",
                 requests=[request],
                 read_state=read_state,
-                fully_applied=fully_applied,
-                not_applied=not_applied,
+                applied=is_applied,
+                unchanged=is_unchanged,
                 invalidate=("Payees", "Transactions", "MixedUseExpenses"),
             )
             return {"status": "fully_applied"}
@@ -2993,7 +3006,7 @@ class GoogleSheetsStorage:
                     ),
                 )
 
-            def fully_applied(state: Any) -> bool:
+            def is_applied(state: Any) -> bool:
                 (
                     current_tags,
                     current_transactions,
@@ -3025,7 +3038,7 @@ class GoogleSheetsStorage:
                         return False
                 return True
 
-            def not_applied(state: Any) -> bool:
+            def is_unchanged(state: Any) -> bool:
                 (
                     current_tags,
                     current_transactions,
@@ -3055,8 +3068,8 @@ class GoogleSheetsStorage:
                 operation="tag merge",
                 requests=requests,
                 read_state=fresh_state,
-                fully_applied=fully_applied,
-                not_applied=not_applied,
+                applied=is_applied,
+                unchanged=is_unchanged,
                 invalidate=("Tags", "Transactions", "Mileage", "MixedUseExpenses"),
             )
             return {"status": "fully_applied", "count": str(len(source_ids))}
@@ -3130,7 +3143,7 @@ class GoogleSheetsStorage:
                 )
             def is_gone(state: Any) -> bool:
                 return tag_id not in state[0] and not references_present(state)
-            def remains(state: Any) -> bool:
+            def is_unchanged(state: Any) -> bool:
                 return (
                     tag_id in state[0]
                     and state[0][tag_id].values == tag_rows[tag_id].values
@@ -3140,8 +3153,8 @@ class GoogleSheetsStorage:
                 operation="tag removal",
                 requests=[self._managed_delete_request("Tags", tag_rows[tag_id])],
                 read_state=read_state,
-                fully_applied=is_gone,
-                not_applied=remains,
+                applied=is_gone,
+                unchanged=is_unchanged,
                 invalidate=("Tags", "Transactions", "Mileage", "MixedUseExpenses"),
             )
             return {"status": "fully_applied"}
@@ -3614,12 +3627,10 @@ class GoogleSheetsStorage:
     def _mixed_use_mutation_state(
         self,
         *,
-        operation: str,
         source_id: str,
         transaction_id: str,
         expected_source: Mapping[str, Any],
         expected_transaction: Mapping[str, Any],
-        error: StorageUnavailableError | None,
         deletion: bool = False,
         original_source: Mapping[str, Any] | None = None,
         original_transaction: Mapping[str, Any] | None = None,
@@ -3629,34 +3640,34 @@ class GoogleSheetsStorage:
         actual_source = sources.get(source_id)
         actual_transaction = transactions.get(transaction_id)
         if deletion:
-            fully_applied = actual_source is None and actual_transaction is None
-            not_applied = self._mixed_use_record_matches(
+            applied = actual_source is None and actual_transaction is None
+            unchanged = self._mixed_use_record_matches(
                 "MixedUseExpenses", actual_source, expected_source
             ) and self._mixed_use_record_matches(
                 "Transactions", actual_transaction, expected_transaction
             )
         else:
-            fully_applied = self._mixed_use_record_matches(
+            applied = self._mixed_use_record_matches(
                 "MixedUseExpenses", actual_source, expected_source
             ) and self._mixed_use_record_matches(
                 "Transactions", actual_transaction, expected_transaction
             )
             if original_source is not None:
-                source_not_applied = self._mixed_use_record_matches(
+                source_unchanged = self._mixed_use_record_matches(
                     "MixedUseExpenses", actual_source, original_source
                 )
                 if original_transaction is None:
-                    transaction_not_applied = actual_transaction is None
+                    transaction_unchanged = actual_transaction is None
                 else:
-                    transaction_not_applied = self._mixed_use_record_matches(
+                    transaction_unchanged = self._mixed_use_record_matches(
                         "Transactions", actual_transaction, original_transaction
                     )
-                not_applied = source_not_applied and transaction_not_applied
+                unchanged = source_unchanged and transaction_unchanged
             else:
-                not_applied = actual_source is None and actual_transaction is None
-        if fully_applied:
+                unchanged = actual_source is None and actual_transaction is None
+        if applied:
             return "applied"
-        if not_applied:
+        if unchanged:
             return "unchanged"
         return "ambiguous"
 
@@ -3933,12 +3944,10 @@ class GoogleSheetsStorage:
                 if not error.retryable:
                     raise
                 state = self._mixed_use_mutation_state(
-                    operation="create",
                     source_id=source_id,
                     transaction_id=transaction_id,
                     expected_source=source,
                     expected_transaction=projection,
-                    error=error,
                 )
                 if state == "applied":
                     return self.get_mixed_use_expense(source_id)
@@ -4041,12 +4050,10 @@ class GoogleSheetsStorage:
                 ]
             ),
             lambda: self._mixed_use_mutation_state(
-                operation="edit",
                 source_id=source_id,
                 transaction_id=transaction_id,
                 expected_source=updated_source,
                 expected_transaction=updated_transaction,
-                error=None,
                 original_source=current_source,
                 original_transaction=current_transaction,
             ),
@@ -4130,12 +4137,10 @@ class GoogleSheetsStorage:
             "mixed-use deletion",
             lambda: self._batch_update_spreadsheet(requests),
             lambda: self._mixed_use_mutation_state(
-                operation="delete",
                 source_id=source_id,
                 transaction_id=transaction_id,
                 expected_source=source,
                 expected_transaction=transaction,
-                error=None,
                 deletion=True,
             ),
             invalidate=("Transactions", "MixedUseExpenses"),
