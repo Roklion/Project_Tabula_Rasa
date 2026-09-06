@@ -1793,7 +1793,14 @@ class GoogleSheetsStorage:
                 current["payee_id"] = _clean_text(current.get("payee_id"), "Payee")
             if "tag_ids" in current:
                 current["tag_ids"] = _encode_tag_ids(current.get("tag_ids", ""))
-            if {key: current.get(key, "") for key in expected} != expected:
+            if any(
+                (
+                    not _decimal_values_match(current.get(key), value)
+                    if key == "amount"
+                    else current.get(key, "") != value
+                )
+                for key, value in expected.items()
+            ):
                 raise StorageConflictError(
                     "A selected transaction changed; review the current rows and try again."
                 )
@@ -2538,6 +2545,7 @@ class GoogleSheetsStorage:
         read_state: Callable[[], Any],
         applied: Callable[[Any], bool],
         unchanged: Callable[[Any], bool],
+        before_retry: Callable[[], None] | None = None,
         invalidate: Iterable[str],
     ) -> None:
         """Write one managed batch with one fresh readback and safe retry."""
@@ -2554,6 +2562,7 @@ class GoogleSheetsStorage:
             operation,
             lambda: self._batch_update_spreadsheet(requests),
             state,
+            before_retry=before_retry,
             invalidate=invalidate,
         )
 
@@ -2732,12 +2741,47 @@ class GoogleSheetsStorage:
                     for record_id, row in mixed_updates.items()
                 )
 
+            def refresh_requests() -> None:
+                current = self._snapshot(
+                    ["Payees", "Transactions", "MixedUseExpenses"],
+                    force_refresh=True,
+                )
+                current_payees = self._managed_rows_by_id(current["Payees"], "Payees")
+                current_transactions = self._managed_rows_by_id(
+                    current["Transactions"], "Transactions"
+                )
+                current_mixed = self._managed_rows_by_id(
+                    current["MixedUseExpenses"], "MixedUseExpenses"
+                )
+                refreshed = [
+                    self._managed_update_request(
+                        "Transactions", current_transactions[record_id], "payee_id", target_id
+                    )
+                    for record_id in transaction_updates
+                ]
+                refreshed.extend(
+                    self._managed_update_request(
+                        "MixedUseExpenses", current_mixed[record_id], "payee_id", target_id
+                    )
+                    for record_id in mixed_updates
+                )
+                refreshed.extend(
+                    self._managed_delete_request("Payees", current_payees[source_id])
+                    for source_id in sorted(
+                        source_ids,
+                        key=lambda item: current_payees[item].row_number,
+                        reverse=True,
+                    )
+                )
+                requests[:] = refreshed
+
             self._managed_write(
                 operation="payee merge",
                 requests=requests,
                 read_state=fresh_state,
                 applied=is_applied,
                 unchanged=is_unchanged,
+                before_retry=refresh_requests,
                 invalidate=("Payees", "Transactions", "MixedUseExpenses"),
             )
             return {"status": "fully_applied", "count": str(len(source_ids))}
@@ -2805,12 +2849,21 @@ class GoogleSheetsStorage:
                     and not references_present(state)
                 )
 
+            def refresh_request() -> None:
+                current_payees, _, _ = read_state()
+                refreshed = self._managed_delete_request(
+                    "Payees", current_payees[payee_id]
+                )
+                requests[:] = [refreshed]
+
+            requests = [request]
             self._managed_write(
                 operation="payee removal",
-                requests=[request],
+                requests=requests,
                 read_state=read_state,
                 applied=is_applied,
                 unchanged=is_unchanged,
+                before_retry=refresh_request,
                 invalidate=("Payees", "Transactions", "MixedUseExpenses"),
             )
             return {"status": "fully_applied"}
@@ -3056,12 +3109,43 @@ class GoogleSheetsStorage:
                         return False
                 return True
 
+            def refresh_requests() -> None:
+                current_tags, current_transactions, current_mileage, current_sources = (
+                    fresh_state()
+                )
+                current_rows_by_title = {
+                    "Transactions": current_transactions,
+                    "Mileage": current_mileage,
+                    "MixedUseExpenses": current_sources,
+                }
+                refreshed = [
+                    self._managed_update_request(
+                        title,
+                        current_rows_by_title[title][
+                            _clean_text(row.values.get("id"), "ID", required=True)
+                        ],
+                        "tag_ids",
+                        expected_value,
+                    )
+                    for title, row, expected_value in update_rows.values()
+                ]
+                refreshed.extend(
+                    self._managed_delete_request("Tags", current_tags[source_id])
+                    for source_id in sorted(
+                        source_ids,
+                        key=lambda item: current_tags[item].row_number,
+                        reverse=True,
+                    )
+                )
+                requests[:] = refreshed
+
             self._managed_write(
                 operation="tag merge",
                 requests=requests,
                 read_state=fresh_state,
                 applied=is_applied,
                 unchanged=is_unchanged,
+                before_retry=refresh_requests,
                 invalidate=("Tags", "Transactions", "Mileage", "MixedUseExpenses"),
             )
             return {"status": "fully_applied", "count": str(len(source_ids))}
@@ -3105,6 +3189,7 @@ class GoogleSheetsStorage:
                 raise StorageConflictError(
                     f"This tag is referenced by {references} records. Merge it or unassign it first."
                 )
+            request = self._managed_delete_request("Tags", tag_rows[tag_id])
             def read_state() -> tuple[
                 dict[str, _StoredRow],
                 dict[str, _StoredRow],
@@ -3141,12 +3226,24 @@ class GoogleSheetsStorage:
                     and state[0][tag_id].values == tag_rows[tag_id].values
                     and not references_present(state)
                 )
+
+            def refresh_request() -> None:
+                nonlocal tag_rows, request
+                tag_rows = read_state()[0]
+                request = self._managed_delete_request("Tags", tag_rows[tag_id])
+
+            requests = [request]
+            def refresh_requests() -> None:
+                refresh_request()
+                requests[:] = [request]
+
             self._managed_write(
                 operation="tag removal",
-                requests=[self._managed_delete_request("Tags", tag_rows[tag_id])],
+                requests=requests,
                 read_state=read_state,
                 applied=is_gone,
                 unchanged=is_unchanged,
+                before_retry=refresh_requests,
                 invalidate=("Tags", "Transactions", "Mileage", "MixedUseExpenses"),
             )
             return {"status": "fully_applied"}
@@ -4040,14 +4137,22 @@ class GoogleSheetsStorage:
             raise StorageConflictError(
                 "The mixed-use expense changed; refresh it before editing."
             )
-        self._write_with_confirmation(
-            "mixed-use edit",
-            lambda: self._replace_rows_atomically(
+        def write() -> None:
+            self._replace_rows_atomically(
                 [
                     ("Transactions", fresh_transaction, updated_transaction),
                     ("MixedUseExpenses", fresh_source, updated_source),
                 ]
-            ),
+            )
+
+        def refresh_rows() -> None:
+            nonlocal fresh_transaction, fresh_source
+            fresh_transaction = self._find_row("Transactions", transaction_id)
+            fresh_source = self._find_row("MixedUseExpenses", source_id)
+
+        self._write_with_confirmation(
+            "mixed-use edit",
+            write,
             lambda: self._mixed_use_mutation_state(
                 source_id=source_id,
                 transaction_id=transaction_id,
@@ -4056,6 +4161,7 @@ class GoogleSheetsStorage:
                 original_source=current_source,
                 original_transaction=current_transaction,
             ),
+            before_retry=refresh_rows,
             invalidate=("Transactions", "MixedUseExpenses"),
         )
         return self.get_mixed_use_expense(source_id)
@@ -4132,6 +4238,16 @@ class GoogleSheetsStorage:
             self._managed_delete_request("Transactions", fresh_transaction),
             self._managed_delete_request("MixedUseExpenses", fresh_source),
         ]
+
+        def refresh_requests() -> None:
+            nonlocal requests, fresh_transaction, fresh_source
+            fresh_transaction = self._find_row("Transactions", transaction_id)
+            fresh_source = self._find_row("MixedUseExpenses", source_id)
+            requests = [
+                self._managed_delete_request("Transactions", fresh_transaction),
+                self._managed_delete_request("MixedUseExpenses", fresh_source),
+            ]
+
         self._write_with_confirmation(
             "mixed-use deletion",
             lambda: self._batch_update_spreadsheet(requests),
@@ -4142,6 +4258,7 @@ class GoogleSheetsStorage:
                 expected_transaction=transaction,
                 deletion=True,
             ),
+            before_retry=refresh_requests,
             invalidate=("Transactions", "MixedUseExpenses"),
         )
 
@@ -4211,46 +4328,32 @@ class GoogleSheetsStorage:
             source.values.get("receipt_references") or ""
         )
 
-        transaction_headers = self._headers("Transactions")
-        source_headers = self._headers("MixedUseExpenses")
-        transaction_reference_column = self._sheet_column_index(
-            transaction_headers, "receipt_references"
-        )
-        source_reference_column = self._sheet_column_index(
-            source_headers, "receipt_references"
-        )
-        requests = [
-            {
-                "updateCells": {
-                    "range": {
-                        "sheetId": self._transactions_sheet_id(),
-                        "startRowIndex": current.row_number - 1,
-                        "endRowIndex": current.row_number,
-                        "startColumnIndex": transaction_reference_column,
-                        "endColumnIndex": transaction_reference_column + 1,
-                    },
-                    "rows": [
-                        {"values": [{"userEnteredValue": {"stringValue": encoded_references}}]}
-                    ],
-                    "fields": "userEnteredValue",
-                }
-            },
-            {
-                "updateCells": {
-                    "range": {
-                        "sheetId": self._sheet_id("MixedUseExpenses"),
-                        "startRowIndex": source.row_number - 1,
-                        "endRowIndex": source.row_number,
-                        "startColumnIndex": source_reference_column,
-                        "endColumnIndex": source_reference_column + 1,
-                    },
-                    "rows": [
-                        {"values": [{"userEnteredValue": {"stringValue": encoded_references}}]}
-                    ],
-                    "fields": "userEnteredValue",
-                }
-            },
-        ]
+        def build_requests(
+            transaction_row: _StoredRow, source_row: _StoredRow
+        ) -> list[dict[str, Any]]:
+            return [
+                self._managed_update_request(
+                    "Transactions",
+                    transaction_row,
+                    "receipt_references",
+                    encoded_references,
+                ),
+                self._managed_update_request(
+                    "MixedUseExpenses",
+                    source_row,
+                    "receipt_references",
+                    encoded_references,
+                ),
+            ]
+
+        requests = build_requests(current, source)
+
+        def refresh_requests() -> None:
+            nonlocal current, source, requests
+            current = self._find_row("Transactions", transaction_id)
+            source = self._find_row("MixedUseExpenses", source_id)
+            requests = build_requests(current, source)
+
         def state() -> str:
             snapshot = self._snapshot(
                 ["Transactions", "MixedUseExpenses"], force_refresh=True
@@ -4279,6 +4382,7 @@ class GoogleSheetsStorage:
             "mixed-use receipt update",
             lambda: self._batch_update_spreadsheet(requests),
             state,
+            before_retry=refresh_requests,
             invalidate=("Transactions", "MixedUseExpenses"),
         )
         updated = dict(transaction)
