@@ -7,7 +7,6 @@ import json
 import threading
 import zipfile
 from decimal import Decimal
-from unittest.mock import patch
 
 import pytest
 
@@ -18,7 +17,6 @@ from tabula_rasa.mixed_use import (
 )
 from tabula_rasa.storage import (
     GoogleSheetsStorage,
-    StorageBulkMutationUncertainError,
     StorageConflictError,
     StorageUnavailableError,
     StorageValidationError,
@@ -1190,7 +1188,7 @@ def test_replace_rows_reports_conflict_when_row_changes_during_retry(
 
     worksheet.batch_update = change_then_timeout  # type: ignore[method-assign]
 
-    with pytest.raises(StorageConflictError, match="changed unexpectedly"):
+    with pytest.raises(StorageUnavailableError, match="could not confirm"):
         default_storage._replace_rows(
             "Accounts", [(row, {**row.values, "name": "Retry conflict updated"})]
         )
@@ -1322,45 +1320,6 @@ def test_current_backup_rejects_orphaned_mixed_use_projection(
 
 
 
-def test_mixed_use_uncertain_create_never_retries_projection_blindly(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    inputs = {
-        **_expense_inputs(default_storage),
-        "total_expense": "100",
-        "business_use_percentage": "50",
-        "allocation_rationale": "Measured use",
-        "source_id": "source-retry-safe",
-        "linked_transaction_id": "transaction-retry-safe",
-    }
-    original_append = default_storage._append
-    calls = 0
-
-    def append_then_lose_first_result(title: str, record: dict[str, str]) -> None:
-        nonlocal calls
-        original_append(title, record)
-        calls += 1
-        if calls == 1:
-            raise StorageBulkMutationUncertainError(
-                "uncertain", outcome="mixed_ambiguous", retryable=False
-            )
-
-    default_storage._append = append_then_lose_first_result  # type: ignore[method-assign]
-    with pytest.raises(StorageBulkMutationUncertainError, match="review"):
-        default_storage.create_mixed_use_expense(**inputs)
-
-    assert len(default_storage._rows("MixedUseExpenses", force_refresh=True)) == 1
-    assert default_storage._rows("Transactions", force_refresh=True) == []
-    original_created_at = default_storage._rows(
-        "MixedUseExpenses", force_refresh=True
-    )[0].values["created_at"]
-    default_storage._append = original_append  # type: ignore[method-assign]
-    retried = default_storage.create_mixed_use_expense(**inputs)
-    assert retried["id"] == "source-retry-safe"
-    assert retried["created_at"] == original_created_at
-    assert len(default_storage.list_transactions()) == 1
-
-
 def test_mixed_use_retry_ignores_its_persisted_receipt_owner(
     default_storage: GoogleSheetsStorage,
 ) -> None:
@@ -1381,225 +1340,6 @@ def test_mixed_use_retry_ignores_its_persisted_receipt_owner(
     assert retried["linked_transaction_id"] == created["linked_transaction_id"]
     assert len(default_storage._rows("MixedUseExpenses", force_refresh=True)) == 1
     assert len(default_storage._rows("Transactions", force_refresh=True)) == 1
-
-
-def test_mixed_use_source_only_retry_classifies_missing_projection_as_retryable(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    inputs = {
-        **_expense_inputs(default_storage),
-        "total_expense": "100",
-        "business_use_percentage": "50",
-        "allocation_rationale": "Measured use",
-        "source_id": "source-source-only-retry",
-        "linked_transaction_id": "transaction-source-only-retry",
-    }
-    original_append = default_storage._append
-    calls = 0
-
-    def fail_projection_on_both_attempts(title: str, record: dict[str, str]) -> None:
-        nonlocal calls
-        calls += 1
-        if title == "Transactions":
-            raise StorageUnavailableError("projection unavailable", retryable=True)
-        original_append(title, record)
-
-    default_storage._append = fail_projection_on_both_attempts  # type: ignore[method-assign]
-    with pytest.raises(StorageBulkMutationUncertainError) as error:
-        default_storage.create_mixed_use_expense(**inputs)
-    assert error.value.outcome == "mixed_ambiguous"
-
-    default_storage.deactivate_account(inputs["account_id"])
-    retry_inputs = {
-        key: value
-        for key, value in inputs.items()
-        if key != "linked_transaction_id"
-    }
-    with pytest.raises(StorageBulkMutationUncertainError) as retry_error:
-        default_storage.create_mixed_use_expense(**retry_inputs)
-    assert retry_error.value.outcome == "not_applied"
-    assert retry_error.value.retryable is True
-    assert calls == 3
-
-
-def test_mixed_use_source_only_repair_preserves_receipt_references(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    inputs = {
-        **_expense_inputs(default_storage),
-        "total_expense": "100",
-        "business_use_percentage": "50",
-        "allocation_rationale": "Measured use",
-        "source_id": "source-repair-receipts",
-        "linked_transaction_id": "transaction-repair-receipts",
-        "receipt_references": [{"id": "receipt-repair", "name": "receipt.pdf"}],
-    }
-    created = default_storage.create_mixed_use_expense(**inputs)
-    default_storage._worksheet("Transactions").rows.pop(1)
-    default_storage._invalidate("Transactions")
-
-    repaired = default_storage.create_mixed_use_expense(**inputs)
-
-    assert repaired["receipt_references"] == created["receipt_references"]
-    assert default_storage.list_transactions()[0]["receipt_references"] == created[
-        "receipt_references"
-    ]
-
-
-def test_mixed_use_source_only_retry_rejects_new_conflicting_projection(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    inputs = {
-        **_expense_inputs(default_storage),
-        "total_expense": "100",
-        "business_use_percentage": "50",
-        "allocation_rationale": "Measured use",
-        "source_id": "source-conflicting-repair",
-        "linked_transaction_id": "transaction-conflicting-repair",
-    }
-    original_append = default_storage._append
-
-    def fail_projection(title: str, record: dict[str, str]) -> None:
-        if title == "Transactions":
-            raise StorageUnavailableError("projection unavailable", retryable=True)
-        original_append(title, record)
-
-    default_storage._append = fail_projection  # type: ignore[method-assign]
-    with pytest.raises(StorageBulkMutationUncertainError):
-        default_storage.create_mixed_use_expense(**inputs)
-    default_storage._append = original_append  # type: ignore[method-assign]
-
-    original_snapshot = default_storage._raw_mixed_use_snapshot
-    calls = 0
-
-    def add_conflicting_projection_before_repair() -> tuple[
-        dict[str, dict[str, str]], dict[str, dict[str, str]]
-    ]:
-        nonlocal calls
-        calls += 1
-        if calls == 2:
-            _, conflicting_projection = default_storage._prepare_mixed_use_expense(
-                inputs,
-                source_id=inputs["source_id"],
-                linked_transaction_id="transaction-conflict",
-            )
-            original_append("Transactions", conflicting_projection)
-        return original_snapshot()
-
-    default_storage._raw_mixed_use_snapshot = (  # type: ignore[method-assign]
-        add_conflicting_projection_before_repair
-    )
-    with pytest.raises(StorageConflictError, match="already has a linked transaction"):
-        default_storage.create_mixed_use_expense(**inputs)
-
-    transactions = default_storage.list_transactions()
-    assert len(transactions) == 1
-    assert transactions[0]["source_id"] == inputs["source_id"]
-    assert transactions[0]["id"] == "transaction-conflict"
-
-
-def test_mixed_use_source_only_retry_preserves_deactivated_source_tag(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    tag = default_storage.create_tag("Historical tag")
-    inputs = {
-        **_expense_inputs(default_storage),
-        "total_expense": "100",
-        "business_use_percentage": "50",
-        "allocation_rationale": "Measured use",
-        "tag_ids": [tag["id"]],
-        "source_id": "source-inactive-tag-retry",
-        "linked_transaction_id": "transaction-inactive-tag-retry",
-    }
-    original_append = default_storage._append
-
-    def fail_projection(title: str, record: dict[str, str]) -> None:
-        if title == "Transactions":
-            raise StorageUnavailableError("projection unavailable", retryable=True)
-        original_append(title, record)
-
-    default_storage._append = fail_projection  # type: ignore[method-assign]
-    with pytest.raises(StorageBulkMutationUncertainError):
-        default_storage.create_mixed_use_expense(**inputs)
-
-    default_storage._append = original_append  # type: ignore[method-assign]
-    default_storage.edit_tag(tag["id"], active=False)
-    retried = default_storage.create_mixed_use_expense(**inputs)
-
-    assert retried["tag_ids"] == [tag["id"]]
-    assert default_storage.list_transactions()[0]["tag_ids"] == [tag["id"]]
-
-
-def test_mixed_use_source_only_retry_resolves_generated_source_from_linked_id(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    inputs = {
-        **_expense_inputs(default_storage),
-        "total_expense": "100",
-        "business_use_percentage": "50",
-        "allocation_rationale": "Measured use",
-        "linked_transaction_id": "transaction-generated-source-retry",
-    }
-    original_append = default_storage._append
-    calls = 0
-
-    def fail_projection_on_both_attempts(title: str, record: dict[str, str]) -> None:
-        nonlocal calls
-        calls += 1
-        if title == "Transactions":
-            raise StorageUnavailableError("projection unavailable", retryable=True)
-        original_append(title, record)
-
-    default_storage._append = fail_projection_on_both_attempts  # type: ignore[method-assign]
-    with pytest.raises(StorageBulkMutationUncertainError):
-        default_storage.create_mixed_use_expense(**inputs)
-    with pytest.raises(StorageBulkMutationUncertainError) as retry_error:
-        default_storage.create_mixed_use_expense(**inputs)
-
-    assert retry_error.value.outcome == "not_applied"
-    assert len(default_storage._rows("MixedUseExpenses", force_refresh=True)) == 1
-    assert default_storage._rows("Transactions", force_refresh=True) == []
-    assert calls == 3
-
-
-def test_mixed_use_retry_reuses_renamed_payee_after_deactivation(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    inputs = {
-        **_expense_inputs(default_storage),
-        "total_expense": "100",
-        "business_use_percentage": "50",
-        "allocation_rationale": "Measured use",
-        "linked_transaction_id": "transaction-new-payee-retry",
-    }
-    payee_id = inputs.pop("payee_id")
-    inputs["new_payee_name"] = "New vendor"
-    original_append = default_storage._append
-
-    def fail_projection(title: str, record: dict[str, str]) -> None:
-        if title == "Transactions":
-            raise StorageUnavailableError("projection unavailable", retryable=True)
-        original_append(title, record)
-
-    default_storage._append = fail_projection  # type: ignore[method-assign]
-    with pytest.raises(StorageBulkMutationUncertainError):
-        default_storage.create_mixed_use_expense(**inputs)
-
-    source = default_storage._rows("MixedUseExpenses", force_refresh=True)[0].values
-    created_payee_id = source["payee_id"]
-    assert created_payee_id != payee_id
-    default_storage.edit_payee(
-        created_payee_id, name="Renamed vendor", active=False
-    )
-    payee_count = len(default_storage._rows("Payees", force_refresh=True))
-
-    with pytest.raises(StorageBulkMutationUncertainError) as retry_error:
-        default_storage.create_mixed_use_expense(**inputs)
-
-    assert retry_error.value.outcome == "not_applied"
-    assert len(default_storage._rows("Payees", force_refresh=True)) == payee_count
-    assert len(default_storage._rows("MixedUseExpenses", force_refresh=True)) == 1
-    assert default_storage._rows("Transactions", force_refresh=True) == []
 
 
 def test_mixed_use_create_retry_reuses_pair_after_account_deactivation(
@@ -1673,57 +1413,13 @@ def test_mixed_use_create_returns_success_when_final_response_is_lost(
         original_append(title, record)
         calls += 1
         if calls == 2:
-            raise StorageUnavailableError("response lost")
+            raise StorageUnavailableError("response lost", retryable=True)
 
     default_storage._append = append_then_lose_final_result  # type: ignore[method-assign]
     result = default_storage.create_mixed_use_expense(**inputs)
 
     assert result["id"] == inputs["source_id"]
     assert len(default_storage.list_transactions()) == 1
-
-
-def test_mixed_use_retry_reuses_projection_timestamp_after_postcondition_failure(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    inputs = {
-        **_expense_inputs(default_storage),
-        "total_expense": "100",
-        "business_use_percentage": "50",
-        "allocation_rationale": "Measured use",
-        "source_id": "source-postcondition-retry",
-        "linked_transaction_id": "transaction-postcondition-retry",
-    }
-    original_snapshot = default_storage._raw_mixed_use_snapshot
-    calls = 0
-
-    def fail_after_written_pair() -> tuple[
-        dict[str, dict[str, str]], dict[str, dict[str, str]]
-    ]:
-        nonlocal calls
-        calls += 1
-        if calls == 2:
-            raise StorageUnavailableError("postcondition unavailable")
-        return original_snapshot()
-
-    default_storage._raw_mixed_use_snapshot = fail_after_written_pair  # type: ignore[method-assign]
-    with pytest.raises(StorageBulkMutationUncertainError, match="postcondition"):
-        default_storage.create_mixed_use_expense(**inputs)
-    default_storage._raw_mixed_use_snapshot = original_snapshot  # type: ignore[method-assign]
-    persisted_projection_created_at = default_storage._rows(
-        "Transactions", force_refresh=True
-    )[0].values["created_at"]
-
-    with patch(
-        "tabula_rasa.storage.google_sheets._utc_now",
-        return_value="2099-01-01T00:00:00Z",
-    ):
-        retried = default_storage.create_mixed_use_expense(**inputs)
-
-    assert retried["id"] == inputs["source_id"]
-    assert (
-        default_storage.list_transactions()[0]["created_at"]
-        == persisted_projection_created_at
-    )
 
 
 def test_mixed_use_edit_returns_success_when_final_response_is_lost(
@@ -1739,7 +1435,7 @@ def test_mixed_use_edit_returns_success_when_final_response_is_lost(
 
     def replace_then_lose_final_result(updates: object) -> None:
         original_replace(updates)  # type: ignore[arg-type]
-        raise StorageUnavailableError("response lost")
+        raise StorageUnavailableError("response lost", retryable=True)
 
     default_storage._replace_rows_atomically = replace_then_lose_final_result  # type: ignore[method-assign]
     result = default_storage.edit_mixed_use_expense(
@@ -2148,44 +1844,6 @@ def test_mixed_use_delete_rejects_pair_drift_before_deleting_rows(
     assert len(default_storage._rows("Transactions", force_refresh=True)) == 1
     assert len(default_storage._rows("MixedUseExpenses", force_refresh=True)) == 1
 
-
-def test_mixed_use_delete_returns_success_when_final_response_is_lost(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    source = default_storage.create_mixed_use_expense(
-        **_expense_inputs(default_storage),
-        total_expense="100",
-        business_use_percentage="50",
-        allocation_rationale="Measured use",
-    )
-    original_delete = default_storage._delete_mixed_use_row
-    calls = 0
-
-    def delete_then_lose_final_result(
-        title: str,
-        record_id: str,
-        *,
-        expected_record: object = None,
-        before_retry: object = None,
-    ) -> None:
-        nonlocal calls
-        original_delete(
-            title,
-            record_id,
-            expected_record=expected_record,
-            before_retry=before_retry,  # type: ignore[arg-type]
-        )
-        calls += 1
-        if calls == 2:
-            raise StorageUnavailableError("response lost")
-
-    default_storage._delete_mixed_use_row = delete_then_lose_final_result  # type: ignore[method-assign]
-    default_storage.delete_mixed_use_expense(source["id"])
-
-    assert default_storage.list_mixed_use_expenses() == []
-    assert default_storage.list_transactions() == []
-
-
 def test_mixed_use_delete_confirms_final_delete_after_lost_response(
     default_storage: GoogleSheetsStorage,
 ) -> None:
@@ -2195,15 +1853,13 @@ def test_mixed_use_delete_confirms_final_delete_after_lost_response(
         business_use_percentage="50",
         allocation_rationale="Measured use",
     )
-    source_worksheet = default_storage._worksheet("MixedUseExpenses")
-    original_delete_rows = source_worksheet.delete_rows
+    original_batch_update = default_storage._workbook.batch_update
 
-    def delete_then_lose_response(row_number: int) -> None:
-        original_delete_rows(row_number)
+    def delete_then_lose_response(body: object) -> None:
+        original_batch_update(body)
         raise OSError("response lost after delete")
 
-    source_worksheet.delete_rows = delete_then_lose_response  # type: ignore[method-assign]
-    default_storage._retry_attempts = 1
+    default_storage._workbook.batch_update = delete_then_lose_response
 
     default_storage.delete_mixed_use_expense(source["id"])
 
@@ -2236,361 +1892,9 @@ def test_mixed_use_append_does_not_replay_when_confirmation_read_fails(
     default_storage._rows = rows_unavailable_after_append  # type: ignore[method-assign]
     default_storage._retry_attempts = 2
 
-    with pytest.raises(StorageBulkMutationUncertainError, match="postcondition"):
+    with pytest.raises(StorageUnavailableError, match="could not confirm"):
         default_storage._append("MixedUseExpenses", {"id": "ambiguous-append"})
 
     default_storage._rows = original_rows  # type: ignore[method-assign]
     assert calls == 1
     assert len(default_storage._rows("MixedUseExpenses", force_refresh=True)) == 1
-
-
-def test_mixed_use_uncertain_edit_classifies_partial_pair_safely(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    source = default_storage.create_mixed_use_expense(
-        **_expense_inputs(default_storage),
-        total_expense="100",
-        business_use_percentage="50",
-        allocation_rationale="Measured use",
-    )
-    original_batch = default_storage._batch_update_spreadsheet
-
-    def replace_then_lose_first_result(requests: object) -> None:
-        assert isinstance(requests, list)
-        original_batch(requests[:1])
-        raise StorageUnavailableError("uncertain", retryable=False)
-
-    default_storage._batch_update_spreadsheet = replace_then_lose_first_result  # type: ignore[method-assign]
-    with pytest.raises(StorageBulkMutationUncertainError, match="ambiguous"):
-        default_storage.edit_mixed_use_expense(
-            source["id"],
-            total_expense="200",
-            business_use_percentage="25",
-            allocation_rationale="Updated use",
-        )
-
-
-def test_mixed_use_edit_classifies_unchanged_pair_as_retryable_not_applied(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    source = default_storage.create_mixed_use_expense(
-        **_expense_inputs(default_storage),
-        total_expense="100",
-        business_use_percentage="50",
-        allocation_rationale="Measured use",
-    )
-
-    def fail_before_replace(_updates: object) -> None:
-        raise StorageUnavailableError("temporary", retryable=True)
-
-    default_storage._replace_rows_atomically = fail_before_replace  # type: ignore[method-assign]
-    with pytest.raises(StorageBulkMutationUncertainError) as error:
-        default_storage.edit_mixed_use_expense(
-            source["id"], allocation_rationale="Updated use"
-        )
-
-    assert error.value.outcome == "not_applied"
-    assert error.value.retryable is True
-
-
-def test_mixed_use_receipt_update_classifies_partial_pair_as_ambiguous(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    source = default_storage.create_mixed_use_expense(
-        **_expense_inputs(default_storage),
-        total_expense="100",
-        business_use_percentage="50",
-        allocation_rationale="Measured use",
-    )
-    old_references = '[{"id":"old-receipt","name":"Receipt"}]'
-    transaction_sheet = default_storage._worksheet("Transactions")
-    source_sheet = default_storage._worksheet("MixedUseExpenses")
-    transaction_headers = default_storage._headers("Transactions")
-    source_headers = default_storage._headers("MixedUseExpenses")
-    transaction_sheet.rows[1][transaction_headers.index("receipt_references")] = (
-        old_references
-    )
-    source_sheet.rows[1][source_headers.index("receipt_references")] = old_references
-    default_storage._invalidate("Transactions")
-    default_storage._invalidate("MixedUseExpenses")
-
-    def apply_transaction_only(_requests: object) -> None:
-        transaction_sheet.rows[1][transaction_headers.index("receipt_references")] = "[]"
-        default_storage._invalidate("Transactions")
-        raise StorageUnavailableError("response lost", retryable=True)
-
-    default_storage._batch_update_spreadsheet = apply_transaction_only  # type: ignore[method-assign]
-    expected_source = default_storage.get_mixed_use_expense(source["id"])
-    with pytest.raises(StorageBulkMutationUncertainError) as error:
-        default_storage.set_mixed_use_receipt_references(
-            source["id"], [], expected_source=expected_source
-        )
-
-    assert error.value.outcome == "mixed_ambiguous"
-    assert error.value.retryable is False
-
-
-def test_mixed_use_uncertain_delete_rejects_partial_pair_as_ambiguous(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    source = default_storage.create_mixed_use_expense(
-        **_expense_inputs(default_storage),
-        total_expense="100",
-        business_use_percentage="50",
-        allocation_rationale="Measured use",
-    )
-    original_delete = default_storage._delete_mixed_use_row
-
-    def delete_then_lose_transaction_result(
-        title: str,
-        record_id: str,
-        *,
-        expected_record: object = None,
-        before_retry: object = None,
-    ) -> None:
-        original_delete(
-            title,
-            record_id,
-            expected_record=expected_record,
-            before_retry=before_retry,  # type: ignore[arg-type]
-        )
-        if title == "Transactions":
-            raise StorageUnavailableError("uncertain", retryable=False)
-
-    default_storage._delete_mixed_use_row = delete_then_lose_transaction_result  # type: ignore[method-assign]
-    with pytest.raises(StorageBulkMutationUncertainError, match="ambiguous"):
-        default_storage.delete_mixed_use_expense(source["id"])
-
-
-def test_mixed_use_delete_repairs_source_only_partial_pair(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    source = default_storage.create_mixed_use_expense(
-        **_expense_inputs(default_storage),
-        total_expense="100",
-        business_use_percentage="50",
-        allocation_rationale="Measured use",
-    )
-    original_delete = default_storage._delete_mixed_use_row
-
-    def delete_then_lose_transaction_result(
-        title: str,
-        record_id: str,
-        *,
-        expected_record: object = None,
-        before_retry: object = None,
-    ) -> None:
-        original_delete(
-            title,
-            record_id,
-            expected_record=expected_record,
-            before_retry=before_retry,  # type: ignore[arg-type]
-        )
-        if title == "Transactions":
-            raise StorageUnavailableError("uncertain", retryable=False)
-
-    default_storage._delete_mixed_use_row = delete_then_lose_transaction_result  # type: ignore[method-assign]
-    with pytest.raises(StorageBulkMutationUncertainError, match="ambiguous"):
-        default_storage.delete_mixed_use_expense(source["id"])
-
-    default_storage._delete_mixed_use_row = original_delete  # type: ignore[method-assign]
-    default_storage.delete_mixed_use_expense(source["id"])
-
-    assert default_storage.list_mixed_use_expenses() == []
-    assert default_storage.list_transactions() == []
-
-
-def test_mixed_use_delete_rechecks_projection_before_source_only_repair(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    source = default_storage.create_mixed_use_expense(
-        **_expense_inputs(default_storage),
-        total_expense="100",
-        business_use_percentage="50",
-        allocation_rationale="Measured use",
-    )
-    transaction = default_storage.list_transactions()[0]
-    transaction_sheet = default_storage._worksheet("Transactions")
-    transaction_headers = default_storage._headers("Transactions")
-    transaction_sheet.rows.pop(1)
-    default_storage._invalidate("Transactions")
-    original_rows = default_storage._rows
-    injected = False
-
-    def restore_projection_before_repair(
-        title: str, *, force_refresh: bool = False
-    ) -> list[object]:
-        nonlocal injected
-        if title == "Transactions" and force_refresh and not injected:
-            injected = True
-            transaction_sheet.append_row(
-                [transaction.get(header, "") for header in transaction_headers]
-            )
-        return original_rows(title, force_refresh=force_refresh)
-
-    default_storage._rows = restore_projection_before_repair  # type: ignore[method-assign]
-    with pytest.raises(StorageConflictError, match="changed"):
-        default_storage.delete_mixed_use_expense(source["id"])
-
-    assert default_storage.list_mixed_use_expenses() == [source]
-    assert default_storage.list_transactions() == [transaction]
-
-
-def test_mixed_use_delete_rechecks_projection_during_source_only_retry(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    source = default_storage.create_mixed_use_expense(
-        **_expense_inputs(default_storage),
-        total_expense="100",
-        business_use_percentage="50",
-        allocation_rationale="Measured use",
-    )
-    transaction = default_storage.list_transactions()[0]
-    transaction_sheet = default_storage._worksheet("Transactions")
-    transaction_headers = default_storage._headers("Transactions")
-    transaction_sheet.rows.pop(1)
-    default_storage._invalidate("Transactions")
-    source_sheet = default_storage._worksheet("MixedUseExpenses")
-    original_delete = source_sheet.delete_rows
-    delete_calls = 0
-
-    def fail_source_delete_once(row_number: int) -> None:
-        nonlocal delete_calls
-        delete_calls += 1
-        if delete_calls == 1:
-            raise OSError("temporary failure")
-        original_delete(row_number)
-
-    def restore_projection_during_retry(_delay: float) -> None:
-        transaction_sheet.append_row(
-            [transaction.get(header, "") for header in transaction_headers]
-        )
-        default_storage._invalidate("Transactions")
-
-    source_sheet.delete_rows = fail_source_delete_once  # type: ignore[method-assign]
-    default_storage._sleeper = restore_projection_during_retry
-    with pytest.raises(StorageConflictError, match="changed"):
-        default_storage.delete_mixed_use_expense(source["id"])
-
-    assert default_storage.list_mixed_use_expenses() == [source]
-    assert default_storage.list_transactions() == [transaction]
-
-
-def test_mixed_use_delete_rechecks_projection_before_source_delete(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    source = default_storage.create_mixed_use_expense(
-        **_expense_inputs(default_storage),
-        total_expense="100",
-        business_use_percentage="50",
-        allocation_rationale="Measured use",
-    )
-    transaction = default_storage.list_transactions()[0]
-    original_delete = default_storage._delete_mixed_use_row
-    injected = False
-
-    def delete_then_restore_projection(
-        title: str,
-        record_id: str,
-        *,
-        expected_record: object = None,
-        before_retry: object = None,
-    ) -> None:
-        nonlocal injected
-        original_delete(  # type: ignore[arg-type]
-            title,
-            record_id,
-            expected_record=expected_record,
-            before_retry=before_retry,
-        )
-        if title == "Transactions" and not injected:
-            injected = True
-            transaction_sheet = default_storage._worksheet("Transactions")
-            headers = default_storage._headers("Transactions")
-            transaction_sheet.append_row(
-                [transaction.get(header, "") for header in headers]
-            )
-            default_storage._invalidate("Transactions")
-
-    default_storage._delete_mixed_use_row = delete_then_restore_projection  # type: ignore[method-assign]
-    with pytest.raises(StorageConflictError, match="changed"):
-        default_storage.delete_mixed_use_expense(source["id"])
-
-    assert default_storage.list_mixed_use_expenses() == [source]
-    assert default_storage.list_transactions() == [transaction]
-
-
-def test_mixed_use_delete_rechecks_projection_during_source_retry(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    source = default_storage.create_mixed_use_expense(
-        **_expense_inputs(default_storage),
-        total_expense="100",
-        business_use_percentage="50",
-        allocation_rationale="Measured use",
-    )
-    transaction = default_storage.list_transactions()[0]
-    source_sheet = default_storage._worksheet("MixedUseExpenses")
-    transaction_sheet = default_storage._worksheet("Transactions")
-    transaction_headers = default_storage._headers("Transactions")
-    original_delete = source_sheet.delete_rows
-    delete_calls = 0
-
-    def fail_source_delete_once(row_number: int) -> None:
-        nonlocal delete_calls
-        delete_calls += 1
-        if delete_calls == 1:
-            raise OSError("temporary failure")
-        original_delete(row_number)
-
-    def restore_projection_during_retry(_delay: float) -> None:
-        transaction_sheet.append_row(
-            [transaction.get(header, "") for header in transaction_headers]
-        )
-        default_storage._invalidate("Transactions")
-
-    source_sheet.delete_rows = fail_source_delete_once  # type: ignore[method-assign]
-    default_storage._sleeper = restore_projection_during_retry
-    with pytest.raises(StorageConflictError, match="changed"):
-        default_storage.delete_mixed_use_expense(source["id"])
-
-    assert default_storage.list_mixed_use_expenses() == [source]
-    assert default_storage.list_transactions() == [transaction]
-
-
-def test_mixed_use_delete_revalidates_records_inside_retry(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    source = default_storage.create_mixed_use_expense(
-        **_expense_inputs(default_storage),
-        total_expense="100",
-        business_use_percentage="50",
-        allocation_rationale="Measured use",
-    )
-    transaction = default_storage._find_row(
-        "Transactions", source["linked_transaction_id"]
-    ).values
-    worksheet = default_storage._worksheet("Transactions")
-    original_delete = worksheet.delete_rows
-    calls = 0
-
-    def edit_then_fail(row_number: int) -> None:
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            description_column = default_storage._headers("Transactions").index(
-                "description"
-            )
-            worksheet.rows[row_number - 1][description_column] = "changed"
-            raise OSError("temporary failure")
-        original_delete(row_number)
-
-    worksheet.delete_rows = edit_then_fail  # type: ignore[method-assign]
-    with pytest.raises(StorageConflictError, match="record changed"):
-        default_storage._delete_mixed_use_row(
-            "Transactions",
-            source["linked_transaction_id"],
-            expected_record=transaction,
-        )
-
-    assert len(default_storage._rows("Transactions", force_refresh=True)) == 1

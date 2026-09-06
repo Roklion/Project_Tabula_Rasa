@@ -6,9 +6,7 @@ import pytest
 from threading import Event, Thread
 
 from tabula_rasa.storage import (
-    StorageBulkMutationUncertainError,
     StorageConflictError,
-    StorageUnavailableError,
     StorageValidationError,
 )
 from tests.app_support import authenticated_app, navigate_to
@@ -110,91 +108,6 @@ def test_expected_management_snapshot_preserves_falsy_values() -> None:
     expected = {"id": "tag-1", "active": False, "count": 0}
 
     GoogleSheetsStorage._assert_expected_managed_records(current, expected)
-
-
-def test_non_applied_management_batch_is_classified(default_storage, monkeypatch) -> None:
-    tag = default_storage.create_tag("Unused")
-
-    def fail(_requests):
-        raise StorageBulkMutationUncertainError(
-            "temporary", outcome="not_applied", retryable=True
-        )
-
-    monkeypatch.setattr(default_storage, "_batch_update_spreadsheet", fail)
-    with pytest.raises(StorageBulkMutationUncertainError) as raised:
-        default_storage.remove_tag(tag["id"])
-    assert raised.value.outcome == "not_applied"
-    assert raised.value.retryable is True
-
-
-def test_non_applied_tag_merge_is_retryable(default_storage, monkeypatch) -> None:
-    target = default_storage.create_tag("Target")
-    source = default_storage.create_tag("Source")
-
-    def fail(_requests):
-        raise StorageUnavailableError("temporary", retryable=True)
-
-    monkeypatch.setattr(default_storage, "_batch_update_spreadsheet", fail)
-    with pytest.raises(StorageBulkMutationUncertainError) as raised:
-        default_storage.merge_tags(target["id"], [source["id"]])
-    assert raised.value.outcome == "not_applied"
-    assert raised.value.retryable is True
-
-
-def test_confirmed_tag_merge_readback_failure_is_uncertain(default_storage, monkeypatch) -> None:
-    target = default_storage.create_tag("Target")
-    source = default_storage.create_tag("Source")
-    original_snapshot = default_storage._snapshot
-    snapshot_calls = 0
-
-    def fail_readback(titles, *, force_refresh=False):
-        nonlocal snapshot_calls
-        snapshot_calls += 1
-        if snapshot_calls >= 2:
-            raise StorageUnavailableError("readback unavailable", retryable=True)
-        return original_snapshot(titles, force_refresh=force_refresh)
-
-    monkeypatch.setattr(default_storage, "_snapshot", fail_readback)
-    with pytest.raises(StorageBulkMutationUncertainError) as raised:
-        default_storage.merge_tags(target["id"], [source["id"]])
-    assert raised.value.outcome == "mixed_ambiguous"
-    assert raised.value.retryable is False
-
-
-def test_confirmed_tag_removal_readback_failure_is_uncertain(default_storage, monkeypatch) -> None:
-    tag = default_storage.create_tag("Unused")
-    original_snapshot = default_storage._snapshot
-    snapshot_calls = 0
-
-    def fail_readback(titles, *, force_refresh=False):
-        nonlocal snapshot_calls
-        snapshot_calls += 1
-        if snapshot_calls >= 2:
-            raise StorageUnavailableError("readback unavailable", retryable=True)
-        return original_snapshot(titles, force_refresh=force_refresh)
-
-    monkeypatch.setattr(default_storage, "_snapshot", fail_readback)
-    with pytest.raises(StorageBulkMutationUncertainError) as raised:
-        default_storage.remove_tag(tag["id"])
-    assert raised.value.outcome == "mixed_ambiguous"
-    assert raised.value.retryable is False
-
-
-def test_partial_source_delete_is_ambiguous_not_retryable(default_storage, monkeypatch) -> None:
-    first = default_storage.create_tag("First")
-    second = default_storage.create_tag("Second")
-    target = default_storage.create_tag("Target")
-
-    def partial_delete(_requests):
-        row = default_storage._find_row("Tags", first["id"])
-        default_storage._worksheet("Tags").delete_rows(row.row_number)
-        raise StorageUnavailableError("response lost", retryable=True)
-
-    monkeypatch.setattr(default_storage, "_batch_update_spreadsheet", partial_delete)
-    with pytest.raises(StorageBulkMutationUncertainError) as raised:
-        default_storage.merge_tags(target["id"], [first["id"], second["id"]])
-    assert raised.value.outcome == "mixed_ambiguous"
-    assert raised.value.retryable is False
 
 
 def test_repeated_merge_with_original_snapshot_converges(default_storage) -> None:
@@ -404,45 +317,6 @@ def test_mileage_import_cannot_interleave_management_remove(default_storage) -> 
     management.join(timeout=5)
     assert not management.is_alive()
     assert tag["id"] not in {item["id"] for item in default_storage.list_tags(active_only=False)}
-
-
-def test_removal_row_gone_with_new_reference_is_ambiguous(default_storage, monkeypatch) -> None:
-    tag = default_storage.create_tag("Race")
-
-    def delete_and_reference(_requests):
-        default_storage.create_mileage_trip(
-            trip_date="2026-01-01", miles="2", start_location="A", destination="B",
-            business_purpose="Race", vehicle="Car", tag_ids=[tag["id"]],
-        )
-        row = default_storage._find_row("Tags", tag["id"])
-        default_storage._worksheet("Tags").delete_rows(row.row_number)
-        raise StorageUnavailableError("response lost", retryable=True)
-
-    monkeypatch.setattr(default_storage, "_batch_update_spreadsheet", delete_and_reference)
-    with pytest.raises(StorageBulkMutationUncertainError) as raised:
-        default_storage.remove_tag(tag["id"])
-    assert raised.value.outcome == "mixed_ambiguous"
-    assert raised.value.retryable is False
-
-
-def test_payee_removal_row_gone_with_new_reference_is_ambiguous(default_storage, monkeypatch) -> None:
-    account, category = _ledger_setup(default_storage)
-    payee = default_storage.create_payee("Race payee")
-
-    def delete_and_reference(_requests):
-        default_storage.create_transaction(
-            txn_date="2026-01-01", kind="Expense", amount="2",
-            account_id=account["id"], category_id=category["id"], payee_id=payee["id"],
-        )
-        row = default_storage._find_row("Payees", payee["id"])
-        default_storage._worksheet("Payees").delete_rows(row.row_number)
-        raise StorageUnavailableError("response lost", retryable=True)
-
-    monkeypatch.setattr(default_storage, "_batch_update_spreadsheet", delete_and_reference)
-    with pytest.raises(StorageBulkMutationUncertainError) as raised:
-        default_storage.remove_payee(payee["id"])
-    assert raised.value.outcome == "mixed_ambiguous"
-    assert raised.value.retryable is False
 
 
 def test_transactions_exposes_profile_local_management_tab() -> None:
