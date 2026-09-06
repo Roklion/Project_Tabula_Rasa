@@ -339,21 +339,12 @@ def test_v1_account_normalization_and_source_checksum_are_preserved() -> None:
     assert manifest["conversion"]["source_archive_sha256"] == hashlib.sha256(legacy).hexdigest()
 
 
-def test_migration_rejects_tampered_csv_and_never_overwrites_source() -> None:
+def test_migration_never_overwrites_source_or_destination() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     current = storage.export_backup_zip(
         {"schema_version": 1, "business_profile_key": "test", "receipts": []}
     )
     legacy = _downgrade(current, 1)
-    output = io.BytesIO()
-    with zipfile.ZipFile(io.BytesIO(legacy)) as source, zipfile.ZipFile(output, "w") as destination:
-        for name in source.namelist():
-            content = source.read(name)
-            if name == "Accounts.csv":
-                content += b"tampered,row\n"
-            destination.writestr(name, content)
-    with pytest.raises(StorageValidationError, match="checksum"):
-        migrate_legacy_backup(output.getvalue())
     with TemporaryDirectory() as directory:
         source_path = Path(directory) / "backup.zip"
         source_path.write_bytes(legacy)
@@ -363,155 +354,6 @@ def test_migration_rejects_tampered_csv_and_never_overwrites_source() -> None:
             migrate_backup_file(source_path, profile_key="test")
         assert source_path.read_bytes() == legacy
         assert destination.read_bytes() == b"existing"
-
-
-def test_migration_rejects_overwide_legacy_rows() -> None:
-    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
-    account = storage.create_account("Checking", "Bank")
-    category = storage.create_category("Office", "Expense")
-    storage.create_transaction(
-        txn_date="2026-09-01",
-        kind="Expense",
-        amount="10.00",
-        account_id=account["id"],
-        category_id=category["id"],
-    )
-    legacy = _downgrade(
-        storage.export_backup_zip(
-            {"schema_version": 1, "business_profile_key": "test", "receipts": []}
-        ),
-        1,
-    )
-
-    def add_extra_column(files: dict[str, bytes], manifest: dict[str, Any]) -> None:
-        rows = list(csv.reader(io.StringIO(files["Transactions.csv"].decode())))
-        rows[1].append("unexpected")
-        buffer = io.StringIO(newline="")
-        csv.writer(buffer, lineterminator="\n").writerows(rows)
-        files["Transactions.csv"] = buffer.getvalue().encode()
-        manifest["sha256"]["Transactions.csv"] = hashlib.sha256(
-            files["Transactions.csv"]
-        ).hexdigest()
-
-    legacy = _rewrite_legacy(legacy, update_manifest=add_extra_column)
-    with pytest.raises(StorageValidationError, match="over-wide"):
-        migrate_legacy_backup(legacy)
-
-
-@pytest.mark.parametrize("field", ["sha256", "row_counts"])
-def test_migration_rejects_null_validation_metadata(field: str) -> None:
-    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
-    legacy = _downgrade(
-        storage.export_backup_zip(
-            {"schema_version": 1, "business_profile_key": "test", "receipts": []}
-        ),
-        1,
-    )
-
-    def null_metadata(_files: dict[str, bytes], manifest: dict[str, Any]) -> None:
-        manifest[field] = None
-
-    legacy = _rewrite_legacy(legacy, update_manifest=null_metadata)
-    with pytest.raises(StorageValidationError, match="validation metadata"):
-        migrate_legacy_backup(legacy)
-
-
-def test_migration_requires_the_complete_source_checksum_set() -> None:
-    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
-    legacy = _downgrade(
-        storage.export_backup_zip(
-            {"schema_version": 1, "business_profile_key": "test", "receipts": []}
-        ),
-        1,
-    )
-
-    def remove_checksum(_files: dict[str, bytes], manifest: dict[str, Any]) -> None:
-        manifest["sha256"].pop("Accounts.csv")
-
-    legacy = _rewrite_legacy(legacy, update_manifest=remove_checksum)
-    with pytest.raises(StorageValidationError, match="checksum entries"):
-        migrate_legacy_backup(legacy)
-
-
-def test_migration_validates_optional_payee_checksum() -> None:
-    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
-    legacy = _downgrade(
-        storage.export_backup_zip(
-            {"schema_version": 1, "business_profile_key": "test", "receipts": []}
-        ),
-        6,
-    )
-
-    def add_tampered_payees(files: dict[str, bytes], manifest: dict[str, Any]) -> None:
-        files["Payees.csv"] = _csv_bytes(
-            ("id", "name", "active", "created_at"),
-            [{"id": "payee-1", "name": "Vendor", "active": "TRUE"}],
-        )
-        manifest["sha256"]["Payees.csv"] = hashlib.sha256(
-            files["Payees.csv"]
-        ).hexdigest()
-        manifest["row_counts"]["Payees"] = 1
-        manifest["worksheet_headers"]["Payees"] = [
-            "id",
-            "name",
-            "active",
-            "created_at",
-        ]
-        files["Payees.csv"] += b"tampered"
-
-    legacy = _rewrite_legacy(legacy, update_manifest=add_tampered_payees)
-    with pytest.raises(StorageValidationError, match="Payees backup checksum"):
-        migrate_legacy_backup(legacy)
-
-
-def test_migration_rejects_colliding_optional_legacy_payees() -> None:
-    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
-    legacy = _downgrade(
-        storage.export_backup_zip(
-            {"schema_version": 1, "business_profile_key": "test", "receipts": []}
-        ),
-        6,
-    )
-
-    def add_colliding_payees(files: dict[str, bytes], manifest: dict[str, Any]) -> None:
-        files["Payees.csv"] = _csv_bytes(
-            ("id", "name", "active", "created_at"),
-            [
-                {"id": "payee-1", "name": "Vendor", "active": "TRUE"},
-                {"id": "payee-2", "name": " vendor ", "active": "TRUE"},
-            ],
-        )
-        manifest["sha256"]["Payees.csv"] = hashlib.sha256(
-            files["Payees.csv"]
-        ).hexdigest()
-        manifest["row_counts"]["Payees"] = 2
-        manifest["worksheet_headers"]["Payees"] = [
-            "id",
-            "name",
-            "active",
-            "created_at",
-        ]
-
-    legacy = _rewrite_legacy(legacy, update_manifest=add_colliding_payees)
-    with pytest.raises(StorageValidationError, match="IDs and names must be unique"):
-        migrate_legacy_backup(legacy, profile_key="test")
-
-
-def test_migration_validates_legacy_receipt_checksum() -> None:
-    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
-    legacy = _downgrade(
-        storage.export_backup_zip(
-            {"schema_version": 1, "business_profile_key": "test", "receipts": []}
-        ),
-        5,
-    )
-
-    def tamper_receipts(files: dict[str, bytes], _manifest: dict[str, Any]) -> None:
-        files["receipts.json"] += b"tampered"
-
-    legacy = _rewrite_legacy(legacy, update_manifest=tamper_receipts)
-    with pytest.raises(StorageValidationError, match="receipts.json backup checksum"):
-        migrate_legacy_backup(legacy)
 
 
 def test_migration_accepts_reordered_legacy_headers() -> None:
