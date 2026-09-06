@@ -103,7 +103,10 @@ def _append_columns(worksheet: Any, headers: list[str], additions: list[str]) ->
     # A retry after an interrupted add_cols call may already have enough
     # trailing capacity. Reuse it instead of appending duplicate blank columns.
     column_count = getattr(worksheet, "col_count", None)
-    if not isinstance(column_count, int) or column_count < len(updated_headers):
+    if isinstance(column_count, int):
+        if column_count < len(updated_headers):
+            worksheet.add_cols(len(updated_headers) - column_count)
+    else:
         worksheet.add_cols(len(additions))
     _assert_headers_unchanged(
         worksheet, [*headers, *([""] * len(additions))]
@@ -367,8 +370,12 @@ def _backfill_mixed_use_source_tags(workbook: Any) -> int:
         source_sheet.batch_update(updates, raw=True)
     if source_tag_header == LEGACY_MIXED_USE_TAG_MIGRATION_HEADER:
         source_tag_index = source_headers.index(source_tag_header)
-        source_headers[source_tag_index] = "tag_ids"
-        source_sheet.update([source_headers], range_name="A1", raw=True)
+        _assert_headers_unchanged(source_sheet, source_headers)
+        source_sheet.update(
+            [["tag_ids"]],
+            range_name=gspread.utils.rowcol_to_a1(1, source_tag_index + 1),
+            raw=True,
+        )
     return len(updates)
 
 
@@ -442,7 +449,8 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     if LEGACY_MIXED_USE_TAG_MIGRATION_HEADER in mixed_headers:
         original_mixed_headers = list(mixed_headers)
         _assert_headers_unchanged(mixed, original_mixed_headers)
-        mixed_headers[mixed_headers.index(LEGACY_MIXED_USE_TAG_MIGRATION_HEADER)] = "tag_ids"
+        marker_index = mixed_headers.index(LEGACY_MIXED_USE_TAG_MIGRATION_HEADER)
+        mixed_headers[marker_index] = "tag_ids"
         missing_columns = [
             header
             for header in ("receipt_references", "tag_ids")
@@ -458,7 +466,21 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
                     *([""] * len(missing_columns)),
                 ],
             )
-        mixed.update([mixed_headers], range_name="A1", raw=True)
+        _assert_headers_unchanged(
+            mixed,
+            [
+                *original_mixed_headers,
+                *( [""] * len(missing_columns)),
+            ],
+        )
+        if missing_columns:
+            mixed.update([mixed_headers], range_name="A1", raw=True)
+        else:
+            mixed.update(
+                [["tag_ids"]],
+                range_name=gspread.utils.rowcol_to_a1(1, marker_index + 1),
+                raw=True,
+            )
     else:
         _append_columns(mixed, mixed_headers, ["receipt_references", "tag_ids"])
 

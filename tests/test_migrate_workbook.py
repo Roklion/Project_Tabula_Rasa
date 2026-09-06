@@ -315,6 +315,18 @@ def test_header_append_rechecks_after_adding_columns() -> None:
     with pytest.raises(ValueError, match="headers changed during migration"):
         _append_columns(worksheet, expected_headers, ["extra"])
 
+
+def test_header_append_restores_exact_capacity_after_shrink() -> None:
+    workbook = FakeWorkbook()
+    worksheet = workbook.worksheet("Transactions")
+    expected_headers = list(WORKSHEET_HEADERS["Transactions"])
+    worksheet.col_count = len(expected_headers) - 2
+
+    updated = _append_columns(worksheet, expected_headers, ["extra"])
+
+    assert updated == [*expected_headers, "extra"]
+    assert worksheet.col_count == len(updated)
+
     column_count_after_abort = worksheet.col_count
     with pytest.raises(ValueError, match="headers changed during migration"):
         _append_columns(worksheet, expected_headers, ["extra"])
