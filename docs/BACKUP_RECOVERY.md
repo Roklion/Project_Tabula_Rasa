@@ -60,19 +60,11 @@ empty-string legacy receipt associations, and reconcile active references.
 An explicit empty list remains intentionally unlinked. If preparation or
 validation is incomplete, no backup is created.
 
-The validator and restore path accept formats 2 through 10:
-
-| Format | Meaning |
-| --- | --- |
-| 2 | Accounts, Categories, and Transactions; no Mileage or receipt references |
-| 3 | Adds Mileage; no transaction receipt references |
-| 4 | Adds transaction receipt references; no receipt inventory |
-| 5 | Adds checksummed receipts.json inventory |
-| 6 | Supported legacy format adding account and category parent_id hierarchy |
-| 7 | Pre-mixed-use format with managed Payees and transaction payee_id references |
-| 8 | Tags-era format with managed Tags and transaction/mileage tag associations |
-| 9 | Mixed-use sources and transaction provenance |
-| 10 | Current format adding durable mixed-use source tag associations |
+The application validator and restore path accept **only format 10**. Older
+archives are not migrated during validation or restore: supplying one directly
+fails before any workbook write and points to the explicit migration command
+below. The migration command supports standard format-1 through format-9
+archives and emits a fresh format-10 archive.
 
 MixedUseExpenses.csv is the authoritative source record for each cost-based
 mixed-use expense, including its durable `tag_ids` metadata. Transactions.csv contains one ordinary Expense projection
@@ -80,8 +72,9 @@ for each source, with source_type=mixed_use_expense and source_id set to the
 source ID; its amount is the allocated business amount only. The source's
 linked_transaction_id must point back to that projection. Current-format
 backup validation rejects missing, orphaned, duplicated, or inconsistent
-source/projection relationships. Formats 2 through 8 restore with no
-mixed-use source records or linkage.
+source/projection relationships. Legacy formats 2 through 8 contain no
+mixed-use source records or linkage; convert them to v10 before application
+restore.
 
 Before upgrading an existing workbook, run the one-time combined workbook
 migration:
@@ -108,6 +101,21 @@ unset.
 
 Older compatible archives restore records at Layer 1 when hierarchy columns
 are absent. A format-1 archive must first be converted to format 2.
+
+For a legacy workbook schema, follow the explicit workbook migration procedure
+in the setup and architecture guides. Payee text embedded in a legacy backup
+is converted by the archive migration command above; it is not resolved during
+application restore.
+
+Pre-inventory formats 1–4 may contain legacy receipt-reference cells but do
+not contain the receipt inventory and integrity metadata required by v10. The
+offline migration therefore clears those associations in the new archive;
+the original archive is preserved for separate receipt recovery or manual
+inspection through the Unreferenced Receipts workflow.
+
+The migration command preserves the source archive and never overwrites it.
+Migration is intentionally an operator-run conversion for standard historical
+archives, not a repair mechanism for hand-edited or corrupt ZIP files.
 
 ## Create a backup in the application
 
@@ -219,11 +227,12 @@ Validate every copied or downloaded archive before relying on it:
 python scripts\validate_google_sheets_backup.py "C:\Safe-Recovery\tabula-rasa-backup-YYYYMMDDTHHMMSSZ.zip"
 ```
 
-Successful validation confirms supported format, exact ZIP structure, manifest
-integrity, headers, checksums, row counts, IDs, ledger relationships, and the
-receipt inventory's profile, identities, filenames, sizes, checksums,
-duplicates, and transaction associations. It also identifies older
-ledger-only sources.
+The current validator accepts only format 10. Successful validation confirms a
+format-10 archive's exact ZIP structure, manifest integrity, headers,
+checksums, row counts, IDs, ledger relationships,
+and the receipt inventory's profile, identities, filenames, sizes, checksums,
+duplicates, and transaction associations. Convert older v1-v9 archives with
+`scripts/migrate_legacy_backup.py` before validating them.
 
 Do not modify a failed archive. Preserve it privately, choose another
 generation, and validate again.
@@ -258,13 +267,13 @@ representative relationships, then delete or clearly label the drill workbook.
 
 ## Recover receipt bytes and remap Drive IDs
 
-Ledger restoration does not restore receipt bytes. For a format 5, 6, 7, or 8
-archive, copy the matching profile Receipts directory from the protected
-Synology recovery set to a safe local path, then recover against the new
-workbook:
+Ledger restoration does not restore receipt bytes. After converting a legacy
+format 5 through 9 archive to v10, copy the matching profile Receipts
+directory from the protected Synology recovery set to a safe local path, then
+recover against the new workbook using the converted archive:
 
 ```powershell
-python scripts\recover_synology_receipts.py "C:\Safe-Recovery\tabula-rasa-backup-YYYYMMDDTHHMMSSZ.zip" "C:\Safe-Recovery\Receipts" --profile PROFILE_KEY --target-spreadsheet-id NEW_SPREADSHEET_ID
+python scripts\recover_synology_receipts.py "C:\Safe-Recovery\tabula-rasa-backup-YYYYMMDDTHHMMSSZ-format10.zip" "C:\Safe-Recovery\Receipts" --profile PROFILE_KEY --target-spreadsheet-id NEW_SPREADSHEET_ID
 ```
 
 The command refuses every configured live workbook. Before a Drive change it
@@ -296,21 +305,28 @@ The recovery order is:
 4. Verify referenced receipts through remapped Drive IDs.
 5. Verify unreferenced receipts remain available without automatic attachment.
 
-Formats 2, 3, and pre-inventory format 4 can restore ledger data but are
-identified as ledger-only sources for receipt recovery.
+Formats 2, 3, and pre-inventory format 4 are ledger-only migration sources;
+they must first be converted to v10 before any application restore or receipt
+recovery operation.
 
-## Convert a format-1 archive
+## Convert a legacy archive
 
-Convert the historical archive offline:
+Convert a format-1 through format-9 archive offline. The default output is a
+new `-format10.zip` file beside the source; use `--output` for another new
+path. For ledger-only archives (formats 1–4), pass the business profile key so
+the generated empty receipt inventory is scoped correctly.
 
 ```powershell
-python scripts\convert_backup_v1_to_v2.py "C:\Safe-Recovery\tabula-rasa-backup-YYYYMMDDTHHMMSSZ.zip"
+python scripts\migrate_legacy_backup.py "C:\Safe-Recovery\tabula-rasa-backup-YYYYMMDDTHHMMSSZ.zip" --profile PROFILE_KEY
 ```
 
-The converter validates the source, infers missing classifications, renames
-the historical Loan subtype to Short-term debt, normalizes legacy active
-values, writes a separate format-2 archive, records source hash and conversion
-time, and validates the result. It never overwrites the original.
+The converter infers missing account classifications, renames the historical
+Loan subtype to Short-term debt, normalizes legacy active values, creates
+managed payees from legacy payee text, carries receipt inventory forward, and
+copies v9 mixed-use projection tags to their authoritative sources. It records
+the source archive hash and validates the result with the normal format-10
+validator. It never overwrites the original. A legacy format-1 compatibility
+module remains for Python imports, but it is not an operator-facing command.
 
 ## Optional Synology recovery copy
 
@@ -479,4 +495,4 @@ retry; identity and checksum rules prevent unnecessary duplicate uploads.
 | Workbook restore | scripts/restore_google_sheets_backup.py |
 | Receipt preparation and manifest | tabula_rasa/receipt_backfill.py and tabula_rasa/receipt_manifest.py |
 | Receipt recovery and Drive-ID remapping | scripts/recover_synology_receipts.py and tabula_rasa/receipt_recovery.py |
-| Format-1 conversion | scripts/convert_backup_v1_to_v2.py |
+| Legacy archive migration (v1–v9 to v10) | scripts/migrate_legacy_backup.py |
