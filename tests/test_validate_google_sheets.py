@@ -135,11 +135,10 @@ def test_configured_profile_still_uses_configured_workbook(
 )
 @patch("scripts.validate_google_sheets.Credentials.from_service_account_info")
 @patch("scripts.validate_google_sheets.gspread.authorize")
-def test_read_only_validation_accepts_legacy_hierarchy_headers_without_migration(
+def test_read_only_validation_rejects_legacy_hierarchy_headers_until_migrated(
     authorize: Mock,
     _from_service_account_info: Mock,
     _load_document: Mock,
-    capsys: pytest.CaptureFixture[str],
 ) -> None:
     workbook = legacy_hierarchy_workbook()
     original_rows = {
@@ -148,10 +147,8 @@ def test_read_only_validation_accepts_legacy_hierarchy_headers_without_migration
     }
     authorize.return_value.open_by_key.return_value = workbook
 
-    validate(Path("unused.toml"), profile_key="test-business")
-
-    output = capsys.readouterr().out
-    assert "Ledger rows readable: Accounts=1, Categories=1" in output
+    with pytest.raises(StorageValidationError, match="parent_id"):
+        validate(Path("unused.toml"), profile_key="test-business")
     for title in ("Accounts", "Categories"):
         assert workbook.sheets[title].rows == original_rows[title]
 
