@@ -1462,7 +1462,12 @@ class GoogleSheetsStorage:
                 if state == "unchanged" and not retried:
                     retried = True
                     if before_retry is not None:
-                        before_retry()
+                        try:
+                            before_retry()
+                        except StorageError:
+                            for title in invalidate:
+                                self._invalidate(title)
+                            raise
                     self._sleeper(self._retry_base_delay_seconds)
                     continue
                 for title in invalidate:
@@ -2301,7 +2306,25 @@ class GoogleSheetsStorage:
             raise StorageConflictError(
                 "That category has mixed-use expenses and cannot be deleted"
             )
-        for attempt in range(self._retry_attempts):
+        original = dict(current.values)
+        current_row = current
+        worksheet = self._worksheet("Categories")
+
+        def write() -> None:
+            self._api(
+                lambda: worksheet.delete_rows(current_row.row_number),
+                retry_safe=False,
+            )
+
+        def state() -> str:
+            try:
+                latest = self._find_row("Categories", category_id)
+            except StorageNotFoundError:
+                return "applied"
+            return "unchanged" if latest.values == original else "ambiguous"
+
+        def refresh() -> None:
+            nonlocal current_row
             mixed_use_sources = self._rows("MixedUseExpenses", force_refresh=True)
             if any(
                 _clean_text(row.values.get("category_id"), "Category") == category_id
@@ -2310,26 +2333,16 @@ class GoogleSheetsStorage:
                 raise StorageConflictError(
                     "That category has mixed-use expenses and cannot be deleted"
                 )
-            current = self._find_row("Categories", category_id)
-            worksheet = self._worksheet("Categories")
-            try:
-                self._api(
-                    lambda: worksheet.delete_rows(current.row_number),
-                    retry_safe=False,
+            current_row = self._find_row("Categories", category_id)
+            if current_row.values != original:
+                raise StorageConflictError(
+                    "The category changed while deletion was being retried."
                 )
-                self._invalidate("Categories")
-                return
-            except StorageUnavailableError as error:
-                self._invalidate("Categories")
-                if not error.retryable:
-                    raise
-                try:
-                    self._find_row("Categories", category_id)
-                except StorageNotFoundError:
-                    return
-                if attempt + 1 >= self._retry_attempts:
-                    raise
-                self._sleeper(self._retry_base_delay_seconds * (2**attempt))
+
+        self._write_with_confirmation(
+            "category deletion", write, state, before_retry=refresh,
+            invalidate=("Categories",),
+        )
 
     def list_payees(
         self, *, active_only: bool = False, _force_refresh: bool = False
@@ -4874,11 +4887,10 @@ class GoogleSheetsStorage:
                         "MixedUseExpenses", force_refresh=True
                     )
                 except StorageError as read_error:
-                    raise StorageBulkMutationUncertainError(
-                        "Receipt recovery completed, but the mixed-use source "
-                        "postcondition could not be read.",
-                        outcome="mixed_ambiguous",
-                        retryable=False,
+                    self._invalidate("Transactions")
+                    self._invalidate("MixedUseExpenses")
+                    raise StorageUnavailableError(
+                        _mutation_guidance("receipt recovery"), retryable=False
                     ) from read_error
                 confirmed_sources = {
                     str(row.values["id"]): dict(row.values)
@@ -4980,28 +4992,38 @@ class GoogleSheetsStorage:
 
     def delete_transaction(self, transaction_id: str) -> None:
         with _MIXED_USE_CREATE_LOCK:
-            for attempt in range(self._retry_attempts):
-                current = self._find_row("Transactions", transaction_id)
-                self._reject_mixed_use_projection(current.values)
-                worksheet = self._worksheet("Transactions")
+            current = self._find_row("Transactions", transaction_id)
+            self._reject_mixed_use_projection(current.values)
+            original = dict(current.values)
+            current_row = current
+            worksheet = self._worksheet("Transactions")
+
+            def write() -> None:
+                self._api(
+                    lambda: worksheet.delete_rows(current_row.row_number),
+                    retry_safe=False,
+                )
+
+            def state() -> str:
                 try:
-                    self._api(
-                        lambda: worksheet.delete_rows(current.row_number),
-                        retry_safe=False,
+                    latest = self._find_row("Transactions", transaction_id)
+                except StorageNotFoundError:
+                    return "applied"
+                return "unchanged" if latest.values == original else "ambiguous"
+
+            def refresh() -> None:
+                nonlocal current_row
+                current_row = self._find_row("Transactions", transaction_id)
+                self._reject_mixed_use_projection(current_row.values)
+                if current_row.values != original:
+                    raise StorageConflictError(
+                        "The transaction changed while deletion was being retried."
                     )
-                    self._invalidate("Transactions")
-                    return
-                except StorageUnavailableError as error:
-                    self._invalidate("Transactions")
-                    if not error.retryable:
-                        raise
-                    try:
-                        self._find_row("Transactions", transaction_id)
-                    except StorageNotFoundError:
-                        return
-                    if attempt + 1 >= self._retry_attempts:
-                        raise
-                    self._sleeper(self._retry_base_delay_seconds * (2**attempt))
+
+            self._write_with_confirmation(
+                "transaction deletion", write, state, before_retry=refresh,
+                invalidate=("Transactions",),
+            )
 
     def _prepare_mileage_trip(
         self,
@@ -5180,27 +5202,36 @@ class GoogleSheetsStorage:
 
     def delete_mileage_trip(self, trip_id: str) -> None:
         with _MIXED_USE_CREATE_LOCK:
-            for attempt in range(self._retry_attempts):
-                current = self._find_row("Mileage", trip_id)
-                worksheet = self._worksheet("Mileage")
+            current = self._find_row("Mileage", trip_id)
+            original = dict(current.values)
+            current_row = current
+            worksheet = self._worksheet("Mileage")
+
+            def write() -> None:
+                self._api(
+                    lambda: worksheet.delete_rows(current_row.row_number),
+                    retry_safe=False,
+                )
+
+            def state() -> str:
                 try:
-                    self._api(
-                        lambda: worksheet.delete_rows(current.row_number),
-                        retry_safe=False,
-                    )
-                    self._invalidate("Mileage")
-                    return
-                except StorageUnavailableError as error:
-                    self._invalidate("Mileage")
-                    if not error.retryable:
-                        raise
-                try:
-                    self._find_row("Mileage", trip_id)
+                    latest = self._find_row("Mileage", trip_id)
                 except StorageNotFoundError:
-                    return
-                if attempt + 1 >= self._retry_attempts:
-                    raise
-                self._sleeper(self._retry_base_delay_seconds * (2**attempt))
+                    return "applied"
+                return "unchanged" if latest.values == original else "ambiguous"
+
+            def refresh() -> None:
+                nonlocal current_row
+                current_row = self._find_row("Mileage", trip_id)
+                if current_row.values != original:
+                    raise StorageConflictError(
+                        "The mileage trip changed while deletion was being retried."
+                    )
+
+            self._write_with_confirmation(
+                "mileage deletion", write, state, before_retry=refresh,
+                invalidate=("Mileage",),
+            )
 
     def preview_quickbooks_mileage(
         self,
