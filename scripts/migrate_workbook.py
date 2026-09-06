@@ -9,6 +9,7 @@ current-schema validator before the command reports success.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -410,10 +411,49 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--secrets", type=Path, default=Path(".streamlit/secrets.toml"))
-    parser.add_argument("--profile", required=True)
+    parser.add_argument("--profile", help="Saved business-profile key from --secrets")
+    parser.add_argument(
+        "--spreadsheet-id",
+        help="Candidate workbook ID for a profile that has not been saved yet",
+    )
+    parser.add_argument(
+        "--service-account-file",
+        type=Path,
+        help="Local service-account JSON file for --spreadsheet-id",
+    )
     args = parser.parse_args()
-    document = load_business_profile_document(args.secrets)
-    secrets = select_profile_secrets(document, args.profile)
+    candidate_mode = (
+        args.spreadsheet_id is not None or args.service_account_file is not None
+    )
+    if args.profile and candidate_mode:
+        parser.error("--profile cannot be combined with candidate workbook options")
+    if not args.profile and not candidate_mode:
+        parser.error(
+            "pass --profile, or pass both --spreadsheet-id and --service-account-file"
+        )
+
+    if args.profile:
+        document = load_business_profile_document(args.secrets)
+        secrets = select_profile_secrets(document, args.profile)
+    else:
+        if not args.spreadsheet_id or args.service_account_file is None:
+            parser.error(
+                "candidate mode requires both --spreadsheet-id and "
+                "--service-account-file"
+            )
+        try:
+            credential_info = json.loads(
+                args.service_account_file.read_text(encoding="utf-8")
+            )
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            parser.error(f"could not read --service-account-file: {exc}")
+        if not isinstance(credential_info, dict):
+            parser.error("--service-account-file must contain a JSON object")
+        secrets = {
+            "spreadsheet_id": args.spreadsheet_id,
+            "gcp_service_account": credential_info,
+        }
+
     credentials = Credentials.from_service_account_info(
         secrets["gcp_service_account"], scopes=[SHEETS_SCOPE]
     )

@@ -412,8 +412,11 @@ Payees are managed values. Transaction forms offer existing active payees and
 support inline creation by typing a new name into the selector and pressing
 Enter. Existing workbooks must be upgraded once with
 `scripts/migrate_workbook.py --profile PROFILE_KEY` before using the new
-transaction schema. The command upgrades the complete recognized historical
-layout, including managed payees.
+transaction schema. For a new or reassigned profile, run
+`scripts/migrate_workbook.py --spreadsheet-id WORKBOOK_ID
+--service-account-file path\to\service-account.json` before saving the profile.
+The command upgrades the complete recognized historical layout, including
+managed payees.
 
 Tags are managed, profile-local values referenced by stable IDs from both
 transactions and mileage rows. Inline Tag creation normalizes names and prevents

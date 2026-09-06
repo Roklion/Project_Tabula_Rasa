@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import gspread
@@ -673,6 +674,48 @@ def test_cli_profile_selection_isolated_to_selected_workbook() -> None:
         south_secrets["gcp_service_account"], scopes=[migration_script.SHEETS_SCOPE]
     )
     client.open_by_key.assert_called_once_with("south-sheet")
+
+
+def test_cli_candidate_workbook_uses_explicit_service_account_file() -> None:
+    credential_file = Path("service-account.json")
+    credential_info = {"client_email": "candidate@example.invalid"}
+    client = Mock()
+    workbook = FakeWorkbook()
+    client.open_by_key.return_value = workbook
+
+    with (
+        patch.object(
+            migration_script.Credentials,
+            "from_service_account_info",
+            return_value=object(),
+        ) as credentials,
+        patch.object(gspread, "authorize", return_value=client),
+        patch.object(migration_script, "migrate_workbook", return_value={}) as migrate,
+        patch.object(
+            Path,
+            "read_text",
+            return_value=json.dumps(credential_info),
+        ) as read_text,
+        patch.object(
+            sys,
+            "argv",
+            [
+                "migrate_workbook.py",
+                "--spreadsheet-id",
+                "candidate-sheet",
+                "--service-account-file",
+                str(credential_file),
+            ],
+        ),
+    ):
+        migration_script.main()
+
+    credentials.assert_called_once_with(
+        credential_info, scopes=[migration_script.SHEETS_SCOPE]
+    )
+    read_text.assert_called_once_with(encoding="utf-8")
+    client.open_by_key.assert_called_once_with("candidate-sheet")
+    migrate.assert_called_once_with(workbook)
 
 
 def test_migration_preflights_malformed_tabs_before_writing() -> None:

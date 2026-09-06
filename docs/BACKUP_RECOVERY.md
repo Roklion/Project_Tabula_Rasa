@@ -90,6 +90,16 @@ migration:
 python scripts/migrate_workbook.py --secrets .streamlit/secrets.toml --profile PROFILE_KEY
 ```
 
+For a new or reassigned profile that has not been saved yet, use the candidate
+workbook directly with a local service-account JSON file:
+
+```text
+python scripts/migrate_workbook.py --spreadsheet-id WORKBOOK_ID --service-account-file path\to\service-account.json
+```
+
+After it succeeds, return to Account settings to validate and save the profile.
+Keep the credential file outside the repository.
+
 It upgrades recognized historical schemas, deduplicates legacy payee text using
 normalized Unicode and whitespace, updates transaction references, and is safe
 to rerun. Older backups are accepted during restore; their payee text is mapped

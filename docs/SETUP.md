@@ -95,6 +95,18 @@ with the one-time combined workbook migration before using the managed
 python scripts/migrate_workbook.py --secrets .streamlit/secrets.toml --profile PROFILE_KEY
 ```
 
+For a new profile, or a profile being changed to a different legacy workbook,
+run the migration with the candidate workbook and a local service-account JSON
+file before saving the profile:
+
+```text
+python scripts/migrate_workbook.py --spreadsheet-id WORKBOOK_ID --service-account-file path\to\service-account.json
+```
+
+Return to Account settings and validate/save the profile after the command
+completes. The credential file is read locally; do not place it in the
+repository.
+
 See [Backup and recovery](BACKUP_RECOVERY.md) for migration behavior and
 legacy-backup compatibility details.
 
