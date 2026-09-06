@@ -23,6 +23,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from tabula_rasa.business_profiles import select_profile_secrets  # noqa: E402
 from tabula_rasa.local_profile_store import load_business_profile_document  # noqa: E402
+from tabula_rasa.mixed_use import MIXED_USE_SOURCE_TYPE  # noqa: E402
 from tabula_rasa.storage.google_sheets import (  # noqa: E402
     MIXED_USE_WORKSHEET_HEADERS,
     PRE_MIXED_USE_WORKSHEET_HEADERS,
@@ -36,6 +37,7 @@ from tabula_rasa.storage.google_sheets import (  # noqa: E402
     GoogleSheetsStorage,
     StorageError,
     StorageValidationError,
+    _normalize_tag_ids,
     decode_receipt_references,
     _looks_like_partial_blank_workbook,
     _validate_hierarchy_records,
@@ -301,6 +303,7 @@ def _clear_colliding_legacy_provenance(
 def _backfill_mixed_use_source_tags(workbook: Any) -> int:
     source_sheet = workbook.worksheet("MixedUseExpenses")
     transaction_sheet = workbook.worksheet("Transactions")
+    tag_sheet = workbook.worksheet("Tags")
     def collect_updates(
         source_values: list[list[Any]],
         transaction_values: list[list[Any]],
@@ -324,9 +327,20 @@ def _backfill_mixed_use_source_tags(workbook: Any) -> int:
             return None
         source_tag_index = source_headers.index(source_tag_header)
         linked_index = source_headers.index("linked_transaction_id")
+        source_id_index = source_headers.index("id")
         transaction_id_index = transaction_headers.index("id")
         transaction_tag_index = transaction_headers.index("tag_ids")
+        tag_headers = _headers(tag_sheet.get_all_values())
+        tag_id_index = tag_headers.index("id") if "id" in tag_headers else None
+        known_tag_ids = {
+            str(row[tag_id_index]).strip()
+            for row in tag_sheet.get_all_values()[1:]
+            if tag_id_index is not None
+            and len(row) > tag_id_index
+            and str(row[tag_id_index]).strip()
+        }
         transaction_tags: dict[str, str] = {}
+        transaction_records: dict[str, dict[str, str]] = {}
         for row in transaction_values[1:]:
             if len(row) <= transaction_id_index:
                 continue
@@ -335,18 +349,63 @@ def _backfill_mixed_use_source_tags(workbook: Any) -> int:
                 continue
             if transaction_id in transaction_tags:
                 raise StorageValidationError("Transaction IDs must be unique")
-            transaction_tags[transaction_id] = (
+            transaction_tag_value = (
                 str(row[transaction_tag_index]).strip()
                 if len(row) > transaction_tag_index
                 else ""
             )
+            normalized_transaction_tags = _normalize_tag_ids(transaction_tag_value)
+            if any(tag_id not in known_tag_ids for tag_id in normalized_transaction_tags):
+                raise StorageValidationError("Transaction contains an unknown tag")
+            transaction_tags[transaction_id] = transaction_tag_value
+            transaction_records[transaction_id] = {
+                header: str(row[index]).strip() if len(row) > index else ""
+                for index, header in enumerate(transaction_headers)
+            }
         updates: list[dict[str, object]] = []
+        source_ids: set[str] = set()
+        linked_ids: set[str] = set()
+        all_source_ids = {
+            str(row[source_id_index]).strip()
+            for row in source_values[1:]
+            if len(row) > source_id_index
+        }
         for row_number, row in enumerate(source_values[1:], start=2):
             padded = list(row) + [""] * (len(source_headers) - len(row))
+            source_id = str(padded[source_id_index]).strip()
+            if source_id in source_ids:
+                raise StorageValidationError("Mixed-use source IDs must be unique")
+            source_ids.add(source_id)
             linked_transaction_id = str(padded[linked_index]).strip()
             if linked_transaction_id not in transaction_tags:
                 raise StorageValidationError(
                     "Mixed-use source references a missing projection transaction"
+                )
+            if linked_transaction_id in linked_ids:
+                raise StorageValidationError(
+                    "Mixed-use linked transaction IDs must be unique"
+                )
+            linked_ids.add(linked_transaction_id)
+            projection = transaction_records[linked_transaction_id]
+            projection_source_id = projection.get("source_id", "")
+            if projection_source_id not in all_source_ids:
+                raise StorageValidationError(
+                    "Mixed-use projection references an unknown source record"
+                )
+            if (
+                projection.get("source_type") != MIXED_USE_SOURCE_TYPE
+                or projection_source_id != source_id
+            ):
+                raise StorageValidationError(
+                    "Mixed-use source and projection IDs do not match"
+                )
+            source_tags = _normalize_tag_ids(padded[source_tag_index])
+            if any(tag_id not in known_tag_ids for tag_id in source_tags):
+                raise StorageValidationError("Mixed-use source contains an unknown tag")
+            projection_tags = _normalize_tag_ids(transaction_tags[linked_transaction_id])
+            if source_tags and source_tags != projection_tags:
+                raise StorageValidationError(
+                    "Mixed-use source and projection tags do not match"
                 )
             if str(padded[source_tag_index]).strip():
                 continue

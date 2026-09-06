@@ -105,13 +105,27 @@ def test_tag_backfill_rechecks_fresh_source_and_projection_before_writing() -> N
     _append_record(
         workbook,
         "Transactions",
-        {"id": "projection-1", "tag_ids": '["tag-old"]'},
+        {
+            "id": "projection-1",
+            "tag_ids": '["tag-old"]',
+            "source_type": "mixed_use_expense",
+            "source_id": "source-1",
+        },
     )
     _append_record(
         workbook,
         "MixedUseExpenses",
-        {"id": "source-1", "linked_transaction_id": "projection-1"},
+        {
+            "id": "source-1",
+            "linked_transaction_id": "projection-1",
+        },
     )
+    for tag_id in ("tag-old", "tag-new"):
+        _append_record(
+            workbook,
+            "Tags",
+            {"id": tag_id, "name": tag_id, "active": "TRUE"},
+        )
     initial_source = source.get_all_values()
     initial_transaction = transaction.get_all_values()
     fresh_source = [list(row) for row in initial_source]
@@ -138,12 +152,56 @@ def test_tag_backfill_rejects_duplicate_transaction_ids_before_writing() -> None
     _append_record(
         workbook,
         "Transactions",
-        {"id": "projection-1", "tag_ids": '["tag-old"]'},
+        {
+            "id": "projection-1",
+            "tag_ids": '["tag-old"]',
+            "source_type": "mixed_use_expense",
+            "source_id": "source-1",
+        },
     )
     _append_record(
         workbook,
         "Transactions",
-        {"id": "projection-1", "tag_ids": '["tag-new"]'},
+        {
+            "id": "projection-1",
+            "tag_ids": '["tag-new"]',
+            "source_type": "mixed_use_expense",
+            "source_id": "source-1",
+        },
+    )
+    _append_record(
+        workbook,
+        "MixedUseExpenses",
+        {"id": "source-1", "linked_transaction_id": "projection-1"},
+    )
+    for tag_id in ("tag-old", "tag-new"):
+        _append_record(
+            workbook,
+            "Tags",
+            {"id": tag_id, "name": tag_id, "active": "TRUE"},
+        )
+    before = source.get_all_values()
+    source.batch_update = Mock(wraps=source.batch_update)
+
+    with pytest.raises(StorageValidationError, match="Transaction IDs must be unique"):
+        _backfill_mixed_use_source_tags(workbook)
+
+    assert source.get_all_values() == before
+    source.batch_update.assert_not_called()
+
+
+def test_tag_backfill_rejects_invalid_projection_tags_before_writing() -> None:
+    workbook = FakeWorkbook(WORKSHEET_HEADERS)
+    source = workbook.sheets["MixedUseExpenses"]
+    _append_record(
+        workbook,
+        "Transactions",
+        {
+            "id": "projection-1",
+            "tag_ids": "not-json",
+            "source_type": "mixed_use_expense",
+            "source_id": "source-1",
+        },
     )
     _append_record(
         workbook,
@@ -153,7 +211,7 @@ def test_tag_backfill_rejects_duplicate_transaction_ids_before_writing() -> None
     before = source.get_all_values()
     source.batch_update = Mock(wraps=source.batch_update)
 
-    with pytest.raises(StorageValidationError, match="Transaction IDs must be unique"):
+    with pytest.raises(StorageValidationError, match="Tag IDs are not valid JSON"):
         _backfill_mixed_use_source_tags(workbook)
 
     assert source.get_all_values() == before
@@ -562,6 +620,38 @@ def test_populated_legacy_startup_is_read_only_and_actionable() -> None:
             StorageInitializationError,
             match=r"migrate_workbook\.py --profile PROFILE_KEY",
         ),
+    ):
+        GoogleSheetsStorage.from_secrets(
+            {"spreadsheet_id": "sheet-1", "gcp_service_account": {"type": "service_account"}}
+        )
+
+    assert before == {
+        title: worksheet.get_all_values() for title, worksheet in workbook.sheets.items()
+    }
+    for worksheet in workbook.sheets.values():
+        worksheet.add_cols.assert_not_called()
+        worksheet.update.assert_not_called()
+
+
+def test_populated_collision_legacy_startup_is_read_only_and_actionable() -> None:
+    headers = dict(VERSION_7_WORKSHEET_HEADERS)
+    headers["Transactions"] = (*headers["Transactions"], "source_type")
+    workbook = FakeWorkbook(headers)
+    _append_record(workbook, "Accounts", {"id": "account-1", "name": "Checking"})
+    before = {
+        title: worksheet.get_all_values() for title, worksheet in workbook.sheets.items()
+    }
+    for worksheet in workbook.sheets.values():
+        worksheet.add_cols = Mock(wraps=worksheet.add_cols)
+        worksheet.update = Mock(wraps=worksheet.update)
+
+    client = Mock()
+    client.open_by_key.return_value = workbook
+
+    with (
+        patch("tabula_rasa.storage.google_sheets.Credentials.from_service_account_info", return_value=object()),
+        patch.object(gspread, "authorize", return_value=client),
+        pytest.raises(StorageInitializationError, match=r"migrate_workbook\.py --profile PROFILE_KEY"),
     ):
         GoogleSheetsStorage.from_secrets(
             {"spreadsheet_id": "sheet-1", "gcp_service_account": {"type": "service_account"}}
