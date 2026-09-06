@@ -144,6 +144,34 @@ def test_tag_removal_retries_once_then_invalidates_on_unchanged_failure(
     assert "Tags" not in default_storage._row_cache
 
 
+def test_tag_removal_rebuilds_row_after_shift_before_retry(default_storage, monkeypatch) -> None:
+    tag = default_storage.create_tag("Shifted")
+    worksheet = default_storage._worksheet("Tags")
+    original_batch_update = default_storage._workbook.batch_update
+    calls = 0
+
+    def shift_then_lose_response(body: object) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            worksheet.rows.insert(1, list(worksheet.rows[1]))
+            worksheet.rows[1][0] = "inserted-before-retry"
+            raise OSError("temporary response lost")
+        original_batch_update(body)
+
+    monkeypatch.setattr(
+        default_storage._workbook, "batch_update", shift_then_lose_response
+    )
+
+    default_storage.remove_tag(tag["id"])
+
+    assert calls == 2
+    assert tag["id"] not in {
+        item["id"] for item in default_storage.list_tags(active_only=False)
+    }
+    assert worksheet.rows[1][0] == "inserted-before-retry"
+
+
 def test_tag_merge_partial_write_stops_without_retry(default_storage, monkeypatch) -> None:
     account, category = _ledger_setup(default_storage)
     target = default_storage.create_tag("Target")
