@@ -489,7 +489,8 @@ Rationale, its stable source ID, and its stable linked transaction ID. The
 linked row in `Transactions` remains an ordinary Expense projection containing
 only the allocated business amount and generic `source_type`/`source_id`
 provenance. Source-aware create, edit, and delete operations preserve this
-relationship, use fresh reads, and classify uncertain multi-record writes;
+relationship, use fresh reads, and confirm uncertain multi-record writes with
+one readback and at most one retry when the pair is clearly unchanged;
 they do not expose a mixed-use page or workflow in Phase A. Current-format
 backups include the source collection and reject orphaned or inconsistent
 relationships; older backup formats restore with no mixed-use records.
@@ -678,8 +679,9 @@ Removal is permanent and permitted only when a fresh reference check finds no
 uses. A referenced Payee or Tag is not silently unassigned; the page reports
 the reference count and directs the user to unassign it through the relevant
 transaction or mileage editor, or to merge it. Confirmed writes invalidate only
-the affected profile-local caches. Uncertain batch responses are classified
-after a fresh read and are never blindly repeated.
+the affected profile-local caches. Uncertain batch responses receive one fresh
+readback; only a clearly unchanged operation may be retried once, while a
+partial or unreadable state invalidates caches and gives inspection guidance.
 
 ### Mileage
 

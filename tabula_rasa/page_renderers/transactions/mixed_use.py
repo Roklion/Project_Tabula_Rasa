@@ -270,7 +270,8 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         sources = [dict(item) for item in raw_sources]
         st.warning(
             "A mixed-use expense was saved without its ledger projection. "
-            "Select it below and save again to repair the missing projection."
+            "The source is shown for inspection; automatic repair is disabled. "
+            "Review the source and ledger before taking corrective action."
         )
         transaction_by_id = {
             str(item.get("id") or ""): item for item in transactions
@@ -645,7 +646,12 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                         mixed_use_source_id=str(result["id"]),
                     )
 
-                if prepared_receipts is not None:
+                if source_incomplete:
+                    save_error.error(
+                        "This mixed-use source has no projection and cannot be "
+                        "edited here. Inspect the source and ledger first."
+                    )
+                elif prepared_receipts is not None:
                     context.confirmed_write(action, payload, operation, success, on_success=reset_after_success, on_confirmed=process_mixed_receipts, report_error=save_error.error)
     with right:
         _render_preview(mixed_use_preview(txn_date=txn_date, account=account_paths.get(account_id, account_id), payee=payee_by_id.get(payee_id, new_payee_name), category=category_paths.get(category_id, category_id), description=description, total_expense=total_expense, business_use_percentage=business_use_percentage, allocation_rationale=rationale))

@@ -2339,6 +2339,9 @@ class GoogleSheetsStorage:
                     "The category changed while deletion was being retried."
                 )
 
+        # Repeat the referential and row checks immediately before the write;
+        # the first snapshot only discovers the candidate row.
+        refresh()
         self._write_with_confirmation(
             "category deletion", write, state, before_retry=refresh,
             invalidate=("Categories",),
@@ -3927,6 +3930,8 @@ class GoogleSheetsStorage:
             raise
         except (StorageError, OSError) as error:
             if isinstance(error, StorageUnavailableError):
+                if not error.retryable:
+                    raise
                 state = self._mixed_use_mutation_state(
                     operation="create",
                     source_id=source_id,
