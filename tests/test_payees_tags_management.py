@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 from threading import Event, Thread
 
 from tabula_rasa.storage import (
     StorageConflictError,
+    StorageUnavailableError,
     StorageValidationError,
 )
 from tests.app_support import authenticated_app, navigate_to
@@ -101,6 +103,77 @@ def test_management_expected_snapshot_rejects_stale_merge(default_storage) -> No
 
     with pytest.raises(StorageConflictError, match="changed"):
         default_storage.merge_tags(target["id"], [source["id"]], expected_tags=expected)
+
+
+def test_tag_merge_confirms_committed_write_without_retry(default_storage, monkeypatch) -> None:
+    target = default_storage.create_tag("Target")
+    source = default_storage.create_tag("Source")
+    original_batch_update = default_storage._workbook.batch_update
+    calls = 0
+
+    def commit_then_lose_response(body: object) -> None:
+        nonlocal calls
+        original_batch_update(body)
+        calls += 1
+        raise OSError("response lost after commit")
+
+    monkeypatch.setattr(
+        default_storage._workbook, "batch_update", commit_then_lose_response
+    )
+
+    result = default_storage.merge_tags(target["id"], [source["id"]])
+
+    assert result == {"status": "fully_applied", "count": "1"}
+    assert calls == 1
+    assert source["id"] not in {
+        item["id"] for item in default_storage.list_tags(active_only=False)
+    }
+
+
+def test_tag_removal_retries_once_then_invalidates_on_unchanged_failure(
+    default_storage, monkeypatch
+) -> None:
+    tag = default_storage.create_tag("Unused")
+    batch_update = Mock(side_effect=OSError("temporary response lost"))
+    monkeypatch.setattr(default_storage._workbook, "batch_update", batch_update)
+
+    with pytest.raises(StorageUnavailableError, match="could not confirm"):
+        default_storage.remove_tag(tag["id"])
+
+    assert batch_update.call_count == 2
+    assert "Tags" not in default_storage._row_cache
+
+
+def test_tag_merge_partial_write_stops_without_retry(default_storage, monkeypatch) -> None:
+    account, category = _ledger_setup(default_storage)
+    target = default_storage.create_tag("Target")
+    source = default_storage.create_tag("Source")
+    default_storage.create_transaction(
+        txn_date="2026-01-01",
+        kind="Expense",
+        amount="10",
+        account_id=account["id"],
+        category_id=category["id"],
+        tag_ids=[source["id"]],
+    )
+    original_batch_update = default_storage._workbook.batch_update
+    calls = 0
+
+    def partial_then_lose_response(body: dict[str, object]) -> None:
+        nonlocal calls
+        calls += 1
+        original_batch_update({"requests": body["requests"][:1]})
+        raise OSError("response lost after partial application")
+
+    monkeypatch.setattr(
+        default_storage._workbook, "batch_update", partial_then_lose_response
+    )
+
+    with pytest.raises(StorageUnavailableError, match="could not confirm"):
+        default_storage.merge_tags(target["id"], [source["id"]])
+
+    assert calls == 1
+    assert "Tags" not in default_storage._row_cache
 
 
 def test_expected_management_snapshot_preserves_falsy_values() -> None:
