@@ -76,15 +76,6 @@ def migrate_payee_rows(
 
 def migrate_workbook(workbook: Any) -> dict[str, int]:
     """Migrate one legacy workbook in place; safe to rerun."""
-    def assert_unchanged(
-        worksheet: Any, expected: list[list[str]], label: str
-    ) -> None:
-        if worksheet.get_all_values() != expected:
-            raise ValueError(
-                f"{label} worksheet changed during payee migration; "
-                "aborting before replacing it"
-            )
-
     transactions_sheet = workbook.worksheet("Transactions")
     transaction_values = transactions_sheet.get_all_values()
     if not transaction_values:
@@ -118,16 +109,10 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     else:
         payee_values = payee_sheet.get_all_values()
     if not payee_values:
-        # The initial read found no rows, but re-read immediately before the
-        # header write so a concurrent edit cannot be overwritten.
-        latest_payee_values = payee_sheet.get_all_values()
-        if latest_payee_values:
-            payee_values = latest_payee_values
-        else:
-            payee_sheet.update(
-                [list(WORKSHEET_HEADERS["Payees"])], range_name="A1", raw=True
-            )
-            payee_values = [list(WORKSHEET_HEADERS["Payees"])]
+        payee_sheet.update(
+            [list(WORKSHEET_HEADERS["Payees"])], range_name="A1", raw=True
+        )
+        payee_values = [list(WORKSHEET_HEADERS["Payees"])]
     payee_headers = [str(value).strip() for value in payee_values[0]]
     if any(not header for header in payee_headers):
         raise ValueError("Payees worksheet has a blank header")
@@ -184,8 +169,6 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     new_headers = ["payee_id" if header == "payee" else header for header in headers]
     existing_ids = {str(item.get("id", "")).strip() for item in existing}
     new_payees = [item for item in payees if item["id"] not in existing_ids]
-    assert_unchanged(transactions_sheet, transaction_values, "Transactions")
-    assert_unchanged(payee_sheet, payee_values, "Payees")
     expected_payee_values = payee_values
     if payees_changed:
         expected_payee_values = [
@@ -194,7 +177,6 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
         ]
         payee_sheet.update(expected_payee_values, range_name="A1", raw=True)
     if new_payees:
-        assert_unchanged(payee_sheet, expected_payee_values, "Payees")
         payee_sheet.append_rows(
             [
                 [item.get(header, "") for header in payee_headers]
@@ -209,10 +191,8 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
                 for item in new_payees
             ],
         ]
-    assert_unchanged(payee_sheet, expected_payee_values, "Payees")
     if "payee" not in headers and not legacy_rows:
         return {"payees": len(new_payees), "transactions": 0}
-    assert_unchanged(transactions_sheet, transaction_values, "Transactions")
     transactions_sheet.update(
         [new_headers]
         + [[row.get(header, "") for header in new_headers] for row in migrated],

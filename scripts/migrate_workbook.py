@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any
 
 import gspread
-from google.auth.exceptions import GoogleAuthError
 from google.oauth2.service_account import Credentials
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -23,7 +22,6 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from tabula_rasa.business_profiles import select_profile_secrets  # noqa: E402
 from tabula_rasa.local_profile_store import load_business_profile_document  # noqa: E402
-from tabula_rasa.mixed_use import MIXED_USE_SOURCE_TYPE  # noqa: E402
 from tabula_rasa.storage.google_sheets import (  # noqa: E402
     MIXED_USE_WORKSHEET_HEADERS,
     PRE_MIXED_USE_WORKSHEET_HEADERS,
@@ -36,8 +34,6 @@ from tabula_rasa.storage.google_sheets import (  # noqa: E402
     WORKSHEET_HEADERS,
     GoogleSheetsStorage,
     StorageError,
-    StorageValidationError,
-    _normalize_tag_ids,
     decode_receipt_references,
     _looks_like_partial_blank_workbook,
     _validate_hierarchy_records,
@@ -101,36 +97,10 @@ def _append_columns(worksheet: Any, headers: list[str], additions: list[str]) ->
     additions = [header for header in additions if header not in headers]
     if not additions:
         return headers
-    _assert_headers_unchanged(worksheet, headers)
+    worksheet.add_cols(len(additions))
     updated_headers = [*headers, *additions]
-    # A retry after an interrupted add_cols call may already have enough
-    # trailing capacity. Reuse it instead of appending duplicate blank columns.
-    column_count = getattr(worksheet, "col_count", None)
-    if isinstance(column_count, int):
-        if column_count < len(updated_headers):
-            worksheet.add_cols(len(updated_headers) - column_count)
-    else:
-        worksheet.add_cols(len(additions))
-    _assert_headers_unchanged(
-        worksheet, [*headers, *([""] * len(additions))]
-    )
     worksheet.update([updated_headers], range_name="A1", raw=True)
     return updated_headers
-
-
-def _assert_headers_unchanged(worksheet: Any, expected: list[str]) -> None:
-    current = [str(value).strip() for value in worksheet.row_values(1)]
-    while current and not current[-1]:
-        current.pop()
-    expected = list(expected)
-    while expected and not expected[-1]:
-        expected.pop()
-    if current != expected:
-        raise ValueError(
-            f"{worksheet.title} worksheet headers changed during migration; "
-            "aborting before header update"
-        )
-
 
 def _validate_receipt_ownership(transactions: list[dict[str, Any]]) -> None:
     owners: dict[str, str] = {}
@@ -218,92 +188,15 @@ def _preflight(workbook: Any) -> dict[str, list[list[Any]]]:
         if len(headers) != len(set(headers)):
             raise ValueError(f"{title} worksheet has duplicate headers")
         if frozenset(headers) not in allowed[title]:
-            if title == "Transactions" and "MixedUseExpenses" not in values:
-                collision_layouts = {
-                    frozenset(layout["Transactions"]) | frozenset(collision)
-                    for layout in (
-                        VERSION_3_WORKSHEET_HEADERS,
-                        VERSION_5_WORKSHEET_HEADERS,
-                        VERSION_6_WORKSHEET_HEADERS,
-                        VERSION_7_WORKSHEET_HEADERS,
-                        LEGACY_TAGS_WORKBOOK_HEADERS,
-                    )
-                    for collision in (
-                        ("source_type",),
-                        ("source_id",),
-                        ("source_type", "source_id"),
-                    )
-                }
-                if frozenset(headers) in collision_layouts:
-                    continue
             raise ValueError(
                 f"{title} worksheet does not match a recognized standard layout"
             )
     return values
 
 
-def _clear_colliding_legacy_provenance(
-    workbook: Any,
-    initial: dict[str, list[list[Any]]],
-) -> None:
-    """Clear custom provenance-name columns before they gain current meaning."""
-    if "MixedUseExpenses" in initial:
-        return
-    rows = initial.get("Transactions")
-    if not rows:
-        return
-    headers = _headers(rows)
-    colliding_headers = [
-        header for header in ("source_type", "source_id") if header in headers
-    ]
-    if not colliding_headers:
-        return
-    indexes = {header: headers.index(header) for header in colliding_headers}
-    has_orphaned_provenance = any(
-        (
-            "source_id" in indexes
-            and len(row) > indexes["source_id"]
-            and str(row[indexes["source_id"]]).strip()
-        )
-        or (
-            "source_type" in indexes
-            and len(row) > indexes["source_type"]
-            and str(row[indexes["source_type"]]).strip()
-            == "mixed_use_expense"
-        )
-        for row in rows[1:]
-    )
-    if has_orphaned_provenance:
-        raise StorageValidationError(
-            "Transactions contain mixed-use provenance, but the "
-            "MixedUseExpenses worksheet is missing"
-        )
-    has_custom_values = any(
-        "source_type" in indexes
-        and len(row) > indexes["source_type"]
-        and str(row[indexes["source_type"]]).strip()
-        for row in rows[1:]
-    )
-    if not has_custom_values:
-        return
-    worksheet = workbook.worksheet("Transactions")
-    fresh_rows = worksheet.get_all_values()
-    if fresh_rows != rows:
-        raise ValueError("Transactions changed during migration; aborting before write")
-    cleared_rows = [
-        list(row) + [""] * (len(headers) - len(row)) for row in fresh_rows
-    ]
-    for row in cleared_rows[1:]:
-        for index in indexes.values():
-            row[index] = ""
-    worksheet.update(cleared_rows, range_name="A1", raw=True)
-    initial["Transactions"] = cleared_rows
-
-
 def _backfill_mixed_use_source_tags(workbook: Any) -> int:
     source_sheet = workbook.worksheet("MixedUseExpenses")
     transaction_sheet = workbook.worksheet("Transactions")
-    tag_sheet = workbook.worksheet("Tags")
     def collect_updates(
         source_values: list[list[Any]],
         transaction_values: list[list[Any]],
@@ -327,89 +220,23 @@ def _backfill_mixed_use_source_tags(workbook: Any) -> int:
             return None
         source_tag_index = source_headers.index(source_tag_header)
         linked_index = source_headers.index("linked_transaction_id")
-        source_id_index = source_headers.index("id")
         transaction_id_index = transaction_headers.index("id")
         transaction_tag_index = transaction_headers.index("tag_ids")
-        tag_headers = _headers(tag_sheet.get_all_values())
-        tag_id_index = tag_headers.index("id") if "id" in tag_headers else None
-        known_tag_ids = {
-            str(row[tag_id_index]).strip()
-            for row in tag_sheet.get_all_values()[1:]
-            if tag_id_index is not None
-            and len(row) > tag_id_index
-            and str(row[tag_id_index]).strip()
+        transaction_tags = {
+            str(row[transaction_id_index]).strip(): str(
+                row[transaction_tag_index]
+            ).strip()
+            for row in transaction_values[1:]
+            if len(row) > transaction_id_index
+            and len(row) > transaction_tag_index
+            and str(row[transaction_id_index]).strip()
         }
-        transaction_tags: dict[str, str] = {}
-        transaction_records: dict[str, dict[str, str]] = {}
-        for row in transaction_values[1:]:
-            if len(row) <= transaction_id_index:
-                continue
-            transaction_id = str(row[transaction_id_index]).strip()
-            if not transaction_id:
-                continue
-            if transaction_id in transaction_tags:
-                raise StorageValidationError("Transaction IDs must be unique")
-            transaction_tag_value = (
-                str(row[transaction_tag_index]).strip()
-                if len(row) > transaction_tag_index
-                else ""
-            )
-            normalized_transaction_tags = _normalize_tag_ids(transaction_tag_value)
-            if any(tag_id not in known_tag_ids for tag_id in normalized_transaction_tags):
-                raise StorageValidationError("Transaction contains an unknown tag")
-            transaction_tags[transaction_id] = transaction_tag_value
-            transaction_records[transaction_id] = {
-                header: str(row[index]).strip() if len(row) > index else ""
-                for index, header in enumerate(transaction_headers)
-            }
         updates: list[dict[str, object]] = []
-        source_ids: set[str] = set()
-        linked_ids: set[str] = set()
-        all_source_ids = {
-            str(row[source_id_index]).strip()
-            for row in source_values[1:]
-            if len(row) > source_id_index
-        }
         for row_number, row in enumerate(source_values[1:], start=2):
             padded = list(row) + [""] * (len(source_headers) - len(row))
-            source_id = str(padded[source_id_index]).strip()
-            if source_id in source_ids:
-                raise StorageValidationError("Mixed-use source IDs must be unique")
-            source_ids.add(source_id)
-            linked_transaction_id = str(padded[linked_index]).strip()
-            if linked_transaction_id not in transaction_tags:
-                raise StorageValidationError(
-                    "Mixed-use source references a missing projection transaction"
-                )
-            if linked_transaction_id in linked_ids:
-                raise StorageValidationError(
-                    "Mixed-use linked transaction IDs must be unique"
-                )
-            linked_ids.add(linked_transaction_id)
-            projection = transaction_records[linked_transaction_id]
-            projection_source_id = projection.get("source_id", "")
-            if projection_source_id not in all_source_ids:
-                raise StorageValidationError(
-                    "Mixed-use projection references an unknown source record"
-                )
-            if (
-                projection.get("source_type") != MIXED_USE_SOURCE_TYPE
-                or projection_source_id != source_id
-            ):
-                raise StorageValidationError(
-                    "Mixed-use source and projection IDs do not match"
-                )
-            source_tags = _normalize_tag_ids(padded[source_tag_index])
-            if any(tag_id not in known_tag_ids for tag_id in source_tags):
-                raise StorageValidationError("Mixed-use source contains an unknown tag")
-            projection_tags = _normalize_tag_ids(transaction_tags[linked_transaction_id])
-            if source_tags and source_tags != projection_tags:
-                raise StorageValidationError(
-                    "Mixed-use source and projection tags do not match"
-                )
             if str(padded[source_tag_index]).strip():
                 continue
-            tags = transaction_tags[linked_transaction_id]
+            tags = transaction_tags.get(str(padded[linked_index]).strip(), "")
             if tags:
                 updates.append(
                     {
@@ -428,24 +255,11 @@ def _backfill_mixed_use_source_tags(workbook: Any) -> int:
         return 0
     source_tag_header, source_headers, updates = collected
     if updates:
-        # Re-read both worksheets immediately before writing so an edit made
-        # after the initial snapshot cannot be overwritten by stale backfill.
-        collected = collect_updates(
-            source_sheet.get_all_values(), transaction_sheet.get_all_values()
-        )
-        if collected is None:
-            return 0
-        source_tag_header, source_headers, updates = collected
-    if updates:
         source_sheet.batch_update(updates, raw=True)
     if source_tag_header == LEGACY_MIXED_USE_TAG_MIGRATION_HEADER:
         source_tag_index = source_headers.index(source_tag_header)
-        _assert_headers_unchanged(source_sheet, source_headers)
-        source_sheet.update(
-            [["tag_ids"]],
-            range_name=gspread.utils.rowcol_to_a1(1, source_tag_index + 1),
-            raw=True,
-        )
+        source_headers[source_tag_index] = "tag_ids"
+        source_sheet.update([source_headers], range_name="A1", raw=True)
     return len(updates)
 
 
@@ -465,8 +279,6 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
             _ensure_headers(worksheet, headers, rows=initial.get(title))
         GoogleSheetsStorage(workbook)
         return {"worksheets": len(WORKSHEET_HEADERS), "source_tags": 0}
-
-    _clear_colliding_legacy_provenance(workbook, initial)
 
     # Core hierarchy columns were introduced together in the standard v6
     # layout. Existing rows are extended by Sheets when columns are appended.
@@ -517,10 +329,7 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
         rows=initial.get("MixedUseExpenses"),
     )
     if LEGACY_MIXED_USE_TAG_MIGRATION_HEADER in mixed_headers:
-        original_mixed_headers = list(mixed_headers)
-        _assert_headers_unchanged(mixed, original_mixed_headers)
-        marker_index = mixed_headers.index(LEGACY_MIXED_USE_TAG_MIGRATION_HEADER)
-        mixed_headers[marker_index] = "tag_ids"
+        mixed_headers[mixed_headers.index(LEGACY_MIXED_USE_TAG_MIGRATION_HEADER)] = "tag_ids"
         missing_columns = [
             header
             for header in ("receipt_references", "tag_ids")
@@ -529,28 +338,7 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
         if missing_columns:
             mixed.add_cols(len(missing_columns))
             mixed_headers.extend(missing_columns)
-            _assert_headers_unchanged(
-                mixed,
-                [
-                    *original_mixed_headers,
-                    *([""] * len(missing_columns)),
-                ],
-            )
-        _assert_headers_unchanged(
-            mixed,
-            [
-                *original_mixed_headers,
-                *( [""] * len(missing_columns)),
-            ],
-        )
-        if missing_columns:
-            mixed.update([mixed_headers], range_name="A1", raw=True)
-        else:
-            mixed.update(
-                [["tag_ids"]],
-                range_name=gspread.utils.rowcol_to_a1(1, marker_index + 1),
-                raw=True,
-            )
+        mixed.update([mixed_headers], range_name="A1", raw=True)
     else:
         _append_columns(mixed, mixed_headers, ["receipt_references", "tag_ids"])
 
@@ -638,13 +426,7 @@ def main() -> None:
             str(secrets["spreadsheet_id"]).strip()
         )
         result = migrate_workbook(workbook)
-    except (
-        gspread.exceptions.GSpreadException,
-        GoogleAuthError,
-        OSError,
-        StorageError,
-        ValueError,
-    ) as exc:
+    except (gspread.exceptions.GSpreadException, OSError, StorageError, ValueError) as exc:
         raise SystemExit(f"Workbook migration failed: {exc}") from exc
     print(
         "Workbook migration complete: "

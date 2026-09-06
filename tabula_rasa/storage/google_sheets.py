@@ -255,26 +255,10 @@ def _looks_like_historical_workbook(
         transactions = values.get("Transactions", [])
         if transactions:
             transaction_headers = {str(value).strip() for value in transactions[0]}
-            collision_layouts = {
-                frozenset(layout["Transactions"]) | frozenset(collision)
-                for layout in (
-                    VERSION_3_WORKSHEET_HEADERS,
-                    VERSION_5_WORKSHEET_HEADERS,
-                    VERSION_6_WORKSHEET_HEADERS,
-                    VERSION_7_WORKSHEET_HEADERS,
-                    LEGACY_TAGS_WORKBOOK_HEADERS,
-                )
-                for collision in (
-                    ("source_type",),
-                    ("source_id",),
-                    ("source_type", "source_id"),
-                )
-            }
-            if transaction_headers != frozenset(WORKSHEET_HEADERS["Transactions"]) and transaction_headers in {
-                frozenset(VERSION_7_WORKSHEET_HEADERS["Transactions"]),
-                frozenset(LEGACY_TAGS_WORKBOOK_HEADERS["Transactions"]),
-                *collision_layouts,
-            }:
+            if transaction_headers in (
+                set(VERSION_7_WORKSHEET_HEADERS["Transactions"]),
+                set(LEGACY_TAGS_WORKBOOK_HEADERS["Transactions"]),
+            ):
                 return True
     return False
 

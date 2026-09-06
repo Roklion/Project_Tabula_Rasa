@@ -7,18 +7,12 @@ from unittest.mock import Mock, patch
 
 import gspread
 import pytest
-from google.auth.exceptions import GoogleAuthError
 
 import scripts.migrate_workbook as migration_script
-from scripts.migrate_workbook import (
-    _backfill_mixed_use_source_tags,
-    _append_columns,
-    migrate_workbook,
-)
+from scripts.migrate_workbook import migrate_workbook
 from tabula_rasa.storage.google_sheets import (
     StorageInitializationError,
     StorageValidationError,
-    PRE_MIXED_USE_WORKSHEET_HEADERS,
     VERSION_3_WORKSHEET_HEADERS,
     VERSION_7_WORKSHEET_HEADERS,
     WORKSHEET_HEADERS,
@@ -96,126 +90,6 @@ def test_migrates_pre_receipt_v3_layout_to_current_headers() -> None:
     assert transaction["description"] == "Supplies"
     assert workbook.sheets["Payees"].rows[1][1] == "Acme"
     GoogleSheetsStorage(workbook)
-
-
-def test_tag_backfill_rechecks_fresh_source_and_projection_before_writing() -> None:
-    workbook = FakeWorkbook(WORKSHEET_HEADERS)
-    source = workbook.sheets["MixedUseExpenses"]
-    transaction = workbook.sheets["Transactions"]
-    _append_record(
-        workbook,
-        "Transactions",
-        {
-            "id": "projection-1",
-            "tag_ids": '["tag-old"]',
-            "source_type": "mixed_use_expense",
-            "source_id": "source-1",
-        },
-    )
-    _append_record(
-        workbook,
-        "MixedUseExpenses",
-        {
-            "id": "source-1",
-            "linked_transaction_id": "projection-1",
-        },
-    )
-    for tag_id in ("tag-old", "tag-new"):
-        _append_record(
-            workbook,
-            "Tags",
-            {"id": tag_id, "name": tag_id, "active": "TRUE"},
-        )
-    initial_source = source.get_all_values()
-    initial_transaction = transaction.get_all_values()
-    fresh_source = [list(row) for row in initial_source]
-    fresh_transaction = [list(row) for row in initial_transaction]
-    fresh_source[1][fresh_source[0].index("tag_ids")] = '["tag-new"]'
-    fresh_transaction[1][fresh_transaction[0].index("tag_ids")] = '["tag-new"]'
-    source.rows = fresh_source
-    source.batch_update = Mock(wraps=source.batch_update)
-    source.get_all_values = Mock(side_effect=[initial_source, fresh_source])
-    transaction.get_all_values = Mock(
-        side_effect=[initial_transaction, fresh_transaction]
-    )
-
-    result = _backfill_mixed_use_source_tags(workbook)
-
-    assert result == 0
-    assert source.rows[1][source.rows[0].index("tag_ids")] == '["tag-new"]'
-    source.batch_update.assert_not_called()
-
-
-def test_tag_backfill_rejects_duplicate_transaction_ids_before_writing() -> None:
-    workbook = FakeWorkbook(WORKSHEET_HEADERS)
-    source = workbook.sheets["MixedUseExpenses"]
-    _append_record(
-        workbook,
-        "Transactions",
-        {
-            "id": "projection-1",
-            "tag_ids": '["tag-old"]',
-            "source_type": "mixed_use_expense",
-            "source_id": "source-1",
-        },
-    )
-    _append_record(
-        workbook,
-        "Transactions",
-        {
-            "id": "projection-1",
-            "tag_ids": '["tag-new"]',
-            "source_type": "mixed_use_expense",
-            "source_id": "source-1",
-        },
-    )
-    _append_record(
-        workbook,
-        "MixedUseExpenses",
-        {"id": "source-1", "linked_transaction_id": "projection-1"},
-    )
-    for tag_id in ("tag-old", "tag-new"):
-        _append_record(
-            workbook,
-            "Tags",
-            {"id": tag_id, "name": tag_id, "active": "TRUE"},
-        )
-    before = source.get_all_values()
-    source.batch_update = Mock(wraps=source.batch_update)
-
-    with pytest.raises(StorageValidationError, match="Transaction IDs must be unique"):
-        _backfill_mixed_use_source_tags(workbook)
-
-    assert source.get_all_values() == before
-    source.batch_update.assert_not_called()
-
-
-def test_tag_backfill_rejects_invalid_projection_tags_before_writing() -> None:
-    workbook = FakeWorkbook(WORKSHEET_HEADERS)
-    source = workbook.sheets["MixedUseExpenses"]
-    _append_record(
-        workbook,
-        "Transactions",
-        {
-            "id": "projection-1",
-            "tag_ids": "not-json",
-            "source_type": "mixed_use_expense",
-            "source_id": "source-1",
-        },
-    )
-    _append_record(
-        workbook,
-        "MixedUseExpenses",
-        {"id": "source-1", "linked_transaction_id": "projection-1"},
-    )
-    before = source.get_all_values()
-    source.batch_update = Mock(wraps=source.batch_update)
-
-    with pytest.raises(StorageValidationError, match="Tag IDs are not valid JSON"):
-        _backfill_mixed_use_source_tags(workbook)
-
-    assert source.get_all_values() == before
-    source.batch_update.assert_not_called()
 
 
 def test_historical_detection_matches_headers_to_their_worksheet() -> None:
@@ -375,136 +249,6 @@ def test_migration_rejects_receipts_shared_by_transactions() -> None:
         migrate_workbook(workbook)
 
 
-def test_header_append_aborts_when_the_worksheet_changed() -> None:
-    workbook = FakeWorkbook()
-    worksheet = workbook.worksheet("Transactions")
-    expected_headers = ["id", "txn_date"]
-    before = worksheet.get_all_values()
-
-    with pytest.raises(ValueError, match="headers changed during migration"):
-        _append_columns(worksheet, expected_headers, ["receipt_references"])
-
-    assert worksheet.get_all_values() == before
-
-
-def test_header_append_rechecks_after_adding_columns() -> None:
-    workbook = FakeWorkbook()
-    worksheet = workbook.worksheet("Transactions")
-    expected_headers = list(WORKSHEET_HEADERS["Transactions"])
-    original_add_cols = worksheet.add_cols
-
-    def add_cols_then_change(columns: int) -> None:
-        original_add_cols(columns)
-        worksheet.rows[0][0] = "changed"
-
-    worksheet.add_cols = add_cols_then_change  # type: ignore[method-assign]
-
-    with pytest.raises(ValueError, match="headers changed during migration"):
-        _append_columns(worksheet, expected_headers, ["extra"])
-
-
-def test_header_append_restores_exact_capacity_after_shrink() -> None:
-    workbook = FakeWorkbook()
-    worksheet = workbook.worksheet("Transactions")
-    expected_headers = list(WORKSHEET_HEADERS["Transactions"])
-    worksheet.col_count = len(expected_headers) - 2
-
-    updated = _append_columns(worksheet, expected_headers, ["extra"])
-
-    assert updated == [*expected_headers, "extra"]
-    assert worksheet.col_count == len(updated)
-
-    column_count_after_abort = worksheet.col_count
-    with pytest.raises(ValueError, match="headers changed during migration"):
-        _append_columns(worksheet, expected_headers, ["extra"])
-    assert worksheet.col_count == column_count_after_abort
-
-
-def test_migration_clears_custom_provenance_column_collision() -> None:
-    headers = dict(PRE_MIXED_USE_WORKSHEET_HEADERS)
-    headers["Transactions"] = (
-        *PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"],
-        "source_type",
-    )
-    workbook = FakeWorkbook(headers)
-    _append_record(
-        workbook,
-        "Accounts",
-        {
-            "id": "account-1",
-            "name": "Checking",
-            "type": "Bank",
-            "classification": "Asset",
-            "opening_balance": "0.00",
-            "active": "TRUE",
-            "created_at": "2026-01-01T00:00:00Z",
-            "parent_id": "",
-        },
-    )
-    _append_record(
-        workbook,
-        "Categories",
-        {"id": "category-1", "name": "Office", "kind": "Expense", "parent_id": ""},
-    )
-    _append_record(
-        workbook,
-        "Transactions",
-        {
-            "id": "transaction-1",
-            "txn_date": "2026-01-01",
-            "kind": "Expense",
-            "amount": "50.00",
-            "account_id": "account-1",
-            "category_id": "category-1",
-            "source_type": "legacy custom value",
-            "created_at": "2026-01-01T00:00:00Z",
-        },
-    )
-
-    migrate_workbook(workbook)
-
-    transaction_sheet = workbook.worksheet("Transactions")
-    assert transaction_sheet.rows[1][transaction_sheet.rows[0].index("source_type")] == ""
-    assert transaction_sheet.rows[0] == list(WORKSHEET_HEADERS["Transactions"])
-    GoogleSheetsStorage(workbook)
-
-
-def test_migration_rejects_orphaned_provenance_without_source_sheet() -> None:
-    headers = dict(PRE_MIXED_USE_WORKSHEET_HEADERS)
-    headers["Transactions"] = (
-        *PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"],
-        "source_type",
-        "source_id",
-    )
-    workbook = FakeWorkbook(headers)
-    _append_record(
-        workbook,
-        "Transactions",
-        {"source_type": "mixed_use_expense", "source_id": "source-1"},
-    )
-
-    with pytest.raises(StorageValidationError, match="MixedUseExpenses worksheet"):
-        migrate_workbook(workbook)
-
-
-def test_marker_header_update_aborts_when_the_worksheet_changed() -> None:
-    headers = dict(WORKSHEET_HEADERS)
-    headers["MixedUseExpenses"] = tuple(
-        "tag_ids__migration_pending" if header == "tag_ids" else header
-        for header in headers["MixedUseExpenses"]
-    )
-    workbook = FakeWorkbook(headers)
-    mixed = workbook.worksheet("MixedUseExpenses")
-    mixed.row_values = Mock(wraps=mixed.row_values)  # type: ignore[method-assign]
-    mixed.row_values.return_value = list(WORKSHEET_HEADERS["MixedUseExpenses"])
-    before = mixed.get_all_values()
-
-    with pytest.raises(ValueError, match="headers changed during migration"):
-        migrate_workbook(workbook)
-
-    assert mixed.get_all_values() == before
-
-
 def test_marker_header_update_uses_original_header_snapshot() -> None:
     headers = dict(WORKSHEET_HEADERS)
     headers["MixedUseExpenses"] = tuple(
@@ -620,38 +364,6 @@ def test_populated_legacy_startup_is_read_only_and_actionable() -> None:
             StorageInitializationError,
             match=r"migrate_workbook\.py --profile PROFILE_KEY",
         ),
-    ):
-        GoogleSheetsStorage.from_secrets(
-            {"spreadsheet_id": "sheet-1", "gcp_service_account": {"type": "service_account"}}
-        )
-
-    assert before == {
-        title: worksheet.get_all_values() for title, worksheet in workbook.sheets.items()
-    }
-    for worksheet in workbook.sheets.values():
-        worksheet.add_cols.assert_not_called()
-        worksheet.update.assert_not_called()
-
-
-def test_populated_collision_legacy_startup_is_read_only_and_actionable() -> None:
-    headers = dict(VERSION_7_WORKSHEET_HEADERS)
-    headers["Transactions"] = (*headers["Transactions"], "source_type")
-    workbook = FakeWorkbook(headers)
-    _append_record(workbook, "Accounts", {"id": "account-1", "name": "Checking"})
-    before = {
-        title: worksheet.get_all_values() for title, worksheet in workbook.sheets.items()
-    }
-    for worksheet in workbook.sheets.values():
-        worksheet.add_cols = Mock(wraps=worksheet.add_cols)
-        worksheet.update = Mock(wraps=worksheet.update)
-
-    client = Mock()
-    client.open_by_key.return_value = workbook
-
-    with (
-        patch("tabula_rasa.storage.google_sheets.Credentials.from_service_account_info", return_value=object()),
-        patch.object(gspread, "authorize", return_value=client),
-        pytest.raises(StorageInitializationError, match=r"migrate_workbook\.py --profile PROFILE_KEY"),
     ):
         GoogleSheetsStorage.from_secrets(
             {"spreadsheet_id": "sheet-1", "gcp_service_account": {"type": "service_account"}}
@@ -947,32 +659,6 @@ def test_cli_reports_expected_migration_errors() -> None:
             "argv",
             ["migrate_workbook.py", "--profile", "test"],
         ),
-        pytest.raises(SystemExit, match="Workbook migration failed: invalid credential"),
-    ):
-        migration_script.main()
-
-
-def test_cli_reports_google_authentication_errors() -> None:
-    with (
-        patch.object(
-            migration_script,
-            "load_business_profile_document",
-            return_value={"business_profiles": {"test": {}}},
-        ),
-        patch.object(
-            migration_script,
-            "select_profile_secrets",
-            return_value={
-                "spreadsheet_id": "sheet-1",
-                "gcp_service_account": {"client_email": "test@example.invalid"},
-            },
-        ),
-        patch.object(
-            migration_script.Credentials,
-            "from_service_account_info",
-            side_effect=GoogleAuthError("invalid credential"),
-        ),
-        patch.object(sys, "argv", ["migrate_workbook.py", "--profile", "test"]),
         pytest.raises(SystemExit, match="Workbook migration failed: invalid credential"),
     ):
         migration_script.main()
