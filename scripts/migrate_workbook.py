@@ -33,6 +33,7 @@ from tabula_rasa.storage.google_sheets import (  # noqa: E402
     VERSION_7_WORKSHEET_HEADERS,
     WORKSHEET_HEADERS,
     GoogleSheetsStorage,
+    StorageError,
     StorageValidationError,
     decode_receipt_references,
     _looks_like_partial_blank_workbook,
@@ -537,13 +538,16 @@ def main() -> None:
             "gcp_service_account": credential_info,
         }
 
-    credentials = Credentials.from_service_account_info(
-        secrets["gcp_service_account"], scopes=[SHEETS_SCOPE]
-    )
-    workbook = gspread.authorize(credentials).open_by_key(
-        str(secrets["spreadsheet_id"]).strip()
-    )
-    result = migrate_workbook(workbook)
+    try:
+        credentials = Credentials.from_service_account_info(
+            secrets["gcp_service_account"], scopes=[SHEETS_SCOPE]
+        )
+        workbook = gspread.authorize(credentials).open_by_key(
+            str(secrets["spreadsheet_id"]).strip()
+        )
+        result = migrate_workbook(workbook)
+    except (gspread.exceptions.GSpreadException, OSError, StorageError, ValueError) as exc:
+        raise SystemExit(f"Workbook migration failed: {exc}") from exc
     print(
         "Workbook migration complete: "
         + ", ".join(f"{key}={value}" for key, value in result.items())

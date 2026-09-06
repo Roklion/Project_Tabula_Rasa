@@ -791,6 +791,36 @@ def test_cli_candidate_workbook_uses_explicit_service_account_file() -> None:
     migrate.assert_called_once_with(workbook)
 
 
+def test_cli_reports_expected_migration_errors() -> None:
+    with (
+        patch.object(
+            migration_script,
+            "load_business_profile_document",
+            return_value={"business_profiles": {"test": {}}},
+        ),
+        patch.object(
+            migration_script,
+            "select_profile_secrets",
+            return_value={
+                "spreadsheet_id": "sheet-1",
+                "gcp_service_account": {"client_email": "test@example.invalid"},
+            },
+        ),
+        patch.object(
+            migration_script.Credentials,
+            "from_service_account_info",
+            side_effect=ValueError("invalid credential"),
+        ),
+        patch.object(
+            sys,
+            "argv",
+            ["migrate_workbook.py", "--profile", "test"],
+        ),
+        pytest.raises(SystemExit, match="Workbook migration failed: invalid credential"),
+    ):
+        migration_script.main()
+
+
 def test_migration_preflights_malformed_tabs_before_writing() -> None:
     headers = dict(VERSION_7_WORKSHEET_HEADERS)
     headers["Accounts"] = ("id", "name")
