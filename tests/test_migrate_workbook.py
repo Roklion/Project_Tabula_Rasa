@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 
 import gspread
 import pytest
+from google.auth.exceptions import GoogleAuthError
 
 import scripts.migrate_workbook as migration_script
 from scripts.migrate_workbook import (
@@ -128,6 +129,34 @@ def test_tag_backfill_rechecks_fresh_source_and_projection_before_writing() -> N
 
     assert result == 0
     assert source.rows[1][source.rows[0].index("tag_ids")] == '["tag-new"]'
+    source.batch_update.assert_not_called()
+
+
+def test_tag_backfill_rejects_duplicate_transaction_ids_before_writing() -> None:
+    workbook = FakeWorkbook(WORKSHEET_HEADERS)
+    source = workbook.sheets["MixedUseExpenses"]
+    _append_record(
+        workbook,
+        "Transactions",
+        {"id": "projection-1", "tag_ids": '["tag-old"]'},
+    )
+    _append_record(
+        workbook,
+        "Transactions",
+        {"id": "projection-1", "tag_ids": '["tag-new"]'},
+    )
+    _append_record(
+        workbook,
+        "MixedUseExpenses",
+        {"id": "source-1", "linked_transaction_id": "projection-1"},
+    )
+    before = source.get_all_values()
+    source.batch_update = Mock(wraps=source.batch_update)
+
+    with pytest.raises(StorageValidationError, match="Transaction IDs must be unique"):
+        _backfill_mixed_use_source_tags(workbook)
+
+    assert source.get_all_values() == before
     source.batch_update.assert_not_called()
 
 
@@ -828,6 +857,32 @@ def test_cli_reports_expected_migration_errors() -> None:
             "argv",
             ["migrate_workbook.py", "--profile", "test"],
         ),
+        pytest.raises(SystemExit, match="Workbook migration failed: invalid credential"),
+    ):
+        migration_script.main()
+
+
+def test_cli_reports_google_authentication_errors() -> None:
+    with (
+        patch.object(
+            migration_script,
+            "load_business_profile_document",
+            return_value={"business_profiles": {"test": {}}},
+        ),
+        patch.object(
+            migration_script,
+            "select_profile_secrets",
+            return_value={
+                "spreadsheet_id": "sheet-1",
+                "gcp_service_account": {"client_email": "test@example.invalid"},
+            },
+        ),
+        patch.object(
+            migration_script.Credentials,
+            "from_service_account_info",
+            side_effect=GoogleAuthError("invalid credential"),
+        ),
+        patch.object(sys, "argv", ["migrate_workbook.py", "--profile", "test"]),
         pytest.raises(SystemExit, match="Workbook migration failed: invalid credential"),
     ):
         migration_script.main()

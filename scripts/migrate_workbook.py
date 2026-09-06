@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import gspread
+from google.auth.exceptions import GoogleAuthError
 from google.oauth2.service_account import Credentials
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -325,21 +326,31 @@ def _backfill_mixed_use_source_tags(workbook: Any) -> int:
         linked_index = source_headers.index("linked_transaction_id")
         transaction_id_index = transaction_headers.index("id")
         transaction_tag_index = transaction_headers.index("tag_ids")
-        transaction_tags = {
-            str(row[transaction_id_index]).strip(): str(
-                row[transaction_tag_index]
-            ).strip()
-            for row in transaction_values[1:]
-            if len(row) > transaction_id_index
-            and len(row) > transaction_tag_index
-            and str(row[transaction_id_index]).strip()
-        }
+        transaction_tags: dict[str, str] = {}
+        for row in transaction_values[1:]:
+            if len(row) <= transaction_id_index:
+                continue
+            transaction_id = str(row[transaction_id_index]).strip()
+            if not transaction_id:
+                continue
+            if transaction_id in transaction_tags:
+                raise StorageValidationError("Transaction IDs must be unique")
+            transaction_tags[transaction_id] = (
+                str(row[transaction_tag_index]).strip()
+                if len(row) > transaction_tag_index
+                else ""
+            )
         updates: list[dict[str, object]] = []
         for row_number, row in enumerate(source_values[1:], start=2):
             padded = list(row) + [""] * (len(source_headers) - len(row))
+            linked_transaction_id = str(padded[linked_index]).strip()
+            if linked_transaction_id not in transaction_tags:
+                raise StorageValidationError(
+                    "Mixed-use source references a missing projection transaction"
+                )
             if str(padded[source_tag_index]).strip():
                 continue
-            tags = transaction_tags.get(str(padded[linked_index]).strip(), "")
+            tags = transaction_tags[linked_transaction_id]
             if tags:
                 updates.append(
                     {
@@ -568,7 +579,13 @@ def main() -> None:
             str(secrets["spreadsheet_id"]).strip()
         )
         result = migrate_workbook(workbook)
-    except (gspread.exceptions.GSpreadException, OSError, StorageError, ValueError) as exc:
+    except (
+        gspread.exceptions.GSpreadException,
+        GoogleAuthError,
+        OSError,
+        StorageError,
+        ValueError,
+    ) as exc:
         raise SystemExit(f"Workbook migration failed: {exc}") from exc
     print(
         "Workbook migration complete: "
