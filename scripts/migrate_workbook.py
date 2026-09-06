@@ -33,6 +33,7 @@ from tabula_rasa.storage.google_sheets import (  # noqa: E402
     VERSION_7_WORKSHEET_HEADERS,
     WORKSHEET_HEADERS,
     GoogleSheetsStorage,
+    StorageValidationError,
     decode_receipt_references,
     _looks_like_partial_blank_workbook,
     _validate_hierarchy_records,
@@ -97,8 +98,12 @@ def _append_columns(worksheet: Any, headers: list[str], additions: list[str]) ->
     if not additions:
         return headers
     _assert_headers_unchanged(worksheet, headers)
-    worksheet.add_cols(len(additions))
     updated_headers = [*headers, *additions]
+    # A retry after an interrupted add_cols call may already have enough
+    # trailing capacity. Reuse it instead of appending duplicate blank columns.
+    column_count = getattr(worksheet, "col_count", None)
+    if not isinstance(column_count, int) or column_count < len(updated_headers):
+        worksheet.add_cols(len(additions))
     _assert_headers_unchanged(
         worksheet, [*headers, *([""] * len(additions))]
     )
@@ -206,10 +211,86 @@ def _preflight(workbook: Any) -> dict[str, list[list[Any]]]:
         if len(headers) != len(set(headers)):
             raise ValueError(f"{title} worksheet has duplicate headers")
         if frozenset(headers) not in allowed[title]:
+            if title == "Transactions" and "MixedUseExpenses" not in values:
+                collision_layouts = {
+                    frozenset(layout["Transactions"]) | frozenset(collision)
+                    for layout in (
+                        VERSION_3_WORKSHEET_HEADERS,
+                        VERSION_5_WORKSHEET_HEADERS,
+                        VERSION_6_WORKSHEET_HEADERS,
+                        VERSION_7_WORKSHEET_HEADERS,
+                        LEGACY_TAGS_WORKBOOK_HEADERS,
+                    )
+                    for collision in (
+                        ("source_type",),
+                        ("source_id",),
+                        ("source_type", "source_id"),
+                    )
+                }
+                if frozenset(headers) in collision_layouts:
+                    continue
             raise ValueError(
                 f"{title} worksheet does not match a recognized standard layout"
             )
     return values
+
+
+def _clear_colliding_legacy_provenance(
+    workbook: Any,
+    initial: dict[str, list[list[Any]]],
+) -> None:
+    """Clear custom provenance-name columns before they gain current meaning."""
+    if "MixedUseExpenses" in initial:
+        return
+    rows = initial.get("Transactions")
+    if not rows:
+        return
+    headers = _headers(rows)
+    colliding_headers = [
+        header for header in ("source_type", "source_id") if header in headers
+    ]
+    if not colliding_headers:
+        return
+    indexes = {header: headers.index(header) for header in colliding_headers}
+    has_orphaned_provenance = any(
+        (
+            "source_id" in indexes
+            and len(row) > indexes["source_id"]
+            and str(row[indexes["source_id"]]).strip()
+        )
+        or (
+            "source_type" in indexes
+            and len(row) > indexes["source_type"]
+            and str(row[indexes["source_type"]]).strip()
+            == "mixed_use_expense"
+        )
+        for row in rows[1:]
+    )
+    if has_orphaned_provenance:
+        raise StorageValidationError(
+            "Transactions contain mixed-use provenance, but the "
+            "MixedUseExpenses worksheet is missing"
+        )
+    has_custom_values = any(
+        "source_type" in indexes
+        and len(row) > indexes["source_type"]
+        and str(row[indexes["source_type"]]).strip()
+        for row in rows[1:]
+    )
+    if not has_custom_values:
+        return
+    worksheet = workbook.worksheet("Transactions")
+    fresh_rows = worksheet.get_all_values()
+    if fresh_rows != rows:
+        raise ValueError("Transactions changed during migration; aborting before write")
+    cleared_rows = [
+        list(row) + [""] * (len(headers) - len(row)) for row in fresh_rows
+    ]
+    for row in cleared_rows[1:]:
+        for index in indexes.values():
+            row[index] = ""
+    worksheet.update(cleared_rows, range_name="A1", raw=True)
+    initial["Transactions"] = cleared_rows
 
 
 def _backfill_mixed_use_source_tags(workbook: Any) -> int:
@@ -306,6 +387,8 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
             _ensure_headers(worksheet, headers, rows=initial.get(title))
         GoogleSheetsStorage(workbook)
         return {"worksheets": len(WORKSHEET_HEADERS), "source_tags": 0}
+
+    _clear_colliding_legacy_provenance(workbook, initial)
 
     # Core hierarchy columns were introduced together in the standard v6
     # layout. Existing rows are extended by Sheets when columns are appended.

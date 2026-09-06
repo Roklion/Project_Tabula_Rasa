@@ -17,6 +17,7 @@ from scripts.migrate_workbook import (
 from tabula_rasa.storage.google_sheets import (
     StorageInitializationError,
     StorageValidationError,
+    PRE_MIXED_USE_WORKSHEET_HEADERS,
     VERSION_3_WORKSHEET_HEADERS,
     VERSION_7_WORKSHEET_HEADERS,
     WORKSHEET_HEADERS,
@@ -313,6 +314,78 @@ def test_header_append_rechecks_after_adding_columns() -> None:
 
     with pytest.raises(ValueError, match="headers changed during migration"):
         _append_columns(worksheet, expected_headers, ["extra"])
+
+    column_count_after_abort = worksheet.col_count
+    with pytest.raises(ValueError, match="headers changed during migration"):
+        _append_columns(worksheet, expected_headers, ["extra"])
+    assert worksheet.col_count == column_count_after_abort
+
+
+def test_migration_clears_custom_provenance_column_collision() -> None:
+    headers = dict(PRE_MIXED_USE_WORKSHEET_HEADERS)
+    headers["Transactions"] = (
+        *PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"],
+        "source_type",
+    )
+    workbook = FakeWorkbook(headers)
+    _append_record(
+        workbook,
+        "Accounts",
+        {
+            "id": "account-1",
+            "name": "Checking",
+            "type": "Bank",
+            "classification": "Asset",
+            "opening_balance": "0.00",
+            "active": "TRUE",
+            "created_at": "2026-01-01T00:00:00Z",
+            "parent_id": "",
+        },
+    )
+    _append_record(
+        workbook,
+        "Categories",
+        {"id": "category-1", "name": "Office", "kind": "Expense", "parent_id": ""},
+    )
+    _append_record(
+        workbook,
+        "Transactions",
+        {
+            "id": "transaction-1",
+            "txn_date": "2026-01-01",
+            "kind": "Expense",
+            "amount": "50.00",
+            "account_id": "account-1",
+            "category_id": "category-1",
+            "source_type": "legacy custom value",
+            "created_at": "2026-01-01T00:00:00Z",
+        },
+    )
+
+    migrate_workbook(workbook)
+
+    transaction_sheet = workbook.worksheet("Transactions")
+    assert transaction_sheet.rows[1][transaction_sheet.rows[0].index("source_type")] == ""
+    assert transaction_sheet.rows[0] == list(WORKSHEET_HEADERS["Transactions"])
+    GoogleSheetsStorage(workbook)
+
+
+def test_migration_rejects_orphaned_provenance_without_source_sheet() -> None:
+    headers = dict(PRE_MIXED_USE_WORKSHEET_HEADERS)
+    headers["Transactions"] = (
+        *PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"],
+        "source_type",
+        "source_id",
+    )
+    workbook = FakeWorkbook(headers)
+    _append_record(
+        workbook,
+        "Transactions",
+        {"source_type": "mixed_use_expense", "source_id": "source-1"},
+    )
+
+    with pytest.raises(StorageValidationError, match="MixedUseExpenses worksheet"):
+        migrate_workbook(workbook)
 
 
 def test_marker_header_update_aborts_when_the_worksheet_changed() -> None:

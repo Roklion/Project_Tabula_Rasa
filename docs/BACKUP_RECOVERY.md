@@ -93,15 +93,6 @@ python scripts/migrate_workbook.py --spreadsheet-id WORKBOOK_ID --service-accoun
 After it succeeds, return to Account settings to validate and save the profile.
 Keep the credential file outside the repository.
 
-It upgrades recognized historical schemas, deduplicates legacy payee text using
-normalized Unicode and whitespace, updates transaction references, and is safe
-to rerun. Older backups are accepted during restore; their payee text is mapped
-only to payees already in the target workbook, otherwise the reference is left
-unset.
-
-Older compatible archives restore records at Layer 1 when hierarchy columns
-are absent. A format-1 archive must first be converted to format 2.
-
 For a legacy workbook schema, follow the explicit workbook migration procedure
 in the setup and architecture guides. Payee text embedded in a legacy backup
 is converted by the archive migration command above; it is not resolved during
