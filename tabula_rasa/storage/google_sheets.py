@@ -298,9 +298,26 @@ class StorageUnavailableError(StorageError):
 
 def _mutation_guidance(operation: str) -> str:
     """Return the common user-facing guidance for an unconfirmed write."""
+    operation_key = operation.casefold()
+    if "mixed-use" in operation_key or "mixeduse" in operation_key:
+        inspection_area = "Mixed-use expenses and the Transactions ledger"
+    elif "payee" in operation_key:
+        inspection_area = (
+            "Payee management and the Transactions and MixedUseExpenses tables"
+        )
+    elif "tag" in operation_key:
+        inspection_area = (
+            "Tag management and the Transactions, Mileage, and MixedUseExpenses tables"
+        )
+    elif any(keyword in operation_key for keyword in ("bulk", "transaction", "category")):
+        inspection_area = "the Transactions ledger"
+    elif "receipt" in operation_key:
+        inspection_area = "the receipt records and linked ledger rows"
+    else:
+        inspection_area = "the affected records"
     return (
-        f"Google Sheets could not confirm the {operation}. Refresh the affected "
-        "records and inspect them before trying again; no success was reported."
+        f"Google Sheets could not confirm the {operation}. Refresh and inspect "
+        f"{inspection_area} before trying again; no success was reported."
     )
 
 

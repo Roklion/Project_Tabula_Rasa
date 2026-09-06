@@ -16,6 +16,7 @@ from tabula_rasa.storage.google_sheets import (
     BACKUP_FORMAT_VERSION,
     decode_receipt_references,
     GoogleSheetsStorage,
+    _mutation_guidance,
     SHEETS_SCOPE,
     SHEETS_READONLY_SCOPE,
     StorageAuthenticationError,
@@ -175,6 +176,24 @@ def rewrite_backup_tables(
         for name, content in contents.items():
             destination.writestr(name, content)
     return output.getvalue()
+
+
+@pytest.mark.parametrize(
+    ("operation", "inspection_area"),
+    [
+        ("mixed-use deletion", "Mixed-use expenses"),
+        ("transaction deletion", "Transactions ledger"),
+        ("payee merge", "Payee management"),
+        ("tag removal", "Tag management"),
+    ],
+)
+def test_mutation_guidance_names_operation_inspection_area(
+    operation: str, inspection_area: str
+) -> None:
+    guidance = _mutation_guidance(operation)
+
+    assert inspection_area in guidance
+    assert "inspect" in guidance.casefold()
 
 
 class TestGoogleSheetsStorage:

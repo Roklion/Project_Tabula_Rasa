@@ -270,8 +270,9 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         sources = [dict(item) for item in raw_sources]
         st.warning(
             "A mixed-use expense was saved without its ledger projection. "
-            "The source is shown for inspection; automatic repair is disabled. "
-            "Review the source and ledger before taking corrective action."
+            "The source is shown for inspection only; saving and automatic "
+            "repair are disabled. Inspect Mixed-use expenses and the ledger "
+            "before taking corrective action."
         )
         transaction_by_id = {
             str(item.get("id") or ""): item for item in transactions
@@ -526,12 +527,19 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             ),
         )
         save_error = st.empty()
-        save_label = (
-            "Repair ledger projection"
-            if source_incomplete
-            else "Save changes" if source else "Save mixed-use expense"
-        )
-        if st.button(save_label, type="primary", key=f"mixed_save_{scope}"):
+        save_label = "Save changes" if source else "Save mixed-use expense"
+        if source_incomplete:
+            st.info(
+                "Inspection only: saving and repair are unavailable. Inspect "
+                "this source in Mixed-use expenses and compare its ledger "
+                "projection before taking corrective action."
+            )
+        if st.button(
+            save_label,
+            type="primary",
+            key=f"mixed_save_{scope}",
+            disabled=source_incomplete,
+        ):
             tag_error = inline_tag_name_error(new_tag_name)
             if (selector_error := tag_selector_error(f"mixed_tags_{scope}")):
                 save_error.error(selector_error)

@@ -419,8 +419,7 @@ def test_mixed_use_selection_clears_after_revision_change(default_storage) -> No
         assert app.session_state["mixed_use_selected_source_id_test"] == ""
 
 
-def test_mixed_use_app_test_exposes_source_only_projection_repair(default_storage) -> None:
-    tag = default_storage.create_tag("Repair tag")
+def test_mixed_use_app_test_exposes_source_only_state_for_inspection(default_storage) -> None:
     source = default_storage.create_mixed_use_expense(
         txn_date="2026-09-03",
         total_expense="100",
@@ -428,7 +427,6 @@ def test_mixed_use_app_test_exposes_source_only_projection_repair(default_storag
         account_id=next(item for item in default_storage.list_accounts() if item["active"])["id"],
         category_id=next(item for item in default_storage.list_categories() if item["kind"] == "Expense")["id"],
         allocation_rationale="Measured use",
-        tag_ids=[tag["id"]],
     )
     transaction_sheet = default_storage._worksheet("Transactions")
     transaction_sheet.rows.pop(1)
@@ -438,14 +436,21 @@ def test_mixed_use_app_test_exposes_source_only_projection_repair(default_storag
         navigate_to(app, "Transactions")
         app.session_state["mixed_use_selected_source_id_test"] = source["id"]
         app.run()
-        assert any("without its ledger projection" in str(item.value) for item in app.warning)
+        assert any(
+            "inspection only" in str(item.value).lower()
+            and "mixed-use expenses" in str(item.value).lower()
+            and "ledger" in str(item.value).lower()
+            for item in (*app.warning, *app.info)
+        )
         tab = _mixed_tab(app)
-        _tab_field(tab, "button", "Repair ledger projection").click().run()
+        save_button = _tab_field(tab, "button", "Save changes")
+        assert save_button.disabled is True
+        assert not any(
+            item.label == "Repair ledger projection" for item in tab.button
+        )
 
-    assert len(default_storage.list_transactions()) == 1
-    assert default_storage.list_mixed_use_expenses()[0]["id"] == source["id"]
-    assert default_storage.list_mixed_use_expenses()[0]["tag_ids"] == [tag["id"]]
-    assert default_storage.list_transactions()[0]["tag_ids"] == [tag["id"]]
+    assert default_storage.list_transactions() == []
+    assert default_storage.list_mixed_use_expense_sources()[0]["id"] == source["id"]
 
 
 def test_mixed_use_app_test_clears_recovery_after_source_deletion(default_storage) -> None:
