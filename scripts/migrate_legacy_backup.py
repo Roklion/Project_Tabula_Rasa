@@ -84,9 +84,7 @@ def _read_csv(
         raise StorageValidationError(f"{title} backup CSV is invalid") from exc
     actual_headers = tuple(header.strip() for header in rows[0]) if rows else ()
     required_headers = set(expected)
-    if not rows or not actual_headers or any(not header for header in actual_headers):
-        raise StorageValidationError(f"{title} backup headers are invalid")
-    if len(actual_headers) != len(set(actual_headers)) or not required_headers.issubset(actual_headers):
+    if not rows or not required_headers.issubset(actual_headers):
         raise StorageValidationError(f"{title} backup headers are invalid")
     records = []
     for row in rows[1:]:
