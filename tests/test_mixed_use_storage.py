@@ -1394,6 +1394,34 @@ def test_mixed_use_create_verifies_uncertain_source_payload_before_projection(
     assert default_storage._rows("Transactions", force_refresh=True) == []
 
 
+def test_mixed_use_create_failure_invalidates_both_pair_caches(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    inputs = {
+        **_expense_inputs(default_storage),
+        "total_expense": "100",
+        "business_use_percentage": "50",
+        "allocation_rationale": "Measured use",
+        "source_id": "source-cache-invalidation",
+        "linked_transaction_id": "transaction-cache-invalidation",
+    }
+    default_storage._row_cache["MixedUseExpenses"] = []
+    default_storage._row_cache["Transactions"] = []
+    original_append = default_storage._append
+
+    def fail_projection_append(title: str, record: dict[str, str]) -> None:
+        if title == "Transactions":
+            raise StorageUnavailableError("projection write failed", retryable=True)
+        original_append(title, record)
+
+    default_storage._append = fail_projection_append  # type: ignore[method-assign]
+    with pytest.raises(StorageUnavailableError, match="could not confirm"):
+        default_storage.create_mixed_use_expense(**inputs)
+
+    assert "MixedUseExpenses" not in default_storage._row_cache
+    assert "Transactions" not in default_storage._row_cache
+
+
 def test_mixed_use_create_returns_success_when_final_response_is_lost(
     default_storage: GoogleSheetsStorage,
 ) -> None:

@@ -204,6 +204,76 @@ class TestGoogleSheetsStorage:
         self.workbook = FakeWorkbook()
         self.storage = GoogleSheetsStorage(self.workbook, sleeper=lambda _: None)
 
+    def test_retry_refresh_failure_invalidates_and_normalizes_error(self) -> None:
+        self.storage._row_cache["Transactions"] = []
+        writes = 0
+
+        def write() -> None:
+            nonlocal writes
+            writes += 1
+            raise StorageUnavailableError("response lost", retryable=True)
+
+        def refresh() -> None:
+            raise StorageUnavailableError("refresh unavailable", retryable=True)
+
+        with pytest.raises(StorageUnavailableError, match="could not confirm") as raised:
+            self.storage._write_with_confirmation(
+                "transaction update",
+                write,
+                lambda: "unchanged",
+                before_retry=refresh,
+                invalidate=("Transactions",),
+            )
+
+        assert writes == 1
+        assert raised.value.retryable is False
+        assert "Transactions ledger" in str(raised.value)
+        assert "Transactions" not in self.storage._row_cache
+
+    def test_retry_backoff_precedes_refresh_callback(self) -> None:
+        events: list[str] = []
+        storage = GoogleSheetsStorage(
+            self.workbook,
+            sleeper=lambda _: events.append("backoff"),
+        )
+        writes = 0
+
+        def write() -> None:
+            nonlocal writes
+            writes += 1
+            events.append("write")
+            if writes == 1:
+                raise StorageUnavailableError("response lost", retryable=True)
+
+        def refresh() -> None:
+            events.append("refresh")
+
+        storage._write_with_confirmation(
+            "transaction update", write, lambda: "unchanged", before_retry=refresh
+        )
+
+        assert events == ["write", "backoff", "refresh", "write"]
+
+    def test_retry_refresh_unexpected_failure_still_invalidates_cache(self) -> None:
+        self.storage._row_cache["Transactions"] = []
+
+        def write() -> None:
+            raise StorageUnavailableError("response lost", retryable=True)
+
+        def refresh() -> None:
+            raise KeyError("row disappeared")
+
+        with pytest.raises(KeyError):
+            self.storage._write_with_confirmation(
+                "transaction update",
+                write,
+                lambda: "unchanged",
+                before_retry=refresh,
+                invalidate=("Transactions",),
+            )
+
+        assert "Transactions" not in self.storage._row_cache
+
     def test_profile_storage_initializes_tabs_and_headers_by_spreadsheet_id(
         self,
     ) -> None:
@@ -2909,6 +2979,28 @@ class TestGoogleSheetsStorage:
         )
 
         assert result == {"status": "fully_applied", "count": "1"}
+
+    def test_uncertain_bulk_category_retries_normalized_unchanged_rows(self) -> None:
+        first, _, replacement = self._bulk_transaction_fixture()
+        expected = [
+            item
+            for item in self.storage.list_transactions(_force_refresh=True)
+            if item["id"] == first["id"]
+        ]
+        transaction_sheet = self.workbook.sheets["Transactions"]
+        amount_index = transaction_sheet.rows[0].index("amount")
+        transaction_sheet.rows[1][amount_index] = "1"
+        batch_update = Mock(side_effect=OSError("temporary response lost"))
+        self.workbook.batch_update = batch_update
+
+        with pytest.raises(StorageUnavailableError, match="could not confirm"):
+            self.storage.bulk_change_transaction_category(
+                [first["id"]],
+                expected_transactions=expected,
+                category_id=replacement["id"],
+            )
+
+        assert batch_update.call_count == 2
 
     def test_bulk_mutations_accept_listed_tag_ids_in_freshness_checks(self) -> None:
         first, _, replacement = self._bulk_transaction_fixture()

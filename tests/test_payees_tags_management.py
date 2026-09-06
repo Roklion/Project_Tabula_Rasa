@@ -172,6 +172,38 @@ def test_tag_removal_rebuilds_row_after_shift_before_retry(default_storage, monk
     assert worksheet.rows[1][0] == "inserted-before-retry"
 
 
+def test_tag_removal_rechecks_references_after_retry_backoff(default_storage) -> None:
+    account, category = _ledger_setup(default_storage)
+    tag = default_storage.create_tag("Referenced during retry")
+    calls = 0
+
+    def add_reference_during_backoff(_: float) -> None:
+        default_storage.create_transaction(
+            txn_date="2026-01-01",
+            kind="Expense",
+            amount="10",
+            account_id=account["id"],
+            category_id=category["id"],
+            tag_ids=[tag["id"]],
+        )
+
+    def fail_once(_: object) -> None:
+        nonlocal calls
+        calls += 1
+        raise OSError("temporary response lost")
+
+    default_storage._sleeper = add_reference_during_backoff
+    default_storage._workbook.batch_update = fail_once
+
+    with pytest.raises(StorageConflictError, match="became referenced"):
+        default_storage.remove_tag(tag["id"])
+
+    assert calls == 1
+    assert tag["id"] in {
+        item["id"] for item in default_storage.list_tags(active_only=False)
+    }
+
+
 def test_tag_merge_partial_write_stops_without_retry(default_storage, monkeypatch) -> None:
     account, category = _ledger_setup(default_storage)
     target = default_storage.create_tag("Target")
