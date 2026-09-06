@@ -83,28 +83,48 @@ make the workbook public.
 | MixedUseExpenses | id, txn_date, kind, total_expense, business_use_percentage, allocated_amount, account_id, category_id, payee_id, description, reference, receipt_references, allocation_rationale, linked_transaction_id, tag_ids, created_at |
 
 The default Sheet1 tab may remain or be deleted. Existing compatible tabs are
-preserved. Empty required tabs receive headers; populated incompatible tabs
-cause validation to fail rather than being overwritten. Defaults are seeded
-only in a blank workbook.
+preserved. Blank-workbook initialization creates the required tabs and headers;
+populated workbooks with empty or incompatible required tabs fail validation
+rather than being overwritten. Defaults are seeded only in a blank workbook.
 
 Existing workbooks that still store transaction payee text must be upgraded
-with the one-time payee migration before using the managed `Payees` and
-`Transactions.payee_id` schema. See [Backup and recovery](BACKUP_RECOVERY.md)
-for the migration command and legacy-backup compatibility details.
+with the one-time combined workbook migration before using the managed
+`Payees` and `Transactions.payee_id` schema:
 
-On normal startup, the application migrates exact legacy format-version 5
-Accounts and Categories headers by appending a blank parent_id column. It also
-creates the MixedUseExpenses worksheet and appends blank source_type/source_id
-columns to Transactions when upgrading a pre-mixed-use workbook. Existing rows
-remain ordinary records with no mixed-use linkage. These migrations are
-idempotent. The read-only validation command does not modify legacy headers or
-create the new worksheet.
+```text
+python scripts/migrate_workbook.py --secrets .streamlit/secrets.toml --profile PROFILE_KEY
+```
 
-Normal startup also creates a missing Tags worksheet and appends blank
-`tag_ids` columns to compatible Transactions, Mileage, and MixedUseExpenses
-worksheets. For an existing mixed-use pair, source tag metadata is backfilled
-from its linked projection during this one-time upgrade. This upgrade is
-idempotent, and existing rows remain valid with no Tags.
+For a new profile, or a profile being changed to a different legacy workbook,
+run the migration with the candidate workbook and a local service-account JSON
+file before saving the profile:
+
+```text
+python scripts/migrate_workbook.py --spreadsheet-id WORKBOOK_ID --service-account-file path\to\service-account.json
+```
+
+Return to Account settings and validate/save the profile after the command
+completes. The credential file is read locally; do not place it in the
+repository.
+
+See [Backup and recovery](BACKUP_RECOVERY.md) for migration behavior and
+legacy-backup compatibility details.
+
+Normal startup validates populated workbooks against the current headers only;
+it never upgrades historical worksheet schemas or creates migration markers.
+An outdated workbook fails with an actionable error and remains unchanged.
+Upgrade a standard historical workbook explicitly, using the selected profile's
+service-account access:
+
+```text
+python scripts/migrate_workbook.py --secrets .streamlit/secrets.toml --profile PROFILE_KEY
+```
+
+The migration command adds the hierarchy, receipt, managed-payee, tag,
+provenance, and mixed-use columns, and backfills v9 mixed-use source tags from
+their linked projection. It validates the complete current schema before
+reporting success and can be rerun after an interrupted migration. Read-only
+validation remains non-mutating and does not perform this conversion.
 
 ## Local profile administration
 

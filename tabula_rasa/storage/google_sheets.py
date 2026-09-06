@@ -126,7 +126,6 @@ MIXED_USE_WORKSHEET_HEADERS = (
     "tag_ids",
     "created_at",
 )
-MIXED_USE_TAG_MIGRATION_HEADER = "tag_ids__migration_pending"
 WORKSHEET_HEADERS = {
     **PRE_MIXED_USE_WORKSHEET_HEADERS,
     "Transactions": (
@@ -190,6 +189,99 @@ DEFAULT_CATEGORIES = {
         "Other expense",
     ),
 }
+
+# Workbook migration recognizes the v8 tags layout independently from the
+# backup-format constants. The backup-only TAGS_WORKSHEET_HEADERS definition
+# can therefore be retired by the legacy-backup migration work.
+LEGACY_TAGS_WORKBOOK_HEADERS = {
+    **PRE_MIXED_USE_WORKSHEET_HEADERS,
+    "Tags": WORKSHEET_HEADERS["Tags"],
+    "Transactions": (
+        *PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"],
+        "tag_ids",
+    ),
+    "Mileage": (
+        *PRE_MIXED_USE_WORKSHEET_HEADERS["Mileage"],
+        "tag_ids",
+    ),
+}
+VERSION_3_WORKSHEET_HEADERS = {
+    title: (
+        tuple(header for header in headers if header != "receipt_references")
+        if title == "Transactions"
+        else headers
+    )
+    for title, headers in PRE_PAYEE_WORKSHEET_HEADERS.items()
+}
+
+
+def _looks_like_historical_workbook(
+    values: Mapping[str, list[list[Any]]],
+) -> bool:
+    """Return whether headers match a supported pre-current workbook layout."""
+    historical_headers = (
+        VERSION_3_WORKSHEET_HEADERS,
+        PRE_PAYEE_WORKSHEET_HEADERS,
+        VERSION_6_WORKSHEET_HEADERS,
+        VERSION_7_WORKSHEET_HEADERS,
+        LEGACY_TAGS_WORKBOOK_HEADERS,
+    )
+    for title, rows in values.items():
+        if not rows:
+            continue
+        headers = [str(value).strip() for value in rows[0]]
+        if "tag_ids__migration_pending" in headers:
+            return True
+        if (
+            title == "MixedUseExpenses"
+            and set(headers)
+            == set(MIXED_USE_WORKSHEET_HEADERS) - {"tag_ids"}
+            and len(headers) == len(set(headers))
+        ):
+            # Version 9 mixed-use sources predate durable source tag IDs.
+            return True
+        if any(
+            title in layout
+            and set(headers) == set(layout[title])
+            and set(headers) != set(WORKSHEET_HEADERS.get(title, ()))
+            and len(headers) == len(set(headers))
+            for layout in historical_headers
+        ):
+            return True
+    # Legacy workbooks commonly omit one or more worksheets entirely. Their
+    # remaining standard tabs still identify the layout reliably.
+    present_titles = set(values)
+    if "MixedUseExpenses" not in present_titles:
+        transactions = values.get("Transactions", [])
+        if transactions:
+            transaction_headers = {str(value).strip() for value in transactions[0]}
+            if transaction_headers in (
+                set(VERSION_7_WORKSHEET_HEADERS["Transactions"]),
+                set(LEGACY_TAGS_WORKBOOK_HEADERS["Transactions"]),
+            ):
+                return True
+    return False
+
+
+def _looks_like_partial_blank_workbook(
+    values: Mapping[str, list[list[Any]]],
+) -> bool:
+    """Return whether only current headers exist in a partial new workbook."""
+    found_header = False
+    for title, rows in values.items():
+        if not any(str(value).strip() for row in rows for value in row):
+            continue
+        if title not in WORKSHEET_HEADERS or not rows:
+            return False
+        headers = [str(value).strip() for value in rows[0]]
+        while headers and not headers[-1]:
+            headers.pop()
+        if headers != list(WORKSHEET_HEADERS[title]):
+            return False
+        if any(str(value).strip() for row in rows[1:] for value in row):
+            return False
+        found_header = True
+    return found_header
 
 
 class StorageError(RuntimeError):
@@ -980,388 +1072,71 @@ class GoogleSheetsStorage:
 
     @classmethod
     def from_secrets(cls, secrets: Mapping[str, Any]) -> "GoogleSheetsStorage":
-        """Create and initialize storage from Streamlit-compatible secrets."""
+        """Open a workbook, bootstrapping only a genuinely blank workbook.
+
+        Populated workbooks are intentionally validation-only. Historical
+        schema conversion is performed by ``scripts/migrate_workbook.py`` so
+        an ordinary application startup cannot mutate ledger data.
+        """
         workbook = cls._open_workbook_from_secrets(
             secrets,
             scopes=[SHEETS_SCOPE],
         )
-
         try:
-            actual_worksheets = {
+            worksheets = {
                 worksheet.title: worksheet for worksheet in workbook.worksheets()
             }
-            pre_mixed_use_workbook = "MixedUseExpenses" not in actual_worksheets
-            mixed_use_tag_migration_needed = False
-            initial_values: dict[str, list[list[Any]]] = {}
-            for title, headers in WORKSHEET_HEADERS.items():
-                worksheet = actual_worksheets.get(title)
-                if worksheet is None:
-                    worksheet = workbook.add_worksheet(
-                        title=title, rows=1000, cols=len(headers)
-                    )
-                    worksheet.update(
-                        [list(headers)], range_name="A1", raw=True
-                    )
-                    actual_worksheets[title] = worksheet
-                    values: list[list[Any]] = [list(headers)]
-                else:
-                    values = worksheet.get_all_values()
-                if title in {"Accounts", "Categories"} and values:
-                    existing_headers = [
-                        str(value).strip() for value in values[0]
-                    ]
-                    legacy_headers = set(
-                        VERSION_5_WORKSHEET_HEADERS[title]
-                    )
-                    if (
-                        "parent_id" not in existing_headers
-                        and legacy_headers.issubset(existing_headers)
-                        and len(existing_headers) == len(set(existing_headers))
-                    ):
-                        worksheet.add_cols(1)
-                        migrated_headers = [*existing_headers, "parent_id"]
-                        worksheet.update(
-                            [migrated_headers],
-                            range_name="A1",
-                            raw=True,
+            values = {
+                title: worksheet.get_all_values()
+                for title, worksheet in worksheets.items()
+            }
+            is_blank = not any(
+                str(value).strip()
+                for rows in values.values()
+                for row in rows
+                for value in row
+            )
+            if is_blank or _looks_like_partial_blank_workbook(values):
+                for title, headers in WORKSHEET_HEADERS.items():
+                    worksheet = worksheets.get(title)
+                    if worksheet is None:
+                        worksheet = workbook.add_worksheet(
+                            title=title,
+                            rows=1000,
+                            cols=len(headers),
                         )
-                        values[0] = migrated_headers
-                if title == "Transactions" and values:
-                    existing_headers = [
-                        str(value).strip() for value in values[0]
-                    ]
-                    transaction_headers_without_receipts = set(
-                        PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"]
-                    ) - {"receipt_references"}
-                    if (
-                        "receipt_references" not in existing_headers
-                        and transaction_headers_without_receipts.issubset(
-                            existing_headers
-                        )
-                        and len(existing_headers)
-                        == len(set(existing_headers))
-                    ):
-                        worksheet.add_cols(1)
-                        migrated_headers = [
-                            *existing_headers,
-                            "receipt_references",
-                        ]
-                        worksheet.update(
-                            [migrated_headers],
-                            range_name="A1",
-                            raw=True,
-                        )
-                        values[0] = migrated_headers
-                if title == "MixedUseExpenses" and values:
-                    existing_headers = [
-                        str(value).strip() for value in values[0]
-                    ]
-                    migration_marker_present = (
-                        MIXED_USE_TAG_MIGRATION_HEADER in existing_headers
-                    )
-                    mixed_use_headers_without_metadata = set(
-                        MIXED_USE_WORKSHEET_HEADERS
-                    ) - {"receipt_references", "tag_ids"}
-                    missing_mixed_use_metadata = [
-                        header
-                        for header in ("receipt_references", "tag_ids")
-                        if header not in existing_headers
-                        and not (
-                            header == "tag_ids" and migration_marker_present
-                        )
-                    ]
-                    if (
-                        missing_mixed_use_metadata
-                        and mixed_use_headers_without_metadata <= set(existing_headers)
-                        and len(existing_headers) == len(set(existing_headers))
-                    ):
-                        mixed_use_tag_migration_needed = (
-                            migration_marker_present
-                            or "tag_ids" in missing_mixed_use_metadata
-                        )
-                        headers_to_add = [
-                            (
-                                MIXED_USE_TAG_MIGRATION_HEADER
-                                if header == "tag_ids"
-                                else header
-                            )
-                            for header in missing_mixed_use_metadata
-                        ]
-                        worksheet.add_cols(len(headers_to_add))
-                        migrated_headers = [
-                            *existing_headers,
-                            *headers_to_add,
-                        ]
-                        worksheet.update(
-                            [migrated_headers],
-                            range_name="A1",
-                            raw=True,
-                        )
-                        values[0] = migrated_headers
-                    elif migration_marker_present:
-                        mixed_use_tag_migration_needed = True
-                if title in {"Transactions", "Mileage"} and values:
-                    existing_headers = [
-                        str(value).strip() for value in values[0]
-                    ]
-                    headers_without_tags = set(WORKSHEET_HEADERS[title]) - {"tag_ids"}
-                    if title == "Transactions":
-                        headers_without_tags -= {"source_type", "source_id"}
-                    if (
-                        "tag_ids" not in existing_headers
-                        and headers_without_tags.issubset(existing_headers)
-                        and len(existing_headers) == len(set(existing_headers))
-                    ):
-                        worksheet.add_cols(1)
-                        migrated_headers = [*existing_headers, "tag_ids"]
-                        worksheet.update(
-                            [migrated_headers],
-                            range_name="A1",
-                            raw=True,
-                        )
-                        values[0] = migrated_headers
-                if title == "Transactions" and values:
-                    existing_headers = [
-                        str(value).strip() for value in values[0]
-                    ]
-                    missing_provenance_headers = [
-                        header
-                        for header in WORKSHEET_HEADERS["Transactions"]
-                        if header not in existing_headers
-                    ]
-                    if missing_provenance_headers:
-                        if not set(PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"]).issubset(
-                            existing_headers
-                        ):
-                            raise StorageValidationError(
-                                "Transactions is missing its pre-mixed-use headers"
-                            )
-                        worksheet.add_cols(len(missing_provenance_headers))
-                        migrated_headers = [
-                            *existing_headers,
-                            *missing_provenance_headers,
-                        ]
-                        worksheet.update(
-                            [migrated_headers],
-                            range_name="A1",
-                            raw=True,
-                        )
-                        values[0] = migrated_headers
-                if (
-                    title == "Transactions"
-                    and values
-                    and pre_mixed_use_workbook
-                    and any(
-                        header in {
-                            "source_type",
-                            "source_id",
-                        }
-                        for header in (
-                            str(value).strip() for value in values[0]
-                        )
-                    )
-                ):
-                    # A pre-mixed-use workbook may have used these names for
-                    # custom columns. Clear their cells before the names gain
-                    # provenance semantics in the upgraded schema.
-                    existing_headers = [
-                        str(value).strip() for value in values[0]
-                    ]
-                    provenance_indexes = {
-                        header: existing_headers.index(header)
-                        for header in ("source_type", "source_id")
-                        if header in existing_headers
-                    }
-                    has_recognized_provenance = any(
-                        (
-                            "source_id" in provenance_indexes
-                            and len(row) > provenance_indexes["source_id"]
-                            and str(row[provenance_indexes["source_id"]]).strip()
-                        )
-                        or (
-                            "source_type" in provenance_indexes
-                            and len(row) > provenance_indexes["source_type"]
-                            and str(row[provenance_indexes["source_type"]]).strip()
-                            == MIXED_USE_SOURCE_TYPE
-                        )
-                        for row in values[1:]
-                    )
-                    if has_recognized_provenance:
-                        raise StorageValidationError(
-                            "Transactions contain mixed-use provenance, but the "
-                            "MixedUseExpenses worksheet is missing"
-                        )
-                    cleared_values = [
-                        [
-                            *list(row),
-                            *([""] * (len(existing_headers) - len(row))),
-                        ]
-                        for row in values
-                    ]
-                    provenance_indexes = [
-                        existing_headers.index(header)
-                        for header in ("source_type", "source_id")
-                        if header in existing_headers
-                    ]
-                    for row in cleared_values[1:]:
-                        for index in provenance_indexes:
-                            row[index] = ""
-                    worksheet.update(cleared_values, range_name="A1", raw=True)
-                    values = cleared_values
-                if not any(str(value).strip() for row in values for value in row):
-                    worksheet.update(
-                        [list(headers)], range_name="A1", raw=True
-                    )
-                    values = [list(headers)]
-                initial_values[title] = values
-            source_values = initial_values.get("MixedUseExpenses")
-            transaction_values = initial_values.get("Transactions")
-            if (
-                mixed_use_tag_migration_needed
-                and source_values
-                and transaction_values
-            ):
-                source_headers = [str(value).strip() for value in source_values[0]]
-                transaction_headers = [
-                    str(value).strip() for value in transaction_values[0]
-                ]
-                source_tag_index = next(
-                    (
-                        source_headers.index(header)
-                        for header in (
-                            "tag_ids",
-                            MIXED_USE_TAG_MIGRATION_HEADER,
-                        )
-                        if header in source_headers
-                    ),
-                    None,
+                        worksheets[title] = worksheet
+                    worksheet.update([list(headers)], range_name="A1", raw=True)
+                return cls(
+                    workbook,
+                    _initial_worksheets=worksheets,
+                    _initial_values={
+                        title: [list(headers)]
+                        for title, headers in WORKSHEET_HEADERS.items()
+                    },
                 )
-                linked_transaction_index = (
-                    source_headers.index("linked_transaction_id")
-                    if "linked_transaction_id" in source_headers
-                    else None
+
+            try:
+                return cls(
+                    workbook,
+                    _initial_worksheets=worksheets,
+                    _initial_values=values,
                 )
-                transaction_id_index = (
-                    transaction_headers.index("id")
-                    if "id" in transaction_headers
-                    else None
-                )
-                transaction_tag_index = (
-                    transaction_headers.index("tag_ids")
-                    if "tag_ids" in transaction_headers
-                    else None
-                )
-                if None not in {
-                    source_tag_index,
-                    linked_transaction_index,
-                    transaction_id_index,
-                    transaction_tag_index,
-                }:
-                    transaction_worksheet = actual_worksheets["Transactions"]
-                    fresh_transaction_values = transaction_worksheet.get_all_values()
-                    transaction_tags_by_id = {
-                        str(row[transaction_id_index]).strip(): str(
-                            row[transaction_tag_index]
-                        ).strip()
-                        for row in fresh_transaction_values[1:]
-                        if len(row) > transaction_id_index
-                        and len(row) > transaction_tag_index
-                        and str(row[transaction_id_index]).strip()
-                    }
-                    # Re-read immediately before migration writes so the
-                    # backfill cannot overwrite edits made after startup's
-                    # initial workbook snapshot.
-                    source_worksheet = actual_worksheets["MixedUseExpenses"]
-                    fresh_source_values = source_worksheet.get_all_values()
-                    fresh_source_headers = [
-                        str(value).strip() for value in fresh_source_values[0]
-                    ] if fresh_source_values else []
-                    if fresh_source_headers != source_headers:
-                        source_values = fresh_source_values
-                        source_headers = fresh_source_headers
-                        source_tag_index = (
-                            next(
-                                (
-                                    source_headers.index(header)
-                                    for header in (
-                                        "tag_ids",
-                                        MIXED_USE_TAG_MIGRATION_HEADER,
-                                    )
-                                    if header in source_headers
-                                ),
-                                None,
-                            )
-                        )
-                        linked_transaction_index = (
-                            source_headers.index("linked_transaction_id")
-                            if "linked_transaction_id" in source_headers
-                            else None
-                        )
-                    backfilled_source_tags = False
-                    tag_updates = []
-                    for row_number, row in enumerate(fresh_source_values[1:], start=2):
-                        if source_tag_index is None or linked_transaction_index is None:
-                            break
-                        if len(row) < len(source_headers):
-                            row.extend([""] * (len(source_headers) - len(row)))
-                        if str(row[source_tag_index]).strip():
-                            continue
-                        linked_id = str(row[linked_transaction_index]).strip()
-                        transaction_tags = transaction_tags_by_id.get(linked_id, "")
-                        if transaction_tags:
-                            row[source_tag_index] = transaction_tags
-                            backfilled_source_tags = True
-                            tag_updates.append(
-                                {
-                                    "range": gspread.utils.rowcol_to_a1(
-                                        row_number, source_tag_index + 1
-                                    ),
-                                    "values": [[transaction_tags]],
-                                }
-                            )
-                    if backfilled_source_tags:
-                        source_worksheet.batch_update(tag_updates, raw=True)
-                        source_values = fresh_source_values
-                        initial_values["MixedUseExpenses"] = source_values
-                    if MIXED_USE_TAG_MIGRATION_HEADER in source_headers:
-                        source_headers = [
-                            (
-                                "tag_ids"
-                                if header == MIXED_USE_TAG_MIGRATION_HEADER
-                                else header
-                            )
-                            for header in source_headers
-                        ]
-                        fresh_source_values[0] = source_headers
-                        source_worksheet.update(
-                            [source_headers],
-                            range_name="A1",
-                            raw=True,
-                        )
-                        initial_values["MixedUseExpenses"] = fresh_source_values
-        except (
-            GoogleAuthError,
-        ) as exc:
+            except StorageValidationError as exc:
+                if _looks_like_historical_workbook(values):
+                    raise StorageInitializationError(
+                        "This workbook uses an older Tabula Rasa schema. "
+                        "Run `python scripts/migrate_workbook.py --profile "
+                        "PROFILE_KEY` for the selected workbook, replacing "
+                        "PROFILE_KEY with its business-profile key, then "
+                        "restart the application."
+                    ) from exc
+                raise
+        except GoogleAuthError as exc:
             raise StorageAuthenticationError(
                 "Google rejected the uploaded service-account credential"
             ) from exc
-        except (
-            PermissionError,
-            gspread.GSpreadException,
-            OSError,
-        ) as exc:
-            raise StorageInitializationError(
-                "The workbook opened, but worksheet initialization failed"
-            ) from exc
-        try:
-            return cls(
-                workbook,
-                _initial_worksheets=actual_worksheets,
-                _initial_values=initial_values,
-            )
-        except StorageValidationError:
-            raise
-        except StorageUnavailableError as exc:
+        except (PermissionError, gspread.GSpreadException, OSError) as exc:
             raise StorageInitializationError(
                 "The workbook opened, but worksheet validation could not finish"
             ) from exc
@@ -3664,19 +3439,49 @@ class GoogleSheetsStorage:
             if kind not in TRANSACTION_KINDS:
                 raise StorageValidationError("Unknown transaction kind")
         transactions = []
+        accounts = self._account_lookup(force_refresh=_force_refresh)
+        categories = self._category_lookup(force_refresh=_force_refresh)
         payees = self._payee_lookup(force_refresh=_force_refresh)
         tags = self._tag_lookup(force_refresh=_force_refresh)
         for row in self._rows("Transactions", force_refresh=_force_refresh):
             item = dict(row.values)
             item["id"] = _clean_text(item.get("id"), "Transaction ID", required=True)
             item["txn_date"] = _iso_date(item.get("txn_date"))
+            item["kind"] = _clean_text(
+                item.get("kind"), "Transaction kind", required=True
+            ).title()
+            if item["kind"] not in TRANSACTION_KINDS:
+                raise StorageValidationError("Unknown transaction kind")
+            item["amount"] = _positive_amount(item.get("amount"))
             item["account_id"] = _clean_text(
                 item.get("account_id"), "Account", required=True
             )
+            if item["account_id"] not in accounts:
+                raise StorageValidationError("Source account does not exist")
             item["to_account_id"] = _clean_text(
                 item.get("to_account_id"), "Destination account"
             )
             item["category_id"] = _clean_text(item.get("category_id"), "Category")
+            if item["kind"] == "Transfer":
+                if not item["to_account_id"]:
+                    raise StorageValidationError("Destination account does not exist")
+                if item["to_account_id"] not in accounts:
+                    raise StorageValidationError("Destination account does not exist")
+                if item["to_account_id"] == item["account_id"]:
+                    raise StorageValidationError("Transfer accounts must be different")
+                if item["category_id"]:
+                    raise StorageValidationError("Transfers cannot have a category")
+            else:
+                if item["to_account_id"]:
+                    raise StorageValidationError(
+                        "Only transfers can have a destination account"
+                    )
+                if item["category_id"] not in categories:
+                    raise StorageValidationError("Category does not exist")
+                if categories[item["category_id"]]["kind"] != item["kind"]:
+                    raise StorageValidationError(
+                        "Category kind does not match transaction kind"
+                    )
             item["payee_id"] = _clean_text(item.get("payee_id"), "Payee")
             item["source_type"] = _clean_text(
                 item.get("source_type"), "Transaction source type"
@@ -3703,6 +3508,7 @@ class GoogleSheetsStorage:
                 raise StorageValidationError("Tag does not exist")
             item["tag_ids"] = normalized_tag_ids
             item["tags"] = [tags[tag_id]["name"] for tag_id in normalized_tag_ids]
+            decode_receipt_references(item.get("receipt_references", ""))
             if start_text and item["txn_date"] < start_text:
                 continue
             if end_text and item["txn_date"] > end_text:
@@ -5527,9 +5333,27 @@ class GoogleSheetsStorage:
         start_text = _iso_date(start) if start is not None else None
         end_text = _iso_date(end) if end is not None else None
         trips = []
+        trip_ids: set[str] = set()
         tags = self._tag_lookup(force_refresh=_force_refresh)
         for row in self._rows("Mileage", force_refresh=_force_refresh):
             item = dict(row.values)
+            item["id"] = _clean_text(item.get("id"), "Mileage ID", required=True)
+            if item["id"] in trip_ids:
+                raise StorageValidationError("Mileage IDs must be unique")
+            trip_ids.add(item["id"])
+            item["trip_date"] = _iso_date(item.get("trip_date"))
+            item["miles"] = _positive_miles(item.get("miles"))
+            item["vehicle"] = _clean_text(item.get("vehicle"), "Vehicle")
+            item["start_location"] = _clean_text(
+                item.get("start_location"), "Starting location", required=True
+            )
+            item["destination"] = _clean_text(
+                item.get("destination"), "Destination", required=True
+            )
+            item["business_purpose"] = _clean_text(
+                item.get("business_purpose"), "Business purpose", required=True
+            )
+            item["notes"] = _clean_text(item.get("notes"), "Notes")
             if start_text and item["trip_date"] < start_text:
                 continue
             if end_text and item["trip_date"] > end_text:

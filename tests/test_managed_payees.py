@@ -245,6 +245,35 @@ def test_migration_uses_supported_raw_append_option() -> None:
     }
 
 
+def test_migration_persists_payee_normalization_before_noop_return() -> None:
+    workbook = FakeWorkbook()
+    payee_sheet = workbook.worksheet("Payees")
+    payee_sheet.rows.append(["payee-1", "Existing vendor", "", "now"])
+    transaction_sheet = workbook.worksheet("Transactions")
+    transaction_sheet.rows.append(
+        [
+            "txn",
+            "2026-09-01",
+            "Expense",
+            "10.00",
+            "account",
+            "",
+            "category",
+            "payee-1",
+            "",
+            "",
+            "[]",
+            "now",
+        ]
+    )
+    transaction_sheet.update = Mock(wraps=transaction_sheet.update)  # type: ignore[method-assign]
+
+    migrate_workbook(workbook)
+
+    assert payee_sheet.rows[1][2] == "TRUE"
+    transaction_sheet.update.assert_not_called()
+
+
 def test_migration_accepts_short_existing_payee_rows() -> None:
     workbook = FakeWorkbook()
     payee_sheet = workbook.worksheet("Payees")

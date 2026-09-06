@@ -76,6 +76,23 @@ source/projection relationships. Legacy formats 2 through 8 contain no
 mixed-use source records or linkage; convert them to v10 before application
 restore.
 
+Before upgrading an existing workbook, run the one-time combined workbook
+migration:
+
+```text
+python scripts/migrate_workbook.py --secrets .streamlit/secrets.toml --profile PROFILE_KEY
+```
+
+For a new or reassigned profile that has not been saved yet, use the candidate
+workbook directly with a local service-account JSON file:
+
+```text
+python scripts/migrate_workbook.py --spreadsheet-id WORKBOOK_ID --service-account-file path\to\service-account.json
+```
+
+After it succeeds, return to Account settings to validate and save the profile.
+Keep the credential file outside the repository.
+
 For a legacy workbook schema, follow the explicit workbook migration procedure
 in the setup and architecture guides. Payee text embedded in a legacy backup
 is converted by the archive migration command above; it is not resolved during

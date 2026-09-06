@@ -667,8 +667,9 @@ def _render_add_profile_form(
     with render_form:
         st.write(
             "Share the spreadsheet with the uploaded service account as Editor before "
-            "saving. Validation opens the workbook, creates missing ledger worksheets "
-            "and headers, and seeds the default accounts and categories."
+            "saving. Validation initializes a genuinely blank workbook, but populated "
+            "workbooks with missing or incompatible worksheets must be migrated first "
+            "with the explicit workbook migration command."
         )
         profile_form_keys = (
             "local_profile_name",

@@ -9,9 +9,7 @@ import zipfile
 from decimal import Decimal
 from unittest.mock import patch
 
-import gspread
 import pytest
-from google.oauth2.service_account import Credentials
 
 from tabula_rasa.mixed_use import (
     MixedUseAllocationError,
@@ -28,9 +26,6 @@ from tabula_rasa.storage import (
 from tabula_rasa.storage import google_sheets as google_sheets_module
 from tabula_rasa.storage.google_sheets import (
     BACKUP_FORMAT_VERSION,
-    MIXED_USE_WORKSHEET_HEADERS,
-    PRE_MIXED_USE_WORKSHEET_HEADERS,
-    WORKSHEET_HEADERS,
 )
 from tests.fakes import FakeWorkbook
 
@@ -1325,29 +1320,6 @@ def test_current_backup_rejects_orphaned_mixed_use_projection(
     with pytest.raises(StorageValidationError, match="unknown source"):
         GoogleSheetsStorage.validate_backup_zip(output.getvalue())
 
-
-def test_writable_initialization_upgrades_pre_mixed_workbook_idempotently() -> None:
-    workbook = FakeWorkbook(PRE_MIXED_USE_WORKSHEET_HEADERS)
-    google_client = type("GoogleClient", (), {"open_by_key": lambda self, _: workbook})()
-    with (
-        patch.object(Credentials, "from_service_account_info", return_value=object()),
-        patch.object(gspread, "authorize", return_value=google_client),
-    ):
-        GoogleSheetsStorage.from_secrets(
-            {"spreadsheet_id": "test", "gcp_service_account": {"type": "service_account"}}
-        )
-        GoogleSheetsStorage.from_secrets(
-            {"spreadsheet_id": "test", "gcp_service_account": {"type": "service_account"}}
-        )
-
-    assert "MixedUseExpenses" in workbook.sheets
-    assert workbook.sheets["MixedUseExpenses"].rows == [list(MIXED_USE_WORKSHEET_HEADERS)]
-    assert set(workbook.sheets["Transactions"].rows[0]) == set(
-        WORKSHEET_HEADERS["Transactions"]
-    )
-    assert workbook.sheets["Transactions"].col_count == len(
-        WORKSHEET_HEADERS["Transactions"]
-    )
 
 
 def test_mixed_use_uncertain_create_never_retries_projection_blindly(
