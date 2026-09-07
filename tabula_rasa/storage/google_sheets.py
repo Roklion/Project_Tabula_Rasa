@@ -1664,10 +1664,12 @@ class GoogleSheetsStorage:
 
         def state() -> str:
             current_rows = self._rows(title, force_refresh=True)
-            current_by_id = {
-                _clean_text(item.values.get("id"), "ID", required=True): item
-                for item in current_rows
-            }
+            current_by_id: dict[str, _StoredRow] = {}
+            for item in current_rows:
+                row_id = _clean_text(item.values.get("id"), "ID", required=True)
+                if row_id in current_by_id:
+                    return "ambiguous"
+                current_by_id[row_id] = item
             if all(
                 current_by_id.get(record_id, _StoredRow(0, {})).values == intended
                 for record_id, intended in intended_by_id.items()
@@ -1686,10 +1688,12 @@ class GoogleSheetsStorage:
             if before_retry is not None:
                 before_retry()
             retry_rows = self._rows(title, force_refresh=True)
-            retry_by_id = {
-                _clean_text(item.values.get("id"), "ID", required=True): item
-                for item in retry_rows
-            }
+            retry_by_id: dict[str, _StoredRow] = {}
+            for item in retry_rows:
+                row_id = _clean_text(item.values.get("id"), "ID", required=True)
+                if row_id in retry_by_id:
+                    raise StorageValidationError(f"Duplicate ID detected in {title}")
+                retry_by_id[row_id] = item
             if any(
                 retry_by_id.get(record_id, _StoredRow(0, {})).values
                 != originals[record_id]
@@ -2821,7 +2825,12 @@ class GoogleSheetsStorage:
                     return False
                 if any(
                     _clean_text(row.values.get("payee_id"), "Payee") in source_ids
-                    for row in (*current_transactions.values(), *current_mixed.values())
+                    for record_id, row in current_transactions.items()
+                    if record_id not in transaction_updates
+                ) or any(
+                    _clean_text(row.values.get("payee_id"), "Payee") in source_ids
+                    for record_id, row in current_mixed.items()
+                    if record_id not in mixed_updates
                 ):
                     return False
                 return all(
@@ -3216,11 +3225,13 @@ class GoogleSheetsStorage:
                         item in source_ids
                         for item in _normalize_tag_ids(row.values.get("tag_ids", ""))
                     )
-                    for row in (
-                        *current_transactions.values(),
-                        *current_mileage.values(),
-                        *current_sources.values(),
+                    for title, current_rows in (
+                        ("Transactions", current_transactions),
+                        ("Mileage", current_mileage),
+                        ("MixedUseExpenses", current_sources),
                     )
+                    for record_id, row in current_rows.items()
+                    if f"{title}:{record_id}" not in update_rows
                 ):
                     return False
                 for title, row, _ in update_rows.values():
