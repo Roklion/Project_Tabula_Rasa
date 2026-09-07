@@ -2004,6 +2004,17 @@ class GoogleSheetsStorage:
             )
             for transaction in current_by_id.values():
                 self._reject_mixed_use_projection(transaction)
+            categories = self._category_lookup(force_refresh=True)
+            refreshed_target = categories.get(category_id)
+            refreshed_kinds = {transaction["kind"] for transaction in current_by_id.values()}
+            if (
+                refreshed_target is None
+                or len(refreshed_kinds) != 1
+                or refreshed_target["kind"] != next(iter(refreshed_kinds))
+            ):
+                raise StorageConflictError(
+                    "The target category changed while the category update was being retried."
+                )
 
         self._write_with_confirmation(
             "category change", write, state, before_retry=refresh, invalidate=("Transactions",)
@@ -2808,6 +2819,11 @@ class GoogleSheetsStorage:
                     for record_id, row in payee_rows.items()
                 ):
                     return False
+                if any(
+                    _clean_text(row.values.get("payee_id"), "Payee") in source_ids
+                    for row in (*current_transactions.values(), *current_mixed.values())
+                ):
+                    return False
                 return all(
                     record_id in current_transactions
                     and current_transactions[record_id].values == row.values
@@ -3193,6 +3209,18 @@ class GoogleSheetsStorage:
                     record_id not in current_tags
                     or current_tags[record_id].values != row.values
                     for record_id, row in tag_rows.items()
+                ):
+                    return False
+                if any(
+                    any(
+                        item in source_ids
+                        for item in _normalize_tag_ids(row.values.get("tag_ids", ""))
+                    )
+                    for row in (
+                        *current_transactions.values(),
+                        *current_mileage.values(),
+                        *current_sources.values(),
+                    )
                 ):
                     return False
                 for title, row, _ in update_rows.values():
@@ -4279,6 +4307,37 @@ class GoogleSheetsStorage:
                 raise StorageConflictError(
                     "The mixed-use expense changed while the edit was being retried."
                 )
+            accounts = self._account_lookup(force_refresh=True)
+            categories = self._category_lookup(force_refresh=True)
+            payees = self._payee_lookup(force_refresh=True)
+            self._validate_mixed_use_references(
+                merged,
+                accounts=accounts,
+                categories=categories,
+                payees=payees,
+            )
+            account_id = _clean_text(merged.get("account_id"), "Account", required=True)
+            original_account_id = _clean_text(
+                current_transaction.get("account_id"), "Account"
+            )
+            if (
+                not _as_bool(accounts[account_id]["active"], "Account active")
+                and account_id != original_account_id
+            ):
+                raise StorageValidationError("Source account is inactive")
+            tags = self._tag_lookup(force_refresh=True)
+            original_tag_ids = _normalize_tag_ids(current_transaction.get("tag_ids", ""))
+            for tag_id in _normalize_tag_ids(merged.get("tag_ids", "")):
+                tag = tags.get(tag_id)
+                if tag is None:
+                    raise StorageValidationError("Tag does not exist")
+                if not _as_bool(tag["active"], "Tag active") and tag_id not in original_tag_ids:
+                    raise StorageValidationError("Tag is inactive")
+            if "receipt_references" in changes:
+                self._reject_receipt_ownership_conflict(
+                    merged.get("receipt_references", ""),
+                    transaction_id=transaction_id,
+                )
 
         self._write_with_confirmation(
             "mixed-use edit",
@@ -4500,6 +4559,10 @@ class GoogleSheetsStorage:
                 raise StorageConflictError(
                     "The mixed-use receipt pair changed while the update was being retried."
                 )
+            self._reject_receipt_ownership_conflict(
+                encoded_references,
+                transaction_id=transaction_id,
+            )
             requests = build_requests(current, source)
 
         def state() -> str:
