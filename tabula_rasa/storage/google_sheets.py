@@ -1683,7 +1683,8 @@ class GoogleSheetsStorage:
             current_row = latest
 
         self._write_with_confirmation(
-            f"{title} update", write, state, before_retry=refresh, invalidate=(title,)
+            f"{title} update", write, state, before_retry=refresh,
+            invalidate=(title,), verify_success=True,
         )
 
     def _replace_rows(
@@ -1782,6 +1783,7 @@ class GoogleSheetsStorage:
             state,
             before_retry=refresh,
             invalidate=(title,),
+            verify_success=True,
         )
 
     def _replace_rows_atomically(
@@ -2537,7 +2539,7 @@ class GoogleSheetsStorage:
         refresh()
         self._write_with_confirmation(
             "category deletion", write, state, before_retry=refresh,
-            invalidate=("Categories",),
+            invalidate=("Categories",), verify_success=True,
         )
 
     def list_payees(
@@ -2752,6 +2754,7 @@ class GoogleSheetsStorage:
             state,
             before_retry=before_retry,
             invalidate=invalidate,
+            verify_success=True,
         )
 
     def _managed_update_request(
@@ -4759,6 +4762,7 @@ class GoogleSheetsStorage:
             ),
             before_retry=refresh_rows,
             invalidate=("Transactions", "MixedUseExpenses"),
+            verify_success=True,
         )
         return self.get_mixed_use_expense(source_id)
 
@@ -4864,6 +4868,7 @@ class GoogleSheetsStorage:
             ),
             before_retry=refresh_requests,
             invalidate=("Transactions", "MixedUseExpenses"),
+            verify_success=True,
         )
 
     def _replace_receipt_references(
@@ -5002,6 +5007,7 @@ class GoogleSheetsStorage:
             state,
             before_retry=refresh_requests,
             invalidate=("Transactions", "MixedUseExpenses"),
+            verify_success=True,
         )
         updated = dict(transaction)
         updated["receipt_references"] = encoded_references
@@ -5762,7 +5768,7 @@ class GoogleSheetsStorage:
 
             self._write_with_confirmation(
                 "transaction deletion", write, state, before_retry=refresh,
-                invalidate=("Transactions",),
+                invalidate=("Transactions",), verify_success=True,
             )
 
     def _prepare_mileage_trip(
@@ -5970,7 +5976,7 @@ class GoogleSheetsStorage:
 
             self._write_with_confirmation(
                 "mileage deletion", write, state, before_retry=refresh,
-                invalidate=("Mileage",),
+                invalidate=("Mileage",), verify_success=True,
             )
 
     def preview_quickbooks_mileage(

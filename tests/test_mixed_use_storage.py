@@ -7,6 +7,7 @@ import json
 import threading
 import zipfile
 from decimal import Decimal
+from unittest.mock import Mock
 
 import pytest
 
@@ -2031,6 +2032,32 @@ def test_mixed_use_delete_confirms_final_delete_after_lost_response(
 
     assert default_storage.list_mixed_use_expenses() == []
     assert default_storage.list_transactions() == []
+
+
+@pytest.mark.parametrize("mutation", ["edit", "delete"])
+def test_mixed_use_batch_requires_final_readback_after_success(
+    default_storage: GoogleSheetsStorage, monkeypatch, mutation: str
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    batch_update = Mock()
+    monkeypatch.setattr(default_storage, "_batch_update_spreadsheet", batch_update)
+
+    with pytest.raises(StorageUnavailableError, match="could not confirm"):
+        if mutation == "edit":
+            default_storage.edit_mixed_use_expense(
+                source["id"], allocation_rationale="Updated use"
+            )
+        else:
+            default_storage.delete_mixed_use_expense(source["id"])
+
+    assert batch_update.call_count == 1
+    assert "Transactions" not in default_storage._row_cache
+    assert "MixedUseExpenses" not in default_storage._row_cache
 
 
 def test_mixed_use_delete_partial_pair_stops_without_retry(

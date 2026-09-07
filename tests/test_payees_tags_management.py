@@ -279,6 +279,21 @@ def test_tag_merge_confirms_committed_write_without_retry(default_storage, monke
     }
 
 
+def test_tag_merge_requires_final_readback_after_successful_batch(
+    default_storage, monkeypatch
+) -> None:
+    target = default_storage.create_tag("Target")
+    source = default_storage.create_tag("Source")
+    batch_update = Mock()
+    monkeypatch.setattr(default_storage, "_batch_update_spreadsheet", batch_update)
+
+    with pytest.raises(StorageUnavailableError, match="could not confirm"):
+        default_storage.merge_tags(target["id"], [source["id"]])
+
+    assert batch_update.call_count == 1
+    assert "Tags" not in default_storage._row_cache
+
+
 def test_tag_removal_retries_once_then_invalidates_on_unchanged_failure(
     default_storage, monkeypatch
 ) -> None:
