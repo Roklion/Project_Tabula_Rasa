@@ -88,7 +88,9 @@ def test_payee_merge_updates_mixed_use_source_and_projection(default_storage) ->
     assert mixed["id"] == default_storage.list_mixed_use_expenses()[0]["id"]
 
 
-def test_payee_merge_rechecks_new_references_before_retry(default_storage) -> None:
+def test_payee_merge_rechecks_new_references_before_retry(
+    default_storage, monkeypatch
+) -> None:
     account, category = _ledger_setup(default_storage)
     target = default_storage.create_payee("Retry target")
     source = default_storage.create_payee("Retry source")
@@ -109,8 +111,8 @@ def test_payee_merge_rechecks_new_references_before_retry(default_storage) -> No
         calls += 1
         raise StorageUnavailableError("temporary response lost", retryable=True)
 
-    default_storage._sleeper = add_reference_during_backoff
-    default_storage._batch_update_spreadsheet = fail_once
+    monkeypatch.setattr(default_storage, "_sleeper", add_reference_during_backoff)
+    monkeypatch.setattr(default_storage, "_batch_update_spreadsheet", fail_once)
 
     with pytest.raises(StorageConflictError, match="references changed"):
         default_storage.merge_payees(target["id"], [source["id"]])
@@ -144,7 +146,9 @@ def test_tag_merge_deduplicates_transactions_and_mileage(default_storage) -> Non
     assert mileage["id"] == default_storage.list_mileage_trips()[0]["id"]
 
 
-def test_tag_merge_rechecks_new_references_before_retry(default_storage) -> None:
+def test_tag_merge_rechecks_new_references_before_retry(
+    default_storage, monkeypatch
+) -> None:
     account, category = _ledger_setup(default_storage)
     target = default_storage.create_tag("Retry target")
     source = default_storage.create_tag("Retry source")
@@ -165,8 +169,8 @@ def test_tag_merge_rechecks_new_references_before_retry(default_storage) -> None
         calls += 1
         raise StorageUnavailableError("temporary response lost", retryable=True)
 
-    default_storage._sleeper = add_reference_during_backoff
-    default_storage._batch_update_spreadsheet = fail_once
+    monkeypatch.setattr(default_storage, "_sleeper", add_reference_during_backoff)
+    monkeypatch.setattr(default_storage, "_batch_update_spreadsheet", fail_once)
 
     with pytest.raises(StorageConflictError, match="references changed"):
         default_storage.merge_tags(target["id"], [source["id"]])
@@ -270,7 +274,9 @@ def test_tag_removal_rebuilds_row_after_shift_before_retry(default_storage, monk
     assert worksheet.rows[1][0] == "inserted-before-retry"
 
 
-def test_tag_removal_rechecks_references_after_retry_backoff(default_storage) -> None:
+def test_tag_removal_rechecks_references_after_retry_backoff(
+    default_storage, monkeypatch
+) -> None:
     account, category = _ledger_setup(default_storage)
     tag = default_storage.create_tag("Referenced during retry")
     calls = 0
@@ -290,8 +296,8 @@ def test_tag_removal_rechecks_references_after_retry_backoff(default_storage) ->
         calls += 1
         raise OSError("temporary response lost")
 
-    default_storage._sleeper = add_reference_during_backoff
-    default_storage._workbook.batch_update = fail_once
+    monkeypatch.setattr(default_storage, "_sleeper", add_reference_during_backoff)
+    monkeypatch.setattr(default_storage._workbook, "batch_update", fail_once)
 
     with pytest.raises(StorageConflictError, match="became referenced"):
         default_storage.remove_tag(tag["id"])

@@ -1584,6 +1584,25 @@ class GoogleSheetsStorage:
                 set(record_ids),
             )
 
+        domain_retry_checks = {
+            "Accounts": lambda record: self._validate_account_append_retry(record),
+            "Categories": lambda record: self._validate_category_append_retry(record),
+            "Transactions": lambda record: self._validate_transaction_append_retry(
+                record
+            ),
+            "MixedUseExpenses": lambda record: self._validate_mixed_use_append_retry(
+                record
+            ),
+            "Mileage": lambda record: self._validate_mileage_append_retry(record),
+        }.get(title)
+
+        def refresh_before_retry() -> None:
+            if before_retry is not None:
+                before_retry()
+            if domain_retry_checks is not None:
+                for record in records:
+                    domain_retry_checks(record)
+
         def state() -> str:
             values, record_id_set = batch_values()
             rows = self._rows(title, force_refresh=True)
@@ -1614,7 +1633,7 @@ class GoogleSheetsStorage:
                 retry_safe=False,
             ),
             state,
-            before_retry=before_retry,
+            before_retry=refresh_before_retry,
             invalidate=(title,),
         )
 
@@ -3953,6 +3972,12 @@ class GoogleSheetsStorage:
 
     def _validate_account_append_retry(self, account: Mapping[str, Any]) -> None:
         accounts = self.list_accounts(active_only=False, _force_refresh=True)
+        account_name = _clean_text(account.get("name"), "Account name", required=True)
+        if any(
+            existing["name"].casefold() == account_name.casefold()
+            for existing in accounts
+        ):
+            raise StorageConflictError("Account names must be unique")
         _validate_hierarchy_records(
             [*accounts, account],
             compatibility_field="classification",
@@ -3961,6 +3986,18 @@ class GoogleSheetsStorage:
 
     def _validate_category_append_retry(self, category: Mapping[str, Any]) -> None:
         categories = self.list_categories(_force_refresh=True)
+        category_name = _clean_text(
+            category.get("name"), "Category name", required=True
+        )
+        category_kind = _clean_text(
+            category.get("kind"), "Category kind", required=True
+        ).title()
+        if any(
+            existing["name"].casefold() == category_name.casefold()
+            and existing["kind"] == category_kind
+            for existing in categories
+        ):
+            raise StorageConflictError("That category already exists")
         _validate_hierarchy_records(
             [*categories, category],
             compatibility_field="kind",
@@ -3994,6 +4031,12 @@ class GoogleSheetsStorage:
                 raise StorageValidationError("Tag does not exist")
             if not _as_bool(tag["active"], "Tag active"):
                 raise StorageValidationError("Tag is inactive")
+        self._reject_receipt_ownership_conflict(
+            source.get("receipt_references", ""),
+            transaction_id=_clean_text(
+                source.get("linked_transaction_id"), "Linked transaction ID"
+            ),
+        )
 
     def _reject_receipt_ownership_conflict(
         self,

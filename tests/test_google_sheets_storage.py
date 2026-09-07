@@ -1284,7 +1284,7 @@ class TestGoogleSheetsStorage:
                 raise OSError("temporary response lost")
             original_update(values, **kwargs)
 
-        worksheet.update = delete_category_then_timeout
+        worksheet.update = delete_category_then_timeout  # type: ignore[method-assign]
         with pytest.raises(StorageValidationError, match="Category does not exist"):
             self.storage.edit_transaction(
                 transaction["id"], category_id=replacement["id"]
@@ -1398,7 +1398,7 @@ class TestGoogleSheetsStorage:
                 raise OSError("response lost before category deletion")
             original_delete(row_number)
 
-        category_sheet.delete_rows = inject_transaction_then_timeout
+        category_sheet.delete_rows = inject_transaction_then_timeout  # type: ignore[method-assign]
 
         with pytest.raises(StorageConflictError, match="transactions"):
             self.storage.delete_category(category["id"])
@@ -1920,6 +1920,81 @@ class TestGoogleSheetsStorage:
                 account_id=account["id"],
                 category_id=category["id"],
             )
+
+        assert calls == 1
+
+    def test_mileage_batch_append_revalidates_references_before_retry(self) -> None:
+        tag = self.storage.create_tag("Batch retry tag")
+        worksheet = self.workbook.sheets["Mileage"]
+        original_append = worksheet.append_rows
+        calls = 0
+
+        def remove_reference_then_timeout(
+            values: list[list[str]], **kwargs: object
+        ) -> None:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                self.storage.remove_tag(tag["id"])
+                raise OSError("temporary response lost")
+            original_append(values, **kwargs)
+
+        worksheet.append_rows = remove_reference_then_timeout  # type: ignore[method-assign]
+        with pytest.raises(StorageValidationError, match="Tag does not exist"):
+            self.storage.create_mileage_round_trip(
+                trip_date="2026-08-01",
+                miles="10",
+                start_location="Office",
+                destination="Client",
+                business_purpose="Meeting",
+                tag_ids=[tag["id"]],
+            )
+
+        assert calls == 1
+
+    def test_account_append_rechecks_name_uniqueness_before_retry(self) -> None:
+        worksheet = self.workbook.sheets["Accounts"]
+        original_append = worksheet.append_row
+        calls = 0
+
+        def duplicate_then_timeout(
+            values: list[str], **kwargs: object
+        ) -> None:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                duplicate = list(values)
+                duplicate[0] = "external-account"
+                original_append(duplicate, **kwargs)
+                raise OSError("temporary response lost")
+            original_append(values, **kwargs)
+
+        worksheet.append_row = duplicate_then_timeout  # type: ignore[method-assign]
+        with pytest.raises(StorageConflictError, match="names must be unique"):
+            self.storage.create_account("Concurrent account", "Bank")
+
+        assert calls == 1
+
+    def test_category_append_rechecks_name_uniqueness_before_retry(self) -> None:
+        worksheet = self.workbook.sheets["Categories"]
+        original_append = worksheet.append_row
+        calls = 0
+
+        def duplicate_then_timeout(
+            values: list[str], **kwargs: object
+        ) -> None:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                duplicate = list(values)
+                duplicate[0] = "external-category"
+                original_append(duplicate, **kwargs)
+                raise OSError("temporary response lost")
+            original_append(values, **kwargs)
+
+        worksheet.append_row = duplicate_then_timeout  # type: ignore[method-assign]
+        with pytest.raises(StorageConflictError, match="category already exists"):
+            self.storage.create_category("Concurrent category", "Expense")
 
         assert calls == 1
 
