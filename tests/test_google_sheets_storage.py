@@ -2892,6 +2892,45 @@ class TestGoogleSheetsStorage:
         ]
         assert restored_storage.list_mileage_trips()[0]["id"] == mileage["id"]
 
+    def test_restore_retries_transaction_before_later_payee_and_tag_tables(
+        self,
+    ) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Sales", "Income")
+        payee = self.storage.create_payee("Customer")
+        tag = self.storage.create_tag("Imported")
+        self.storage.create_transaction(
+            txn_date="2026-07-19",
+            kind="Income",
+            amount=25,
+            account_id=account["id"],
+            category_id=category["id"],
+            payee_id=payee["id"],
+            tag_ids=[tag["id"]],
+        )
+        backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
+        target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+        worksheet = target._worksheet("Transactions")
+        original_append = worksheet.append_rows
+        calls = 0
+
+        def lose_first_response(
+            values: list[list[str]], **kwargs: object
+        ) -> None:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise OSError("temporary response lost")
+            original_append(values, **kwargs)
+
+        worksheet.append_rows = lose_first_response  # type: ignore[method-assign]
+        counts = target.restore_backup_zip(backup)
+
+        assert calls == 2
+        assert counts["Transactions"] == 1
+        assert target.list_transactions()[0]["payee_id"] == payee["id"]
+        assert target.list_transactions()[0]["tag_ids"] == [tag["id"]]
+
     def test_backup_round_trips_account_and_category_hierarchies(self) -> None:
         account_parent = self.storage.create_account("Operating", "Bank")
         account_child = self.storage.create_account(
