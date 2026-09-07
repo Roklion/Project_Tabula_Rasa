@@ -448,6 +448,9 @@ def test_mixed_use_app_test_exposes_source_only_state_for_inspection(default_sto
         assert not any(
             item.label == "Repair ledger projection" for item in tab.button
         )
+        assert not any(
+            item.label == "Permanently delete" for item in tab.button
+        )
 
     assert default_storage.list_transactions() == []
     assert default_storage.list_mixed_use_expense_sources()[0]["id"] == source["id"]

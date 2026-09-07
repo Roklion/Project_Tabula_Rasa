@@ -686,11 +686,17 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                 edit_id=str(linked["id"]),
             )
         st.divider()
-        st.warning("Deleting this source permanently removes its linked ledger projection. Receipt files remain in Drive as unreferenced files.")
-        confirmed = st.checkbox("I understand this deletion is permanent", key=f"mixed_confirm_delete_{scope}")
-        delete_error = st.empty()
-        if st.button("Permanently delete", type="primary", key=f"mixed_delete_{scope}"):
-            if not confirmed:
-                delete_error.error("Confirm the permanent deletion before continuing.")
-            else:
-                context.confirmed_write("delete_mixed_use_expense", {"id": source["id"], "expected_source": expected_source}, lambda: context.storage.delete_mixed_use_expense(source["id"], expected_source=expected_source), "Mixed-use expense deleted.", on_success=lambda: st.session_state.pop(selected_key, None), report_error=delete_error.error)
+        if source_incomplete:
+            st.info(
+                "Inspection only: deletion is unavailable until the source and "
+                "ledger relationship has been reviewed."
+            )
+        else:
+            st.warning("Deleting this source permanently removes its linked ledger projection. Receipt files remain in Drive as unreferenced files.")
+            confirmed = st.checkbox("I understand this deletion is permanent", key=f"mixed_confirm_delete_{scope}")
+            delete_error = st.empty()
+            if st.button("Permanently delete", type="primary", key=f"mixed_delete_{scope}"):
+                if not confirmed:
+                    delete_error.error("Confirm the permanent deletion before continuing.")
+                else:
+                    context.confirmed_write("delete_mixed_use_expense", {"id": source["id"], "expected_source": expected_source}, lambda: context.storage.delete_mixed_use_expense(source["id"], expected_source=expected_source), "Mixed-use expense deleted.", on_success=lambda: st.session_state.pop(selected_key, None), report_error=delete_error.error)
