@@ -1437,7 +1437,7 @@ class GoogleSheetsStorage:
             raise StorageValidationError(f"Duplicate ID detected in {title}")
         return matches[0]
 
-    def _write_with_confirmation(
+    def _write_with_uncertain_readback(
         self,
         operation: str,
         write: Callable[[], None],
@@ -1530,7 +1530,7 @@ class GoogleSheetsStorage:
             expected = {header: str(record.get(header, "")) for header in headers}
             return "applied" if matches[0].values == expected else "ambiguous"
 
-        self._write_with_confirmation(
+        self._write_with_uncertain_readback(
             f"{title} append",
             lambda: self._api(
                 lambda: worksheet.append_row(values, value_input_option="RAW"),
@@ -1577,7 +1577,7 @@ class GoogleSheetsStorage:
                 return "unchanged"
             return "ambiguous"
 
-        self._write_with_confirmation(
+        self._write_with_uncertain_readback(
             f"{title} batch append",
             lambda: self._api(
                 lambda: worksheet.append_rows(values, value_input_option="RAW"),
@@ -1618,7 +1618,7 @@ class GoogleSheetsStorage:
                 )
             current_row = latest
 
-        self._write_with_confirmation(
+        self._write_with_uncertain_readback(
             f"{title} update", write, state, before_retry=refresh, invalidate=(title,)
         )
 
@@ -1712,7 +1712,7 @@ class GoogleSheetsStorage:
                 for record_id in originals
             ]
 
-        self._write_with_confirmation(
+        self._write_with_uncertain_readback(
             f"{title} batch update",
             write,
             state,
@@ -2014,7 +2014,7 @@ class GoogleSheetsStorage:
             for transaction in current_by_id.values():
                 self._reject_mixed_use_projection(transaction)
 
-        self._write_with_confirmation(
+        self._write_with_uncertain_readback(
             "category change", write, state, before_retry=refresh, invalidate=("Transactions",)
         )
         return {"status": "fully_applied", "count": str(len(pending_by_id))}
@@ -2082,7 +2082,7 @@ class GoogleSheetsStorage:
                 for transaction in current_by_id.values():
                     self._reject_mixed_use_projection(transaction)
 
-            self._write_with_confirmation(
+            self._write_with_uncertain_readback(
                 "transaction deletion", write, state,
                 before_retry=refresh, invalidate=("Transactions",),
             )
@@ -2439,7 +2439,7 @@ class GoogleSheetsStorage:
         # Repeat the referential and row checks immediately before the write;
         # the first snapshot only discovers the candidate row.
         refresh()
-        self._write_with_confirmation(
+        self._write_with_uncertain_readback(
             "category deletion", write, state, before_retry=refresh,
             invalidate=("Categories",),
         )
@@ -2643,7 +2643,7 @@ class GoogleSheetsStorage:
                 return "unchanged"
             return "ambiguous"
 
-        self._write_with_confirmation(
+        self._write_with_uncertain_readback(
             operation,
             lambda: self._batch_update_spreadsheet(requests),
             state,
@@ -4295,7 +4295,7 @@ class GoogleSheetsStorage:
                     "The mixed-use expense changed while the edit was being retried."
                 )
 
-        self._write_with_confirmation(
+        self._write_with_uncertain_readback(
             "mixed-use edit",
             write,
             lambda: self._mixed_use_mutation_state(
@@ -4401,7 +4401,7 @@ class GoogleSheetsStorage:
                 self._managed_delete_request("MixedUseExpenses", fresh_source),
             ]
 
-        self._write_with_confirmation(
+        self._write_with_uncertain_readback(
             "mixed-use deletion",
             lambda: self._batch_update_spreadsheet(requests),
             lambda: self._mixed_use_mutation_state(
@@ -4541,7 +4541,7 @@ class GoogleSheetsStorage:
                 return "unchanged"
             return "ambiguous"
 
-        self._write_with_confirmation(
+        self._write_with_uncertain_readback(
             "mixed-use receipt update",
             lambda: self._batch_update_spreadsheet(requests),
             state,
@@ -5249,7 +5249,7 @@ class GoogleSheetsStorage:
                         "The transaction changed while deletion was being retried."
                     )
 
-            self._write_with_confirmation(
+            self._write_with_uncertain_readback(
                 "transaction deletion", write, state, before_retry=refresh,
                 invalidate=("Transactions",),
             )
@@ -5457,7 +5457,7 @@ class GoogleSheetsStorage:
                         "The mileage trip changed while deletion was being retried."
                     )
 
-            self._write_with_confirmation(
+            self._write_with_uncertain_readback(
                 "mileage deletion", write, state, before_retry=refresh,
                 invalidate=("Mileage",),
             )
