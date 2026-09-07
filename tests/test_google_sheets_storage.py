@@ -274,6 +274,25 @@ class TestGoogleSheetsStorage:
 
         assert "Transactions" not in self.storage._row_cache
 
+    def test_readback_unexpected_failure_still_invalidates_cache(self) -> None:
+        self.storage._row_cache["Transactions"] = []
+
+        def write() -> None:
+            raise StorageUnavailableError("response lost", retryable=True)
+
+        def readback() -> str:
+            raise KeyError("unreadable response")
+
+        with pytest.raises(KeyError):
+            self.storage._write_with_confirmation(
+                "transaction update",
+                write,
+                readback,
+                invalidate=("Transactions",),
+            )
+
+        assert "Transactions" not in self.storage._row_cache
+
     def test_profile_storage_initializes_tabs_and_headers_by_spreadsheet_id(
         self,
     ) -> None:
@@ -1831,6 +1850,19 @@ class TestGoogleSheetsStorage:
                 [{"id": "duplicate"}, {"id": "duplicate"}],
             )
 
+        worksheet.append_rows.assert_not_called()
+
+    def test_append_helpers_reject_missing_ids_before_writing(self) -> None:
+        worksheet = self.workbook.sheets["Accounts"]
+        worksheet.append_row = Mock(wraps=worksheet.append_row)
+        worksheet.append_rows = Mock(wraps=worksheet.append_rows)
+
+        with pytest.raises(StorageValidationError, match="ID is required"):
+            self.storage._append("Accounts", {"name": "Missing ID"})
+        with pytest.raises(StorageValidationError, match="ID is required"):
+            self.storage._append_many("Accounts", [{"name": "Missing ID"}])
+
+        worksheet.append_row.assert_not_called()
         worksheet.append_rows.assert_not_called()
 
     def test_mileage_round_trip_supports_different_return_miles(self) -> None:

@@ -1476,6 +1476,10 @@ class GoogleSheetsStorage:
                     raise StorageUnavailableError(
                         _mutation_guidance(operation), retryable=False
                     ) from read_error
+                except Exception:
+                    for title in invalidate:
+                        self._invalidate(title)
+                    raise
                 if state == "applied":
                     for title in invalidate:
                         self._invalidate(title)
@@ -1511,7 +1515,7 @@ class GoogleSheetsStorage:
         headers = self._headers(title)
         values = [str(record.get(header, "")) for header in headers]
         worksheet = self._worksheet(title)
-        record_id = _clean_text(record.get("id"), "ID")
+        record_id = _clean_text(record.get("id"), "ID", required=True)
 
         def state() -> str:
             rows = self._rows(title, force_refresh=True)
@@ -1542,7 +1546,8 @@ class GoogleSheetsStorage:
             return
         headers = self._headers(title)
         record_ids = [
-            _clean_text(record.get("id"), "ID") for record in records
+            _clean_text(record.get("id"), "ID", required=True)
+            for record in records
         ]
         if len(record_ids) != len(set(record_ids)):
             raise StorageValidationError(f"Duplicate ID detected in {title}")
