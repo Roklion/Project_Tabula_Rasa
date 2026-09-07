@@ -4104,6 +4104,7 @@ class GoogleSheetsStorage:
         )
         source_id = source["id"]
         transaction_id = projection["id"]
+        source_append_confirmed = False
         if existing_source is not None:
             # A source-only retry must compare against the persisted source,
             # including its original timestamp, rather than regenerate it.
@@ -4136,6 +4137,7 @@ class GoogleSheetsStorage:
             )
         try:
             self._append("MixedUseExpenses", source)
+            source_append_confirmed = True
             persisted_source = self._find_row("MixedUseExpenses", source_id)
             if not self._mixed_use_record_matches(
                 "MixedUseExpenses", persisted_source.values, source
@@ -4153,6 +4155,10 @@ class GoogleSheetsStorage:
                 if not error.retryable:
                     self._invalidate("MixedUseExpenses")
                     self._invalidate("Transactions")
+                    if source_append_confirmed:
+                        raise StorageUnavailableError(
+                            _mutation_guidance("mixed-use create"), retryable=False
+                        ) from error
                     raise
                 try:
                     state = self._mixed_use_mutation_state(

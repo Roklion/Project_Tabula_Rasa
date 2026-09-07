@@ -154,15 +154,21 @@ be saved.
 
 The live **Ledger Result** preview updates without storage writes. Save
 immediately creates the source and exactly one linked Expense projection; there
-is no Draft workflow. Edit and permanent deletion are available only from this
-tab and preserve the linked transaction identity. Receipts use the same
+is no Draft workflow. Complete sources can be edited and permanently deleted
+only from this tab and preserve the linked transaction identity. A source
+without its linked projection is inspection-only; Save and permanent deletion
+are unavailable until the source and ledger relationship has been reviewed.
+Receipts use the same
 configured Drive folder and retry-safe workflow as ordinary transactions.
 
 The allocated projection remains in the normal ledger for balances, reports,
 search, filters, and exports, but is marked **Mixed-use** and read-only.
 Normal Edit, Delete, Copy, bulk actions, and receipt mutation cannot change it.
-Mixed-use source copy and bulk source editing are not part of #119; they are
-follow-up work tracked by #149.
+If a source exists without its linked ledger projection, the source is shown
+for inspection only; Save and permanent deletion are unavailable until the
+source and ledger relationship has been reviewed. Mixed-use source copy and
+bulk source editing are not part of #119; they are follow-up work tracked by
+#149.
 
 The **Mixed-use Expense Log** is a single-row-selectable table above the
 editor. Select a row to edit that source; the table selection is tied to the

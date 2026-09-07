@@ -499,9 +499,11 @@ The Transactions page also provides a **Mixed-use expenses** tab. Its
 profile-scoped source editor exposes normal Expense fields plus Total Expense,
 Business Use %, and required Allocation Rationale. A live, side-effect-free
 Ledger Result preview uses the canonical Decimal allocation calculation; Save
-is the only persistence action and there is no Draft mode. Sources can be
-edited or permanently deleted only from this tab, preserving stable IDs and
-updating/removing the existing projection.
+is the only persistence action and there is no Draft mode. Complete sources
+can be edited or permanently deleted only from this tab, preserving stable IDs
+and updating/removing the existing projection. A source without its linked
+projection is inspection-only; Save and permanent deletion are unavailable
+until the source and ledger relationship has been reviewed.
 
 The linked projection remains visible in the ordinary ledger at the allocated
 amount and is marked **Mixed-use**. It is read-only there; edit, delete, copy,
@@ -520,7 +522,9 @@ invalid scope clears the selection and edit baseline, and a new table
 generation prevents an old table selection from being replayed. The tab opens
 in clearly labeled **Add mixed-use expense** mode. Selecting a row changes to
 **Edit mixed-use expense**; **Add new mixed-use expense** clears the selection
-and returns to Add mode.
+and returns to Add mode. If a source exists without its linked ledger
+projection, it is shown for inspection only: Save and permanent deletion are
+unavailable until the source and ledger relationship has been reviewed.
 
 #### Add transaction contract
 
