@@ -154,15 +154,21 @@ be saved.
 
 The live **Ledger Result** preview updates without storage writes. Save
 immediately creates the source and exactly one linked Expense projection; there
-is no Draft workflow. Edit and permanent deletion are available only from this
-tab and preserve the linked transaction identity. Receipts use the same
+is no Draft workflow. Complete sources can be edited and permanently deleted
+only from this tab and preserve the linked transaction identity. A source
+without its linked projection is inspection-only; Save and permanent deletion
+are unavailable until the source and ledger relationship has been reviewed.
+Receipts use the same
 configured Drive folder and retry-safe workflow as ordinary transactions.
 
 The allocated projection remains in the normal ledger for balances, reports,
 search, filters, and exports, but is marked **Mixed-use** and read-only.
 Normal Edit, Delete, Copy, bulk actions, and receipt mutation cannot change it.
-Mixed-use source copy and bulk source editing are not part of #119; they are
-follow-up work tracked by #149.
+If a source exists without its linked ledger projection, the source is shown
+for inspection only; Save and permanent deletion are unavailable until the
+source and ledger relationship has been reviewed. Mixed-use source copy and
+bulk source editing are not part of #119; they are follow-up work tracked by
+#149.
 
 The **Mixed-use Expense Log** is a single-row-selectable table above the
 editor. Select a row to edit that source; the table selection is tied to the
@@ -231,8 +237,10 @@ bulk selection. Bulk mode provides only:
 
 Transfers and mixed Income/Expense selections cannot use Change category.
 Bulk actions recheck the complete stable-ID selection immediately before a
-write. The application reports an uncertain mutation after a fresh read rather
-than blindly repeating an ambiguous write.
+write. If a transient response is uncertain, the application performs one
+fresh readback: a confirmed result is reported as success, an entirely
+unchanged selection may be retried once, and any partial or unreadable result
+invalidates caches and gives explicit inspection guidance.
 
 No bulk changes are available for dates, amounts, payees, Tags, descriptions,
 references, accounts, transfer fields, or receipts. Reconciliation,
@@ -256,9 +264,10 @@ preserved.
 Removal is permanent and allowed only for an unreferenced value. If a Payee or
 Tag is still used, the page shows the fresh reference count and blocks removal;
 unassign it in the relevant transaction or mileage editor or merge it instead.
-Every operation is scoped to the selected profile, confirms the Sheets write
-before reporting success, and reports an uncertain write for review rather
-than silently retrying an ambiguous mutation.
+Every operation is scoped to the selected profile and reports success only
+after the Sheets write is confirmed. An uncertain response is read back once;
+only a clearly unchanged operation is retried, while a partial or unreadable
+state invalidates caches and gives explicit inspection guidance.
 
 ### Edit and delete
 

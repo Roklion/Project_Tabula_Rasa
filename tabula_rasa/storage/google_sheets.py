@@ -296,12 +296,37 @@ class StorageUnavailableError(StorageError):
         self.retryable = retryable
 
 
-class StorageBulkMutationUncertainError(StorageUnavailableError):
-    """Raised when a bulk write's postcondition is not safely complete."""
-
-    def __init__(self, message: str, *, outcome: str, retryable: bool):
-        super().__init__(message, retryable=retryable)
-        self.outcome = outcome
+def _mutation_guidance(operation: str) -> str:
+    """Return the common user-facing guidance for an unconfirmed write."""
+    operation_key = operation.casefold()
+    if "mixed-use" in operation_key or "mixeduse" in operation_key:
+        inspection_area = "Mixed-use expenses and the Transactions ledger"
+    elif "payee" in operation_key:
+        inspection_area = (
+            "Payee management and the Transactions and MixedUseExpenses tables"
+        )
+    elif "tag" in operation_key:
+        inspection_area = (
+            "Tag management and the Transactions, Mileage, and MixedUseExpenses tables"
+        )
+    elif "category" in operation_key:
+        inspection_area = "Categories and the Transactions ledger"
+    elif "account" in operation_key:
+        inspection_area = (
+            "Accounts and the Transactions, Mileage, and MixedUseExpenses tables"
+        )
+    elif "mileage" in operation_key:
+        inspection_area = "the Mileage log"
+    elif any(keyword in operation_key for keyword in ("bulk", "transaction")):
+        inspection_area = "the Transactions ledger"
+    elif "receipt" in operation_key:
+        inspection_area = "the receipt records and linked ledger rows"
+    else:
+        inspection_area = "the affected records"
+    return (
+        f"Google Sheets could not confirm the {operation}. Refresh and inspect "
+        f"{inspection_area} before trying again; no success was reported."
+    )
 
 
 class StorageAuthenticationError(StorageUnavailableError):
@@ -1412,88 +1437,190 @@ class GoogleSheetsStorage:
             raise StorageValidationError(f"Duplicate ID detected in {title}")
         return matches[0]
 
+    def _write_with_uncertain_readback(
+        self,
+        operation: str,
+        write: Callable[[], None],
+        readback: Callable[[], str],
+        *,
+        before_retry: Callable[[], None] | None = None,
+        invalidate: Iterable[str] = (),
+    ) -> None:
+        """Perform one mutation, confirming uncertain responses before retrying.
+
+        ``readback`` returns ``"applied"`` when the requested postcondition is
+        present, ``"unchanged"`` when the complete precondition is still
+        present, and ``"ambiguous"`` for every partial or conflicting state.
+        A write is never retried more than once and only an unchanged state is
+        safe to retry.  Cache invalidation happens before every failure leaves
+        this method so callers cannot continue using a stale snapshot.
+        """
+        retried = False
+        while True:
+            try:
+                write()
+            except StorageUnavailableError as error:
+                if not error.retryable:
+                    for title in invalidate:
+                        self._invalidate(title)
+                    if retried:
+                        raise StorageUnavailableError(
+                            _mutation_guidance(operation), retryable=False
+                        ) from error
+                    raise
+                try:
+                    state = readback()
+                except (StorageError, OSError) as read_error:
+                    for title in invalidate:
+                        self._invalidate(title)
+                    raise StorageUnavailableError(
+                        _mutation_guidance(operation), retryable=False
+                    ) from read_error
+                except Exception:
+                    for title in invalidate:
+                        self._invalidate(title)
+                    raise
+                if state == "applied":
+                    for title in invalidate:
+                        self._invalidate(title)
+                    return
+                if state == "unchanged" and not retried:
+                    retried = True
+                    self._sleeper(self._retry_base_delay_seconds)
+                    if before_retry is not None:
+                        try:
+                            before_retry()
+                        except (StorageUnavailableError, OSError) as refresh_error:
+                            for title in invalidate:
+                                self._invalidate(title)
+                            raise StorageUnavailableError(
+                                _mutation_guidance(operation), retryable=False
+                            ) from refresh_error
+                        except Exception:
+                            for title in invalidate:
+                                self._invalidate(title)
+                            raise
+                    continue
+                for title in invalidate:
+                    self._invalidate(title)
+                raise StorageUnavailableError(
+                    _mutation_guidance(operation), retryable=False
+                ) from error
+            else:
+                for title in invalidate:
+                    self._invalidate(title)
+                return
+
     def _append(self, title: str, record: Mapping[str, Any]) -> None:
         headers = self._headers(title)
         values = [str(record.get(header, "")) for header in headers]
         worksheet = self._worksheet(title)
-        record_id = str(record.get("id", ""))
-        for attempt in range(self._retry_attempts):
-            try:
-                self._api(
-                    lambda: worksheet.append_row(values, value_input_option="RAW"),
-                    retry_safe=False,
-                )
-                self._invalidate(title)
-                return
-            except StorageUnavailableError as error:
-                if not error.retryable:
-                    raise
-                try:
-                    if record_id and any(
-                        _clean_text(row.values.get("id"), "ID") == record_id
-                        for row in self._rows(title, force_refresh=True)
-                    ):
-                        return
-                except StorageError as read_error:
-                    raise StorageBulkMutationUncertainError(
-                        f"The {title} append completed but its postcondition could not "
-                        "be read. Review the row before retrying.",
-                        outcome="mixed_ambiguous",
-                        retryable=False,
-                    ) from read_error
-                if attempt + 1 >= self._retry_attempts:
-                    raise
-                self._sleeper(self._retry_base_delay_seconds * (2**attempt))
+        record_id = _clean_text(record.get("id"), "ID", required=True)
+
+        def state() -> str:
+            rows = self._rows(title, force_refresh=True)
+            matches = [
+                row for row in rows
+                if _clean_text(row.values.get("id"), "ID") == record_id
+            ]
+            if not matches:
+                return "unchanged"
+            if len(matches) != 1:
+                return "ambiguous"
+            expected = {header: str(record.get(header, "")) for header in headers}
+            return "applied" if matches[0].values == expected else "ambiguous"
+
+        self._write_with_uncertain_readback(
+            f"{title} append",
+            lambda: self._api(
+                lambda: worksheet.append_row(values, value_input_option="RAW"),
+                retry_safe=False,
+            ),
+            state,
+            invalidate=(title,),
+        )
 
     def _append_many(self, title: str, records: Iterable[Mapping[str, Any]]) -> None:
         records = list(records)
         if not records:
             return
         headers = self._headers(title)
+        record_ids = [
+            _clean_text(record.get("id"), "ID", required=True)
+            for record in records
+        ]
+        if len(record_ids) != len(set(record_ids)):
+            raise StorageValidationError(f"Duplicate ID detected in {title}")
         values = [
             [str(record.get(header, "")) for header in headers] for record in records
         ]
         worksheet = self._worksheet(title)
-        record_ids = {str(record.get("id", "")) for record in records}
-        for attempt in range(self._retry_attempts):
-            try:
-                self._api(
-                    lambda: worksheet.append_rows(values, value_input_option="RAW"),
-                    retry_safe=False,
-                )
-                self._invalidate(title)
-                return
-            except StorageUnavailableError as error:
-                if not error.retryable:
-                    raise
-                try:
-                    existing_ids = {
-                        row.values.get("id", "")
-                        for row in self._rows(title, force_refresh=True)
-                    }
-                    present = record_ids & existing_ids
-                    if present == record_ids:
-                        return
-                    if present:
-                        raise StorageConflictError(
-                            "Batch write completion could not be confirmed safely"
-                        )
-                except StorageUnavailableError:
-                    pass
-                if attempt + 1 >= self._retry_attempts:
-                    raise
-                self._sleeper(self._retry_base_delay_seconds * (2**attempt))
+        record_id_set = set(record_ids)
+
+        def state() -> str:
+            rows = self._rows(title, force_refresh=True)
+            by_id: dict[str, dict[str, str]] = {}
+            for row in rows:
+                record_id = _clean_text(row.values.get("id"), "ID")
+                if record_id in by_id:
+                    return "ambiguous"
+                by_id[record_id] = row.values
+            expected = {
+                _clean_text(record.get("id"), "ID"): {
+                    header: str(record.get(header, "")) for header in headers
+                }
+                for record in records
+            }
+            if all(by_id.get(record_id) == item for record_id, item in expected.items()):
+                return "applied"
+            if not any(record_id in by_id for record_id in record_id_set):
+                return "unchanged"
+            return "ambiguous"
+
+        self._write_with_uncertain_readback(
+            f"{title} batch append",
+            lambda: self._api(
+                lambda: worksheet.append_rows(values, value_input_option="RAW"),
+                retry_safe=False,
+            ),
+            state,
+            invalidate=(title,),
+        )
 
     def _replace_row(self, title: str, row: _StoredRow, record: Mapping[str, Any]) -> None:
         headers = self._headers(title)
         values = [str(record.get(header, "")) for header in headers]
         worksheet = self._worksheet(title)
-        self._api(
-            lambda: worksheet.update(
-                [values], range_name=f"A{row.row_number}", raw=True
+        record_id = _clean_text(record.get("id"), "ID", required=True)
+        original = dict(row.values)
+        current_row = row
+
+        def write() -> None:
+            self._api(
+                lambda: worksheet.update(
+                    [values], range_name=f"A{current_row.row_number}", raw=True
+                ),
+                retry_safe=False,
             )
+
+        def state() -> str:
+            latest = self._find_row(title, record_id)
+            if latest.values == {header: str(record.get(header, "")) for header in headers}:
+                return "applied"
+            return "unchanged" if latest.values == original else "ambiguous"
+
+        def refresh() -> None:
+            nonlocal current_row
+            latest = self._find_row(title, record_id)
+            if latest.values != original:
+                raise StorageConflictError(
+                    f"The {title} row changed while the write was being retried."
+                )
+            current_row = latest
+
+        self._write_with_uncertain_readback(
+            f"{title} update", write, state, before_retry=refresh, invalidate=(title,)
         )
-        self._invalidate(title)
 
     def _replace_rows(
         self,
@@ -1507,7 +1634,18 @@ class GoogleSheetsStorage:
         headers = self._headers(title)
         worksheet = self._worksheet(title)
         current_updates = list(updates)
-        for attempt in range(self._retry_attempts):
+        originals = {
+            _clean_text(record.get("id"), "ID", required=True): dict(row.values)
+            for row, record in updates
+        }
+        if len(originals) != len(updates):
+            raise StorageValidationError(f"Duplicate ID detected in {title}")
+        updates_by_id = {
+            _clean_text(record.get("id"), "ID", required=True): record
+            for _, record in updates
+        }
+
+        def write() -> None:
             batch = [
                 {
                     "range": f"A{row.row_number}",
@@ -1515,81 +1653,72 @@ class GoogleSheetsStorage:
                 }
                 for row, record in current_updates
             ]
-            try:
-                self._api(
-                    lambda: worksheet.batch_update(batch, raw=True),
-                    retry_safe=False,
+            self._api(
+                lambda: worksheet.batch_update(batch, raw=True),
+                retry_safe=False,
+            )
+
+        intended_by_id = {
+            _clean_text(record.get("id"), "ID", required=True): {
+                header: str(record.get(header, "")) for header in headers
+            }
+            for _, record in updates
+        }
+        if len(intended_by_id) != len(updates):
+            raise StorageValidationError(f"Duplicate ID detected in {title}")
+
+        def state() -> str:
+            current_rows = self._rows(title, force_refresh=True)
+            current_by_id: dict[str, _StoredRow] = {}
+            for item in current_rows:
+                row_id = _clean_text(item.values.get("id"), "ID", required=True)
+                if row_id in current_by_id:
+                    return "ambiguous"
+                current_by_id[row_id] = item
+            if all(
+                current_by_id.get(record_id, _StoredRow(0, {})).values == intended
+                for record_id, intended in intended_by_id.items()
+            ):
+                return "applied"
+            if all(
+                current_by_id.get(record_id, _StoredRow(0, {})).values
+                == originals[record_id]
+                for record_id in originals
+            ):
+                return "unchanged"
+            return "ambiguous"
+
+        def refresh() -> None:
+            nonlocal current_updates
+            if before_retry is not None:
+                before_retry()
+            retry_rows = self._rows(title, force_refresh=True)
+            retry_by_id: dict[str, _StoredRow] = {}
+            for item in retry_rows:
+                row_id = _clean_text(item.values.get("id"), "ID", required=True)
+                if row_id in retry_by_id:
+                    raise StorageValidationError(f"Duplicate ID detected in {title}")
+                retry_by_id[row_id] = item
+            if any(
+                retry_by_id.get(record_id, _StoredRow(0, {})).values
+                != originals[record_id]
+                for record_id in originals
+            ):
+                raise StorageConflictError(
+                    f"A row in {title} changed unexpectedly during a write retry."
                 )
-            except StorageUnavailableError as error:
-                current_rows = self._rows(title, force_refresh=True)
-                current_by_id: dict[str, _StoredRow] = {}
-                for row in current_rows:
-                    row_id = _clean_text(row.values.get("id"), "ID", required=True)
-                    if row_id in current_by_id:
-                        raise StorageValidationError(f"Duplicate ID detected in {title}")
-                    current_by_id[row_id] = row
-                intended_by_id = {
-                    _clean_text(record.get("id"), "ID", required=True): {
-                        header: str(record.get(header, "")) for header in headers
-                    }
-                    for _, record in updates
-                }
-                if all(
-                    current_by_id.get(record_id, _StoredRow(0, {})).values == intended
-                    for record_id, intended in intended_by_id.items()
-                ):
-                    return
-                if not error.retryable or attempt + 1 >= self._retry_attempts:
-                    raise
-                if not all(
-                    current_by_id.get(
-                        _clean_text(row.values.get("id"), "ID", required=True),
-                        _StoredRow(0, {}),
-                    ).values
-                    == row.values
-                    for row, _ in current_updates
-                ):
-                    raise StorageConflictError(
-                        f"A row in {title} changed unexpectedly during a write retry."
-                    ) from error
-                self._sleeper(self._retry_base_delay_seconds * (2**attempt))
-                if before_retry is not None:
-                    before_retry()
-                retry_rows = self._rows(title, force_refresh=True)
-                retry_by_id: dict[str, _StoredRow] = {}
-                for row in retry_rows:
-                    row_id = _clean_text(row.values.get("id"), "ID", required=True)
-                    if row_id in retry_by_id:
-                        raise StorageValidationError(f"Duplicate ID detected in {title}")
-                    retry_by_id[row_id] = row
-                if all(
-                    retry_by_id.get(record_id, _StoredRow(0, {})).values == intended
-                    for record_id, intended in intended_by_id.items()
-                ):
-                    return
-                if not all(
-                    retry_by_id.get(
-                        _clean_text(row.values.get("id"), "ID", required=True),
-                        _StoredRow(0, {}),
-                    ).values
-                    == row.values
-                    for row, _ in current_updates
-                ):
-                    raise StorageConflictError(
-                        f"A row in {title} changed unexpectedly during a write retry."
-                    ) from error
-                current_updates = [
-                    (
-                        retry_by_id[
-                            _clean_text(row.values.get("id"), "ID", required=True)
-                        ],
-                        record,
-                    )
-                    for row, record in current_updates
-                ]
-                continue
-            self._invalidate(title)
-            return
+            current_updates = [
+                (retry_by_id[record_id], updates_by_id[record_id])
+                for record_id in originals
+            ]
+
+        self._write_with_uncertain_readback(
+            f"{title} batch update",
+            write,
+            state,
+            before_retry=refresh,
+            invalidate=(title,),
+        )
 
     def _replace_rows_atomically(
         self,
@@ -1704,18 +1833,60 @@ class GoogleSheetsStorage:
                     if key == "tag_ids"
                     else (str(value) if value is not None else "")
                 )
-            current = dict(row.values)
-            if "payee_id" in current:
-                current["payee_id"] = _clean_text(current.get("payee_id"), "Payee")
-            if "tag_ids" in current:
-                current["tag_ids"] = _encode_tag_ids(current.get("tag_ids", ""))
-            if {key: current.get(key, "") for key in expected} != expected:
+            current = self._normalized_transaction_values(row.values)
+            if any(
+                not self._transaction_value_matches(key, current.get(key), value)
+                for key, value in expected.items()
+            ):
                 raise StorageConflictError(
                     "A selected transaction changed; review the current rows and try again."
                 )
             selected_rows[transaction_id] = row
             current_by_id_values[transaction_id] = current
         return selected_rows, current_by_id_values
+
+    @staticmethod
+    def _transaction_value_matches(key: str, actual: Any, expected: Any) -> bool:
+        if key == "amount":
+            return _decimal_values_match(actual, str(expected))
+        if key == "payee_id":
+            return _clean_text(actual, "Payee") == _clean_text(expected, "Payee")
+        if key == "tag_ids":
+            return _normalize_tag_ids(actual) == _normalize_tag_ids(expected)
+        return str(actual or "") == str(expected or "")
+
+    @classmethod
+    def _normalized_transaction_values(
+        cls, values: Mapping[str, Any]
+    ) -> dict[str, str]:
+        normalized: dict[str, str] = {}
+        for header in WORKSHEET_HEADERS["Transactions"]:
+            value = values.get(header, "")
+            if header == "amount":
+                try:
+                    normalized[header] = format(
+                        Decimal(str(value).strip()).normalize(), "f"
+                    )
+                except (InvalidOperation, ValueError):
+                    normalized[header] = str(value or "")
+            elif header == "payee_id":
+                normalized[header] = _clean_text(value, "Payee")
+            elif header == "tag_ids":
+                normalized[header] = _encode_tag_ids(value)
+            else:
+                normalized[header] = str(value or "")
+        return normalized
+
+    @classmethod
+    def _transaction_rows_match(
+        cls, actual: Mapping[str, Any], expected: Mapping[str, Any]
+    ) -> bool:
+        return all(
+            cls._transaction_value_matches(
+                header, actual.get(header), expected.get(header)
+            )
+            for header in WORKSHEET_HEADERS["Transactions"]
+        )
 
     @staticmethod
     def _reject_mixed_use_projection(transaction: Mapping[str, Any]) -> None:
@@ -1733,78 +1904,6 @@ class GoogleSheetsStorage:
             raise StorageValidationError("Transaction source type is unsupported")
         raise StorageValidationError(
             "Mixed-use projections must be changed through mixed-use expense APIs"
-        )
-
-    def _bulk_postcondition_error(
-        self,
-        *,
-        operation: str,
-        error: StorageUnavailableError,
-        expected_by_id: Mapping[str, Mapping[str, str]],
-        postcondition: Callable[[Mapping[str, Mapping[str, str]]], bool],
-        fully_applied: Callable[[Mapping[str, Mapping[str, str]]], bool],
-    ) -> dict[str, str] | None:
-        if not error.retryable:
-            raise StorageBulkMutationUncertainError(
-                f"The {operation} batch was rejected. Do not retry until the underlying "
-                "error is corrected.",
-                outcome="not_applied",
-                retryable=False,
-            ) from error
-        try:
-            current_rows = self._rows("Transactions", force_refresh=True)
-        except StorageUnavailableError as read_error:
-            self._invalidate("Transactions")
-            raise StorageBulkMutationUncertainError(
-                f"The {operation} batch completed but its postcondition could not be "
-                "read. Review the selected rows before retrying.",
-                outcome="mixed_ambiguous",
-                retryable=False,
-            ) from read_error
-        current_by_id = {
-            str(row.values["id"]): dict(row.values) for row in current_rows
-        }
-        if fully_applied(current_by_id):
-            self._invalidate("Transactions")
-            return {"status": "fully_applied", "count": str(len(expected_by_id))}
-        if postcondition(current_by_id):
-            raise StorageBulkMutationUncertainError(
-                f"The {operation} batch was not applied. Review the current ledger before retrying.",
-                outcome="not_applied",
-                retryable=True,
-            ) from error
-        raise StorageBulkMutationUncertainError(
-            f"The {operation} batch outcome is ambiguous. Do not retry until the selected rows are reviewed.",
-            outcome="mixed_ambiguous",
-            retryable=False,
-        ) from error
-
-    def _verify_bulk_success(
-        self,
-        *,
-        operation: str,
-        postcondition: Callable[[Mapping[str, Mapping[str, str]]], bool],
-    ) -> None:
-        try:
-            current_rows = self._rows("Transactions", force_refresh=True)
-        except StorageUnavailableError as read_error:
-            self._invalidate("Transactions")
-            raise StorageBulkMutationUncertainError(
-                f"The {operation} batch completed but its postcondition could not be "
-                "read. Review the selected rows before retrying.",
-                outcome="mixed_ambiguous",
-                retryable=False,
-            ) from read_error
-        current_by_id = {
-            str(row.values["id"]): dict(row.values) for row in current_rows
-        }
-        if postcondition(current_by_id):
-            return
-        raise StorageBulkMutationUncertainError(
-            f"The {operation} batch completed but its postcondition is ambiguous. "
-            "Review the selected rows before retrying.",
-            outcome="mixed_ambiguous",
-            retryable=False,
         )
 
     def _batch_update_spreadsheet(self, requests: Sequence[Mapping[str, Any]]) -> None:
@@ -1868,51 +1967,55 @@ class GoogleSheetsStorage:
         headers = self._headers("Transactions")
         category_column = self._sheet_column_index(headers, "category_id")
         sheet_id = self._transactions_sheet_id()
-        requests = [
-            {
-                "updateCells": {
-                    "range": {
-                        "sheetId": sheet_id,
-                        "startRowIndex": selected_rows[transaction_id].row_number - 1,
-                        "endRowIndex": selected_rows[transaction_id].row_number,
-                        "startColumnIndex": category_column,
-                        "endColumnIndex": category_column + 1,
-                    },
-                    "rows": [
-                        {"values": [{"userEnteredValue": {"stringValue": category_id}}]}
-                    ],
-                    "fields": "userEnteredValue",
+        def write() -> None:
+            requests = [
+                {
+                    "updateCells": {
+                        "range": {
+                            "sheetId": sheet_id,
+                            "startRowIndex": selected_rows[transaction_id].row_number - 1,
+                            "endRowIndex": selected_rows[transaction_id].row_number,
+                            "startColumnIndex": category_column,
+                            "endColumnIndex": category_column + 1,
+                        },
+                        "rows": [
+                            {"values": [{"userEnteredValue": {"stringValue": category_id}}]}
+                        ],
+                        "fields": "userEnteredValue",
+                    }
                 }
-            }
-            for transaction_id in pending_by_id
-        ]
-        try:
+                for transaction_id in pending_by_id
+            ]
             self._batch_update_spreadsheet(requests)
-        except StorageUnavailableError as error:
-            outcome = self._bulk_postcondition_error(
-                operation="category change",
-                error=error,
-                expected_by_id=pending_by_id,
-                postcondition=lambda current: all(
-                    item in current and current[item] == pending_by_id[item]
-                    for item in pending_by_id
-                ),
-                fully_applied=lambda current: all(
-                    item in current
-                    and current[item].get("category_id") == category_id
-                    for item in pending_by_id
-                ),
-            )
-            if outcome is not None:
-                return outcome
-            raise AssertionError("Bulk category postcondition did not classify")
-        self._verify_bulk_success(
-            operation="category change",
-            postcondition=lambda current: all(
-                item in current
-                and current[item].get("category_id") == category_id
+
+        def state() -> str:
+            current = {
+                str(row.values["id"]): self._normalized_transaction_values(row.values)
+                for row in self._rows("Transactions", force_refresh=True)
+            }
+            if all(
+                item in current and current[item].get("category_id") == category_id
                 for item in pending_by_id
-            ),
+            ):
+                return "applied"
+            if all(
+                item in current
+                and self._transaction_rows_match(current[item], pending_by_id[item])
+                for item in pending_by_id
+            ):
+                return "unchanged"
+            return "ambiguous"
+
+        def refresh() -> None:
+            nonlocal selected_rows, current_by_id
+            selected_rows, current_by_id = self._fresh_bulk_transaction_snapshot(
+                transaction_ids, expected_transactions
+            )
+            for transaction in current_by_id.values():
+                self._reject_mixed_use_projection(transaction)
+
+        self._write_with_uncertain_readback(
+            "category change", write, state, before_retry=refresh, invalidate=("Transactions",)
         )
         return {"status": "fully_applied", "count": str(len(pending_by_id))}
 
@@ -1930,46 +2033,58 @@ class GoogleSheetsStorage:
             for transaction in current_by_id.values():
                 self._reject_mixed_use_projection(transaction)
             sheet_id = self._transactions_sheet_id()
-            requests = [
-                {
-                    "deleteDimension": {
-                        "range": {
-                            "sheetId": sheet_id,
-                            "dimension": "ROWS",
-                            "startIndex": selected_rows[transaction_id].row_number - 1,
-                            "endIndex": selected_rows[transaction_id].row_number,
+            original_by_id = dict(current_by_id)
+
+            def write() -> None:
+                requests = [
+                    {
+                        "deleteDimension": {
+                            "range": {
+                                "sheetId": sheet_id,
+                                "dimension": "ROWS",
+                                "startIndex": selected_rows[transaction_id].row_number - 1,
+                                "endIndex": selected_rows[transaction_id].row_number,
+                            }
                         }
                     }
-                }
-                for transaction_id in sorted(
-                    selected_rows,
-                    key=lambda item: selected_rows[item].row_number,
-                    reverse=True,
-                )
-            ]
-            try:
+                    for transaction_id in sorted(
+                        selected_rows,
+                        key=lambda item: selected_rows[item].row_number,
+                        reverse=True,
+                    )
+                ]
                 self._batch_update_spreadsheet(requests)
-            except StorageUnavailableError as error:
-                outcome = self._bulk_postcondition_error(
-                    operation="transaction deletion",
-                    error=error,
-                    expected_by_id=current_by_id,
-                    postcondition=lambda current: all(
-                        item in current and current[item] == current_by_id[item]
-                        for item in current_by_id
-                    ),
-                    fully_applied=lambda current: not any(
-                        item in current for item in current_by_id
-                    ),
+
+            def state() -> str:
+                current = {
+                    str(row.values["id"]): self._normalized_transaction_values(row.values)
+                    for row in self._rows("Transactions", force_refresh=True)
+                }
+                if not any(item in current for item in original_by_id):
+                    return "applied"
+                if all(
+                    item in current
+                    and self._transaction_rows_match(current[item], value)
+                    for item, value in original_by_id.items()
+                ):
+                    return "unchanged"
+                return "ambiguous"
+
+            def refresh() -> None:
+                nonlocal selected_rows, current_by_id
+                selected_rows, current_by_id = self._fresh_bulk_transaction_snapshot(
+                    transaction_ids, expected_transactions
                 )
-                if outcome is not None:
-                    return outcome
-                raise AssertionError("Bulk deletion postcondition did not classify")
-            self._verify_bulk_success(
-                operation="transaction deletion",
-                postcondition=lambda current: not any(
-                    item in current for item in current_by_id
-                ),
+                if current_by_id != original_by_id:
+                    raise StorageConflictError(
+                        "A selected transaction changed while deletion was being retried."
+                    )
+                for transaction in current_by_id.values():
+                    self._reject_mixed_use_projection(transaction)
+
+            self._write_with_uncertain_readback(
+                "transaction deletion", write, state,
+                before_retry=refresh, invalidate=("Transactions",),
             )
             return {"status": "fully_applied", "count": str(len(selected_rows))}
 
@@ -2288,7 +2403,25 @@ class GoogleSheetsStorage:
             raise StorageConflictError(
                 "That category has mixed-use expenses and cannot be deleted"
             )
-        for attempt in range(self._retry_attempts):
+        original = dict(current.values)
+        current_row = current
+        worksheet = self._worksheet("Categories")
+
+        def write() -> None:
+            self._api(
+                lambda: worksheet.delete_rows(current_row.row_number),
+                retry_safe=False,
+            )
+
+        def state() -> str:
+            try:
+                latest = self._find_row("Categories", category_id)
+            except StorageNotFoundError:
+                return "applied"
+            return "unchanged" if latest.values == original else "ambiguous"
+
+        def refresh() -> None:
+            nonlocal current_row
             mixed_use_sources = self._rows("MixedUseExpenses", force_refresh=True)
             if any(
                 _clean_text(row.values.get("category_id"), "Category") == category_id
@@ -2297,26 +2430,19 @@ class GoogleSheetsStorage:
                 raise StorageConflictError(
                     "That category has mixed-use expenses and cannot be deleted"
                 )
-            current = self._find_row("Categories", category_id)
-            worksheet = self._worksheet("Categories")
-            try:
-                self._api(
-                    lambda: worksheet.delete_rows(current.row_number),
-                    retry_safe=False,
+            current_row = self._find_row("Categories", category_id)
+            if current_row.values != original:
+                raise StorageConflictError(
+                    "The category changed while deletion was being retried."
                 )
-                self._invalidate("Categories")
-                return
-            except StorageUnavailableError as error:
-                self._invalidate("Categories")
-                if not error.retryable:
-                    raise
-                try:
-                    self._find_row("Categories", category_id)
-                except StorageNotFoundError:
-                    return
-                if attempt + 1 >= self._retry_attempts:
-                    raise
-                self._sleeper(self._retry_base_delay_seconds * (2**attempt))
+
+        # Repeat the referential and row checks immediately before the write;
+        # the first snapshot only discovers the candidate row.
+        refresh()
+        self._write_with_uncertain_readback(
+            "category deletion", write, state, before_retry=refresh,
+            invalidate=("Categories",),
+        )
 
     def list_payees(
         self, *, active_only: bool = False, _force_refresh: bool = False
@@ -2496,81 +2622,34 @@ class GoogleSheetsStorage:
             result[record_id] = row
         return result
 
-    def _managed_batch_result(
+    def _managed_write(
         self,
         *,
         operation: str,
-        error: StorageUnavailableError | None,
+        requests: Sequence[Mapping[str, Any]],
         read_state: Callable[[], Any],
-        fully_applied: Callable[[Any], bool],
-        not_applied: Callable[[Any], bool],
-        invalidate: Iterable[str],
-    ) -> dict[str, str] | None:
-        """Classify a cross-sheet batch response using a fresh postcondition read."""
-        try:
-            state = read_state()
-            applied = fully_applied(state)
-            untouched = not applied and not_applied(state)
-        except StorageError as read_error:
-            for title in invalidate:
-                self._invalidate(title)
-            raise StorageBulkMutationUncertainError(
-                f"The {operation} completed but its postcondition could not be read. "
-                "Review the affected records before retrying.",
-                outcome="mixed_ambiguous",
-                retryable=False,
-            ) from read_error
-        if applied:
-            for title in invalidate:
-                self._invalidate(title)
-            return {"status": "fully_applied"}
-        if untouched:
-            retryable = bool(error and error.retryable)
-            raise StorageBulkMutationUncertainError(
-                f"The {operation} was not applied. Review the affected records before retrying.",
-                outcome="not_applied",
-                retryable=retryable,
-            ) from error
-        for title in invalidate:
-            self._invalidate(title)
-        raise StorageBulkMutationUncertainError(
-            f"The {operation} outcome is ambiguous. Do not retry until the affected "
-            "records are reviewed.",
-            outcome="mixed_ambiguous",
-            retryable=False,
-        ) from error
-
-    def _managed_confirmed_postcondition(
-        self,
-        *,
-        operation: str,
-        read_state: Callable[[], Any],
-        fully_applied: Callable[[Any], bool],
+        applied: Callable[[Any], bool],
+        unchanged: Callable[[Any], bool],
+        before_retry: Callable[[], None] | None = None,
         invalidate: Iterable[str],
     ) -> None:
-        """Require a readable postcondition after a confirmed batch write."""
-        try:
-            state = read_state()
-        except StorageError as read_error:
-            for title in invalidate:
-                self._invalidate(title)
-            raise StorageBulkMutationUncertainError(
-                f"The {operation} completed but its postcondition could not be read. "
-                "Review the affected records before retrying.",
-                outcome="mixed_ambiguous",
-                retryable=False,
-            ) from read_error
-        if not fully_applied(state):
-            for title in invalidate:
-                self._invalidate(title)
-            raise StorageBulkMutationUncertainError(
-                f"The {operation} completed but its postcondition is ambiguous. "
-                "Review the affected records before retrying.",
-                outcome="mixed_ambiguous",
-                retryable=False,
-            )
-        for title in invalidate:
-            self._invalidate(title)
+        """Write one managed batch with one fresh readback and safe retry."""
+
+        def state() -> str:
+            current = read_state()
+            if applied(current):
+                return "applied"
+            if unchanged(current):
+                return "unchanged"
+            return "ambiguous"
+
+        self._write_with_uncertain_readback(
+            operation,
+            lambda: self._batch_update_spreadsheet(requests),
+            state,
+            before_retry=before_retry,
+            invalidate=invalidate,
+        )
 
     def _managed_update_request(
         self, title: str, row: _StoredRow, column: str, value: str
@@ -2708,7 +2787,7 @@ class GoogleSheetsStorage:
                     self._managed_rows_by_id(current["MixedUseExpenses"], "MixedUseExpenses"),
                 )
 
-            def fully_applied(state: Any) -> bool:
+            def is_applied(state: Any) -> bool:
                 current_payees, current_transactions, current_mixed = state
                 return (
                     target_id in current_payees
@@ -2730,7 +2809,7 @@ class GoogleSheetsStorage:
                     )
                 )
 
-            def not_applied(state: Any) -> bool:
+            def is_unchanged(state: Any) -> bool:
                 current_payees, current_transactions, current_mixed = state
                 if any(
                     record_id not in current_payees
@@ -2747,22 +2826,65 @@ class GoogleSheetsStorage:
                     for record_id, row in mixed_updates.items()
                 )
 
-            try:
-                self._batch_update_spreadsheet(requests)
-            except StorageUnavailableError as error:
-                result = self._managed_batch_result(
-                    operation="payee merge", error=error, fully_applied=fully_applied,
-                    read_state=fresh_state,
-                    not_applied=not_applied,
-                    invalidate=("Payees", "Transactions", "MixedUseExpenses"),
+            def refresh_requests() -> None:
+                current = self._snapshot(
+                    ["Payees", "Transactions", "MixedUseExpenses"],
+                    force_refresh=True,
                 )
-                if result is not None:
-                    return {**result, "count": str(len(source_ids))}
-                raise AssertionError("managed batch classification did not return")
-            self._managed_confirmed_postcondition(
+                current_state = (
+                    {
+                        record_id: dict(row.values)
+                        for record_id, row in self._managed_rows_by_id(
+                            current["Payees"], "Payees"
+                        ).items()
+                    },
+                    self._managed_rows_by_id(
+                        current["Transactions"], "Transactions"
+                    ),
+                    self._managed_rows_by_id(
+                        current["MixedUseExpenses"], "MixedUseExpenses"
+                    ),
+                )
+                if not is_unchanged(current_state):
+                    raise StorageConflictError(
+                        "Payee records or references changed while the merge was being retried."
+                    )
+                current_payees = self._managed_rows_by_id(current["Payees"], "Payees")
+                current_transactions = self._managed_rows_by_id(
+                    current["Transactions"], "Transactions"
+                )
+                current_mixed = self._managed_rows_by_id(
+                    current["MixedUseExpenses"], "MixedUseExpenses"
+                )
+                refreshed = [
+                    self._managed_update_request(
+                        "Transactions", current_transactions[record_id], "payee_id", target_id
+                    )
+                    for record_id in transaction_updates
+                ]
+                refreshed.extend(
+                    self._managed_update_request(
+                        "MixedUseExpenses", current_mixed[record_id], "payee_id", target_id
+                    )
+                    for record_id in mixed_updates
+                )
+                refreshed.extend(
+                    self._managed_delete_request("Payees", current_payees[source_id])
+                    for source_id in sorted(
+                        source_ids,
+                        key=lambda item: current_payees[item].row_number,
+                        reverse=True,
+                    )
+                )
+                requests[:] = refreshed
+
+            self._managed_write(
                 operation="payee merge",
+                requests=requests,
                 read_state=fresh_state,
-                fully_applied=fully_applied,
+                applied=is_applied,
+                unchanged=is_unchanged,
+                before_retry=refresh_requests,
                 invalidate=("Payees", "Transactions", "MixedUseExpenses"),
             )
             return {"status": "fully_applied", "count": str(len(source_ids))}
@@ -2818,11 +2940,11 @@ class GoogleSheetsStorage:
                     for row in (*current_transactions.values(), *current_mixed.values())
                 )
 
-            def fully_applied(state: Any) -> bool:
+            def is_applied(state: Any) -> bool:
                 current_payees, _, _ = state
                 return payee_id not in current_payees and not references_present(state)
 
-            def not_applied(state: Any) -> bool:
+            def is_unchanged(state: Any) -> bool:
                 current_payees, _, _ = state
                 return (
                     payee_id in current_payees
@@ -2830,22 +2952,26 @@ class GoogleSheetsStorage:
                     and not references_present(state)
                 )
 
-            try:
-                self._batch_update_spreadsheet([request])
-            except StorageUnavailableError as error:
-                result = self._managed_batch_result(
-                    operation="payee removal", error=error, fully_applied=fully_applied,
-                    read_state=read_state,
-                    not_applied=not_applied,
-                    invalidate=("Payees", "Transactions", "MixedUseExpenses"),
+            def refresh_request() -> None:
+                state = read_state()
+                if not is_unchanged(state):
+                    raise StorageConflictError(
+                        "The payee changed or became referenced while removal was being retried."
+                    )
+                current_payees, _, _ = state
+                refreshed = self._managed_delete_request(
+                    "Payees", current_payees[payee_id]
                 )
-                if result is not None:
-                    return result
-                raise AssertionError("managed batch classification did not return")
-            self._managed_confirmed_postcondition(
+                requests[:] = [refreshed]
+
+            requests = [request]
+            self._managed_write(
                 operation="payee removal",
+                requests=requests,
                 read_state=read_state,
-                fully_applied=fully_applied,
+                applied=is_applied,
+                unchanged=is_unchanged,
+                before_retry=refresh_request,
                 invalidate=("Payees", "Transactions", "MixedUseExpenses"),
             )
             return {"status": "fully_applied"}
@@ -3033,7 +3159,7 @@ class GoogleSheetsStorage:
                     ),
                 )
 
-            def fully_applied(state: Any) -> bool:
+            def is_applied(state: Any) -> bool:
                 (
                     current_tags,
                     current_transactions,
@@ -3065,7 +3191,7 @@ class GoogleSheetsStorage:
                         return False
                 return True
 
-            def not_applied(state: Any) -> bool:
+            def is_unchanged(state: Any) -> bool:
                 (
                     current_tags,
                     current_transactions,
@@ -3091,22 +3217,53 @@ class GoogleSheetsStorage:
                         return False
                 return True
 
-            try:
-                self._batch_update_spreadsheet(requests)
-            except StorageUnavailableError as error:
-                result = self._managed_batch_result(
-                    operation="tag merge", error=error, fully_applied=fully_applied,
-                    read_state=fresh_state,
-                    not_applied=not_applied,
-                    invalidate=("Tags", "Transactions", "Mileage", "MixedUseExpenses"),
+            def refresh_requests() -> None:
+                current_tags, current_transactions, current_mileage, current_sources = (
+                    fresh_state()
                 )
-                if result is not None:
-                    return {**result, "count": str(len(source_ids))}
-                raise AssertionError("managed batch classification did not return")
-            self._managed_confirmed_postcondition(
+                current_state = (
+                    current_tags,
+                    current_transactions,
+                    current_mileage,
+                    current_sources,
+                )
+                if not is_unchanged(current_state):
+                    raise StorageConflictError(
+                        "Tag records or references changed while the merge was being retried."
+                    )
+                current_rows_by_title = {
+                    "Transactions": current_transactions,
+                    "Mileage": current_mileage,
+                    "MixedUseExpenses": current_sources,
+                }
+                refreshed = [
+                    self._managed_update_request(
+                        title,
+                        current_rows_by_title[title][
+                            _clean_text(row.values.get("id"), "ID", required=True)
+                        ],
+                        "tag_ids",
+                        expected_value,
+                    )
+                    for title, row, expected_value in update_rows.values()
+                ]
+                refreshed.extend(
+                    self._managed_delete_request("Tags", current_tags[source_id])
+                    for source_id in sorted(
+                        source_ids,
+                        key=lambda item: current_tags[item].row_number,
+                        reverse=True,
+                    )
+                )
+                requests[:] = refreshed
+
+            self._managed_write(
                 operation="tag merge",
+                requests=requests,
                 read_state=fresh_state,
-                fully_applied=fully_applied,
+                applied=is_applied,
+                unchanged=is_unchanged,
+                before_retry=refresh_requests,
                 invalidate=("Tags", "Transactions", "Mileage", "MixedUseExpenses"),
             )
             return {"status": "fully_applied", "count": str(len(source_ids))}
@@ -3150,6 +3307,7 @@ class GoogleSheetsStorage:
                 raise StorageConflictError(
                     f"This tag is referenced by {references} records. Merge it or unassign it first."
                 )
+            request = self._managed_delete_request("Tags", tag_rows[tag_id])
             def read_state() -> tuple[
                 dict[str, _StoredRow],
                 dict[str, _StoredRow],
@@ -3180,30 +3338,35 @@ class GoogleSheetsStorage:
                 )
             def is_gone(state: Any) -> bool:
                 return tag_id not in state[0] and not references_present(state)
-            def remains(state: Any) -> bool:
+            def is_unchanged(state: Any) -> bool:
                 return (
                     tag_id in state[0]
                     and state[0][tag_id].values == tag_rows[tag_id].values
                     and not references_present(state)
                 )
-            try:
-                self._batch_update_spreadsheet([
-                    self._managed_delete_request("Tags", tag_rows[tag_id])
-                ])
-            except StorageUnavailableError as error:
-                result = self._managed_batch_result(
-                    operation="tag removal", error=error, fully_applied=is_gone,
-                    read_state=read_state,
-                    not_applied=remains,
-                    invalidate=("Tags", "Transactions", "Mileage", "MixedUseExpenses"),
-                )
-                if result is not None:
-                    return result
-                raise AssertionError("managed batch classification did not return")
-            self._managed_confirmed_postcondition(
+
+            def refresh_request() -> None:
+                nonlocal tag_rows, request
+                state = read_state()
+                if not is_unchanged(state):
+                    raise StorageConflictError(
+                        "The tag changed or became referenced while removal was being retried."
+                    )
+                tag_rows = state[0]
+                request = self._managed_delete_request("Tags", tag_rows[tag_id])
+
+            requests = [request]
+            def refresh_requests() -> None:
+                refresh_request()
+                requests[:] = [request]
+
+            self._managed_write(
                 operation="tag removal",
+                requests=requests,
                 read_state=read_state,
-                fully_applied=is_gone,
+                applied=is_gone,
+                unchanged=is_unchanged,
+                before_retry=refresh_requests,
                 invalidate=("Tags", "Transactions", "Mileage", "MixedUseExpenses"),
             )
             return {"status": "fully_applied"}
@@ -3673,72 +3836,52 @@ class GoogleSheetsStorage:
             expected_source.get("tag_ids", "")
         )
 
-    def _mixed_use_mutation_result(
+    def _mixed_use_mutation_state(
         self,
         *,
-        operation: str,
         source_id: str,
         transaction_id: str,
         expected_source: Mapping[str, Any],
         expected_transaction: Mapping[str, Any],
-        error: StorageUnavailableError | None,
         deletion: bool = False,
         original_source: Mapping[str, Any] | None = None,
         original_transaction: Mapping[str, Any] | None = None,
-    ) -> dict[str, str] | None:
-        try:
-            sources, transactions = self._raw_mixed_use_snapshot()
-        except StorageError as read_error:
-            raise StorageBulkMutationUncertainError(
-                f"The mixed-use {operation} completed but its postcondition could not "
-                "be read. Review the source and ledger before retrying.",
-                outcome="mixed_ambiguous",
-                retryable=False,
-            ) from read_error
+    ) -> str:
+        """Classify a fresh mixed-use pair snapshot for the common write policy."""
+        sources, transactions = self._raw_mixed_use_snapshot()
         actual_source = sources.get(source_id)
         actual_transaction = transactions.get(transaction_id)
         if deletion:
-            fully_applied = actual_source is None and actual_transaction is None
-            not_applied = self._mixed_use_record_matches(
+            applied = actual_source is None and actual_transaction is None
+            unchanged = self._mixed_use_record_matches(
                 "MixedUseExpenses", actual_source, expected_source
             ) and self._mixed_use_record_matches(
                 "Transactions", actual_transaction, expected_transaction
             )
         else:
-            fully_applied = self._mixed_use_record_matches(
+            applied = self._mixed_use_record_matches(
                 "MixedUseExpenses", actual_source, expected_source
             ) and self._mixed_use_record_matches(
                 "Transactions", actual_transaction, expected_transaction
             )
             if original_source is not None:
-                source_not_applied = self._mixed_use_record_matches(
+                source_unchanged = self._mixed_use_record_matches(
                     "MixedUseExpenses", actual_source, original_source
                 )
                 if original_transaction is None:
-                    transaction_not_applied = actual_transaction is None
+                    transaction_unchanged = actual_transaction is None
                 else:
-                    transaction_not_applied = self._mixed_use_record_matches(
+                    transaction_unchanged = self._mixed_use_record_matches(
                         "Transactions", actual_transaction, original_transaction
                     )
-                not_applied = source_not_applied and transaction_not_applied
+                unchanged = source_unchanged and transaction_unchanged
             else:
-                not_applied = actual_source is None and actual_transaction is None
-        if fully_applied:
-            return {"status": "fully_applied"}
-        if not_applied:
-            retryable = error.retryable if error is not None else False
-            raise StorageBulkMutationUncertainError(
-                f"The mixed-use {operation} was not applied. Review the source and "
-                "ledger before retrying.",
-                outcome="not_applied",
-                retryable=retryable,
-            ) from error
-        raise StorageBulkMutationUncertainError(
-            f"The mixed-use {operation} outcome is ambiguous. Do not retry until the "
-            "source and ledger relationship is reviewed.",
-            outcome="mixed_ambiguous",
-            retryable=False,
-        ) from error
+                unchanged = actual_source is None and actual_transaction is None
+        if applied:
+            return "applied"
+        if unchanged:
+            return "unchanged"
+        return "ambiguous"
 
     def _prepare_mixed_use_expense(
         self,
@@ -3966,6 +4109,7 @@ class GoogleSheetsStorage:
         )
         source_id = source["id"]
         transaction_id = projection["id"]
+        source_append_confirmed = False
         if existing_source is not None:
             # A source-only retry must compare against the persisted source,
             # including its original timestamp, rather than regenerate it.
@@ -3989,52 +4133,16 @@ class GoogleSheetsStorage:
                 )
                 and existing_transaction is None
             ):
-                # A source-only result is an incomplete operation, not a new
-                # create. Reusing the caller's stable IDs safely resumes the
-                # missing projection without creating a second source.
-                _, fresh_transactions = self._raw_mixed_use_snapshot()
-                conflicting_projection = next(
-                    (
-                        transaction
-                        for transaction in fresh_transactions.values()
-                        if str(transaction.get("source_type") or "").strip()
-                        == MIXED_USE_SOURCE_TYPE
-                        and str(transaction.get("source_id") or "").strip()
-                        == source_id
-                    ),
-                    None,
+                raise StorageValidationError(
+                    "The mixed-use source exists without its ledger projection. "
+                    "Inspect the source and ledger before retrying or repairing it."
                 )
-                if conflicting_projection is not None:
-                    raise StorageConflictError(
-                        "The mixed-use source already has a linked transaction"
-                    )
-                try:
-                    self._append("Transactions", projection)
-                except StorageUnavailableError as error:
-                    self._mixed_use_mutation_result(
-                        operation="create",
-                        source_id=source_id,
-                        transaction_id=transaction_id,
-                        expected_source=source,
-                        expected_transaction=projection,
-                        error=error,
-                        original_source=source,
-                    )
-                    return self.get_mixed_use_expense(source_id)
-                self._mixed_use_mutation_result(
-                    operation="create",
-                    source_id=source_id,
-                    transaction_id=transaction_id,
-                    expected_source=source,
-                    expected_transaction=projection,
-                    error=None,
-                )
-                return self.get_mixed_use_expense(source_id)
             raise StorageConflictError(
                 "The mixed-use source or linked transaction ID is already in use"
             )
         try:
             self._append("MixedUseExpenses", source)
+            source_append_confirmed = True
             persisted_source = self._find_row("MixedUseExpenses", source_id)
             if not self._mixed_use_record_matches(
                 "MixedUseExpenses", persisted_source.values, source
@@ -4044,33 +4152,42 @@ class GoogleSheetsStorage:
                 )
             self._append("Transactions", projection)
         except StorageConflictError:
+            self._invalidate("MixedUseExpenses")
+            self._invalidate("Transactions")
             raise
         except (StorageError, OSError) as error:
             if isinstance(error, StorageUnavailableError):
-                outcome = self._mixed_use_mutation_result(
-                    operation="create",
-                    source_id=source_id,
-                    transaction_id=transaction_id,
-                    expected_source=source,
-                    expected_transaction=projection,
-                    error=error,
-                )
-                if outcome is not None:
+                if not error.retryable:
+                    self._invalidate("MixedUseExpenses")
+                    self._invalidate("Transactions")
+                    if source_append_confirmed:
+                        raise StorageUnavailableError(
+                            _mutation_guidance("mixed-use create"), retryable=False
+                        ) from error
+                    raise
+                try:
+                    state = self._mixed_use_mutation_state(
+                        source_id=source_id,
+                        transaction_id=transaction_id,
+                        expected_source=source,
+                        expected_transaction=projection,
+                    )
+                except StorageError as read_error:
+                    self._invalidate("MixedUseExpenses")
+                    self._invalidate("Transactions")
+                    raise StorageUnavailableError(
+                        _mutation_guidance("mixed-use create"), retryable=False
+                    ) from read_error
+                if state == "applied":
                     return self.get_mixed_use_expense(source_id)
-            raise StorageBulkMutationUncertainError(
-                "The mixed-use create did not complete. Review the source and ledger "
-                "before retrying.",
-                outcome="mixed_ambiguous",
-                retryable=False,
-            ) from error
-        self._mixed_use_mutation_result(
-            operation="create",
-            source_id=source_id,
-            transaction_id=transaction_id,
-            expected_source=source,
-            expected_transaction=projection,
-            error=None,
-        )
+                self._invalidate("MixedUseExpenses")
+                self._invalidate("Transactions")
+                raise StorageUnavailableError(
+                    _mutation_guidance("mixed-use create"), retryable=False
+                ) from error
+            self._invalidate("MixedUseExpenses")
+            self._invalidate("Transactions")
+            raise
         return self.get_mixed_use_expense(source_id)
 
     def edit_mixed_use_expense(
@@ -4157,72 +4274,42 @@ class GoogleSheetsStorage:
             raise StorageConflictError(
                 "The mixed-use expense changed; refresh it before editing."
             )
-        try:
+        def write() -> None:
             self._replace_rows_atomically(
                 [
                     ("Transactions", fresh_transaction, updated_transaction),
                     ("MixedUseExpenses", fresh_source, updated_source),
                 ]
             )
-        except StorageUnavailableError as error:
-            self._mixed_use_mutation_result(
-                operation="edit",
+
+        def refresh_rows() -> None:
+            nonlocal fresh_transaction, fresh_source
+            fresh_transaction = self._find_row("Transactions", transaction_id)
+            fresh_source = self._find_row("MixedUseExpenses", source_id)
+            if not self._mixed_use_record_matches(
+                "Transactions", fresh_transaction.values, current_transaction
+            ) or not self._mixed_use_record_matches(
+                "MixedUseExpenses", fresh_source.values, current_source
+            ):
+                raise StorageConflictError(
+                    "The mixed-use expense changed while the edit was being retried."
+                )
+
+        self._write_with_uncertain_readback(
+            "mixed-use edit",
+            write,
+            lambda: self._mixed_use_mutation_state(
                 source_id=source_id,
                 transaction_id=transaction_id,
                 expected_source=updated_source,
                 expected_transaction=updated_transaction,
-                error=error,
                 original_source=current_source,
                 original_transaction=current_transaction,
-            )
-            return self.get_mixed_use_expense(source_id)
-        self._mixed_use_mutation_result(
-            operation="edit",
-            source_id=source_id,
-            transaction_id=transaction_id,
-            expected_source=updated_source,
-            expected_transaction=updated_transaction,
-            error=None,
+            ),
+            before_retry=refresh_rows,
+            invalidate=("Transactions", "MixedUseExpenses"),
         )
         return self.get_mixed_use_expense(source_id)
-
-    def _delete_mixed_use_row(
-        self,
-        title: str,
-        record_id: str,
-        *,
-        expected_record: Mapping[str, Any] | None = None,
-        before_retry: Callable[[], None] | None = None,
-    ) -> None:
-        for attempt in range(self._retry_attempts):
-            current = self._find_row(title, record_id)
-            if expected_record is not None and not self._mixed_use_record_matches(
-                title, current.values, expected_record
-            ):
-                raise StorageConflictError(
-                    f"The {title} record changed; refresh before deleting."
-                )
-            worksheet = self._worksheet(title)
-            try:
-                self._api(
-                    lambda: worksheet.delete_rows(current.row_number),
-                    retry_safe=False,
-                )
-                self._invalidate(title)
-                return
-            except StorageUnavailableError as error:
-                self._invalidate(title)
-                if not error.retryable:
-                    raise
-                try:
-                    self._find_row(title, record_id)
-                except StorageNotFoundError:
-                    return
-                if attempt + 1 >= self._retry_attempts:
-                    raise
-                self._sleeper(self._retry_base_delay_seconds * (2**attempt))
-                if before_retry is not None:
-                    before_retry()
 
     def delete_mixed_use_expense(
         self,
@@ -4257,21 +4344,6 @@ class GoogleSheetsStorage:
             required=True,
         )
 
-        def reject_reappeared_projection() -> None:
-            latest_transactions = self._rows(
-                "Transactions", force_refresh=True
-            )
-            if any(
-                _clean_text(row.values.get("source_type"), "Transaction source type")
-                == MIXED_USE_SOURCE_TYPE
-                and _clean_text(row.values.get("source_id"), "Transaction source ID")
-                == source_id
-                for row in latest_transactions
-            ):
-                raise StorageConflictError(
-                    "The mixed-use expense changed; refresh it before deleting."
-                )
-
         transaction = transactions.get(transaction_id)
         if transaction is None:
             if expected_source is not None and not self._mixed_use_record_matches(
@@ -4280,26 +4352,10 @@ class GoogleSheetsStorage:
                 raise StorageConflictError(
                     "The mixed-use expense changed; refresh it before deleting."
                 )
-            latest_transactions = self._rows(
-                "Transactions", force_refresh=True
+            raise StorageValidationError(
+                "The mixed-use source exists without its ledger projection. "
+                "Inspect the source and ledger before deleting or repairing it."
             )
-            if any(
-                _clean_text(row.values.get("source_type"), "Transaction source type")
-                == MIXED_USE_SOURCE_TYPE
-                and _clean_text(row.values.get("source_id"), "Transaction source ID")
-                == source_id
-                for row in latest_transactions
-            ):
-                raise StorageConflictError(
-                    "The mixed-use expense changed; refresh it before deleting."
-                )
-            self._delete_mixed_use_row(
-                "MixedUseExpenses",
-                source_id,
-                expected_record=source,
-                before_retry=reject_reappeared_projection,
-            )
-            return
         if expected_source is not None and not self._mixed_use_source_matches(
             source, expected_source, transaction
         ):
@@ -4323,48 +4379,40 @@ class GoogleSheetsStorage:
                 "The mixed-use expense changed; refresh it before deleting."
             )
 
-        try:
-            self._delete_mixed_use_row(
-                "Transactions", transaction_id, expected_record=transaction
-            )
-            latest_transactions = self._rows(
-                "Transactions", force_refresh=True
-            )
-            if any(
-                _clean_text(row.values.get("source_type"), "Transaction source type")
-                == MIXED_USE_SOURCE_TYPE
-                and _clean_text(row.values.get("source_id"), "Transaction source ID")
-                == source_id
-                for row in latest_transactions
+        requests = [
+            self._managed_delete_request("Transactions", fresh_transaction),
+            self._managed_delete_request("MixedUseExpenses", fresh_source),
+        ]
+
+        def refresh_requests() -> None:
+            nonlocal requests, fresh_transaction, fresh_source
+            fresh_transaction = self._find_row("Transactions", transaction_id)
+            fresh_source = self._find_row("MixedUseExpenses", source_id)
+            if not self._mixed_use_record_matches(
+                "Transactions", fresh_transaction.values, transaction
+            ) or not self._mixed_use_record_matches(
+                "MixedUseExpenses", fresh_source.values, source
             ):
                 raise StorageConflictError(
-                    "The mixed-use expense changed; refresh it before deleting."
+                    "The mixed-use expense changed while deletion was being retried."
                 )
-            self._delete_mixed_use_row(
-                "MixedUseExpenses",
-                source_id,
-                expected_record=source,
-                before_retry=reject_reappeared_projection,
-            )
-        except StorageUnavailableError as error:
-            self._mixed_use_mutation_result(
-                operation="delete",
+            requests = [
+                self._managed_delete_request("Transactions", fresh_transaction),
+                self._managed_delete_request("MixedUseExpenses", fresh_source),
+            ]
+
+        self._write_with_uncertain_readback(
+            "mixed-use deletion",
+            lambda: self._batch_update_spreadsheet(requests),
+            lambda: self._mixed_use_mutation_state(
                 source_id=source_id,
                 transaction_id=transaction_id,
                 expected_source=source,
                 expected_transaction=transaction,
-                error=error,
                 deletion=True,
-            )
-            return
-        self._mixed_use_mutation_result(
-            operation="delete",
-            source_id=source_id,
-            transaction_id=transaction_id,
-            expected_source=source,
-            expected_transaction=transaction,
-            error=None,
-            deletion=True,
+            ),
+            before_retry=refresh_requests,
+            invalidate=("Transactions", "MixedUseExpenses"),
         )
 
     def _replace_receipt_references(
@@ -4432,87 +4480,74 @@ class GoogleSheetsStorage:
         original_source_receipts = str(
             source.values.get("receipt_references") or ""
         )
+        original_transaction = dict(transaction)
+        original_source = dict(source.values)
 
-        transaction_headers = self._headers("Transactions")
-        source_headers = self._headers("MixedUseExpenses")
-        transaction_reference_column = self._sheet_column_index(
-            transaction_headers, "receipt_references"
-        )
-        source_reference_column = self._sheet_column_index(
-            source_headers, "receipt_references"
-        )
-        requests = [
-            {
-                "updateCells": {
-                    "range": {
-                        "sheetId": self._transactions_sheet_id(),
-                        "startRowIndex": current.row_number - 1,
-                        "endRowIndex": current.row_number,
-                        "startColumnIndex": transaction_reference_column,
-                        "endColumnIndex": transaction_reference_column + 1,
-                    },
-                    "rows": [
-                        {"values": [{"userEnteredValue": {"stringValue": encoded_references}}]}
-                    ],
-                    "fields": "userEnteredValue",
-                }
-            },
-            {
-                "updateCells": {
-                    "range": {
-                        "sheetId": self._sheet_id("MixedUseExpenses"),
-                        "startRowIndex": source.row_number - 1,
-                        "endRowIndex": source.row_number,
-                        "startColumnIndex": source_reference_column,
-                        "endColumnIndex": source_reference_column + 1,
-                    },
-                    "rows": [
-                        {"values": [{"userEnteredValue": {"stringValue": encoded_references}}]}
-                    ],
-                    "fields": "userEnteredValue",
-                }
-            },
-        ]
-        try:
-            self._batch_update_spreadsheet(requests)
-        except StorageUnavailableError as error:
-            try:
-                confirmed_transaction = self._find_row(
-                    "Transactions", transaction_id
-                )
-                confirmed_source = self._find_row("MixedUseExpenses", source_id)
-            except StorageError as read_error:
-                raise StorageBulkMutationUncertainError(
-                    "The mixed-use receipt update completed, but its paired "
-                    "postcondition could not be read.",
-                    outcome="mixed_ambiguous",
-                    retryable=False,
-                ) from read_error
-            if (
-                str(confirmed_transaction.values.get("receipt_references") or "")
-                == encoded_references
-                and str(confirmed_source.values.get("receipt_references") or "")
-                == encoded_references
+        def build_requests(
+            transaction_row: _StoredRow, source_row: _StoredRow
+        ) -> list[dict[str, Any]]:
+            return [
+                self._managed_update_request(
+                    "Transactions",
+                    transaction_row,
+                    "receipt_references",
+                    encoded_references,
+                ),
+                self._managed_update_request(
+                    "MixedUseExpenses",
+                    source_row,
+                    "receipt_references",
+                    encoded_references,
+                ),
+            ]
+
+        requests = build_requests(current, source)
+
+        def refresh_requests() -> None:
+            nonlocal current, source, requests
+            current = self._find_row("Transactions", transaction_id)
+            source = self._find_row("MixedUseExpenses", source_id)
+            if not self._mixed_use_record_matches(
+                "Transactions", current.values, original_transaction
+            ) or not self._mixed_use_record_matches(
+                "MixedUseExpenses", source.values, original_source
             ):
-                self._invalidate("Transactions")
-                self._invalidate("MixedUseExpenses")
-                return dict(confirmed_transaction.values)
-            not_applied = (
-                original_transaction_receipts
-                == str(
-                    confirmed_transaction.values.get("receipt_references") or ""
+                raise StorageConflictError(
+                    "The mixed-use receipt pair changed while the update was being retried."
                 )
-                and original_source_receipts
-                == str(confirmed_source.values.get("receipt_references") or "")
+            requests = build_requests(current, source)
+
+        def state() -> str:
+            snapshot = self._snapshot(
+                ["Transactions", "MixedUseExpenses"], force_refresh=True
             )
-            raise StorageBulkMutationUncertainError(
-                "The mixed-use receipt update was not fully applied. Review the "
-                "source and ledger before retrying.",
-                outcome="not_applied" if error.retryable and not_applied else "mixed_ambiguous",
-                retryable=error.retryable and not_applied,
-            ) from error
-        self._invalidate("Transactions")
-        self._invalidate("MixedUseExpenses")
+            confirmed_transaction = self._managed_rows_by_id(
+                snapshot["Transactions"], "Transactions"
+            ).get(transaction_id)
+            confirmed_source = self._managed_rows_by_id(
+                snapshot["MixedUseExpenses"], "MixedUseExpenses"
+            ).get(source_id)
+            if confirmed_transaction is None or confirmed_source is None:
+                return "ambiguous"
+            transaction_receipts = str(
+                confirmed_transaction.values.get("receipt_references") or ""
+            )
+            source_receipts = str(
+                confirmed_source.values.get("receipt_references") or ""
+            )
+            if transaction_receipts == encoded_references and source_receipts == encoded_references:
+                return "applied"
+            if transaction_receipts == original_transaction_receipts and source_receipts == original_source_receipts:
+                return "unchanged"
+            return "ambiguous"
+
+        self._write_with_uncertain_readback(
+            "mixed-use receipt update",
+            lambda: self._batch_update_spreadsheet(requests),
+            state,
+            before_retry=refresh_requests,
+            invalidate=("Transactions", "MixedUseExpenses"),
+        )
         updated = dict(transaction)
         updated["receipt_references"] = encoded_references
         return updated
@@ -5137,11 +5172,10 @@ class GoogleSheetsStorage:
                         "MixedUseExpenses", force_refresh=True
                     )
                 except StorageError as read_error:
-                    raise StorageBulkMutationUncertainError(
-                        "Receipt recovery completed, but the mixed-use source "
-                        "postcondition could not be read.",
-                        outcome="mixed_ambiguous",
-                        retryable=False,
+                    self._invalidate("Transactions")
+                    self._invalidate("MixedUseExpenses")
+                    raise StorageUnavailableError(
+                        _mutation_guidance("receipt recovery"), retryable=False
                     ) from read_error
                 confirmed_sources = {
                     str(row.values["id"]): dict(row.values)
@@ -5243,28 +5277,38 @@ class GoogleSheetsStorage:
 
     def delete_transaction(self, transaction_id: str) -> None:
         with _MIXED_USE_CREATE_LOCK:
-            for attempt in range(self._retry_attempts):
-                current = self._find_row("Transactions", transaction_id)
-                self._reject_mixed_use_projection(current.values)
-                worksheet = self._worksheet("Transactions")
+            current = self._find_row("Transactions", transaction_id)
+            self._reject_mixed_use_projection(current.values)
+            original = dict(current.values)
+            current_row = current
+            worksheet = self._worksheet("Transactions")
+
+            def write() -> None:
+                self._api(
+                    lambda: worksheet.delete_rows(current_row.row_number),
+                    retry_safe=False,
+                )
+
+            def state() -> str:
                 try:
-                    self._api(
-                        lambda: worksheet.delete_rows(current.row_number),
-                        retry_safe=False,
+                    latest = self._find_row("Transactions", transaction_id)
+                except StorageNotFoundError:
+                    return "applied"
+                return "unchanged" if latest.values == original else "ambiguous"
+
+            def refresh() -> None:
+                nonlocal current_row
+                current_row = self._find_row("Transactions", transaction_id)
+                self._reject_mixed_use_projection(current_row.values)
+                if current_row.values != original:
+                    raise StorageConflictError(
+                        "The transaction changed while deletion was being retried."
                     )
-                    self._invalidate("Transactions")
-                    return
-                except StorageUnavailableError as error:
-                    self._invalidate("Transactions")
-                    if not error.retryable:
-                        raise
-                    try:
-                        self._find_row("Transactions", transaction_id)
-                    except StorageNotFoundError:
-                        return
-                    if attempt + 1 >= self._retry_attempts:
-                        raise
-                    self._sleeper(self._retry_base_delay_seconds * (2**attempt))
+
+            self._write_with_uncertain_readback(
+                "transaction deletion", write, state, before_retry=refresh,
+                invalidate=("Transactions",),
+            )
 
     def _prepare_mileage_trip(
         self,
@@ -5443,27 +5487,36 @@ class GoogleSheetsStorage:
 
     def delete_mileage_trip(self, trip_id: str) -> None:
         with _MIXED_USE_CREATE_LOCK:
-            for attempt in range(self._retry_attempts):
-                current = self._find_row("Mileage", trip_id)
-                worksheet = self._worksheet("Mileage")
+            current = self._find_row("Mileage", trip_id)
+            original = dict(current.values)
+            current_row = current
+            worksheet = self._worksheet("Mileage")
+
+            def write() -> None:
+                self._api(
+                    lambda: worksheet.delete_rows(current_row.row_number),
+                    retry_safe=False,
+                )
+
+            def state() -> str:
                 try:
-                    self._api(
-                        lambda: worksheet.delete_rows(current.row_number),
-                        retry_safe=False,
-                    )
-                    self._invalidate("Mileage")
-                    return
-                except StorageUnavailableError as error:
-                    self._invalidate("Mileage")
-                    if not error.retryable:
-                        raise
-                try:
-                    self._find_row("Mileage", trip_id)
+                    latest = self._find_row("Mileage", trip_id)
                 except StorageNotFoundError:
-                    return
-                if attempt + 1 >= self._retry_attempts:
-                    raise
-                self._sleeper(self._retry_base_delay_seconds * (2**attempt))
+                    return "applied"
+                return "unchanged" if latest.values == original else "ambiguous"
+
+            def refresh() -> None:
+                nonlocal current_row
+                current_row = self._find_row("Mileage", trip_id)
+                if current_row.values != original:
+                    raise StorageConflictError(
+                        "The mileage trip changed while deletion was being retried."
+                    )
+
+            self._write_with_uncertain_readback(
+                "mileage deletion", write, state, before_retry=refresh,
+                invalidate=("Mileage",),
+            )
 
     def preview_quickbooks_mileage(
         self,

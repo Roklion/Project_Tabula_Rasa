@@ -132,8 +132,10 @@ sequenceDiagram
 Edits, deletes, uniqueness checks, and reference checks use fresh data before
 writing. A write success is shown only after the Google API confirms it.
 Affected caches are invalidated only after confirmation. Temporary network and
-quota failures use bounded retries, while uncertain mutations are read back or
-reconciled before any safe retry.
+quota failures use bounded readback handling. Each mutation has one fresh
+confirmation read: a confirmed final state succeeds, a clearly unchanged
+state may be retried once, and an ambiguous or unreadable state invalidates
+caches and gives actionable inspection guidance.
 
 ## Receipt boundary
 

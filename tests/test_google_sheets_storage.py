@@ -16,10 +16,10 @@ from tabula_rasa.storage.google_sheets import (
     BACKUP_FORMAT_VERSION,
     decode_receipt_references,
     GoogleSheetsStorage,
+    _mutation_guidance,
     SHEETS_SCOPE,
     SHEETS_READONLY_SCOPE,
     StorageAuthenticationError,
-    StorageBulkMutationUncertainError,
     StorageConflictError,
     StorageInitializationError,
     StorageNotFoundError,
@@ -178,10 +178,120 @@ def rewrite_backup_tables(
     return output.getvalue()
 
 
+@pytest.mark.parametrize(
+    ("operation", "inspection_area"),
+    [
+        ("mixed-use deletion", "Mixed-use expenses"),
+        ("transaction deletion", "Transactions ledger"),
+        ("payee merge", "Payee management"),
+        ("tag removal", "Tag management"),
+        ("category deletion", "Categories and the Transactions ledger"),
+        ("account update", "Accounts and the Transactions, Mileage, and MixedUseExpenses tables"),
+        ("Mileage batch update", "Mileage log"),
+    ],
+)
+def test_mutation_guidance_names_operation_inspection_area(
+    operation: str, inspection_area: str
+) -> None:
+    guidance = _mutation_guidance(operation)
+
+    assert inspection_area in guidance
+    assert "inspect" in guidance.casefold()
+
+
 class TestGoogleSheetsStorage:
     def setup_method(self) -> None:
         self.workbook = FakeWorkbook()
         self.storage = GoogleSheetsStorage(self.workbook, sleeper=lambda _: None)
+
+    def test_retry_refresh_failure_invalidates_and_normalizes_error(self) -> None:
+        self.storage._row_cache["Transactions"] = []
+        writes = 0
+
+        def write() -> None:
+            nonlocal writes
+            writes += 1
+            raise StorageUnavailableError("response lost", retryable=True)
+
+        def refresh() -> None:
+            raise StorageUnavailableError("refresh unavailable", retryable=True)
+
+        with pytest.raises(StorageUnavailableError, match="could not confirm") as raised:
+            self.storage._write_with_uncertain_readback(
+                "transaction update",
+                write,
+                lambda: "unchanged",
+                before_retry=refresh,
+                invalidate=("Transactions",),
+            )
+
+        assert writes == 1
+        assert raised.value.retryable is False
+        assert "Transactions ledger" in str(raised.value)
+        assert "Transactions" not in self.storage._row_cache
+
+    def test_retry_backoff_precedes_refresh_callback(self) -> None:
+        events: list[str] = []
+        storage = GoogleSheetsStorage(
+            self.workbook,
+            sleeper=lambda _: events.append("backoff"),
+        )
+        writes = 0
+
+        def write() -> None:
+            nonlocal writes
+            writes += 1
+            events.append("write")
+            if writes == 1:
+                raise StorageUnavailableError("response lost", retryable=True)
+
+        def refresh() -> None:
+            events.append("refresh")
+
+        storage._write_with_uncertain_readback(
+            "transaction update", write, lambda: "unchanged", before_retry=refresh
+        )
+
+        assert events == ["write", "backoff", "refresh", "write"]
+
+    def test_retry_refresh_unexpected_failure_still_invalidates_cache(self) -> None:
+        self.storage._row_cache["Transactions"] = []
+
+        def write() -> None:
+            raise StorageUnavailableError("response lost", retryable=True)
+
+        def refresh() -> None:
+            raise KeyError("row disappeared")
+
+        with pytest.raises(KeyError):
+            self.storage._write_with_uncertain_readback(
+                "transaction update",
+                write,
+                lambda: "unchanged",
+                before_retry=refresh,
+                invalidate=("Transactions",),
+            )
+
+        assert "Transactions" not in self.storage._row_cache
+
+    def test_readback_unexpected_failure_still_invalidates_cache(self) -> None:
+        self.storage._row_cache["Transactions"] = []
+
+        def write() -> None:
+            raise StorageUnavailableError("response lost", retryable=True)
+
+        def readback() -> str:
+            raise KeyError("unreadable response")
+
+        with pytest.raises(KeyError):
+            self.storage._write_with_uncertain_readback(
+                "transaction update",
+                write,
+                readback,
+                invalidate=("Transactions",),
+            )
+
+        assert "Transactions" not in self.storage._row_cache
 
     def test_profile_storage_initializes_tabs_and_headers_by_spreadsheet_id(
         self,
@@ -1159,8 +1269,8 @@ class TestGoogleSheetsStorage:
         with pytest.raises(StorageUnavailableError, match="no success"):
             self.storage.edit_account(child["id"], parent_id=second["id"])
 
-        assert account_sheet.update.call_count == 4
-        assert "Accounts" in self.storage._row_cache
+        assert account_sheet.update.call_count == 2
+        assert "Accounts" not in self.storage._row_cache
         cached_child = next(
             item
             for item in self.storage.list_accounts(active_only=False)
@@ -1729,6 +1839,31 @@ class TestGoogleSheetsStorage:
             ("Client site", "Office"),
             ("Office", "Client site"),
         ]
+
+    def test_batch_append_rejects_duplicate_input_ids_before_writing(self) -> None:
+        worksheet = self.workbook.sheets["Accounts"]
+        worksheet.append_rows = Mock(wraps=worksheet.append_rows)
+
+        with pytest.raises(StorageValidationError, match="Duplicate ID"):
+            self.storage._append_many(
+                "Accounts",
+                [{"id": "duplicate"}, {"id": "duplicate"}],
+            )
+
+        worksheet.append_rows.assert_not_called()
+
+    def test_append_helpers_reject_missing_ids_before_writing(self) -> None:
+        worksheet = self.workbook.sheets["Accounts"]
+        worksheet.append_row = Mock(wraps=worksheet.append_row)
+        worksheet.append_rows = Mock(wraps=worksheet.append_rows)
+
+        with pytest.raises(StorageValidationError, match="ID is required"):
+            self.storage._append("Accounts", {"name": "Missing ID"})
+        with pytest.raises(StorageValidationError, match="ID is required"):
+            self.storage._append_many("Accounts", [{"name": "Missing ID"}])
+
+        worksheet.append_row.assert_not_called()
+        worksheet.append_rows.assert_not_called()
 
     def test_mileage_round_trip_supports_different_return_miles(self) -> None:
         worksheet = self.workbook.sheets["Mileage"]
@@ -2792,7 +2927,7 @@ class TestGoogleSheetsStorage:
         assert [account["id"] for account in accounts] == [created["id"]]
         assert worksheet.append_row.call_count == 1
 
-    def test_failed_append_preserves_the_confirmed_account_cache(self) -> None:
+    def test_failed_append_invalidates_cache(self) -> None:
         worksheet = self.workbook.sheets["Accounts"]
         original_read = worksheet.get_all_values
         worksheet.get_all_values = Mock(wraps=original_read)
@@ -2805,9 +2940,9 @@ class TestGoogleSheetsStorage:
             self.storage.create_account("Checking", "Bank")
 
         assert worksheet.get_all_values.call_count == 2
-        assert "Accounts" in self.storage._row_cache
+        assert "Accounts" not in self.storage._row_cache
         assert self.storage.list_accounts(active_only=False) == []
-        assert worksheet.get_all_values.call_count == 2
+        assert worksheet.get_all_values.call_count == 3
 
     def test_unconfirmed_retryable_append_never_reports_success(self) -> None:
         worksheet = self.workbook.sheets["Accounts"]
@@ -2816,11 +2951,11 @@ class TestGoogleSheetsStorage:
         with pytest.raises(StorageUnavailableError, match="no success"):
             self.storage.create_account("Checking", "Bank")
 
-        assert worksheet.append_row.call_count == 4
+        assert worksheet.append_row.call_count == 2
+        assert "Accounts" not in self.storage._row_cache
         assert self.storage.list_accounts(active_only=False) == []
-        assert "Accounts" in self.storage._row_cache
 
-    def test_failed_batch_append_preserves_profile_caches(self) -> None:
+    def test_failed_batch_append_invalidates_caches(self) -> None:
         account_sheet = self.workbook.sheets["Accounts"]
         category_sheet = self.workbook.sheets["Categories"]
         account_sheet.append_rows = Mock(
@@ -2830,7 +2965,7 @@ class TestGoogleSheetsStorage:
         with pytest.raises(StorageUnavailableError, match="no success"):
             self.storage.ensure_defaults()
 
-        assert "Accounts" in self.storage._row_cache
+        assert "Accounts" not in self.storage._row_cache
         assert "Categories" in self.storage._row_cache
         assert self.storage.list_accounts(active_only=False) == []
         assert self.storage.list_categories() == []
@@ -2888,6 +3023,28 @@ class TestGoogleSheetsStorage:
         )
 
         assert result == {"status": "fully_applied", "count": "1"}
+
+    def test_uncertain_bulk_category_retries_normalized_unchanged_rows(self) -> None:
+        first, _, replacement = self._bulk_transaction_fixture()
+        expected = [
+            item
+            for item in self.storage.list_transactions(_force_refresh=True)
+            if item["id"] == first["id"]
+        ]
+        transaction_sheet = self.workbook.sheets["Transactions"]
+        amount_index = transaction_sheet.rows[0].index("amount")
+        transaction_sheet.rows[1][amount_index] = "1"
+        batch_update = Mock(side_effect=OSError("temporary response lost"))
+        self.workbook.batch_update = batch_update
+
+        with pytest.raises(StorageUnavailableError, match="could not confirm"):
+            self.storage.bulk_change_transaction_category(
+                [first["id"]],
+                expected_transactions=expected,
+                category_id=replacement["id"],
+            )
+
+        assert batch_update.call_count == 2
 
     def test_bulk_mutations_accept_listed_tag_ids_in_freshness_checks(self) -> None:
         first, _, replacement = self._bulk_transaction_fixture()
@@ -3081,86 +3238,6 @@ class TestGoogleSheetsStorage:
         )
         assert self.storage.list_transactions() == []
 
-    def test_bulk_category_change_rejects_row_drift_after_snapshot(self) -> None:
-        first, second, replacement = self._bulk_transaction_fixture()
-        unrelated = self.storage.create_transaction(
-            txn_date="2026-07-20",
-            kind="Expense",
-            amount=3,
-            account_id=first["account_id"],
-            category_id=first["category_id"],
-        )
-        expected = [
-            transaction
-            for transaction in self.storage.list_transactions(_force_refresh=True)
-            if transaction["id"] in {first["id"], second["id"]}
-        ]
-        original_batch = self.workbook.batch_update
-
-        def reorder_before_batch(body: dict[str, object]) -> None:
-            transaction_sheet = self.workbook.sheets["Transactions"]
-            transaction_sheet.rows[1], transaction_sheet.rows[3] = (
-                transaction_sheet.rows[3],
-                transaction_sheet.rows[1],
-            )
-            original_batch(body)
-
-        self.workbook.batch_update = Mock(side_effect=reorder_before_batch)
-
-        with pytest.raises(StorageBulkMutationUncertainError) as raised:
-            self.storage.bulk_change_transaction_category(
-                [first["id"], second["id"]],
-                expected_transactions=expected,
-                category_id=replacement["id"],
-            )
-
-        assert raised.value.outcome == "mixed_ambiguous"
-        assert raised.value.retryable is False
-        assert unrelated["id"] in {
-            transaction["id"] for transaction in self.storage.list_transactions()
-        }
-
-    def test_bulk_delete_rejects_row_drift_after_snapshot(self) -> None:
-        first, second, _ = self._bulk_transaction_fixture()
-        unrelated = self.storage.create_transaction(
-            txn_date="2026-07-20",
-            kind="Expense",
-            amount=3,
-            account_id=first["account_id"],
-            category_id=first["category_id"],
-        )
-        expected = [
-            transaction
-            for transaction in self.storage.list_transactions(_force_refresh=True)
-            if transaction["id"] in {first["id"], second["id"]}
-        ]
-        original_batch = self.workbook.batch_update
-
-        def reorder_before_batch(body: dict[str, object]) -> None:
-            transaction_sheet = self.workbook.sheets["Transactions"]
-            transaction_sheet.rows[1], transaction_sheet.rows[3] = (
-                transaction_sheet.rows[3],
-                transaction_sheet.rows[1],
-            )
-            original_batch(body)
-
-        self.workbook.batch_update = Mock(side_effect=reorder_before_batch)
-
-        with pytest.raises(StorageBulkMutationUncertainError) as raised:
-            self.storage.bulk_delete_transactions(
-                [first["id"], second["id"]],
-                expected_transactions=expected,
-            )
-
-        assert raised.value.outcome == "mixed_ambiguous"
-        assert raised.value.retryable is False
-        assert first["id"] in {
-            transaction["id"] for transaction in self.storage.list_transactions()
-        }
-        assert unrelated["id"] not in {
-            transaction["id"] for transaction in self.storage.list_transactions()
-        }
-
     def test_bulk_mutation_rejects_changed_complete_selection(self) -> None:
         first, second, replacement = self._bulk_transaction_fixture()
         expected = self.storage.list_transactions(_force_refresh=True)
@@ -3246,20 +3323,19 @@ class TestGoogleSheetsStorage:
             side_effect=OSError("temporary response lost before commit")
         )
 
-        with pytest.raises(StorageUnavailableError) as raised:
+        with pytest.raises(StorageUnavailableError, match="could not confirm"):
             self.storage.bulk_change_transaction_category(
                 [first["id"], second["id"]],
                 expected_transactions=expected,
                 category_id=replacement["id"],
             )
 
-        assert raised.value.outcome == "not_applied"
-        assert raised.value.retryable is True
+        assert self.workbook.batch_update.call_count == 2
         assert unrelated["id"] in {
             transaction["id"] for transaction in self.storage.list_transactions()
         }
 
-    def test_uncertain_bulk_delete_response_classifies_not_applied_without_retry(
+    def test_uncertain_bulk_delete_retries_once_when_rows_are_unchanged(
         self,
     ) -> None:
         first, second, _ = self._bulk_transaction_fixture()
@@ -3268,15 +3344,13 @@ class TestGoogleSheetsStorage:
             side_effect=OSError("temporary response lost before commit")
         )
 
-        with pytest.raises(StorageUnavailableError) as raised:
+        with pytest.raises(StorageUnavailableError, match="could not confirm"):
             self.storage.bulk_delete_transactions(
                 [first["id"], second["id"]],
                 expected_transactions=expected,
             )
 
-        assert raised.value.outcome == "not_applied"
-        assert raised.value.retryable is True
-        assert self.workbook.batch_update.call_count == 1
+        assert self.workbook.batch_update.call_count == 2
         assert {
             transaction["id"] for transaction in self.storage.list_transactions()
         } == {first["id"], second["id"]}
@@ -3299,11 +3373,10 @@ class TestGoogleSheetsStorage:
                 category_id=replacement["id"],
             )
 
-        assert raised.value.outcome == "not_applied"
         assert raised.value.retryable is False
-        assert "Do not retry" in str(raised.value)
+        assert "permission denied" in str(raised.value)
 
-    def test_uncertain_bulk_readback_failure_is_ambiguous(self) -> None:
+    def test_uncertain_bulk_readback_failure_is_actionable(self) -> None:
         first, second, replacement = self._bulk_transaction_fixture()
         expected = [
             transaction
@@ -3329,7 +3402,7 @@ class TestGoogleSheetsStorage:
         )
 
         try:
-            with pytest.raises(StorageBulkMutationUncertainError) as raised:
+            with pytest.raises(StorageUnavailableError, match="could not confirm") as raised:
                 self.storage.bulk_change_transaction_category(
                     [first["id"], second["id"]],
                     expected_transactions=expected,
@@ -3338,43 +3411,7 @@ class TestGoogleSheetsStorage:
         finally:
             self.storage._rows = original_rows  # type: ignore[method-assign]
 
-        assert raised.value.outcome == "mixed_ambiguous"
         assert raised.value.retryable is False
-
-    def test_successful_bulk_readback_failure_is_ambiguous(self) -> None:
-        first, second, replacement = self._bulk_transaction_fixture()
-        expected = [
-            transaction
-            for transaction in self.storage.list_transactions(_force_refresh=True)
-            if transaction["id"] in {first["id"], second["id"]}
-        ]
-        original_rows = self.storage._rows
-        transaction_reads = 0
-
-        def fail_second_transaction_read(
-            title: str, *, force_refresh: bool = False
-        ) -> object:
-            nonlocal transaction_reads
-            if title == "Transactions":
-                transaction_reads += 1
-                if transaction_reads == 2:
-                    raise StorageUnavailableError("readback unavailable", retryable=True)
-            return original_rows(title, force_refresh=force_refresh)
-
-        self.storage._rows = fail_second_transaction_read  # type: ignore[method-assign]
-        try:
-            with pytest.raises(StorageBulkMutationUncertainError) as raised:
-                self.storage.bulk_change_transaction_category(
-                    [first["id"], second["id"]],
-                    expected_transactions=expected,
-                    category_id=replacement["id"],
-                )
-        finally:
-            self.storage._rows = original_rows  # type: ignore[method-assign]
-
-        assert raised.value.outcome == "mixed_ambiguous"
-        assert raised.value.retryable is False
-        assert "Transactions" not in self.storage._row_cache
 
     def test_uncertain_bulk_delete_ignores_unselected_rows(self) -> None:
         first, second, _ = self._bulk_transaction_fixture()
@@ -3394,19 +3431,18 @@ class TestGoogleSheetsStorage:
             side_effect=OSError("temporary response lost before commit")
         )
 
-        with pytest.raises(StorageUnavailableError) as raised:
+        with pytest.raises(StorageUnavailableError, match="could not confirm"):
             self.storage.bulk_delete_transactions(
                 [first["id"], second["id"]],
                 expected_transactions=expected,
             )
 
-        assert raised.value.outcome == "not_applied"
-        assert raised.value.retryable is True
+        assert self.workbook.batch_update.call_count == 2
         assert {
             transaction["id"] for transaction in self.storage.list_transactions()
         } == {first["id"], second["id"], unrelated["id"]}
 
-    def test_uncertain_bulk_delete_response_classifies_mixed_without_retry(
+    def test_uncertain_bulk_delete_partial_state_is_actionable(
         self,
     ) -> None:
         first, second, _ = self._bulk_transaction_fixture()
@@ -3419,13 +3455,12 @@ class TestGoogleSheetsStorage:
 
         self.workbook.batch_update = Mock(side_effect=partially_apply_then_timeout)
 
-        with pytest.raises(StorageUnavailableError) as raised:
+        with pytest.raises(StorageUnavailableError, match="could not confirm") as raised:
             self.storage.bulk_delete_transactions(
                 [first["id"], second["id"]],
                 expected_transactions=expected,
             )
 
-        assert raised.value.outcome == "mixed_ambiguous"
         assert raised.value.retryable is False
         assert self.workbook.batch_update.call_count == 1
 

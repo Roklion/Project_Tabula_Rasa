@@ -270,7 +270,9 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         sources = [dict(item) for item in raw_sources]
         st.warning(
             "A mixed-use expense was saved without its ledger projection. "
-            "Select it below and save again to repair the missing projection."
+            "The source is shown for inspection only; saving and automatic "
+            "repair are disabled. Inspect Mixed-use expenses and the ledger "
+            "before taking corrective action."
         )
         transaction_by_id = {
             str(item.get("id") or ""): item for item in transactions
@@ -525,12 +527,19 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             ),
         )
         save_error = st.empty()
-        save_label = (
-            "Repair ledger projection"
-            if source_incomplete
-            else "Save changes" if source else "Save mixed-use expense"
-        )
-        if st.button(save_label, type="primary", key=f"mixed_save_{scope}"):
+        save_label = "Save changes" if source else "Save mixed-use expense"
+        if source_incomplete:
+            st.info(
+                "Inspection only: saving and repair are unavailable. Inspect "
+                "this source in Mixed-use expenses and compare its ledger "
+                "projection before taking corrective action."
+            )
+        if st.button(
+            save_label,
+            type="primary",
+            key=f"mixed_save_{scope}",
+            disabled=source_incomplete,
+        ):
             tag_error = inline_tag_name_error(new_tag_name)
             if (selector_error := tag_selector_error(f"mixed_tags_{scope}")):
                 save_error.error(selector_error)
@@ -677,11 +686,17 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                 edit_id=str(linked["id"]),
             )
         st.divider()
-        st.warning("Deleting this source permanently removes its linked ledger projection. Receipt files remain in Drive as unreferenced files.")
-        confirmed = st.checkbox("I understand this deletion is permanent", key=f"mixed_confirm_delete_{scope}")
-        delete_error = st.empty()
-        if st.button("Permanently delete", type="primary", key=f"mixed_delete_{scope}"):
-            if not confirmed:
-                delete_error.error("Confirm the permanent deletion before continuing.")
-            else:
-                context.confirmed_write("delete_mixed_use_expense", {"id": source["id"], "expected_source": expected_source}, lambda: context.storage.delete_mixed_use_expense(source["id"], expected_source=expected_source), "Mixed-use expense deleted.", on_success=lambda: st.session_state.pop(selected_key, None), report_error=delete_error.error)
+        if source_incomplete:
+            st.info(
+                "Inspection only: deletion is unavailable until the source and "
+                "ledger relationship has been reviewed."
+            )
+        else:
+            st.warning("Deleting this source permanently removes its linked ledger projection. Receipt files remain in Drive as unreferenced files.")
+            confirmed = st.checkbox("I understand this deletion is permanent", key=f"mixed_confirm_delete_{scope}")
+            delete_error = st.empty()
+            if st.button("Permanently delete", type="primary", key=f"mixed_delete_{scope}"):
+                if not confirmed:
+                    delete_error.error("Confirm the permanent deletion before continuing.")
+                else:
+                    context.confirmed_write("delete_mixed_use_expense", {"id": source["id"], "expected_source": expected_source}, lambda: context.storage.delete_mixed_use_expense(source["id"], expected_source=expected_source), "Mixed-use expense deleted.", on_success=lambda: st.session_state.pop(selected_key, None), report_error=delete_error.error)

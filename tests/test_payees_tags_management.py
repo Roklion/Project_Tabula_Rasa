@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 from threading import Event, Thread
 
 from tabula_rasa.storage import (
-    StorageBulkMutationUncertainError,
     StorageConflictError,
     StorageUnavailableError,
     StorageValidationError,
@@ -105,96 +105,142 @@ def test_management_expected_snapshot_rejects_stale_merge(default_storage) -> No
         default_storage.merge_tags(target["id"], [source["id"]], expected_tags=expected)
 
 
+def test_tag_merge_confirms_committed_write_without_retry(default_storage, monkeypatch) -> None:
+    target = default_storage.create_tag("Target")
+    source = default_storage.create_tag("Source")
+    original_batch_update = default_storage._workbook.batch_update
+    calls = 0
+
+    def commit_then_lose_response(body: object) -> None:
+        nonlocal calls
+        original_batch_update(body)
+        calls += 1
+        raise OSError("response lost after commit")
+
+    monkeypatch.setattr(
+        default_storage._workbook, "batch_update", commit_then_lose_response
+    )
+
+    result = default_storage.merge_tags(target["id"], [source["id"]])
+
+    assert result == {"status": "fully_applied", "count": "1"}
+    assert calls == 1
+    assert source["id"] not in {
+        item["id"] for item in default_storage.list_tags(active_only=False)
+    }
+
+
+def test_tag_removal_retries_once_then_invalidates_on_unchanged_failure(
+    default_storage, monkeypatch
+) -> None:
+    tag = default_storage.create_tag("Unused")
+    batch_update = Mock(side_effect=OSError("temporary response lost"))
+    monkeypatch.setattr(default_storage._workbook, "batch_update", batch_update)
+
+    with pytest.raises(StorageUnavailableError, match="could not confirm"):
+        default_storage.remove_tag(tag["id"])
+
+    assert batch_update.call_count == 2
+    assert "Tags" not in default_storage._row_cache
+
+
+def test_tag_removal_rebuilds_row_after_shift_before_retry(default_storage, monkeypatch) -> None:
+    tag = default_storage.create_tag("Shifted")
+    worksheet = default_storage._worksheet("Tags")
+    original_batch_update = default_storage._workbook.batch_update
+    calls = 0
+
+    def shift_then_lose_response(body: object) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            worksheet.rows.insert(1, list(worksheet.rows[1]))
+            worksheet.rows[1][0] = "inserted-before-retry"
+            raise OSError("temporary response lost")
+        original_batch_update(body)
+
+    monkeypatch.setattr(
+        default_storage._workbook, "batch_update", shift_then_lose_response
+    )
+
+    default_storage.remove_tag(tag["id"])
+
+    assert calls == 2
+    assert tag["id"] not in {
+        item["id"] for item in default_storage.list_tags(active_only=False)
+    }
+    assert worksheet.rows[1][0] == "inserted-before-retry"
+
+
+def test_tag_removal_rechecks_references_after_retry_backoff(default_storage) -> None:
+    account, category = _ledger_setup(default_storage)
+    tag = default_storage.create_tag("Referenced during retry")
+    calls = 0
+
+    def add_reference_during_backoff(_: float) -> None:
+        default_storage.create_transaction(
+            txn_date="2026-01-01",
+            kind="Expense",
+            amount="10",
+            account_id=account["id"],
+            category_id=category["id"],
+            tag_ids=[tag["id"]],
+        )
+
+    def fail_once(_: object) -> None:
+        nonlocal calls
+        calls += 1
+        raise OSError("temporary response lost")
+
+    default_storage._sleeper = add_reference_during_backoff
+    default_storage._workbook.batch_update = fail_once
+
+    with pytest.raises(StorageConflictError, match="became referenced"):
+        default_storage.remove_tag(tag["id"])
+
+    assert calls == 1
+    assert tag["id"] in {
+        item["id"] for item in default_storage.list_tags(active_only=False)
+    }
+
+
+def test_tag_merge_partial_write_stops_without_retry(default_storage, monkeypatch) -> None:
+    account, category = _ledger_setup(default_storage)
+    target = default_storage.create_tag("Target")
+    source = default_storage.create_tag("Source")
+    default_storage.create_transaction(
+        txn_date="2026-01-01",
+        kind="Expense",
+        amount="10",
+        account_id=account["id"],
+        category_id=category["id"],
+        tag_ids=[source["id"]],
+    )
+    original_batch_update = default_storage._workbook.batch_update
+    calls = 0
+
+    def partial_then_lose_response(body: dict[str, object]) -> None:
+        nonlocal calls
+        calls += 1
+        original_batch_update({"requests": body["requests"][:1]})
+        raise OSError("response lost after partial application")
+
+    monkeypatch.setattr(
+        default_storage._workbook, "batch_update", partial_then_lose_response
+    )
+
+    with pytest.raises(StorageUnavailableError, match="could not confirm"):
+        default_storage.merge_tags(target["id"], [source["id"]])
+
+    assert calls == 1
+    assert "Tags" not in default_storage._row_cache
+
+
 def test_expected_management_snapshot_preserves_falsy_values() -> None:
     current = {"tag-1": {"id": "tag-1", "active": "FALSE", "count": "0"}}
     expected = {"id": "tag-1", "active": False, "count": 0}
 
     GoogleSheetsStorage._assert_expected_managed_records(current, expected)
-
-
-def test_non_applied_management_batch_is_classified(default_storage, monkeypatch) -> None:
-    tag = default_storage.create_tag("Unused")
-
-    def fail(_requests):
-        raise StorageBulkMutationUncertainError(
-            "temporary", outcome="not_applied", retryable=True
-        )
-
-    monkeypatch.setattr(default_storage, "_batch_update_spreadsheet", fail)
-    with pytest.raises(StorageBulkMutationUncertainError) as raised:
-        default_storage.remove_tag(tag["id"])
-    assert raised.value.outcome == "not_applied"
-    assert raised.value.retryable is True
-
-
-def test_non_applied_tag_merge_is_retryable(default_storage, monkeypatch) -> None:
-    target = default_storage.create_tag("Target")
-    source = default_storage.create_tag("Source")
-
-    def fail(_requests):
-        raise StorageUnavailableError("temporary", retryable=True)
-
-    monkeypatch.setattr(default_storage, "_batch_update_spreadsheet", fail)
-    with pytest.raises(StorageBulkMutationUncertainError) as raised:
-        default_storage.merge_tags(target["id"], [source["id"]])
-    assert raised.value.outcome == "not_applied"
-    assert raised.value.retryable is True
-
-
-def test_confirmed_tag_merge_readback_failure_is_uncertain(default_storage, monkeypatch) -> None:
-    target = default_storage.create_tag("Target")
-    source = default_storage.create_tag("Source")
-    original_snapshot = default_storage._snapshot
-    snapshot_calls = 0
-
-    def fail_readback(titles, *, force_refresh=False):
-        nonlocal snapshot_calls
-        snapshot_calls += 1
-        if snapshot_calls >= 2:
-            raise StorageUnavailableError("readback unavailable", retryable=True)
-        return original_snapshot(titles, force_refresh=force_refresh)
-
-    monkeypatch.setattr(default_storage, "_snapshot", fail_readback)
-    with pytest.raises(StorageBulkMutationUncertainError) as raised:
-        default_storage.merge_tags(target["id"], [source["id"]])
-    assert raised.value.outcome == "mixed_ambiguous"
-    assert raised.value.retryable is False
-
-
-def test_confirmed_tag_removal_readback_failure_is_uncertain(default_storage, monkeypatch) -> None:
-    tag = default_storage.create_tag("Unused")
-    original_snapshot = default_storage._snapshot
-    snapshot_calls = 0
-
-    def fail_readback(titles, *, force_refresh=False):
-        nonlocal snapshot_calls
-        snapshot_calls += 1
-        if snapshot_calls >= 2:
-            raise StorageUnavailableError("readback unavailable", retryable=True)
-        return original_snapshot(titles, force_refresh=force_refresh)
-
-    monkeypatch.setattr(default_storage, "_snapshot", fail_readback)
-    with pytest.raises(StorageBulkMutationUncertainError) as raised:
-        default_storage.remove_tag(tag["id"])
-    assert raised.value.outcome == "mixed_ambiguous"
-    assert raised.value.retryable is False
-
-
-def test_partial_source_delete_is_ambiguous_not_retryable(default_storage, monkeypatch) -> None:
-    first = default_storage.create_tag("First")
-    second = default_storage.create_tag("Second")
-    target = default_storage.create_tag("Target")
-
-    def partial_delete(_requests):
-        row = default_storage._find_row("Tags", first["id"])
-        default_storage._worksheet("Tags").delete_rows(row.row_number)
-        raise StorageUnavailableError("response lost", retryable=True)
-
-    monkeypatch.setattr(default_storage, "_batch_update_spreadsheet", partial_delete)
-    with pytest.raises(StorageBulkMutationUncertainError) as raised:
-        default_storage.merge_tags(target["id"], [first["id"], second["id"]])
-    assert raised.value.outcome == "mixed_ambiguous"
-    assert raised.value.retryable is False
 
 
 def test_repeated_merge_with_original_snapshot_converges(default_storage) -> None:
@@ -404,45 +450,6 @@ def test_mileage_import_cannot_interleave_management_remove(default_storage) -> 
     management.join(timeout=5)
     assert not management.is_alive()
     assert tag["id"] not in {item["id"] for item in default_storage.list_tags(active_only=False)}
-
-
-def test_removal_row_gone_with_new_reference_is_ambiguous(default_storage, monkeypatch) -> None:
-    tag = default_storage.create_tag("Race")
-
-    def delete_and_reference(_requests):
-        default_storage.create_mileage_trip(
-            trip_date="2026-01-01", miles="2", start_location="A", destination="B",
-            business_purpose="Race", vehicle="Car", tag_ids=[tag["id"]],
-        )
-        row = default_storage._find_row("Tags", tag["id"])
-        default_storage._worksheet("Tags").delete_rows(row.row_number)
-        raise StorageUnavailableError("response lost", retryable=True)
-
-    monkeypatch.setattr(default_storage, "_batch_update_spreadsheet", delete_and_reference)
-    with pytest.raises(StorageBulkMutationUncertainError) as raised:
-        default_storage.remove_tag(tag["id"])
-    assert raised.value.outcome == "mixed_ambiguous"
-    assert raised.value.retryable is False
-
-
-def test_payee_removal_row_gone_with_new_reference_is_ambiguous(default_storage, monkeypatch) -> None:
-    account, category = _ledger_setup(default_storage)
-    payee = default_storage.create_payee("Race payee")
-
-    def delete_and_reference(_requests):
-        default_storage.create_transaction(
-            txn_date="2026-01-01", kind="Expense", amount="2",
-            account_id=account["id"], category_id=category["id"], payee_id=payee["id"],
-        )
-        row = default_storage._find_row("Payees", payee["id"])
-        default_storage._worksheet("Payees").delete_rows(row.row_number)
-        raise StorageUnavailableError("response lost", retryable=True)
-
-    monkeypatch.setattr(default_storage, "_batch_update_spreadsheet", delete_and_reference)
-    with pytest.raises(StorageBulkMutationUncertainError) as raised:
-        default_storage.remove_payee(payee["id"])
-    assert raised.value.outcome == "mixed_ambiguous"
-    assert raised.value.retryable is False
 
 
 def test_transactions_exposes_profile_local_management_tab() -> None:

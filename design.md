@@ -489,7 +489,8 @@ Rationale, its stable source ID, and its stable linked transaction ID. The
 linked row in `Transactions` remains an ordinary Expense projection containing
 only the allocated business amount and generic `source_type`/`source_id`
 provenance. Source-aware create, edit, and delete operations preserve this
-relationship, use fresh reads, and classify uncertain multi-record writes;
+relationship, use fresh reads, and confirm uncertain multi-record writes with
+one readback and at most one retry when the pair is clearly unchanged;
 they do not expose a mixed-use page or workflow in Phase A. Current-format
 backups include the source collection and reject orphaned or inconsistent
 relationships; older backup formats restore with no mixed-use records.
@@ -498,9 +499,11 @@ The Transactions page also provides a **Mixed-use expenses** tab. Its
 profile-scoped source editor exposes normal Expense fields plus Total Expense,
 Business Use %, and required Allocation Rationale. A live, side-effect-free
 Ledger Result preview uses the canonical Decimal allocation calculation; Save
-is the only persistence action and there is no Draft mode. Sources can be
-edited or permanently deleted only from this tab, preserving stable IDs and
-updating/removing the existing projection.
+is the only persistence action and there is no Draft mode. Complete sources
+can be edited or permanently deleted only from this tab, preserving stable IDs
+and updating/removing the existing projection. A source without its linked
+projection is inspection-only; Save and permanent deletion are unavailable
+until the source and ledger relationship has been reviewed.
 
 The linked projection remains visible in the ordinary ledger at the allocated
 amount and is marked **Mixed-use**. It is read-only there; edit, delete, copy,
@@ -519,7 +522,9 @@ invalid scope clears the selection and edit baseline, and a new table
 generation prevents an old table selection from being replayed. The tab opens
 in clearly labeled **Add mixed-use expense** mode. Selecting a row changes to
 **Edit mixed-use expense**; **Add new mixed-use expense** clears the selection
-and returns to Add mode.
+and returns to Add mode. If a source exists without its linked ledger
+projection, it is shown for inspection only: Save and permanent deletion are
+unavailable until the source and ledger relationship has been reviewed.
 
 #### Add transaction contract
 
@@ -678,8 +683,9 @@ Removal is permanent and permitted only when a fresh reference check finds no
 uses. A referenced Payee or Tag is not silently unassigned; the page reports
 the reference count and directs the user to unassign it through the relevant
 transaction or mileage editor, or to merge it. Confirmed writes invalidate only
-the affected profile-local caches. Uncertain batch responses are classified
-after a fresh read and are never blindly repeated.
+the affected profile-local caches. Uncertain batch responses receive one fresh
+readback; only a clearly unchanged operation may be retried once, while a
+partial or unreadable state invalidates caches and gives inspection guidance.
 
 ### Mileage
 
