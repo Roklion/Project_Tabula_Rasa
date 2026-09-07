@@ -1445,7 +1445,6 @@ class GoogleSheetsStorage:
         *,
         before_retry: Callable[[], None] | None = None,
         invalidate: Iterable[str] = (),
-        verify_success: bool = False,
     ) -> None:
         """Perform one mutation, confirming uncertain responses before retrying.
 
@@ -1504,44 +1503,11 @@ class GoogleSheetsStorage:
                     _mutation_guidance(operation), retryable=False
                 ) from error
             else:
-                if verify_success:
-                    try:
-                        state = readback()
-                    except (StorageError, OSError) as read_error:
-                        for title in invalidate:
-                            self._invalidate(title)
-                        raise StorageUnavailableError(
-                            _mutation_guidance(operation), retryable=False
-                        ) from read_error
-                    if state != "applied":
-                        for title in invalidate:
-                            self._invalidate(title)
-                        raise StorageUnavailableError(
-                            _mutation_guidance(operation), retryable=False
-                        )
                 for title in invalidate:
                     self._invalidate(title)
                 return
 
-    def _append(
-        self,
-        title: str,
-        record: Mapping[str, Any],
-        *,
-        before_retry: Callable[[], None] | None = None,
-    ) -> None:
-        if before_retry is None:
-            before_retry = {
-                "Accounts": lambda: self._validate_account_append_retry(record),
-                "Categories": lambda: self._validate_category_append_retry(record),
-                "Transactions": lambda: self._validate_transaction_append_retry(
-                    record
-                ),
-                "MixedUseExpenses": lambda: self._validate_mixed_use_append_retry(
-                    record
-                ),
-                "Mileage": lambda: self._validate_mileage_append_retry(record),
-            }.get(title)
+    def _append(self, title: str, record: Mapping[str, Any]) -> None:
         headers = self._headers(title)
         values = [str(record.get(header, "")) for header in headers]
         worksheet = self._worksheet(title)
@@ -1567,48 +1533,26 @@ class GoogleSheetsStorage:
                 retry_safe=False,
             ),
             state,
-            before_retry=before_retry,
             invalidate=(title,),
         )
 
-    def _append_many(
-        self,
-        title: str,
-        records: Iterable[Mapping[str, Any]],
-        *,
-        before_retry: Callable[[], None] | None = None,
-        check_references: bool = True,
-    ) -> None:
-        # Preserve a caller-owned list so an import can remove rows that became
-        # duplicates while the uncertain write was being confirmed.
-        records = records if isinstance(records, list) else list(records)
+    def _append_many(self, title: str, records: Iterable[Mapping[str, Any]]) -> None:
+        records = list(records)
         if not records:
             return
         headers = self._headers(title)
+        record_ids = [
+            _clean_text(record.get("id"), "ID") for record in records
+        ]
+        if len(record_ids) != len(set(record_ids)):
+            raise StorageValidationError(f"Duplicate ID detected in {title}")
+        values = [
+            [str(record.get(header, "")) for header in headers] for record in records
+        ]
         worksheet = self._worksheet(title)
-
-        def batch_values() -> tuple[list[list[str]], set[str]]:
-            record_ids = [
-                _clean_text(record.get("id"), "ID") for record in records
-            ]
-            if len(record_ids) != len(set(record_ids)):
-                raise StorageValidationError(f"Duplicate ID detected in {title}")
-            return (
-                [
-                    [str(record.get(header, "")) for header in headers]
-                    for record in records
-                ],
-                set(record_ids),
-            )
-
-        def refresh_before_retry() -> None:
-            if before_retry is not None:
-                before_retry()
-            if check_references:
-                self._validate_append_batch_references(title, records)
+        record_id_set = set(record_ids)
 
         def state() -> str:
-            values, record_id_set = batch_values()
             rows = self._rows(title, force_refresh=True)
             by_id: dict[str, dict[str, str]] = {}
             for row in rows:
@@ -1631,13 +1575,10 @@ class GoogleSheetsStorage:
         self._write_with_confirmation(
             f"{title} batch append",
             lambda: self._api(
-                lambda: worksheet.append_rows(
-                    batch_values()[0], value_input_option="RAW"
-                ),
+                lambda: worksheet.append_rows(values, value_input_option="RAW"),
                 retry_safe=False,
             ),
             state,
-            before_retry=refresh_before_retry,
             invalidate=(title,),
         )
 
@@ -1670,21 +1611,10 @@ class GoogleSheetsStorage:
                 raise StorageConflictError(
                     f"The {title} row changed while the write was being retried."
                 )
-            if title in {"Accounts", "Categories", "Payees", "Tags"}:
-                self._validate_managed_edit_retry(title, record_id, record)
-            elif title == "Transactions":
-                self._validate_transaction_retry_references(record, original)
-                self._reject_receipt_ownership_conflict(
-                    record.get("receipt_references", ""),
-                    transaction_id=record_id,
-                )
-            elif title == "Mileage":
-                self._validate_mileage_retry_references(record, original)
             current_row = latest
 
         self._write_with_confirmation(
-            f"{title} update", write, state, before_retry=refresh,
-            invalidate=(title,), verify_success=True,
+            f"{title} update", write, state, before_retry=refresh, invalidate=(title,)
         )
 
     def _replace_rows(
@@ -1783,7 +1713,6 @@ class GoogleSheetsStorage:
             state,
             before_retry=refresh,
             invalidate=(title,),
-            verify_success=True,
         )
 
     def _replace_rows_atomically(
@@ -2079,21 +2008,9 @@ class GoogleSheetsStorage:
             )
             for transaction in current_by_id.values():
                 self._reject_mixed_use_projection(transaction)
-            categories = self._category_lookup(force_refresh=True)
-            refreshed_target = categories.get(category_id)
-            refreshed_kinds = {transaction["kind"] for transaction in current_by_id.values()}
-            if (
-                refreshed_target is None
-                or len(refreshed_kinds) != 1
-                or refreshed_target["kind"] != next(iter(refreshed_kinds))
-            ):
-                raise StorageConflictError(
-                    "The target category changed while the category update was being retried."
-                )
 
         self._write_with_confirmation(
-            "category change", write, state, before_retry=refresh,
-            invalidate=("Transactions",), verify_success=True,
+            "category change", write, state, before_retry=refresh, invalidate=("Transactions",)
         )
         return {"status": "fully_applied", "count": str(len(pending_by_id))}
 
@@ -2163,7 +2080,6 @@ class GoogleSheetsStorage:
             self._write_with_confirmation(
                 "transaction deletion", write, state,
                 before_retry=refresh, invalidate=("Transactions",),
-                verify_success=True,
             )
             return {"status": "fully_applied", "count": str(len(selected_rows))}
 
@@ -2405,9 +2321,6 @@ class GoogleSheetsStorage:
                 raise StorageConflictError(
                     "Category kind cannot change while used by a mixed-use expense"
                 )
-            self._validate_managed_edit_retry(
-                "Categories", normalized_category_id, updated
-            )
         if kind != updated["kind"]:
             reject_mixed_use_kind_change()
             current = self._find_row("Categories", normalized_category_id)
@@ -2504,22 +2417,6 @@ class GoogleSheetsStorage:
 
         def refresh() -> None:
             nonlocal current_row
-            existing_categories = self.list_categories(_force_refresh=True)
-            if any(
-                str(category.get("parent_id") or "").strip() == category_id
-                for category in existing_categories
-            ):
-                raise StorageConflictError(
-                    "That category has child categories and cannot be deleted"
-                )
-            transactions = self.list_transactions(_force_refresh=True)
-            if any(
-                str(transaction.get("category_id") or "").strip() == category_id
-                for transaction in transactions
-            ):
-                raise StorageConflictError(
-                    "That category has transactions and cannot be deleted"
-                )
             mixed_use_sources = self._rows("MixedUseExpenses", force_refresh=True)
             if any(
                 _clean_text(row.values.get("category_id"), "Category") == category_id
@@ -2539,7 +2436,7 @@ class GoogleSheetsStorage:
         refresh()
         self._write_with_confirmation(
             "category deletion", write, state, before_retry=refresh,
-            invalidate=("Categories",), verify_success=True,
+            invalidate=("Categories",),
         )
 
     def list_payees(
@@ -2582,14 +2479,7 @@ class GoogleSheetsStorage:
                 "active": "TRUE" if active else "FALSE",
                 "created_at": _utc_now(),
             }
-            def recheck_payee_name() -> None:
-                if any(
-                    normalize_payee_name(item["name"]) == key
-                    for item in self.list_payees(_force_refresh=True)
-                ):
-                    raise StorageConflictError("That payee already exists")
-
-            self._append("Payees", record, before_retry=recheck_payee_name)
+            self._append("Payees", record)
             return record
 
     def _ensure_payee_names(
@@ -2754,7 +2644,6 @@ class GoogleSheetsStorage:
             state,
             before_retry=before_retry,
             invalidate=invalidate,
-            verify_success=True,
         )
 
     def _managed_update_request(
@@ -2921,16 +2810,6 @@ class GoogleSheetsStorage:
                     record_id not in current_payees
                     or current_payees[record_id] != row.values
                     for record_id, row in payee_rows.items()
-                ):
-                    return False
-                if any(
-                    _clean_text(row.values.get("payee_id"), "Payee") in source_ids
-                    for record_id, row in current_transactions.items()
-                    if record_id not in transaction_updates
-                ) or any(
-                    _clean_text(row.values.get("payee_id"), "Payee") in source_ids
-                    for record_id, row in current_mixed.items()
-                    if record_id not in mixed_updates
                 ):
                     return False
                 return all(
@@ -3141,14 +3020,7 @@ class GoogleSheetsStorage:
                 "active": "TRUE" if active else "FALSE",
                 "created_at": _utc_now(),
             }
-            def recheck_tag_name() -> None:
-                if any(
-                    normalize_tag_name(item["name"]) == key
-                    for item in self.list_tags(_force_refresh=True)
-                ):
-                    raise StorageConflictError("That tag already exists")
-
-            self._append("Tags", record, before_retry=recheck_tag_name)
+            self._append("Tags", record)
             return record
 
     def edit_tag(
@@ -3325,20 +3197,6 @@ class GoogleSheetsStorage:
                     record_id not in current_tags
                     or current_tags[record_id].values != row.values
                     for record_id, row in tag_rows.items()
-                ):
-                    return False
-                if any(
-                    any(
-                        item in source_ids
-                        for item in _normalize_tag_ids(row.values.get("tag_ids", ""))
-                    )
-                    for title, current_rows in (
-                        ("Transactions", current_transactions),
-                        ("Mileage", current_mileage),
-                        ("MixedUseExpenses", current_sources),
-                    )
-                    for record_id, row in current_rows.items()
-                    if f"{title}:{record_id}" not in update_rows
                 ):
                     return False
                 for title, row, _ in update_rows.values():
@@ -3913,296 +3771,6 @@ class GoogleSheetsStorage:
         decode_receipt_references(source.get("receipt_references", ""))
         _iso_date(source.get("txn_date"))
 
-    def _validate_transaction_retry_references(
-        self,
-        transaction: Mapping[str, Any],
-        original: Mapping[str, Any],
-        *,
-        accounts: Mapping[str, Mapping[str, Any]] | None = None,
-        categories: Mapping[str, Mapping[str, str]] | None = None,
-        payees: Mapping[str, Mapping[str, str]] | None = None,
-        tags: Mapping[str, Mapping[str, str]] | None = None,
-    ) -> None:
-        accounts = accounts or self._account_lookup(force_refresh=True)
-        categories = categories or self._category_lookup(force_refresh=True)
-        payees = payees or self._payee_lookup(force_refresh=True)
-        tags = tags or self._tag_lookup(force_refresh=True)
-        account_id = _clean_text(transaction.get("account_id"), "Account", required=True)
-        if account_id not in accounts:
-            raise StorageValidationError("Source account does not exist")
-        original_account_id = _clean_text(original.get("account_id"), "Account")
-        if (
-            not _as_bool(accounts[account_id]["active"], "Account active")
-            and account_id != original_account_id
-        ):
-            raise StorageValidationError("Source account is inactive")
-        kind = _clean_text(transaction.get("kind"), "Transaction kind", required=True).title()
-        category_id = _clean_text(transaction.get("category_id"), "Category")
-        to_account_id = _clean_text(
-            transaction.get("to_account_id"), "Destination account"
-        )
-        if kind == "Transfer":
-            if to_account_id not in accounts:
-                raise StorageValidationError("Destination account does not exist")
-            original_to_account_id = _clean_text(
-                original.get("to_account_id"), "Destination account"
-            )
-            if (
-                not _as_bool(accounts[to_account_id]["active"], "Account active")
-                and to_account_id != original_to_account_id
-            ):
-                raise StorageValidationError("Destination account is inactive")
-            if category_id:
-                raise StorageValidationError("Transfers cannot have a category")
-        else:
-            if to_account_id:
-                raise StorageValidationError(
-                    "Only transfers can have a destination account"
-                )
-            if category_id not in categories:
-                raise StorageValidationError("Category does not exist")
-            if categories[category_id]["kind"] != kind:
-                raise StorageValidationError("Category kind does not match transaction kind")
-        payee_id = _clean_text(transaction.get("payee_id"), "Payee")
-        if payee_id and payee_id not in payees:
-            raise StorageValidationError("Payee does not exist")
-        original_tag_ids = _normalize_tag_ids(original.get("tag_ids", ""))
-        for tag_id in _normalize_tag_ids(transaction.get("tag_ids", "")):
-            tag = tags.get(tag_id)
-            if tag is None:
-                raise StorageValidationError("Tag does not exist")
-            if not _as_bool(tag["active"], "Tag active") and tag_id not in original_tag_ids:
-                raise StorageValidationError("Tag is inactive")
-        decode_receipt_references(transaction.get("receipt_references", ""))
-
-    def _validate_mileage_retry_references(
-        self,
-        trip: Mapping[str, Any],
-        original: Mapping[str, Any],
-        *,
-        tags: Mapping[str, Mapping[str, str]] | None = None,
-    ) -> None:
-        tags = tags or self._tag_lookup(force_refresh=True)
-        original_tag_ids = _normalize_tag_ids(original.get("tag_ids", ""))
-        for tag_id in _normalize_tag_ids(trip.get("tag_ids", "")):
-            tag = tags.get(tag_id)
-            if tag is None:
-                raise StorageValidationError("Tag does not exist")
-            if not _as_bool(tag["active"], "Tag active") and tag_id not in original_tag_ids:
-                raise StorageValidationError("Tag is inactive")
-
-    def _validate_account_append_retry(self, account: Mapping[str, Any]) -> None:
-        accounts = self.list_accounts(active_only=False, _force_refresh=True)
-        account_name = _clean_text(account.get("name"), "Account name", required=True)
-        if any(
-            existing["name"].casefold() == account_name.casefold()
-            for existing in accounts
-        ):
-            raise StorageConflictError("Account names must be unique")
-        _validate_hierarchy_records(
-            [*accounts, account],
-            compatibility_field="classification",
-            item_label="Account",
-        )
-
-    def _validate_append_batch_references(
-        self, title: str, records: Iterable[Mapping[str, Any]]
-    ) -> None:
-        records = list(records)
-        if title == "Accounts":
-            accounts = self.list_accounts(active_only=False, _force_refresh=True)
-            names = {item["name"].casefold() for item in accounts}
-            for record in records:
-                name = _clean_text(record.get("name"), "Account name", required=True)
-                if name.casefold() in names:
-                    raise StorageConflictError("Account names must be unique")
-                names.add(name.casefold())
-            _validate_hierarchy_records(
-                [*accounts, *records],
-                compatibility_field="classification",
-                item_label="Account",
-            )
-        elif title == "Categories":
-            categories = self.list_categories(_force_refresh=True)
-            names = {
-                (item["name"].casefold(), item["kind"]) for item in categories
-            }
-            for record in records:
-                name = _clean_text(record.get("name"), "Category name", required=True)
-                kind = _clean_text(
-                    record.get("kind"), "Category kind", required=True
-                ).title()
-                if (name.casefold(), kind) in names:
-                    raise StorageConflictError("That category already exists")
-                names.add((name.casefold(), kind))
-            _validate_hierarchy_records(
-                [*categories, *records],
-                compatibility_field="kind",
-                item_label="Category",
-            )
-        elif title == "Payees":
-            names = {
-                normalize_payee_name(item["name"])
-                for item in self.list_payees(_force_refresh=True)
-            }
-            for record in records:
-                key = normalize_payee_name(record.get("name", ""))
-                if key in names:
-                    raise StorageConflictError("That payee already exists")
-                names.add(key)
-        elif title == "Transactions":
-            accounts = self._account_lookup(force_refresh=True)
-            categories = self._category_lookup(force_refresh=True)
-            payees = self._payee_lookup(force_refresh=True)
-            tags = self._tag_lookup(force_refresh=True)
-            for record in records:
-                self._validate_transaction_retry_references(
-                    record,
-                    {},
-                    accounts=accounts,
-                    categories=categories,
-                    payees=payees,
-                    tags=tags,
-                )
-        elif title == "Mileage":
-            tags = self._tag_lookup(force_refresh=True)
-            for record in records:
-                self._validate_mileage_retry_references(record, {}, tags=tags)
-        elif title == "MixedUseExpenses":
-            accounts = self._account_lookup(force_refresh=True)
-            categories = self._category_lookup(force_refresh=True)
-            payees = self._payee_lookup(force_refresh=True)
-            for record in records:
-                self._validate_mixed_use_append_retry(
-                    record,
-                    accounts=accounts,
-                    categories=categories,
-                    payees=payees,
-                )
-
-    def _validate_managed_edit_retry(
-        self, title: str, record_id: str, record: Mapping[str, Any]
-    ) -> None:
-        if title == "Accounts":
-            accounts = self.list_accounts(active_only=False, _force_refresh=True)
-            if any(
-                item["id"] != record_id
-                and item["name"].casefold()
-                == _clean_text(record.get("name"), "Account name", required=True).casefold()
-                for item in accounts
-            ):
-                raise StorageConflictError("Account names must be unique")
-            _validate_hierarchy_records(
-                [record if item["id"] == record_id else item for item in accounts],
-                compatibility_field="classification",
-                item_label="Account",
-            )
-        elif title == "Categories":
-            categories = self.list_categories(_force_refresh=True)
-            name = _clean_text(record.get("name"), "Category name", required=True)
-            kind = _clean_text(record.get("kind"), "Category kind", required=True).title()
-            if any(
-                item["id"] != record_id
-                and item["name"].casefold() == name.casefold()
-                and item["kind"] == kind
-                for item in categories
-            ):
-                raise StorageConflictError("That category already exists")
-            _validate_hierarchy_records(
-                [record if item["id"] == record_id else item for item in categories],
-                compatibility_field="kind",
-                item_label="Category",
-            )
-        elif title == "Payees":
-            name = normalize_payee_name(record.get("name", ""))
-            if any(
-                item["id"] != record_id
-                and normalize_payee_name(item["name"]) == name
-                for item in self.list_payees(_force_refresh=True)
-            ):
-                raise StorageConflictError("That payee already exists")
-        elif title == "Tags":
-            name = normalize_tag_name(record.get("name", ""))
-            if any(
-                item["id"] != record_id
-                and normalize_tag_name(item["name"]) == name
-                for item in self.list_tags(_force_refresh=True)
-            ):
-                raise StorageConflictError("That tag already exists")
-
-    def _validate_payee_append_retry(self, payee: Mapping[str, Any]) -> None:
-        key = normalize_payee_name(payee.get("name", ""))
-        if any(
-            normalize_payee_name(item["name"])
-            == key
-            for item in self.list_payees(_force_refresh=True)
-        ):
-            raise StorageConflictError("That payee already exists")
-
-    def _validate_category_append_retry(self, category: Mapping[str, Any]) -> None:
-        categories = self.list_categories(_force_refresh=True)
-        category_name = _clean_text(
-            category.get("name"), "Category name", required=True
-        )
-        category_kind = _clean_text(
-            category.get("kind"), "Category kind", required=True
-        ).title()
-        if any(
-            existing["name"].casefold() == category_name.casefold()
-            and existing["kind"] == category_kind
-            for existing in categories
-        ):
-            raise StorageConflictError("That category already exists")
-        _validate_hierarchy_records(
-            [*categories, category],
-            compatibility_field="kind",
-            item_label="Category",
-        )
-
-    def _validate_transaction_append_retry(
-        self, transaction: Mapping[str, Any]
-    ) -> None:
-        self._validate_transaction_retry_references(transaction, {})
-        self._reject_receipt_ownership_conflict(
-            transaction.get("receipt_references", ""),
-            transaction_id=_clean_text(transaction.get("id"), "ID"),
-        )
-
-    def _validate_mileage_append_retry(self, trip: Mapping[str, Any]) -> None:
-        self._validate_mileage_retry_references(trip, {})
-
-    def _validate_mixed_use_append_retry(
-        self,
-        source: Mapping[str, Any],
-        *,
-        accounts: Mapping[str, Mapping[str, Any]] | None = None,
-        categories: Mapping[str, Mapping[str, str]] | None = None,
-        payees: Mapping[str, Mapping[str, str]] | None = None,
-    ) -> None:
-        self._validate_mixed_use_references(
-            source,
-            accounts=accounts,
-            categories=categories,
-            payees=payees,
-        )
-        accounts = accounts or self._account_lookup(force_refresh=True)
-        account_id = _clean_text(source.get("account_id"), "Account", required=True)
-        if not _as_bool(accounts[account_id]["active"], "Account active"):
-            raise StorageValidationError("Source account is inactive")
-        tags = self._tag_lookup(force_refresh=True)
-        for tag_id in _normalize_tag_ids(source.get("tag_ids", "")):
-            tag = tags.get(tag_id)
-            if tag is None:
-                raise StorageValidationError("Tag does not exist")
-            if not _as_bool(tag["active"], "Tag active"):
-                raise StorageValidationError("Tag is inactive")
-        self._reject_receipt_ownership_conflict(
-            source.get("receipt_references", ""),
-            transaction_id=_clean_text(
-                source.get("linked_transaction_id"), "Linked transaction ID"
-            ),
-        )
-
     def _reject_receipt_ownership_conflict(
         self,
         references: Any,
@@ -4715,39 +4283,6 @@ class GoogleSheetsStorage:
                 raise StorageConflictError(
                     "The mixed-use expense changed while the edit was being retried."
                 )
-            accounts = self._account_lookup(force_refresh=True)
-            categories = self._category_lookup(force_refresh=True)
-            payees = self._payee_lookup(force_refresh=True)
-            self._validate_mixed_use_references(
-                updated_source,
-                accounts=accounts,
-                categories=categories,
-                payees=payees,
-            )
-            account_id = _clean_text(
-                updated_source.get("account_id"), "Account", required=True
-            )
-            original_account_id = _clean_text(
-                current_transaction.get("account_id"), "Account"
-            )
-            if (
-                not _as_bool(accounts[account_id]["active"], "Account active")
-                and account_id != original_account_id
-            ):
-                raise StorageValidationError("Source account is inactive")
-            tags = self._tag_lookup(force_refresh=True)
-            original_tag_ids = _normalize_tag_ids(current_transaction.get("tag_ids", ""))
-            for tag_id in _normalize_tag_ids(updated_transaction.get("tag_ids", "")):
-                tag = tags.get(tag_id)
-                if tag is None:
-                    raise StorageValidationError("Tag does not exist")
-                if not _as_bool(tag["active"], "Tag active") and tag_id not in original_tag_ids:
-                    raise StorageValidationError("Tag is inactive")
-            if "receipt_references" in changes:
-                self._reject_receipt_ownership_conflict(
-                    updated_source.get("receipt_references", ""),
-                    transaction_id=transaction_id,
-                )
 
         self._write_with_confirmation(
             "mixed-use edit",
@@ -4762,7 +4297,6 @@ class GoogleSheetsStorage:
             ),
             before_retry=refresh_rows,
             invalidate=("Transactions", "MixedUseExpenses"),
-            verify_success=True,
         )
         return self.get_mixed_use_expense(source_id)
 
@@ -4868,7 +4402,6 @@ class GoogleSheetsStorage:
             ),
             before_retry=refresh_requests,
             invalidate=("Transactions", "MixedUseExpenses"),
-            verify_success=True,
         )
 
     def _replace_receipt_references(
@@ -4971,10 +4504,6 @@ class GoogleSheetsStorage:
                 raise StorageConflictError(
                     "The mixed-use receipt pair changed while the update was being retried."
                 )
-            self._reject_receipt_ownership_conflict(
-                encoded_references,
-                transaction_id=transaction_id,
-            )
             requests = build_requests(current, source)
 
         def state() -> str:
@@ -5007,7 +4536,6 @@ class GoogleSheetsStorage:
             state,
             before_retry=refresh_requests,
             invalidate=("Transactions", "MixedUseExpenses"),
-            verify_success=True,
         )
         updated = dict(transaction)
         updated["receipt_references"] = encoded_references
@@ -5768,7 +5296,7 @@ class GoogleSheetsStorage:
 
             self._write_with_confirmation(
                 "transaction deletion", write, state, before_retry=refresh,
-                invalidate=("Transactions",), verify_success=True,
+                invalidate=("Transactions",),
             )
 
     def _prepare_mileage_trip(
@@ -5976,7 +5504,7 @@ class GoogleSheetsStorage:
 
             self._write_with_confirmation(
                 "mileage deletion", write, state, before_retry=refresh,
-                invalidate=("Mileage",), verify_success=True,
+                invalidate=("Mileage",),
             )
 
     def preview_quickbooks_mileage(
@@ -6051,26 +5579,7 @@ class GoogleSheetsStorage:
         prepared = [
             self._prepare_mileage_trip(item, tags=tags) for item in preview["rows"]
         ]
-
-        def refresh_import_batch() -> None:
-            existing = {
-                mileage_fingerprint(item)
-                for item in self.list_mileage_trips(_force_refresh=True)
-            }
-            pending = [
-                item
-                for item in prepared
-                if mileage_fingerprint(item) not in existing
-            ]
-            if len(pending) != len(prepared):
-                prepared[:] = pending
-            if not prepared:
-                raise StorageConflictError(
-                    "A concurrent mileage import created all pending rows; "
-                    "inspect Mileage before retrying."
-                )
-
-        self._append_many("Mileage", prepared, before_retry=refresh_import_batch)
+        self._append_many("Mileage", prepared)
         return prepared
 
     @_active_ledger_mutation_lock
@@ -6295,26 +5804,7 @@ class GoogleSheetsStorage:
             )
             for item in preview["rows"]
         ]
-
-        def refresh_import_batch() -> None:
-            existing = {
-                fingerprint(item)
-                for item in self.list_transactions(_force_refresh=True)
-            }
-            pending = [
-                item for item in prepared if fingerprint(item) not in existing
-            ]
-            if len(pending) != len(prepared):
-                prepared[:] = pending
-            if not prepared:
-                raise StorageConflictError(
-                    "A concurrent transaction import created all pending rows; "
-                    "inspect the Transactions ledger before retrying."
-                )
-
-        self._append_many(
-            "Transactions", prepared, before_retry=refresh_import_batch
-        )
+        self._append_many("Transactions", prepared)
         return prepared
 
     def export_backup_zip(self, receipt_manifest: Mapping[str, Any]) -> bytes:
@@ -6471,12 +5961,7 @@ class GoogleSheetsStorage:
             _, records = tables[title]
             if title == "MixedUseExpenses" and not records:
                 continue
-            # The backup parser validates the complete cross-sheet dependency
-            # graph before any restore write. During restore, dependencies may
-            # legitimately still be pending in later target worksheets, so
-            # retry validation must use that prevalidated backup graph rather
-            # than the partially populated target workbook.
-            self._append_many(title, records, check_references=False)
+            self._append_many(title, records)
             restored = self._rows(title, force_refresh=True)
             expected_by_id = {record["id"]: record for record in records}
             actual_by_id = {row.values.get("id", ""): row.values for row in restored}

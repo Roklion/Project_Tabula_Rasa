@@ -7,7 +7,6 @@ import json
 import threading
 import zipfile
 from decimal import Decimal
-from unittest.mock import Mock
 
 import pytest
 
@@ -1394,46 +1393,6 @@ def test_mixed_use_create_retry_reuses_pair_after_account_deactivation(
     assert retried == created
 
 
-def test_mixed_use_append_rechecks_receipt_ownership_before_retry(
-    default_storage: GoogleSheetsStorage, monkeypatch
-) -> None:
-    inputs = {
-        **_expense_inputs(default_storage),
-        "total_expense": "100",
-        "business_use_percentage": "50",
-        "allocation_rationale": "Measured use",
-        "source_id": "source-receipt-concurrent",
-        "linked_transaction_id": "transaction-receipt-concurrent",
-        "receipt_references": [{"id": "concurrent-receipt", "name": "Receipt.pdf"}],
-    }
-    source_sheet = default_storage._worksheet("MixedUseExpenses")
-    original_append = source_sheet.append_row
-    calls = 0
-
-    def add_owner_then_timeout(values: list[str], **kwargs: object) -> None:
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            default_storage.create_transaction(
-                txn_date=inputs["txn_date"],
-                kind="Expense",
-                amount="50",
-                account_id=inputs["account_id"],
-                category_id=inputs["category_id"],
-                payee_id=inputs["payee_id"],
-                receipt_references=inputs["receipt_references"],
-            )
-            raise OSError("temporary response lost")
-        original_append(values, **kwargs)
-
-    monkeypatch.setattr(source_sheet, "append_row", add_owner_then_timeout)
-    with pytest.raises(StorageConflictError, match="already linked"):
-        default_storage.create_mixed_use_expense(**inputs)
-
-    assert calls == 1
-    assert default_storage.list_mixed_use_expenses() == []
-
-
 def test_mixed_use_create_verifies_uncertain_source_payload_before_projection(
     default_storage: GoogleSheetsStorage,
 ) -> None:
@@ -1578,78 +1537,6 @@ def test_mixed_use_edit_replaces_pair_in_one_spreadsheet_batch(
         default_storage._sheet_id("Transactions"),
         default_storage._sheet_id("MixedUseExpenses"),
     }
-
-
-def test_mixed_use_edit_revalidates_references_before_retry(
-    default_storage: GoogleSheetsStorage,
-    monkeypatch,
-) -> None:
-    source = default_storage.create_mixed_use_expense(
-        **_expense_inputs(default_storage),
-        total_expense="100",
-        business_use_percentage="50",
-        allocation_rationale="Measured use",
-    )
-    target = default_storage.create_category("Retry mixed target", "Expense")
-    calls = 0
-
-    def delete_target_during_backoff(_: float) -> None:
-        default_storage.delete_category(target["id"])
-
-    def fail_once(_: object) -> None:
-        nonlocal calls
-        calls += 1
-        raise StorageUnavailableError("temporary response lost", retryable=True)
-
-    monkeypatch.setattr(default_storage, "_sleeper", delete_target_during_backoff)
-    monkeypatch.setattr(default_storage, "_batch_update_spreadsheet", fail_once)
-
-    with pytest.raises(StorageValidationError, match="Category does not exist"):
-        default_storage.edit_mixed_use_expense(
-            source["id"], category_id=target["id"]
-        )
-
-    assert calls == 1
-    assert default_storage.get_mixed_use_expense(source["id"])["category_id"] != target["id"]
-
-
-def test_mixed_use_edit_revalidates_inline_created_payee_before_retry(
-    default_storage: GoogleSheetsStorage,
-    monkeypatch,
-) -> None:
-    inputs = {**_expense_inputs(default_storage), "payee_id": ""}
-    source = default_storage.create_mixed_use_expense(
-        **inputs,
-        total_expense="100",
-        business_use_percentage="50",
-        allocation_rationale="Measured use",
-    )
-    calls = 0
-
-    def delete_inline_payee_during_backoff(_: float) -> None:
-        payee = next(
-            item
-            for item in default_storage.list_payees(active_only=False)
-            if item["name"] == "Retry inline payee"
-        )
-        row = default_storage._find_row("Payees", payee["id"])
-        default_storage._worksheet("Payees").delete_rows(row.row_number)
-        default_storage._invalidate("Payees")
-
-    def fail_once(_: object) -> None:
-        nonlocal calls
-        calls += 1
-        raise StorageUnavailableError("temporary response lost", retryable=True)
-
-    monkeypatch.setattr(default_storage, "_sleeper", delete_inline_payee_during_backoff)
-    monkeypatch.setattr(default_storage, "_batch_update_spreadsheet", fail_once)
-
-    with pytest.raises(StorageValidationError, match="Payee does not exist"):
-        default_storage.edit_mixed_use_expense(
-            source["id"], new_payee_name="Retry inline payee"
-        )
-
-    assert calls == 1
 
 
 def test_mixed_use_edit_rejects_receipt_drift_before_replacing_rows(
@@ -2032,32 +1919,6 @@ def test_mixed_use_delete_confirms_final_delete_after_lost_response(
 
     assert default_storage.list_mixed_use_expenses() == []
     assert default_storage.list_transactions() == []
-
-
-@pytest.mark.parametrize("mutation", ["edit", "delete"])
-def test_mixed_use_batch_requires_final_readback_after_success(
-    default_storage: GoogleSheetsStorage, monkeypatch, mutation: str
-) -> None:
-    source = default_storage.create_mixed_use_expense(
-        **_expense_inputs(default_storage),
-        total_expense="100",
-        business_use_percentage="50",
-        allocation_rationale="Measured use",
-    )
-    batch_update = Mock()
-    monkeypatch.setattr(default_storage, "_batch_update_spreadsheet", batch_update)
-
-    with pytest.raises(StorageUnavailableError, match="could not confirm"):
-        if mutation == "edit":
-            default_storage.edit_mixed_use_expense(
-                source["id"], allocation_rationale="Updated use"
-            )
-        else:
-            default_storage.delete_mixed_use_expense(source["id"])
-
-    assert batch_update.call_count == 1
-    assert "Transactions" not in default_storage._row_cache
-    assert "MixedUseExpenses" not in default_storage._row_cache
 
 
 def test_mixed_use_delete_partial_pair_stops_without_retry(

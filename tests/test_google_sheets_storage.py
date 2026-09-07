@@ -1259,39 +1259,6 @@ class TestGoogleSheetsStorage:
         )
         assert cached_child["parent_id"] == first["id"]
 
-    def test_transaction_edit_revalidates_category_before_retry(self) -> None:
-        account = self.storage.create_account("Retry edit account", "Bank")
-        original = self.storage.create_category("Retry edit original", "Expense")
-        replacement = self.storage.create_category("Retry edit replacement", "Expense")
-        transaction = self.storage.create_transaction(
-            txn_date="2026-08-01",
-            kind="Expense",
-            amount="25",
-            account_id=account["id"],
-            category_id=original["id"],
-        )
-        worksheet = self.workbook.sheets["Transactions"]
-        original_update = worksheet.update
-        calls = 0
-
-        def delete_category_then_timeout(
-            values: list[list[str]], **kwargs: object
-        ) -> None:
-            nonlocal calls
-            calls += 1
-            if calls == 1:
-                self.storage.delete_category(replacement["id"])
-                raise OSError("temporary response lost")
-            original_update(values, **kwargs)
-
-        worksheet.update = delete_category_then_timeout  # type: ignore[method-assign]
-        with pytest.raises(StorageValidationError, match="Category does not exist"):
-            self.storage.edit_transaction(
-                transaction["id"], category_id=replacement["id"]
-            )
-
-        assert calls == 1
-
     def test_unknown_account_type_is_rejected(self) -> None:
         with pytest.raises(StorageValidationError):
             self.storage.create_account(
@@ -1317,30 +1284,6 @@ class TestGoogleSheetsStorage:
         assert edited["name"] == "Professional services"
         assert edited["kind"] == "Expense"
         assert self.storage.list_categories() == [edited]
-
-    def test_edit_category_kind_rechecks_uniqueness_before_retry(self) -> None:
-        category = self.storage.create_category("Retry category", "Expense")
-        worksheet = self.workbook.sheets["Categories"]
-        original_batch_update = worksheet.batch_update
-        calls = 0
-
-        def duplicate_then_timeout(
-            values: list[dict[str, object]], **kwargs: object
-        ) -> None:
-            nonlocal calls
-            calls += 1
-            if calls == 1:
-                self.storage.create_category("Concurrent category", "Income")
-                raise OSError("temporary response lost")
-            original_batch_update(values, **kwargs)
-
-        worksheet.batch_update = duplicate_then_timeout  # type: ignore[method-assign]
-        with pytest.raises(StorageConflictError, match="already exists"):
-            self.storage.edit_category(
-                category["id"], name="Concurrent category", kind="Income"
-            )
-
-        assert calls == 1
 
     def test_delete_category_requires_no_transactions_or_children(self) -> None:
         unused = self.storage.create_category("Unused", "Expense")
@@ -1397,34 +1340,6 @@ class TestGoogleSheetsStorage:
         category_sheet.delete_rows = inject_source_then_timeout
 
         with pytest.raises(StorageConflictError, match="mixed-use expenses"):
-            self.storage.delete_category(category["id"])
-
-        assert self.storage.list_categories() == [category]
-
-    def test_delete_category_rechecks_transactions_after_retry(self) -> None:
-        account = self.storage.create_account("Delete retry account", "Bank")
-        category = self.storage.create_category("Delete retry category", "Expense")
-        category_sheet = self.workbook.sheets["Categories"]
-        original_delete = category_sheet.delete_rows
-        injected = False
-
-        def inject_transaction_then_timeout(row_number: int) -> None:
-            nonlocal injected
-            if not injected:
-                injected = True
-                self.storage.create_transaction(
-                    txn_date="2026-08-01",
-                    kind="Expense",
-                    amount="25",
-                    account_id=account["id"],
-                    category_id=category["id"],
-                )
-                raise OSError("response lost before category deletion")
-            original_delete(row_number)
-
-        category_sheet.delete_rows = inject_transaction_then_timeout  # type: ignore[method-assign]
-
-        with pytest.raises(StorageConflictError, match="transactions"):
             self.storage.delete_category(category["id"])
 
         assert self.storage.list_categories() == [category]
@@ -1917,146 +1832,6 @@ class TestGoogleSheetsStorage:
             )
 
         worksheet.append_rows.assert_not_called()
-
-    def test_transaction_append_revalidates_references_before_retry(self) -> None:
-        account = self.storage.create_account("Retry append account", "Bank")
-        category = self.storage.create_category("Retry append category", "Expense")
-        worksheet = self.workbook.sheets["Transactions"]
-        original_append = worksheet.append_row
-        calls = 0
-
-        def remove_reference_then_timeout(
-            values: list[str], **kwargs: object
-        ) -> None:
-            nonlocal calls
-            calls += 1
-            if calls == 1:
-                self.storage.delete_category(category["id"])
-                raise OSError("temporary response lost")
-            original_append(values, **kwargs)
-
-        worksheet.append_row = remove_reference_then_timeout  # type: ignore[method-assign]
-        with pytest.raises(StorageValidationError, match="Category does not exist"):
-            self.storage.create_transaction(
-                txn_date="2026-08-01",
-                kind="Expense",
-                amount="25",
-                account_id=account["id"],
-                category_id=category["id"],
-            )
-
-        assert calls == 1
-
-    def test_mileage_batch_append_revalidates_references_before_retry(self) -> None:
-        tag = self.storage.create_tag("Batch retry tag")
-        worksheet = self.workbook.sheets["Mileage"]
-        original_append = worksheet.append_rows
-        calls = 0
-
-        def remove_reference_then_timeout(
-            values: list[list[str]], **kwargs: object
-        ) -> None:
-            nonlocal calls
-            calls += 1
-            if calls == 1:
-                self.storage.remove_tag(tag["id"])
-                raise OSError("temporary response lost")
-            original_append(values, **kwargs)
-
-        worksheet.append_rows = remove_reference_then_timeout  # type: ignore[method-assign]
-        with pytest.raises(StorageValidationError, match="Tag does not exist"):
-            self.storage.create_mileage_round_trip(
-                trip_date="2026-08-01",
-                miles="10",
-                start_location="Office",
-                destination="Client",
-                business_purpose="Meeting",
-                tag_ids=[tag["id"]],
-            )
-
-        assert calls == 1
-
-    def test_account_append_rechecks_name_uniqueness_before_retry(self) -> None:
-        worksheet = self.workbook.sheets["Accounts"]
-        original_append = worksheet.append_row
-        calls = 0
-
-        def duplicate_then_timeout(
-            values: list[str], **kwargs: object
-        ) -> None:
-            nonlocal calls
-            calls += 1
-            if calls == 1:
-                duplicate = list(values)
-                duplicate[0] = "external-account"
-                original_append(duplicate, **kwargs)
-                raise OSError("temporary response lost")
-            original_append(values, **kwargs)
-
-        worksheet.append_row = duplicate_then_timeout  # type: ignore[method-assign]
-        with pytest.raises(StorageConflictError, match="names must be unique"):
-            self.storage.create_account("Concurrent account", "Bank")
-
-        assert calls == 1
-
-    def test_category_append_rechecks_name_uniqueness_before_retry(self) -> None:
-        worksheet = self.workbook.sheets["Categories"]
-        original_append = worksheet.append_row
-        calls = 0
-
-        def duplicate_then_timeout(
-            values: list[str], **kwargs: object
-        ) -> None:
-            nonlocal calls
-            calls += 1
-            if calls == 1:
-                duplicate = list(values)
-                duplicate[0] = "external-category"
-                original_append(duplicate, **kwargs)
-                raise OSError("temporary response lost")
-            original_append(values, **kwargs)
-
-        worksheet.append_row = duplicate_then_timeout  # type: ignore[method-assign]
-        with pytest.raises(StorageConflictError, match="category already exists"):
-            self.storage.create_category("Concurrent category", "Expense")
-
-        assert calls == 1
-
-    def test_quickbooks_import_rechecks_duplicates_before_retry(self) -> None:
-        self.storage.create_account("Checking", "Bank")
-        self.storage.create_category("Office", "Expense")
-        source_row = {
-            "Date": "07/02/2026",
-            "Transaction Type": "Expense",
-            "Num": "2",
-            "Name": "Shop",
-            "Memo/Description": "Paper",
-            "Account": "Checking",
-            "Split": "Office",
-            "Amount": "(20.50)",
-        }
-        worksheet = self.workbook.sheets["Transactions"]
-        original_append = worksheet.append_rows
-        calls = 0
-
-        def duplicate_then_timeout(
-            values: list[list[str]], **kwargs: object
-        ) -> None:
-            nonlocal calls
-            calls += 1
-            if calls == 1:
-                duplicate = list(values[0])
-                duplicate[0] = "external-import"
-                original_append([duplicate], **kwargs)
-                raise OSError("temporary response lost")
-            original_append(values, **kwargs)
-
-        worksheet.append_rows = duplicate_then_timeout  # type: ignore[method-assign]
-        with pytest.raises(StorageConflictError, match="concurrent transaction import"):
-            self.storage.import_quickbooks_transactions([source_row])
-
-        assert calls == 1
-        assert len(self.storage.list_transactions(_force_refresh=True)) == 1
 
     def test_mileage_round_trip_supports_different_return_miles(self) -> None:
         worksheet = self.workbook.sheets["Mileage"]
@@ -2916,45 +2691,6 @@ class TestGoogleSheetsStorage:
         ]
         assert restored_storage.list_mileage_trips()[0]["id"] == mileage["id"]
 
-    def test_restore_retries_transaction_before_later_payee_and_tag_tables(
-        self,
-    ) -> None:
-        account = self.storage.create_account("Checking", "Bank")
-        category = self.storage.create_category("Sales", "Income")
-        payee = self.storage.create_payee("Customer")
-        tag = self.storage.create_tag("Imported")
-        self.storage.create_transaction(
-            txn_date="2026-07-19",
-            kind="Income",
-            amount=25,
-            account_id=account["id"],
-            category_id=category["id"],
-            payee_id=payee["id"],
-            tag_ids=[tag["id"]],
-        )
-        backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
-        target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
-        worksheet = target._worksheet("Transactions")
-        original_append = worksheet.append_rows
-        calls = 0
-
-        def lose_first_response(
-            values: list[list[str]], **kwargs: object
-        ) -> None:
-            nonlocal calls
-            calls += 1
-            if calls == 1:
-                raise OSError("temporary response lost")
-            original_append(values, **kwargs)
-
-        worksheet.append_rows = lose_first_response  # type: ignore[method-assign]
-        counts = target.restore_backup_zip(backup)
-
-        assert calls == 2
-        assert counts["Transactions"] == 1
-        assert target.list_transactions()[0]["payee_id"] == payee["id"]
-        assert target.list_transactions()[0]["tag_ids"] == [tag["id"]]
-
     def test_backup_round_trips_account_and_category_hierarchies(self) -> None:
         account_parent = self.storage.create_account("Operating", "Bank")
         account_child = self.storage.create_account(
@@ -3277,67 +3013,6 @@ class TestGoogleSheetsStorage:
             )
 
         assert batch_update.call_count == 2
-
-    def test_uncertain_bulk_category_revalidates_target_before_retry(self) -> None:
-        account = self.storage.create_account("Retry category account", "Bank")
-        original = self.storage.create_category("Retry original", "Expense")
-        target = self.storage.create_category("Retry target", "Expense")
-        transaction = self.storage.create_transaction(
-            txn_date="2026-08-01",
-            kind="Expense",
-            amount="25",
-            account_id=account["id"],
-            category_id=original["id"],
-        )
-        calls = 0
-
-        def delete_target_during_backoff(_: float) -> None:
-            self.storage.delete_category(target["id"])
-
-        def fail_once(_: object) -> None:
-            nonlocal calls
-            calls += 1
-            raise StorageUnavailableError("temporary response lost", retryable=True)
-
-        self.storage._sleeper = delete_target_during_backoff
-        self.storage._batch_update_spreadsheet = fail_once
-
-        with pytest.raises(StorageConflictError, match="target category changed"):
-            self.storage.bulk_change_transaction_category(
-                [transaction["id"]],
-                expected_transactions=[transaction],
-                category_id=target["id"],
-            )
-
-        assert calls == 1
-
-    @pytest.mark.parametrize("mutation", ["category", "delete"])
-    def test_bulk_index_mutations_confirm_successful_batch(
-        self, mutation: str
-    ) -> None:
-        first, _, replacement = self._bulk_transaction_fixture()
-        expected = [
-            item
-            for item in self.storage.list_transactions(_force_refresh=True)
-            if item["id"] == first["id"]
-        ]
-        batch_update = Mock()
-        self.storage._batch_update_spreadsheet = batch_update
-
-        with pytest.raises(StorageUnavailableError, match="could not confirm"):
-            if mutation == "category":
-                self.storage.bulk_change_transaction_category(
-                    [first["id"]],
-                    expected_transactions=expected,
-                    category_id=replacement["id"],
-                )
-            else:
-                self.storage.bulk_delete_transactions(
-                    [first["id"]], expected_transactions=expected
-                )
-
-        assert batch_update.call_count == 1
-        assert "Transactions" not in self.storage._row_cache
 
     def test_bulk_mutations_accept_listed_tag_ids_in_freshness_checks(self) -> None:
         first, _, replacement = self._bulk_transaction_fixture()

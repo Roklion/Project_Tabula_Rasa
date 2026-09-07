@@ -37,85 +37,6 @@ def test_payee_rename_preserves_id_and_references(default_storage) -> None:
     assert default_storage.list_transactions()[0]["payee"] == "Renamed Vendor"
 
 
-def test_payee_append_rechecks_name_before_retry(default_storage) -> None:
-    worksheet = default_storage._worksheet("Payees")
-    headers = default_storage._headers("Payees")
-    original_append = worksheet.append_row
-    calls = 0
-
-    def duplicate_then_timeout(values: list[str], **kwargs: object) -> None:
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            duplicate = {header: "" for header in headers}
-            duplicate.update(
-                {
-                    "id": "external-payee",
-                    "name": "Concurrent Vendor",
-                    "active": "TRUE",
-                    "created_at": "2026-01-01T00:00:00+00:00",
-                }
-            )
-            original_append(
-                [duplicate.get(header, "") for header in headers], **kwargs
-            )
-            raise OSError("temporary response lost")
-        original_append(values, **kwargs)
-
-    worksheet.append_row = duplicate_then_timeout  # type: ignore[method-assign]
-    with pytest.raises(StorageConflictError, match="already exists"):
-        default_storage.create_payee("Concurrent Vendor")
-
-    assert calls == 1
-
-
-def test_payee_batch_append_rechecks_name_before_retry(default_storage) -> None:
-    worksheet = default_storage._worksheet("Payees")
-    original_append = worksheet.append_rows
-    calls = 0
-
-    def duplicate_then_timeout(
-        values: list[list[str]], **kwargs: object
-    ) -> None:
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            duplicate = list(values[0])
-            duplicate[0] = "external-payee-batch"
-            original_append([duplicate], **kwargs)
-            raise OSError("temporary response lost")
-        original_append(values, **kwargs)
-
-    worksheet.append_rows = duplicate_then_timeout  # type: ignore[method-assign]
-    with pytest.raises(StorageConflictError, match="already exists"):
-        default_storage._ensure_payee_names(["Concurrent Batch Vendor"])
-
-    assert calls == 1
-
-
-def test_payee_edit_rechecks_name_before_retry(default_storage) -> None:
-    payee = default_storage.create_payee("Original Vendor")
-    worksheet = default_storage._worksheet("Payees")
-    original_update = worksheet.update
-    calls = 0
-
-    def duplicate_then_timeout(
-        values: list[list[str]], range_name: str, **kwargs: object
-    ) -> None:
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            default_storage.create_payee("Concurrent Vendor")
-            raise OSError("temporary response lost")
-        original_update(values, range_name=range_name, **kwargs)
-
-    worksheet.update = duplicate_then_timeout  # type: ignore[method-assign]
-    with pytest.raises(StorageConflictError, match="already exists"):
-        default_storage.edit_payee(payee["id"], name="Concurrent Vendor")
-
-    assert calls == 1
-
-
 def test_payee_merge_updates_mixed_use_source_and_projection(default_storage) -> None:
     account, category = _ledger_setup(default_storage)
     target = default_storage.create_payee("Target")
@@ -133,41 +54,6 @@ def test_payee_merge_updates_mixed_use_source_and_projection(default_storage) ->
     assert default_storage.list_mixed_use_expenses()[0]["payee_id"] == target["id"]
     assert source["id"] not in {item["id"] for item in default_storage.list_payees(active_only=False)}
     assert mixed["id"] == default_storage.list_mixed_use_expenses()[0]["id"]
-
-
-def test_payee_merge_rechecks_new_references_before_retry(
-    default_storage, monkeypatch
-) -> None:
-    account, category = _ledger_setup(default_storage)
-    target = default_storage.create_payee("Retry target")
-    source = default_storage.create_payee("Retry source")
-    calls = 0
-
-    def add_reference_during_backoff(_: float) -> None:
-        default_storage.create_transaction(
-            txn_date="2026-01-01",
-            kind="Expense",
-            amount="10",
-            account_id=account["id"],
-            category_id=category["id"],
-            payee_id=source["id"],
-        )
-
-    def fail_once(_: object) -> None:
-        nonlocal calls
-        calls += 1
-        raise StorageUnavailableError("temporary response lost", retryable=True)
-
-    monkeypatch.setattr(default_storage, "_sleeper", add_reference_during_backoff)
-    monkeypatch.setattr(default_storage, "_batch_update_spreadsheet", fail_once)
-
-    with pytest.raises(StorageConflictError, match="references changed"):
-        default_storage.merge_payees(target["id"], [source["id"]])
-
-    assert calls == 1
-    assert source["id"] in {
-        item["id"] for item in default_storage.list_payees(active_only=False)
-    }
 
 
 def test_tag_merge_deduplicates_transactions_and_mileage(default_storage) -> None:
@@ -191,41 +77,6 @@ def test_tag_merge_deduplicates_transactions_and_mileage(default_storage) -> Non
     assert default_storage.list_mileage_trips()[0]["tag_ids"] == [target["id"]]
     assert source["id"] not in {item["id"] for item in default_storage.list_tags(active_only=False)}
     assert mileage["id"] == default_storage.list_mileage_trips()[0]["id"]
-
-
-def test_tag_merge_rechecks_new_references_before_retry(
-    default_storage, monkeypatch
-) -> None:
-    account, category = _ledger_setup(default_storage)
-    target = default_storage.create_tag("Retry target")
-    source = default_storage.create_tag("Retry source")
-    calls = 0
-
-    def add_reference_during_backoff(_: float) -> None:
-        default_storage.create_transaction(
-            txn_date="2026-01-01",
-            kind="Expense",
-            amount="10",
-            account_id=account["id"],
-            category_id=category["id"],
-            tag_ids=[source["id"]],
-        )
-
-    def fail_once(_: object) -> None:
-        nonlocal calls
-        calls += 1
-        raise StorageUnavailableError("temporary response lost", retryable=True)
-
-    monkeypatch.setattr(default_storage, "_sleeper", add_reference_during_backoff)
-    monkeypatch.setattr(default_storage, "_batch_update_spreadsheet", fail_once)
-
-    with pytest.raises(StorageConflictError, match="references changed"):
-        default_storage.merge_tags(target["id"], [source["id"]])
-
-    assert calls == 1
-    assert source["id"] in {
-        item["id"] for item in default_storage.list_tags(active_only=False)
-    }
 
 
 def test_referenced_remove_is_blocked_and_unreferenced_remove_succeeds(default_storage) -> None:
@@ -279,21 +130,6 @@ def test_tag_merge_confirms_committed_write_without_retry(default_storage, monke
     }
 
 
-def test_tag_merge_requires_final_readback_after_successful_batch(
-    default_storage, monkeypatch
-) -> None:
-    target = default_storage.create_tag("Target")
-    source = default_storage.create_tag("Source")
-    batch_update = Mock()
-    monkeypatch.setattr(default_storage, "_batch_update_spreadsheet", batch_update)
-
-    with pytest.raises(StorageUnavailableError, match="could not confirm"):
-        default_storage.merge_tags(target["id"], [source["id"]])
-
-    assert batch_update.call_count == 1
-    assert "Tags" not in default_storage._row_cache
-
-
 def test_tag_removal_retries_once_then_invalidates_on_unchanged_failure(
     default_storage, monkeypatch
 ) -> None:
@@ -336,9 +172,7 @@ def test_tag_removal_rebuilds_row_after_shift_before_retry(default_storage, monk
     assert worksheet.rows[1][0] == "inserted-before-retry"
 
 
-def test_tag_removal_rechecks_references_after_retry_backoff(
-    default_storage, monkeypatch
-) -> None:
+def test_tag_removal_rechecks_references_after_retry_backoff(default_storage) -> None:
     account, category = _ledger_setup(default_storage)
     tag = default_storage.create_tag("Referenced during retry")
     calls = 0
@@ -358,8 +192,8 @@ def test_tag_removal_rechecks_references_after_retry_backoff(
         calls += 1
         raise OSError("temporary response lost")
 
-    monkeypatch.setattr(default_storage, "_sleeper", add_reference_during_backoff)
-    monkeypatch.setattr(default_storage._workbook, "batch_update", fail_once)
+    default_storage._sleeper = add_reference_during_backoff
+    default_storage._workbook.batch_update = fail_once
 
     with pytest.raises(StorageConflictError, match="became referenced"):
         default_storage.remove_tag(tag["id"])
