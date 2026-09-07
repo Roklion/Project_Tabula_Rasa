@@ -4622,62 +4622,6 @@ class GoogleSheetsStorage:
             )
             return self._replace_receipt_references(transaction, encoded)
 
-    def initialize_legacy_transaction_receipts(
-        self,
-        transaction_id: str,
-        *,
-        references: Sequence[Mapping[str, Any]],
-    ) -> dict[str, str]:
-        with _MIXED_USE_CREATE_LOCK:
-            return self._initialize_legacy_transaction_receipts(
-                transaction_id, references=references
-            )
-
-    def _initialize_legacy_transaction_receipts(
-        self,
-        transaction_id: str,
-        *,
-        references: Sequence[Mapping[str, Any]],
-    ) -> dict[str, str]:
-        """Populate one still-blank legacy receipt cell with rich references."""
-        current = self._find_row("Transactions", transaction_id)
-        self._reject_mixed_use_projection(current.values)
-        try:
-            normalized = [
-                validate_receipt_reference(reference, allow_legacy=False)
-                for reference in references
-            ]
-        except ReceiptManifestError as exc:
-            raise StorageValidationError(str(exc)) from exc
-        if not normalized:
-            raise StorageValidationError(
-                "Legacy receipt initialization requires at least one receipt"
-            )
-        file_ids = [str(reference["id"]) for reference in normalized]
-        if len(file_ids) != len(set(file_ids)):
-            raise StorageValidationError("Receipt references are duplicated")
-        transactions = self.list_transactions(_force_refresh=True)
-        for transaction in transactions:
-            if transaction["id"] == transaction_id:
-                continue
-            linked_ids = {
-                str(item["id"])
-                for item in decode_receipt_references(
-                    transaction.get("receipt_references", "")
-                )
-            }
-            if linked_ids.intersection(file_ids):
-                raise StorageConflictError(
-                    "That receipt is already linked to another transaction"
-                )
-        if str(current.values.get("receipt_references", "")) != "":
-            raise StorageConflictError(
-                "The transaction receipt references are already initialized"
-            )
-        return self._replace_receipt_references(
-            current, _encode_receipt_references(normalized)
-        )
-
     def link_transaction_receipt(
         self,
         transaction_id: str,

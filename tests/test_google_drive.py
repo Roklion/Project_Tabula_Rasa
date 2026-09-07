@@ -874,7 +874,6 @@ class TestGoogleDriveFiles:
 
         uploaded = client.upload_receipt(
             profile_key="north",
-            transaction_id="txn-1",
             folder_id="folder123456",
             original_name=r"..\statement.pdf",
             content=b"receipt",
@@ -885,7 +884,7 @@ class TestGoogleDriveFiles:
         create_request = session.requests[-1]
         body = create_request[2]["data"]
         assert b'"tabulaRasaProfile":"north"' in body
-        assert b'"tabulaRasaTransaction":"txn-1"' in body
+        assert b'"tabulaRasaTransaction"' not in body
         assert (
             f'"tabulaRasaSha256":"{hashlib.sha256(b"receipt").hexdigest()}"'.encode()
             in body
@@ -935,7 +934,6 @@ class TestGoogleDriveFiles:
 
         uploaded = client.upload_receipt(
             profile_key="north",
-            transaction_id="txn-2",
             folder_id="folder123456",
             original_name="statement.pdf",
             content=b"second receipt",
@@ -977,7 +975,6 @@ class TestGoogleDriveFiles:
 
         uploaded = client.upload_receipt(
             profile_key="north",
-            transaction_id="txn-1",
             folder_id="folder123456",
             original_name="statement.pdf",
             content=b"receipt",
@@ -991,7 +988,7 @@ class TestGoogleDriveFiles:
         ).hexdigest()
         recovery_query = session.requests[-1][2]["params"]["q"]
         assert "value='north'" in recovery_query
-        assert "value='txn-1'" in recovery_query
+        assert "tabulaRasaTransaction" not in recovery_query
         assert "key='tabulaRasaReceiptId'" in recovery_query
         assert "key='tabulaRasaSha256'" in recovery_query
 
@@ -1014,7 +1011,6 @@ class TestGoogleDriveFiles:
 
         uploaded = client.upload_receipt(
             profile_key="north",
-            transaction_id="txn-1",
             folder_id="folder123456",
             original_name="statement.pdf",
             content=b"receipt",
@@ -1050,7 +1046,6 @@ class TestGoogleDriveFiles:
 
         uploaded = client.upload_receipt(
             profile_key="north",
-            transaction_id="txn-1",
             folder_id="folder123456",
             original_name="statement.pdf",
             content=b"receipt",
@@ -1081,7 +1076,6 @@ class TestGoogleDriveFiles:
         with pytest.raises(GoogleDriveAccessError) as raised:
             client.upload_receipt(
                 profile_key="north",
-                transaction_id="txn-1",
                 folder_id="folder123456",
                 original_name="statement.pdf",
                 content=b"receipt",
@@ -1119,7 +1113,6 @@ class TestGoogleDriveFiles:
         with pytest.raises(GoogleDriveAccessError) as raised:
             client.upload_receipt(
                 profile_key="north",
-                transaction_id="txn-1",
                 folder_id="folder123456",
                 original_name="statement.pdf",
                 content=b"receipt",
@@ -1162,7 +1155,6 @@ class TestGoogleDriveFiles:
 
         uploaded = client.upload_receipt(
             profile_key="north",
-            transaction_id="txn-1",
             folder_id="folder123456",
             original_name="statement.pdf",
             content=b"receipt",

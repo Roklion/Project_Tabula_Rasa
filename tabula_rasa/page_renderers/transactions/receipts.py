@@ -207,7 +207,6 @@ def _process_context_receipts(
         workflow,
         upload_receipt=lambda receipt: receipt_drive.upload_receipt(
             profile_key=context.profile_key,
-            transaction_id=transaction_id,
             folder_id=folder_id,
             original_name=str(receipt["original_name"]),
             content=bytes(receipt["content"]),

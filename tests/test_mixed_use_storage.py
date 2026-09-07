@@ -450,50 +450,6 @@ def test_transaction_receipt_unlink_shares_mixed_use_creation_lock(
     assert not errors
 
 
-def test_legacy_receipt_initialization_shares_mixed_use_creation_lock(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    transaction = default_storage.create_transaction(
-        **_expense_inputs(default_storage), kind="Expense", amount="10"
-    )
-    transaction_sheet = default_storage._worksheet("Transactions")
-    transaction_headers = default_storage._headers("Transactions")
-    transaction_sheet.rows[1][transaction_headers.index("receipt_references")] = ""
-    default_storage._invalidate("Transactions")
-    reference = {
-        "id": "legacyreceipt01",
-        "name": "receipt.pdf",
-        "receipt_id": "0123456789abcdef0123456789abcdef",
-        "original_filename": "receipt.pdf",
-        "mime_type": "application/pdf",
-        "byte_size": 1,
-        "sha256": "a" * 64,
-    }
-    started = threading.Event()
-    finished = threading.Event()
-    errors: list[BaseException] = []
-
-    def initialize_receipt() -> None:
-        started.set()
-        try:
-            default_storage.initialize_legacy_transaction_receipts(
-                transaction["id"], references=[reference]
-            )
-        except BaseException as error:  # pragma: no cover - assertion below reports it
-            errors.append(error)
-        finally:
-            finished.set()
-
-    worker = threading.Thread(target=initialize_receipt)
-    with google_sheets_module._MIXED_USE_CREATE_LOCK:
-        worker.start()
-        assert started.wait(1)
-        assert not finished.wait(0.1)
-    assert finished.wait(1)
-    worker.join(timeout=1)
-    assert not errors
-
-
 def test_receipt_remap_shares_mixed_use_creation_lock(
     default_storage: GoogleSheetsStorage,
 ) -> None:
@@ -840,7 +796,6 @@ def test_generic_receipt_setter_rejects_receipts_owned_by_another_transaction(
     "operation",
     [
         "set_transaction_receipt_references",
-        "initialize_legacy_transaction_receipts",
         "link_transaction_receipt",
         "remap_transaction_receipt",
         "unlink_transaction_receipt",
@@ -862,10 +817,6 @@ def test_every_generic_receipt_mutation_rejects_mixed_use_projection(
         if operation == "set_transaction_receipt_references":
             default_storage.set_transaction_receipt_references(
                 transaction_id, [reference]
-            )
-        elif operation == "initialize_legacy_transaction_receipts":
-            default_storage.initialize_legacy_transaction_receipts(
-                transaction_id, references=[reference]
             )
         elif operation == "link_transaction_receipt":
             default_storage.link_transaction_receipt(

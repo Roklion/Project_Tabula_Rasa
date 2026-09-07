@@ -538,7 +538,6 @@ def suffixed_receipt_filename(filename: str, occurrence: int) -> str:
 def _receipt_identity_query(
     *,
     profile_key: str,
-    transaction_id: str,
     folder_id: str,
     receipt_id: str,
     content_sha256: str,
@@ -552,10 +551,6 @@ def _receipt_identity_query(
             (
                 "appProperties has { key='tabulaRasaProfile' and "
                 f"value='{_escape_query_value(profile_key)}' }}"
-            ),
-            (
-                "appProperties has { key='tabulaRasaTransaction' and "
-                f"value='{_escape_query_value(transaction_id)}' }}"
             ),
             (
                 "appProperties has { key='tabulaRasaReceiptId' and "
@@ -1134,7 +1129,6 @@ class GoogleDriveClient:
         self,
         *,
         profile_key: str,
-        transaction_id: str,
         folder_id: str,
         original_name: str,
         content: bytes,
@@ -1152,7 +1146,6 @@ class GoogleDriveClient:
             raise GoogleDriveAccessError("Receipt identity is invalid.")
         identity_query = _receipt_identity_query(
             profile_key=profile_key,
-            transaction_id=transaction_id,
             folder_id=folder_id,
             receipt_id=receipt_id,
             content_sha256=content_sha256,
@@ -1212,7 +1205,6 @@ class GoogleDriveClient:
             "appProperties": {
                 "tabulaRasaKind": "receipt",
                 "tabulaRasaProfile": profile_key,
-                "tabulaRasaTransaction": transaction_id,
                 "tabulaRasaReceiptId": receipt_id,
                 "tabulaRasaSha256": content_sha256,
             },
@@ -1259,7 +1251,6 @@ class GoogleDriveClient:
         self,
         *,
         profile_key: str,
-        transaction_id: str,
         folder_id: str,
         receipt_id: str,
         content: bytes,
@@ -1271,48 +1262,12 @@ class GoogleDriveClient:
         content_sha256 = hashlib.sha256(content).hexdigest()
         identity_query = _receipt_identity_query(
             profile_key=profile_key,
-            transaction_id=transaction_id,
             folder_id=folder_id,
             receipt_id=receipt_id,
             content_sha256=content_sha256,
         )
         matches = self._list(identity_query, page_size=2)
         return dict(matches[0]) if matches else None
-
-    def list_receipts(
-        self,
-        *,
-        profile_key: str,
-        transaction_id: str,
-        folder_id: str,
-    ) -> list[dict[str, Any]]:
-        """List app-managed receipts for one transaction."""
-        folder_id = self._valid_folder_id(folder_id)
-        query = " and ".join(
-            [
-                f"'{_escape_query_value(folder_id)}' in parents",
-                "trashed = false",
-                (
-                    "appProperties has { key='tabulaRasaKind' and "
-                    "value='receipt' }"
-                ),
-                (
-                    "appProperties has { key='tabulaRasaProfile' and "
-                    f"value='{_escape_query_value(profile_key)}' }}"
-                ),
-                (
-                    "appProperties has { key='tabulaRasaTransaction' and "
-                    f"value='{_escape_query_value(transaction_id)}' }}"
-                ),
-            ]
-        )
-        return self._list(
-            query,
-            page_size=100,
-            order_by="createdTime desc",
-            use_cache=True,
-            fetch_all=True,
-        )
 
     def list_profile_receipts(
         self,

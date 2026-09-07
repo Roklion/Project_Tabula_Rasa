@@ -15,7 +15,6 @@ from tabula_rasa.storage import (
     decode_receipt_references,
     GoogleSheetsStorage,
     MIXED_USE_SOURCE_TYPE,
-    StorageConflictError,
     StorageError,
 )
 
@@ -59,10 +58,8 @@ def prepare_profile_receipts(
         "references_updated": 0,
         "errors": [],
     }
-    pending_initializations: dict[str, list[dict[str, Any]]] = {}
     for receipt in receipts:
         file_id = str(receipt.get("id") or "")
-        receipt_with_metadata = receipt
         try:
             reference = receipt_reference_from_drive_file(receipt)
         except ReceiptManifestError:
@@ -72,7 +69,6 @@ def prepare_profile_receipts(
                     folder_id=folder_id,
                     file_id=file_id,
                 )
-                receipt_with_metadata = updated
                 reference = receipt_reference_from_drive_file(updated)
             except (RuntimeError, ReceiptManifestError) as error:
                 report["errors"].append(
@@ -82,21 +78,6 @@ def prepare_profile_receipts(
             report["drive_backfilled"] += 1
         transaction_id = associations.get(file_id)
         if transaction_id is None:
-            properties = receipt_with_metadata.get("appProperties")
-            legacy_transaction_id = (
-                str(properties.get("tabulaRasaTransaction") or "")
-                if isinstance(properties, dict)
-                else ""
-            )
-            legacy_transaction = transactions_by_id.get(legacy_transaction_id)
-            if (
-                legacy_transaction is not None
-                and str(legacy_transaction.get("receipt_references", "")) == ""
-            ):
-                pending_initializations.setdefault(
-                    legacy_transaction_id,
-                    [],
-                ).append(reference)
             continue
         current_transaction = transactions_by_id[transaction_id]
         current_reference = next(
@@ -129,56 +110,6 @@ def prepare_profile_receipts(
             )
             continue
         report["references_updated"] += 1
-    for transaction_id, references in pending_initializations.items():
-        try:
-            transaction = transactions_by_id[transaction_id]
-            source_type = str(transaction.get("source_type") or "")
-            source_id = str(transaction.get("source_id") or "")
-            if source_type == MIXED_USE_SOURCE_TYPE and source_id:
-                expected_receipt_references = str(
-                    transaction.get("receipt_references") or ""
-                )
-                expected_source = next(
-                    (
-                        source
-                        for source in storage.list_mixed_use_expenses(
-                            _force_refresh=True
-                        )
-                        if source["id"] == source_id
-                    ),
-                    None,
-                )
-                if expected_source is None:
-                    raise StorageConflictError(
-                        "The mixed-use receipt pair changed; refresh before retrying."
-                    )
-                if (
-                    str(expected_source.get("receipt_references") or "")
-                    != expected_receipt_references
-                ):
-                    raise StorageConflictError(
-                        "The mixed-use receipt pair changed; refresh before retrying."
-                    )
-                storage.set_mixed_use_receipt_references(
-                    source_id,
-                    references,
-                    expected_source=expected_source,
-                )
-            else:
-                storage.initialize_legacy_transaction_receipts(
-                    transaction_id,
-                    references=references,
-                )
-        except StorageError as error:
-            report["errors"].extend(
-                {
-                    "file_id": str(reference["id"]),
-                    "error": str(error),
-                }
-                for reference in references
-            )
-            continue
-        report["references_updated"] += len(references)
     return report
 
 

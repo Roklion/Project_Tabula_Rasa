@@ -171,7 +171,7 @@ def test_preparation_routes_mixed_use_receipt_remaps_through_source_api(
     assert storage.get_mixed_use_expense(source["id"])["receipt_references"]
 
 
-def test_preparation_migrates_a_drive_only_transaction_association() -> None:
+def test_preparation_does_not_migrate_a_drive_only_transaction_association() -> None:
     workbook = FakeWorkbook()
     storage = GoogleSheetsStorage(workbook, sleeper=lambda _delay: None)
     account = storage.create_account("Checking", "Bank")
@@ -206,16 +206,14 @@ def test_preparation_migrates_a_drive_only_transaction_association() -> None:
     assert report == {
         "examined": 1,
         "drive_backfilled": 1,
-        "references_updated": 1,
+        "references_updated": 0,
         "errors": [],
     }
     current = storage.list_transactions(_force_refresh=True)[0]
-    reference = decode_receipt_references(current["receipt_references"])[0]
-    assert reference["id"] == "receipt123456"
-    assert reference["receipt_id"] == "a" * 32
+    assert current["receipt_references"] == ""
 
 
-def test_preparation_routes_drive_only_mixed_use_association_through_source_api(
+def test_preparation_does_not_migrate_drive_only_mixed_use_association(
     storage: GoogleSheetsStorage,
 ) -> None:
     storage.ensure_defaults()
@@ -265,21 +263,17 @@ def test_preparation_routes_drive_only_mixed_use_association_through_source_api(
     assert report == {
         "examined": 1,
         "drive_backfilled": 1,
-        "references_updated": 1,
+        "references_updated": 0,
         "errors": [],
     }
-    updated_source = storage.get_mixed_use_expense(source["id"])
-    updated_projection = next(
-        transaction
-        for transaction in storage.list_transactions(_force_refresh=True)
-        if transaction["id"] == projection_id
-    )
-    assert decode_receipt_references(updated_source["receipt_references"])[0][
-        "id"
-    ] == "receipt123456"
-    assert updated_source["receipt_references"] == updated_projection[
-        "receipt_references"
-    ]
+    for worksheet_title, record_id in (
+        ("Transactions", projection_id),
+        ("MixedUseExpenses", source["id"]),
+    ):
+        worksheet = storage._workbook.worksheet(worksheet_title)
+        headers = worksheet.rows[0]
+        row = next(item for item in worksheet.rows[1:] if item[0] == record_id)
+        assert row[headers.index("receipt_references")] == ""
 
 
 def test_preparation_does_not_overwrite_concurrent_mixed_use_receipt_change(
@@ -335,7 +329,7 @@ def test_preparation_does_not_overwrite_concurrent_mixed_use_receipt_change(
     )
 
     assert report["references_updated"] == 0
-    assert len(report["errors"]) == 1
+    assert report["errors"] == []
     assert storage.get_mixed_use_expense(source["id"])[
         "receipt_references"
     ] == "[]"
@@ -386,7 +380,7 @@ def test_preparation_does_not_override_a_concurrent_explicit_unlink() -> None:
     current = storage.list_transactions(_force_refresh=True)[0]
     assert current["receipt_references"] == "[]"
     assert report["references_updated"] == 0
-    assert len(report["errors"]) == 1
+    assert report["errors"] == []
 
 
 def test_preparation_respects_an_explicitly_empty_reference_list() -> None:
