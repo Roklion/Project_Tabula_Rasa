@@ -1561,6 +1561,7 @@ class GoogleSheetsStorage:
         records: Iterable[Mapping[str, Any]],
         *,
         before_retry: Callable[[], None] | None = None,
+        check_references: bool = True,
     ) -> None:
         # Preserve a caller-owned list so an import can remove rows that became
         # duplicates while the uncertain write was being confirmed.
@@ -1584,25 +1585,11 @@ class GoogleSheetsStorage:
                 set(record_ids),
             )
 
-        domain_retry_checks = {
-            "Accounts": lambda record: self._validate_account_append_retry(record),
-            "Categories": lambda record: self._validate_category_append_retry(record),
-            "Payees": lambda record: self._validate_payee_append_retry(record),
-            "Transactions": lambda record: self._validate_transaction_append_retry(
-                record
-            ),
-            "MixedUseExpenses": lambda record: self._validate_mixed_use_append_retry(
-                record
-            ),
-            "Mileage": lambda record: self._validate_mileage_append_retry(record),
-        }.get(title)
-
         def refresh_before_retry() -> None:
             if before_retry is not None:
                 before_retry()
-            if domain_retry_checks is not None:
-                for record in records:
-                    domain_retry_checks(record)
+            if check_references:
+                self._validate_append_batch_references(title, records)
 
         def state() -> str:
             values, record_id_set = batch_values()
@@ -3904,11 +3891,16 @@ class GoogleSheetsStorage:
         self,
         transaction: Mapping[str, Any],
         original: Mapping[str, Any],
+        *,
+        accounts: Mapping[str, Mapping[str, Any]] | None = None,
+        categories: Mapping[str, Mapping[str, str]] | None = None,
+        payees: Mapping[str, Mapping[str, str]] | None = None,
+        tags: Mapping[str, Mapping[str, str]] | None = None,
     ) -> None:
-        accounts = self._account_lookup(force_refresh=True)
-        categories = self._category_lookup(force_refresh=True)
-        payees = self._payee_lookup(force_refresh=True)
-        tags = self._tag_lookup(force_refresh=True)
+        accounts = accounts or self._account_lookup(force_refresh=True)
+        categories = categories or self._category_lookup(force_refresh=True)
+        payees = payees or self._payee_lookup(force_refresh=True)
+        tags = tags or self._tag_lookup(force_refresh=True)
         account_id = _clean_text(transaction.get("account_id"), "Account", required=True)
         if account_id not in accounts:
             raise StorageValidationError("Source account does not exist")
@@ -3961,8 +3953,10 @@ class GoogleSheetsStorage:
         self,
         trip: Mapping[str, Any],
         original: Mapping[str, Any],
+        *,
+        tags: Mapping[str, Mapping[str, str]] | None = None,
     ) -> None:
-        tags = self._tag_lookup(force_refresh=True)
+        tags = tags or self._tag_lookup(force_refresh=True)
         original_tag_ids = _normalize_tag_ids(original.get("tag_ids", ""))
         for tag_id in _normalize_tag_ids(trip.get("tag_ids", "")):
             tag = tags.get(tag_id)
@@ -3984,6 +3978,81 @@ class GoogleSheetsStorage:
             compatibility_field="classification",
             item_label="Account",
         )
+
+    def _validate_append_batch_references(
+        self, title: str, records: Iterable[Mapping[str, Any]]
+    ) -> None:
+        records = list(records)
+        if title == "Accounts":
+            accounts = self.list_accounts(active_only=False, _force_refresh=True)
+            names = {item["name"].casefold() for item in accounts}
+            for record in records:
+                name = _clean_text(record.get("name"), "Account name", required=True)
+                if name.casefold() in names:
+                    raise StorageConflictError("Account names must be unique")
+                names.add(name.casefold())
+            _validate_hierarchy_records(
+                [*accounts, *records],
+                compatibility_field="classification",
+                item_label="Account",
+            )
+        elif title == "Categories":
+            categories = self.list_categories(_force_refresh=True)
+            names = {
+                (item["name"].casefold(), item["kind"]) for item in categories
+            }
+            for record in records:
+                name = _clean_text(record.get("name"), "Category name", required=True)
+                kind = _clean_text(
+                    record.get("kind"), "Category kind", required=True
+                ).title()
+                if (name.casefold(), kind) in names:
+                    raise StorageConflictError("That category already exists")
+                names.add((name.casefold(), kind))
+            _validate_hierarchy_records(
+                [*categories, *records],
+                compatibility_field="kind",
+                item_label="Category",
+            )
+        elif title == "Payees":
+            names = {
+                normalize_payee_name(item["name"])
+                for item in self.list_payees(_force_refresh=True)
+            }
+            for record in records:
+                key = normalize_payee_name(record.get("name", ""))
+                if key in names:
+                    raise StorageConflictError("That payee already exists")
+                names.add(key)
+        elif title == "Transactions":
+            accounts = self._account_lookup(force_refresh=True)
+            categories = self._category_lookup(force_refresh=True)
+            payees = self._payee_lookup(force_refresh=True)
+            tags = self._tag_lookup(force_refresh=True)
+            for record in records:
+                self._validate_transaction_retry_references(
+                    record,
+                    {},
+                    accounts=accounts,
+                    categories=categories,
+                    payees=payees,
+                    tags=tags,
+                )
+        elif title == "Mileage":
+            tags = self._tag_lookup(force_refresh=True)
+            for record in records:
+                self._validate_mileage_retry_references(record, {}, tags=tags)
+        elif title == "MixedUseExpenses":
+            accounts = self._account_lookup(force_refresh=True)
+            categories = self._category_lookup(force_refresh=True)
+            payees = self._payee_lookup(force_refresh=True)
+            for record in records:
+                self._validate_mixed_use_append_retry(
+                    record,
+                    accounts=accounts,
+                    categories=categories,
+                    payees=payees,
+                )
 
     def _validate_payee_append_retry(self, payee: Mapping[str, Any]) -> None:
         key = normalize_payee_name(payee.get("name", ""))
@@ -4027,10 +4096,20 @@ class GoogleSheetsStorage:
         self._validate_mileage_retry_references(trip, {})
 
     def _validate_mixed_use_append_retry(
-        self, source: Mapping[str, Any]
+        self,
+        source: Mapping[str, Any],
+        *,
+        accounts: Mapping[str, Mapping[str, Any]] | None = None,
+        categories: Mapping[str, Mapping[str, str]] | None = None,
+        payees: Mapping[str, Mapping[str, str]] | None = None,
     ) -> None:
-        self._validate_mixed_use_references(source)
-        accounts = self._account_lookup(force_refresh=True)
+        self._validate_mixed_use_references(
+            source,
+            accounts=accounts,
+            categories=categories,
+            payees=payees,
+        )
+        accounts = accounts or self._account_lookup(force_refresh=True)
         account_id = _clean_text(source.get("account_id"), "Account", required=True)
         if not _as_bool(accounts[account_id]["active"], "Account active"):
             raise StorageValidationError("Source account is inactive")
@@ -6313,7 +6392,12 @@ class GoogleSheetsStorage:
             _, records = tables[title]
             if title == "MixedUseExpenses" and not records:
                 continue
-            self._append_many(title, records)
+            # The backup parser validates the complete cross-sheet dependency
+            # graph before any restore write. During restore, dependencies may
+            # legitimately still be pending in later target worksheets, so
+            # retry validation must use that prevalidated backup graph rather
+            # than the partially populated target workbook.
+            self._append_many(title, records, check_references=False)
             restored = self._rows(title, force_refresh=True)
             expected_by_id = {record["id"]: record for record in records}
             actual_by_id = {row.values.get("id", ""): row.values for row in restored}
