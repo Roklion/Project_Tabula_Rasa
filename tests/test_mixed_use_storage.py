@@ -1513,6 +1513,38 @@ def test_mixed_use_edit_replaces_pair_in_one_spreadsheet_batch(
     }
 
 
+def test_mixed_use_edit_revalidates_references_before_retry(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    target = default_storage.create_category("Retry mixed target", "Expense")
+    calls = 0
+
+    def delete_target_during_backoff(_: float) -> None:
+        default_storage.delete_category(target["id"])
+
+    def fail_once(_: object) -> None:
+        nonlocal calls
+        calls += 1
+        raise StorageUnavailableError("temporary response lost", retryable=True)
+
+    default_storage._sleeper = delete_target_during_backoff
+    default_storage._batch_update_spreadsheet = fail_once
+
+    with pytest.raises(StorageValidationError, match="Category does not exist"):
+        default_storage.edit_mixed_use_expense(
+            source["id"], category_id=target["id"]
+        )
+
+    assert calls == 1
+    assert default_storage.get_mixed_use_expense(source["id"])["category_id"] != target["id"]
+
+
 def test_mixed_use_edit_rejects_receipt_drift_before_replacing_rows(
     default_storage: GoogleSheetsStorage,
 ) -> None:

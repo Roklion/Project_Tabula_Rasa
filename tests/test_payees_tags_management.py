@@ -56,6 +56,39 @@ def test_payee_merge_updates_mixed_use_source_and_projection(default_storage) ->
     assert mixed["id"] == default_storage.list_mixed_use_expenses()[0]["id"]
 
 
+def test_payee_merge_rechecks_new_references_before_retry(default_storage) -> None:
+    account, category = _ledger_setup(default_storage)
+    target = default_storage.create_payee("Retry target")
+    source = default_storage.create_payee("Retry source")
+    calls = 0
+
+    def add_reference_during_backoff(_: float) -> None:
+        default_storage.create_transaction(
+            txn_date="2026-01-01",
+            kind="Expense",
+            amount="10",
+            account_id=account["id"],
+            category_id=category["id"],
+            payee_id=source["id"],
+        )
+
+    def fail_once(_: object) -> None:
+        nonlocal calls
+        calls += 1
+        raise StorageUnavailableError("temporary response lost", retryable=True)
+
+    default_storage._sleeper = add_reference_during_backoff
+    default_storage._batch_update_spreadsheet = fail_once
+
+    with pytest.raises(StorageConflictError, match="references changed"):
+        default_storage.merge_payees(target["id"], [source["id"]])
+
+    assert calls == 1
+    assert source["id"] in {
+        item["id"] for item in default_storage.list_payees(active_only=False)
+    }
+
+
 def test_tag_merge_deduplicates_transactions_and_mileage(default_storage) -> None:
     account, category = _ledger_setup(default_storage)
     target = default_storage.create_tag("Target")
@@ -77,6 +110,39 @@ def test_tag_merge_deduplicates_transactions_and_mileage(default_storage) -> Non
     assert default_storage.list_mileage_trips()[0]["tag_ids"] == [target["id"]]
     assert source["id"] not in {item["id"] for item in default_storage.list_tags(active_only=False)}
     assert mileage["id"] == default_storage.list_mileage_trips()[0]["id"]
+
+
+def test_tag_merge_rechecks_new_references_before_retry(default_storage) -> None:
+    account, category = _ledger_setup(default_storage)
+    target = default_storage.create_tag("Retry target")
+    source = default_storage.create_tag("Retry source")
+    calls = 0
+
+    def add_reference_during_backoff(_: float) -> None:
+        default_storage.create_transaction(
+            txn_date="2026-01-01",
+            kind="Expense",
+            amount="10",
+            account_id=account["id"],
+            category_id=category["id"],
+            tag_ids=[source["id"]],
+        )
+
+    def fail_once(_: object) -> None:
+        nonlocal calls
+        calls += 1
+        raise StorageUnavailableError("temporary response lost", retryable=True)
+
+    default_storage._sleeper = add_reference_during_backoff
+    default_storage._batch_update_spreadsheet = fail_once
+
+    with pytest.raises(StorageConflictError, match="references changed"):
+        default_storage.merge_tags(target["id"], [source["id"]])
+
+    assert calls == 1
+    assert source["id"] in {
+        item["id"] for item in default_storage.list_tags(active_only=False)
+    }
 
 
 def test_referenced_remove_is_blocked_and_unreferenced_remove_succeeds(default_storage) -> None:

@@ -3014,6 +3014,39 @@ class TestGoogleSheetsStorage:
 
         assert batch_update.call_count == 2
 
+    def test_uncertain_bulk_category_revalidates_target_before_retry(self) -> None:
+        account = self.storage.create_account("Retry category account", "Bank")
+        original = self.storage.create_category("Retry original", "Expense")
+        target = self.storage.create_category("Retry target", "Expense")
+        transaction = self.storage.create_transaction(
+            txn_date="2026-08-01",
+            kind="Expense",
+            amount="25",
+            account_id=account["id"],
+            category_id=original["id"],
+        )
+        calls = 0
+
+        def delete_target_during_backoff(_: float) -> None:
+            self.storage.delete_category(target["id"])
+
+        def fail_once(_: object) -> None:
+            nonlocal calls
+            calls += 1
+            raise StorageUnavailableError("temporary response lost", retryable=True)
+
+        self.storage._sleeper = delete_target_during_backoff
+        self.storage._batch_update_spreadsheet = fail_once
+
+        with pytest.raises(StorageConflictError, match="target category changed"):
+            self.storage.bulk_change_transaction_category(
+                [transaction["id"]],
+                expected_transactions=[transaction],
+                category_id=target["id"],
+            )
+
+        assert calls == 1
+
     def test_bulk_mutations_accept_listed_tag_ids_in_freshness_checks(self) -> None:
         first, _, replacement = self._bulk_transaction_fixture()
         tag = self.storage.create_tag("Project")
