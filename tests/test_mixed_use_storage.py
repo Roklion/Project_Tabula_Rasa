@@ -1226,6 +1226,32 @@ def test_replace_rows_refreshes_positions_after_retry_backoff(
     assert rows[0].values["id"] == "inserted-during-backoff"
 
 
+def test_replace_rows_stops_on_duplicate_id_in_uncertain_readback(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    account = default_storage.create_account("Duplicate readback", "Bank")
+    row = default_storage._find_row("Accounts", account["id"])
+    worksheet = default_storage._worksheet("Accounts")
+    original_batch_update = worksheet.batch_update
+    calls = 0
+
+    def duplicate_then_timeout(data: object, **kwargs: object) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            worksheet.rows.append(list(worksheet.rows[1]))
+            raise OSError("temporary response lost")
+        original_batch_update(data, **kwargs)
+
+    worksheet.batch_update = duplicate_then_timeout  # type: ignore[method-assign]
+    with pytest.raises(StorageUnavailableError, match="could not confirm"):
+        default_storage._replace_rows(
+            "Accounts", [(row, {**row.values, "name": "Should not retry"})]
+        )
+
+    assert calls == 1
+
+
 def test_replace_rows_refreshes_positions_after_retry_guard(
     default_storage: GoogleSheetsStorage,
 ) -> None:
