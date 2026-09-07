@@ -1507,7 +1507,13 @@ class GoogleSheetsStorage:
                     self._invalidate(title)
                 return
 
-    def _append(self, title: str, record: Mapping[str, Any]) -> None:
+    def _append(
+        self,
+        title: str,
+        record: Mapping[str, Any],
+        *,
+        before_retry: Callable[[], None] | None = None,
+    ) -> None:
         headers = self._headers(title)
         values = [str(record.get(header, "")) for header in headers]
         worksheet = self._worksheet(title)
@@ -1533,6 +1539,7 @@ class GoogleSheetsStorage:
                 retry_safe=False,
             ),
             state,
+            before_retry=before_retry,
             invalidate=(title,),
         )
 
@@ -1611,6 +1618,14 @@ class GoogleSheetsStorage:
                 raise StorageConflictError(
                     f"The {title} row changed while the write was being retried."
                 )
+            if title == "Transactions":
+                self._validate_transaction_retry_references(record, original)
+                self._reject_receipt_ownership_conflict(
+                    record.get("receipt_references", ""),
+                    transaction_id=record_id,
+                )
+            elif title == "Mileage":
+                self._validate_mileage_retry_references(record, original)
             current_row = latest
 
         self._write_with_confirmation(
@@ -2428,6 +2443,22 @@ class GoogleSheetsStorage:
 
         def refresh() -> None:
             nonlocal current_row
+            existing_categories = self.list_categories(_force_refresh=True)
+            if any(
+                str(category.get("parent_id") or "").strip() == category_id
+                for category in existing_categories
+            ):
+                raise StorageConflictError(
+                    "That category has child categories and cannot be deleted"
+                )
+            transactions = self.list_transactions(_force_refresh=True)
+            if any(
+                str(transaction.get("category_id") or "").strip() == category_id
+                for transaction in transactions
+            ):
+                raise StorageConflictError(
+                    "That category has transactions and cannot be deleted"
+                )
             mixed_use_sources = self._rows("MixedUseExpenses", force_refresh=True)
             if any(
                 _clean_text(row.values.get("category_id"), "Category") == category_id
@@ -2490,7 +2521,14 @@ class GoogleSheetsStorage:
                 "active": "TRUE" if active else "FALSE",
                 "created_at": _utc_now(),
             }
-            self._append("Payees", record)
+            def recheck_payee_name() -> None:
+                if any(
+                    normalize_payee_name(item["name"]) == key
+                    for item in self.list_payees(_force_refresh=True)
+                ):
+                    raise StorageConflictError("That payee already exists")
+
+            self._append("Payees", record, before_retry=recheck_payee_name)
             return record
 
     def _ensure_payee_names(
@@ -3041,7 +3079,14 @@ class GoogleSheetsStorage:
                 "active": "TRUE" if active else "FALSE",
                 "created_at": _utc_now(),
             }
-            self._append("Tags", record)
+            def recheck_tag_name() -> None:
+                if any(
+                    normalize_tag_name(item["name"]) == key
+                    for item in self.list_tags(_force_refresh=True)
+                ):
+                    raise StorageConflictError("That tag already exists")
+
+            self._append("Tags", record, before_retry=recheck_tag_name)
             return record
 
     def edit_tag(
@@ -3805,6 +3850,77 @@ class GoogleSheetsStorage:
             raise StorageValidationError("Payee does not exist")
         decode_receipt_references(source.get("receipt_references", ""))
         _iso_date(source.get("txn_date"))
+
+    def _validate_transaction_retry_references(
+        self,
+        transaction: Mapping[str, Any],
+        original: Mapping[str, Any],
+    ) -> None:
+        accounts = self._account_lookup(force_refresh=True)
+        categories = self._category_lookup(force_refresh=True)
+        payees = self._payee_lookup(force_refresh=True)
+        tags = self._tag_lookup(force_refresh=True)
+        account_id = _clean_text(transaction.get("account_id"), "Account", required=True)
+        if account_id not in accounts:
+            raise StorageValidationError("Source account does not exist")
+        original_account_id = _clean_text(original.get("account_id"), "Account")
+        if (
+            not _as_bool(accounts[account_id]["active"], "Account active")
+            and account_id != original_account_id
+        ):
+            raise StorageValidationError("Source account is inactive")
+        kind = _clean_text(transaction.get("kind"), "Transaction kind", required=True).title()
+        category_id = _clean_text(transaction.get("category_id"), "Category")
+        to_account_id = _clean_text(
+            transaction.get("to_account_id"), "Destination account"
+        )
+        if kind == "Transfer":
+            if to_account_id not in accounts:
+                raise StorageValidationError("Destination account does not exist")
+            original_to_account_id = _clean_text(
+                original.get("to_account_id"), "Destination account"
+            )
+            if (
+                not _as_bool(accounts[to_account_id]["active"], "Account active")
+                and to_account_id != original_to_account_id
+            ):
+                raise StorageValidationError("Destination account is inactive")
+            if category_id:
+                raise StorageValidationError("Transfers cannot have a category")
+        else:
+            if to_account_id:
+                raise StorageValidationError(
+                    "Only transfers can have a destination account"
+                )
+            if category_id not in categories:
+                raise StorageValidationError("Category does not exist")
+            if categories[category_id]["kind"] != kind:
+                raise StorageValidationError("Category kind does not match transaction kind")
+        payee_id = _clean_text(transaction.get("payee_id"), "Payee")
+        if payee_id and payee_id not in payees:
+            raise StorageValidationError("Payee does not exist")
+        original_tag_ids = _normalize_tag_ids(original.get("tag_ids", ""))
+        for tag_id in _normalize_tag_ids(transaction.get("tag_ids", "")):
+            tag = tags.get(tag_id)
+            if tag is None:
+                raise StorageValidationError("Tag does not exist")
+            if not _as_bool(tag["active"], "Tag active") and tag_id not in original_tag_ids:
+                raise StorageValidationError("Tag is inactive")
+        decode_receipt_references(transaction.get("receipt_references", ""))
+
+    def _validate_mileage_retry_references(
+        self,
+        trip: Mapping[str, Any],
+        original: Mapping[str, Any],
+    ) -> None:
+        tags = self._tag_lookup(force_refresh=True)
+        original_tag_ids = _normalize_tag_ids(original.get("tag_ids", ""))
+        for tag_id in _normalize_tag_ids(trip.get("tag_ids", "")):
+            tag = tags.get(tag_id)
+            if tag is None:
+                raise StorageValidationError("Tag does not exist")
+            if not _as_bool(tag["active"], "Tag active") and tag_id not in original_tag_ids:
+                raise StorageValidationError("Tag is inactive")
 
     def _reject_receipt_ownership_conflict(
         self,
