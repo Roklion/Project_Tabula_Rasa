@@ -29,7 +29,6 @@ from tabula_rasa.storage import (
     StorageValidationError,
 )
 from tabula_rasa.page_renderers.transactions.receipts import (
-    editor_receipt_link_recovery_key,
     new_receipt_creation_workflow,
     receipt_creation_workflow_key,
     receipt_editor_workflow_key,
@@ -152,11 +151,6 @@ def test_mixed_use_upload_is_blocked_during_linked_editor_recovery() -> None:
 
     assert _mixed_use_receipt_recovery_active(
         {receipt_editor_workflow_key(profile, transaction_id): {}},
-        profile,
-        transaction_id,
-    )
-    assert _mixed_use_receipt_recovery_active(
-        {editor_receipt_link_recovery_key(profile, transaction_id): {}},
         profile,
         transaction_id,
     )
@@ -480,7 +474,7 @@ def test_mixed_use_app_test_clears_recovery_after_source_deletion(default_storag
             new_receipt_creation_workflow(
                 transaction["id"],
                 [],
-                profile_key="test",
+                spreadsheet_id="test-sheet",
                 mixed_use_source_id=source["id"],
             )
         )
@@ -510,7 +504,7 @@ def test_mixed_use_app_test_ignores_ordinary_receipt_recovery(default_storage) -
             new_receipt_creation_workflow(
                 transaction["id"],
                 [],
-                profile_key="test",
+                spreadsheet_id="test-sheet",
             )
         )
         app.run()

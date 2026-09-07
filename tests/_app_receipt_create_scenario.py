@@ -172,9 +172,9 @@ def main() -> None:
         by_label(app.button, "Save changes").click().run()
         assert len(upload_calls) == 4
         assert len(link_calls) == 2
-        assert by_label(app.button, "Retry linking uploaded receipt")
+        assert by_label(app.button, "Retry unresolved receipts")
 
-        by_label(app.button, "Retry linking uploaded receipt").click().run()
+        by_label(app.button, "Retry unresolved receipts").click().run()
         assert len(upload_calls) == 4
         assert len(link_calls) == 3
         assert sum(
