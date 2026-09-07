@@ -1486,20 +1486,12 @@ class GoogleSheetsStorage:
                     if before_retry is not None:
                         try:
                             before_retry()
-                        except StorageConflictError:
-                            for title in invalidate:
-                                self._invalidate(title)
-                            raise
                         except (StorageUnavailableError, OSError) as refresh_error:
                             for title in invalidate:
                                 self._invalidate(title)
                             raise StorageUnavailableError(
                                 _mutation_guidance(operation), retryable=False
                             ) from refresh_error
-                        except StorageError:
-                            for title in invalidate:
-                                self._invalidate(title)
-                            raise
                         except Exception:
                             for title in invalidate:
                                 self._invalidate(title)
@@ -1549,13 +1541,16 @@ class GoogleSheetsStorage:
         if not records:
             return
         headers = self._headers(title)
+        record_ids = [
+            _clean_text(record.get("id"), "ID") for record in records
+        ]
+        if len(record_ids) != len(set(record_ids)):
+            raise StorageValidationError(f"Duplicate ID detected in {title}")
         values = [
             [str(record.get(header, "")) for header in headers] for record in records
         ]
         worksheet = self._worksheet(title)
-        record_ids = {
-            _clean_text(record.get("id"), "ID") for record in records
-        }
+        record_id_set = set(record_ids)
 
         def state() -> str:
             rows = self._rows(title, force_refresh=True)
@@ -1573,7 +1568,7 @@ class GoogleSheetsStorage:
             }
             if all(by_id.get(record_id) == item for record_id, item in expected.items()):
                 return "applied"
-            if not any(record_id in by_id for record_id in record_ids):
+            if not any(record_id in by_id for record_id in record_id_set):
                 return "unchanged"
             return "ambiguous"
 
