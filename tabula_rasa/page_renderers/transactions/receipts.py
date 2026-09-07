@@ -29,7 +29,8 @@ RECEIPT_EDITOR_WORKFLOW_KEY = "transaction_receipt_editor_workflow"
 MAX_RECEIPT_UPLOAD_TOTAL_BYTES = 200 * 1024 * 1024
 UPLOADED_NOT_LINKED_MESSAGE = (
     "The receipt is uploaded in Google Drive but could not be linked in Google "
-    "Sheets. The file remains available from Unreferenced receipt."
+    "Sheets. If it is not already linked, the file remains available from "
+    "Unreferenced receipts."
 )
 
 
@@ -471,10 +472,10 @@ def clear_missing_editor_receipt_recoveries(
             continue
         transaction_id = str(workflow.get("transaction_id", ""))
         if not _workflow_matches_configuration(context, workflow, receipt_folder):
-            st.session_state.pop(key, None)
+            _cancel_editor_receipt_recovery(context, transaction_id)
             notices.append(_configuration_changed_message())
         elif transaction_id not in transaction_ids:
-            st.session_state.pop(key, None)
+            _cancel_editor_receipt_recovery(context, transaction_id)
             notices.append(
                 "The transaction no longer exists. Uploaded files remain in "
                 "Google Drive and can be linked as unreferenced receipts."

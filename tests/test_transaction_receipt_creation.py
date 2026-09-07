@@ -23,6 +23,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     process_receipt_recovery,
     receipt_creation_counts,
     receipt_creation_workflow_key,
+    receipt_editor_upload_reset_key,
     receipt_editor_workflow_key,
     render_receipt_creation_recovery,
 )
@@ -276,9 +277,10 @@ def test_configuration_change_clears_only_matching_profile_workflow() -> None:
         ),
     }
 
+    context = _context()
     with patch.object(st, "session_state", state):
         notices = clear_missing_editor_receipt_recoveries(
-            _context(),
+            context,
             [{"id": "txn-1"}],
         )
 
@@ -286,6 +288,9 @@ def test_configuration_change_clears_only_matching_profile_workflow() -> None:
     assert south_key in state
     assert len(notices) == 1
     assert "workflow was cleared" in notices[0]
+    context.schedule_widget_reset.assert_called_once_with(
+        receipt_editor_upload_reset_key("north", "txn-1")
+    )
 
 
 def test_missing_transaction_clears_recovery_without_deleting_drive_file() -> None:
@@ -299,11 +304,15 @@ def test_missing_transaction_clears_recovery_without_deleting_drive_file() -> No
         )
     }
 
+    context = _context()
     with patch.object(st, "session_state", state):
-        notices = clear_missing_editor_receipt_recoveries(_context(), [])
+        notices = clear_missing_editor_receipt_recoveries(context, [])
 
     assert key not in state
     assert "remain in Google Drive" in notices[0]
+    context.schedule_widget_reset.assert_called_once_with(
+        receipt_editor_upload_reset_key("north", "txn-1")
+    )
 
 
 def test_manual_unreferenced_link_finishes_matching_editor_workflow() -> None:
