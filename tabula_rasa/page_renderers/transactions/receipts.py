@@ -638,15 +638,16 @@ def render_receipt_creation_recovery(context: TransactionsContext) -> bool:
     return True
 
 
-def _record_editor_receipt_linked(
+def _remove_editor_receipt_from_recovery(
     context: TransactionsContext,
     transaction_id: str,
-    reference: Mapping[str, Any],
+    file_id: str,
+    *,
+    record_linked: bool = False,
 ) -> bool:
     workflow = _editor_workflow(context, transaction_id)
     if workflow is None:
         return False
-    file_id = str(reference.get("id", ""))
     remaining = [
         receipt
         for receipt in workflow.get("receipts", [])
@@ -659,8 +660,22 @@ def _record_editor_receipt_linked(
     if len(remaining) == len(workflow.get("receipts", [])):
         return False
     workflow["receipts"] = remaining
-    workflow["linked_count"] = int(workflow.get("linked_count", 0)) + 1
+    if record_linked:
+        workflow["linked_count"] = int(workflow.get("linked_count", 0)) + 1
     return _finish_editor_receipt_workflow(context, transaction_id, workflow)
+
+
+def _record_editor_receipt_linked(
+    context: TransactionsContext,
+    transaction_id: str,
+    reference: Mapping[str, Any],
+) -> bool:
+    return _remove_editor_receipt_from_recovery(
+        context,
+        transaction_id,
+        str(reference.get("id", "")),
+        record_linked=True,
+    )
 
 
 def render_receipts(
@@ -762,6 +777,11 @@ def render_receipts(
                 unlink_error.error(f"Receipt reference was not removed. {error}")
             else:
                 _mark_workbook_data_changed(context)
+                _remove_editor_receipt_from_recovery(
+                    context,
+                    edit_id,
+                    receipt_id,
+                )
                 st.session_state.pop(candidate_key, None)
                 st.session_state[notice_key] = (
                     f"Receipt removed: {name}. The file remains in Google Drive."
