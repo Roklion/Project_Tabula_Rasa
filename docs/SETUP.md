@@ -126,6 +126,17 @@ their linked projection. It validates the complete current schema before
 reporting success and can be rerun after an interrupted migration. Read-only
 validation remains non-mutating and does not perform this conversion.
 
+If the historical Drive receipt files predate workbook receipt references, run
+the separate one-time association migration after the workbook migration:
+
+```text
+python scripts/migrate_receipt_associations.py --secrets .streamlit/secrets.toml --profile PROFILE_KEY
+```
+
+Normal startup and backup creation never infer associations from legacy Drive
+metadata. The receipt migration considers only blank legacy cells and leaves an
+explicit empty receipt list unlinked.
+
 ## Local profile administration
 
 The authenticated Account settings route can create and edit the local

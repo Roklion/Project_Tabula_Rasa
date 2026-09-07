@@ -1672,6 +1672,44 @@ class TestGoogleSheetsStorage:
         ) == [{"id": "receipt234567", "name": "invoice.png"}]
         assert unlinked["id"] == transaction["id"]
 
+    def test_uncertain_receipt_link_is_confirmed_without_a_second_write(
+        self,
+    ) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Software", "Expense")
+        transaction = self.storage.create_transaction(
+            txn_date="2026-07-19",
+            kind="Expense",
+            amount="12.5",
+            account_id=account["id"],
+            category_id=category["id"],
+        )
+        worksheet = self.workbook.sheets["Transactions"]
+        original_update = worksheet.update
+
+        def commit_then_timeout(
+            values: list[list[str]],
+            range_name: str,
+            **kwargs: object,
+        ) -> None:
+            original_update(values, range_name, **kwargs)
+            raise OSError("response lost after receipt link")
+
+        worksheet.update = Mock(side_effect=commit_then_timeout)
+
+        self.storage.link_transaction_receipt(
+            transaction["id"],
+            file_id="receipt123456",
+            name="statement.pdf",
+        )
+
+        assert worksheet.update.call_count == 1
+        assert decode_receipt_references(
+            self.storage.list_transactions(_force_refresh=True)[0][
+                "receipt_references"
+            ]
+        ) == [{"id": "receipt123456", "name": "statement.pdf"}]
+
     def test_transaction_receipt_reference_validation_is_strict(self) -> None:
         with pytest.raises(
             StorageValidationError,
