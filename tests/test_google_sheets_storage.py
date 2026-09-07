@@ -1894,6 +1894,71 @@ class TestGoogleSheetsStorage:
 
         worksheet.append_rows.assert_not_called()
 
+    def test_transaction_append_revalidates_references_before_retry(self) -> None:
+        account = self.storage.create_account("Retry append account", "Bank")
+        category = self.storage.create_category("Retry append category", "Expense")
+        worksheet = self.workbook.sheets["Transactions"]
+        original_append = worksheet.append_row
+        calls = 0
+
+        def remove_reference_then_timeout(
+            values: list[str], **kwargs: object
+        ) -> None:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                self.storage.delete_category(category["id"])
+                raise OSError("temporary response lost")
+            original_append(values, **kwargs)
+
+        worksheet.append_row = remove_reference_then_timeout  # type: ignore[method-assign]
+        with pytest.raises(StorageValidationError, match="Category does not exist"):
+            self.storage.create_transaction(
+                txn_date="2026-08-01",
+                kind="Expense",
+                amount="25",
+                account_id=account["id"],
+                category_id=category["id"],
+            )
+
+        assert calls == 1
+
+    def test_quickbooks_import_rechecks_duplicates_before_retry(self) -> None:
+        self.storage.create_account("Checking", "Bank")
+        self.storage.create_category("Office", "Expense")
+        source_row = {
+            "Date": "07/02/2026",
+            "Transaction Type": "Expense",
+            "Num": "2",
+            "Name": "Shop",
+            "Memo/Description": "Paper",
+            "Account": "Checking",
+            "Split": "Office",
+            "Amount": "(20.50)",
+        }
+        worksheet = self.workbook.sheets["Transactions"]
+        original_append = worksheet.append_rows
+        calls = 0
+
+        def duplicate_then_timeout(
+            values: list[list[str]], **kwargs: object
+        ) -> None:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                duplicate = list(values[0])
+                duplicate[0] = "external-import"
+                original_append([duplicate], **kwargs)
+                raise OSError("temporary response lost")
+            original_append(values, **kwargs)
+
+        worksheet.append_rows = duplicate_then_timeout  # type: ignore[method-assign]
+        with pytest.raises(StorageConflictError, match="concurrent transaction import"):
+            self.storage.import_quickbooks_transactions([source_row])
+
+        assert calls == 1
+        assert len(self.storage.list_transactions(_force_refresh=True)) == 1
+
     def test_mileage_round_trip_supports_different_return_miles(self) -> None:
         worksheet = self.workbook.sheets["Mileage"]
         original_append_many = worksheet.append_rows

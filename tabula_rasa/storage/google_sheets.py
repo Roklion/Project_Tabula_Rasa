@@ -1514,6 +1514,18 @@ class GoogleSheetsStorage:
         *,
         before_retry: Callable[[], None] | None = None,
     ) -> None:
+        if before_retry is None:
+            before_retry = {
+                "Accounts": lambda: self._validate_account_append_retry(record),
+                "Categories": lambda: self._validate_category_append_retry(record),
+                "Transactions": lambda: self._validate_transaction_append_retry(
+                    record
+                ),
+                "MixedUseExpenses": lambda: self._validate_mixed_use_append_retry(
+                    record
+                ),
+                "Mileage": lambda: self._validate_mileage_append_retry(record),
+            }.get(title)
         headers = self._headers(title)
         values = [str(record.get(header, "")) for header in headers]
         worksheet = self._worksheet(title)
@@ -1543,23 +1555,37 @@ class GoogleSheetsStorage:
             invalidate=(title,),
         )
 
-    def _append_many(self, title: str, records: Iterable[Mapping[str, Any]]) -> None:
-        records = list(records)
+    def _append_many(
+        self,
+        title: str,
+        records: Iterable[Mapping[str, Any]],
+        *,
+        before_retry: Callable[[], None] | None = None,
+    ) -> None:
+        # Preserve a caller-owned list so an import can remove rows that became
+        # duplicates while the uncertain write was being confirmed.
+        records = records if isinstance(records, list) else list(records)
         if not records:
             return
         headers = self._headers(title)
-        record_ids = [
-            _clean_text(record.get("id"), "ID") for record in records
-        ]
-        if len(record_ids) != len(set(record_ids)):
-            raise StorageValidationError(f"Duplicate ID detected in {title}")
-        values = [
-            [str(record.get(header, "")) for header in headers] for record in records
-        ]
         worksheet = self._worksheet(title)
-        record_id_set = set(record_ids)
+
+        def batch_values() -> tuple[list[list[str]], set[str]]:
+            record_ids = [
+                _clean_text(record.get("id"), "ID") for record in records
+            ]
+            if len(record_ids) != len(set(record_ids)):
+                raise StorageValidationError(f"Duplicate ID detected in {title}")
+            return (
+                [
+                    [str(record.get(header, "")) for header in headers]
+                    for record in records
+                ],
+                set(record_ids),
+            )
 
         def state() -> str:
+            values, record_id_set = batch_values()
             rows = self._rows(title, force_refresh=True)
             by_id: dict[str, dict[str, str]] = {}
             for row in rows:
@@ -1582,10 +1608,13 @@ class GoogleSheetsStorage:
         self._write_with_confirmation(
             f"{title} batch append",
             lambda: self._api(
-                lambda: worksheet.append_rows(values, value_input_option="RAW"),
+                lambda: worksheet.append_rows(
+                    batch_values()[0], value_input_option="RAW"
+                ),
                 retry_safe=False,
             ),
             state,
+            before_retry=before_retry,
             invalidate=(title,),
         )
 
@@ -3922,6 +3951,50 @@ class GoogleSheetsStorage:
             if not _as_bool(tag["active"], "Tag active") and tag_id not in original_tag_ids:
                 raise StorageValidationError("Tag is inactive")
 
+    def _validate_account_append_retry(self, account: Mapping[str, Any]) -> None:
+        accounts = self.list_accounts(active_only=False, _force_refresh=True)
+        _validate_hierarchy_records(
+            [*accounts, account],
+            compatibility_field="classification",
+            item_label="Account",
+        )
+
+    def _validate_category_append_retry(self, category: Mapping[str, Any]) -> None:
+        categories = self.list_categories(_force_refresh=True)
+        _validate_hierarchy_records(
+            [*categories, category],
+            compatibility_field="kind",
+            item_label="Category",
+        )
+
+    def _validate_transaction_append_retry(
+        self, transaction: Mapping[str, Any]
+    ) -> None:
+        self._validate_transaction_retry_references(transaction, {})
+        self._reject_receipt_ownership_conflict(
+            transaction.get("receipt_references", ""),
+            transaction_id=_clean_text(transaction.get("id"), "ID"),
+        )
+
+    def _validate_mileage_append_retry(self, trip: Mapping[str, Any]) -> None:
+        self._validate_mileage_retry_references(trip, {})
+
+    def _validate_mixed_use_append_retry(
+        self, source: Mapping[str, Any]
+    ) -> None:
+        self._validate_mixed_use_references(source)
+        accounts = self._account_lookup(force_refresh=True)
+        account_id = _clean_text(source.get("account_id"), "Account", required=True)
+        if not _as_bool(accounts[account_id]["active"], "Account active"):
+            raise StorageValidationError("Source account is inactive")
+        tags = self._tag_lookup(force_refresh=True)
+        for tag_id in _normalize_tag_ids(source.get("tag_ids", "")):
+            tag = tags.get(tag_id)
+            if tag is None:
+                raise StorageValidationError("Tag does not exist")
+            if not _as_bool(tag["active"], "Tag active"):
+                raise StorageValidationError("Tag is inactive")
+
     def _reject_receipt_ownership_conflict(
         self,
         references: Any,
@@ -5767,7 +5840,26 @@ class GoogleSheetsStorage:
         prepared = [
             self._prepare_mileage_trip(item, tags=tags) for item in preview["rows"]
         ]
-        self._append_many("Mileage", prepared)
+
+        def refresh_import_batch() -> None:
+            existing = {
+                mileage_fingerprint(item)
+                for item in self.list_mileage_trips(_force_refresh=True)
+            }
+            pending = [
+                item
+                for item in prepared
+                if mileage_fingerprint(item) not in existing
+            ]
+            if len(pending) != len(prepared):
+                prepared[:] = pending
+            if not prepared:
+                raise StorageConflictError(
+                    "A concurrent mileage import created all pending rows; "
+                    "inspect Mileage before retrying."
+                )
+
+        self._append_many("Mileage", prepared, before_retry=refresh_import_batch)
         return prepared
 
     @_active_ledger_mutation_lock
@@ -5992,7 +6084,26 @@ class GoogleSheetsStorage:
             )
             for item in preview["rows"]
         ]
-        self._append_many("Transactions", prepared)
+
+        def refresh_import_batch() -> None:
+            existing = {
+                fingerprint(item)
+                for item in self.list_transactions(_force_refresh=True)
+            }
+            pending = [
+                item for item in prepared if fingerprint(item) not in existing
+            ]
+            if len(pending) != len(prepared):
+                prepared[:] = pending
+            if not prepared:
+                raise StorageConflictError(
+                    "A concurrent transaction import created all pending rows; "
+                    "inspect the Transactions ledger before retrying."
+                )
+
+        self._append_many(
+            "Transactions", prepared, before_retry=refresh_import_batch
+        )
         return prepared
 
     def export_backup_zip(self, receipt_manifest: Mapping[str, Any]) -> bytes:
