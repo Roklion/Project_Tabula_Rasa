@@ -1587,6 +1587,7 @@ class GoogleSheetsStorage:
         domain_retry_checks = {
             "Accounts": lambda record: self._validate_account_append_retry(record),
             "Categories": lambda record: self._validate_category_append_retry(record),
+            "Payees": lambda record: self._validate_payee_append_retry(record),
             "Transactions": lambda record: self._validate_transaction_append_retry(
                 record
             ),
@@ -3983,6 +3984,15 @@ class GoogleSheetsStorage:
             compatibility_field="classification",
             item_label="Account",
         )
+
+    def _validate_payee_append_retry(self, payee: Mapping[str, Any]) -> None:
+        key = normalize_payee_name(payee.get("name", ""))
+        if any(
+            normalize_payee_name(item["name"])
+            == key
+            for item in self.list_payees(_force_refresh=True)
+        ):
+            raise StorageConflictError("That payee already exists")
 
     def _validate_category_append_retry(self, category: Mapping[str, Any]) -> None:
         categories = self.list_categories(_force_refresh=True)
