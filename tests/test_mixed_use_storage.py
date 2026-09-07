@@ -1172,7 +1172,7 @@ def test_replace_rows_rebuilds_ranges_after_rows_shift_during_retry(
     assert rows[0].values["id"] == "inserted-before-retry"
 
 
-def test_replace_rows_reports_conflict_when_row_changes_during_retry(
+def test_replace_rows_fails_to_confirm_when_row_changes_during_retry(
     default_storage: GoogleSheetsStorage,
 ) -> None:
     account = default_storage.create_account("Retry conflict", "Bank")

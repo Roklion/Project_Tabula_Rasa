@@ -3159,7 +3159,7 @@ class TestGoogleSheetsStorage:
         assert [account["id"] for account in accounts] == [created["id"]]
         assert worksheet.append_row.call_count == 1
 
-    def test_failed_append_preserves_the_confirmed_account_cache(self) -> None:
+    def test_failed_append_invalidates_cache(self) -> None:
         worksheet = self.workbook.sheets["Accounts"]
         original_read = worksheet.get_all_values
         worksheet.get_all_values = Mock(wraps=original_read)
@@ -3187,7 +3187,7 @@ class TestGoogleSheetsStorage:
         assert "Accounts" not in self.storage._row_cache
         assert self.storage.list_accounts(active_only=False) == []
 
-    def test_failed_batch_append_preserves_profile_caches(self) -> None:
+    def test_failed_batch_append_invalidates_caches(self) -> None:
         account_sheet = self.workbook.sheets["Accounts"]
         category_sheet = self.workbook.sheets["Categories"]
         account_sheet.append_rows = Mock(
