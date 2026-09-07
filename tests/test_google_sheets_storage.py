@@ -1318,6 +1318,30 @@ class TestGoogleSheetsStorage:
         assert edited["kind"] == "Expense"
         assert self.storage.list_categories() == [edited]
 
+    def test_edit_category_kind_rechecks_uniqueness_before_retry(self) -> None:
+        category = self.storage.create_category("Retry category", "Expense")
+        worksheet = self.workbook.sheets["Categories"]
+        original_batch_update = worksheet.batch_update
+        calls = 0
+
+        def duplicate_then_timeout(
+            values: list[dict[str, object]], **kwargs: object
+        ) -> None:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                self.storage.create_category("Concurrent category", "Income")
+                raise OSError("temporary response lost")
+            original_batch_update(values, **kwargs)
+
+        worksheet.batch_update = duplicate_then_timeout  # type: ignore[method-assign]
+        with pytest.raises(StorageConflictError, match="already exists"):
+            self.storage.edit_category(
+                category["id"], name="Concurrent category", kind="Income"
+            )
+
+        assert calls == 1
+
     def test_delete_category_requires_no_transactions_or_children(self) -> None:
         unused = self.storage.create_category("Unused", "Expense")
         self.storage.delete_category(unused["id"])
@@ -3286,6 +3310,34 @@ class TestGoogleSheetsStorage:
             )
 
         assert calls == 1
+
+    @pytest.mark.parametrize("mutation", ["category", "delete"])
+    def test_bulk_index_mutations_confirm_successful_batch(
+        self, mutation: str
+    ) -> None:
+        first, _, replacement = self._bulk_transaction_fixture()
+        expected = [
+            item
+            for item in self.storage.list_transactions(_force_refresh=True)
+            if item["id"] == first["id"]
+        ]
+        batch_update = Mock()
+        self.storage._batch_update_spreadsheet = batch_update
+
+        with pytest.raises(StorageUnavailableError, match="could not confirm"):
+            if mutation == "category":
+                self.storage.bulk_change_transaction_category(
+                    [first["id"]],
+                    expected_transactions=expected,
+                    category_id=replacement["id"],
+                )
+            else:
+                self.storage.bulk_delete_transactions(
+                    [first["id"]], expected_transactions=expected
+                )
+
+        assert batch_update.call_count == 1
+        assert "Transactions" not in self.storage._row_cache
 
     def test_bulk_mutations_accept_listed_tag_ids_in_freshness_checks(self) -> None:
         first, _, replacement = self._bulk_transaction_fixture()

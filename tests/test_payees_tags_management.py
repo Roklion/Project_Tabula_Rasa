@@ -93,6 +93,29 @@ def test_payee_batch_append_rechecks_name_before_retry(default_storage) -> None:
     assert calls == 1
 
 
+def test_payee_edit_rechecks_name_before_retry(default_storage) -> None:
+    payee = default_storage.create_payee("Original Vendor")
+    worksheet = default_storage._worksheet("Payees")
+    original_update = worksheet.update
+    calls = 0
+
+    def duplicate_then_timeout(
+        values: list[list[str]], range_name: str, **kwargs: object
+    ) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            default_storage.create_payee("Concurrent Vendor")
+            raise OSError("temporary response lost")
+        original_update(values, range_name=range_name, **kwargs)
+
+    worksheet.update = duplicate_then_timeout  # type: ignore[method-assign]
+    with pytest.raises(StorageConflictError, match="already exists"):
+        default_storage.edit_payee(payee["id"], name="Concurrent Vendor")
+
+    assert calls == 1
+
+
 def test_payee_merge_updates_mixed_use_source_and_projection(default_storage) -> None:
     account, category = _ledger_setup(default_storage)
     target = default_storage.create_payee("Target")

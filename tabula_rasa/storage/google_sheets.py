@@ -1445,6 +1445,7 @@ class GoogleSheetsStorage:
         *,
         before_retry: Callable[[], None] | None = None,
         invalidate: Iterable[str] = (),
+        verify_success: bool = False,
     ) -> None:
         """Perform one mutation, confirming uncertain responses before retrying.
 
@@ -1503,6 +1504,21 @@ class GoogleSheetsStorage:
                     _mutation_guidance(operation), retryable=False
                 ) from error
             else:
+                if verify_success:
+                    try:
+                        state = readback()
+                    except (StorageError, OSError) as read_error:
+                        for title in invalidate:
+                            self._invalidate(title)
+                        raise StorageUnavailableError(
+                            _mutation_guidance(operation), retryable=False
+                        ) from read_error
+                    if state != "applied":
+                        for title in invalidate:
+                            self._invalidate(title)
+                        raise StorageUnavailableError(
+                            _mutation_guidance(operation), retryable=False
+                        )
                 for title in invalidate:
                     self._invalidate(title)
                 return
@@ -1654,7 +1670,9 @@ class GoogleSheetsStorage:
                 raise StorageConflictError(
                     f"The {title} row changed while the write was being retried."
                 )
-            if title == "Transactions":
+            if title in {"Accounts", "Categories", "Payees", "Tags"}:
+                self._validate_managed_edit_retry(title, record_id, record)
+            elif title == "Transactions":
                 self._validate_transaction_retry_references(record, original)
                 self._reject_receipt_ownership_conflict(
                     record.get("receipt_references", ""),
@@ -2072,7 +2090,8 @@ class GoogleSheetsStorage:
                 )
 
         self._write_with_confirmation(
-            "category change", write, state, before_retry=refresh, invalidate=("Transactions",)
+            "category change", write, state, before_retry=refresh,
+            invalidate=("Transactions",), verify_success=True,
         )
         return {"status": "fully_applied", "count": str(len(pending_by_id))}
 
@@ -2142,6 +2161,7 @@ class GoogleSheetsStorage:
             self._write_with_confirmation(
                 "transaction deletion", write, state,
                 before_retry=refresh, invalidate=("Transactions",),
+                verify_success=True,
             )
             return {"status": "fully_applied", "count": str(len(selected_rows))}
 
@@ -2383,6 +2403,9 @@ class GoogleSheetsStorage:
                 raise StorageConflictError(
                     "Category kind cannot change while used by a mixed-use expense"
                 )
+            self._validate_managed_edit_retry(
+                "Categories", normalized_category_id, updated
+            )
         if kind != updated["kind"]:
             reject_mixed_use_kind_change()
             current = self._find_row("Categories", normalized_category_id)
@@ -4053,6 +4076,56 @@ class GoogleSheetsStorage:
                     categories=categories,
                     payees=payees,
                 )
+
+    def _validate_managed_edit_retry(
+        self, title: str, record_id: str, record: Mapping[str, Any]
+    ) -> None:
+        if title == "Accounts":
+            accounts = self.list_accounts(active_only=False, _force_refresh=True)
+            if any(
+                item["id"] != record_id
+                and item["name"].casefold()
+                == _clean_text(record.get("name"), "Account name", required=True).casefold()
+                for item in accounts
+            ):
+                raise StorageConflictError("Account names must be unique")
+            _validate_hierarchy_records(
+                [record if item["id"] == record_id else item for item in accounts],
+                compatibility_field="classification",
+                item_label="Account",
+            )
+        elif title == "Categories":
+            categories = self.list_categories(_force_refresh=True)
+            name = _clean_text(record.get("name"), "Category name", required=True)
+            kind = _clean_text(record.get("kind"), "Category kind", required=True).title()
+            if any(
+                item["id"] != record_id
+                and item["name"].casefold() == name.casefold()
+                and item["kind"] == kind
+                for item in categories
+            ):
+                raise StorageConflictError("That category already exists")
+            _validate_hierarchy_records(
+                [record if item["id"] == record_id else item for item in categories],
+                compatibility_field="kind",
+                item_label="Category",
+            )
+        elif title == "Payees":
+            name = normalize_payee_name(record.get("name", ""))
+            if any(
+                item["id"] != record_id
+                and normalize_payee_name(item["name"]) == name
+                for item in self.list_payees(_force_refresh=True)
+            ):
+                raise StorageConflictError("That payee already exists")
+        elif title == "Tags":
+            name = normalize_tag_name(record.get("name", ""))
+            if any(
+                item["id"] != record_id
+                and normalize_tag_name(item["name"]) == name
+                for item in self.list_tags(_force_refresh=True)
+            ):
+                raise StorageConflictError("That tag already exists")
 
     def _validate_payee_append_retry(self, payee: Mapping[str, Any]) -> None:
         key = normalize_payee_name(payee.get("name", ""))
