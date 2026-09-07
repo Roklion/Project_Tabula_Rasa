@@ -990,19 +990,19 @@ class TestGoogleDriveFiles:
             b"receipt"
         ).hexdigest()
         recovery_query = session.requests[-1][2]["params"]["q"]
-        assert "name = 'statement.pdf'" in recovery_query
         assert "value='north'" in recovery_query
         assert "value='txn-1'" in recovery_query
         assert "key='tabulaRasaReceiptId'" in recovery_query
         assert "key='tabulaRasaSha256'" in recovery_query
 
-    def test_receipt_upload_marks_unreadable_success_as_uncertain(self) -> None:
+    def test_receipt_upload_retries_once_after_unreadable_success(self) -> None:
         session = DriveSession(
             [
                 FakeResponse(200, {"files": []}),
                 FakeResponse(200, {"files": []}),
                 FakeResponse(200, payload="not-json"),
                 FakeResponse(200, {"files": []}),
+                FakeResponse(200, {"id": "receipt123456", "name": "statement.pdf"}),
             ]
         )
         client = GoogleDriveClient(
@@ -1012,32 +1012,33 @@ class TestGoogleDriveFiles:
             sleeper=lambda _delay: None,
         )
 
-        with pytest.raises(GoogleDriveAccessError) as raised:
-            client.upload_receipt(
-                profile_key="north",
-                transaction_id="txn-1",
-                folder_id="folder123456",
-                original_name="statement.pdf",
-                content=b"receipt",
-                mime_type="application/pdf",
-                receipt_id="a" * 32,
-            )
+        uploaded = client.upload_receipt(
+            profile_key="north",
+            transaction_id="txn-1",
+            folder_id="folder123456",
+            original_name="statement.pdf",
+            content=b"receipt",
+            mime_type="application/pdf",
+            receipt_id="a" * 32,
+        )
 
-        assert raised.value.retryable is True
+        assert uploaded["id"] == "receipt123456"
         assert [request[0] for request in session.requests] == [
             "GET",
             "GET",
             "POST",
             "GET",
+            "POST",
         ]
 
-    def test_receipt_upload_marks_transient_http_failure_as_uncertain(self) -> None:
+    def test_receipt_upload_retries_once_after_transient_failure(self) -> None:
         session = DriveSession(
             [
                 FakeResponse(200, {"files": []}),
                 FakeResponse(200, {"files": []}),
                 FakeResponse(500),
                 FakeResponse(200, {"files": []}),
+                FakeResponse(200, {"id": "receipt123456", "name": "statement.pdf"}),
             ]
         )
         client = GoogleDriveClient(
@@ -1047,23 +1048,23 @@ class TestGoogleDriveFiles:
             sleeper=lambda _delay: None,
         )
 
-        with pytest.raises(GoogleDriveAccessError) as raised:
-            client.upload_receipt(
-                profile_key="north",
-                transaction_id="txn-1",
-                folder_id="folder123456",
-                original_name="statement.pdf",
-                content=b"receipt",
-                mime_type="application/pdf",
-                receipt_id="a" * 32,
-            )
+        uploaded = client.upload_receipt(
+            profile_key="north",
+            transaction_id="txn-1",
+            folder_id="folder123456",
+            original_name="statement.pdf",
+            content=b"receipt",
+            mime_type="application/pdf",
+            receipt_id="a" * 32,
+        )
 
-        assert raised.value.retryable is True
+        assert uploaded["id"] == "receipt123456"
         assert [request[0] for request in session.requests] == [
             "GET",
             "GET",
             "POST",
             "GET",
+            "POST",
         ]
 
     def test_receipt_upload_keeps_preflight_failure_retryable_without_upload_attempt(
@@ -1146,21 +1147,8 @@ class TestGoogleDriveFiles:
                 FakeResponse(
                     200,
                     {
-                        "files": [
-                            {
-                                "id": "receipt123456",
-                                "name": "statement.pdf",
-                                "appProperties": {
-                                    "tabulaRasaKind": "receipt",
-                                    "tabulaRasaProfile": "north",
-                                    "tabulaRasaTransaction": "txn-1",
-                                    "tabulaRasaReceiptId": receipt_id,
-                                    "tabulaRasaSha256": hashlib.sha256(
-                                        b"receipt"
-                                    ).hexdigest(),
-                                },
-                            }
-                        ]
+                        "id": "receipt123456",
+                        "name": "statement.pdf",
                     },
                 ),
             ]
@@ -1172,16 +1160,6 @@ class TestGoogleDriveFiles:
             sleeper=lambda _delay: None,
         )
 
-        with pytest.raises(GoogleDriveAccessError):
-            client.upload_receipt(
-                profile_key="north",
-                transaction_id="txn-1",
-                folder_id="folder123456",
-                original_name="statement.pdf",
-                content=b"receipt",
-                mime_type="application/pdf",
-                receipt_id=receipt_id,
-            )
         uploaded = client.upload_receipt(
             profile_key="north",
             transaction_id="txn-1",
@@ -1198,13 +1176,12 @@ class TestGoogleDriveFiles:
             for request in session.requests
             if request[0] == "POST"
         ]
-        assert len(post_bodies) == 1
-        assert (
-            f'"tabulaRasaReceiptId":"{receipt_id}"'.encode()
-            in post_bodies[0]
+        assert len(post_bodies) == 2
+        assert all(
+            f'"tabulaRasaReceiptId":"{receipt_id}"'.encode() in body
+            for body in post_bodies
         )
-        retry_query = session.requests[-1][2]["params"]["q"]
-        assert f"value='{receipt_id}'" in retry_query
+        assert all(b'"name":"statement.pdf"' in body for body in post_bodies)
 
     def test_profile_receipt_listing_is_not_transaction_scoped(self) -> None:
         receipt = {

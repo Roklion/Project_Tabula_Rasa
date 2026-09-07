@@ -535,6 +535,40 @@ def suffixed_receipt_filename(filename: str, occurrence: int) -> str:
     return f"{stem} ({occurrence}){extension}"
 
 
+def _receipt_identity_query(
+    *,
+    profile_key: str,
+    transaction_id: str,
+    folder_id: str,
+    receipt_id: str,
+    content_sha256: str,
+) -> str:
+    """Return the single Drive identity used for upload reconciliation."""
+    return " and ".join(
+        [
+            f"'{_escape_query_value(folder_id)}' in parents",
+            "trashed = false",
+            "appProperties has { key='tabulaRasaKind' and value='receipt' }",
+            (
+                "appProperties has { key='tabulaRasaProfile' and "
+                f"value='{_escape_query_value(profile_key)}' }}"
+            ),
+            (
+                "appProperties has { key='tabulaRasaTransaction' and "
+                f"value='{_escape_query_value(transaction_id)}' }}"
+            ),
+            (
+                "appProperties has { key='tabulaRasaReceiptId' and "
+                f"value='{receipt_id}' }}"
+            ),
+            (
+                "appProperties has { key='tabulaRasaSha256' and "
+                f"value='{content_sha256}' }}"
+            ),
+        ]
+    )
+
+
 class PathName:
     """Minimal cross-platform basename parser for untrusted upload names."""
 
@@ -1116,31 +1150,12 @@ class GoogleDriveClient:
         receipt_id = str(receipt_id or secrets.token_hex(16))
         if not RECEIPT_ID_PATTERN.fullmatch(receipt_id):
             raise GoogleDriveAccessError("Receipt identity is invalid.")
-        identity_query = " and ".join(
-            [
-                f"'{_escape_query_value(folder_id)}' in parents",
-                "trashed = false",
-                (
-                    "appProperties has { key='tabulaRasaKind' and "
-                    "value='receipt' }"
-                ),
-                (
-                    "appProperties has { key='tabulaRasaProfile' and "
-                    f"value='{_escape_query_value(profile_key)}' }}"
-                ),
-                (
-                    "appProperties has { key='tabulaRasaTransaction' and "
-                    f"value='{_escape_query_value(transaction_id)}' }}"
-                ),
-                (
-                    "appProperties has { key='tabulaRasaReceiptId' and "
-                    f"value='{receipt_id}' }}"
-                ),
-                (
-                    "appProperties has { key='tabulaRasaSha256' and "
-                    f"value='{content_sha256}' }}"
-                ),
-            ]
+        identity_query = _receipt_identity_query(
+            profile_key=profile_key,
+            transaction_id=transaction_id,
+            folder_id=folder_id,
+            receipt_id=receipt_id,
+            content_sha256=content_sha256,
         )
         try:
             existing_by_identity = self._list(identity_query, page_size=2)
@@ -1203,9 +1218,6 @@ class GoogleDriveClient:
             },
         }
         if not existing_by_identity:
-            committed_query = " and ".join(
-                [identity_query, f"name = '{_escape_query_value(filename)}'"]
-            )
             try:
                 uploaded = self._multipart_create(
                     metadata,
@@ -1213,17 +1225,22 @@ class GoogleDriveClient:
                     mime_type or "application/octet-stream",
                 )
             except GoogleDriveAccessError as error:
-                # A disconnected response after Google committed the upload is
-                # uncertain. Query by the deterministic identity and filename
-                # before reporting failure so a retry cannot create a duplicate.
+                if not error.retryable:
+                    raise
+                # One identity readback distinguishes a committed upload from
+                # an unchanged Drive state. Only the latter gets one safe retry.
                 try:
-                    committed = self._list(committed_query, page_size=2)
+                    committed = self._list(identity_query, page_size=2)
                 except GoogleDriveError as reconciliation_error:
                     raise error from reconciliation_error
                 if committed:
                     uploaded = committed[0]
                 else:
-                    raise
+                    uploaded = self._multipart_create(
+                        metadata,
+                        content,
+                        mime_type or "application/octet-stream",
+                    )
         uploaded.setdefault("name", filename)
         uploaded.setdefault("mimeType", mime_type or "application/octet-stream")
         uploaded.setdefault("size", str(len(content)))
@@ -1252,31 +1269,12 @@ class GoogleDriveClient:
         if not RECEIPT_ID_PATTERN.fullmatch(str(receipt_id)):
             raise GoogleDriveAccessError("Receipt identity is invalid.")
         content_sha256 = hashlib.sha256(content).hexdigest()
-        identity_query = " and ".join(
-            [
-                f"'{_escape_query_value(folder_id)}' in parents",
-                "trashed = false",
-                (
-                    "appProperties has { key='tabulaRasaKind' and "
-                    "value='receipt' }"
-                ),
-                (
-                    "appProperties has { key='tabulaRasaProfile' and "
-                    f"value='{_escape_query_value(profile_key)}' }}"
-                ),
-                (
-                    "appProperties has { key='tabulaRasaTransaction' and "
-                    f"value='{_escape_query_value(transaction_id)}' }}"
-                ),
-                (
-                    "appProperties has { key='tabulaRasaReceiptId' and "
-                    f"value='{_escape_query_value(receipt_id)}' }}"
-                ),
-                (
-                    "appProperties has { key='tabulaRasaSha256' and "
-                    f"value='{content_sha256}' }}"
-                ),
-            ]
+        identity_query = _receipt_identity_query(
+            profile_key=profile_key,
+            transaction_id=transaction_id,
+            folder_id=folder_id,
+            receipt_id=receipt_id,
+            content_sha256=content_sha256,
         )
         matches = self._list(identity_query, page_size=2)
         return dict(matches[0]) if matches else None
