@@ -120,6 +120,7 @@ def migrate_receipt_associations(
             storage.set_transaction_receipt_references(
                 transaction_id,
                 references,
+                expected_transaction=transaction,
             )
         migrated += len(references)
     return {"associations_migrated": migrated, "checksums_backfilled": backfilled}

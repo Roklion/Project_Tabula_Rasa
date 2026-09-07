@@ -3,8 +3,14 @@ from __future__ import annotations
 import hashlib
 from unittest.mock import Mock
 
+import pytest
+
 from scripts.migrate_receipt_associations import migrate_receipt_associations
-from tabula_rasa.storage import decode_receipt_references, GoogleSheetsStorage
+from tabula_rasa.storage import (
+    decode_receipt_references,
+    GoogleSheetsStorage,
+    StorageConflictError,
+)
 from tests.fakes import FakeWorkbook
 
 
@@ -237,4 +243,47 @@ def test_fresh_receipt_cell_prevents_overwriting_a_concurrent_link() -> None:
     )
 
     assert report == {"associations_migrated": 0, "checksums_backfilled": 0}
+    assert list_transactions(_force_refresh=True)[0]["receipt_references"] == "[]"
+
+
+def test_setter_rechecks_receipt_cell_after_ownership_scan() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook())
+    transaction = storage.create_transaction(
+        **_expense_inputs(storage),
+        kind="Expense",
+        amount="10",
+    )
+    _set_receipts_cell(
+        storage,
+        worksheet="Transactions",
+        record_id=transaction["id"],
+        value="",
+    )
+    drive = Mock()
+    drive.list_profile_receipts.return_value = [_legacy_receipt(transaction["id"])]
+    list_transactions = storage.list_transactions
+    calls = 0
+
+    def concurrent_link(*, _force_refresh: bool = False) -> list[dict[str, str]]:
+        nonlocal calls
+        calls += 1
+        if calls == 3:
+            _set_receipts_cell(
+                storage,
+                worksheet="Transactions",
+                record_id=transaction["id"],
+                value="[]",
+            )
+        return list_transactions(_force_refresh=_force_refresh)
+
+    storage.list_transactions = Mock(side_effect=concurrent_link)
+
+    with pytest.raises(StorageConflictError, match="transaction changed"):
+        migrate_receipt_associations(
+            storage,
+            drive,
+            profile_key="north",
+            folder_id="north-folder",
+        )
+
     assert list_transactions(_force_refresh=True)[0]["receipt_references"] == "[]"
