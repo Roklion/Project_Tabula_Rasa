@@ -1259,6 +1259,39 @@ class TestGoogleSheetsStorage:
         )
         assert cached_child["parent_id"] == first["id"]
 
+    def test_transaction_edit_revalidates_category_before_retry(self) -> None:
+        account = self.storage.create_account("Retry edit account", "Bank")
+        original = self.storage.create_category("Retry edit original", "Expense")
+        replacement = self.storage.create_category("Retry edit replacement", "Expense")
+        transaction = self.storage.create_transaction(
+            txn_date="2026-08-01",
+            kind="Expense",
+            amount="25",
+            account_id=account["id"],
+            category_id=original["id"],
+        )
+        worksheet = self.workbook.sheets["Transactions"]
+        original_update = worksheet.update
+        calls = 0
+
+        def delete_category_then_timeout(
+            values: list[list[str]], **kwargs: object
+        ) -> None:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                self.storage.delete_category(replacement["id"])
+                raise OSError("temporary response lost")
+            original_update(values, **kwargs)
+
+        worksheet.update = delete_category_then_timeout
+        with pytest.raises(StorageValidationError, match="Category does not exist"):
+            self.storage.edit_transaction(
+                transaction["id"], category_id=replacement["id"]
+            )
+
+        assert calls == 1
+
     def test_unknown_account_type_is_rejected(self) -> None:
         with pytest.raises(StorageValidationError):
             self.storage.create_account(
@@ -1340,6 +1373,34 @@ class TestGoogleSheetsStorage:
         category_sheet.delete_rows = inject_source_then_timeout
 
         with pytest.raises(StorageConflictError, match="mixed-use expenses"):
+            self.storage.delete_category(category["id"])
+
+        assert self.storage.list_categories() == [category]
+
+    def test_delete_category_rechecks_transactions_after_retry(self) -> None:
+        account = self.storage.create_account("Delete retry account", "Bank")
+        category = self.storage.create_category("Delete retry category", "Expense")
+        category_sheet = self.workbook.sheets["Categories"]
+        original_delete = category_sheet.delete_rows
+        injected = False
+
+        def inject_transaction_then_timeout(row_number: int) -> None:
+            nonlocal injected
+            if not injected:
+                injected = True
+                self.storage.create_transaction(
+                    txn_date="2026-08-01",
+                    kind="Expense",
+                    amount="25",
+                    account_id=account["id"],
+                    category_id=category["id"],
+                )
+                raise OSError("response lost before category deletion")
+            original_delete(row_number)
+
+        category_sheet.delete_rows = inject_transaction_then_timeout
+
+        with pytest.raises(StorageConflictError, match="transactions"):
             self.storage.delete_category(category["id"])
 
         assert self.storage.list_categories() == [category]

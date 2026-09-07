@@ -37,6 +37,38 @@ def test_payee_rename_preserves_id_and_references(default_storage) -> None:
     assert default_storage.list_transactions()[0]["payee"] == "Renamed Vendor"
 
 
+def test_payee_append_rechecks_name_before_retry(default_storage) -> None:
+    worksheet = default_storage._worksheet("Payees")
+    headers = default_storage._headers("Payees")
+    original_append = worksheet.append_row
+    calls = 0
+
+    def duplicate_then_timeout(values: list[str], **kwargs: object) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            duplicate = {header: "" for header in headers}
+            duplicate.update(
+                {
+                    "id": "external-payee",
+                    "name": "Concurrent Vendor",
+                    "active": "TRUE",
+                    "created_at": "2026-01-01T00:00:00+00:00",
+                }
+            )
+            original_append(
+                [duplicate.get(header, "") for header in headers], **kwargs
+            )
+            raise OSError("temporary response lost")
+        original_append(values, **kwargs)
+
+    worksheet.append_row = duplicate_then_timeout  # type: ignore[method-assign]
+    with pytest.raises(StorageConflictError, match="already exists"):
+        default_storage.create_payee("Concurrent Vendor")
+
+    assert calls == 1
+
+
 def test_payee_merge_updates_mixed_use_source_and_projection(default_storage) -> None:
     account, category = _ledger_setup(default_storage)
     target = default_storage.create_payee("Target")
