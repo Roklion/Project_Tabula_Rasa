@@ -4322,12 +4322,14 @@ class GoogleSheetsStorage:
             categories = self._category_lookup(force_refresh=True)
             payees = self._payee_lookup(force_refresh=True)
             self._validate_mixed_use_references(
-                merged,
+                updated_source,
                 accounts=accounts,
                 categories=categories,
                 payees=payees,
             )
-            account_id = _clean_text(merged.get("account_id"), "Account", required=True)
+            account_id = _clean_text(
+                updated_source.get("account_id"), "Account", required=True
+            )
             original_account_id = _clean_text(
                 current_transaction.get("account_id"), "Account"
             )
@@ -4338,7 +4340,7 @@ class GoogleSheetsStorage:
                 raise StorageValidationError("Source account is inactive")
             tags = self._tag_lookup(force_refresh=True)
             original_tag_ids = _normalize_tag_ids(current_transaction.get("tag_ids", ""))
-            for tag_id in _normalize_tag_ids(merged.get("tag_ids", "")):
+            for tag_id in _normalize_tag_ids(updated_transaction.get("tag_ids", "")):
                 tag = tags.get(tag_id)
                 if tag is None:
                     raise StorageValidationError("Tag does not exist")
@@ -4346,7 +4348,7 @@ class GoogleSheetsStorage:
                     raise StorageValidationError("Tag is inactive")
             if "receipt_references" in changes:
                 self._reject_receipt_ownership_conflict(
-                    merged.get("receipt_references", ""),
+                    updated_source.get("receipt_references", ""),
                     transaction_id=transaction_id,
                 )
 
