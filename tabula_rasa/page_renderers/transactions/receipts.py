@@ -20,7 +20,11 @@ from tabula_rasa.receipt_manifest import (
     ReceiptManifestError,
     receipt_reference_from_drive_file,
 )
-from tabula_rasa.storage import StorageError, decode_receipt_references
+from tabula_rasa.storage import (
+    decode_receipt_references,
+    StorageError,
+    StorageNotFoundError,
+)
 
 
 RECEIPT_UPLOAD_TYPES = ["pdf", "png", "jpg", "jpeg", "webp", "heic"]
@@ -247,7 +251,7 @@ def _fresh_transaction_receipt_references(
             return decode_receipt_references(
                 transaction.get("receipt_references", "")
             )
-    raise StorageError(
+    raise StorageNotFoundError(
         "The selected transaction no longer exists. Refresh the ledger before "
         "uploading receipts."
     )
@@ -618,6 +622,15 @@ def render_receipt_creation_recovery(context: TransactionsContext) -> bool:
                     "Connect Google Drive and configure this profile's receipt folder."
                 )
             _process_context_receipts(context, workflow, receipt_folder)
+        except StorageNotFoundError:
+            st.session_state.pop(key, None)
+            context.schedule_widget_reset("reset_add_transaction_form")
+            st.warning(
+                "The saved transaction no longer exists. Receipt recovery was "
+                "cleared; uploaded files remain available in Google Drive as "
+                "unreferenced receipts."
+            )
+            return False
         except (GoogleDriveError, StorageError) as error:
             workflow["error"] = str(error)
         finish_receipt_creation_if_complete(context, workflow)

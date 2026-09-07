@@ -259,6 +259,38 @@ def test_creation_recovery_is_profile_scoped() -> None:
     assert state[receipt_creation_workflow_key("south")] is south
 
 
+def test_creation_recovery_clears_when_saved_transaction_is_gone() -> None:
+    workflow = new_receipt_creation_workflow(
+        "txn-1",
+        [_prepared()],
+        spreadsheet_id="north-sheet",
+        receipt_folder_id="north-folder",
+    )
+    key = receipt_creation_workflow_key("north")
+    state = {key: workflow}
+    storage = Mock()
+    storage.list_transactions.return_value = []
+    context = _context(storage=storage)
+
+    with (
+        patch.object(st, "session_state", state),
+        patch.object(st, "info"),
+        patch.object(st, "warning") as warning,
+        patch.object(st, "caption"),
+        patch.object(st, "error"),
+        patch.object(st, "button", return_value=True),
+        patch.object(st, "rerun") as rerun,
+    ):
+        assert not render_receipt_creation_recovery(context)
+
+    assert key not in state
+    context.schedule_widget_reset.assert_called_once_with(
+        "reset_add_transaction_form"
+    )
+    assert "no longer exists" in warning.call_args.args[0]
+    rerun.assert_not_called()
+
+
 def test_configuration_change_clears_only_matching_profile_workflow() -> None:
     north_key = receipt_editor_workflow_key("north", "txn-1")
     south_key = receipt_editor_workflow_key("south", "txn-2")
