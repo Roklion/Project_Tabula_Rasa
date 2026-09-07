@@ -1571,6 +1571,44 @@ def test_mixed_use_edit_revalidates_references_before_retry(
     assert default_storage.get_mixed_use_expense(source["id"])["category_id"] != target["id"]
 
 
+def test_mixed_use_edit_revalidates_inline_created_payee_before_retry(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    inputs = {**_expense_inputs(default_storage), "payee_id": ""}
+    source = default_storage.create_mixed_use_expense(
+        **inputs,
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    calls = 0
+
+    def delete_inline_payee_during_backoff(_: float) -> None:
+        payee = next(
+            item
+            for item in default_storage.list_payees(active_only=False)
+            if item["name"] == "Retry inline payee"
+        )
+        row = default_storage._find_row("Payees", payee["id"])
+        default_storage._worksheet("Payees").delete_rows(row.row_number)
+        default_storage._invalidate("Payees")
+
+    def fail_once(_: object) -> None:
+        nonlocal calls
+        calls += 1
+        raise StorageUnavailableError("temporary response lost", retryable=True)
+
+    default_storage._sleeper = delete_inline_payee_during_backoff
+    default_storage._batch_update_spreadsheet = fail_once
+
+    with pytest.raises(StorageValidationError, match="Payee does not exist"):
+        default_storage.edit_mixed_use_expense(
+            source["id"], new_payee_name="Retry inline payee"
+        )
+
+    assert calls == 1
+
+
 def test_mixed_use_edit_rejects_receipt_drift_before_replacing_rows(
     default_storage: GoogleSheetsStorage,
 ) -> None:
