@@ -1821,6 +1821,18 @@ class TestGoogleSheetsStorage:
             ("Office", "Client site"),
         ]
 
+    def test_batch_append_rejects_duplicate_input_ids_before_writing(self) -> None:
+        worksheet = self.workbook.sheets["Accounts"]
+        worksheet.append_rows = Mock(wraps=worksheet.append_rows)
+
+        with pytest.raises(StorageValidationError, match="Duplicate ID"):
+            self.storage._append_many(
+                "Accounts",
+                [{"id": "duplicate"}, {"id": "duplicate"}],
+            )
+
+        worksheet.append_rows.assert_not_called()
+
     def test_mileage_round_trip_supports_different_return_miles(self) -> None:
         worksheet = self.workbook.sheets["Mileage"]
         original_append_many = worksheet.append_rows
