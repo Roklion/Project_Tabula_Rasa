@@ -217,7 +217,7 @@ class TestGoogleSheetsStorage:
             raise StorageUnavailableError("refresh unavailable", retryable=True)
 
         with pytest.raises(StorageUnavailableError, match="could not confirm") as raised:
-            self.storage._write_with_confirmation(
+            self.storage._write_with_uncertain_readback(
                 "transaction update",
                 write,
                 lambda: "unchanged",
@@ -248,7 +248,7 @@ class TestGoogleSheetsStorage:
         def refresh() -> None:
             events.append("refresh")
 
-        storage._write_with_confirmation(
+        storage._write_with_uncertain_readback(
             "transaction update", write, lambda: "unchanged", before_retry=refresh
         )
 
@@ -264,7 +264,7 @@ class TestGoogleSheetsStorage:
             raise KeyError("row disappeared")
 
         with pytest.raises(KeyError):
-            self.storage._write_with_confirmation(
+            self.storage._write_with_uncertain_readback(
                 "transaction update",
                 write,
                 lambda: "unchanged",
@@ -284,7 +284,7 @@ class TestGoogleSheetsStorage:
             raise KeyError("unreadable response")
 
         with pytest.raises(KeyError):
-            self.storage._write_with_confirmation(
+            self.storage._write_with_uncertain_readback(
                 "transaction update",
                 write,
                 readback,
