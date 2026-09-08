@@ -109,8 +109,11 @@ Expense inputs, the full total, business-use percentage, currency-rounded
 allocated amount, allocation rationale, and stable source and projection IDs.
 The corresponding Transactions row remains an ordinary Expense projection and
 stores generic `source_type` and `source_id` provenance. Source-aware CRUD
-updates the existing projection or removes both records, with fresh reads and
-postcondition classification for the non-transactional multi-row writes.
+updates the existing projection or removes both records while preserving the
+source-authoritative and read-only-projection invariants. These are
+non-transactional multi-row writes. Pre-write validation, stable identity,
+bounded uncertain-write readback, and actionable partial-state guidance are
+preferred to an application-level transaction protocol.
 This Phase A contract is storage/domain-only; it does not expose a user-facing
 mixed-use workflow.
 
@@ -124,18 +127,125 @@ sequenceDiagram
     User->>App: Submit a ledger operation
     App->>Profile: Resolve workbook and service account
     App->>Sheets: Fresh validation and requested write
-    Sheets-->>App: Confirmed result
-    App->>App: Invalidate affected caches and record duplicate guard
+    Sheets-->>App: Confirmed result or bounded uncertain-write readback
+    App->>App: Invalidate affected caches before later reads
     App-->>User: Report success only after confirmation
 ```
 
-Edits, deletes, uniqueness checks, and reference checks use fresh data before
-writing. A write success is shown only after the Google API confirms it.
-Affected caches are invalidated only after confirmation. Temporary network and
-quota failures use bounded readback handling. Each mutation has one fresh
-confirmation read: a confirmed final state succeeds, a clearly unchanged
-state may be retried once, and an ambiguous or unreadable state invalidates
-caches and gives actionable inspection guidance.
+### Bounded remote mutation policy
+
+Google Sheets is the active source of truth, but it is not a transactional or
+serializable database. The application therefore does not emulate ACID
+semantics with dependency snapshots, transaction managers, repeated
+postcondition checks, or automatic repair loops. Native batch requests are
+appropriate when they reduce a logically coupled mutation, but a batch is not
+treated as a general rollback boundary.
+
+Every mutation still protects correctness at the boundary by reading fresh
+records before writes, validating domain and referential constraints, enforcing
+selected profile identity, rejecting stale expected-record edits, and
+generating stable IDs before creates. The supported network policy is
+deliberately small:
+
+1. Attempt the requested write once.
+2. If commit status is uncertain, read the affected stable ID or final state
+   once. A confirmed requested state is success.
+3. Retry once only when the fresh read proves the operation is absent and the
+  retry cannot duplicate or corrupt data. Otherwise, invalidate affected
+   caches and stop with an actionable inspection/recovery message.
+
+A successful Google response is authoritative; an uncertain response can be
+confirmed only by the one bounded readback described above. The application
+does not add a second success-path read merely to defend against unsupported
+manual row reordering or other arbitrary cross-client interleavings. Affected
+caches are invalidated after a confirmed or uncertain write, before later reads
+can reuse stale rows. This boundary keeps duplicate prevention and stale-write
+protection while avoiding a growing state-machine that pretends Sheets offers
+guarantees it does not provide.
+
+### Recoverable cross-service partial failure
+
+Drive and Sheets operations are also not atomic. Receipt workflows prepare a
+stable receipt identity and content hash, upload at most once plus one safe
+identity-based retry after an uncertain Drive response, then link the known
+file in Sheets. If linking is uncertain, one fresh transaction/source read can
+confirm success; otherwise the workflow stops and tells the user what to
+inspect. A successfully uploaded but unlinked file remains in the profile's
+Drive storage and is surfaced as an **Unreferenced Receipt** for explicit
+recovery. The app does not delete that file as simulated rollback.
+
+This same rule applies to future multi-service work: make partial state
+detectable and recoverable, keep recovery scoped to the selected profile and
+configuration revision, and expose a user-facing recovery boundary when
+automatic repair would require a distributed transaction simulation.
+
+### Current formats and explicit migration
+
+Normal runtime primarily understands the current workbook schema and current
+backup format. A genuinely new/empty workbook may be bootstrapped, but a
+populated historical workbook is validated and rejected with an actionable
+instruction to run the explicit workbook migration tool
+(`scripts/migrate_workbook.py`). Historical backup conversion likewise lives
+in `scripts/migrate_legacy_backup.py`; production
+restore accepts only the current format and validates the converted output
+using the normal current-format validator.
+
+Migration tools have a narrower trust boundary than production runtime. They
+recognize supported standard application outputs, perform deterministic
+transformations, and fail clearly when the recognized contract is not met.
+Archive migration preserves its source archive; `scripts/migrate_workbook.py`
+intentionally upgrades the selected workbook in place and should be run only
+after the operator has secured a recoverable backup. The tools do not
+permanently carry every old schema into startup or reproduce adversarial
+validation for inputs they are explicitly designed to convert.
+
+### Proportionality and review drift
+
+Defensive complexity is justified by the combination of realistic likelihood,
+impact, detectability/recoverability, and implementation/test/maintenance
+cost. High-impact data-loss, duplicate, stale-write, security, and
+cross-profile risks deserve strong controls. A low-likelihood state with a
+clear manual recovery path does not automatically justify hundreds of lines
+of production and test machinery.
+
+When a review round successively adds retry callbacks, snapshots, state
+branches, or success-path readbacks for narrower variants of the same race,
+perform a holistic mission check. Classify a finding on two independent axes:
+whether it can technically occur, and whether it is inside the supported
+product threat/concurrency model at a proportional cost. The smallest safe
+response may be a local stable-ID check, a stop-and-inspect error, or an
+evidence-backed dispute. Batch related accepted fixes into one coherent review
+head instead of repeatedly expanding the implementation for every theoretical
+interleaving.
+
+## Responsibility-based module boundaries
+
+The structural refactor follows ownership and data-flow seams, not a fixed
+line-count target. A cohesive moderately large module is preferable to
+artificial fragmentation. Stable public facades and package re-exports keep
+unrelated callers from changing while the implementation moves behind them.
+Lower-level storage, client, and schema helpers must not depend on Streamlit
+page renderers, and shared helpers are justified only when they clarify a
+real responsibility or remove real duplication.
+
+The target seams for the decomposition work are:
+
+| Responsibility | Target boundary |
+| --- | --- |
+| Sheets storage facade | `tabula_rasa/storage/google_sheets/__init__.py` keeps `GoogleSheetsStorage` and re-exports intentionally public names. |
+| Sheets primitives | `tabula_rasa/storage/google_sheets/errors.py`, `tabula_rasa/storage/google_sheets/schema.py`, `tabula_rasa/storage/google_sheets/validation.py`, `tabula_rasa/storage/google_sheets/client.py`, and a small `tabula_rasa/storage/google_sheets/base.py` own errors, current schema, API access, validation, and shared row/cache/read/write helpers. |
+| Sheets domains | `tabula_rasa/storage/google_sheets/accounts.py`, `tabula_rasa/storage/google_sheets/categories.py`, `tabula_rasa/storage/google_sheets/payees.py`, `tabula_rasa/storage/google_sheets/tags.py`, `tabula_rasa/storage/google_sheets/transactions.py`, `tabula_rasa/storage/google_sheets/mileage.py`, `tabula_rasa/storage/google_sheets/mixed_use.py`, `tabula_rasa/storage/google_sheets/receipts.py`, and `tabula_rasa/storage/google_sheets/backups.py` own cohesive domain operations. Historical migration code stays in scripts. |
+| Receipt page workflow | `tabula_rasa/page_renderers/transactions/receipt_workflows.py` owns reusable upload/recovery state; `tabula_rasa/page_renderers/transactions/receipt_editor.py` owns editor rendering; `tabula_rasa/page_renderers/transactions/receipt_display.py` owns listing/unlink UI. `tabula_rasa/page_renderers/transactions/receipts.py` may remain a thin compatibility facade. |
+| Mileage page | `tabula_rasa/page_renderers/mileage/mileage_routing.py`, `tabula_rasa/page_renderers/mileage/mileage_form.py`, `tabula_rasa/page_renderers/mileage/mileage_ledger.py`, and `tabula_rasa/page_renderers/mileage/mileage_locations.py` separate route state, forms, ledger behavior, and location helpers; `tabula_rasa/page_renderers/mileage.py` remains orchestration-focused. |
+| Transaction ledger page | `tabula_rasa/page_renderers/transactions/ledger_filters.py`, `tabula_rasa/page_renderers/transactions/ledger_bulk.py`, `tabula_rasa/page_renderers/transactions/ledger_editor.py`, and `tabula_rasa/page_renderers/transactions/transaction_copy.py` separate search/filter state, bulk actions, single-record editing, and provenance/copy behavior; `tabula_rasa/page_renderers/ledger.py` composes them. |
+| Drive integration | `tabula_rasa/storage/google_drive/__init__.py` preserves `GoogleDriveClient`; `tabula_rasa/storage/google_drive/oauth.py`, `tabula_rasa/storage/google_drive/client.py`, `tabula_rasa/storage/google_drive/folders.py`, `tabula_rasa/storage/google_drive/receipts.py`, and `tabula_rasa/storage/google_drive/backups.py` separate identity/auth, generic requests, managed folders, receipts, and backups. |
+| Tests | Test files follow these production seams, with shared fixtures in the appropriate `conftest.py` or helper module rather than duplicated per domain. |
+
+`tabula_rasa/local_profile_admin.py` is split only if profile form, readiness,
+credential, and storage responsibilities remain genuinely distinct after the
+cleanup; otherwise its cohesion is documented and it remains intact. These
+boundaries are architectural ownership guidance, not a demand that every row
+of code become a separate class or file.
 
 ## Receipt boundary
 
