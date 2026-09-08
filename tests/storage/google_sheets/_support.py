@@ -34,9 +34,9 @@ from tabula_rasa.storage.google_sheets import (
     StorageUnavailableError,
     StorageValidationError,
     StorageWorkbookAccessError,
-    VERSION_5_WORKSHEET_HEADERS,
     WORKSHEET_HEADERS,
 )
+from scripts.migration_schemas import VERSION_5_WORKSHEET_HEADERS
 
 from tabula_rasa.quickbooks_import import (
     general_ledger_rows,

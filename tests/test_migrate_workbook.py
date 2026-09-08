@@ -13,11 +13,13 @@ from scripts.migrate_workbook import migrate_workbook
 from tabula_rasa.storage.google_sheets import (
     StorageInitializationError,
     StorageValidationError,
-    VERSION_3_WORKSHEET_HEADERS,
-    VERSION_7_WORKSHEET_HEADERS,
     WORKSHEET_HEADERS,
     GoogleSheetsStorage,
     _looks_like_historical_workbook,
+)
+from scripts.migration_schemas import (
+    VERSION_3_WORKSHEET_HEADERS,
+    VERSION_7_WORKSHEET_HEADERS,
 )
 from tests.fakes import FakeWorkbook
 

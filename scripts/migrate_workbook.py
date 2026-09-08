@@ -24,19 +24,21 @@ from tabula_rasa.business_profiles import select_profile_secrets  # noqa: E402
 from tabula_rasa.local_profile_store import load_business_profile_document  # noqa: E402
 from tabula_rasa.storage.google_sheets import (  # noqa: E402
     MIXED_USE_WORKSHEET_HEADERS,
-    PRE_MIXED_USE_WORKSHEET_HEADERS,
     SHEETS_SCOPE,
-    LEGACY_TAGS_WORKBOOK_HEADERS,
-    VERSION_3_WORKSHEET_HEADERS,
-    VERSION_5_WORKSHEET_HEADERS,
-    VERSION_6_WORKSHEET_HEADERS,
-    VERSION_7_WORKSHEET_HEADERS,
     WORKSHEET_HEADERS,
     GoogleSheetsStorage,
     StorageError,
     decode_receipt_references,
     _looks_like_partial_blank_workbook,
     _validate_hierarchy_records,
+)
+from scripts.migration_schemas import (  # noqa: E402
+    LEGACY_TAGS_WORKBOOK_HEADERS,
+    PRE_MIXED_USE_WORKSHEET_HEADERS,
+    VERSION_3_WORKSHEET_HEADERS,
+    VERSION_5_WORKSHEET_HEADERS,
+    VERSION_6_WORKSHEET_HEADERS,
+    VERSION_7_WORKSHEET_HEADERS,
 )
 from scripts.migrate_payees import migrate_workbook as migrate_payees  # noqa: E402
 

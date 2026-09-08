@@ -30,12 +30,7 @@ from .schema import (
     ACCOUNT_CLASSIFICATIONS,
     BACKUP_FORMAT_VERSION,
     FIXED_TYPE_CLASSIFICATIONS,
-    LEGACY_TAGS_WORKBOOK_HEADERS,
     MIXED_USE_WORKSHEET_HEADERS,
-    PRE_PAYEE_WORKSHEET_HEADERS,
-    VERSION_3_WORKSHEET_HEADERS,
-    VERSION_6_WORKSHEET_HEADERS,
-    VERSION_7_WORKSHEET_HEADERS,
     WORKSHEET_HEADERS,
 )
 from .errors import (
@@ -45,14 +40,13 @@ from .errors import (
 def _looks_like_historical_workbook(
     values: Mapping[str, list[list[Any]]],
 ) -> bool:
-    """Return whether headers match a supported pre-current workbook layout."""
-    historical_headers = (
-        VERSION_3_WORKSHEET_HEADERS,
-        PRE_PAYEE_WORKSHEET_HEADERS,
-        VERSION_6_WORKSHEET_HEADERS,
-        VERSION_7_WORKSHEET_HEADERS,
-        LEGACY_TAGS_WORKBOOK_HEADERS,
-    )
+    """Return whether a workbook has a recognizable migration-only marker.
+
+    The detailed historical layouts belong to ``scripts.migration_schemas``.
+    Runtime needs only the small set of stable markers required to direct an
+    older workbook to the explicit migration command.
+    """
+    present_titles = set(values)
     for title, rows in values.items():
         if not rows:
             continue
@@ -67,24 +61,14 @@ def _looks_like_historical_workbook(
         ):
             # Version 9 mixed-use sources predate durable source tag IDs.
             return True
-        if any(
-            title in layout
-            and set(headers) == set(layout[title])
-            and set(headers) != set(WORKSHEET_HEADERS.get(title, ()))
-            and len(headers) == len(set(headers))
-            for layout in historical_headers
-        ):
-            return True
-    # Legacy workbooks commonly omit one or more worksheets entirely. Their
-    # remaining standard tabs still identify the layout reliably.
-    present_titles = set(values)
-    if "MixedUseExpenses" not in present_titles:
-        transactions = values.get("Transactions", [])
-        if transactions:
-            transaction_headers = {str(value).strip() for value in transactions[0]}
-            if transaction_headers in (
-                set(VERSION_7_WORKSHEET_HEADERS["Transactions"]),
-                set(LEGACY_TAGS_WORKBOOK_HEADERS["Transactions"]),
+        if title == "Transactions" and len(headers) == len(set(headers)):
+            header_set = set(headers)
+            if "payee" in header_set:
+                return True
+            if (
+                "MixedUseExpenses" not in present_titles
+                and "payee_id" in header_set
+                and "source_type" not in header_set
             ):
                 return True
     return False

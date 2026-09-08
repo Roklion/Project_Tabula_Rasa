@@ -15,13 +15,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from tabula_rasa.storage.google_sheets import (  # noqa: E402
-    PRE_PAYEE_WORKSHEET_HEADERS,
     SHEETS_SCOPE,
     WORKSHEET_HEADERS,
     _utc_now,
     _validate_payee_records,
     normalize_payee_name,
 )
+from scripts.migration_schemas import PRE_PAYEE_WORKSHEET_HEADERS  # noqa: E402
 from scripts._legacy_payees import legacy_payee_id  # noqa: E402
 
 
