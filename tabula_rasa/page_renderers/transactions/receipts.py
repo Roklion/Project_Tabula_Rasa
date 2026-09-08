@@ -202,22 +202,29 @@ def _process_context_receipts(
     receipt_folder: Mapping[str, object],
 ) -> None:
     linked_before, _ = receipt_creation_counts(workflow)
-    receipt_drive = context.get_drive_client(
-        context.profile_key,
-        context.configuration_revision,
-    )
+    receipt_drive = None
     transaction_id = str(workflow["transaction_id"])
     folder_id = str(receipt_folder["id"])
-    process_receipt_recovery(
-        workflow,
-        upload_receipt=lambda receipt: receipt_drive.upload_receipt(
+
+    def upload_receipt(receipt: Mapping[str, Any]) -> Mapping[str, Any]:
+        nonlocal receipt_drive
+        if receipt_drive is None:
+            receipt_drive = context.get_drive_client(
+                context.profile_key,
+                context.configuration_revision,
+            )
+        return receipt_drive.upload_receipt(
             profile_key=context.profile_key,
             folder_id=folder_id,
             original_name=str(receipt["original_name"]),
             content=bytes(receipt["content"]),
             mime_type=str(receipt["mime_type"]),
             receipt_id=str(receipt["receipt_id"]),
-        ),
+        )
+
+    process_receipt_recovery(
+        workflow,
+        upload_receipt=upload_receipt,
         link_receipt=lambda reference: context.storage.link_transaction_receipt(
             transaction_id,
             reference=reference,
@@ -348,8 +355,6 @@ def _render_editor_receipt_recovery(
     context: TransactionsContext,
     transaction_id: str,
     receipt_folder: Mapping[str, object] | None,
-    *,
-    retry_available: bool = True,
 ) -> bool:
     workflow = _editor_workflow(context, transaction_id)
     if workflow is None:
@@ -360,7 +365,7 @@ def _render_editor_receipt_recovery(
         return False
 
     _render_workflow_status(workflow, saved=False)
-    if retry_available and workflow.get("receipts") and st.button(
+    if workflow.get("receipts") and st.button(
         "Retry unresolved receipts",
         type="primary",
         key=f"retry-editor-receipts-{context.profile_key}-{transaction_id}",
@@ -512,21 +517,10 @@ def render_filtered_editor_receipt_recovery(
     transaction_id: str,
 ) -> bool:
     receipt_folder = _receipt_folder(context)
-    retry_available = receipt_folder is not None
-    if retry_available:
-        try:
-            context.get_drive_client(
-                context.profile_key,
-                context.configuration_revision,
-            )
-        except GoogleDriveError as error:
-            st.error(str(error))
-            retry_available = False
     return _render_editor_receipt_recovery(
         context,
         transaction_id,
         receipt_folder,
-        retry_available=retry_available,
     )
 
 
@@ -694,7 +688,6 @@ def render_receipts(
             context,
             edit_id,
             None,
-            retry_available=False,
         )
         st.info(
             "Connect Google Drive and select a receipt folder from the local "
@@ -711,7 +704,6 @@ def render_receipts(
             context,
             edit_id,
             receipt_folder,
-            retry_available=False,
         )
         st.error(str(error))
         return

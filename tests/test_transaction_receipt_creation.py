@@ -14,6 +14,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     UPLOADED_NOT_LINKED_MESSAGE,
     _cancel_editor_receipt_recovery,
     _fresh_transaction_receipt_count,
+    _process_context_receipts,
     _record_editor_receipt_linked,
     clear_missing_editor_receipt_recoveries,
     clear_receipt_creation_recovery,
@@ -168,6 +169,30 @@ def test_uploaded_but_unlinked_receipt_retries_reference_without_reupload() -> N
 
     assert receipt_creation_counts(workflow) == (1, 0)
     assert upload.call_count == 1
+
+
+def test_uploaded_reference_retries_link_without_drive_access() -> None:
+    pending = _prepared()
+    pending["reference"] = _drive_file(pending)
+    pending["content"] = b""
+    workflow = new_receipt_creation_workflow(
+        "txn-1",
+        [pending],
+        spreadsheet_id="north-sheet",
+        receipt_folder_id="north-folder",
+    )
+    storage = Mock()
+    context = _context(storage=storage)
+    context.get_drive_client.side_effect = GoogleDriveAccessError("Drive unavailable")
+
+    _process_context_receipts(context, workflow, {"id": "north-folder"})
+
+    context.get_drive_client.assert_not_called()
+    storage.link_transaction_receipt.assert_called_once_with(
+        "txn-1",
+        reference=pending["reference"],
+    )
+    assert workflow["receipts"] == []
 
 
 def test_one_upload_failure_does_not_stop_later_receipts() -> None:
