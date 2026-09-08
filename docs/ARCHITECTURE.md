@@ -238,10 +238,10 @@ The target seams for the decomposition work are:
 | Receipt page workflow | `tabula_rasa/page_renderers/transactions/receipt_workflows.py` owns reusable upload/recovery state; `tabula_rasa/page_renderers/transactions/receipt_editor.py` owns editor rendering; `tabula_rasa/page_renderers/transactions/receipt_display.py` owns listing/unlink UI. `tabula_rasa/page_renderers/transactions/receipts.py` may remain a thin compatibility facade. |
 | Mileage page | `tabula_rasa/page_renderers/mileage/mileage_routing.py`, `tabula_rasa/page_renderers/mileage/mileage_form.py`, `tabula_rasa/page_renderers/mileage/mileage_ledger.py`, and `tabula_rasa/page_renderers/mileage/mileage_locations.py` separate route state, forms, ledger behavior, and location helpers; `tabula_rasa/page_renderers/mileage.py` remains orchestration-focused. |
 | Transaction ledger page | `tabula_rasa/page_renderers/transactions/ledger_filters.py`, `tabula_rasa/page_renderers/transactions/ledger_bulk.py`, `tabula_rasa/page_renderers/transactions/ledger_editor.py`, and `tabula_rasa/page_renderers/transactions/transaction_copy.py` separate search/filter state, bulk actions, single-record editing, and provenance/copy behavior; `tabula_rasa/page_renderers/ledger.py` composes them. |
-| Drive integration | `tabula_rasa/storage/google_drive/__init__.py` preserves `GoogleDriveClient`; `tabula_rasa/storage/google_drive/oauth.py`, `client.py`, `folders.py`, `receipts.py`, and `backups.py` separate identity/auth, generic requests, managed folders, receipts, and backups. |
+| Drive integration | `tabula_rasa/storage/google_drive/__init__.py` preserves `GoogleDriveClient`; `tabula_rasa/storage/google_drive/oauth.py`, `tabula_rasa/storage/google_drive/client.py`, `tabula_rasa/storage/google_drive/folders.py`, `tabula_rasa/storage/google_drive/receipts.py`, and `tabula_rasa/storage/google_drive/backups.py` separate identity/auth, generic requests, managed folders, receipts, and backups. |
 | Tests | Test files follow these production seams, with shared fixtures in the appropriate `conftest.py` or helper module rather than duplicated per domain. |
 
-`local_profile_admin.py` is split only if profile form, readiness,
+`tabula_rasa/local_profile_admin.py` is split only if profile form, readiness,
 credential, and storage responsibilities remain genuinely distinct after the
 cleanup; otherwise its cohesion is documented and it remains intact. These
 boundaries are architectural ownership guidance, not a demand that every row

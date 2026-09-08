@@ -49,7 +49,7 @@ development environment at two full-suite gates:
 ```
 ruff check .
 python -m pytest
-git diff --check
+git diff --check origin/main...HEAD
 ```
 
 Between those gates, including implementation commits and review-remediation
