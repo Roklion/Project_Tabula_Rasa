@@ -56,8 +56,8 @@ Between those gates, including implementation commits and review-remediation
 rounds, run linting and tests focused on the affected files and behavior. A
 commit may proceed when those affected checks pass. Broad changes, changes to
 shared infrastructure, or risk that focused checks do not cover, justify an
-earlier full gate; do not rerun it merely to call an ordinary intermediate
-commit ready.
+earlier full gate; do not rerun the full suite merely to call an ordinary
+intermediate commit ready.
 
 If either full-gate command fails, resolve the failure or report it as a
 blocker instead of publishing the initial PR or describing the review loop as

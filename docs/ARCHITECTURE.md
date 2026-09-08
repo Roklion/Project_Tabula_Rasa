@@ -111,7 +111,7 @@ The corresponding Transactions row remains an ordinary Expense projection and
 stores generic `source_type` and `source_id` provenance. Source-aware CRUD
 updates the existing projection or removes both records while preserving the
 source-authoritative and read-only-projection invariants. These are
-non-transactional multi-row writes: pre-write validation, stable identity,
+non-transactional multi-row writes. Pre-write validation, stable identity,
 bounded uncertain-write readback, and actionable partial-state guidance are
 preferred to an application-level transaction protocol.
 This Phase A contract is storage/domain-only; it does not expose a user-facing
@@ -141,10 +141,11 @@ postcondition checks, or automatic repair loops. Native batch requests are
 appropriate when they reduce a logically coupled mutation, but a batch is not
 treated as a general rollback boundary.
 
-Every mutation still protects correctness at the boundary: read fresh records
-before writes, validate domain and referential constraints, enforce selected
-profile identity, reject stale expected-record edits, and generate stable IDs
-before creates. The supported network policy is deliberately small:
+Every mutation still protects correctness at the boundary by reading fresh
+records before writes, validating domain and referential constraints, enforcing
+selected profile identity, rejecting stale expected-record edits, and
+generating stable IDs before creates. The supported network policy is
+deliberately small:
 
 1. Attempt the requested write once.
 2. If commit status is uncertain, read the affected stable ID or final state
@@ -183,8 +184,9 @@ automatic repair would require a distributed transaction simulation.
 Normal runtime primarily understands the current workbook schema and current
 backup format. A genuinely new/empty workbook may be bootstrapped, but a
 populated historical workbook is validated and rejected with an actionable
-instruction to run the explicit workbook migration tool. Historical backup
-conversion likewise lives in `scripts/migrate_legacy_backup.py`; production
+instruction to run the explicit workbook migration tool
+(`scripts/migrate_workbook.py`). Historical backup conversion likewise lives
+in `scripts/migrate_legacy_backup.py`; production
 restore accepts only the current format and validates the converted output
 using the normal current-format validator.
 
@@ -229,12 +231,12 @@ The target seams for the decomposition work are:
 | Responsibility | Target boundary |
 | --- | --- |
 | Sheets storage facade | `tabula_rasa/storage/google_sheets/__init__.py` keeps `GoogleSheetsStorage` and re-exports intentionally public names. |
-| Sheets primitives | `errors.py`, `schema.py`, `validation.py`, `client.py`, and a small `base.py` own errors, current schema, API access, validation, and shared row/cache/read/write helpers. |
-| Sheets domains | `accounts.py`, `categories.py`, `payees.py`, `tags.py`, `transactions.py`, `mileage.py`, `mixed_use.py`, `receipts.py`, and `backup.py` own cohesive domain operations. Historical migration code stays in scripts. |
-| Receipt page workflow | `receipt_workflows.py` owns reusable upload/recovery state; `receipt_editor.py` owns editor rendering; `receipt_display.py` owns listing/unlink UI. `receipts.py` may remain a thin compatibility facade. |
-| Mileage page | `mileage_routing.py`, `mileage_form.py`, `mileage_ledger.py`, and `mileage_locations.py` separate route state, forms, ledger behavior, and location helpers; `mileage.py` remains orchestration-focused. |
-| Transaction ledger page | `ledger_filters.py`, `ledger_bulk.py`, `ledger_editor.py`, and `transaction_copy.py` separate search/filter state, bulk actions, single-record editing, and provenance/copy behavior; `ledger.py` composes them. |
-| Drive integration | `google_drive/__init__.py` preserves `GoogleDriveClient`; `oauth.py`, `client.py`, `folders.py`, `receipts.py`, and `backups.py` separate identity/auth, generic requests, managed folders, receipts, and backups. |
+| Sheets primitives | `tabula_rasa/storage/google_sheets/errors.py`, `tabula_rasa/storage/google_sheets/schema.py`, `tabula_rasa/storage/google_sheets/validation.py`, `tabula_rasa/storage/google_sheets/client.py`, and a small `tabula_rasa/storage/google_sheets/base.py` own errors, current schema, API access, validation, and shared row/cache/read/write helpers. |
+| Sheets domains | `tabula_rasa/storage/google_sheets/accounts.py`, `tabula_rasa/storage/google_sheets/categories.py`, `tabula_rasa/storage/google_sheets/payees.py`, `tabula_rasa/storage/google_sheets/tags.py`, `tabula_rasa/storage/google_sheets/transactions.py`, `tabula_rasa/storage/google_sheets/mileage.py`, `tabula_rasa/storage/google_sheets/mixed_use.py`, `tabula_rasa/storage/google_sheets/receipts.py`, and `tabula_rasa/storage/google_sheets/backup.py` own cohesive domain operations. Historical migration code stays in scripts. |
+| Receipt page workflow | `tabula_rasa/page_renderers/transactions/receipt_workflows.py` owns reusable upload/recovery state; `tabula_rasa/page_renderers/transactions/receipt_editor.py` owns editor rendering; `tabula_rasa/page_renderers/transactions/receipt_display.py` owns listing/unlink UI. `tabula_rasa/page_renderers/transactions/receipts.py` may remain a thin compatibility facade. |
+| Mileage page | `tabula_rasa/page_renderers/mileage/mileage_routing.py`, `tabula_rasa/page_renderers/mileage/mileage_form.py`, `tabula_rasa/page_renderers/mileage/mileage_ledger.py`, and `tabula_rasa/page_renderers/mileage/mileage_locations.py` separate route state, forms, ledger behavior, and location helpers; `tabula_rasa/page_renderers/mileage.py` remains orchestration-focused. |
+| Transaction ledger page | `tabula_rasa/page_renderers/transactions/ledger_filters.py`, `tabula_rasa/page_renderers/transactions/ledger_bulk.py`, `tabula_rasa/page_renderers/transactions/ledger_editor.py`, and `tabula_rasa/page_renderers/transactions/transaction_copy.py` separate search/filter state, bulk actions, single-record editing, and provenance/copy behavior; `tabula_rasa/page_renderers/ledger.py` composes them. |
+| Drive integration | `tabula_rasa/storage/google_drive/__init__.py` preserves `GoogleDriveClient`; `tabula_rasa/storage/google_drive/oauth.py`, `client.py`, `folders.py`, `receipts.py`, and `backups.py` separate identity/auth, generic requests, managed folders, receipts, and backups. |
 | Tests | Test files follow these production seams, with shared fixtures in the appropriate `conftest.py` or helper module rather than duplicated per domain. |
 
 `local_profile_admin.py` is split only if profile form, readiness,
