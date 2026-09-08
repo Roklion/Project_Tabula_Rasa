@@ -265,8 +265,10 @@ the trusted project layer is reloaded.
 - Edits, deletes, uniqueness checks, and reference checks must use fresh data
   at the mutation boundary. Do not turn this into repeated whole-graph
   snapshots or post-success verification after a confirmed Google response.
-- Show success only after the Google API confirms the operation, and invalidate
-  affected caches only after a confirmed write.
+- Show success only after the original Google API response confirms the
+  operation or one bounded readback after an uncertain response confirms the
+  requested final state. Invalidate affected caches after confirmed or
+  uncertain writes, before any later reads can reuse stale rows.
 - Retries, duplicate suppression, imports, and uploads must use stable identity,
   one uncertain-write readback, and at most one demonstrably safe retry; they
   must not create duplicate ledger rows or files after uncertain responses.

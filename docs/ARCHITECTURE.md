@@ -127,8 +127,8 @@ sequenceDiagram
     User->>App: Submit a ledger operation
     App->>Profile: Resolve workbook and service account
     App->>Sheets: Fresh validation and requested write
-    Sheets-->>App: Confirmed result
-    App->>App: Invalidate affected caches and record duplicate guard
+    Sheets-->>App: Confirmed result or bounded uncertain-write readback
+    App->>App: Invalidate affected caches before later reads
     App-->>User: Report success only after confirmation
 ```
 
@@ -153,11 +153,14 @@ before creates. The supported network policy is deliberately small:
    retry cannot duplicate or corrupt data. Otherwise invalidate affected
    caches and stop with an actionable inspection/recovery message.
 
-A successful Google response is authoritative. The application does not add a
-second success-path read merely to defend against unsupported manual row
-reordering or other arbitrary cross-client interleavings. This boundary keeps
-duplicate prevention and stale-write protection while avoiding a growing
-state-machine that pretends Sheets offers guarantees it does not provide.
+A successful Google response is authoritative; an uncertain response can be
+confirmed only by the one bounded readback described above. The application
+does not add a second success-path read merely to defend against unsupported
+manual row reordering or other arbitrary cross-client interleavings. Affected
+caches are invalidated after a confirmed or uncertain write, before later reads
+can reuse stale rows. This boundary keeps duplicate prevention and stale-write
+protection while avoiding a growing state-machine that pretends Sheets offers
+guarantees it does not provide.
 
 ### Recoverable cross-service partial failure
 
