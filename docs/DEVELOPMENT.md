@@ -139,9 +139,10 @@ implementation against the current code, tests, canonical documentation,
 callers, storage paths, retries, and state transitions.
 
 Codex is the primary repository/remediation reviewer and Gemini is an
-independent advisory reviewer. The human maintainer retains requirements,
-approval, and merge authority. Follow AGENTS.md for repository-wide rules and
-.gemini/styleguide.md for Gemini's normal/fallback mode and review metadata.
+independent complementary advisory reviewer. The human maintainer retains
+requirements, approval, and merge authority. Follow AGENTS.md for
+repository-wide rules and .gemini/styleguide.md for Gemini's specialized
+adversarial review focus.
 
 ## Documentation maintenance
 

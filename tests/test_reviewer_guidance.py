@@ -25,35 +25,45 @@ def test_gemini_configuration_keeps_review_advisory_and_enabled() -> None:
     assert "password" not in uncommented_config
 
 
-def test_gemini_review_mode_uses_trusted_codex_availability() -> None:
+def test_gemini_review_keeps_a_stable_complementary_role() -> None:
     styleguide = read_repository_file(".gemini/styleguide.md")
     normalized_styleguide = " ".join(styleguide.split())
 
-    assert "`/gemini review` is the only review command." in styleguide
+    assert "`/gemini review` is the review command." in styleguide
     assert "`/gemini review everything`" not in styleguide
-    assert "chatgpt-codex-connector[bot]" in styleguide
-    assert "current review round" in normalized_styleguide
-    assert "Do not infer Codex unavailability from silence" in styleguide
-    assert "text authored by the pull-request author" in normalized_styleguide
-    assert "do not use Codex findings as input" in normalized_styleguide
-    assert "label the output **Full fallback review**" in styleguide
-    assert "Do not modify code, push changes, approve, merge" in styleguide
-    assert "state its commit SHA" in styleguide
-    assert "`No additional feedback.`" in styleguide
-    assert "Do not use a thumbs-up reaction" in styleguide
+    assert "independent, complementary adversarial reviewer" in normalized_styleguide
+    assert "Codex remains the broad primary reviewer" in normalized_styleguide
+    assert "primary review coverage remains unresolved" in normalized_styleguide
+    assert "full fallback" not in normalized_styleguide
+    assert "Review metadata" not in styleguide
+    assert "Reviewed head" not in styleguide
+    assert "do not modify code, push changes, approve, or merge" in normalized_styleguide
+    assert "counterexamples and overlooked edge cases" in normalized_styleguide
+    assert "failure and retry behavior" in normalized_styleguide
+    assert "stale state or unsafe state transitions before writes" in normalized_styleguide
+    assert "idempotency and duplicate writes, uploads, or other operations" in normalized_styleguide
+    assert "profile isolation and trust boundaries" in normalized_styleguide
+    assert "backup, recovery, and destructive-operation safety" in normalized_styleguide
 
 
 def test_repository_review_guidance_has_clear_ownership() -> None:
     agents = read_repository_file("AGENTS.md")
+    normalized_agents = " ".join(agents.split())
     styleguide = read_repository_file(".gemini/styleguide.md")
+    normalized_styleguide = " ".join(styleguide.split())
     development = read_repository_file("docs/DEVELOPMENT.md")
+    normalized_development = " ".join(development.split())
 
     assert "## Codex reviewer role" in agents
     assert "Follow the human workflow in `docs/DEVELOPMENT.md`" in agents
     assert "`@codex review`" in agents
-    assert "chatgpt-codex-connector[bot]" in styleguide
-    assert "Full fallback review" in styleguide
-    assert "Do not modify code, push changes, approve, merge" in styleguide
+    assert "primary-review coverage remains unresolved" in normalized_agents
+    assert "full fallback mode" not in agents.casefold()
+    assert "complementary adversarial reviewer" in normalized_styleguide
+    assert "specialized adversarial review focus" in normalized_development
+    assert "full fallback" not in styleguide.casefold()
+    assert "Review metadata" not in styleguide
+    assert "do not modify code, push changes, approve, or merge" in normalized_styleguide
     assert "## Pull requests and review" in development
     assert "AGENTS.md" in development
     assert ".gemini/styleguide.md" in development
