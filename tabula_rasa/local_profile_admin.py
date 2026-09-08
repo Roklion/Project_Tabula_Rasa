@@ -13,323 +13,95 @@ from scripts.export_streamlit_secrets import (
     build_streamlit_secrets_toml,
     write_secure_export,
 )
-from tabula_rasa.business_profiles import load_business_profiles
 from tabula_rasa.google_drive import GoogleDriveError
-from tabula_rasa.google_drive_admin import (
-    render_google_drive_admin,
-    validate_google_drive_profile,
-)
+from tabula_rasa.google_drive_admin import render_google_drive_admin
+from tabula_rasa.google_drive_admin import validate_google_drive_profile
 from tabula_rasa.ledger_auth import verify_password
+from tabula_rasa.local_profile_admin_forms import (
+    render_add_profile_form,
+    render_local_profile_edits,
+    sync_profile_key_suggestion,
+)
+from tabula_rasa.local_profile_admin_readiness import (
+    fresh_profile_readiness,
+    readiness_for_display,
+    render_profile_readiness,
+    safe_readiness_error,
+)
+from tabula_rasa.local_profile_admin_security import (
+    render_security_deployment_info as _render_security_deployment_info_impl,
+)
+from tabula_rasa.local_profile_admin_support import (
+    configured_profiles_or_empty,
+    initialize_candidate_storage,
+    masked_spreadsheet_id,
+    profile_setup_error_message,
+    validate_profile_edit_action,
+)
+from tabula_rasa.local_profile_admin_synology import render_synology_recovery_admin
 from tabula_rasa.local_profile_store import (
     LOCAL_PROFILE_STORE_PATH,
     LocalProfileStoreError,
-    build_profile_edit_settings,
-    build_profile_settings,
     load_local_profiles,
-    save_local_profile,
-    suggest_profile_key,
-    update_local_profile,
-    update_local_profile_synology_recovery,
-    validate_profile_key,
-)
-from tabula_rasa.profile_readiness import (
-    ProfileReadiness,
-    profile_configuration_readiness,
-    profile_settings_fingerprint,
 )
 from tabula_rasa.presentation import render_page_header
-from tabula_rasa.storage import (
-    GoogleSheetsStorage,
-    StorageAuthenticationError,
-    StorageError,
-    StorageInitializationError,
-    StorageValidationError,
-    StorageWorkbookAccessError,
-)
-from tabula_rasa.synology_recovery import (
-    PROFILE_ROOT_LAYOUT,
-    SynologyRecoveryConfigurationError,
-    resolve_synology_recovery_defaults,
-)
+from tabula_rasa.storage import GoogleSheetsStorage
+
+__all__ = [
+    "GoogleDriveError",
+    "GoogleSheetsStorage",
+    "SecretsExportError",
+    "_export_hosted_secrets_file",
+    "_fresh_profile_readiness",
+    "_initialize_candidate_storage",
+    "_configured_profiles_or_empty",
+    "_masked_spreadsheet_id",
+    "_profile_rows",
+    "_profile_setup_error_message",
+    "_readiness_for_display",
+    "_render_add_profile_form",
+    "_render_local_profile_edits",
+    "_render_profile_readiness",
+    "_render_security_deployment_info",
+    "_render_synology_recovery_admin",
+    "_safe_readiness_error",
+    "_sync_profile_key_suggestion",
+    "_validate_profile_edit_action",
+    "render_local_profile_admin",
+]
 
 
-def _masked_spreadsheet_id(spreadsheet_id: object) -> str:
-    value = str(spreadsheet_id)
-    return f"…{value[-8:]}" if len(value) > 8 else value
+# These compatibility names preserve the focused test seams and private helper
+# imports used by the existing administration tests while the implementation is
+# owned by the cohesive modules above.
+_initialize_candidate_storage = initialize_candidate_storage
+_profile_setup_error_message = profile_setup_error_message
+_validate_profile_edit_action = validate_profile_edit_action
+_readiness_for_display = readiness_for_display
+_configured_profiles_or_empty = configured_profiles_or_empty
+_masked_spreadsheet_id = masked_spreadsheet_id
+_render_add_profile_form = render_add_profile_form
+_render_local_profile_edits = render_local_profile_edits
+_render_profile_readiness = render_profile_readiness
+_render_synology_recovery_admin = render_synology_recovery_admin
+_safe_readiness_error = safe_readiness_error
+_sync_profile_key_suggestion = sync_profile_key_suggestion
 
 
-def _profile_setup_error_message(
-    error: StorageError,
-    settings: Mapping[str, Any],
-) -> str:
-    spreadsheet = _masked_spreadsheet_id(settings.get("spreadsheet_id", ""))
-    credential = settings.get("gcp_service_account", {})
-    service_account = str(credential.get("client_email", "unknown"))
-
-    if isinstance(error, StorageAuthenticationError):
-        detail = (
-            "Service-account authentication failed. The uploaded key may be "
-            "invalid, disabled, revoked, or no longer active."
-        )
-    elif isinstance(error, StorageWorkbookAccessError):
-        detail = (
-            "Workbook access failed. Verify the spreadsheet ID, enable the "
-            "Google Sheets API in the service-account project, and share the "
-            "spreadsheet with this service account."
-        )
-    elif isinstance(error, StorageInitializationError):
-        detail = (
-            "The workbook opened, but initialization failed. Confirm the "
-            "service account has Editor access and the ledger tabs are not "
-            "protected."
-        )
-    elif isinstance(error, StorageValidationError):
-        detail = f"Workbook structure validation failed: {error}."
-    else:
-        detail = "Google Sheets setup failed unexpectedly. Retry the request."
-
-    return (
-        f"{detail} Spreadsheet: {spreadsheet}. "
-        f"Service account: {service_account}. No profile was saved."
-    )
-
-
-def _validate_profile_edit_action(
-    save_settings: bool,
-    rotate_credential: bool,
-    credential_file: Any,
-) -> None:
-    if save_settings and credential_file is not None:
-        raise LocalProfileStoreError(
-            "To replace the credential, use the 'Validate and rotate credential' button."
-        )
-    if rotate_credential and credential_file is None:
-        raise LocalProfileStoreError(
-            "Upload a replacement Google service-account JSON for rotation."
-        )
-
-
-def _sync_profile_key_suggestion() -> None:
-    """Update the editable key while it still matches the prior suggestion."""
-    name = str(st.session_state.get("local_profile_name", ""))
-    suggestion = suggest_profile_key(name)
-    current = str(st.session_state.get("local_profile_key", ""))
-    previous = str(st.session_state.get("local_profile_key_suggestion", ""))
-    if not current or current == previous:
-        st.session_state["local_profile_key"] = suggestion
-    st.session_state["local_profile_key_suggestion"] = suggestion
-
-
-def _safe_readiness_error(stage: str, error: Exception) -> str:
-    """Return an actionable readiness message without echoing secrets."""
-    if stage == "Sheets" and isinstance(error, StorageAuthenticationError):
-        return "Sheets credential validation failed. Confirm the service-account key."
-    if stage == "Sheets" and isinstance(error, StorageWorkbookAccessError):
-        return "Sheets workbook validation failed. Confirm sharing and the workbook ID."
-    if stage == "Sheets" and isinstance(error, StorageInitializationError):
-        return "Sheets workbook initialization failed. Confirm Editor access."
-    if stage == "Sheets" and isinstance(error, StorageValidationError):
-        return "Sheets workbook structure validation failed. Repair the required tabs."
-    if stage == "Drive" and isinstance(error, GoogleDriveError):
-        return f"Google Drive validation failed: {error}"
-    return f"{stage} validation failed. Retry the readiness check."
-
-
-def _fresh_profile_readiness(
-    profile_key: str,
-    settings: Mapping[str, Any],
-    *,
-    app_secrets: Mapping[str, Any],
-    local_profiles: Mapping[str, Mapping[str, Any]] | None = None,
-) -> ProfileReadiness:
-    """Run fresh Sheets and configured Drive checks for one profile."""
-    validation_errors: list[str] = []
-    profiles_for_isolation = local_profiles or {profile_key: settings}
-    try:
-        GoogleSheetsStorage.from_secrets_read_only(settings)
-    except StorageError as error:
-        validation_errors.append(_safe_readiness_error("Sheets", error))
-
-    drive = settings.get("google_drive")
-    storage_root = drive.get("storage_root") if isinstance(drive, Mapping) else None
-    if (
-        isinstance(drive, Mapping)
-        and isinstance(storage_root, Mapping)
-        and storage_root.get("id")
-    ):
-        try:
-            validate_google_drive_profile(
-                app_secrets,
-                profile_key,
-                drive,
-                local_profiles=profiles_for_isolation,
-            )
-        except (GoogleDriveError, LocalProfileStoreError) as error:
-            validation_errors.append(_safe_readiness_error("Drive", error))
-
-    return profile_configuration_readiness(
-        profile_key,
-        settings,
-        validation_errors=tuple(validation_errors),
-    )
-
-
-def _readiness_for_display(
-    profile_key: str,
-    settings: Mapping[str, Any],
-) -> ProfileReadiness:
-    stored = st.session_state.get(f"profile-readiness:{profile_key}")
-    if (
-        isinstance(stored, tuple)
-        and len(stored) == 2
-        and stored[0] == profile_settings_fingerprint(settings)
-        and isinstance(stored[1], ProfileReadiness)
-    ):
-        return stored[1]
-    return ProfileReadiness(
-        status="incomplete",
-        missing_steps=(
-            "Run the readiness check to verify current Sheets and Drive settings.",
-        ),
-    )
-
-
-def _render_profile_readiness(
-    profile_key: str,
-    settings: Mapping[str, Any],
-    *,
-    app_secrets: Mapping[str, Any],
-    local_profiles: Mapping[str, Mapping[str, Any]],
-) -> None:
-    st.subheader("Profile readiness")
-    report = _readiness_for_display(
-        profile_key,
-        settings,
-    )
-    labels = {
-        "incomplete": "Incomplete",
-        "ready-local": "Ready locally",
-    }
-    status_key = f"profile_readiness_status_{report.status.replace('-', '_')}"
-    with st.container(key=status_key):
-        st.metric("Status", labels[report.status])
-    for step in report.missing_steps:
-        st.warning(step)
-    for error in report.validation_errors:
-        st.error(error)
-    if report.status == "ready-local":
-        st.info(
-            "Local profile settings are ready. To publish them to Streamlit "
-            "Community Cloud, run `python scripts/export_streamlit_secrets.py` "
-            "from the repository root, paste the complete generated TOML into "
-            "Streamlit App settings > Secrets, and save it. This local page "
-            "cannot verify the separate hosted Secrets store; confirm the "
-            "deployed app after saving. Local backup and Synology changes do not "
-            "require a new export."
-        )
-    if st.button(
-        "Run readiness check",
-        type="primary",
-        key=f"profile-readiness-check-{profile_key}",
-    ):
-        report = _fresh_profile_readiness(
-            profile_key,
-            settings,
-            app_secrets=app_secrets,
-            local_profiles=local_profiles,
-        )
-        st.session_state[f"profile-readiness:{profile_key}"] = (
-            profile_settings_fingerprint(settings),
-            report,
-        )
-        st.rerun()
-
-
-def _render_security_deployment_info(
-    app_secrets: Mapping[str, Any] | None = None,
-    *,
-    store_path: Path = LOCAL_PROFILE_STORE_PATH,
-) -> None:
-    """Explain local/hosted boundaries without adding administration controls."""
-    st.subheader("Security & deployment information")
-    st.write(
-        "Account settings is local administration for every configured business "
-        "profile. It is not per-user identity or permission management."
-    )
-    st.info(
-        "The application password currently unlocks every local profile. Profile "
-        "keys identify configuration and are not user accounts. Private keys are "
-        "never displayed after upload."
-    )
-    st.write(
-        "Local profile settings are stored in the ignored plaintext profile file "
-        "and depend on operating-system protections. Hosted changes require the "
-        "documented Streamlit Secrets export and replacement process. Local backup "
-        "paths and Synology metadata are excluded from that hosted projection."
-    )
-    st.subheader("Hosted Streamlit Secrets export")
-    st.write(
-        "Generate one combined Secrets document from every included local profile "
-        "after its hosted settings are ready. The generated file is written only "
-        "to the ignored local .streamlit directory and is never shown in this UI."
-    )
-    if app_secrets is not None and st.button(
-        "Generate hosted Secrets file",
-        key="generate-hosted-secrets-file",
-    ):
-        try:
-            destination = _export_hosted_secrets_file(
-                app_secrets,
-                store_path=store_path,
-            )
-        except (LocalProfileStoreError, SecretsExportError, OSError):
-            st.error(
-                "Hosted Streamlit Secrets export failed. Review every included "
-                "local profile's Sheets and Google Drive settings, verify that "
-                ".streamlit is writable, and retry. No hosted deployment was "
-                "changed."
-            )
-        except Exception:
-            # Keep an unexpected exporter failure from rendering a traceback that
-            # could contain a credential supplied by a third-party dependency.
-            st.error(
-                "Hosted Streamlit Secrets export failed unexpectedly. Verify the "
-                "local profile configuration and retry; no hosted deployment was "
-                "changed."
-            )
-        else:
-            st.success(f"Generated hosted Secrets file: {destination}")
-            st.info(
-                "Paste the complete file into Streamlit App settings > Secrets, "
-                "save it, then delete the generated local file. Re-run profile "
-                "readiness locally afterward; this page cannot verify hosted "
-                "Secrets acceptance."
-            )
-    st.markdown(
-        "See the [Account settings and profile setup guide]("
-        "https://github.com/Roklion/Project_Tabula_Rasa/blob/main/docs/SETUP.md), "
-        "[backup and recovery guide]("
-        "https://github.com/Roklion/Project_Tabula_Rasa/blob/main/docs/"
-        "BACKUP_RECOVERY.md), and [Synology recovery guide]("
-        "https://github.com/Roklion/Project_Tabula_Rasa/blob/main/docs/"
-        "BACKUP_RECOVERY.md#optional-synology-recovery-copy) for operational "
-        "procedures."
+def _fresh_profile_readiness(*args: Any, **kwargs: Any) -> Any:
+    return fresh_profile_readiness(
+        *args,
+        drive_validator=validate_google_drive_profile,
+        **kwargs,
     )
 
 
 def _export_hosted_secrets_file(
-    app_secrets: Mapping[str, Any],
+    app_secrets: Mapping[str, object],
     *,
     store_path: Path = LOCAL_PROFILE_STORE_PATH,
 ) -> Path:
-    """Validate all local profiles and create a new hosted Secrets file.
-
-    The exporter deliberately reloads the canonical store at action time so a
-    stale Account settings page cannot export an outdated or partial profile
-    set. ``build_streamlit_secrets_toml`` owns the hosted allowlist and Drive
-    validation; ``write_secure_export`` owns the ignored owner-only file and
-    no-overwrite safety boundary.
-    """
+    """Compatibility facade for the hosted Secrets export workflow."""
     local_profiles = load_local_profiles(store_path)
     if not local_profiles:
         raise LocalProfileStoreError(
@@ -339,25 +111,16 @@ def _export_hosted_secrets_file(
     return write_secure_export(document)
 
 
-def _initialize_candidate_storage(
-    settings: Mapping[str, Any],
-) -> GoogleSheetsStorage:
-    candidate_storage = GoogleSheetsStorage.from_secrets(settings)
-    try:
-        candidate_storage.ensure_defaults()
-    except (
-        StorageAuthenticationError,
-        StorageWorkbookAccessError,
-        StorageInitializationError,
-        StorageValidationError,
-    ):
-        raise
-    except StorageError as error:
-        raise StorageInitializationError(
-            "The workbook opened, but default accounts and categories "
-            "could not be initialized"
-        ) from error
-    return candidate_storage
+def _render_security_deployment_info(
+    app_secrets: Mapping[str, Any] | None = None,
+    *,
+    store_path: Path = LOCAL_PROFILE_STORE_PATH,
+) -> None:
+    _render_security_deployment_info_impl(
+        app_secrets,
+        store_path=store_path,
+        export_function=_export_hosted_secrets_file,
+    )
 
 
 def _profile_rows(
@@ -365,7 +128,7 @@ def _profile_rows(
     local_profiles: Mapping[str, Any],
 ) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
-    for profile in _configured_profiles_or_empty(effective_secrets):
+    for profile in configured_profiles_or_empty(effective_secrets):
         credential = profile.secrets.get("gcp_service_account", {})
         synology_recovery = profile.secrets.get("synology_recovery")
         source = (
@@ -377,7 +140,7 @@ def _profile_rows(
             {
                 "Profile key": profile.key,
                 "Business": profile.name,
-                "Spreadsheet": _masked_spreadsheet_id(
+                "Spreadsheet": masked_spreadsheet_id(
                     profile.secrets.get("spreadsheet_id", "")
                 ),
                 "Local backup folder": str(
@@ -403,371 +166,6 @@ def _profile_rows(
             }
         )
     return rows
-
-
-def _configured_profiles_or_empty(
-    effective_secrets: Mapping[str, Any],
-) -> list[Any]:
-    """Treat a clean install without hosted profiles as having no profiles."""
-    configured = effective_secrets.get("business_profiles")
-    if configured is None or (isinstance(configured, Mapping) and not configured):
-        return []
-    return load_business_profiles(effective_secrets)
-
-
-def _render_synology_recovery_admin(
-    local_profiles: Mapping[str, Mapping[str, Any]],
-    *,
-    app_secrets: Mapping[str, Any],
-    app_defaults: object = None,
-    selected_profile_key: str | None = None,
-    store_path: Path,
-) -> None:
-    st.subheader("Synology recovery copy")
-    st.write(
-        "Optionally record the expected Google Drive-to-NAS Cloud Sync setup for "
-        "each business. Project Tabula Rasa does not mount or connect to the NAS."
-    )
-    if not local_profiles:
-        st.info("Add a local business profile before configuring Synology recovery.")
-        return
-
-    profile_key = selected_profile_key
-    if profile_key is None:
-        profile_key = st.selectbox(
-            "Business profile for Synology recovery",
-            list(local_profiles),
-            format_func=lambda key: str(local_profiles[key].get("name", key)),
-        )
-    if profile_key not in local_profiles:
-        st.info("Select a local business profile before configuring Synology recovery.")
-        return
-    existing = local_profiles[profile_key].get("synology_recovery")
-    existing = existing if isinstance(existing, Mapping) else {}
-    try:
-        defaults = resolve_synology_recovery_defaults(app_defaults, profile_key)
-    except SynologyRecoveryConfigurationError as error:
-        st.error(str(error))
-        defaults = {
-            "layout": PROFILE_ROOT_LAYOUT,
-            "destination_path": "",
-            "schedule": "",
-            "retention_policy": "",
-        }
-    with st.form("synology_recovery_form"):
-        enabled = st.checkbox(
-            "Maintain an optional Synology recovery copy for this business",
-            value=bool(existing),
-        )
-        destination_path = st.text_input(
-            "NAS destination path",
-            value=str(
-                existing.get(
-                    "destination_path",
-                    defaults["destination_path"],
-                )
-            ),
-            placeholder=f"/volume1/Backups/TabulaRasa/{profile_key}",
-            help=(
-                "Informational DSM path only. The app never opens or writes to it."
-            ),
-        )
-        schedule = st.text_input(
-            "Cloud Sync schedule",
-            value=str(existing.get("schedule", defaults["schedule"])),
-            help="For example: Continuous, or Daily at 11:00 PM.",
-        )
-        retention_policy = st.text_area(
-            "NAS retention policy",
-            value=str(
-                existing.get(
-                    "retention_policy",
-                    defaults["retention_policy"],
-                )
-            ),
-            help=(
-                "Destination deletions must remain disabled. Describe when an "
-                "administrator may manually remove old NAS generations."
-            ),
-        )
-        save_error = st.empty()
-        save = st.form_submit_button("Save Synology recovery choice")
-
-    st.caption(
-        "Required DSM settings: Download remote changes only; destination "
-        "deletions disabled. One-task mode uses the profile storage root as its "
-        "remote source. Confirm the actual task and its logs in Cloud Sync."
-    )
-    if not save:
-        return
-
-    settings = (
-        {
-            "layout": PROFILE_ROOT_LAYOUT,
-            "destination_path": destination_path,
-            "schedule": schedule,
-            "retention_policy": retention_policy,
-        }
-        if enabled
-        else None
-    )
-    try:
-        # The Drive root and its managed children are validated when the
-        # profile's Drive settings are selected or provisioned. Saving this
-        # record only changes local NAS metadata; do not query unrelated Drive
-        # parent folders because the narrow drive.file grant may not expose them.
-        update_local_profile_synology_recovery(
-            profile_key,
-            settings,
-            path=store_path,
-        )
-    except LocalProfileStoreError as error:
-        save_error.error(str(error))
-        return
-
-    st.cache_resource.clear()
-    state = "enabled" if enabled else "disabled"
-    st.session_state["local_profile_admin_notice"] = (
-        f"Synology recovery was {state} for '{profile_key}'."
-    )
-    st.rerun()
-
-
-def _render_local_profile_edits(
-    effective_secrets: Mapping[str, Any],
-    local_profiles: Mapping[str, Mapping[str, Any]],
-    *,
-    selected_profile_key: str | None = None,
-    store_path: Path,
-) -> None:
-    st.subheader("Edit local profile settings")
-    st.write(
-        "Change ordinary profile settings without re-uploading the stored Sheets "
-        "credential. Profile keys are immutable. Use the separate rotation button "
-        "only when replacing that credential."
-    )
-    profiles = (
-        {
-            selected_profile_key: local_profiles[selected_profile_key]
-        }
-        if selected_profile_key in local_profiles
-        else local_profiles
-    )
-    for profile_key, existing in profiles.items():
-        business_name = str(existing.get("name", profile_key))
-        with st.expander(f"{business_name} ({profile_key})"):
-            with st.form(f"local_profile_edit_{profile_key}"):
-                name = st.text_input(
-                    "Business name",
-                    value=business_name,
-                    max_chars=100,
-                    key=f"local_profile_edit_name_{profile_key}",
-                )
-                spreadsheet = st.text_input(
-                    "Google Sheets URL or spreadsheet ID",
-                    value=str(existing.get("spreadsheet_id") or ""),
-                    key=f"local_profile_edit_spreadsheet_{profile_key}",
-                )
-                backup_folder_path = st.text_input(
-                    "Optional local backup folder path",
-                    value=str(existing.get("backup_folder_path") or ""),
-                    help=(
-                        "Leave blank for the profile-scoped repository fallback. "
-                        "This setting is independent from Google Drive backups."
-                    ),
-                    key=f"local_profile_edit_backup_path_{profile_key}",
-                )
-                credential_file = st.file_uploader(
-                    "Replacement Google service-account JSON (rotation only)",
-                    type=["json"],
-                    accept_multiple_files=False,
-                    key=f"local_profile_edit_credential_{profile_key}",
-                )
-                edit_error = st.empty()
-                save_settings = st.form_submit_button(
-                    "Validate and save settings",
-                    key=f"local_profile_edit_save_{profile_key}",
-                )
-                rotate_credential = st.form_submit_button(
-                    "Validate and rotate credential",
-                    key=f"local_profile_edit_rotate_{profile_key}",
-                )
-
-            if not (save_settings or rotate_credential):
-                continue
-            settings: Mapping[str, Any] = existing
-            try:
-                _validate_profile_edit_action(
-                    save_settings,
-                    rotate_credential,
-                    credential_file,
-                )
-                settings = build_profile_edit_settings(
-                    existing,
-                    name,
-                    spreadsheet,
-                    backup_folder_path,
-                    credential_file.getvalue()
-                    if rotate_credential and credential_file is not None
-                    else None,
-                )
-                folded_name = settings["name"].casefold()
-                if any(
-                    profile.key != profile_key
-                    and profile.name.casefold() == folded_name
-                    for profile in load_business_profiles(effective_secrets)
-                ):
-                    raise LocalProfileStoreError(
-                        "Business display names must be unique."
-                    )
-                _initialize_candidate_storage(settings)
-                update_local_profile(
-                    profile_key,
-                    name=name,
-                    spreadsheet=spreadsheet,
-                    backup_folder_path=backup_folder_path,
-                    credential_upload=(
-                        credential_file.getvalue()
-                        if rotate_credential and credential_file is not None
-                        else None
-                    ),
-                    path=store_path,
-                )
-            except LocalProfileStoreError as error:
-                edit_error.error(str(error))
-                continue
-            except StorageError as error:
-                edit_error.error(_profile_setup_error_message(error, settings))
-                continue
-
-            st.cache_resource.clear()
-            action = "rotated and saved" if rotate_credential else "saved"
-            st.session_state["local_profile_admin_notice"] = (
-                f"Business profile '{profile_key}' was validated and {action}."
-            )
-            st.rerun()
-
-
-def _render_add_profile_form(
-    effective_secrets: Mapping[str, Any],
-    *,
-    store_path: Path,
-    prominent: bool,
-) -> None:
-    heading = "Create your first business profile" if prominent else "Add another local profile"
-    if prominent:
-        st.subheader(heading)
-        st.write(
-            "Start with the Sheets ledger. Optional Drive, local backup, and "
-            "Synology steps appear after the profile is saved."
-        )
-        render_form = st.container()
-    else:
-        render_form = st.expander(heading, expanded=False)
-    with render_form:
-        st.write(
-            "Share the spreadsheet with the uploaded service account as Editor before "
-            "saving. Validation initializes a genuinely blank workbook, but populated "
-            "workbooks with missing or incompatible worksheets must be migrated first "
-            "with the explicit workbook migration command."
-        )
-        profile_form_keys = (
-            "local_profile_name",
-            "local_profile_key",
-            "local_profile_key_suggestion",
-            "local_profile_spreadsheet",
-            "local_profile_backup_path",
-            "local_profile_credential",
-        )
-        if st.session_state.pop("reset_local_profile_form", False):
-            for form_key in profile_form_keys:
-                st.session_state.pop(form_key, None)
-
-        name = st.text_input(
-            "Business name",
-            max_chars=100,
-            key="local_profile_name",
-            on_change=_sync_profile_key_suggestion,
-        )
-        profile_key = st.text_input(
-            "Profile key",
-            max_chars=48,
-            help="Derived from the business name. Lowercase letters, numbers, underscores, and hyphens.",
-            key="local_profile_key",
-        )
-        with st.form("local_profile_form", clear_on_submit=False):
-            spreadsheet = st.text_input(
-                "Google Sheets URL or spreadsheet ID",
-                key="local_profile_spreadsheet",
-            )
-            backup_folder_path = st.text_input(
-                "Optional local backup folder path",
-                help=(
-                    "Leave blank for a profile-scoped repository fallback. "
-                    "Google Drive Desktop is not needed for cloud-native backups."
-                ),
-                key="local_profile_backup_path",
-            )
-            credential_file = st.file_uploader(
-                "Google service-account JSON",
-                type=["json"],
-                accept_multiple_files=False,
-                key="local_profile_credential",
-            )
-            save_error = st.empty()
-            submitted = st.form_submit_button("Validate and save", type="primary")
-
-        if not submitted:
-            return
-
-        try:
-            key = validate_profile_key(profile_key)
-            if key in {
-                profile.key for profile in _configured_profiles_or_empty(effective_secrets)
-            }:
-                raise LocalProfileStoreError(
-                    "That profile key already exists. Use its edit or credential "
-                    "rotation controls instead."
-                )
-            if credential_file is None:
-                raise LocalProfileStoreError(
-                    "Upload the Google service-account JSON file."
-                )
-            settings = build_profile_settings(
-                name,
-                spreadsheet,
-                credential_file.getvalue(),
-                backup_folder_path,
-                None,
-                None,
-            )
-            folded_name = settings["name"].casefold()
-            if any(
-                profile.key != key and profile.name.casefold() == folded_name
-                for profile in _configured_profiles_or_empty(effective_secrets)
-            ):
-                raise LocalProfileStoreError(
-                    "Business display names must be unique."
-                )
-            _initialize_candidate_storage(settings)
-            save_local_profile(
-                key,
-                settings,
-                path=store_path,
-            )
-        except LocalProfileStoreError as error:
-            save_error.error(str(error))
-            return
-        except StorageError as error:
-            save_error.error(_profile_setup_error_message(error, settings))
-            return
-
-        st.cache_resource.clear()
-        st.session_state["reset_local_profile_form"] = True
-        st.session_state["local_profile_admin_notice"] = (
-            f"Business profile '{key}' was validated and saved locally."
-        )
-        st.rerun()
 
 
 def render_local_profile_admin(
@@ -823,7 +221,7 @@ def render_local_profile_admin(
 
     if not local_profiles:
         st.subheader("Business profiles")
-        _render_add_profile_form(
+        render_add_profile_form(
             effective_secrets,
             store_path=store_path,
             prominent=True,
@@ -850,13 +248,13 @@ def render_local_profile_admin(
         ]
     )
     with business_profiles_tab:
-        _render_local_profile_edits(
+        render_local_profile_edits(
             effective_secrets,
             local_profiles,
             selected_profile_key=selected_profile_key,
             store_path=store_path,
         )
-        _render_add_profile_form(
+        render_add_profile_form(
             effective_secrets,
             store_path=store_path,
             prominent=False,
@@ -872,7 +270,7 @@ def render_local_profile_admin(
         )
 
     with recovery_tab:
-        _render_synology_recovery_admin(
+        render_synology_recovery_admin(
             local_profiles,
             app_secrets=base_secrets,
             app_defaults=base_secrets.get("synology_recovery_defaults"),
@@ -880,7 +278,7 @@ def render_local_profile_admin(
             store_path=store_path,
         )
         selected_settings = local_profiles[selected_profile_key]
-        _render_profile_readiness(
+        render_profile_readiness(
             selected_profile_key,
             selected_settings,
             app_secrets=base_secrets,
@@ -892,4 +290,3 @@ def render_local_profile_admin(
             base_secrets,
             store_path=store_path,
         )
-    return
