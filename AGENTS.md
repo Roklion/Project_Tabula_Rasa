@@ -38,7 +38,7 @@ settings, or performing other GitHub write actions.
 Running tests, linters, format checks, and other read-only validation commands
 is pre-authorized and does not require asking the user for approval.
 
-Run both of these commands from the repository root using the project's active
+Run all of these commands from the repository root using the project's active
 development environment at two full-suite gates:
 
 1. before initially publishing a coding branch or creating/marking its pull
@@ -59,7 +59,7 @@ shared infrastructure, or risks that focused checks do not cover, justify an
 earlier full gate; do not rerun the full suite merely to call an ordinary
 intermediate commit ready.
 
-If either full-gate command fails, resolve the failure or report it as a
+If any full-gate command fails, resolve the failure or report it as a
 blocker instead of publishing the initial PR or describing the review loop as
 terminal. If an affected check fails during an intermediate round, resolve it
 or report it before committing that round.
