@@ -220,14 +220,56 @@ the trusted project layer is reloaded.
   deployment-wide. Do not require per-profile handling for them or imply that
   the application password provides per-profile authorization.
 
+## Engineering proportionality and responsibility boundaries
+
+- Keep normal runtime focused on the current workbook and backup formats. Put
+  recognized historical conversion in explicit, one-time migration tooling;
+  do not grow permanent startup or restore branches for every old schema.
+- Treat Google Sheets as a remote, non-transactional backend. Use native batch
+  requests where they clarify one logical mutation, but do not build an
+  application-level ACID or transaction-manager abstraction over it.
+- For a remote mutation, validate domain, reference, profile, duplicate, and
+  expected-record/stale-write invariants at the mutation boundary. Create
+  stable identities before remote creates. On uncertain commit status, perform
+  one fresh readback; accept a confirmed final state, retry at most once only
+  when safety is demonstrable, and otherwise stop with actionable guidance.
+  A successful API response is authoritative; do not add unconditional
+  post-success verification or repeated reconciliation for unsupported manual
+  worksheet interleavings.
+- For Drive + Sheets workflows, prefer a detectable, user-recoverable partial
+  result over simulated rollback. An uploaded receipt whose ledger link is
+  uncertain remains available through the unreferenced-receipt recovery
+  surface and must not be deleted as automatic rollback.
+- Before adding defensive or recovery machinery, weigh realistic likelihood,
+  impact, detectability/recoverability, and implementation, test, and
+  maintenance cost. Prefer the smallest mechanism that materially reduces a
+  credible risk; a technically possible edge case is not automatically an
+  actionable product requirement.
+- Split modules by cohesive responsibility and ownership, not arbitrary LOC
+  targets. Preserve stable public facades where useful, prefer composition and
+  small shared helpers, avoid circular imports, and do not introduce generic
+  frameworks solely to make files smaller. Lower-level storage/client/schema
+  code must not depend on page renderers.
+- Test supported workflows and credible high-impact failures, including domain
+  invariants, duplicate prevention, profile isolation, and data-loss risks.
+  Do not create exhaustive matrices for theoretical failure interleavings that
+  the product intentionally does not promise.
+- When review feedback adds retries, state branches, snapshots, or repeated
+  readbacks, pause for a holistic mission/proportionality check. Distinguish
+  technical possibility from supported threat/concurrency scope, batch related
+  remediation into one coherent review head, and record evidence when the
+  smallest safe fix is a local guard, stop-and-inspect error, or dispute.
+
 ## Ledger writes and reliability
 
 - Edits, deletes, uniqueness checks, and reference checks must use fresh data
-  before writing.
+  at the mutation boundary. Do not turn this into repeated whole-graph
+  snapshots or post-success verification after a confirmed Google response.
 - Show success only after the Google API confirms the operation, and invalidate
   affected caches only after a confirmed write.
-- Retries, duplicate suppression, imports, and uploads must not create
-  duplicate ledger rows or files after uncertain network responses.
+- Retries, duplicate suppression, imports, and uploads must use stable identity,
+  one uncertain-write readback, and at most one demonstrably safe retry; they
+  must not create duplicate ledger rows or files after uncertain responses.
 - The active ledger must remain Google Sheets-backed. Do not introduce local
   storage as an alternate source of truth.
 
@@ -252,6 +294,9 @@ the trusted project layer is reloaded.
 
 ## Backup, restore, and receipts
 
+- Normal runtime accepts only the current workbook/backup formats. Historical
+  conversion belongs in explicit migration tooling and must not be reintroduced
+  into startup or restore code.
 - Restoration must target a new blank workbook and must refuse the configured
   live workbook.
 - Backup version, manifest, checksum, and validation requirements must not be
@@ -266,6 +311,9 @@ the trusted project layer is reloaded.
 - Behavior changes need regression coverage for both the success path and
   relevant failure paths.
 - Profile-sensitive changes need an isolation test using at least two profiles.
+- Keep validation proportional to the supported contract and the risk boundary;
+  do not preserve tests whose only purpose is exhaustive theoretical
+  interleaving classification.
 - Update the canonical guide when externally visible behavior, configuration,
   recovery procedures, or security boundaries change.
 
