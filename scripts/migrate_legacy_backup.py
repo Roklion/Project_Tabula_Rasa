@@ -28,9 +28,9 @@ from tabula_rasa.storage.google_sheets import (
     BACKUP_FORMAT_VERSION,
     FIXED_TYPE_CLASSIFICATIONS,
     WORKSHEET_HEADERS,
-    _legacy_payee_id,
     normalize_payee_name,
 )
+from scripts._legacy_payees import legacy_payee_id
 
 
 _V1_ACCOUNTS = (
@@ -194,7 +194,7 @@ def _payees_and_transactions(
             continue
         if key not in payees:
             payees[key] = {
-                "id": _legacy_payee_id(name),
+                "id": legacy_payee_id(name),
                 "name": " ".join(name.split()),
                 "active": "TRUE",
                 "created_at": str(row.get("created_at") or fallback_created_at),

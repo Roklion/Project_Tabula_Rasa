@@ -61,7 +61,6 @@ class _GoogleSheetsStorageClient:
         retry_attempts: int = 4,
         retry_base_delay_seconds: float = 0.25,
         sleeper: Callable[[float], None] = time.sleep,
-        _allow_legacy_hierarchy_headers: bool = False,
         _initial_worksheets: Mapping[str, Any] | None = None,
         _initial_values: Mapping[str, list[list[Any]]] | None = None,
     ):
@@ -70,9 +69,6 @@ class _GoogleSheetsStorageClient:
         self._retry_attempts = retry_attempts
         self._retry_base_delay_seconds = retry_base_delay_seconds
         self._sleeper = sleeper
-        self._allow_legacy_hierarchy_headers = (
-            _allow_legacy_hierarchy_headers
-        )
         self._worksheet_cache = dict(_initial_worksheets or {})
         self._header_cache: dict[str, list[str]] = {}
         self._row_cache: dict[str, tuple[float, list[_StoredRow]]] = {}
@@ -285,11 +281,6 @@ class _GoogleSheetsStorageClient:
 
     def _validate_header_values(self, title: str, headers: list[str]) -> None:
         required = set(WORKSHEET_HEADERS[title])
-        if (
-            self._allow_legacy_hierarchy_headers
-            and title in {"Accounts", "Categories"}
-        ):
-            required.discard("parent_id")
         if not headers:
             raise StorageValidationError(f"{title} header row is empty")
         if any(not header for header in headers):

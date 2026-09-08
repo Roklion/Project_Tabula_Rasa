@@ -18,8 +18,6 @@ from datetime import timezone
 from decimal import Decimal
 from decimal import InvalidOperation
 from typing import Any
-from uuid import NAMESPACE_URL
-from uuid import uuid5
 from tabula_rasa.hierarchy import HierarchyValidationError
 from tabula_rasa.hierarchy import validate_two_level_hierarchy
 from tabula_rasa.mixed_use import MIXED_USE_SOURCE_TYPE
@@ -134,9 +132,6 @@ def normalize_tag_name(value: Any) -> str:
     return " ".join(
         unicodedata.normalize("NFKC", _clean_text(value, "Tag name")).split()
     ).casefold()
-
-def _legacy_payee_id(name: str) -> str:
-    return str(uuid5(NAMESPACE_URL, f"tabula-rasa:payee:{normalize_payee_name(name)}"))
 
 def _validate_hierarchy_records(
     records: Iterable[Mapping[str, Any]],
@@ -708,7 +703,6 @@ __all__ = [
     "_looks_like_partial_blank_workbook",
     "_utc_now",
     "_clean_text",
-    "_legacy_payee_id",
     "_validate_hierarchy_records",
     "_validate_payee_records",
     "_decimal_values_match",

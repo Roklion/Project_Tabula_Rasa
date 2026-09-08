@@ -18,11 +18,11 @@ from tabula_rasa.storage.google_sheets import (  # noqa: E402
     PRE_PAYEE_WORKSHEET_HEADERS,
     SHEETS_SCOPE,
     WORKSHEET_HEADERS,
-    _legacy_payee_id,
     _utc_now,
     _validate_payee_records,
     normalize_payee_name,
 )
+from scripts._legacy_payees import legacy_payee_id  # noqa: E402
 
 
 def migrate_payee_rows(
@@ -62,7 +62,7 @@ def migrate_payee_rows(
             payee = payees_by_key.get(key)
             if payee is None:
                 payee = {
-                    "id": _legacy_payee_id(legacy_name),
+                    "id": legacy_payee_id(legacy_name),
                     "name": " ".join(legacy_name.split()),
                     "active": "TRUE",
                     "created_at": _utc_now(),
