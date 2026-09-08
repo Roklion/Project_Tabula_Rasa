@@ -38,18 +38,19 @@ def test_gemini_review_keeps_a_stable_complementary_role() -> None:
     assert "Review metadata" not in styleguide
     assert "Reviewed head" not in styleguide
     assert "do not modify code, push changes, approve, or merge" in normalized_styleguide
-    assert "counterexamples and overlooked edge cases" in styleguide
-    assert "failure and retry behavior" in styleguide
-    assert "stale state or unsafe state transitions before writes" in styleguide
-    assert "idempotency and duplicate writes, uploads, or other operations" in styleguide
-    assert "profile isolation and trust boundaries" in styleguide
-    assert "backup, recovery, and destructive-operation safety" in styleguide
+    assert "counterexamples and overlooked edge cases" in normalized_styleguide
+    assert "failure and retry behavior" in normalized_styleguide
+    assert "stale state or unsafe state transitions before writes" in normalized_styleguide
+    assert "idempotency and duplicate writes, uploads, or other operations" in normalized_styleguide
+    assert "profile isolation and trust boundaries" in normalized_styleguide
+    assert "backup, recovery, and destructive-operation safety" in normalized_styleguide
 
 
 def test_repository_review_guidance_has_clear_ownership() -> None:
     agents = read_repository_file("AGENTS.md")
     normalized_agents = " ".join(agents.split())
     styleguide = read_repository_file(".gemini/styleguide.md")
+    normalized_styleguide = " ".join(styleguide.split())
     development = read_repository_file("docs/DEVELOPMENT.md")
     normalized_development = " ".join(development.split())
 
@@ -58,11 +59,11 @@ def test_repository_review_guidance_has_clear_ownership() -> None:
     assert "`@codex review`" in agents
     assert "primary-review coverage remains unresolved" in normalized_agents
     assert "full fallback mode" not in agents.casefold()
-    assert "complementary adversarial reviewer" in styleguide
+    assert "complementary adversarial reviewer" in normalized_styleguide
     assert "specialized adversarial review focus" in normalized_development
     assert "full fallback" not in styleguide.casefold()
     assert "Review metadata" not in styleguide
-    assert "do not modify code, push changes, approve, or merge" in styleguide
+    assert "do not modify code, push changes, approve, or merge" in normalized_styleguide
     assert "## Pull requests and review" in development
     assert "AGENTS.md" in development
     assert ".gemini/styleguide.md" in development
