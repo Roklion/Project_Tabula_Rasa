@@ -363,6 +363,22 @@ class AccountsMixin:
 
         def refresh() -> None:
             nonlocal current_row
+            existing_categories = self.list_categories(_force_refresh=True)
+            if any(
+                str(category.get("parent_id") or "").strip() == category_id
+                for category in existing_categories
+            ):
+                raise StorageConflictError(
+                    "That category has child categories and cannot be deleted"
+                )
+            transactions = self.list_transactions(_force_refresh=True)
+            if any(
+                str(transaction.get("category_id") or "").strip() == category_id
+                for transaction in transactions
+            ):
+                raise StorageConflictError(
+                    "That category has transactions and cannot be deleted"
+                )
             mixed_use_sources = self._rows("MixedUseExpenses", force_refresh=True)
             if any(
                 _clean_text(row.values.get("category_id"), "Category") == category_id

@@ -514,7 +514,9 @@ class _ReceiptOperationsMixin:
         try:
             uploaded = self._multipart_create(metadata, content, mime_type)
             created_file_id = str(uploaded.get("id", ""))
-        except GoogleDriveAccessError:
+        except GoogleDriveAccessError as error:
+            if not error.retryable:
+                raise
             recovered_after_uncertain_response = True
         committed = self._list(identity_query, page_size=1000)
         if not committed:

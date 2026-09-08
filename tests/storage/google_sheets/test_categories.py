@@ -131,6 +131,72 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
 
         assert self.storage.list_categories() == [category]
 
+    def test_delete_category_rechecks_child_categories_after_retry(self) -> None:
+        category = self.storage.create_category("Parent candidate", "Expense")
+        category_sheet = self.workbook.sheets["Categories"]
+        category_headers = self.storage._headers("Categories")
+        original_delete = category_sheet.delete_rows
+        injected = False
+
+        def inject_child_then_timeout(row_number: int) -> None:
+            nonlocal injected
+            if not injected:
+                injected = True
+                child_row = [""] * len(category_headers)
+                child_row[category_headers.index("id")] = "child-119"
+                child_row[category_headers.index("name")] = "Child"
+                child_row[category_headers.index("kind")] = "Expense"
+                child_row[category_headers.index("parent_id")] = category["id"]
+                category_sheet.append_row(child_row)
+                raise OSError("response lost before category deletion")
+            original_delete(row_number)
+
+        category_sheet.delete_rows = inject_child_then_timeout
+
+        with pytest.raises(StorageConflictError, match="child categories"):
+            self.storage.delete_category(category["id"])
+
+        categories = self.storage.list_categories()
+        assert {item["id"] for item in categories} == {
+            category["id"],
+            "child-119",
+        }
+        assert next(
+            item for item in categories if item["id"] == "child-119"
+        )["parent_id"] == category["id"]
+
+    def test_delete_category_rechecks_transactions_after_retry(self) -> None:
+        category = self.storage.create_category("Transaction candidate", "Expense")
+        account = self.storage.create_account("Checking", "Bank")
+        transaction_sheet = self.workbook.sheets["Transactions"]
+        category_sheet = self.workbook.sheets["Categories"]
+        transaction_headers = self.storage._headers("Transactions")
+        original_delete = category_sheet.delete_rows
+        injected = False
+
+        def inject_transaction_then_timeout(row_number: int) -> None:
+            nonlocal injected
+            if not injected:
+                injected = True
+                transaction_row = [""] * len(transaction_headers)
+                transaction_row[transaction_headers.index("id")] = "txn-119"
+                transaction_row[transaction_headers.index("txn_date")] = "2026-08-01"
+                transaction_row[transaction_headers.index("kind")] = "Expense"
+                transaction_row[transaction_headers.index("amount")] = "25"
+                transaction_row[transaction_headers.index("account_id")] = account["id"]
+                transaction_row[transaction_headers.index("category_id")] = category["id"]
+                transaction_sheet.append_row(transaction_row)
+                raise OSError("response lost before category deletion")
+            original_delete(row_number)
+
+        category_sheet.delete_rows = inject_transaction_then_timeout
+
+        with pytest.raises(StorageConflictError, match="transactions"):
+            self.storage.delete_category(category["id"])
+
+        assert self.storage.list_categories() == [category]
+        assert self.storage.list_transactions()[0]["category_id"] == category["id"]
+
     def test_edit_category_rechecks_mixed_use_sources_during_retry(
         self,
     ) -> None:

@@ -8,12 +8,47 @@ import pytest
 import requests
 
 from tabula_rasa.google_drive import (
-    GoogleDriveClient, GoogleDriveConflictError,
+    GoogleDriveAccessError, GoogleDriveClient, GoogleDriveConflictError,
 )
 
 from ._support import FakeResponse, DriveSession, drive_settings, oauth_config
 
 class TestGoogleDriveReceiptRecovery:
+    def test_receipt_recovery_propagates_nonretryable_upload_failure(self) -> None:
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, {"files": []}),
+                FakeResponse(400, {"error": {"message": "invalid request"}}),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        with pytest.raises(GoogleDriveAccessError) as raised:
+            client.restore_receipt(
+                profile_key="north",
+                folder_id="folder123456",
+                stored_filename="statement.pdf",
+                original_filename="statement.pdf",
+                content=b"receipt",
+                mime_type="application/pdf",
+                receipt_id="a" * 32,
+                sha256=hashlib.sha256(b"receipt").hexdigest(),
+                old_file_id="receipt123456",
+            )
+
+        assert raised.value.retryable is False
+        assert [request[0] for request in session.requests] == [
+            "GET",
+            "GET",
+            "POST",
+        ]
+
     def test_receipt_recovery_preserves_name_and_integrity_metadata(self) -> None:
         session = DriveSession(
             [
