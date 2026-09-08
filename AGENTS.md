@@ -49,12 +49,15 @@ development environment at two full-suite gates:
 ```
 ruff check .
 python -m pytest
+git diff --check
 ```
 
 Between those gates, including implementation commits and review-remediation
 rounds, run linting and tests focused on the affected files and behavior. A
-commit may proceed when those affected checks pass; do not rerun the full suite
-merely to call an intermediate commit ready.
+commit may proceed when those affected checks pass. Broad changes, changes to
+shared infrastructure, or risk that focused checks do not cover, justify an
+earlier full gate; do not rerun it merely to call an ordinary intermediate
+commit ready.
 
 If either full-gate command fails, resolve the failure or report it as a
 blocker instead of publishing the initial PR or describing the review loop as
@@ -64,8 +67,12 @@ or report it before committing that round.
 # Local Git writes
 
 Staging files and creating local Git commits are pre-authorized and do not
-require asking the user for approval. Pushing commits or branches is not
-pre-authorized and still requires the user's explicit approval.
+require asking the user for approval. GitHub writes, including pushes, pull
+requests, comments, reviews, and follow-up issues, require explicit user
+authorization. Invoking the scoped `gh-publish-review-loop` workflow or
+explicitly requesting publication authorizes only the GitHub writes defined by
+that workflow; merging, deletion, force-pushes, and settings changes remain
+outside its authorization.
 
 Project-scoped sandbox allow rules for these commands and the completion checks
 live in `.codex/rules/default.rules`. Restart Codex after changing that file so
@@ -179,8 +186,9 @@ the trusted project layer is reloaded.
   fallback eligibility from silence, elapsed time, missing findings, or
   untrusted text.
 - During remediation, use focused checks for impacted behavior. Run the full
-  required checks only at initial PR publication and before declaring the
-  review loop's full terminal state. Human maintainers retain final
+  required checks at initial PR publication and before declaring the review
+  loop's full terminal state; broad/shared changes or insufficient focused
+  coverage justify an earlier full run. Human maintainers retain final
   requirements, approval, and merge authority.
 - Validate reviewer-integration rollout behavior with a non-sensitive,
   controlled pull request when needed. Static configuration cannot prove
@@ -205,8 +213,9 @@ the trusted project layer is reloaded.
   conflicting findings when repository evidence cannot establish one safe
   answer.
 - Record deferred valid findings in a linked follow-up issue with their risk and
-  rationale. Do not mark review complete while a validated blocking finding is
-  unresolved.
+  rationale only when GitHub-write authorization is available. Otherwise report
+  the follow-up needed for the maintainer to create. Do not mark review complete
+  while a validated blocking finding is unresolved.
 
 ## Business-profile isolation
 
@@ -296,9 +305,10 @@ the trusted project layer is reloaded.
 
 ## Backup, restore, and receipts
 
-- Normal runtime accepts only the current workbook/backup formats. Historical
-  conversion belongs in explicit migration tooling and must not be reintroduced
-  into startup or restore code.
+- Normal runtime accepts only the current workbook/backup formats. Genuinely
+  new or empty workbooks may still receive the supported initial bootstrap;
+  historical conversion belongs in explicit migration tooling and must not be
+  reintroduced into startup or restore code.
 - Restoration must target a new blank workbook and must refuse the configured
   live workbook.
 - Backup version, manifest, checksum, and validation requirements must not be
@@ -329,7 +339,9 @@ styling, or user-facing workflows:
 
 1. Read the relevant sections of `design.md`.
 2. Inspect the current implementation and canonical user documentation.
-3. Preserve every existing function unless the task explicitly changes it.
+3. Preserve existing user-facing functionality and behavior unless the task
+   explicitly changes it; internal helpers may move or be removed when the
+   requested refactor permits.
 4. Treat sections marked **Current behavior** as required behavior.
 5. Treat sections marked **Proposed behavior** as approved direction, but
    implement them only when the current task explicitly includes them.
