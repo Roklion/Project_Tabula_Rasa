@@ -289,7 +289,7 @@ document. Hosted Streamlit cannot update these values itself.
 
 | Responsibility | Implementation |
 | --- | --- |
-| OAuth state, code exchange, refresh, and Drive operations | tabula_rasa/google_drive.py |
+| OAuth state, code exchange, refresh, and Drive operations | `tabula_rasa/google_drive/` (`oauth.py`, `client.py`, `folders.py`, `receipts.py`, and `backups.py`) |
 | Callback and per-profile administration | tabula_rasa/google_drive_admin.py |
 | Browser Picker | tabula_rasa/google_drive_picker.py |
 | Local credential persistence | tabula_rasa/local_profile_store.py |

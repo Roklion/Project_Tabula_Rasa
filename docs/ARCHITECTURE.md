@@ -352,7 +352,7 @@ local-only recovery metadata.
 | Local profile persistence | tabula_rasa/local_profile_store.py |
 | Sheets storage, current v10 backup format, and restore validation | tabula_rasa/storage/google_sheets.py |
 | Legacy backup conversion (v1–v9 to v10) | scripts/migrate_legacy_backup.py |
-| Drive OAuth and file operations | tabula_rasa/google_drive.py |
+| Drive OAuth and file operations | tabula_rasa/google_drive/__init__.py, with `oauth.py`, `client.py`, `folders.py`, `receipts.py`, and `backups.py` responsibility modules |
 | Drive administration and Picker | tabula_rasa/google_drive_admin.py and tabula_rasa/google_drive_picker.py |
 | Maps autocomplete and route distance | tabula_rasa/address_autocomplete.py and tabula_rasa/maps_routing.py |
 | Receipts and recovery metadata | tabula_rasa/receipt_manifest.py and tabula_rasa/receipt_recovery.py |
