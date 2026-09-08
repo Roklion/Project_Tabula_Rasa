@@ -192,10 +192,12 @@ using the normal current-format validator.
 
 Migration tools have a narrower trust boundary than production runtime. They
 recognize supported standard application outputs, perform deterministic
-transformations, preserve the source archive/workbook, and fail clearly when
-the recognized contract is not met. They do not permanently carry every old
-schema into startup or reproduce adversarial validation for inputs the tool is
-explicitly designed to convert.
+transformations, and fail clearly when the recognized contract is not met.
+Archive migration preserves its source archive; `scripts/migrate_workbook.py`
+intentionally upgrades the selected workbook in place and should be run only
+after the operator has secured a recoverable backup. The tools do not
+permanently carry every old schema into startup or reproduce adversarial
+validation for inputs they are explicitly designed to convert.
 
 ### Proportionality and review drift
 
