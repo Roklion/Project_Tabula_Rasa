@@ -26,8 +26,10 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     receipt_creation_workflow_key,
     receipt_editor_upload_reset_key,
     receipt_editor_workflow_key,
+    render_receipts,
     render_receipt_creation_recovery,
 )
+from tabula_rasa.receipt_manifest import receipt_reference_from_drive_file
 
 
 class UploadedFile:
@@ -386,7 +388,7 @@ def test_manual_unreferenced_link_finishes_matching_editor_workflow() -> None:
     context = _context()
 
     with patch.object(st, "session_state", state):
-        assert _record_editor_receipt_linked(
+        _record_editor_receipt_linked(
             context,
             "txn-1",
             {"id": pending["reference"]["id"]},
@@ -394,6 +396,57 @@ def test_manual_unreferenced_link_finishes_matching_editor_workflow() -> None:
 
     assert receipt_editor_workflow_key("north", "txn-1") not in state
     context.schedule_widget_reset.assert_called_once()
+
+
+def test_manual_unreferenced_link_reports_success_when_recovery_finishes() -> None:
+    pending = _prepared()
+    drive_file = _drive_file(pending)
+    pending["reference"] = drive_file
+    pending["content"] = b""
+    workflow = new_receipt_creation_workflow(
+        "txn-1",
+        [pending],
+        spreadsheet_id="north-sheet",
+        receipt_folder_id="north-folder",
+    )
+    workflow_key = receipt_editor_workflow_key("north", "txn-1")
+    notice_key = "receipt-notice-north-txn-1"
+    state = {workflow_key: workflow}
+    storage = Mock()
+    drive = Mock()
+    drive.list_profile_receipts.return_value = [drive_file]
+    context = _context(storage=storage, drive=drive)
+
+    with (
+        patch.object(st, "session_state", state),
+        patch.object(st, "divider"),
+        patch.object(st, "subheader"),
+        patch.object(st, "warning"),
+        patch.object(st, "caption"),
+        patch.object(st, "error"),
+        patch.object(st, "empty", return_value=Mock()),
+        patch.object(st, "selectbox", return_value=drive_file["id"]),
+        patch.object(
+            st,
+            "button",
+            side_effect=lambda label, **_kwargs: label == "Link selected receipt",
+        ),
+        patch.object(st, "rerun") as rerun,
+    ):
+        render_receipts(
+            context,
+            selected={"receipt_references": ""},
+            all_transactions=[],
+            edit_id="txn-1",
+        )
+
+    storage.link_transaction_receipt.assert_called_once_with(
+        "txn-1",
+        reference=receipt_reference_from_drive_file(drive_file),
+    )
+    assert workflow_key not in state
+    assert state[notice_key] == f"Receipt linked: {drive_file['name']}"
+    rerun.assert_called_once_with()
 
 
 def test_cancel_and_delete_cleanup_are_profile_and_target_scoped() -> None:

@@ -124,6 +124,10 @@ def test_migrates_mixed_use_association_through_source_pair() -> None:
     )
     drive = Mock()
     drive.list_profile_receipts.return_value = [_legacy_receipt(projection_id)]
+    list_transactions = storage.list_transactions
+    list_sources = storage.list_mixed_use_expense_sources
+    storage.list_transactions = Mock(wraps=list_transactions)
+    storage.list_mixed_use_expense_sources = Mock(wraps=list_sources)
 
     migrate_receipt_associations(
         storage,
@@ -132,6 +136,14 @@ def test_migrates_mixed_use_association_through_source_pair() -> None:
         folder_id="north-folder",
     )
 
+    assert storage.list_transactions.call_count == 2
+    assert all(
+        call.kwargs == {"_force_refresh": True}
+        for call in storage.list_transactions.call_args_list
+    )
+    storage.list_mixed_use_expense_sources.assert_called_once_with(
+        _force_refresh=True
+    )
     refreshed_source = storage.get_mixed_use_expense(source["id"])
     projection = next(
         transaction
@@ -203,7 +215,7 @@ def test_missing_integrity_metadata_is_backfilled_only_in_migration_tool() -> No
     )
 
 
-def test_fresh_receipt_cell_prevents_overwriting_a_concurrent_link() -> None:
+def test_cached_candidate_conflicts_if_receipt_cell_changes_before_write() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook())
     transaction = storage.create_transaction(
         **_expense_inputs(storage),
@@ -217,66 +229,17 @@ def test_fresh_receipt_cell_prevents_overwriting_a_concurrent_link() -> None:
         value="",
     )
     drive = Mock()
-    drive.list_profile_receipts.return_value = [_legacy_receipt(transaction["id"])]
-    list_transactions = storage.list_transactions
-    calls = 0
 
-    def concurrent_link(*, _force_refresh: bool = False) -> list[dict[str, str]]:
-        nonlocal calls
-        calls += 1
-        if calls == 2:
-            _set_receipts_cell(
-                storage,
-                worksheet="Transactions",
-                record_id=transaction["id"],
-                value="[]",
-            )
-        return list_transactions(_force_refresh=_force_refresh)
+    def concurrent_link(**_kwargs: object) -> list[dict[str, object]]:
+        _set_receipts_cell(
+            storage,
+            worksheet="Transactions",
+            record_id=transaction["id"],
+            value="[]",
+        )
+        return [_legacy_receipt(transaction["id"])]
 
-    storage.list_transactions = Mock(side_effect=concurrent_link)
-
-    report = migrate_receipt_associations(
-        storage,
-        drive,
-        profile_key="north",
-        folder_id="north-folder",
-    )
-
-    assert report == {"associations_migrated": 0, "checksums_backfilled": 0}
-    assert list_transactions(_force_refresh=True)[0]["receipt_references"] == "[]"
-
-
-def test_setter_rechecks_receipt_cell_after_ownership_scan() -> None:
-    storage = GoogleSheetsStorage(FakeWorkbook())
-    transaction = storage.create_transaction(
-        **_expense_inputs(storage),
-        kind="Expense",
-        amount="10",
-    )
-    _set_receipts_cell(
-        storage,
-        worksheet="Transactions",
-        record_id=transaction["id"],
-        value="",
-    )
-    drive = Mock()
-    drive.list_profile_receipts.return_value = [_legacy_receipt(transaction["id"])]
-    list_transactions = storage.list_transactions
-    calls = 0
-
-    def concurrent_link(*, _force_refresh: bool = False) -> list[dict[str, str]]:
-        nonlocal calls
-        calls += 1
-        if calls == 3:
-            _set_receipts_cell(
-                storage,
-                worksheet="Transactions",
-                record_id=transaction["id"],
-                value="[]",
-            )
-        return list_transactions(_force_refresh=_force_refresh)
-
-    storage.list_transactions = Mock(side_effect=concurrent_link)
+    drive.list_profile_receipts.side_effect = concurrent_link
 
     with pytest.raises(StorageConflictError, match="transaction changed"):
         migrate_receipt_associations(
@@ -286,4 +249,6 @@ def test_setter_rechecks_receipt_cell_after_ownership_scan() -> None:
             folder_id="north-folder",
         )
 
-    assert list_transactions(_force_refresh=True)[0]["receipt_references"] == "[]"
+    assert storage.list_transactions(_force_refresh=True)[0][
+        "receipt_references"
+    ] == "[]"

@@ -638,10 +638,10 @@ def _remove_editor_receipt_from_recovery(
     file_id: str,
     *,
     record_linked: bool = False,
-) -> bool:
+) -> None:
     workflow = _editor_workflow(context, transaction_id)
     if workflow is None:
-        return False
+        return
     remaining = [
         receipt
         for receipt in workflow.get("receipts", [])
@@ -652,19 +652,19 @@ def _remove_editor_receipt_from_recovery(
         )
     ]
     if len(remaining) == len(workflow.get("receipts", [])):
-        return False
+        return
     workflow["receipts"] = remaining
     if record_linked:
         workflow["linked_count"] = int(workflow.get("linked_count", 0)) + 1
-    return _finish_editor_receipt_workflow(context, transaction_id, workflow)
+    _finish_editor_receipt_workflow(context, transaction_id, workflow)
 
 
 def _record_editor_receipt_linked(
     context: TransactionsContext,
     transaction_id: str,
     reference: Mapping[str, Any],
-) -> bool:
-    return _remove_editor_receipt_from_recovery(
+) -> None:
+    _remove_editor_receipt_from_recovery(
         context,
         transaction_id,
         str(reference.get("id", "")),
@@ -846,12 +846,12 @@ def render_receipts(
             link_error.error(f"The receipt could not be linked. {error}")
         else:
             _mark_workbook_data_changed(context)
-            if not _record_editor_receipt_linked(
+            _record_editor_receipt_linked(
                 context,
                 edit_id,
                 existing_receipt,
-            ):
-                st.session_state[notice_key] = (
-                    f"Receipt linked: {existing_receipt['name']}"
-                )
+            )
+            st.session_state[notice_key] = (
+                f"Receipt linked: {existing_receipt['name']}"
+            )
             st.rerun()

@@ -3781,13 +3781,16 @@ class GoogleSheetsStorage:
         references: Any,
         *,
         transaction_id: str | None = None,
+        transactions: Iterable[Mapping[str, Any]] | None = None,
     ) -> None:
         receipt_ids = {
             item["id"] for item in decode_receipt_references(references)
         }
         if not receipt_ids:
             return
-        for transaction in self.list_transactions(_force_refresh=True):
+        if transactions is None:
+            transactions = self.list_transactions(_force_refresh=True)
+        for transaction in transactions:
             if transaction["id"] == transaction_id:
                 continue
             if receipt_ids.intersection(
@@ -4561,20 +4564,27 @@ class GoogleSheetsStorage:
     ) -> dict[str, str]:
         """Replace the Drive receipt references attached to one transaction."""
         with _MIXED_USE_CREATE_LOCK:
-            current = self._find_row("Transactions", transaction_id)
+            transaction_id = _clean_text(transaction_id, "ID", required=True)
+            transaction_rows = self._managed_rows_by_id(
+                self._rows("Transactions", force_refresh=True),
+                "Transactions",
+            )
+            current = transaction_rows.get(transaction_id)
+            if current is None:
+                raise StorageNotFoundError("Transaction no longer exists")
             self._reject_mixed_use_projection(current.values)
             encoded_references = _encode_receipt_references(references)
             self._reject_receipt_ownership_conflict(
-                encoded_references, transaction_id=transaction_id
+                encoded_references,
+                transaction_id=transaction_id,
+                transactions=(row.values for row in transaction_rows.values()),
             )
-            if expected_transaction is not None:
-                current = self._find_row("Transactions", transaction_id)
-                if not self._mixed_use_record_matches(
-                    "Transactions", current.values, expected_transaction
-                ):
-                    raise StorageConflictError(
-                        "The transaction changed; refresh before changing receipts."
-                    )
+            if expected_transaction is not None and not self._mixed_use_record_matches(
+                "Transactions", current.values, expected_transaction
+            ):
+                raise StorageConflictError(
+                    "The transaction changed; refresh before changing receipts."
+                )
             return self._replace_receipt_references(
                 current, encoded_references
             )

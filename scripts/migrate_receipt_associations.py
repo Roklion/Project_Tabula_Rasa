@@ -77,35 +77,22 @@ def migrate_receipt_associations(
         pending.setdefault(transaction_id, []).append(reference)
 
     migrated = 0
+    mixed_use_sources_by_id: dict[str, dict[str, str]] | None = None
     for transaction_id, references in pending.items():
-        transaction = next(
-            (
-                item
-                for item in storage.list_transactions(_force_refresh=True)
-                if str(item.get("id") or "") == transaction_id
-            ),
-            None,
-        )
-        if (
-            transaction is None
-            or str(transaction.get("receipt_references", "")) != ""
-        ):
-            continue
+        transaction = transactions_by_id[transaction_id]
         source_id = str(transaction.get("source_id") or "")
         if (
             str(transaction.get("source_type") or "") == MIXED_USE_SOURCE_TYPE
             and source_id
         ):
-            source = next(
-                (
-                    item
-                    for item in storage.list_mixed_use_expense_sources(
+            if mixed_use_sources_by_id is None:
+                mixed_use_sources_by_id = {
+                    str(source["id"]): source
+                    for source in storage.list_mixed_use_expense_sources(
                         _force_refresh=True
                     )
-                    if str(item.get("id") or "") == source_id
-                ),
-                None,
-            )
+                }
+            source = mixed_use_sources_by_id.get(source_id)
             if (
                 source is None
                 or str(source.get("receipt_references", "")) != ""
