@@ -151,7 +151,7 @@ deliberately small:
 2. If commit status is uncertain, read the affected stable ID or final state
    once. A confirmed requested state is success.
 3. Retry once only when the fresh read proves the operation is absent and the
-   retry cannot duplicate or corrupt data. Otherwise invalidate affected
+  retry cannot duplicate or corrupt data. Otherwise, invalidate affected
    caches and stop with an actionable inspection/recovery message.
 
 A successful Google response is authoritative; an uncertain response can be
@@ -234,7 +234,7 @@ The target seams for the decomposition work are:
 | --- | --- |
 | Sheets storage facade | `tabula_rasa/storage/google_sheets/__init__.py` keeps `GoogleSheetsStorage` and re-exports intentionally public names. |
 | Sheets primitives | `tabula_rasa/storage/google_sheets/errors.py`, `tabula_rasa/storage/google_sheets/schema.py`, `tabula_rasa/storage/google_sheets/validation.py`, `tabula_rasa/storage/google_sheets/client.py`, and a small `tabula_rasa/storage/google_sheets/base.py` own errors, current schema, API access, validation, and shared row/cache/read/write helpers. |
-| Sheets domains | `tabula_rasa/storage/google_sheets/accounts.py`, `tabula_rasa/storage/google_sheets/categories.py`, `tabula_rasa/storage/google_sheets/payees.py`, `tabula_rasa/storage/google_sheets/tags.py`, `tabula_rasa/storage/google_sheets/transactions.py`, `tabula_rasa/storage/google_sheets/mileage.py`, `tabula_rasa/storage/google_sheets/mixed_use.py`, `tabula_rasa/storage/google_sheets/receipts.py`, and `tabula_rasa/storage/google_sheets/backup.py` own cohesive domain operations. Historical migration code stays in scripts. |
+| Sheets domains | `tabula_rasa/storage/google_sheets/accounts.py`, `tabula_rasa/storage/google_sheets/categories.py`, `tabula_rasa/storage/google_sheets/payees.py`, `tabula_rasa/storage/google_sheets/tags.py`, `tabula_rasa/storage/google_sheets/transactions.py`, `tabula_rasa/storage/google_sheets/mileage.py`, `tabula_rasa/storage/google_sheets/mixed_use.py`, `tabula_rasa/storage/google_sheets/receipts.py`, and `tabula_rasa/storage/google_sheets/backups.py` own cohesive domain operations. Historical migration code stays in scripts. |
 | Receipt page workflow | `tabula_rasa/page_renderers/transactions/receipt_workflows.py` owns reusable upload/recovery state; `tabula_rasa/page_renderers/transactions/receipt_editor.py` owns editor rendering; `tabula_rasa/page_renderers/transactions/receipt_display.py` owns listing/unlink UI. `tabula_rasa/page_renderers/transactions/receipts.py` may remain a thin compatibility facade. |
 | Mileage page | `tabula_rasa/page_renderers/mileage/mileage_routing.py`, `tabula_rasa/page_renderers/mileage/mileage_form.py`, `tabula_rasa/page_renderers/mileage/mileage_ledger.py`, and `tabula_rasa/page_renderers/mileage/mileage_locations.py` separate route state, forms, ledger behavior, and location helpers; `tabula_rasa/page_renderers/mileage.py` remains orchestration-focused. |
 | Transaction ledger page | `tabula_rasa/page_renderers/transactions/ledger_filters.py`, `tabula_rasa/page_renderers/transactions/ledger_bulk.py`, `tabula_rasa/page_renderers/transactions/ledger_editor.py`, and `tabula_rasa/page_renderers/transactions/transaction_copy.py` separate search/filter state, bulk actions, single-record editing, and provenance/copy behavior; `tabula_rasa/page_renderers/ledger.py` composes them. |
