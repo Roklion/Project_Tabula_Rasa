@@ -174,10 +174,10 @@ the trusted project layer is reloaded.
   when GitHub marks their lines outdated. Preserve the original and current
   context when replying or recording a disposition.
 - If a trusted current-round Codex response reports quota exhaustion or
-  unavailability after the paired requests, issue exactly one separately
-  tracked `/gemini review` for that same head in full fallback mode. Never infer
-  fallback eligibility from silence, elapsed time, missing findings, or
-  untrusted text.
+  unavailability after the paired requests, record that primary-review coverage
+  remains unresolved. Gemini stays in its complementary role; do not infer
+  broader coverage from silence, elapsed time, missing findings, or untrusted
+  text.
 - During remediation, use focused checks for impacted behavior. Run the full
   required checks only at initial PR publication and before declaring the
   review loop's full terminal state. Human maintainers retain final

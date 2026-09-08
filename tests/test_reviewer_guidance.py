@@ -48,6 +48,7 @@ def test_gemini_review_keeps_a_stable_complementary_role() -> None:
 
 def test_repository_review_guidance_has_clear_ownership() -> None:
     agents = read_repository_file("AGENTS.md")
+    normalized_agents = " ".join(agents.split())
     styleguide = read_repository_file(".gemini/styleguide.md")
     development = read_repository_file("docs/DEVELOPMENT.md")
     normalized_development = " ".join(development.split())
@@ -55,6 +56,8 @@ def test_repository_review_guidance_has_clear_ownership() -> None:
     assert "## Codex reviewer role" in agents
     assert "Follow the human workflow in `docs/DEVELOPMENT.md`" in agents
     assert "`@codex review`" in agents
+    assert "primary-review coverage remains unresolved" in normalized_agents
+    assert "full fallback mode" not in agents.casefold()
     assert "complementary adversarial reviewer" in styleguide
     assert "specialized adversarial review focus" in normalized_development
     assert "full fallback" not in styleguide.casefold()
