@@ -31,8 +31,9 @@ to information about this repository is pre-authorized and does not require
 asking the user for explicit approval. This includes pull requests, issues,
 comments, reviews, checks, commits, branches, and repository metadata. It does
 not itself authorize posting comments, resolving review threads, merging,
-changing settings, or performing other GitHub write actions. Those actions
-require the separate user authorization described under **Local Git writes**.
+changing settings, or performing other GitHub write actions. Standard write
+actions require the user authorization described under **Local Git writes**;
+merging and changing settings require separate explicit requests.
 
 # Validation checks
 
