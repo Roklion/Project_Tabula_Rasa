@@ -21,9 +21,9 @@ from .errors import (
 )
 from .accounts import AccountsMixin
 from .backup import BackupMixin
-from .managed import _ManagedMixin
 from .mileage import MileageMixin
 from .mixed_use import _MixedUseMixin
+from .payees import PayeesMixin
 from .receipts import ReceiptsMixin
 from .schema import (
     ACCOUNT_CLASSIFICATIONS,
@@ -51,6 +51,7 @@ from .validation import (
     _legacy_payee_id,
     _looks_like_historical_workbook,
     _looks_like_partial_blank_workbook,
+    _normalize_tag_ids,
     _utc_now,
     _validate_hierarchy_records,
     _validate_payee_records,
@@ -60,12 +61,14 @@ from .validation import (
     normalize_tag_name,
 )
 from .transactions import TransactionsMixin
+from .tags import TagsMixin
 
 
 class GoogleSheetsStorage(
     _GoogleSheetsStorageClient,
     AccountsMixin,
-    _ManagedMixin,
+    PayeesMixin,
+    TagsMixin,
     TransactionsMixin,
     _MixedUseMixin,
     ReceiptsMixin,
@@ -118,6 +121,7 @@ __all__ = [
     "_legacy_payee_id",
     "_looks_like_historical_workbook",
     "_looks_like_partial_blank_workbook",
+    "_normalize_tag_ids",
     "_utc_now",
     "_validate_hierarchy_records",
     "_validate_payee_records",
