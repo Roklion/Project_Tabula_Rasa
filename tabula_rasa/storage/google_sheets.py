@@ -4561,18 +4561,20 @@ class GoogleSheetsStorage:
     ) -> dict[str, str]:
         """Replace the Drive receipt references attached to one transaction."""
         with _MIXED_USE_CREATE_LOCK:
+            current = self._find_row("Transactions", transaction_id)
+            self._reject_mixed_use_projection(current.values)
             encoded_references = _encode_receipt_references(references)
             self._reject_receipt_ownership_conflict(
                 encoded_references, transaction_id=transaction_id
             )
-            current = self._find_row("Transactions", transaction_id)
-            self._reject_mixed_use_projection(current.values)
-            if expected_transaction is not None and not self._mixed_use_record_matches(
-                "Transactions", current.values, expected_transaction
-            ):
-                raise StorageConflictError(
-                    "The transaction changed; refresh before changing receipts."
-                )
+            if expected_transaction is not None:
+                current = self._find_row("Transactions", transaction_id)
+                if not self._mixed_use_record_matches(
+                    "Transactions", current.values, expected_transaction
+                ):
+                    raise StorageConflictError(
+                        "The transaction changed; refresh before changing receipts."
+                    )
             return self._replace_receipt_references(
                 current, encoded_references
             )
