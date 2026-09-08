@@ -30,8 +30,10 @@ Read-only access through the connected GitHub integration or GitHub webpages
 to information about this repository is pre-authorized and does not require
 asking the user for explicit approval. This includes pull requests, issues,
 comments, reviews, checks, commits, branches, and repository metadata. It does
-not authorize posting comments, resolving review threads, merging, changing
-settings, or performing other GitHub write actions.
+not itself authorize posting comments, resolving review threads, merging,
+changing settings, or performing other GitHub write actions. Standard write
+actions require the user authorization described under **Local Git writes**;
+merging and changing settings require separate explicit requests.
 
 # Validation checks
 
@@ -67,12 +69,24 @@ or report it before committing that round.
 # Local Git writes
 
 Staging files and creating local Git commits are pre-authorized and do not
-require asking the user for approval. GitHub writes, including pushes, pull
-requests, comments, reviews, and follow-up issues, require explicit user
-authorization. Invoking the scoped `gh-publish-review-loop` workflow or
-explicitly requesting publication authorizes only the GitHub writes defined by
-that workflow; merging, deletion, force-pushes, and settings changes remain
-outside its authorization.
+require asking the user for approval.
+
+Pushing commits or branches and performing GitHub writes require explicit user
+authorization. Either of the following supplies that authorization:
+
+- the user explicitly requests the push or GitHub write; or
+- the user explicitly invokes `$gh-publish-review-loop`, only for the
+  repository, branch, pull request, task, and actions covered by that skill.
+
+Implicit selection of the skill does not itself authorize a push or GitHub
+write; the underlying user request must authorize it. Sandbox, network, tool,
+and Auto-review approvals remain separate runtime controls and must use the
+normal Codex approval mechanism.
+
+This authorization does not include merging a pull request, deleting branches,
+force-pushing or rewriting published history, modifying repository settings or
+secrets, or making unrelated changes unless the user separately requests the
+specific action.
 
 Project-scoped sandbox allow rules for these commands and the completion checks
 live in `.codex/rules/default.rules`. Restart Codex after changing that file so
