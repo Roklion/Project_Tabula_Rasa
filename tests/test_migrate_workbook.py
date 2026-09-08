@@ -15,6 +15,8 @@ from tabula_rasa.storage.google_sheets import (
     StorageValidationError,
     WORKSHEET_HEADERS,
     GoogleSheetsStorage,
+)
+from tabula_rasa.storage.google_sheets.validation import (
     _looks_like_historical_workbook,
 )
 from scripts.migration_schemas import (
