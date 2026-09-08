@@ -21,7 +21,6 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     render_receipt_creation_recovery,
     render_receipts,
     receipt_creation_workflow_key,
-    editor_receipt_link_recovery_key,
     receipt_editor_workflow_key,
 )
 from tabula_rasa.storage import StorageError, decode_receipt_references
@@ -68,23 +67,6 @@ class _MixedUseReceiptStorage:
     def unlink_transaction_receipt(self, transaction_id, *, file_id):
         result = self._storage.unlink_mixed_use_receipt(
             self._source_id, file_id=file_id, expected_source=self._expected_source
-        )
-        self._refresh_expected_source()
-        return result
-
-    def set_transaction_receipt_references(self, transaction_id, references):
-        result = self._storage.set_mixed_use_receipt_references(
-            self._source_id, references, expected_source=self._expected_source
-        )
-        self._refresh_expected_source()
-        return result
-
-    def remap_transaction_receipt(self, transaction_id, *, old_file_id, reference):
-        result = self._storage.remap_mixed_use_receipt(
-            self._source_id,
-            old_file_id=old_file_id,
-            reference=reference,
-            expected_source=self._expected_source,
         )
         self._refresh_expected_source()
         return result
@@ -137,12 +119,9 @@ def _mixed_use_receipt_recovery_active(
     """Prevent a second mixed-use upload while the linked editor recovers."""
     if not transaction_id:
         return False
-    return any(
-        isinstance(state.get(key), Mapping)
-        for key in (
-            receipt_editor_workflow_key(profile, transaction_id),
-            editor_receipt_link_recovery_key(profile, transaction_id),
-        )
+    return isinstance(
+        state.get(receipt_editor_workflow_key(profile, transaction_id)),
+        Mapping,
     )
 
 def _mixed_use_selection_ids(
@@ -222,19 +201,6 @@ def _incomplete_source_ids(
     }
 
 
-def _recovery_configuration_matches(
-    context, recovery: Mapping[str, object]
-) -> bool:
-    """Keep mixed-use recovery bound to the workbook that created it."""
-    expected_spreadsheet = str(recovery.get("spreadsheet_id") or "")
-    if not expected_spreadsheet:
-        return True
-    profile_secrets = getattr(context, "profile_secrets", {})
-    if not isinstance(profile_secrets, Mapping):
-        return False
-    return expected_spreadsheet == str(profile_secrets.get("spreadsheet_id") or "")
-
-
 def _render_preview(preview: Mapping[str, str]) -> None:
     st.markdown("#### Ledger Result (read-only)")
     if preview["status"] != "ready":
@@ -303,13 +269,6 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
     source_by_id = {str(item["id"]): item for item in sources}
     recovery = st.session_state.get(receipt_creation_workflow_key(profile))
     if isinstance(recovery, Mapping):
-        if not _recovery_configuration_matches(context, recovery):
-            st.warning(
-                "Receipt recovery is waiting on the profile's previous Google "
-                "Sheets workbook. Restore that workbook configuration before "
-                "resuming recovery."
-            )
-            return
         recovery_transaction_id = str(recovery.get("transaction_id") or "")
         recovery_source_id = str(recovery.get("mixed_use_source_id") or "")
         if not recovery_source_id:

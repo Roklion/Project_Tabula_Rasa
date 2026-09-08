@@ -7,6 +7,10 @@ from tabula_rasa.google_drive import (
     DRIVE_SCOPE,
     GoogleDriveClient,
 )
+from tabula_rasa.page_renderers.transactions.receipts import (
+    new_receipt_creation_workflow,
+    receipt_editor_workflow_key,
+)
 from tabula_rasa.storage import (
     decode_receipt_references,
     GoogleSheetsStorage,
@@ -280,6 +284,39 @@ def main() -> None:
             for success in app.success
         )
         assert app.session_state["workbook_data_revision"] == 2
+
+        workflow_key = receipt_editor_workflow_key("test", transaction["id"])
+        app.session_state[workflow_key] = new_receipt_creation_workflow(
+            transaction["id"],
+            [
+                {
+                    "key": "pending-linked-receipt",
+                    "receipt_id": receipt_reference["receipt_id"],
+                    "sha256": receipt_reference["sha256"],
+                    "original_name": receipt_reference["original_filename"],
+                    "mime_type": receipt_reference["mime_type"],
+                    "content": b"",
+                    "reference": dict(receipt_reference),
+                    "error": "The receipt link could not be confirmed.",
+                }
+            ],
+            spreadsheet_id="test-sheet",
+            receipt_folder_id="folder123456",
+        )
+        app.run()
+        assert by_label(app.button, "Retry unresolved receipts")
+        by_label(app.button, "Remove receipt").click().run()
+        by_label(app.button, "Remove reference").click().run()
+        assert decode_receipt_references(
+            stored_transaction(storage, transaction["id"])["receipt_references"]
+        ) == []
+        assert workflow_key not in app.session_state
+        assert not [
+            button
+            for button in app.button
+            if button.label == "Retry unresolved receipts"
+        ]
+        assert drive_files == [receipt, outside_receipt]
 
 
 if __name__ == "__main__":

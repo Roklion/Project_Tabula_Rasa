@@ -55,10 +55,21 @@ bytes are not embedded in every ledger archive.
 
 Current-format backups require the selected profile's configured Drive receipt
 folder. Immediately before creation, the app and command-line tools refresh
-Sheets and Drive, backfill missing receipt integrity metadata, initialize only
-empty-string legacy receipt associations, and reconcile active references.
-An explicit empty list remains intentionally unlinked. If preparation or
-validation is incomplete, no backup is created.
+Sheets and Drive, backfill missing receipt integrity metadata, and reconcile
+only references already present in the current workbook. They do not infer
+historical associations from Drive metadata. If preparation or validation is
+incomplete, no backup is created.
+
+For a workbook that was explicitly upgraded from a legacy schema and still has
+blank receipt-reference cells, migrate old Drive-only associations once before
+normal operation:
+
+```powershell
+python scripts\migrate_receipt_associations.py --secrets .streamlit\secrets.toml --profile PROFILE_KEY
+```
+
+The command considers only blank legacy cells; an explicit empty list remains
+intentionally unlinked. It is safe to rerun after an interrupted migration.
 
 The application validator and restore path accept **only format 10**. Older
 archives are not migrated during validation or restore: supplying one directly

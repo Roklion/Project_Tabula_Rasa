@@ -138,10 +138,12 @@ The application saves the transaction in Sheets first, then uploads and links
 each selected receipt to the selected profile's Drive folder. If receipt work
 is partial, the transaction remains saved, successful links remain linked, and
 the page reports complete and unresolved counts with **Retry unresolved
-receipts**. An uploaded-but-unlinked file is recovered by its existing Drive
-identity rather than blindly uploaded again. A completed workflow resets the
-form intentionally; a failed validation or transaction write does not upload
-receipts.
+receipts**. An uncertain upload is checked once by its stable receipt ID and
+content hash, then retried once only when Drive reports no matching file. An
+uncertain Sheets link is read back once; if it still cannot be confirmed, the
+uploaded file remains available under **Unreferenced receipt**. A completed
+workflow resets the form intentionally; a failed validation or transaction
+write does not upload receipts.
 
 ### Mixed-use expenses
 
@@ -307,8 +309,10 @@ receipt (2).pdf. Uploaded files receive stable identity and checksum metadata.
 Partial uploads keep successful links, report unresolved files, and offer
 retry. **Cancel recovery** discards unresolved local file contents without
 deleting files already in Drive; those files remain available in
-**Unreferenced receipt**. **Retry recovery check** is shown when a saved
-transaction must be rechecked before the upload surface is restored.
+**Unreferenced receipt**. Pending work is cleared if the selected profile's
+workbook or receipt folder changes, preventing cross-profile or cross-folder
+linking; select any local-only files again after returning to the intended
+configuration.
 
 In the edit form, choose receipts in the optional uploader immediately above
 **Save changes**. Saving the edit starts receipt processing; no separate upload

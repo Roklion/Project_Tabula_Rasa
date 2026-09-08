@@ -21,10 +21,8 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     clear_missing_editor_receipt_recoveries,
     editor_receipt_recovery_active,
     editor_receipt_recovery_transaction_ids,
-    editor_receipt_notice_transaction_ids,
     prepare_editor_receipt_uploads,
     process_editor_receipt_uploads,
-    render_editor_receipt_notice,
     render_editor_receipt_uploader,
     render_filtered_editor_receipt_recovery,
     render_receipts,
@@ -590,26 +588,18 @@ def render_ledger(
         - set(transaction_ids)
         - derived_ids
     )
-    filtered_notice_ids = (
-        set(editor_receipt_notice_transaction_ids(context))
-        - set(transaction_ids)
-        - derived_ids
-    )
-    if filtered_recovery_ids or filtered_notice_ids:
+    if filtered_recovery_ids:
         with st.expander(
             "Receipt recovery for filtered transactions",
             expanded=True,
         ):
-            if filtered_recovery_ids:
-                st.warning(
-                    "Receipt recovery remains available below even when its "
-                    "transaction is hidden by the active ledger filters."
-                )
-                for recovery_id in sorted(filtered_recovery_ids):
-                    st.caption(f"Transaction recovery: {recovery_id}")
-                    render_filtered_editor_receipt_recovery(context, recovery_id)
-            for notice_id in sorted(filtered_notice_ids):
-                render_editor_receipt_notice(context, notice_id)
+            st.warning(
+                "Receipt recovery remains available below even when its "
+                "transaction is hidden by the active ledger filters."
+            )
+            for recovery_id in sorted(filtered_recovery_ids):
+                st.caption(f"Transaction recovery: {recovery_id}")
+                render_filtered_editor_receipt_recovery(context, recovery_id)
     if mode == "Bulk":
         selected_ids = tuple(
             str(transaction_id)

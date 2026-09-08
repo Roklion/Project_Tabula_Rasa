@@ -7,6 +7,7 @@ import json
 import threading
 import zipfile
 from decimal import Decimal
+from unittest.mock import Mock
 
 import pytest
 
@@ -16,6 +17,7 @@ from tabula_rasa.mixed_use import (
     validate_mixed_use_allocation,
 )
 from tabula_rasa.storage import (
+    decode_receipt_references,
     GoogleSheetsStorage,
     StorageConflictError,
     StorageUnavailableError,
@@ -450,50 +452,6 @@ def test_transaction_receipt_unlink_shares_mixed_use_creation_lock(
     assert not errors
 
 
-def test_legacy_receipt_initialization_shares_mixed_use_creation_lock(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    transaction = default_storage.create_transaction(
-        **_expense_inputs(default_storage), kind="Expense", amount="10"
-    )
-    transaction_sheet = default_storage._worksheet("Transactions")
-    transaction_headers = default_storage._headers("Transactions")
-    transaction_sheet.rows[1][transaction_headers.index("receipt_references")] = ""
-    default_storage._invalidate("Transactions")
-    reference = {
-        "id": "legacyreceipt01",
-        "name": "receipt.pdf",
-        "receipt_id": "0123456789abcdef0123456789abcdef",
-        "original_filename": "receipt.pdf",
-        "mime_type": "application/pdf",
-        "byte_size": 1,
-        "sha256": "a" * 64,
-    }
-    started = threading.Event()
-    finished = threading.Event()
-    errors: list[BaseException] = []
-
-    def initialize_receipt() -> None:
-        started.set()
-        try:
-            default_storage.initialize_legacy_transaction_receipts(
-                transaction["id"], references=[reference]
-            )
-        except BaseException as error:  # pragma: no cover - assertion below reports it
-            errors.append(error)
-        finally:
-            finished.set()
-
-    worker = threading.Thread(target=initialize_receipt)
-    with google_sheets_module._MIXED_USE_CREATE_LOCK:
-        worker.start()
-        assert started.wait(1)
-        assert not finished.wait(0.1)
-    assert finished.wait(1)
-    worker.join(timeout=1)
-    assert not errors
-
-
 def test_receipt_remap_shares_mixed_use_creation_lock(
     default_storage: GoogleSheetsStorage,
 ) -> None:
@@ -840,7 +798,6 @@ def test_generic_receipt_setter_rejects_receipts_owned_by_another_transaction(
     "operation",
     [
         "set_transaction_receipt_references",
-        "initialize_legacy_transaction_receipts",
         "link_transaction_receipt",
         "remap_transaction_receipt",
         "unlink_transaction_receipt",
@@ -862,10 +819,6 @@ def test_every_generic_receipt_mutation_rejects_mixed_use_projection(
         if operation == "set_transaction_receipt_references":
             default_storage.set_transaction_receipt_references(
                 transaction_id, [reference]
-            )
-        elif operation == "initialize_legacy_transaction_receipts":
-            default_storage.initialize_legacy_transaction_receipts(
-                transaction_id, references=[reference]
             )
         elif operation == "link_transaction_receipt":
             default_storage.link_transaction_receipt(
@@ -1672,6 +1625,38 @@ def test_mixed_use_receipt_update_refreshes_row_position_before_writing(
     assert rows[0].values["receipt_references"] == "[]"
     assert rows[1].values["id"] == source["linked_transaction_id"]
     assert rows[1].values["receipt_references"] == "[]"
+
+
+def test_uncertain_mixed_use_receipt_link_confirms_pair_without_retry(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **_expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    original_batch_update = default_storage._workbook.batch_update
+
+    def commit_then_timeout(body: dict[str, object]) -> None:
+        original_batch_update(body)
+        raise OSError("response lost after mixed-use receipt link")
+
+    default_storage._workbook.batch_update = Mock(side_effect=commit_then_timeout)
+
+    default_storage.link_mixed_use_receipt(
+        source["id"],
+        reference={"id": "receipt123456", "name": "statement.pdf"},
+        expected_source=source,
+    )
+
+    assert default_storage._workbook.batch_update.call_count == 1
+    refreshed_source = default_storage.get_mixed_use_expense(source["id"])
+    projection = default_storage.list_transactions(_force_refresh=True)[0]
+    assert refreshed_source["receipt_references"] == projection["receipt_references"]
+    assert decode_receipt_references(projection["receipt_references"])[0]["id"] == (
+        "receipt123456"
+    )
 
 
 def test_receipt_recovery_restarts_after_mixed_use_pair_drift(

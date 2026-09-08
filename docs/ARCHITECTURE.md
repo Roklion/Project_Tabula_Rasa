@@ -147,8 +147,15 @@ needed for display, retry, backup inventory, and recovery.
 The transaction-creation workflow validates every selected file, saves the
 transaction first, then uploads and links receipts. If receipt work is partial,
 the confirmed transaction remains saved and unresolved files have a retry path.
-An uploaded-but-unlinked file is recovered by its existing identity rather than
-blindly uploaded again.
+An uncertain Drive response gets one stable-identity readback and, only when no
+file exists, one retry. Sheets link uncertainty uses the storage layer's single
+fresh readback. An uploaded-but-unlinked file is never deleted as rollback and
+remains available through Unreferenced receipt.
+
+Session recovery stores only the target, exact profile storage identity,
+prepared receipt identity/content, uploaded reference when known, and last
+error. A workbook or receipt-folder change rejects and clears that state rather
+than carrying it across configurations.
 
 Removing a receipt from a transaction removes only the ledger reference. It
 does not delete the Google Drive file; the file remains available as an

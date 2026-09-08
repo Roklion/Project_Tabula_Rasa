@@ -18,7 +18,6 @@ def main() -> None:
     storage.create_payee("Guard vendor")
     storage.create_payee("Guard vendor invalid")
     upload_calls: list[str] = []
-    uploaded_transaction_ids: list[str] = []
     created_transaction_ids: list[str] = []
     write_failure: dict[str, Exception | None] = {"error": None}
     original_create = GoogleSheetsStorage.create_transaction
@@ -36,13 +35,11 @@ def main() -> None:
     def upload_receipt(
         _client: GoogleDriveClient,
         *,
-        transaction_id: str,
         original_name: str,
         content: bytes,
         **_: object,
     ) -> dict[str, object]:
         upload_calls.append(original_name)
-        uploaded_transaction_ids.append(transaction_id)
         return {
             "id": "drive123456789",
             "name": original_name,
@@ -127,9 +124,7 @@ def main() -> None:
         assert len(transactions) == 2
         assert len(created_transaction_ids) == 2
         assert upload_calls == ["validation.pdf"]
-        assert len(uploaded_transaction_ids) == 1
-        uploaded_transaction_id = uploaded_transaction_ids[0]
-        assert uploaded_transaction_id in created_transaction_ids
+        uploaded_transaction_id = created_transaction_ids[-1]
         assert (
             transactions[uploaded_transaction_id]["receipt_references"].count(
                 '"id"'

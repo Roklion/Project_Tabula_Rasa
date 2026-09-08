@@ -329,10 +329,17 @@ Receipt-on-create is an ordered workflow: validate fields and files, save the
 transaction, upload files, and link each result independently. A confirmed
 transaction is never reported as unsaved because receipt work failed. Partial
 work keeps successful links, reports complete and unresolved counts, and
-offers retry only for unresolved work. An uploaded-but-unlinked file is
-retried by its existing identity, not blindly uploaded again. The editor
-retains multi-file upload, retry, cancel recovery, recovery-check, unlink, and
-unreferenced-link behavior.
+offers retry only for unresolved work. Each Drive upload uses a prepared
+receipt ID and content hash: after an uncertain response, read Drive once by
+that identity, then retry the upload once only when the file is clearly absent.
+Sheets linking uses the shared bounded write policy: one fresh readback can
+confirm an uncertain link, while an unconfirmed uploaded file remains available
+through Unreferenced receipt. The editor retains multi-file upload, retry,
+cancel recovery, unlink, and unreferenced-link behavior.
+
+Pending receipt state is scoped to the selected profile and exact workbook and
+receipt folder. A configuration change clears that pending state instead of
+reattaching it elsewhere; uploaded files remain recoverable in Drive.
 
 The interface reports the concise outcome and next action; it does not expose
 an internal pending/uploaded/linked/failed state machine as a separate product
@@ -649,7 +656,7 @@ the same permanent warning and acknowledgement strength as bulk deletion.
 
 The page must retain linked receipt opening, reference removal without file
 deletion, multi-file editor upload, unresolved retry, cancel recovery,
-recovery check, and unreferenced receipt linking.
+and unreferenced receipt linking.
 
 In the edit form, the optional multi-file receipt picker appears immediately
 before the Save changes controls. Saving the edit validates and processes any

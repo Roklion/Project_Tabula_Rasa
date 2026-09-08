@@ -1,52 +1,35 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-import json
+import hashlib
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
 import streamlit as st
 
-from tabula_rasa.google_drive import GoogleDriveAccessError, GoogleDriveError
+from tabula_rasa.google_drive import GoogleDriveAccessError
+from tabula_rasa.page_renderers.transactions.creation import render_add_transaction
 from tabula_rasa.page_renderers.transactions.receipts import (
-    EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE,
-    handle_confirmed_transaction_receipts,
-    clear_receipt_creation_recovery,
+    UPLOADED_NOT_LINKED_MESSAGE,
+    _cancel_editor_receipt_recovery,
+    _fresh_transaction_receipt_count,
+    _process_context_receipts,
+    _record_editor_receipt_linked,
     clear_missing_editor_receipt_recoveries,
-    editor_receipt_recovery_active,
+    clear_receipt_creation_recovery,
+    handle_confirmed_transaction_receipts,
     new_receipt_creation_workflow,
     prepare_receipt_uploads,
     process_receipt_recovery,
     receipt_creation_counts,
     receipt_creation_workflow_key,
-    receipt_editor_notice_key,
-    render_receipt_creation_recovery,
-    _workflow_configuration_matches,
-    _link_recovery_configuration_matches,
-    _workflow_has_uploaded_receipt,
-    _transaction_still_exists,
-    _fresh_transaction_receipt_count,
-    _new_unresolved_receipt_count,
-    _reconcile_editor_workflow_references,
-    _discard_editor_workflow_receipt,
-    _cancel_editor_receipt_recovery,
-    _editor_receipt_notice_requires_attention,
-    _finish_editor_receipt_workflow,
-    _mark_editor_receipt_notice_validated,
-    _render_editor_receipt_recovery,
-    _process_editor_receipts,
-    _record_editor_receipt_linked,
-    editor_receipt_notice_transaction_ids,
-    editor_receipt_recovery_transaction_ids,
-    render_editor_receipt_notice,
-    render_receipts,
-    _start_editor_receipt_workflow,
+    receipt_editor_upload_reset_key,
     receipt_editor_workflow_key,
+    render_receipts,
+    render_receipt_creation_recovery,
 )
-from tabula_rasa.page_renderers.transactions.creation import render_add_transaction
 from tabula_rasa.receipt_manifest import receipt_reference_from_drive_file
-from tabula_rasa.storage import StorageError
 
 
 class UploadedFile:
@@ -59,35 +42,62 @@ class UploadedFile:
         return self._content
 
 
-def _drive_file(receipt_id: str, name: str) -> dict[str, object]:
+def _prepared(name: str = "receipt.pdf", content: bytes = b"receipt") -> dict:
+    return prepare_receipt_uploads(
+        [UploadedFile(name, content, "application/pdf")]
+    )[0]
+
+
+def _drive_file(receipt: Mapping[str, object]) -> dict[str, object]:
     return {
-        "id": f"drive-{receipt_id}123456",
-        "name": name,
-        "mimeType": "application/pdf",
-        "size": "7",
+        "id": f"drive-{receipt['receipt_id']}",
+        "name": receipt["original_name"],
+        "mimeType": receipt["mime_type"],
+        "size": str(len(receipt["content"])),
         "appProperties": {
             "tabulaRasaKind": "receipt",
-            "tabulaRasaReceiptId": receipt_id * 32,
-            "tabulaRasaSha256": "b" * 64,
-            "tabulaRasaOriginalName": name,
+            "tabulaRasaReceiptId": receipt["receipt_id"],
+            "tabulaRasaSha256": receipt["sha256"],
+            "tabulaRasaOriginalName": receipt["original_name"],
         },
     }
 
 
-def test_prepare_receipts_preserves_duplicate_names_as_independent_items() -> None:
-    prepared = prepare_receipt_uploads(
+def _context(
+    *,
+    profile: str = "north",
+    spreadsheet: str = "north-sheet",
+    folder: str = "north-folder",
+    storage: object | None = None,
+    drive: object | None = None,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        profile_key=profile,
+        profile_secrets={
+            "spreadsheet_id": spreadsheet,
+            "google_drive": {"receipt_folder": {"id": folder}},
+        },
+        configuration_revision="revision",
+        storage=storage or Mock(),
+        get_drive_client=Mock(return_value=drive or Mock()),
+        schedule_widget_reset=Mock(),
+        reset_widget_state_if_requested=Mock(),
+        mark_workbook_data_changed=Mock(),
+    )
+
+
+def test_prepare_receipts_keeps_stable_identity_and_content_hash() -> None:
+    first, second = prepare_receipt_uploads(
         [
             UploadedFile("receipt.pdf", b"first", "application/pdf"),
             UploadedFile("receipt.pdf", b"second", "application/pdf"),
         ]
     )
 
-    assert [item["original_name"] for item in prepared] == [
-        "receipt.pdf",
-        "receipt.pdf",
-    ]
-    assert prepared[0]["key"] != prepared[1]["key"]
-    assert [item["linked"] for item in prepared] == [False, False]
+    assert first["receipt_id"] != second["receipt_id"]
+    assert first["sha256"] != second["sha256"]
+    assert first["key"] != second["key"]
+    assert first["content"] == b"first"
 
 
 @pytest.mark.parametrize(
@@ -108,136 +118,384 @@ def test_prepare_receipts_rejects_invalid_files_before_sheets_write(
         )
 
 
-def test_prepare_receipts_rejects_more_than_manifest_limit_before_sheets_write() -> None:
-    uploaded = UploadedFile("receipt.pdf", b"receipt", "application/pdf")
-
+def test_prepare_receipts_rejects_count_and_batch_size_limits() -> None:
+    upload = UploadedFile("receipt.pdf", b"123", "application/pdf")
     with pytest.raises(GoogleDriveAccessError, match="no more than 100"):
-        prepare_receipt_uploads([uploaded] * 101)
-
-
-def test_prepare_receipts_rejects_batches_over_aggregate_memory_limit() -> None:
+        prepare_receipt_uploads([upload, upload], existing_reference_count=99)
     with patch(
         "tabula_rasa.page_renderers.transactions.receipts.MAX_RECEIPT_UPLOAD_TOTAL_BYTES",
         5,
     ):
         with pytest.raises(GoogleDriveAccessError, match="200 MB total"):
-            prepare_receipt_uploads(
-                [
-                    UploadedFile("first.pdf", b"123", "application/pdf"),
-                    UploadedFile("second.pdf", b"456", "application/pdf"),
-                ]
-            )
+            prepare_receipt_uploads([upload, upload])
 
 
-def test_editor_receipt_selection_respects_existing_manifest_capacity() -> None:
-    uploaded = UploadedFile("receipt.pdf", b"receipt", "application/pdf")
+def test_normal_upload_and_link_clears_pending_work() -> None:
+    workflow = new_receipt_creation_workflow("txn-1", [_prepared()])
+    linked = Mock()
 
-    with pytest.raises(GoogleDriveAccessError, match="no more than 100"):
-        prepare_receipt_uploads(
-            [uploaded, uploaded],
-            existing_reference_count=99,
-        )
+    process_receipt_recovery(
+        workflow,
+        upload_receipt=_drive_file,
+        link_receipt=linked,
+    )
+
+    assert receipt_creation_counts(workflow) == (1, 0)
+    assert workflow["receipts"] == []
+    assert linked.call_count == 1
 
 
-def test_partial_link_failure_retries_only_unresolved_receipt() -> None:
-    receipts = [
-        {
-            "key": "first",
-            "original_name": "receipt.pdf",
-            "content": b"first",
-            "mime_type": "application/pdf",
-            "linked": False,
-        },
-        {
-            "key": "second",
-            "original_name": "receipt.pdf",
-            "content": b"second",
-            "mime_type": "application/pdf",
-            "linked": False,
-        },
-    ]
-    workflow = new_receipt_creation_workflow("txn-1", receipts)
-    uploaded: list[str] = []
-    linked: list[str] = []
-    fail_second_link = {"value": True}
-
-    def upload(item: Mapping[str, object]) -> Mapping[str, object]:
-        key = str(item["key"])
-        uploaded.append(key)
-        return _drive_file(
-            "a" if key == "first" else "c",
-            str(item["original_name"]),
-        )
-
-    def link(reference: Mapping[str, object]) -> None:
-        receipt_id = str(reference["receipt_id"])
-        linked.append(receipt_id)
-        if receipt_id.startswith("c") and fail_second_link["value"]:
-            raise RuntimeError("Sheets link failed")
+def test_uploaded_but_unlinked_receipt_retries_reference_without_reupload() -> None:
+    workflow = new_receipt_creation_workflow("txn-1", [_prepared()])
+    upload = Mock(side_effect=_drive_file)
+    link = Mock(side_effect=RuntimeError("Sheets unavailable"))
 
     process_receipt_recovery(
         workflow,
         upload_receipt=upload,
         link_receipt=link,
+    )
+
+    pending = workflow["receipts"][0]
+    assert receipt_creation_counts(workflow) == (0, 1)
+    assert pending["content"] == b""
+    assert pending["reference"]["id"].startswith("drive-")
+    assert UPLOADED_NOT_LINKED_MESSAGE in pending["error"]
+
+    link.side_effect = None
+    process_receipt_recovery(
+        workflow,
+        upload_receipt=upload,
+        link_receipt=link,
+    )
+
+    assert receipt_creation_counts(workflow) == (1, 0)
+    assert upload.call_count == 1
+
+
+def test_uploaded_reference_retries_link_without_drive_access() -> None:
+    pending = _prepared()
+    pending["reference"] = _drive_file(pending)
+    pending["content"] = b""
+    workflow = new_receipt_creation_workflow(
+        "txn-1",
+        [pending],
+        spreadsheet_id="north-sheet",
+        receipt_folder_id="north-folder",
+    )
+    storage = Mock()
+    context = _context(storage=storage)
+    context.get_drive_client.side_effect = GoogleDriveAccessError("Drive unavailable")
+
+    _process_context_receipts(context, workflow, {"id": "north-folder"})
+
+    context.get_drive_client.assert_not_called()
+    storage.link_transaction_receipt.assert_called_once_with(
+        "txn-1",
+        reference=pending["reference"],
+    )
+    assert workflow["receipts"] == []
+
+
+def test_one_upload_failure_does_not_stop_later_receipts() -> None:
+    first = _prepared("first.pdf", b"first")
+    second = _prepared("second.pdf", b"second")
+    workflow = new_receipt_creation_workflow("txn-1", [first, second])
+
+    def upload(receipt: Mapping[str, object]) -> Mapping[str, object]:
+        if receipt["original_name"] == "first.pdf":
+            raise GoogleDriveAccessError("Drive unavailable", retryable=True)
+        return _drive_file(receipt)
+
+    process_receipt_recovery(
+        workflow,
+        upload_receipt=upload,
+        link_receipt=Mock(),
     )
 
     assert receipt_creation_counts(workflow) == (1, 1)
-    assert uploaded == ["first", "second"]
-    assert [item["linked"] for item in workflow["receipts"]] == [True, False]
-    assert workflow["receipts"][0]["content"] == b""
-    assert workflow["receipts"][1]["content"] == b""
+    assert workflow["receipts"][0]["original_name"] == "first.pdf"
+    assert workflow["receipts"][0]["content"] == b"first"
 
-    fail_second_link["value"] = False
-    process_receipt_recovery(
-        workflow,
-        upload_receipt=upload,
-        link_receipt=link,
+
+def test_confirmed_receipts_use_selected_profile_and_clear_successful_state() -> None:
+    storage = Mock()
+    drive = Mock()
+    drive.upload_receipt.side_effect = lambda **kwargs: _drive_file(
+        {
+            "receipt_id": kwargs["receipt_id"],
+            "sha256": hashlib.sha256(kwargs["content"]).hexdigest(),
+            "original_name": kwargs["original_name"],
+            "mime_type": kwargs["mime_type"],
+            "content": kwargs["content"],
+        }
     )
+    context = _context(storage=storage, drive=drive)
+    state: dict[str, object] = {}
 
-    assert receipt_creation_counts(workflow) == (2, 0)
-    assert uploaded == ["first", "second"]
-    assert len(linked) == 3
+    with patch.object(st, "session_state", state):
+        handle_confirmed_transaction_receipts(
+            context,
+            {"id": "txn-1"},
+            [_prepared()],
+        )
+
+    context.get_drive_client.assert_called_once_with("north", "revision")
+    drive.upload_receipt.assert_called_once()
+    assert drive.upload_receipt.call_args.kwargs["folder_id"] == "north-folder"
+    storage.link_transaction_receipt.assert_called_once()
+    assert receipt_creation_workflow_key("north") not in state
+    context.mark_workbook_data_changed.assert_called_once_with()
 
 
-def test_receipt_recovery_state_is_scoped_to_profile() -> None:
-    north = new_receipt_creation_workflow("north-txn", [], profile_key="north")
-    south = new_receipt_creation_workflow("south-txn", [], profile_key="south")
-    session_state = {
+def test_creation_recovery_is_profile_scoped() -> None:
+    north = new_receipt_creation_workflow(
+        "north-txn",
+        [_prepared()],
+        spreadsheet_id="north-sheet",
+        receipt_folder_id="north-folder",
+    )
+    south = new_receipt_creation_workflow(
+        "south-txn",
+        [_prepared()],
+        spreadsheet_id="south-sheet",
+        receipt_folder_id="south-folder",
+    )
+    state = {
         receipt_creation_workflow_key("north"): north,
         receipt_creation_workflow_key("south"): south,
     }
+    context = _context(
+        profile="south",
+        spreadsheet="south-sheet",
+        folder="south-folder",
+    )
 
     with (
-        patch.object(st, "session_state", session_state),
+        patch.object(st, "session_state", state),
         patch.object(st, "info") as info,
         patch.object(st, "warning"),
         patch.object(st, "caption"),
+        patch.object(st, "error"),
         patch.object(st, "button", return_value=False),
     ):
-        assert render_receipt_creation_recovery(
-            SimpleNamespace(profile_key="south", profile_secrets={})
-        )
+        assert render_receipt_creation_recovery(context)
 
-    info.assert_called_once_with(
-        "Transaction south-txn is saved in Google Sheets. "
-        "Receipt processing can be resumed independently."
-    )
-    assert session_state[receipt_creation_workflow_key("north")] is north
-    assert session_state[receipt_creation_workflow_key("south")] is south
+    assert "south-txn" in info.call_args.args[0]
+    assert state[receipt_creation_workflow_key("north")] is north
+    assert state[receipt_creation_workflow_key("south")] is south
 
 
-def test_mixed_use_recovery_is_owned_by_mixed_tab() -> None:
+def test_creation_recovery_clears_when_saved_transaction_is_gone() -> None:
     workflow = new_receipt_creation_workflow(
-        "txn-1", [], profile_key="north", mixed_use_source_id="source-1"
+        "txn-1",
+        [_prepared()],
+        spreadsheet_id="north-sheet",
+        receipt_folder_id="north-folder",
     )
-    assert workflow["mixed_use_source_id"] == "source-1"
+    key = receipt_creation_workflow_key("north")
+    state = {key: workflow}
+    storage = Mock()
+    storage.list_transactions.return_value = []
+    context = _context(storage=storage)
 
     with (
+        patch.object(st, "session_state", state),
+        patch.object(st, "info"),
+        patch.object(st, "warning") as warning,
+        patch.object(st, "caption"),
+        patch.object(st, "error"),
+        patch.object(st, "button", return_value=True),
+        patch.object(st, "rerun") as rerun,
+    ):
+        assert not render_receipt_creation_recovery(context)
+
+    assert key not in state
+    context.schedule_widget_reset.assert_called_once_with(
+        "reset_add_transaction_form"
+    )
+    assert "no longer exists" in warning.call_args.args[0]
+    rerun.assert_not_called()
+
+
+def test_configuration_change_clears_only_matching_profile_workflow() -> None:
+    north_key = receipt_editor_workflow_key("north", "txn-1")
+    south_key = receipt_editor_workflow_key("south", "txn-2")
+    state = {
+        north_key: new_receipt_creation_workflow(
+            "txn-1",
+            [_prepared()],
+            spreadsheet_id="old-sheet",
+            receipt_folder_id="old-folder",
+        ),
+        south_key: new_receipt_creation_workflow(
+            "txn-2",
+            [_prepared()],
+            spreadsheet_id="south-sheet",
+            receipt_folder_id="south-folder",
+        ),
+    }
+
+    context = _context()
+    with patch.object(st, "session_state", state):
+        notices = clear_missing_editor_receipt_recoveries(
+            context,
+            [{"id": "txn-1"}],
+        )
+
+    assert north_key not in state
+    assert south_key in state
+    assert len(notices) == 1
+    assert "workflow was cleared" in notices[0]
+    context.schedule_widget_reset.assert_called_once_with(
+        receipt_editor_upload_reset_key("north", "txn-1")
+    )
+
+
+def test_missing_transaction_clears_recovery_without_deleting_drive_file() -> None:
+    key = receipt_editor_workflow_key("north", "txn-1")
+    state = {
+        key: new_receipt_creation_workflow(
+            "txn-1",
+            [_prepared()],
+            spreadsheet_id="north-sheet",
+            receipt_folder_id="north-folder",
+        )
+    }
+
+    context = _context()
+    with patch.object(st, "session_state", state):
+        notices = clear_missing_editor_receipt_recoveries(context, [])
+
+    assert key not in state
+    assert "remain in Google Drive" in notices[0]
+    context.schedule_widget_reset.assert_called_once_with(
+        receipt_editor_upload_reset_key("north", "txn-1")
+    )
+
+
+def test_manual_unreferenced_link_finishes_matching_editor_workflow() -> None:
+    pending = _prepared()
+    pending["reference"] = _drive_file(pending)
+    pending["content"] = b""
+    workflow = new_receipt_creation_workflow(
+        "txn-1",
+        [pending],
+        spreadsheet_id="north-sheet",
+        receipt_folder_id="north-folder",
+    )
+    state = {receipt_editor_workflow_key("north", "txn-1"): workflow}
+    context = _context()
+
+    with patch.object(st, "session_state", state):
+        _record_editor_receipt_linked(
+            context,
+            "txn-1",
+            {"id": pending["reference"]["id"]},
+        )
+
+    assert receipt_editor_workflow_key("north", "txn-1") not in state
+    context.schedule_widget_reset.assert_called_once()
+
+
+def test_manual_unreferenced_link_reports_success_when_recovery_finishes() -> None:
+    pending = _prepared()
+    drive_file = _drive_file(pending)
+    pending["reference"] = drive_file
+    pending["content"] = b""
+    workflow = new_receipt_creation_workflow(
+        "txn-1",
+        [pending],
+        spreadsheet_id="north-sheet",
+        receipt_folder_id="north-folder",
+    )
+    workflow_key = receipt_editor_workflow_key("north", "txn-1")
+    notice_key = "receipt-notice-north-txn-1"
+    state = {workflow_key: workflow}
+    storage = Mock()
+    drive = Mock()
+    drive.list_profile_receipts.return_value = [drive_file]
+    context = _context(storage=storage, drive=drive)
+
+    with (
+        patch.object(st, "session_state", state),
+        patch.object(st, "divider"),
+        patch.object(st, "subheader"),
+        patch.object(st, "warning"),
+        patch.object(st, "caption"),
+        patch.object(st, "error"),
+        patch.object(st, "empty", return_value=Mock()),
+        patch.object(st, "selectbox", return_value=drive_file["id"]),
         patch.object(
             st,
-            "session_state",
-            {receipt_creation_workflow_key("north"): workflow},
+            "button",
+            side_effect=lambda label, **_kwargs: label == "Link selected receipt",
         ),
+        patch.object(st, "rerun") as rerun,
+    ):
+        render_receipts(
+            context,
+            selected={"receipt_references": ""},
+            all_transactions=[],
+            edit_id="txn-1",
+        )
+
+    storage.link_transaction_receipt.assert_called_once_with(
+        "txn-1",
+        reference=receipt_reference_from_drive_file(drive_file),
+    )
+    assert workflow_key not in state
+    assert state[notice_key] == f"Receipt linked: {drive_file['name']}"
+    rerun.assert_called_once_with()
+
+
+def test_cancel_and_delete_cleanup_are_profile_and_target_scoped() -> None:
+    north_key = receipt_editor_workflow_key("north", "txn-1")
+    south_key = receipt_editor_workflow_key("south", "txn-1")
+    state = {
+        north_key: new_receipt_creation_workflow("txn-1", [_prepared()]),
+        south_key: new_receipt_creation_workflow("txn-1", [_prepared()]),
+        receipt_creation_workflow_key("north"): new_receipt_creation_workflow(
+            "txn-2", [_prepared()]
+        ),
+    }
+    context = _context()
+
+    with patch.object(st, "session_state", state):
+        _cancel_editor_receipt_recovery(context, "txn-1")
+        clear_receipt_creation_recovery(context, "txn-1")
+
+    assert north_key not in state
+    assert south_key in state
+    assert receipt_creation_workflow_key("north") in state
+
+
+def test_fresh_receipt_count_uses_forced_sheets_read() -> None:
+    storage = Mock()
+    storage.list_transactions.return_value = [
+        {
+            "id": "txn-1",
+            "receipt_references": '[{"id":"drive123456","name":"one.pdf"}]',
+        }
+    ]
+
+    assert _fresh_transaction_receipt_count(
+        _context(storage=storage),
+        "txn-1",
+    ) == 1
+    storage.list_transactions.assert_called_once_with(_force_refresh=True)
+
+
+def test_mixed_use_creation_recovery_is_not_rendered_by_add_transaction() -> None:
+    workflow = new_receipt_creation_workflow(
+        "projection-1",
+        [_prepared()],
+        mixed_use_source_id="source-1",
+    )
+    state = {receipt_creation_workflow_key("north"): workflow}
+
+    with (
+        patch.object(st, "session_state", state),
         patch(
             "tabula_rasa.page_renderers.transactions.creation.render_receipt_creation_recovery"
         ) as render_recovery,
@@ -252,1460 +510,3 @@ def test_mixed_use_recovery_is_owned_by_mixed_tab() -> None:
         )
 
     render_recovery.assert_not_called()
-
-
-def test_confirmed_upload_metadata_failure_does_not_upload_again() -> None:
-    workflow = new_receipt_creation_workflow(
-        "txn-1",
-        [
-            {
-                "key": "metadata-failure",
-                "original_name": "receipt.pdf",
-                "content": b"receipt",
-                "mime_type": "application/pdf",
-                "linked": False,
-            }
-        ],
-    )
-    uploaded: list[str] = []
-
-    def upload(item: Mapping[str, object]) -> Mapping[str, object]:
-        uploaded.append(str(item["key"]))
-        return {
-            "id": "drive123456",
-            "name": "receipt.pdf",
-            "mimeType": "application/pdf",
-            "size": "7",
-        }
-
-    for _ in range(2):
-        process_receipt_recovery(
-            workflow,
-            upload_receipt=upload,
-            link_receipt=lambda _reference: None,
-        )
-
-    assert uploaded == ["metadata-failure"]
-    assert receipt_creation_counts(workflow) == (0, 1)
-    assert "metadata" in workflow["receipts"][0]["error"]
-
-
-def test_receipt_recovery_uses_selected_profile_clients() -> None:
-    session_state: dict[str, object] = {}
-    drive_profiles: list[str] = []
-    storage_profiles: list[str] = []
-
-    def drive_client_for(profile_key: str, _revision: str):
-        drive_profiles.append(profile_key)
-
-        class DriveClient:
-            def upload_receipt(self, **_kwargs: object) -> Mapping[str, object]:
-                receipt_id = "a" if profile_key == "north" else "b"
-                return _drive_file(receipt_id, f"{profile_key}.pdf")
-
-        return DriveClient()
-
-    def make_context(profile_key: str) -> SimpleNamespace:
-        class StorageClient:
-            def link_transaction_receipt(
-                self,
-                _transaction_id: str,
-                *,
-                reference: Mapping[str, object],
-            ) -> None:
-                storage_profiles.append(str(reference["original_filename"]).split(".")[0])
-                raise RuntimeError("link pending")
-
-        return SimpleNamespace(
-            profile_key=profile_key,
-            storage=StorageClient(),
-            profile_secrets={"google_drive": {"receipt_folder": {"id": "folder"}}},
-            configuration_revision="1",
-            get_drive_client=drive_client_for,
-            schedule_widget_reset=lambda _flag: None,
-        )
-
-    receipt = {
-        "key": "receipt",
-        "original_name": "receipt.pdf",
-        "content": b"receipt",
-        "mime_type": "application/pdf",
-        "receipt_id": "a" * 32,
-        "linked": False,
-    }
-    with patch.object(st, "session_state", session_state):
-        handle_confirmed_transaction_receipts(
-            make_context("north"), {"id": "north-txn"}, [receipt]
-        )
-        handle_confirmed_transaction_receipts(
-            make_context("south"), {"id": "south-txn"}, [receipt]
-        )
-
-    assert drive_profiles == ["north", "south"]
-    assert storage_profiles == ["north", "south"]
-    assert session_state[receipt_creation_workflow_key("north")]["transaction_id"] == (
-        "north-txn"
-    )
-    assert session_state[receipt_creation_workflow_key("south")]["transaction_id"] == (
-        "south-txn"
-    )
-
-
-def test_confirmed_receipt_link_invalidates_prepared_export_revision() -> None:
-    revision_changes = Mock()
-    linked: list[str] = []
-
-    class DriveClient:
-        def upload_receipt(self, **_kwargs: object) -> Mapping[str, object]:
-            return _drive_file("a", "receipt.pdf")
-
-    class StorageClient:
-        def link_transaction_receipt(
-            self,
-            transaction_id: str,
-            *,
-            reference: Mapping[str, object],
-        ) -> None:
-            linked.append(f"{transaction_id}:{reference['id']}")
-
-    context = SimpleNamespace(
-        profile_key="north",
-        storage=StorageClient(),
-        profile_secrets={
-            "spreadsheet_id": "north-sheet",
-            "google_drive": {"receipt_folder": {"id": "north-folder"}},
-        },
-        configuration_revision="revision",
-        get_drive_client=lambda *_args: DriveClient(),
-        schedule_widget_reset=lambda _flag: None,
-        mark_workbook_data_changed=revision_changes,
-    )
-    receipt = {
-        "key": "receipt",
-        "original_name": "receipt.pdf",
-        "content": b"receipt",
-        "mime_type": "application/pdf",
-        "receipt_id": "a" * 32,
-        "linked": False,
-    }
-
-    with patch.object(st, "session_state", {}):
-        handle_confirmed_transaction_receipts(
-            context,
-            {"id": "north-txn"},
-            [receipt],
-        )
-
-    assert linked == ["north-txn:drive-a123456"]
-    revision_changes.assert_called_once_with()
-
-
-def test_deleted_transaction_clears_only_matching_recovery() -> None:
-    session_state: dict[str, object] = {}
-    north_context = SimpleNamespace(profile_key="north")
-    session_state[receipt_creation_workflow_key("north")] = (
-        new_receipt_creation_workflow(
-            "north-txn",
-            [],
-            profile_key="north",
-        )
-    )
-    session_state[receipt_editor_workflow_key("north", "north-txn")] = (
-        new_receipt_creation_workflow("north-txn", [], profile_key="north")
-    )
-    session_state[receipt_editor_notice_key("north", "north-txn")] = (
-        "stale notice"
-    )
-    with patch.object(st, "session_state", session_state):
-        clear_receipt_creation_recovery(north_context, "other-txn")
-        assert receipt_creation_workflow_key("north") in session_state
-        clear_receipt_creation_recovery(north_context, "north-txn")
-
-    assert receipt_creation_workflow_key("north") not in session_state
-    assert receipt_editor_workflow_key("north", "north-txn") not in session_state
-    assert receipt_editor_notice_key("north", "north-txn") not in session_state
-
-
-def test_receipt_recovery_refuses_changed_profile_configuration() -> None:
-    workflow = new_receipt_creation_workflow(
-        "north-txn",
-        [],
-        profile_key="north",
-        configuration_revision="old-revision",
-        spreadsheet_id="old-sheet",
-        receipt_folder_id="old-folder",
-    )
-    context = SimpleNamespace(
-        configuration_revision="new-revision",
-        profile_secrets={"spreadsheet_id": "new-sheet"},
-    )
-
-    assert not _workflow_configuration_matches(
-        context,
-        workflow,
-        {"id": "new-folder"},
-    )
-    assert "configuration changed" in workflow["configuration_error"]
-
-
-def test_receipt_recovery_ignores_unrelated_profile_revision_change() -> None:
-    workflow = new_receipt_creation_workflow(
-        "north-txn",
-        [],
-        profile_key="north",
-        configuration_revision="old-revision",
-        spreadsheet_id="north-sheet",
-        receipt_folder_id="north-folder",
-    )
-    context = SimpleNamespace(
-        configuration_revision="new-revision",
-        profile_secrets={"spreadsheet_id": "north-sheet"},
-    )
-
-    assert _workflow_configuration_matches(
-        context,
-        workflow,
-        {"id": "north-folder"},
-    )
-    assert "configuration_error" not in workflow
-
-
-def test_transaction_recovery_rechecks_fresh_sheets_data() -> None:
-    storage = SimpleNamespace(
-        list_transactions=lambda **kwargs: (
-            assert_force_refresh(kwargs),
-            [{"id": "txn-1"}],
-        )[1]
-    )
-    context = SimpleNamespace(storage=storage)
-
-    assert _transaction_still_exists(context, "txn-1")
-
-
-def test_editor_capacity_rechecks_fresh_sheets_data() -> None:
-    references = [
-        {
-            "id": f"drive-receipt-{index:02d}",
-            "name": f"receipt-{index}.pdf",
-            "receipt_id": f"{index:032d}",
-            "original_filename": f"receipt-{index}.pdf",
-            "mime_type": "application/pdf",
-            "byte_size": 7,
-            "sha256": "a" * 64,
-        }
-        for index in range(99)
-    ]
-    storage = SimpleNamespace(
-        list_transactions=lambda **kwargs: (
-            assert_force_refresh(kwargs),
-            [{"id": "txn-1", "receipt_references": json.dumps(references)}],
-        )[1]
-    )
-    context = SimpleNamespace(storage=storage)
-
-    assert _fresh_transaction_receipt_count(context, "txn-1") == 99
-
-
-def test_editor_retry_rejects_batch_over_fresh_capacity() -> None:
-    references = [
-        {"id": f"drive-{index:08d}", "name": f"receipt-{index}.pdf"}
-        for index in range(100)
-    ]
-    storage = SimpleNamespace(
-        list_transactions=lambda **kwargs: (
-            assert_force_refresh(kwargs),
-            [{"id": "txn-1", "receipt_references": json.dumps(references)}],
-        )[1]
-    )
-    context = SimpleNamespace(
-        profile_key="north",
-        storage=storage,
-        profile_secrets={"spreadsheet_id": "sheet"},
-        configuration_revision="revision",
-        get_drive_client=lambda *_args: (_ for _ in ()).throw(
-            AssertionError("Drive processing must not start at capacity")
-        ),
-    )
-    workflow = new_receipt_creation_workflow(
-        "txn-1",
-        [{"key": "receipt", "original_name": "receipt.pdf", "content": b"receipt"}],
-        profile_key="north",
-        spreadsheet_id="sheet",
-        receipt_folder_id="folder",
-    )
-    session_state = {receipt_editor_workflow_key("north", "txn-1"): workflow}
-
-    with (
-        patch.object(st, "session_state", session_state),
-        patch.object(st, "warning"),
-        patch.object(st, "caption"),
-        patch.object(st, "empty", return_value=Mock()),
-        patch.object(st, "button", side_effect=[True, False]),
-        patch.object(st, "rerun", side_effect=RuntimeError("rerun")),
-    ):
-        with pytest.raises(RuntimeError, match="rerun"):
-            _render_editor_receipt_recovery(context, "txn-1", {"id": "folder"})
-
-    assert workflow["configuration_error"]
-    assert "no more than 100" in workflow["configuration_error"]
-
-
-def test_editor_retry_does_not_count_a_reference_already_in_sheets() -> None:
-    existing_file_id = "drive-existing"
-
-    assert _new_unresolved_receipt_count(
-        [
-            {"reference": {"id": existing_file_id}},
-            {"drive_file": {"id": "drive-new"}},
-            {"content": b"not-uploaded"},
-        ],
-        {existing_file_id},
-    ) == 2
-
-
-def test_editor_retry_reconciles_receipts_removed_from_sheets() -> None:
-    workflow = new_receipt_creation_workflow(
-        "txn-1",
-        [
-            {"linked": True, "reference": {"id": "drive-removed"}},
-            {"linked": True, "reference": {"id": "drive-kept"}},
-            {"linked": False, "reference": {"id": "drive-pending"}},
-        ],
-    )
-
-    _reconcile_editor_workflow_references(
-        workflow,
-        [{"id": "drive-kept"}, {"id": "drive-pending"}],
-    )
-
-    assert [
-        receipt["reference"]["id"]
-        for receipt in workflow["receipts"]
-    ] == ["drive-kept", "drive-pending"]
-
-
-def test_editor_retry_persists_deleted_transaction_notice() -> None:
-    storage = SimpleNamespace(
-        list_transactions=lambda **kwargs: (
-            assert_force_refresh(kwargs),
-            [],
-        )[1]
-    )
-    context = SimpleNamespace(
-        profile_key="north",
-        storage=storage,
-        profile_secrets={"spreadsheet_id": "sheet"},
-        configuration_revision="revision",
-    )
-    workflow = new_receipt_creation_workflow(
-        "txn-1",
-        [{"key": "receipt", "original_name": "receipt.pdf", "content": b"receipt"}],
-        profile_key="north",
-        spreadsheet_id="sheet",
-        receipt_folder_id="folder",
-    )
-    session_state = {receipt_editor_workflow_key("north", "txn-1"): workflow}
-
-    with (
-        patch.object(st, "session_state", session_state),
-        patch.object(st, "warning"),
-        patch.object(st, "caption"),
-        patch.object(st, "empty", return_value=Mock()),
-        patch.object(st, "button", side_effect=[True, False]),
-        patch.object(st, "rerun", side_effect=RuntimeError("rerun")),
-    ):
-        with pytest.raises(RuntimeError, match="rerun"):
-            _render_editor_receipt_recovery(context, "txn-1", {"id": "folder"})
-
-    assert receipt_editor_workflow_key("north", "txn-1") not in session_state
-    assert session_state[receipt_editor_notice_key("north", "txn-1")] == {
-        "message": EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE,
-        "spreadsheet_id": "sheet",
-        "receipt_folder_id": "folder",
-        "validated_configuration": "sheet\x00",
-    }
-
-
-def test_transaction_recovery_detects_uploaded_receipt_pointer() -> None:
-    workflow = new_receipt_creation_workflow(
-        "txn-1",
-        [
-            {
-                "linked": False,
-                "reference": {"id": "receipt123456"},
-            }
-        ],
-    )
-
-    assert _workflow_has_uploaded_receipt(workflow)
-    assert not _workflow_has_uploaded_receipt(
-        new_receipt_creation_workflow("txn-2", [{"linked": False}])
-    )
-    uncertain_workflow = new_receipt_creation_workflow(
-        "txn-3",
-        [{"linked": False, "upload_uncertain": True}],
-    )
-    assert _workflow_has_uploaded_receipt(uncertain_workflow)
-
-
-def test_editor_receipt_recovery_cancel_discards_workflow() -> None:
-    schedule_reset = Mock()
-    context = SimpleNamespace(
-        profile_key="north",
-        schedule_widget_reset=schedule_reset,
-    )
-    workflow = new_receipt_creation_workflow(
-        "txn-1",
-        [{"key": "receipt", "original_name": "receipt.pdf", "content": b"receipt"}],
-        profile_key="north",
-    )
-    session_state = {receipt_editor_workflow_key("north", "txn-1"): workflow}
-
-    with (
-        patch.object(st, "session_state", session_state),
-        patch.object(st, "warning"),
-        patch.object(st, "caption"),
-        patch.object(st, "button", side_effect=[False, True]),
-        patch.object(st, "rerun", side_effect=RuntimeError("rerun")),
-    ):
-        with pytest.raises(RuntimeError, match="rerun"):
-            _render_editor_receipt_recovery(context, "txn-1", {"id": "folder"})
-
-    assert receipt_editor_workflow_key("north", "txn-1") not in session_state
-    assert session_state[receipt_editor_notice_key("north", "txn-1")] == {
-        "message": (
-            "Receipt recovery canceled. Files already uploaded remain in Google "
-            "Drive and can be linked from the Unreferenced receipt workflow."
-        ),
-        "spreadsheet_id": "",
-        "receipt_folder_id": "",
-        "validated_configuration": "",
-    }
-    schedule_reset.assert_called_once_with("reset-receipt-editor:north:txn-1")
-
-
-def test_editor_receipt_recovery_can_be_canceled_when_drive_is_unavailable() -> None:
-    context = SimpleNamespace(
-        profile_key="north",
-        profile_secrets={
-            "spreadsheet_id": "sheet",
-            "google_drive": {"receipt_folder": {"id": "folder"}},
-        },
-        configuration_revision="revision",
-        get_drive_client=lambda *_args: (_ for _ in ()).throw(
-            GoogleDriveError("Drive is unavailable")
-        ),
-    )
-    workflow = new_receipt_creation_workflow(
-        "txn-1",
-        [{"key": "receipt", "original_name": "receipt.pdf", "content": b"receipt"}],
-        profile_key="north",
-    )
-    session_state = {receipt_editor_workflow_key("north", "txn-1"): workflow}
-
-    with (
-        patch.object(st, "session_state", session_state),
-        patch.object(st, "divider"),
-        patch.object(st, "subheader"),
-        patch.object(st, "warning"),
-        patch.object(st, "caption"),
-        patch.object(st, "info"),
-        patch.object(st, "error"),
-        patch.object(st, "button", return_value=True),
-        patch.object(st, "rerun", side_effect=RuntimeError("rerun")),
-    ):
-        with pytest.raises(RuntimeError, match="rerun"):
-            render_receipts(
-                context,
-                selected={"receipt_references": "[]"},
-                all_transactions=[],
-                edit_id="txn-1",
-            )
-
-    assert receipt_editor_workflow_key("north", "txn-1") not in session_state
-    assert receipt_editor_notice_key("north", "txn-1") in session_state
-
-
-def test_editor_receipt_recovery_cannot_cancel_after_storage_switch() -> None:
-    context = SimpleNamespace(
-        profile_key="north",
-        profile_secrets={
-            "spreadsheet_id": "new-sheet",
-            "google_drive": {"receipt_folder": {"id": "new-folder"}},
-        },
-        configuration_revision="new-revision",
-    )
-    workflow = new_receipt_creation_workflow(
-        "txn-1",
-        [{"linked": False, "content": b"receipt"}],
-        profile_key="north",
-        configuration_revision="old-revision",
-        spreadsheet_id="old-sheet",
-        receipt_folder_id="old-folder",
-    )
-    session_state = {receipt_editor_workflow_key("north", "txn-1"): workflow}
-
-    with (
-        patch.object(st, "session_state", session_state),
-        patch.object(st, "warning"),
-        patch.object(st, "caption"),
-        patch.object(st, "error"),
-        patch.object(st, "info") as info,
-        patch.object(st, "button") as button,
-    ):
-        assert _render_editor_receipt_recovery(
-            context,
-            "txn-1",
-            {"id": "new-folder"},
-            retry_available=True,
-        )
-
-    button.assert_not_called()
-    info.assert_called_once()
-    assert receipt_editor_workflow_key("north", "txn-1") in session_state
-    assert receipt_editor_notice_key("north", "txn-1") not in session_state
-
-
-def test_editor_receipt_recovery_confirmation_retry_works_without_drive() -> None:
-    context = SimpleNamespace(
-        profile_key="north",
-        profile_secrets={"spreadsheet_id": "sheet"},
-        storage=SimpleNamespace(
-            list_transactions=lambda **_kwargs: [
-                {"id": "txn-1", "receipt_references": "[]"}
-            ]
-        ),
-    )
-    workflow = new_receipt_creation_workflow(
-        "txn-1",
-        [{"linked": True, "reference": {"id": "drive-receipt"}}],
-        profile_key="north",
-        spreadsheet_id="sheet",
-    )
-    workflow["configuration_error"] = "The transaction could not be confirmed."
-    session_state = {receipt_editor_workflow_key("north", "txn-1"): workflow}
-
-    with (
-        patch.object(st, "session_state", session_state),
-        patch.object(st, "error"),
-        patch.object(st, "info"),
-        patch.object(st, "button", return_value=True),
-        patch.object(st, "rerun", side_effect=RuntimeError("rerun")),
-    ):
-        with pytest.raises(RuntimeError, match="rerun"):
-            _render_editor_receipt_recovery(
-                context,
-                "txn-1",
-                None,
-                retry_available=False,
-            )
-
-    assert receipt_editor_workflow_key("north", "txn-1") not in session_state
-    assert receipt_editor_notice_key("north", "txn-1") in session_state
-
-
-def test_editor_receipt_recovery_rejects_retry_without_receipt_folder() -> None:
-    context = SimpleNamespace(profile_key="north", profile_secrets={})
-    workflow = new_receipt_creation_workflow(
-        "txn-1",
-        [{"key": "receipt", "original_name": "receipt.pdf", "content": b"receipt"}],
-        profile_key="north",
-    )
-    session_state = {receipt_editor_workflow_key("north", "txn-1"): workflow}
-
-    with (
-        patch.object(st, "session_state", session_state),
-        patch.object(st, "warning"),
-        patch.object(st, "caption"),
-        patch.object(st, "info"),
-        patch.object(st, "button", return_value=True),
-        patch.object(st, "rerun", side_effect=RuntimeError("rerun")),
-    ):
-        with pytest.raises(RuntimeError, match="rerun"):
-            _render_editor_receipt_recovery(
-                context,
-                "txn-1",
-                None,
-                retry_available=True,
-            )
-
-
-def test_editor_receipt_recovery_transaction_ids_are_profile_scoped() -> None:
-    session_state = {
-        receipt_editor_workflow_key("north", "north-txn"): (
-            new_receipt_creation_workflow("north-txn", [], profile_key="north")
-        ),
-        receipt_editor_workflow_key("north:shop", "shop-txn"): (
-            new_receipt_creation_workflow(
-                "shop-txn", [], profile_key="north:shop"
-            )
-        ),
-    }
-
-    with patch.object(st, "session_state", session_state):
-        assert editor_receipt_recovery_transaction_ids(
-            SimpleNamespace(profile_key="north", profile_secrets={})
-        ) == ["north-txn"]
-
-
-def test_editor_receipt_notice_can_render_outside_a_transaction_row() -> None:
-    key = receipt_editor_notice_key("north", "hidden-txn")
-    session_state: dict[str, object] = {
-        key: {
-            "message": "1 receipt(s) uploaded and linked; 0 unresolved.",
-            "spreadsheet_id": "",
-            "receipt_folder_id": "",
-        }
-    }
-
-    with (
-        patch.object(st, "session_state", session_state),
-        patch.object(st, "success") as success,
-    ):
-        assert editor_receipt_notice_transaction_ids(
-            SimpleNamespace(profile_key="north")
-        ) == ["hidden-txn"]
-        assert render_editor_receipt_notice(
-            SimpleNamespace(profile_key="north", profile_secrets={}),
-            "hidden-txn",
-        )
-
-    success.assert_called_once_with("1 receipt(s) uploaded and linked; 0 unresolved.")
-    assert key not in session_state
-
-
-def test_editor_receipt_notice_attention_states_use_warning_semantics() -> None:
-    assert _editor_receipt_notice_requires_attention(
-        EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE
-    )
-    assert _editor_receipt_notice_requires_attention(
-        "Receipt recovery canceled. Files already uploaded remain in Google Drive "
-        "and can be linked from the Unreferenced receipt workflow."
-    )
-    assert not _editor_receipt_notice_requires_attention(
-        "2 receipt(s) uploaded and linked; 0 unresolved."
-    )
-
-
-def test_cancel_editor_receipt_recovery_is_profile_scoped() -> None:
-    north_workflow = new_receipt_creation_workflow(
-        "txn-1", [], profile_key="north"
-    )
-    south_workflow = new_receipt_creation_workflow(
-        "txn-1", [], profile_key="south"
-    )
-    session_state = {
-        receipt_editor_workflow_key("north", "txn-1"): north_workflow,
-        receipt_editor_workflow_key("south", "txn-1"): south_workflow,
-    }
-
-    with patch.object(st, "session_state", session_state):
-        _cancel_editor_receipt_recovery(
-            SimpleNamespace(profile_key="north"),
-            "txn-1",
-        )
-
-    assert receipt_editor_workflow_key("north", "txn-1") not in session_state
-    assert receipt_editor_workflow_key("south", "txn-1") in session_state
-
-
-def test_transaction_recovery_does_not_upload_after_cross_session_deletion() -> None:
-    storage = SimpleNamespace(
-        list_transactions=lambda **kwargs: (
-            assert_force_refresh(kwargs),
-            [],
-        )[1]
-    )
-    context = SimpleNamespace(
-        profile_key="north",
-        storage=storage,
-        profile_secrets={"google_drive": {"receipt_folder": {"id": "folder"}}},
-        configuration_revision="revision",
-        get_drive_client=lambda *_args: (_ for _ in ()).throw(
-            AssertionError("Drive upload must not start after deletion")
-        ),
-        schedule_widget_reset=lambda _flag: None,
-    )
-    workflow = new_receipt_creation_workflow(
-        "txn-1",
-        [
-            {
-                "key": "receipt",
-                "original_name": "receipt.pdf",
-                "content": b"receipt",
-                "mime_type": "application/pdf",
-                "linked": False,
-            }
-        ],
-        profile_key="north",
-        configuration_revision="revision",
-        spreadsheet_id="",
-        receipt_folder_id="folder",
-    )
-    session_state = {receipt_creation_workflow_key("north"): workflow}
-
-    with (
-        patch.object(st, "session_state", session_state),
-        patch.object(st, "info"),
-        patch.object(st, "warning"),
-        patch.object(st, "error"),
-        patch.object(st, "caption"),
-        patch.object(st, "button", return_value=True),
-        patch.object(st, "rerun", side_effect=RuntimeError("rerun")),
-    ):
-        with pytest.raises(RuntimeError, match="rerun"):
-            render_receipt_creation_recovery(context)
-
-    assert receipt_creation_workflow_key("north") not in session_state
-    assert session_state["write_success_notice"] == (
-        "The saved transaction no longer exists. "
-        "Start a new transaction and select its receipts again."
-    )
-
-
-def assert_force_refresh(kwargs: Mapping[str, object]) -> None:
-    assert kwargs == {"_force_refresh": True}
-
-
-def test_post_create_link_recovery_refuses_changed_storage_configuration() -> None:
-    context = SimpleNamespace(
-        profile_secrets={"spreadsheet_id": "new-sheet"},
-    )
-    recovery = {
-        "spreadsheet_id": "old-sheet",
-        "receipt_folder_id": "old-folder",
-    }
-
-    assert not _link_recovery_configuration_matches(
-        context,
-        recovery,
-        {"id": "new-folder"},
-    )
-    assert _link_recovery_configuration_matches(
-        context,
-        {
-            "spreadsheet_id": "new-sheet",
-            "receipt_folder_id": "new-folder",
-        },
-        {"id": "new-folder"},
-    )
-
-
-def test_upload_failure_does_not_stop_later_receipts() -> None:
-    workflow = new_receipt_creation_workflow(
-        "txn-1",
-        [
-            {
-                "key": "failed",
-                "original_name": "failed.pdf",
-                "content": b"failed",
-                "mime_type": "application/pdf",
-                "linked": False,
-            },
-            {
-                "key": "successful",
-                "original_name": "successful.pdf",
-                "content": b"successful",
-                "mime_type": "application/pdf",
-                "linked": False,
-            },
-        ],
-    )
-
-    def upload(item: Mapping[str, object]) -> Mapping[str, object]:
-        if item["key"] == "failed":
-            raise RuntimeError("Drive upload failed")
-        return _drive_file("d", str(item["original_name"]))
-
-    process_receipt_recovery(
-        workflow,
-        upload_receipt=upload,
-        link_receipt=lambda _reference: None,
-    )
-
-    assert [item["linked"] for item in workflow["receipts"]] == [False, True]
-    assert workflow["receipts"][0]["content"] == b"failed"
-    assert workflow["receipts"][1]["content"] == b""
-    assert receipt_creation_counts(workflow) == (1, 1)
-
-
-def test_preflight_failure_does_not_mark_upload_as_uncertain() -> None:
-    workflow = new_receipt_creation_workflow(
-        "txn-1",
-        [
-            {
-                "key": "preflight-failed",
-                "original_name": "receipt.pdf",
-                "content": b"receipt",
-                "mime_type": "application/pdf",
-                "linked": False,
-            }
-        ],
-    )
-
-    def upload(_item: Mapping[str, object]) -> Mapping[str, object]:
-        raise GoogleDriveAccessError(
-            "Drive inventory unavailable",
-            retryable=True,
-            upload_attempted=False,
-        )
-
-    process_receipt_recovery(
-        workflow,
-        upload_receipt=upload,
-        link_receipt=lambda _reference: None,
-    )
-
-    assert workflow["receipts"][0].get("upload_uncertain") is not True
-
-
-def test_uncertain_upload_reconciles_without_a_second_create() -> None:
-    workflow = new_receipt_creation_workflow(
-        "txn-1",
-        [
-            {
-                "key": "uncertain",
-                "original_name": "receipt.pdf",
-                "content": b"receipt",
-                "mime_type": "application/pdf",
-                "receipt_id": "a" * 32,
-                "linked": False,
-            }
-        ],
-    )
-    upload_calls = 0
-    reconcile_calls = 0
-
-    def upload(_item: Mapping[str, object]) -> Mapping[str, object]:
-        nonlocal upload_calls
-        upload_calls += 1
-        raise GoogleDriveAccessError(
-            "Drive response was lost",
-            retryable=True,
-        )
-
-    def reconcile(_item: Mapping[str, object]) -> Mapping[str, object] | None:
-        nonlocal reconcile_calls
-        reconcile_calls += 1
-        if reconcile_calls == 1:
-            return None
-        return _drive_file("d", "receipt.pdf")
-
-    process_receipt_recovery(
-        workflow,
-        upload_receipt=upload,
-        reconcile_receipt=reconcile,
-        link_receipt=lambda _reference: None,
-    )
-    assert upload_calls == 1
-    assert receipt_creation_counts(workflow) == (0, 1)
-    assert workflow["receipts"][0]["upload_uncertain"] is True
-
-    process_receipt_recovery(
-        workflow,
-        upload_receipt=upload,
-        reconcile_receipt=reconcile,
-        link_receipt=lambda _reference: None,
-    )
-
-    assert upload_calls == 1
-    assert reconcile_calls == 1
-    assert receipt_creation_counts(workflow) == (0, 1)
-
-    process_receipt_recovery(
-        workflow,
-        upload_receipt=upload,
-        reconcile_receipt=reconcile,
-        link_receipt=lambda _reference: None,
-    )
-
-    assert upload_calls == 1
-    assert reconcile_calls == 2
-    assert receipt_creation_counts(workflow) == (1, 0)
-
-
-def test_editor_receipt_recovery_retries_only_unresolved_without_reupload() -> None:
-    upload_calls: list[str] = []
-    link_calls: list[str] = []
-    fail_upload = {"value": True}
-    fail_link = {"value": True}
-
-    class DriveClient:
-        def upload_receipt(self, **kwargs: object) -> Mapping[str, object]:
-            name = str(kwargs["original_name"])
-            upload_calls.append(name)
-            content = bytes(kwargs["content"])
-            if content == b"second" and fail_upload["value"]:
-                raise RuntimeError("second upload failed")
-            return _drive_file(
-                "a" if content == b"first" else "c",
-                name,
-            )
-
-    class StorageClient:
-        def link_transaction_receipt(
-            self,
-            _transaction_id: str,
-            *,
-            reference: Mapping[str, object],
-        ) -> None:
-            receipt_id = str(reference["receipt_id"])
-            link_calls.append(receipt_id)
-            if receipt_id.startswith("c") and fail_link["value"]:
-                raise RuntimeError("second link failed")
-
-    context = SimpleNamespace(
-        profile_key="north",
-        storage=StorageClient(),
-        profile_secrets={
-            "spreadsheet_id": "north-sheet",
-            "google_drive": {"receipt_folder": {"id": "north-folder"}},
-        },
-        configuration_revision="revision",
-        get_drive_client=lambda *_args: DriveClient(),
-        mark_workbook_data_changed=Mock(),
-    )
-    receipts = prepare_receipt_uploads(
-        [
-            UploadedFile("receipt.pdf", b"first", "application/pdf"),
-            UploadedFile("receipt.pdf", b"second", "application/pdf"),
-        ]
-    )
-    session_state: dict[str, object] = {}
-
-    with patch.object(st, "session_state", session_state):
-        workflow = _start_editor_receipt_workflow(
-            context,
-            "txn-1",
-            receipts,
-            {"id": "north-folder"},
-        )
-        assert receipt_creation_counts(workflow) == (1, 1)
-        assert upload_calls == ["receipt.pdf", "receipt.pdf"]
-
-        fail_upload["value"] = False
-        _process_editor_receipts(context, workflow, {"id": "north-folder"})
-        assert receipt_creation_counts(workflow) == (1, 1)
-        assert upload_calls == ["receipt.pdf", "receipt.pdf", "receipt.pdf"]
-        assert isinstance(workflow["receipts"][1]["reference"], Mapping)
-
-        fail_link["value"] = False
-        _process_editor_receipts(context, workflow, {"id": "north-folder"})
-        assert receipt_creation_counts(workflow) == (2, 0)
-        assert upload_calls == ["receipt.pdf", "receipt.pdf", "receipt.pdf"]
-        assert len(link_calls) == 3
-        assert _finish_editor_receipt_workflow(context, "txn-1", workflow)
-
-    assert receipt_editor_workflow_key("north", "txn-1") not in session_state
-    assert session_state[receipt_editor_notice_key("north", "txn-1")] == {
-        "message": "2 receipt(s) uploaded and linked; 0 unresolved.",
-        "spreadsheet_id": "north-sheet",
-        "receipt_folder_id": "north-folder",
-        "validated_configuration": "",
-    }
-
-
-def test_editor_receipt_recovery_forgets_receipt_after_manual_unlink() -> None:
-    workflow = new_receipt_creation_workflow(
-        "txn-1",
-        [
-            {"linked": True, "reference": {"id": "drive-removed"}},
-            {"linked": False, "reference": {"id": "drive-pending"}},
-        ],
-    )
-
-    _discard_editor_workflow_receipt(workflow, "drive-removed")
-
-    assert workflow["receipts"] == [
-        {"linked": False, "reference": {"id": "drive-pending"}}
-    ]
-
-
-def test_editor_receipt_workflow_persists_drive_configuration_error() -> None:
-    context = SimpleNamespace(
-        profile_key="north",
-        configuration_revision="revision",
-        profile_secrets={"spreadsheet_id": "north-sheet"},
-        get_drive_client=Mock(
-            side_effect=GoogleDriveError("Drive is unavailable")
-        ),
-    )
-    workflow = new_receipt_creation_workflow(
-        "txn-1",
-        [{"linked": False, "content": b"receipt"}],
-    )
-    session_state: dict[str, object] = {}
-
-    with patch.object(st, "session_state", session_state):
-        result = _start_editor_receipt_workflow(
-            context,
-            "txn-1",
-            workflow["receipts"],
-            {"id": "north-folder"},
-        )
-
-    assert result["configuration_error"] == "Drive is unavailable"
-    assert session_state[receipt_editor_workflow_key("north", "txn-1")] is result
-
-
-def test_editor_manual_link_recovery_check_can_finish_after_read_failure() -> None:
-    reference = {"id": "drive-receipt", "name": "receipt.pdf"}
-    read_count = 0
-
-    def list_transactions(**_kwargs: object) -> list[dict[str, object]]:
-        nonlocal read_count
-        read_count += 1
-        if read_count == 1:
-            raise StorageError("temporary Sheets read failure")
-        return [{"id": "txn-1", "receipt_references": json.dumps([reference])}]
-
-    context = SimpleNamespace(
-        profile_key="north",
-        storage=SimpleNamespace(list_transactions=list_transactions),
-        profile_secrets={
-            "spreadsheet_id": "north-sheet",
-            "google_drive": {"receipt_folder": {"id": "north-folder"}},
-        },
-        configuration_revision="revision",
-        get_drive_client=Mock(
-            side_effect=AssertionError("No Drive work is needed after linking")
-        ),
-    )
-    workflow = new_receipt_creation_workflow(
-        "txn-1",
-        [{"linked": False, "reference": reference, "content": b""}],
-        profile_key="north",
-        spreadsheet_id="north-sheet",
-        receipt_folder_id="north-folder",
-    )
-    session_state = {receipt_editor_workflow_key("north", "txn-1"): workflow}
-
-    with patch.object(st, "session_state", session_state):
-        assert not _record_editor_receipt_linked(context, "txn-1", reference)
-        with (
-            patch.object(st, "error"),
-            patch.object(st, "button", return_value=True),
-            patch.object(st, "rerun", side_effect=RuntimeError("rerun")),
-        ):
-            with pytest.raises(RuntimeError, match="rerun"):
-                _render_editor_receipt_recovery(
-                    context,
-                    "txn-1",
-                    {"id": "north-folder"},
-                )
-
-    assert read_count == 2
-    assert receipt_editor_workflow_key("north", "txn-1") not in session_state
-    assert session_state[receipt_editor_notice_key("north", "txn-1")] == {
-        "message": "1 receipt(s) uploaded and linked; 0 unresolved.",
-        "spreadsheet_id": "north-sheet",
-        "receipt_folder_id": "north-folder",
-        "validated_configuration": "",
-    }
-
-
-def test_editor_receipt_recovery_isolated_by_profile() -> None:
-    drive_profiles: list[str] = []
-
-    class DriveClient:
-        def upload_receipt(self, **kwargs: object) -> Mapping[str, object]:
-            drive_profiles.append(str(kwargs["profile_key"]))
-            return _drive_file("a", f"{kwargs['profile_key']}.pdf")
-
-    class StorageClient:
-        def link_transaction_receipt(
-            self,
-            _transaction_id: str,
-            *,
-            reference: Mapping[str, object],
-        ) -> None:
-            del reference
-
-    def context_for(profile_key: str) -> SimpleNamespace:
-        return SimpleNamespace(
-            profile_key=profile_key,
-            storage=StorageClient(),
-            profile_secrets={
-                "spreadsheet_id": f"{profile_key}-sheet",
-                "google_drive": {
-                    "receipt_folder": {"id": f"{profile_key}-folder"}
-                },
-            },
-            configuration_revision="revision",
-            get_drive_client=lambda *_args: DriveClient(),
-            mark_workbook_data_changed=Mock(),
-        )
-
-    session_state: dict[str, object] = {}
-    with patch.object(st, "session_state", session_state):
-        for profile_key in ("north", "south"):
-            context = context_for(profile_key)
-            receipt = prepare_receipt_uploads(
-                [UploadedFile("receipt.pdf", b"receipt", "application/pdf")]
-            )
-            workflow = _start_editor_receipt_workflow(
-                context,
-                "shared-transaction-id",
-                receipt,
-                {"id": f"{profile_key}-folder"},
-            )
-            assert receipt_creation_counts(workflow) == (1, 0)
-
-    assert drive_profiles == ["north", "south"]
-    assert (
-        session_state[
-            receipt_editor_workflow_key("north", "shared-transaction-id")
-        ]["profile_key"]
-        == "north"
-    )
-    assert (
-        session_state[
-            receipt_editor_workflow_key("south", "shared-transaction-id")
-        ]["profile_key"]
-        == "south"
-    )
-
-
-def test_unreferenced_link_resolves_matching_editor_recovery() -> None:
-    first_reference = receipt_reference_from_drive_file(_drive_file("a", "first.pdf"))
-    second_reference = receipt_reference_from_drive_file(_drive_file("b", "second.pdf"))
-    context = SimpleNamespace(
-        profile_key="north",
-        schedule_widget_reset=Mock(),
-        storage=SimpleNamespace(
-            list_transactions=lambda **_kwargs: [
-                {
-                    "id": "txn-1",
-                    "receipt_references": [first_reference, second_reference],
-                }
-            ]
-        ),
-    )
-    workflow = new_receipt_creation_workflow(
-        "txn-1",
-        [
-            {
-                "linked": False,
-                "reference": first_reference,
-                "content": b"",
-                "error": "link failed",
-            },
-            {
-                "linked": False,
-                "reference": second_reference,
-                "content": b"",
-                "error": "link failed",
-            },
-        ],
-        profile_key="north",
-    )
-    session_state: dict[str, object] = {
-        receipt_editor_workflow_key("north", "txn-1"): workflow,
-    }
-
-    with patch.object(st, "session_state", session_state):
-        assert not _record_editor_receipt_linked(
-            context,
-            "txn-1",
-            first_reference,
-        )
-        assert receipt_creation_counts(workflow) == (1, 1)
-        assert _record_editor_receipt_linked(
-            context,
-            "txn-1",
-            second_reference,
-        )
-
-    assert receipt_editor_workflow_key("north", "txn-1") not in session_state
-    assert session_state[receipt_editor_notice_key("north", "txn-1")] == {
-        "message": "2 receipt(s) uploaded and linked; 0 unresolved.",
-        "spreadsheet_id": "",
-        "receipt_folder_id": "",
-        "validated_configuration": "",
-    }
-
-
-def test_missing_editor_recovery_cleanup_is_profile_scoped() -> None:
-    north_workflow = new_receipt_creation_workflow(
-        "north-gone", [], profile_key="north"
-    )
-    south_workflow = new_receipt_creation_workflow(
-        "south-gone", [], profile_key="south"
-    )
-    session_state: dict[str, object] = {
-        receipt_editor_workflow_key("north", "north-gone"): north_workflow,
-        receipt_editor_workflow_key("south", "south-gone"): south_workflow,
-    }
-    with patch.object(st, "session_state", session_state):
-        notices = clear_missing_editor_receipt_recoveries(
-            SimpleNamespace(profile_key="north", profile_secrets={}),
-            [{"id": "north-still-present"}],
-        )
-
-    assert notices == [
-        "The transaction no longer exists. Uploaded files remain in Google "
-        "Drive and can be linked from the Unreferenced receipt workflow."
-    ]
-    assert receipt_editor_workflow_key("north", "north-gone") not in session_state
-    assert receipt_editor_workflow_key("south", "south-gone") in session_state
-    assert session_state[
-        receipt_editor_notice_key("north", "north-gone")
-    ] == {
-        "message": EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE,
-        "spreadsheet_id": "",
-        "receipt_folder_id": "",
-        "validated_configuration": "\x00",
-    }
-
-
-def test_editor_receipt_recovery_active_is_profile_scoped() -> None:
-    session_state: dict[str, object] = {
-        receipt_editor_workflow_key("north", "txn-1"): {},
-        receipt_editor_workflow_key("south", "txn-2"): {},
-        receipt_editor_notice_key("north", "deleted"): "notice",
-    }
-    with patch.object(st, "session_state", session_state):
-        assert editor_receipt_recovery_active(SimpleNamespace(profile_key="north"))
-        assert editor_receipt_recovery_active(SimpleNamespace(profile_key="south"))
-        assert not editor_receipt_recovery_active(SimpleNamespace(profile_key="west"))
-
-
-def test_editor_receipt_recovery_active_does_not_match_profile_prefix() -> None:
-    session_state: dict[str, object] = {
-        receipt_editor_notice_key("north-east", "txn-1"): "notice",
-    }
-
-    with patch.object(st, "session_state", session_state):
-        assert not editor_receipt_recovery_active(SimpleNamespace(profile_key="north"))
-        assert editor_receipt_recovery_active(
-            SimpleNamespace(profile_key="north-east")
-        )
-
-
-def test_editor_receipt_recovery_active_does_not_match_colon_profile_prefix() -> None:
-    session_state: dict[str, object] = {
-        receipt_editor_workflow_key("north:shop", "txn-1"): {},
-        receipt_editor_notice_key("north:shop", "txn-2"): "notice",
-    }
-
-    with patch.object(st, "session_state", session_state):
-        assert not editor_receipt_recovery_active(SimpleNamespace(profile_key="north"))
-        assert editor_receipt_recovery_active(
-            SimpleNamespace(profile_key="north:shop")
-        )
-
-
-def test_editor_receipt_recovery_active_ignores_validated_notice() -> None:
-    session_state: dict[str, object] = {
-        receipt_editor_notice_key("north", "txn-1"): {
-            "message": "Receipt recovery complete.",
-            "spreadsheet_id": "",
-            "receipt_folder_id": "",
-            "validated_configuration": "\x00",
-        }
-    }
-
-    with patch.object(st, "session_state", session_state):
-        assert not editor_receipt_recovery_active(
-            SimpleNamespace(profile_key="north", profile_secrets={})
-        )
-
-
-def test_mark_editor_receipt_notice_validated_reassigns_a_copy() -> None:
-    notice = {"message": "Receipt recovery complete."}
-    session_state: dict[str, object] = {"notice-key": notice}
-
-    with patch.object(st, "session_state", session_state):
-        _mark_editor_receipt_notice_validated(
-            "notice-key",
-            notice,
-            "sheet-id\x00folder-id",
-        )
-
-    assert notice == {"message": "Receipt recovery complete."}
-    assert session_state["notice-key"] == {
-        "message": "Receipt recovery complete.",
-        "validated_configuration": "sheet-id\x00folder-id",
-    }
-    assert session_state["notice-key"] is not notice
-
-
-def test_editor_receipt_recovery_active_ignores_mismatched_workflow() -> None:
-    workflow = new_receipt_creation_workflow(
-        "old-txn",
-        [],
-        profile_key="north",
-        spreadsheet_id="old-sheet",
-        receipt_folder_id="old-folder",
-    )
-    session_state: dict[str, object] = {
-        receipt_editor_workflow_key("north", "old-txn"): workflow
-    }
-
-    with patch.object(st, "session_state", session_state):
-        assert not editor_receipt_recovery_active(
-            SimpleNamespace(
-                profile_key="north",
-                profile_secrets={
-                    "spreadsheet_id": "new-sheet",
-                    "google_drive": {"receipt_folder": {"id": "new-folder"}},
-                },
-            )
-        )
-
-
-def test_missing_editor_recovery_is_preserved_after_profile_reconfiguration() -> None:
-    workflow = new_receipt_creation_workflow(
-        "old-txn",
-        [],
-        profile_key="north",
-        spreadsheet_id="old-sheet",
-    )
-    session_state: dict[str, object] = {
-        receipt_editor_workflow_key("north", "old-txn"): workflow,
-    }
-    with patch.object(st, "session_state", session_state):
-        notices = clear_missing_editor_receipt_recoveries(
-            SimpleNamespace(
-                profile_key="north",
-                profile_secrets={"spreadsheet_id": "new-sheet"},
-            ),
-            [],
-        )
-
-    assert notices == []
-    assert receipt_editor_workflow_key("north", "old-txn") in session_state
-
-
-def test_missing_editor_recovery_cleanup_pops_orphaned_notice() -> None:
-    notice = "The transaction no longer exists. Uploaded files remain in Drive."
-    session_state: dict[str, object] = {
-        receipt_editor_notice_key("north", "north-gone"): notice,
-        receipt_editor_notice_key("south", "south-gone"): "Keep south notice",
-    }
-
-    with patch.object(st, "session_state", session_state):
-        notices = clear_missing_editor_receipt_recoveries(
-            SimpleNamespace(profile_key="north", profile_secrets={}),
-            [{"id": "north-still-present"}],
-        )
-
-    assert notices == [EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE]
-    assert receipt_editor_notice_key("north", "north-gone") not in session_state
-    assert session_state[receipt_editor_notice_key("south", "south-gone")] == (
-        "Keep south notice"
-    )
-
-
-def test_missing_editor_recovery_cleanup_does_not_cross_match_profile_prefix() -> None:
-    key = receipt_editor_notice_key("north-east", "north-east-gone")
-    session_state: dict[str, object] = {key: "Keep north-east notice"}
-
-    with patch.object(st, "session_state", session_state):
-        notices = clear_missing_editor_receipt_recoveries(
-            SimpleNamespace(profile_key="north", profile_secrets={}),
-            [],
-        )
-
-    assert notices == []
-    assert session_state[key] == "Keep north-east notice"
-
-
-def test_missing_editor_recovery_cleanup_does_not_cross_match_colon_profile() -> None:
-    key = receipt_editor_notice_key("north:shop", "north-shop-gone")
-    session_state: dict[str, object] = {key: "Keep north:shop notice"}
-
-    with patch.object(st, "session_state", session_state):
-        notices = clear_missing_editor_receipt_recoveries(
-            SimpleNamespace(profile_key="north", profile_secrets={}),
-            [],
-        )
-
-    assert notices == []
-    assert session_state[key] == "Keep north:shop notice"
-
-
-def test_missing_editor_recovery_cleanup_removes_empty_notice() -> None:
-    key = receipt_editor_notice_key("north", "empty-notice")
-    session_state: dict[str, object] = {key: ""}
-
-    with patch.object(st, "session_state", session_state):
-        notices = clear_missing_editor_receipt_recoveries(
-            SimpleNamespace(profile_key="north", profile_secrets={}),
-            [{"id": "empty-notice"}],
-        )
-
-    assert notices == []
-    assert key not in session_state
-
-
-def test_missing_editor_recovery_replaces_orphaned_success_notice() -> None:
-    key = receipt_editor_notice_key("north", "north-gone")
-    session_state: dict[str, object] = {
-        key: "2 receipt(s) uploaded and linked; 0 unresolved."
-    }
-
-    with patch.object(st, "session_state", session_state):
-        notices = clear_missing_editor_receipt_recoveries(
-            SimpleNamespace(profile_key="north", profile_secrets={}),
-            [],
-        )
-
-    assert notices == [EDITOR_RECEIPT_TRANSACTION_MISSING_NOTICE]
-    assert key not in session_state
-
-
-def test_missing_editor_recovery_preserves_notice_after_profile_reconfiguration() -> None:
-    key = receipt_editor_notice_key("north", "old-txn")
-    session_state: dict[str, object] = {
-        key: {
-            "message": "2 receipt(s) uploaded and linked; 0 unresolved.",
-            "spreadsheet_id": "old-sheet",
-            "receipt_folder_id": "old-folder",
-            "validated_configuration": "",
-        }
-    }
-
-    with patch.object(st, "session_state", session_state):
-        notices = clear_missing_editor_receipt_recoveries(
-            SimpleNamespace(
-                profile_key="north",
-                profile_secrets={"spreadsheet_id": "new-sheet"},
-            ),
-            [],
-        )
-
-    assert notices == []
-    notice = session_state[key]
-    assert isinstance(notice, Mapping)
-    assert notice["message"] == "2 receipt(s) uploaded and linked; 0 unresolved."
-
-
-def test_missing_editor_recovery_is_preserved_after_receipt_folder_change() -> None:
-    workflow = new_receipt_creation_workflow(
-        "old-txn",
-        [],
-        profile_key="north",
-        spreadsheet_id="north-sheet",
-        receipt_folder_id="old-folder",
-    )
-    session_state: dict[str, object] = {
-        receipt_editor_workflow_key("north", "old-txn"): workflow,
-    }
-
-    with patch.object(st, "session_state", session_state):
-        notices = clear_missing_editor_receipt_recoveries(
-            SimpleNamespace(
-                profile_key="north",
-                profile_secrets={
-                    "spreadsheet_id": "north-sheet",
-                    "google_drive": {
-                        "receipt_folder": {"id": "new-folder"}
-                    },
-                },
-            ),
-            [],
-        )
-
-    assert notices == []
-    assert receipt_editor_workflow_key("north", "old-txn") in session_state
