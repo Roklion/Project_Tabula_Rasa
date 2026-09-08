@@ -46,7 +46,6 @@ def fresh_profile_readiness(
     *,
     app_secrets: Mapping[str, Any],
     local_profiles: Mapping[str, Mapping[str, Any]] | None = None,
-    drive_validator: Any = None,
 ) -> ProfileReadiness:
     """Run fresh Sheets and configured Drive checks for one profile."""
     validation_errors: list[str] = []
@@ -64,7 +63,7 @@ def fresh_profile_readiness(
         and storage_root.get("id")
     ):
         try:
-            (drive_validator or validate_google_drive_profile)(
+            validate_google_drive_profile(
                 app_secrets,
                 profile_key,
                 drive,

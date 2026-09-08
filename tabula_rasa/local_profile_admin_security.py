@@ -39,7 +39,6 @@ def render_security_deployment_info(
     app_secrets: Mapping[str, Any] | None = None,
     *,
     store_path: Path = LOCAL_PROFILE_STORE_PATH,
-    export_function: Any = export_hosted_secrets_file,
 ) -> None:
     """Explain local/hosted boundaries without adding administration controls."""
     st.subheader("Security & deployment information")
@@ -69,7 +68,7 @@ def render_security_deployment_info(
         key="generate-hosted-secrets-file",
     ):
         try:
-            destination = export_function(
+            destination = export_hosted_secrets_file(
                 app_secrets,
                 store_path=store_path,
             )
