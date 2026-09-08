@@ -253,11 +253,15 @@ def test_page_export_filenames_use_tabula_rasa() -> None:
     assert 'f"tabula-rasa-backup-{date.today()}.zip"' in source
 
     mileage_source = (
-        PROJECT_ROOT / "tabula_rasa" / "page_renderers" / "mileage.py"
+        PROJECT_ROOT / "tabula_rasa" / "page_renderers" / "mileage_ledger.py"
     ).read_text(encoding="utf-8")
     assert 'f"tabula-rasa-mileage-{start}-to-{end}.csv"' in mileage_source
 
     ledger_source = (
-        PROJECT_ROOT / "tabula_rasa" / "page_renderers" / "transactions" / "ledger.py"
+        PROJECT_ROOT
+        / "tabula_rasa"
+        / "page_renderers"
+        / "transactions"
+        / "ledger_bulk.py"
     ).read_text(encoding="utf-8")
     assert 'f"tabula-rasa-selected-{date.today()}.csv"' in ledger_source
