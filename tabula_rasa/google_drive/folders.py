@@ -7,8 +7,9 @@ from typing import Any
 from .errors import (
     DRIVE_API_ROOT, FOLDER_MIME_TYPE, PROFILE_KEY_PATTERN, STORAGE_CHILD_NAMES,
     GoogleDriveAccessError, GoogleDriveConfigurationError, GoogleDriveConflictError,
+    _json_response,
 )
-from .client import _escape_query_value, _json_response
+from .client import _escape_query_value
 from .oauth import _clean_text
 
 

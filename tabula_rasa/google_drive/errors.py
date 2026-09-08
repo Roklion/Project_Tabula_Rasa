@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+import json
 import re
+from typing import Any
+
+import requests
 
 
 def _clean_text(value: object, *, maximum: int = 4096) -> str:
@@ -8,6 +13,27 @@ def _clean_text(value: object, *, maximum: int = 4096) -> str:
     if not text or len(text) > maximum or any(ord(character) < 32 for character in text):
         return ""
     return text
+
+
+def _json_response(
+    response: requests.Response,
+    *,
+    retryable: bool = False,
+) -> Mapping[str, Any]:
+    """Decode a Drive response without coupling OAuth to the client mixin."""
+    try:
+        payload = response.json()
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise GoogleDriveAccessError(
+            "Google Drive returned an unreadable response. Retry the request.",
+            retryable=retryable,
+        ) from exc
+    if not isinstance(payload, Mapping):
+        raise GoogleDriveAccessError(
+            "Google Drive returned an unreadable response. Retry the request.",
+            retryable=retryable,
+        )
+    return payload
 
 DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file"
 AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"

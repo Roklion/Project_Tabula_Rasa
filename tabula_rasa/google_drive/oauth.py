@@ -17,9 +17,8 @@ from .errors import (
     AUTHORIZATION_ENDPOINT, DRIVE_API_ROOT, DRIVE_ID_PATTERN, DRIVE_SCOPE,
     HTTP_TIMEOUT_SECONDS, PROFILE_KEY_PATTERN, STATE_MAX_AGE_SECONDS,
     TOKEN_ENDPOINT, GoogleDriveAuthorizationError, GoogleDriveConfigurationError,
-    _clean_text,
+    _clean_text, _json_response,
 )
-from .client import _json_response
 
 @dataclass(frozen=True)
 class GoogleDriveOAuthConfig:

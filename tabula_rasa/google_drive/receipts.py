@@ -15,11 +15,11 @@ from tabula_rasa.receipt_manifest import (
     validate_receipt_filename,
 )
 
-from .client import PathName, _escape_query_value, _json_response
+from .client import PathName, _escape_query_value
 from .errors import (
     DRIVE_API_ROOT, MAX_RECEIPT_BYTES, RECEIPT_FILE_EXTENSIONS,
     SAFE_RECEIPT_NAME_PATTERN, GoogleDriveAccessError, GoogleDriveConflictError,
-    GoogleDriveError,
+    GoogleDriveError, _json_response,
 )
 from .oauth import _clean_text
 

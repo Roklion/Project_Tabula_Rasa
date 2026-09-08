@@ -12,30 +12,11 @@ from .errors import (
     DRIVE_API_ROOT, DRIVE_ID_PATTERN, DRIVE_UPLOAD_ROOT, FOLDER_MIME_TYPE,
     HTTP_TIMEOUT_SECONDS, REVOCATION_ENDPOINT, TOKEN_ENDPOINT,
     GoogleDriveAccessError, GoogleDriveAuthorizationError, _clean_text,
+    _json_response,
 )
 
 if TYPE_CHECKING:
     from .oauth import GoogleDriveOAuthConfig
-
-
-def _json_response(
-    response: requests.Response,
-    *,
-    retryable: bool = False,
-) -> Mapping[str, Any]:
-    try:
-        payload = response.json()
-    except (ValueError, json.JSONDecodeError) as exc:
-        raise GoogleDriveAccessError(
-            "Google Drive returned an unreadable response. Retry the request.",
-            retryable=retryable,
-        ) from exc
-    if not isinstance(payload, Mapping):
-        raise GoogleDriveAccessError(
-            "Google Drive returned an unreadable response. Retry the request.",
-            retryable=retryable,
-        )
-    return payload
 
 
 def _escape_query_value(value: str) -> str:

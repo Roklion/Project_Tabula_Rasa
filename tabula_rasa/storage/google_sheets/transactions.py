@@ -527,12 +527,6 @@ class TransactionsMixin:
                 tag_ids.append(new_tag["id"])
             tags[new_tag["id"]] = new_tag
             tag_ids = _normalize_tag_ids(tag_ids)
-        for tag_id in tag_ids:
-            tag = tags.get(tag_id)
-            if tag is None:
-                raise StorageValidationError("Tag does not exist")
-            if not _as_bool(tag["active"], "Tag active") and tag_id not in original_tag_ids:
-                raise StorageValidationError("Tag is inactive")
         record = {
             "id": transaction_id or str(uuid4()),
             "txn_date": txn_date,
