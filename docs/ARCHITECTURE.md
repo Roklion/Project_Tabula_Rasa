@@ -241,7 +241,13 @@ The target seams for the decomposition work are:
 | Drive integration | `tabula_rasa/storage/google_drive/__init__.py` preserves `GoogleDriveClient`; `tabula_rasa/storage/google_drive/oauth.py`, `tabula_rasa/storage/google_drive/client.py`, `tabula_rasa/storage/google_drive/folders.py`, `tabula_rasa/storage/google_drive/receipts.py`, and `tabula_rasa/storage/google_drive/backups.py` separate identity/auth, generic requests, managed folders, receipts, and backups. |
 | Tests | Test files follow these production seams, with shared fixtures in the appropriate `conftest.py` or helper module rather than duplicated per domain. |
 
-`tabula_rasa/local_profile_admin.py` is split only if profile form, readiness,
+The current Sheets package implements the first slice with a stable facade,
+explicit primitive modules, and a flat set of domain mixins. `base.py` is kept
+to genuinely shared row/lock primitives for now; any later split of remaining
+shared behavior must have a clear ownership boundary and preserve imports and
+behavior. This is composition for compatibility, not a new storage framework.
+
+`local_profile_admin.py` is split only if profile form, readiness,
 credential, and storage responsibilities remain genuinely distinct after the
 cleanup; otherwise its cohesion is documented and it remains intact. These
 boundaries are architectural ownership guidance, not a demand that every row
