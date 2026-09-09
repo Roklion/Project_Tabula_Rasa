@@ -217,6 +217,12 @@ def test_profile_switch_clears_unscoped_presentation_state() -> None:
         "mixed_use_edit_baseline_source_id_north": "north-source",
         "mixed_use_pending_source_id_north": "pending-source",
         "mixed_use_pending_transaction_id_north": "pending-transaction",
+        "mixed_use_copy_source_id_north": "north-source",
+        "mixed_use_copy_snapshot_north": {"id": "north-source"},
+        "mixed_use_copy_new_source_id_north": "new-source",
+        "mixed_use_copy_new_transaction_id_north": "new-transaction",
+        "mixed_use_copy_generation_north": 3,
+        "mixed_cancel_copy_north_north-source_copy_3": True,
         "mixed_date_north_north-source": "stale-date",
         "mixed_total_north_north-source": "stale-total",
         "mixed_confirm_delete_north_north-source": True,
@@ -268,6 +274,12 @@ def test_profile_switch_clears_unscoped_presentation_state() -> None:
     assert "mixed_use_table_generation_north" not in session_state
     assert "mixed_use_edit_baseline_north" not in session_state
     assert "mixed_use_edit_baseline_source_id_north" not in session_state
+    assert "mixed_use_copy_source_id_north" not in session_state
+    assert "mixed_use_copy_snapshot_north" not in session_state
+    assert "mixed_use_copy_new_source_id_north" not in session_state
+    assert "mixed_use_copy_new_transaction_id_north" not in session_state
+    assert "mixed_use_copy_generation_north" not in session_state
+    assert "mixed_cancel_copy_north_north-source_copy_3" not in session_state
     assert session_state["mixed_use_pending_source_id_north"] == "pending-source"
     assert session_state["mixed_use_pending_transaction_id_north"] == "pending-transaction"
     assert "mixed_date_north_north-source" not in session_state

@@ -118,20 +118,15 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         assert categories[first["id"]] == replacement["id"]
         assert categories[second["id"]] == replacement["id"]
 
-    def test_bulk_category_change_ignores_unrelated_concurrent_edit(self) -> None:
+    def test_bulk_category_change_updates_all_pending_rows_in_one_batch(self) -> None:
         first, second, replacement = self._bulk_transaction_fixture()
         expected = [
             transaction
             for transaction in self.storage.list_transactions(_force_refresh=True)
             if transaction["id"] in {first["id"], second["id"]}
         ]
-        original_batch = self.workbook.batch_update
-
-        def apply_category_then_edit(body: dict[str, object]) -> None:
-            original_batch(body)
-            self.workbook.sheets["Transactions"].rows[1][7] = "Collaborator edit"
-
-        self.workbook.batch_update = apply_category_then_edit
+        workbook_batch = Mock(wraps=self.workbook.batch_update)
+        self.workbook.batch_update = workbook_batch
 
         result = self.storage.bulk_change_transaction_category(
             [first["id"], second["id"]],
@@ -140,9 +135,60 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         )
 
         assert result == {"status": "fully_applied", "count": "2"}
+        assert workbook_batch.call_count == 1
+        categories = {
+            item["id"]: item["category_id"]
+            for item in self.storage.list_transactions()
+        }
+        assert categories[first["id"]] == replacement["id"]
+        assert categories[second["id"]] == replacement["id"]
+
+    def test_bulk_category_change_ignores_unrelated_concurrent_edit(self) -> None:
+        first, second, replacement = self._bulk_transaction_fixture()
+        expected = [
+            transaction
+            for transaction in self.storage.list_transactions(_force_refresh=True)
+            if transaction["id"] in {first["id"], second["id"]}
+        ]
+        original_batch = self.workbook.batch_update
+        transaction_sheet = self.workbook.sheets["Transactions"]
+        id_index = transaction_sheet.rows[0].index("id")
+        description_index = transaction_sheet.rows[0].index("description")
+        first_row = next(
+            row for row in transaction_sheet.rows[1:] if row[id_index] == first["id"]
+        )
+
+        def apply_category_after_edit(body: dict[str, object]) -> None:
+            first_row[description_index] = "Collaborator edit"
+            original_batch(body)
+
+        self.workbook.batch_update = apply_category_after_edit
+
+        try:
+            result = self.storage.bulk_change_transaction_category(
+                [first["id"], second["id"]],
+                expected_transactions=expected,
+                category_id=replacement["id"],
+            )
+        finally:
+            self.workbook.batch_update = original_batch
+
+        assert result == {"status": "fully_applied", "count": "2"}
+        assert next(
+            item["description"]
+            for item in self.storage.list_transactions()
+            if item["id"] == first["id"]
+        ) == "Collaborator edit"
 
     def test_bulk_delete_resolves_fresh_rows_after_row_order_changes(self) -> None:
         first, second, _ = self._bulk_transaction_fixture()
+        unrelated = self.storage.create_transaction(
+            txn_date="2026-07-20",
+            kind="Expense",
+            amount=3,
+            account_id=first["account_id"],
+            category_id=first["category_id"],
+        )
         expected = [
             transaction
             for transaction in self.storage.list_transactions(_force_refresh=True)
@@ -153,16 +199,21 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             transaction_sheet.rows[2],
             transaction_sheet.rows[1],
         )
-        result = self.storage.bulk_delete_transactions(
-            [first["id"]],
-            expected_transactions=[
-                item for item in expected if item["id"] == first["id"]
-            ],
-        )
+        workbook_batch = Mock(wraps=self.workbook.batch_update)
+        original_batch_update = self.workbook.batch_update
+        self.workbook.batch_update = workbook_batch
+        try:
+            result = self.storage.bulk_delete_transactions(
+                [first["id"], second["id"]],
+                expected_transactions=expected,
+            )
+        finally:
+            self.workbook.batch_update = original_batch_update
 
-        assert result == {"status": "fully_applied", "count": "1"}
+        assert result == {"status": "fully_applied", "count": "2"}
+        assert workbook_batch.call_count == 1
         assert [item["id"] for item in self.storage.list_transactions()] == [
-            second["id"]
+            unrelated["id"]
         ]
 
     def test_bulk_mutation_rejects_changed_complete_selection(self) -> None:
@@ -180,13 +231,22 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
                 category_id=replacement["id"],
             )
 
-    def test_bulk_category_change_normalizes_transaction_ids(self) -> None:
+    def test_bulk_category_change_normalizes_transaction_and_payee_ids(self) -> None:
         first, second, replacement = self._bulk_transaction_fixture()
+        payee = self.storage.create_payee("Vendor")
+        self.storage.edit_transaction(first["id"], payee_id=payee["id"])
         expected = [
             transaction
             for transaction in self.storage.list_transactions(_force_refresh=True)
             if transaction["id"] in {first["id"], second["id"]}
         ]
+        transaction_sheet = self.workbook.sheets["Transactions"]
+        id_index = transaction_sheet.rows[0].index("id")
+        payee_index = transaction_sheet.rows[0].index("payee_id")
+        transaction_row = next(
+            row for row in transaction_sheet.rows[1:] if row[id_index] == first["id"]
+        )
+        transaction_row[payee_index] = f"  {payee['id']}  "
 
         result = self.storage.bulk_change_transaction_category(
             [f" {first['id']} ", f"{second['id']} "],
@@ -195,6 +255,34 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         )
 
         assert result == {"status": "fully_applied", "count": "2"}
+        categories = {
+            item["id"]: item["category_id"]
+            for item in self.storage.list_transactions()
+        }
+        assert categories[first["id"]] == replacement["id"]
+        assert categories[second["id"]] == replacement["id"]
+
+    def test_uncertain_bulk_category_response_is_confirmed_without_retry(
+        self,
+    ) -> None:
+        first, second, replacement = self._bulk_transaction_fixture()
+        expected = self.storage.list_transactions(_force_refresh=True)
+        original_batch = self.workbook.batch_update
+
+        def commit_then_timeout(body: dict[str, object]) -> None:
+            original_batch(body)
+            raise OSError("response lost after commit")
+
+        self.workbook.batch_update = Mock(side_effect=commit_then_timeout)
+
+        result = self.storage.bulk_change_transaction_category(
+            [first["id"], second["id"]],
+            expected_transactions=expected,
+            category_id=replacement["id"],
+        )
+
+        assert result == {"status": "fully_applied", "count": "2"}
+        assert self.workbook.batch_update.call_count == 1
 
     def test_uncertain_bulk_category_ignores_unselected_rows(self) -> None:
         first, second, replacement = self._bulk_transaction_fixture()
@@ -210,18 +298,30 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             for transaction in self.storage.list_transactions(_force_refresh=True)
             if transaction["id"] in {first["id"], second["id"]}
         ]
-        self.workbook.batch_update = Mock(
+        transaction_sheet = self.workbook.sheets["Transactions"]
+        id_index = transaction_sheet.rows[0].index("id")
+        amount_index = transaction_sheet.rows[0].index("amount")
+        first_row = next(
+            row for row in transaction_sheet.rows[1:] if row[id_index] == first["id"]
+        )
+        first_row[amount_index] = "1"
+        original_batch = self.workbook.batch_update
+        workbook_batch = Mock(
             side_effect=OSError("temporary response lost before commit")
         )
+        self.workbook.batch_update = workbook_batch
 
-        with pytest.raises(StorageUnavailableError, match="could not confirm"):
-            self.storage.bulk_change_transaction_category(
-                [first["id"], second["id"]],
-                expected_transactions=expected,
-                category_id=replacement["id"],
-            )
+        try:
+            with pytest.raises(StorageUnavailableError, match="could not confirm"):
+                self.storage.bulk_change_transaction_category(
+                    [first["id"], second["id"]],
+                    expected_transactions=expected,
+                    category_id=replacement["id"],
+                )
+        finally:
+            self.workbook.batch_update = original_batch
 
-        assert self.workbook.batch_update.call_count == 2
+        assert workbook_batch.call_count == 2
         assert unrelated["id"] in {
             transaction["id"] for transaction in self.storage.list_transactions()
         }

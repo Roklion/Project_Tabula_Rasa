@@ -116,6 +116,9 @@ and Expense require a same-kind category. Transfer requires two different
 active accounts and has no category. New transaction amounts start at **0.00**;
 the amount must be greater than zero when you save.
 
+The account field is labeled **To Account** for Income and **From Account** for
+Expense. Transfers show both **From Account** and **To account**.
+
 Payee / customer is optional. Select an existing active managed Payee or type
 a new name into the selector and press Enter to create it inline. Existing
 Payee names are recognized case-insensitively, and a new Payee is stored before
@@ -168,17 +171,32 @@ search, filters, and exports, but is marked **Mixed-use** and read-only.
 Normal Edit, Delete, Copy, bulk actions, and receipt mutation cannot change it.
 If a source exists without its linked ledger projection, the source is shown
 for inspection only; Save and permanent deletion are unavailable until the
-source and ledger relationship has been reviewed. Mixed-use source copy and
-bulk source editing are not part of #119; they are follow-up work tracked by
-#149.
+source and ledger relationship has been reviewed. Bulk source editing is not
+supported. For one selected complete source, use **Copy mixed-use expense**.
+The app re-reads and validates the source and its linked projection when
+copying starts, then opens a distinct new-source editor from an independent
+snapshot. It pre-generates new source and projection IDs, preserves the date,
+ordinary Expense fields, allocation fields, and active managed Payee/Tag
+associations, and ends the memo with exactly one `Copy From <mixed-use source
+ID>` suffix. Allocation is normalized again when saved. Copy mode has no
+receipt uploader or receipt references; attach receipts only after saving the
+new source. **Cancel copy** creates nothing and leaves the original source and
+projection unchanged. Incomplete sources remain inspection-only and cannot be
+copied.
 
 The **Mixed-use Expense Log** is a single-row-selectable table above the
 editor. Select a row to edit that source; the table selection is tied to the
 source's stable ID, not to a displayed row value. The selection is scoped to
 the active business profile and current workbook revision, so a changed,
 removed, or stale selection is cleared safely. The tab starts in **Add
-mixed-use expense** mode. Use **Add new mixed-use expense** to clear an edit
-selection and return to Add mode.
+mixed-use expense** mode. Use **Copy mixed-use expense** to open an independent
+new-source copy editor, or **Add new mixed-use expense** to clear an edit
+selection and return to Add mode. A copy snapshot remains saveable if the
+original source changes after copying starts. Switching business profiles
+clears or ignores copy state from the other profile. Its columns are Date,
+Payee, Account, Category, Total, Business %, Allocated, Rationale, Description,
+and Receipt. The Receipt column shows a paperclip when one or more receipts
+are linked.
 
 ### View and edit the ledger
 
@@ -194,7 +212,7 @@ The ledger opens latest-date-first. Its controls appear in this order:
 8. **Edit/Bulk** mode immediately before the table.
 
 The table retains these user-facing columns: Date, Type, Account, To account,
-Category, Payee, Tags, Description, Amount, Receipt, Reference, and ID. To
+Category, Payee, Amount, Tags, Description, Receipt, Reference, and ID. To
 account is blank for non-transfers, Category is blank for transfers, and Tags
 is blank when no Tags are assigned. The Tags filter includes records containing
 any selected Tag. Receipt shows when one or more receipts are linked.

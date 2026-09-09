@@ -201,7 +201,20 @@ def main() -> None:
         ).run()
 
         transaction_table = app.dataframe[0].value
-        assert list(transaction_table.columns)[-2:] == ["Reference", "ID"]
+        assert list(transaction_table.columns) == [
+            "Date",
+            "Type",
+            "Account",
+            "To account",
+            "Category",
+            "Payee",
+            "Amount",
+            "Tags",
+            "Description",
+            "Receipt",
+            "Reference",
+            "ID",
+        ]
         selected_transaction_row = transaction_table.loc[
             transaction_table["ID"] == transaction["id"]
         ].iloc[0]

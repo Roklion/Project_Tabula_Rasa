@@ -69,6 +69,47 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         assert raised.value.retryable is False
         assert "Transactions" not in self.storage._row_cache
 
+    def test_definitive_write_failure_is_not_retried(self) -> None:
+        failure = StorageUnavailableError("definitive failure", retryable=False)
+        writes = 0
+
+        def write() -> None:
+            nonlocal writes
+            writes += 1
+            raise failure
+
+        with pytest.raises(StorageUnavailableError, match="definitive failure") as raised:
+            self.storage._write_with_uncertain_readback(
+                "transaction update", write, lambda: "changed"
+            )
+
+        assert writes == 1
+        assert raised.value is failure
+
+    def test_retry_backoff_precedes_refresh_callback(self) -> None:
+        events: list[str] = []
+        storage = GoogleSheetsStorage(
+            self.workbook,
+            sleeper=lambda _: events.append("backoff"),
+        )
+        writes = 0
+
+        def write() -> None:
+            nonlocal writes
+            writes += 1
+            events.append("write")
+            if writes == 1:
+                raise StorageUnavailableError("response lost", retryable=True)
+
+        def refresh() -> None:
+            events.append("refresh")
+
+        storage._write_with_uncertain_readback(
+            "transaction update", write, lambda: "unchanged", before_retry=refresh
+        )
+
+        assert events == ["write", "backoff", "refresh", "write"]
+
     def test_retry_refresh_unexpected_failure_still_invalidates_cache(self) -> None:
         self.storage._row_cache["Transactions"] = []
 
@@ -157,6 +198,18 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         assert workbook.sheets["Sheet1"].rows == [[]]
         for title, headers in WORKSHEET_HEADERS.items():
             assert workbook.sheets[title].rows == [list(headers)]
+
+    def test_profile_storage_rejects_null_spreadsheet_id(self) -> None:
+        with pytest.raises(
+            StorageAuthenticationError,
+            match="Profile Google settings are incomplete or malformed",
+        ):
+            GoogleSheetsStorage.from_secrets(
+                {
+                    "spreadsheet_id": None,
+                    "gcp_service_account": {"type": "service_account"},
+                }
+            )
 
     def test_read_only_profile_storage_validates_without_mutating_workbook(
         self,
@@ -408,9 +461,12 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             original_batch_update(data, **kwargs)
 
         worksheet.batch_update = insert_row_then_fail  # type: ignore[method-assign]
-        self.storage._replace_rows(
-            "Accounts", [(row, {**row.values, "name": "Retry target updated"})]
-        )
+        try:
+            self.storage._replace_rows(
+                "Accounts", [(row, {**row.values, "name": "Retry target updated"})]
+            )
+        finally:
+            worksheet.batch_update = original_batch_update  # type: ignore[method-assign]
 
         rows = self.storage._rows("Accounts", force_refresh=True)
         assert (
@@ -419,6 +475,64 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             == "Retry target updated"
         )
         assert rows[0].values["id"] == "inserted-before-retry"
+
+    def test_batch_replace_stops_when_target_changes_after_uncertain_response(
+        self,
+    ) -> None:
+        account = self.storage.create_account("Retry conflict", "Bank")
+        row = self.storage._find_row("Accounts", account["id"])
+        worksheet = self.workbook.sheets["Accounts"]
+        original_batch_update = worksheet.batch_update
+        name_index = worksheet.rows[0].index("name")
+
+        def change_then_timeout(
+            data: list[dict[str, object]], **kwargs: object
+        ) -> None:
+            del data, kwargs
+            worksheet.rows[row.row_number - 1][name_index] = "Changed elsewhere"
+            raise OSError("temporary response lost")
+
+        batch_update = Mock(side_effect=change_then_timeout)
+        worksheet.batch_update = batch_update
+        try:
+            with pytest.raises(StorageUnavailableError, match="could not confirm"):
+                self.storage._replace_rows(
+                    "Accounts", [(row, {**row.values, "name": "Retry conflict updated"})]
+                )
+        finally:
+            worksheet.batch_update = original_batch_update  # type: ignore[method-assign]
+
+        assert batch_update.call_count == 1
+        assert worksheet.rows[row.row_number - 1][name_index] == "Changed elsewhere"
+
+    def test_batch_replace_stops_on_duplicate_id_in_uncertain_readback(self) -> None:
+        account = self.storage.create_account("Duplicate readback", "Bank")
+        row = self.storage._find_row("Accounts", account["id"])
+        worksheet = self.workbook.sheets["Accounts"]
+        original_batch_update = worksheet.batch_update
+        calls = 0
+
+        def duplicate_then_timeout(
+            data: list[dict[str, object]], **kwargs: object
+        ) -> None:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                worksheet.rows.append(list(worksheet.rows[1]))
+                raise OSError("temporary response lost")
+            original_batch_update(data, **kwargs)
+
+        batch_update = Mock(side_effect=duplicate_then_timeout)
+        worksheet.batch_update = batch_update
+        try:
+            with pytest.raises(StorageUnavailableError, match="could not confirm"):
+                self.storage._replace_rows(
+                    "Accounts", [(row, {**row.values, "name": "Should not retry"})]
+                )
+        finally:
+            worksheet.batch_update = original_batch_update  # type: ignore[method-assign]
+
+        assert calls == 1
 
     def test_temporary_failure_retries_with_exponential_backoff(self) -> None:
         delays: list[float] = []
@@ -515,6 +629,7 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
                 self.storage._append("Accounts", {"id": "ambiguous-append"})
         finally:
             self.storage._rows = original_rows  # type: ignore[method-assign]
+            worksheet.append_row = original_append_row  # type: ignore[method-assign]
 
         assert calls == 1
         assert len(self.storage._rows("Accounts", force_refresh=True)) == 1

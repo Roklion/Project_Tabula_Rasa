@@ -258,7 +258,7 @@ def main() -> None:
             "Income"
         ).run()
         by_label(app.number_input, "Amount").set_value(20)
-        by_label(app.selectbox, "From Account").set_value("Operations")
+        by_label(app.selectbox, "To Account").set_value("Operations")
         by_label(app.selectbox, "Category").set_value("Sales")
         by_label(app.selectbox, "Payee / customer").set_value("Hierarchy income").run()
         by_label(app.button, "Save transaction").click().run()

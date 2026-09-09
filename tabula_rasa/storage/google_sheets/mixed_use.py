@@ -330,8 +330,55 @@ class _MixedUseMixin:
             for row in self._rows("MixedUseExpenses", force_refresh=_force_refresh)
         ]
 
-    def get_mixed_use_expense(self, source_id: str) -> dict[str, str]:
+    def get_mixed_use_expense(
+        self, source_id: str, *, _force_refresh: bool = False
+    ) -> dict[str, str]:
         source_id = _clean_text(source_id, "Mixed-use source ID", required=True)
+        if _force_refresh:
+            sources, transactions = self._raw_mixed_use_snapshot(force_refresh=True)
+            source = sources.get(source_id)
+            if source is None:
+                raise StorageNotFoundError("Mixed-use expense no longer exists")
+            transaction_id = _clean_text(
+                source.get("linked_transaction_id"),
+                "Linked transaction ID",
+                required=True,
+            )
+            transaction = transactions.get(transaction_id)
+            if transaction is None:
+                raise StorageValidationError(
+                    "Mixed-use source references a missing projection transaction"
+                )
+            _validate_mixed_use_tables(
+                {
+                    "MixedUseExpenses": (
+                        MIXED_USE_WORKSHEET_HEADERS,
+                        [source],
+                    ),
+                    "Transactions": (
+                        WORKSHEET_HEADERS["Transactions"],
+                        [transaction],
+                    ),
+                }
+            )
+            accounts = self._account_lookup(force_refresh=True)
+            categories = self._category_lookup(force_refresh=True)
+            payees = self._payee_lookup(force_refresh=True)
+            self._validate_mixed_use_references(
+                source,
+                accounts=accounts,
+                categories=categories,
+                payees=payees,
+            )
+            item = dict(source)
+            item["payee"] = payees.get(item["payee_id"], {}).get("name", "")
+            source_has_tag_metadata = "tag_ids" in item
+            source_tag_ids = _normalize_tag_ids(item.get("tag_ids", ""))
+            if not source_has_tag_metadata:
+                source_tag_ids = _normalize_tag_ids(transaction.get("tag_ids", ""))
+            item["tag_ids"] = source_tag_ids
+            item["ledger_status"] = "linked"
+            return item
         for source in self.list_mixed_use_expenses():
             if source["id"] == source_id:
                 return source

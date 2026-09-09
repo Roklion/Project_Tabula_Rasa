@@ -88,6 +88,104 @@ def test_copied_transaction_description_preserves_user_copy_text_at_end() -> Non
     ) == "Reminder: Copy From project-123. Copy From source-123"
 
 
+def test_copied_transaction_description_normalizes_punctuated_source_ids() -> None:
+    assert copied_transaction_description(
+        {
+            "id": "source:1.2",
+            "description": "Memo. Copy From source:1.2",
+        }
+    ) == "Memo. Copy From source:1.2"
+
+
+def test_copied_transaction_description_strips_stale_punctuated_provenance() -> None:
+    assert copied_transaction_description(
+        {
+            "id": "new-source",
+            "description": "Memo. Copy From source:1.2",
+        }
+    ) == "Memo. Copy From new-source"
+
+
+def test_copied_transaction_description_strips_stale_punctuated_marker() -> None:
+    assert copied_transaction_description(
+        {
+            "id": "new-source",
+            "description": "Copy From old:id",
+        }
+    ) == "Copy From new-source"
+
+
+def test_copied_transaction_description_preserves_numeric_multiword_memo() -> None:
+    assert copied_transaction_description(
+        {
+            "id": "source-123",
+            "description": "Quarterly filing. Copy From tax year 2025",
+        }
+    ) == "Quarterly filing. Copy From tax year 2025. Copy From source-123"
+
+
+def test_copied_transaction_description_normalizes_whitespace_source_ids() -> None:
+    assert copied_transaction_description(
+        {
+            "id": "source 1",
+            "description": "Memo. Copy From source 1",
+        }
+    ) == "Memo. Copy From source 1"
+    assert copied_transaction_description(
+        {
+            "id": "source 1",
+            "description": "Copied from transaction source 1: Memo",
+        }
+    ) == "Memo. Copy From source 1"
+
+
+def test_copied_transaction_description_preserves_multiword_copy_from_memo() -> None:
+    assert copied_transaction_description(
+        {
+            "id": "source-123",
+            "description": "Copy From vendor invoice",
+        }
+    ) == "Copy From vendor invoice. Copy From source-123"
+
+
+def test_copied_transaction_description_preserves_multiword_legacy_prefix_memo() -> None:
+    assert copied_transaction_description(
+        {
+            "id": "source-123",
+            "description": (
+                "Copied from transaction vendor invoice: awaiting approval"
+            ),
+        }
+    ) == (
+        "Copied from transaction vendor invoice: awaiting approval. "
+        "Copy From source-123"
+    )
+
+
+def test_copied_transaction_description_preserves_delimited_copy_from_memo() -> None:
+    assert copied_transaction_description(
+        {
+            "id": "source-123",
+            "description": "Copy From vendor invoice: awaiting approval",
+        }
+    ) == "Copy From vendor invoice: awaiting approval. Copy From source-123"
+
+
+def test_copied_transaction_description_normalizes_blank_whitespace_id_memo() -> None:
+    assert copied_transaction_description(
+        {"id": "source 1", "description": "Copy From source 1"}
+    ) == "Copy From source 1"
+
+
+def test_copied_transaction_description_preserves_multiword_suffix_memo() -> None:
+    assert copied_transaction_description(
+        {
+            "id": "source-123",
+            "description": "My memo. Copy From vendor invoice",
+        }
+    ) == "My memo. Copy From vendor invoice. Copy From source-123"
+
+
 def test_copied_transaction_description_has_no_separator_for_blank_memo() -> None:
     assert copied_transaction_description(
         {"id": "source-123", "description": "  Copy From old-1  "}

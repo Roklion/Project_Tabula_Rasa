@@ -516,9 +516,16 @@ The linked projection remains visible in the ordinary ledger at the allocated
 amount and is marked **Mixed-use**. It is read-only there; edit, delete, copy,
 bulk mutation, and receipt actions are managed from the Mixed-use expenses tab.
 Receipt operations use the same profile receipt folder and Drive recovery
-workflow as ordinary transactions. Mixed-use source copy and bulk source
-editing are intentionally not implemented; they are follow-up work tracked by
-#149.
+workflow as ordinary transactions. The Mixed-use Expense Log also provides
+**Copy mixed-use expense** for one selected complete source. Copy initiation
+re-reads and validates the source/projection pair, then opens a distinct
+new-source editor from an independent snapshot with pre-generated source and
+projection IDs. The copy preserves the date, normal Expense fields, allocation
+inputs, and active managed associations; its memo ends with exactly one
+`Copy From <mixed-use source ID>` suffix. Allocation is normalized again when
+the copy is saved. Copy mode has no receipt uploader or receipt references,
+and Cancel creates nothing. The authoritative source and its projection are
+never mutated; incomplete sources remain inspection-only and cannot be copied.
 
 The Mixed-use expenses tab shows a single-row-selectable **Mixed-use Expense
 Log** before its editor. The table's displayed row position is translated to
@@ -528,10 +535,14 @@ include the visible source IDs and workbook data revision. A changed or
 invalid scope clears the selection and edit baseline, and a new table
 generation prevents an old table selection from being replayed. The tab opens
 in clearly labeled **Add mixed-use expense** mode. Selecting a row changes to
-**Edit mixed-use expense**; **Add new mixed-use expense** clears the selection
-and returns to Add mode. If a source exists without its linked ledger
+**Edit mixed-use expense**; **Copy mixed-use expense** opens an independent
+new-source editor; **Add new mixed-use expense** clears the selection and
+returns to Add mode. If a source exists without its linked ledger
 projection, it is shown for inspection only: Save and permanent deletion are
 unavailable until the source and ledger relationship has been reviewed.
+The log columns, in exact order, are Date, Payee, Account, Category, Total,
+Business %, Allocated, Rationale, Description, and Receipt. Receipt shows the
+paperclip indicator when one or more receipts are linked.
 
 #### Add transaction contract
 
@@ -541,8 +552,9 @@ The form presents:
 2. Date
 3. Category and Amount for Income or Expense
 4. Amount for Transfer
-5. From Account
-6. To account for Transfer
+5. Account: **To Account** for Income, **From Account** for Expense or
+   Transfer
+6. **To account** for Transfer
 7. Payee / customer selector and Reference. The selector lists active managed
    Payees and accepts a new name typed and confirmed with Enter; typed existing
    names select the stored Payee case-insensitively. New values are stored in
@@ -581,7 +593,7 @@ Controls appear in this exact order:
 8. Edit/Bulk mode immediately before the table
 
 The table columns, in exact order, are Date, Type, Account, To account,
-Category, Payee, Tags, Description, Amount, Receipt, Reference, and ID. To
+Category, Payee, Amount, Tags, Description, Receipt, Reference, and ID. To
 account is blank for non-transfers, Category is blank for transfers, Tags is
 blank when none are assigned, Receipt indicates one or more linked receipts,
 and ID remains accessible for disambiguation. The Tags filter matches a record
@@ -701,8 +713,9 @@ partial or unreadable state invalidates caches and gives inspection guidance.
 Record and maintain dated business mileage. Add trip preserves Trip date,
 Vehicle, Business miles, Starting location, Destination, Round trip, optional
 Tags, Business purpose, Notes, and Save mileage trip. Related fields may share
-desktop rows: Trip date/Vehicle, Business miles/Round trip, and
-Starting location/Destination.
+desktop rows: Trip date/Vehicle, Business miles/Return business miles when
+Round trip is selected, and Starting location/Destination. Tags appear
+immediately below the mileage row.
 
 The log presents From, To, and Tags filters, Trips and Business miles metrics,
 filtered CSV download, and the complete table with ID, Date, Miles, From,
@@ -743,7 +756,7 @@ When Google Maps is not configured, each lookup control is the single manual
 recorded-text input; the page does not render a duplicate recorded-text field.
 When either current endpoint was selected with Google autocomplete or the
 current mileage suggestion was calculated by Google Routes, a Google Maps note
-appears directly below the mileage control. Stored rows do not claim Google
+appears directly below the mileage and Tags controls. Stored rows do not claim Google
 provenance after reload because that metadata is intentionally not persisted.
 
 Round trip performs separate outbound and reversed return calculations and
