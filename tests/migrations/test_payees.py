@@ -231,6 +231,22 @@ def test_migration_rejects_malformed_transaction_headers(
     headers = list(transaction_sheet.rows[0])
     header_change(headers)
     transaction_sheet.rows[0] = headers
+    transaction_sheet.rows.append(
+        [
+            "txn",
+            "2026-09-01",
+            "Expense",
+            "10.00",
+            "account",
+            "",
+            "category",
+            "Legacy vendor",
+            "",
+            "",
+            "",
+            "now",
+        ]
+    )
     original_transactions = [list(row) for row in transaction_sheet.rows]
     payee_sheet = workbook.worksheet("Payees")
     original_payees = [list(row) for row in payee_sheet.rows]
