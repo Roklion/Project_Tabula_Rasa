@@ -121,6 +121,9 @@ every module:
 - tests/drive_fixtures.py provides reusable semantic Google Drive builders;
 - tests/_app_*_scenario.py contains executable scenario layers used by the UI
   tests;
+- tests/tooling/ contains repository-policy, environment-bootstrap, and Git-hook
+  checks; these remain part of the full suite and can be run with
+  `python -m pytest tests/tooling`;
 - Drive, receipt, backup, storage, and profile tests exercise their respective
   failure, retry, and isolation boundaries; and
 - scripts/smoke_transactions.py provides the browser-level viewport check.
