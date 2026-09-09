@@ -116,6 +116,9 @@ and Expense require a same-kind category. Transfer requires two different
 active accounts and has no category. New transaction amounts start at **0.00**;
 the amount must be greater than zero when you save.
 
+The account field is labeled **To Account** for Income and **From Account** for
+Expense. Transfers show both **From Account** and **To account**.
+
 Payee / customer is optional. Select an existing active managed Payee or type
 a new name into the selector and press Enter to create it inline. Existing
 Payee names are recognized case-insensitively, and a new Payee is stored before
@@ -178,7 +181,9 @@ source's stable ID, not to a displayed row value. The selection is scoped to
 the active business profile and current workbook revision, so a changed,
 removed, or stale selection is cleared safely. The tab starts in **Add
 mixed-use expense** mode. Use **Add new mixed-use expense** to clear an edit
-selection and return to Add mode.
+selection and return to Add mode. Its columns are Date, Payee, Account,
+Category, Total, Business %, Allocated, Rationale, Description, and Receipt.
+The Receipt column shows a paperclip when one or more receipts are linked.
 
 ### View and edit the ledger
 
@@ -194,7 +199,7 @@ The ledger opens latest-date-first. Its controls appear in this order:
 8. **Edit/Bulk** mode immediately before the table.
 
 The table retains these user-facing columns: Date, Type, Account, To account,
-Category, Payee, Tags, Description, Amount, Receipt, Reference, and ID. To
+Category, Payee, Amount, Tags, Description, Receipt, Reference, and ID. To
 account is blank for non-transfers, Category is blank for transfers, and Tags
 is blank when no Tags are assigned. The Tags filter includes records containing
 any selected Tag. Receipt shows when one or more receipts are linked.

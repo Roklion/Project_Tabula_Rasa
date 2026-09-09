@@ -210,7 +210,7 @@ def main() -> None:
 
         by_label(app.segmented_control, "Transaction type").set_value("Income").run()
         by_label(app.number_input, "Amount").set_value(75)
-        by_label(app.selectbox, "From Account").set_value("Checking")
+        by_label(app.selectbox, "To Account").set_value("Checking")
         by_label(app.selectbox, "Category").set_value("Sales")
         by_label(app.selectbox, "Payee / customer").set_value("Test customer").run()
         by_label(app.button, "Save transaction").click().run()
