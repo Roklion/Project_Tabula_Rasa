@@ -5,10 +5,14 @@ import pytest
 from tabula_rasa.page_renderers.transactions.mixed_use import (
     _MixedUseReceiptStorage,
     _clear_mixed_use_selection,
+    _clear_mixed_use_copy,
     _incomplete_source_ids,
+    _fresh_mixed_use_copy_source,
+    _mixed_use_copy_keys,
     _mixed_use_selection_ids,
     _mixed_use_receipt_recovery_active,
     _pending_create_ids,
+    _start_mixed_use_copy,
     mixed_use_preview,
 )
 from tabula_rasa.page_renderers.transactions.ledger import (
@@ -74,6 +78,68 @@ def test_mixed_use_preview_is_safe_for_incomplete_inputs() -> None:
     assert preview["allocated_amount"] == "—"
     assert preview["status"] != "ready"
     assert preview["description"] == "—"
+
+
+def test_mixed_use_copy_re_reads_pair_and_keeps_independent_snapshot(default_storage) -> None:
+    account = next(item for item in default_storage.list_accounts() if item["active"])
+    category = next(
+        item
+        for item in default_storage.list_categories()
+        if item["kind"] == "Expense"
+    )
+    source = default_storage.create_mixed_use_expense(
+        txn_date="2026-09-03",
+        total_expense="100",
+        business_use_percentage="25",
+        account_id=account["id"],
+        category_id=category["id"],
+        description="Original memo",
+        allocation_rationale="Measured use",
+    )
+
+    fresh = _fresh_mixed_use_copy_source(default_storage, source["id"])
+    state = {}
+    new_source_id, new_transaction_id = _start_mixed_use_copy(
+        state, "north", fresh
+    )
+    keys = _mixed_use_copy_keys("north")
+    snapshot = state[keys["snapshot"]]
+    assert new_source_id != source["id"]
+    assert new_transaction_id != source["linked_transaction_id"]
+    assert snapshot["txn_date"] == "2026-09-03"
+    assert snapshot["description"] == (
+        f"Original memo. Copy From {source['id']}"
+    )
+
+    # Mutating the returned source cannot mutate the copy's initialized data.
+    fresh["description"] = "Changed after copy started"
+    assert state[keys["snapshot"]]["description"] != fresh["description"]
+    generation = state[keys["generation"]]
+    _clear_mixed_use_copy(state, "north")
+    _start_mixed_use_copy(state, "north", source)
+    assert state[keys["generation"]] == generation + 1
+
+
+def test_mixed_use_copy_rejects_missing_projection(default_storage) -> None:
+    account = next(item for item in default_storage.list_accounts() if item["active"])
+    category = next(
+        item
+        for item in default_storage.list_categories()
+        if item["kind"] == "Expense"
+    )
+    source = default_storage.create_mixed_use_expense(
+        txn_date="2026-09-03",
+        total_expense="100",
+        business_use_percentage="25",
+        account_id=account["id"],
+        category_id=category["id"],
+        allocation_rationale="Measured use",
+    )
+    default_storage._worksheet("Transactions").rows.pop(1)
+    default_storage._invalidate("Transactions")
+
+    with pytest.raises(StorageValidationError, match="missing projection"):
+        _fresh_mixed_use_copy_source(default_storage, source["id"])
 
 
 def test_pending_create_ids_remain_stable_for_uncertain_retries() -> None:
@@ -391,6 +457,74 @@ def test_mixed_use_table_target_switch_and_delete_are_source_scoped(default_stor
     assert [item["id"] for item in default_storage.list_transactions()] == [
         first["linked_transaction_id"]
     ]
+
+
+def test_mixed_use_copy_cancel_and_save_create_new_pair_without_receipts(
+    default_storage,
+) -> None:
+    account = next(item for item in default_storage.list_accounts() if item["active"])
+    category = next(
+        item
+        for item in default_storage.list_categories()
+        if item["kind"] == "Expense"
+    )
+    source = default_storage.create_mixed_use_expense(
+        txn_date="2026-09-03",
+        total_expense="100",
+        business_use_percentage="25",
+        account_id=account["id"],
+        category_id=category["id"],
+        description="Original memo",
+        allocation_rationale="Measured use",
+    )
+    original = default_storage.get_mixed_use_expense(source["id"])
+
+    with authenticated_app(default_storage) as app:
+        navigate_to(app, "Transactions")
+        app.session_state["mixed_use_selected_source_id_test"] = source["id"]
+        app.run()
+        tab = _mixed_tab(app)
+        by_label(tab.button, "Copy mixed-use expense").click().run()
+        tab = _mixed_tab(app)
+        assert not tab.file_uploader
+        assert _tab_field(tab, "date_input", "Date").value == date(2026, 9, 3)
+        assert _tab_field(tab, "text_input", "Description / memo").value == (
+            f"Original memo. Copy From {source['id']}"
+        )
+        by_label(tab.button, "Cancel copy").click().run()
+        assert app.session_state["mixed_use_selected_source_id_test"] == source["id"]
+        assert default_storage.get_mixed_use_expense(source["id"]) == original
+
+        by_label(_mixed_tab(app).button, "Copy mixed-use expense").click().run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "text_input", "Total Expense").set_value("240").run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "text_input", "Business Use %").set_value("50").run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "text_area", "Allocation Rationale (required)").set_value(
+            "Updated rationale"
+        ).run()
+        tab = _mixed_tab(app)
+        by_label(tab.button, "Save copied mixed-use expense").click().run()
+
+    copied = next(
+        item
+        for item in default_storage.list_mixed_use_expenses()
+        if item["id"] != source["id"]
+    )
+    projection = next(
+        item
+        for item in default_storage.list_transactions()
+        if item["id"] != source["linked_transaction_id"]
+    )
+    assert copied["linked_transaction_id"] == projection["id"]
+    assert copied["id"] != source["id"]
+    assert copied["linked_transaction_id"] != source["linked_transaction_id"]
+    assert copied["description"] == f"Original memo. Copy From {source['id']}"
+    assert copied["total_expense"] == "240.00"
+    assert copied["allocated_amount"] == "120.00"
+    assert copied["receipt_references"] == "[]"
+    assert default_storage.get_mixed_use_expense(source["id"]) == original
 
 
 def test_mixed_use_selection_clears_after_revision_change(default_storage) -> None:
