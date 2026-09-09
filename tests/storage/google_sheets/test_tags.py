@@ -295,7 +295,9 @@ def test_tag_merge_partial_write_stops_without_retry(default_storage, monkeypatc
     def partial_then_lose_response(body: dict[str, object]) -> None:
         nonlocal calls
         calls += 1
-        original_batch_update({"requests": body["requests"][:1]})
+        requests = body.get("requests")
+        assert isinstance(requests, list)
+        original_batch_update({"requests": requests[:1]})
         raise OSError("response lost after partial application")
 
     monkeypatch.setattr(
@@ -493,7 +495,9 @@ def test_tag_merge_accepts_commit_before_uncertain_response(
     }
 
 
-def test_tag_removal_rechecks_references_after_retry_backoff(default_storage) -> None:
+def test_tag_removal_rechecks_references_after_retry_backoff(
+    default_storage, monkeypatch
+) -> None:
     account, category = _ledger_setup(default_storage)
     tag = default_storage.create_tag("Referenced during retry")
     calls = 0
@@ -514,7 +518,7 @@ def test_tag_removal_rechecks_references_after_retry_backoff(default_storage) ->
         raise OSError("temporary response lost")
 
     default_storage._sleeper = add_reference_during_backoff
-    default_storage._workbook.batch_update = fail_once
+    monkeypatch.setattr(default_storage._workbook, "batch_update", fail_once)
 
     with pytest.raises(StorageConflictError, match="became referenced"):
         default_storage.remove_tag(tag["id"])
