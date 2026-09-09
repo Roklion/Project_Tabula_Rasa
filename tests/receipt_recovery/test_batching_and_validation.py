@@ -79,8 +79,8 @@ def test_recovery_batches_multiple_receipts_into_one_reconciliation() -> None:
     first = make_reference(1, b"first")
     second = make_reference(2, b"second")
     backup, target, _ = backup_with_receipts([first, second])
-    original_apply = target.apply_receipt_recovery_plan
-    target.apply_receipt_recovery_plan = Mock(wraps=original_apply)
+    worksheet = target._workbook.sheets["Transactions"]
+    worksheet.batch_update = Mock(wraps=worksheet.batch_update)
     drive = Mock()
     drive.restore_receipt.side_effect = [
         (make_drive_file(first, file_id="newreceipt01"), False),
@@ -104,7 +104,40 @@ def test_recovery_batches_multiple_receipts_into_one_reconciliation() -> None:
     assert report["restored"] == 2
     assert report["references_remapped"] == 2
     assert report["errors"] == 0
-    target.apply_receipt_recovery_plan.assert_called_once()
+    worksheet.batch_update.assert_called_once()
+
+
+def test_recovery_rejects_duplicate_ids_added_after_preflight() -> None:
+    content = b"receipt"
+    reference = make_reference(1, content)
+    backup, target, _ = backup_with_receipts([reference])
+    worksheet = target._workbook.sheets["Transactions"]
+
+    def restore_after_duplicate(**_kwargs: object) -> tuple[dict[str, object], bool]:
+        worksheet.rows.append(list(worksheet.rows[1]))
+        return make_drive_file(reference), True
+
+    worksheet.batch_update = Mock(wraps=worksheet.batch_update)
+    drive = Mock()
+    drive.restore_receipt.side_effect = restore_after_duplicate
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(reference["name"])).write_bytes(content)
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=target,
+            drive=drive,
+        )
+
+    assert report["reused"] == 0
+    assert report["references_remapped"] == 0
+    assert report["errors"] == 1
+    worksheet.batch_update.assert_not_called()
 
 
 def test_recovery_batching_remains_isolated_between_profiles() -> None:
