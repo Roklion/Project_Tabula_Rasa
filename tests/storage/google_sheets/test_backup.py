@@ -1,3 +1,5 @@
+import csv
+
 from ._support import (
     BACKUP_FORMAT_VERSION,
     FakeWorkbook,
@@ -269,6 +271,34 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         assert validated["format_version"] == BACKUP_FORMAT_VERSION
         assert target.list_payees()[0]["id"] == payee["id"]
         assert target.list_transactions()[0]["payee_id"] == payee["id"]
+
+    def test_backup_rejects_invalid_payee_records(self) -> None:
+        storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+        payee = storage.create_payee("Valid vendor")
+        backup = storage.export_backup_zip(
+            build_receipt_manifest("test", storage.list_transactions(), [])
+        )
+        contents: dict[str, bytes]
+        with zipfile.ZipFile(io.BytesIO(backup)) as source:
+            contents = {name: source.read(name) for name in source.namelist()}
+        payee_rows = list(csv.reader(io.StringIO(contents["Payees.csv"].decode())))
+        payee_rows[1][1] = ""
+        csv_buffer = io.StringIO(newline="")
+        csv.writer(csv_buffer, lineterminator="\n").writerows(payee_rows)
+        contents["Payees.csv"] = csv_buffer.getvalue().encode()
+        manifest = json.loads(contents["manifest.json"])
+        manifest["sha256"]["Payees.csv"] = hashlib.sha256(
+            contents["Payees.csv"]
+        ).hexdigest()
+        contents["manifest.json"] = json.dumps(manifest).encode()
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w") as destination:
+            for name, content in contents.items():
+                destination.writestr(name, content)
+
+        with pytest.raises(StorageValidationError, match="Payee name"):
+            GoogleSheetsStorage.validate_backup_zip(output.getvalue())
+        assert payee["name"] == "Valid vendor"
 
     def test_manifest_rejects_a_drive_filename_that_would_be_trimmed(self) -> None:
         receipt = drive_file_from_reference(
