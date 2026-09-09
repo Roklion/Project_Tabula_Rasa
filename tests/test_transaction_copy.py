@@ -97,6 +97,21 @@ def test_copied_transaction_description_normalizes_punctuated_source_ids() -> No
     ) == "Memo. Copy From source:1.2"
 
 
+def test_copied_transaction_description_normalizes_whitespace_source_ids() -> None:
+    assert copied_transaction_description(
+        {
+            "id": "source 1",
+            "description": "Memo. Copy From source 1",
+        }
+    ) == "Memo. Copy From source 1"
+    assert copied_transaction_description(
+        {
+            "id": "new-source",
+            "description": "Copied from transaction source 1: Memo",
+        }
+    ) == "Memo. Copy From new-source"
+
+
 def test_copied_transaction_description_has_no_separator_for_blank_memo() -> None:
     assert copied_transaction_description(
         {"id": "source-123", "description": "  Copy From old-1  "}
