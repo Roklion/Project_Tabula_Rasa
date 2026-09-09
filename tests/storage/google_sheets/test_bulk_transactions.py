@@ -186,11 +186,15 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             transaction_sheet.rows[1],
         )
         workbook_batch = Mock(wraps=self.workbook.batch_update)
+        original_batch_update = self.workbook.batch_update
         self.workbook.batch_update = workbook_batch
-        result = self.storage.bulk_delete_transactions(
-            [first["id"], second["id"]],
-            expected_transactions=expected,
-        )
+        try:
+            result = self.storage.bulk_delete_transactions(
+                [first["id"], second["id"]],
+                expected_transactions=expected,
+            )
+        finally:
+            self.workbook.batch_update = original_batch_update
 
         assert result == {"status": "fully_applied", "count": "2"}
         assert workbook_batch.call_count == 1
