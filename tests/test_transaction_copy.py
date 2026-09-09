@@ -106,6 +106,15 @@ def test_copied_transaction_description_strips_stale_punctuated_provenance() -> 
     ) == "Memo. Copy From new-source"
 
 
+def test_copied_transaction_description_strips_stale_whitespace_provenance() -> None:
+    assert copied_transaction_description(
+        {
+            "id": "new-source",
+            "description": "Memo. Copy From source 1",
+        }
+    ) == "Memo. Copy From new-source"
+
+
 def test_copied_transaction_description_normalizes_whitespace_source_ids() -> None:
     assert copied_transaction_description(
         {
