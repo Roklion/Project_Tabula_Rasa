@@ -30,8 +30,9 @@ def test_gemini_configuration_is_parseable_and_safe() -> None:
         "HIGH",
         "CRITICAL",
     }
-    assert isinstance(code_review.get("max_review_comments"), int)
-    assert code_review["max_review_comments"] > 0
+    max_review_comments = code_review.get("max_review_comments")
+    assert type(max_review_comments) is int
+    assert max_review_comments > 0
 
     pull_request_opened = code_review.get("pull_request_opened")
     assert isinstance(pull_request_opened, dict)
