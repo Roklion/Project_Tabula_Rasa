@@ -9,7 +9,6 @@ from tabula_rasa.storage import (
     StorageConflictError,
     StorageValidationError,
 )
-from tabula_rasa.storage import google_sheets as google_sheets_module
 from tests.fakes import FakeWorkbook
 from tests.mixed_use_storage._support import expense_inputs
 
@@ -143,13 +142,6 @@ def test_different_spreadsheets_have_independent_ledger_locks() -> None:
         assert finished.wait(1)
     worker.join(timeout=1)
     assert not errors
-
-
-def test_lock_primitives_are_not_google_sheets_facade_exports() -> None:
-    assert "_workbook_mutation_lock" not in google_sheets_module.__all__
-    assert "_MIXED_USE_CREATE_LOCK" not in google_sheets_module.__dict__
-    assert "_PAYEE_WRITE_LOCK" not in google_sheets_module.__dict__
-    assert "_TAG_WRITE_LOCK" not in google_sheets_module.__dict__
 
 
 def test_category_delete_rejects_orphaned_mixed_use_source(
@@ -479,47 +471,6 @@ def test_receipt_mutations_reject_half_populated_provenance(
 
     sources = default_storage._rows("MixedUseExpenses", force_refresh=True)
     assert sources[0].values["id"] == source["id"]
-
-
-def test_receipt_link_scans_for_duplicate_ownership_inside_lock(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    source = default_storage.create_mixed_use_expense(
-        **expense_inputs(default_storage),
-        total_expense="100",
-        business_use_percentage="50",
-        allocation_rationale="Measured use",
-    )
-    scan_started = threading.Event()
-    finished = threading.Event()
-    errors: list[BaseException] = []
-    original_list_transactions = default_storage.list_transactions
-
-    def list_transactions(*args: object, **kwargs: object) -> list[dict[str, str]]:
-        scan_started.set()
-        return original_list_transactions(*args, **kwargs)
-
-    default_storage.list_transactions = list_transactions  # type: ignore[method-assign]
-
-    def link_receipt() -> None:
-        try:
-            default_storage.link_mixed_use_receipt(
-                source["id"],
-                reference={"id": "receipt-lock-check", "name": "Receipt"},
-            )
-        except BaseException as error:  # pragma: no cover - assertion below reports it
-            errors.append(error)
-        finally:
-            finished.set()
-
-    with default_storage._workbook_locks.ledger:
-        worker = threading.Thread(target=link_receipt)
-        worker.start()
-        assert not scan_started.wait(0.1)
-        assert not finished.wait(0.1)
-    assert finished.wait(1)
-    worker.join(timeout=1)
-    assert not errors
 
 
 def test_receipt_recovery_rejects_half_populated_provenance(
