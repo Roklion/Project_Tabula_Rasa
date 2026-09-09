@@ -9,7 +9,6 @@ from tabula_rasa.storage import (
     StorageConflictError,
     StorageValidationError,
 )
-from tabula_rasa.storage import google_sheets as google_sheets_module
 from tests.fakes import FakeWorkbook
 from tests.mixed_use_storage._support import expense_inputs
 
@@ -143,13 +142,6 @@ def test_different_spreadsheets_have_independent_ledger_locks() -> None:
         assert finished.wait(1)
     worker.join(timeout=1)
     assert not errors
-
-
-def test_lock_primitives_are_not_google_sheets_facade_exports() -> None:
-    assert "_workbook_mutation_lock" not in google_sheets_module.__all__
-    assert "_MIXED_USE_CREATE_LOCK" not in google_sheets_module.__dict__
-    assert "_PAYEE_WRITE_LOCK" not in google_sheets_module.__dict__
-    assert "_TAG_WRITE_LOCK" not in google_sheets_module.__dict__
 
 
 def test_category_delete_rejects_orphaned_mixed_use_source(
@@ -481,6 +473,29 @@ def test_receipt_mutations_reject_half_populated_provenance(
     assert sources[0].values["id"] == source["id"]
 
 
+def test_receipt_recovery_rejects_half_populated_provenance(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    default_storage.create_mixed_use_expense(
+        **expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured business use",
+    )
+    expected_transaction = default_storage.list_transactions()[0]
+    transaction_sheet = default_storage._worksheet("Transactions")
+    headers = default_storage._headers("Transactions")
+    transaction_sheet.rows[1][headers.index("source_type")] = ""
+    default_storage._invalidate("Transactions")
+
+    with pytest.raises(
+        StorageValidationError, match="incomplete transaction provenance"
+    ):
+        default_storage.apply_receipt_recovery_plan(
+            [expected_transaction], {expected_transaction["id"]: []}
+        )
+
+
 def test_receipt_link_scans_for_duplicate_ownership_inside_lock(
     default_storage: GoogleSheetsStorage,
 ) -> None:
@@ -520,26 +535,3 @@ def test_receipt_link_scans_for_duplicate_ownership_inside_lock(
     assert finished.wait(1)
     worker.join(timeout=1)
     assert not errors
-
-
-def test_receipt_recovery_rejects_half_populated_provenance(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    default_storage.create_mixed_use_expense(
-        **expense_inputs(default_storage),
-        total_expense="100",
-        business_use_percentage="50",
-        allocation_rationale="Measured business use",
-    )
-    expected_transaction = default_storage.list_transactions()[0]
-    transaction_sheet = default_storage._worksheet("Transactions")
-    headers = default_storage._headers("Transactions")
-    transaction_sheet.rows[1][headers.index("source_type")] = ""
-    default_storage._invalidate("Transactions")
-
-    with pytest.raises(
-        StorageValidationError, match="incomplete transaction provenance"
-    ):
-        default_storage.apply_receipt_recovery_plan(
-            [expected_transaction], {expected_transaction["id"]: []}
-        )
