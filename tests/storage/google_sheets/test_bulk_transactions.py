@@ -185,12 +185,15 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             transaction_sheet.rows[2],
             transaction_sheet.rows[1],
         )
+        workbook_batch = Mock(wraps=self.workbook.batch_update)
+        self.workbook.batch_update = workbook_batch
         result = self.storage.bulk_delete_transactions(
             [first["id"], second["id"]],
             expected_transactions=expected,
         )
 
         assert result == {"status": "fully_applied", "count": "2"}
+        assert workbook_batch.call_count == 1
         assert [item["id"] for item in self.storage.list_transactions()] == [
             unrelated["id"]
         ]
@@ -210,13 +213,21 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
                 category_id=replacement["id"],
             )
 
-    def test_bulk_category_change_normalizes_transaction_ids(self) -> None:
+    def test_bulk_category_change_normalizes_transaction_and_payee_ids(self) -> None:
         first, second, replacement = self._bulk_transaction_fixture()
+        payee = self.storage.create_payee("Vendor")
+        self.storage.edit_transaction(first["id"], payee_id=payee["id"])
         expected = [
             transaction
             for transaction in self.storage.list_transactions(_force_refresh=True)
             if transaction["id"] in {first["id"], second["id"]}
         ]
+        transaction_sheet = self.workbook.sheets["Transactions"]
+        payee_index = transaction_sheet.rows[0].index("payee_id")
+        transaction_row = next(
+            row for row in transaction_sheet.rows if row[0] == first["id"]
+        )
+        transaction_row[payee_index] = f"  {payee['id']}  "
 
         result = self.storage.bulk_change_transaction_category(
             [f" {first['id']} ", f"{second['id']} "],
@@ -225,6 +236,12 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         )
 
         assert result == {"status": "fully_applied", "count": "2"}
+        categories = {
+            item["id"]: item["category_id"]
+            for item in self.storage.list_transactions()
+        }
+        assert categories[first["id"]] == replacement["id"]
+        assert categories[second["id"]] == replacement["id"]
 
     def test_uncertain_bulk_category_response_is_confirmed_without_retry(
         self,

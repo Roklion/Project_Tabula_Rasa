@@ -69,6 +69,30 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         assert raised.value.retryable is False
         assert "Transactions" not in self.storage._row_cache
 
+    def test_retry_backoff_precedes_refresh_callback(self) -> None:
+        events: list[str] = []
+        storage = GoogleSheetsStorage(
+            self.workbook,
+            sleeper=lambda _: events.append("backoff"),
+        )
+        writes = 0
+
+        def write() -> None:
+            nonlocal writes
+            writes += 1
+            events.append("write")
+            if writes == 1:
+                raise StorageUnavailableError("response lost", retryable=True)
+
+        def refresh() -> None:
+            events.append("refresh")
+
+        storage._write_with_uncertain_readback(
+            "transaction update", write, lambda: "unchanged", before_retry=refresh
+        )
+
+        assert events == ["write", "backoff", "refresh", "write"]
+
     def test_retry_refresh_unexpected_failure_still_invalidates_cache(self) -> None:
         self.storage._row_cache["Transactions"] = []
 
@@ -431,6 +455,59 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             == "Retry target updated"
         )
         assert rows[0].values["id"] == "inserted-before-retry"
+
+    def test_batch_replace_stops_when_target_changes_after_uncertain_response(
+        self,
+    ) -> None:
+        account = self.storage.create_account("Retry conflict", "Bank")
+        row = self.storage._find_row("Accounts", account["id"])
+        worksheet = self.workbook.sheets["Accounts"]
+        original_batch_update = worksheet.batch_update
+        name_index = worksheet.rows[0].index("name")
+
+        def change_then_timeout(
+            data: list[dict[str, object]], **kwargs: object
+        ) -> None:
+            del data, kwargs
+            worksheet.rows[row.row_number - 1][name_index] = "Changed elsewhere"
+            raise OSError("temporary response lost")
+
+        worksheet.batch_update = Mock(side_effect=change_then_timeout)
+
+        with pytest.raises(StorageUnavailableError, match="could not confirm"):
+            self.storage._replace_rows(
+                "Accounts", [(row, {**row.values, "name": "Retry conflict updated"})]
+            )
+
+        assert worksheet.batch_update.call_count == 1
+        assert worksheet.rows[row.row_number - 1][name_index] == "Changed elsewhere"
+        worksheet.batch_update = original_batch_update  # type: ignore[method-assign]
+
+    def test_batch_replace_stops_on_duplicate_id_in_uncertain_readback(self) -> None:
+        account = self.storage.create_account("Duplicate readback", "Bank")
+        row = self.storage._find_row("Accounts", account["id"])
+        worksheet = self.workbook.sheets["Accounts"]
+        original_batch_update = worksheet.batch_update
+        calls = 0
+
+        def duplicate_then_timeout(
+            data: list[dict[str, object]], **kwargs: object
+        ) -> None:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                worksheet.rows.append(list(worksheet.rows[1]))
+                raise OSError("temporary response lost")
+            original_batch_update(data, **kwargs)
+
+        worksheet.batch_update = Mock(side_effect=duplicate_then_timeout)
+
+        with pytest.raises(StorageUnavailableError, match="could not confirm"):
+            self.storage._replace_rows(
+                "Accounts", [(row, {**row.values, "name": "Should not retry"})]
+            )
+
+        assert calls == 1
 
     def test_temporary_failure_retries_with_exponential_backoff(self) -> None:
         delays: list[float] = []
