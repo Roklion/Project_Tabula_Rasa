@@ -21,6 +21,46 @@ from tests.receipt_recovery._support import (
 )
 
 
+def test_recovery_retries_when_manual_edit_invalidates_cached_noop() -> None:
+    content = b"receipt"
+    reference = make_reference(1, content)
+    backup, target, _ = backup_with_receipts([reference])
+    stale_reference = {**reference, "id": "stale-recovered-id"}
+    worksheet = target._workbook.sheets["Transactions"]
+    reference_index = worksheet.rows[0].index("receipt_references")
+
+    def restore_after_manual_edit(**_kwargs: object) -> tuple[dict[str, object], bool]:
+        worksheet.rows[1][reference_index] = json.dumps([stale_reference])
+        return make_drive_file(reference), True
+
+    original_apply = target.apply_receipt_recovery_plan
+    target.apply_receipt_recovery_plan = Mock(wraps=original_apply)
+    drive = Mock()
+    drive.restore_receipt.side_effect = restore_after_manual_edit
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(reference["name"])).write_bytes(content)
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=target,
+            drive=drive,
+        )
+
+    assert report["reused"] == 1
+    assert report["references_remapped"] == 1
+    assert report["errors"] == 0
+    assert 1 < target.apply_receipt_recovery_plan.call_count <= 3
+    current = target.list_transactions(_force_refresh=True)[0]
+    assert decode_receipt_references(current["receipt_references"])[0]["id"] == str(
+        reference["id"]
+    )
+
+
 def test_recovery_stops_when_state_never_converges() -> None:
     content = b"receipt"
     reference = make_reference(1, content)
