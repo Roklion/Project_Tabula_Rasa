@@ -26,3 +26,20 @@ def test_add_transaction_can_create_inline_payee() -> None:
     transaction = storage.list_transactions()[0]
     assert transaction["payee"] == "New vendor"
     assert transaction["payee_id"] == storage.list_payees()[0]["id"]
+
+
+def test_add_income_labels_account_as_to_account() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    storage.create_account("Checking", "Bank")
+    storage.create_category("Services", "Income")
+
+    with authenticated_app(storage) as app:
+        navigate_to(app, "Transactions")
+        by_label(app.segmented_control, "Transaction type").set_value(
+            "Income"
+        ).run()
+
+        assert by_label(app.selectbox, "To Account").value == "Checking"
+        assert not any(
+            element.label == "From Account" for element in app.selectbox
+        )

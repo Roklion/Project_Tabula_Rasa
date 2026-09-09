@@ -120,7 +120,7 @@ def render_add_transaction(
                 key="add_transaction_amount",
             )
         source = st.selectbox(
-            "From Account",
+            "To Account" if kind == "Income" else "From Account",
             list(account_map),
             key=f"add_transaction_account_{kind.casefold()}",
         )

@@ -8,7 +8,10 @@ from tabula_rasa.page_renderers.transactions.mixed_use import (
     _clear_mixed_use_copy,
     _incomplete_source_ids,
     _fresh_mixed_use_copy_source,
+    _copyable_tag_ids,
+    _editable_account_ids,
     _mixed_use_copy_keys,
+    _mixed_use_log_rows,
     _mixed_use_selection_ids,
     _mixed_use_receipt_recovery_active,
     _pending_create_ids,
@@ -46,6 +49,73 @@ def _mixed_tab(app):
 
 def _tab_field(tab, collection: str, label: str):
     return next(item for item in getattr(tab, collection) if item.label == label)
+
+
+def test_mixed_use_log_puts_receipt_indicator_at_the_end() -> None:
+    rows = _mixed_use_log_rows(
+        [
+            {
+                "txn_date": "2026-09-08",
+                "payee": "Vendor",
+                "description": "Shared office supplies",
+                "account_id": "account",
+                "category_id": "category",
+                "total_expense": "100.00",
+                "business_use_percentage": "25",
+                "allocated_amount": "25.00",
+                "allocation_rationale": "Shared workspace",
+                "receipt_references": (
+                    '[{"id":"' + "a" * 32 + '","name":"receipt.pdf"}]'
+                ),
+            },
+            {
+                "txn_date": "2026-09-07",
+                "payee": "Other vendor",
+                "account_id": "account",
+                "category_id": "category",
+                "total_expense": "50.00",
+                "business_use_percentage": "50",
+                "allocated_amount": "25.00",
+                "allocation_rationale": "Shared service",
+                "receipt_references": "[]",
+            },
+        ],
+        {"account": "Checking"},
+        {"category": "Office"},
+    )
+
+    assert list(rows[0]) == [
+        "Date",
+        "Payee",
+        "Account",
+        "Category",
+        "Total",
+        "Business %",
+        "Allocated",
+        "Rationale",
+        "Description",
+        "Receipt",
+    ]
+    assert rows[0]["Receipt"] == "\U0001f4ce"
+    assert rows[0]["Payee"] == "Vendor"
+    assert rows[0]["Description"] == "Shared office supplies"
+    assert rows[1]["Receipt"] == ""
+
+
+def test_mixed_use_log_keeps_malformed_receipts_inspectable() -> None:
+    rows = _mixed_use_log_rows(
+        [
+            {
+                "txn_date": "2026-09-08",
+                "payee": "Vendor",
+                "receipt_references": "not-json",
+            }
+        ],
+        {},
+        {},
+    )
+
+    assert rows[0]["Receipt"] == ""
 
 
 def test_mixed_use_preview_uses_decimal_allocation_and_rationale() -> None:
@@ -118,6 +188,70 @@ def test_mixed_use_copy_re_reads_pair_and_keeps_independent_snapshot(default_sto
     _clear_mixed_use_copy(state, "north")
     _start_mixed_use_copy(state, "north", source)
     assert state[keys["generation"]] == generation + 1
+
+
+def test_mixed_use_copy_snapshot_saves_after_original_edit(default_storage) -> None:
+    account = next(item for item in default_storage.list_accounts() if item["active"])
+    category = next(
+        item
+        for item in default_storage.list_categories()
+        if item["kind"] == "Expense"
+    )
+    source = default_storage.create_mixed_use_expense(
+        txn_date="2026-09-03",
+        total_expense="100",
+        business_use_percentage="25",
+        account_id=account["id"],
+        category_id=category["id"],
+        description="Original memo",
+        allocation_rationale="Original rationale",
+    )
+    snapshot_state: dict[str, object] = {}
+    _start_mixed_use_copy(
+        snapshot_state,
+        "north",
+        _fresh_mixed_use_copy_source(default_storage, source["id"]),
+    )
+    keys = _mixed_use_copy_keys("north")
+    snapshot = snapshot_state[keys["snapshot"]]
+    default_storage.edit_mixed_use_expense(
+        source["id"],
+        total_expense="300",
+        business_use_percentage="50",
+        allocation_rationale="Changed after copy started",
+    )
+
+    copied = default_storage.create_mixed_use_expense(
+        source_id=snapshot_state[keys["new_source_id"]],
+        linked_transaction_id=snapshot_state[keys["new_transaction_id"]],
+        txn_date=snapshot["txn_date"],
+        total_expense=snapshot["total_expense"],
+        business_use_percentage=snapshot["business_use_percentage"],
+        account_id=snapshot["account_id"],
+        category_id=snapshot["category_id"],
+        payee_id=snapshot.get("payee_id", ""),
+        reference=snapshot.get("reference", ""),
+        description=snapshot["description"],
+        tag_ids=snapshot.get("tag_ids", ()),
+        allocation_rationale=snapshot["allocation_rationale"],
+    )
+    assert copied["description"] == f"Original memo. Copy From {source['id']}"
+    assert copied["total_expense"] == "100.00"
+    assert copied["allocated_amount"] == "25.00"
+    assert default_storage.get_mixed_use_expense(source["id"])["total_expense"] == "300.00"
+
+
+def test_mixed_use_copy_uses_active_only_managed_values() -> None:
+    accounts = [
+        {"id": "inactive", "active": False},
+        {"id": "active", "active": True},
+    ]
+    tags = [
+        {"id": "old", "active": "FALSE"},
+        {"id": "current", "active": "TRUE"},
+    ]
+    assert _editable_account_ids(accounts, ["inactive"], copy_mode=True) == ["active"]
+    assert _copyable_tag_ids(tags, ["old", "current"]) == ["current"]
 
 
 def test_mixed_use_copy_rejects_missing_projection(default_storage) -> None:

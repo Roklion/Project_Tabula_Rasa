@@ -28,7 +28,11 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     receipt_creation_workflow_key,
     receipt_editor_workflow_key,
 )
-from tabula_rasa.storage import StorageError, decode_receipt_references
+from tabula_rasa.storage import (
+    StorageError,
+    StorageValidationError,
+    decode_receipt_references,
+)
 from tabula_rasa.storage.google_sheets import (
     _normalize_tag_ids,
     mixed_use_ledger_description,
@@ -243,12 +247,23 @@ def _mixed_use_log_rows(
     category_paths: Mapping[str, str],
 ) -> list[dict[str, str]]:
     """Build display-only rows while keeping source IDs out of the table."""
+
+    def receipt_indicator(item: Mapping[str, object]) -> str:
+        try:
+            return (
+                "\U0001f4ce"
+                if decode_receipt_references(item.get("receipt_references", ""))
+                else ""
+            )
+        except StorageValidationError:
+            # Keep incomplete source rows inspectable even when their receipt
+            # metadata is malformed; receipt repair remains unavailable.
+            return ""
+
     return [
         {
             "Date": str(item.get("txn_date", "")),
-            "Payee / description": str(
-                item.get("payee") or item.get("description", "")
-            ),
+            "Payee": str(item.get("payee", "")),
             "Account": account_paths.get(str(item.get("account_id", "")), "Unknown"),
             "Category": category_paths.get(
                 str(item.get("category_id", "")), "Unknown"
@@ -257,7 +272,8 @@ def _mixed_use_log_rows(
             "Business %": str(item.get("business_use_percentage", "")),
             "Allocated": f"${item.get('allocated_amount', '0.00')}",
             "Rationale": str(item.get("allocation_rationale", "")),
-            "Status": str(item.get("ledger_status", "linked")),
+            "Description": str(item.get("description", "")),
+            "Receipt": receipt_indicator(item),
         }
         for item in sources
     ]

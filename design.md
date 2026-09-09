@@ -540,6 +540,9 @@ new-source editor; **Add new mixed-use expense** clears the selection and
 returns to Add mode. If a source exists without its linked ledger
 projection, it is shown for inspection only: Save and permanent deletion are
 unavailable until the source and ledger relationship has been reviewed.
+The log columns, in exact order, are Date, Payee, Account, Category, Total,
+Business %, Allocated, Rationale, Description, and Receipt. Receipt shows the
+paperclip indicator when one or more receipts are linked.
 
 #### Add transaction contract
 
@@ -549,8 +552,9 @@ The form presents:
 2. Date
 3. Category and Amount for Income or Expense
 4. Amount for Transfer
-5. From Account
-6. To account for Transfer
+5. Account: **To Account** for Income, **From Account** for Expense or
+   Transfer
+6. **To account** for Transfer
 7. Payee / customer selector and Reference. The selector lists active managed
    Payees and accepts a new name typed and confirmed with Enter; typed existing
    names select the stored Payee case-insensitively. New values are stored in
@@ -589,7 +593,7 @@ Controls appear in this exact order:
 8. Edit/Bulk mode immediately before the table
 
 The table columns, in exact order, are Date, Type, Account, To account,
-Category, Payee, Tags, Description, Amount, Receipt, Reference, and ID. To
+Category, Payee, Amount, Tags, Description, Receipt, Reference, and ID. To
 account is blank for non-transfers, Category is blank for transfers, Tags is
 blank when none are assigned, Receipt indicates one or more linked receipts,
 and ID remains accessible for disambiguation. The Tags filter matches a record
@@ -709,8 +713,9 @@ partial or unreadable state invalidates caches and gives inspection guidance.
 Record and maintain dated business mileage. Add trip preserves Trip date,
 Vehicle, Business miles, Starting location, Destination, Round trip, optional
 Tags, Business purpose, Notes, and Save mileage trip. Related fields may share
-desktop rows: Trip date/Vehicle, Business miles/Round trip, and
-Starting location/Destination.
+desktop rows: Trip date/Vehicle, Business miles/Return business miles when
+Round trip is selected, and Starting location/Destination. Tags appear
+immediately below the mileage row.
 
 The log presents From, To, and Tags filters, Trips and Business miles metrics,
 filtered CSV download, and the complete table with ID, Date, Miles, From,
@@ -751,7 +756,7 @@ When Google Maps is not configured, each lookup control is the single manual
 recorded-text input; the page does not render a duplicate recorded-text field.
 When either current endpoint was selected with Google autocomplete or the
 current mileage suggestion was calculated by Google Routes, a Google Maps note
-appears directly below the mileage control. Stored rows do not claim Google
+appears directly below the mileage and Tags controls. Stored rows do not claim Google
 provenance after reload because that metadata is intentionally not persisted.
 
 Round trip performs separate outbound and reversed return calculations and
