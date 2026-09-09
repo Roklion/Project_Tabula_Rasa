@@ -146,26 +146,6 @@ def _fresh_mixed_use_copy_source(storage, source_id: str) -> dict[str, str]:
     )
     if source is None:
         raise StorageError("The selected mixed-use expense no longer exists.")
-    linked_id = str(source.get("linked_transaction_id") or "").strip()
-    # The source listing validates source fields but deliberately permits an
-    # incomplete source for inspection. Re-read Transactions to ensure copy
-    # starts only from a complete authoritative source/projection pair.
-    transactions = storage.list_transactions(_force_refresh=True)
-    linked = next(
-        (
-            item
-            for item in transactions
-            if str(item.get("id") or "") == linked_id
-            and str(item.get("source_type") or "") == "mixed_use_expense"
-            and str(item.get("source_id") or "") == source_id
-        ),
-        None,
-    )
-    if linked is None:
-        raise StorageError(
-            "This mixed-use expense has no linked ledger projection and is "
-            "available for inspection only."
-        )
     return dict(source)
 
 
@@ -604,8 +584,32 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             )
         txn_date = st.date_input("Date", date.fromisoformat(str(defaults.get("txn_date", date.today().isoformat()))), key=f"mixed_date_{scope}")
         c1, c2 = st.columns(2)
-        account_id = c1.selectbox("Account", account_ids, index=account_ids.index(str(defaults.get("account_id", account_ids[0]))) if str(defaults.get("account_id", account_ids[0])) in account_ids else 0, format_func=account_paths.get, key=f"mixed_account_{scope}")
-        category_id = c2.selectbox("Category", category_ids, index=category_ids.index(str(defaults.get("category_id", category_ids[0]))) if str(defaults.get("category_id", category_ids[0])) in category_ids else 0, format_func=category_paths.get, key=f"mixed_category_{scope}")
+        current_account_id = str(defaults.get("account_id") or "")
+        account_index = (
+            account_ids.index(current_account_id)
+            if current_account_id in account_ids
+            else (None if copy_mode else 0)
+        )
+        account_id = c1.selectbox(
+            "Account",
+            account_ids,
+            index=account_index,
+            format_func=account_paths.get,
+            key=f"mixed_account_{scope}",
+        )
+        current_category_id = str(defaults.get("category_id") or "")
+        category_index = (
+            category_ids.index(current_category_id)
+            if current_category_id in category_ids
+            else (None if copy_mode else 0)
+        )
+        category_id = c2.selectbox(
+            "Category",
+            category_ids,
+            index=category_index,
+            format_func=category_paths.get,
+            key=f"mixed_category_{scope}",
+        )
         options, payee_by_id = _payee_options(payees)
         current_payee = str(defaults.get("payee_id", ""))
         if source and current_payee and current_payee not in options:
@@ -673,6 +677,14 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                 "this source in Mixed-use expenses and compare its ledger "
                 "projection before taking corrective action."
             )
+        if copy_mode and not account_id:
+            st.warning(
+                "Choose an active account before saving this copied mixed-use expense."
+            )
+        if copy_mode and not category_id:
+            st.warning(
+                "Choose an active Expense category before saving this copied mixed-use expense."
+            )
         cancel_copy_requested = False
         if copy_mode:
             save_column, cancel_column = st.columns(2)
@@ -698,6 +710,14 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                 save_error.error(selector_error)
             elif tag_error:
                 save_error.error(tag_error)
+            elif copy_mode and not account_id:
+                save_error.error(
+                    "Choose an active account before saving this copied mixed-use expense."
+                )
+            elif copy_mode and not category_id:
+                save_error.error(
+                    "Choose an active Expense category before saving this copied mixed-use expense."
+                )
             elif not rationale.strip():
                 save_error.error("Allocation rationale is required.")
             elif isinstance(recovery, Mapping) and not recovery_source and receipt_uploads:
