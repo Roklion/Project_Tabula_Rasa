@@ -188,17 +188,10 @@ def test_migration_rejects_malformed_payee_layout_before_writes() -> None:
     assert transaction_sheet.rows == before_transactions
 
 
-def test_migration_rejects_payees_worksheet_missing_created_at() -> None:
-    workbook = FakeWorkbook()
-    workbook.worksheet("Payees").rows[0] = ["id", "name", "active"]
-
-    with pytest.raises(ValueError, match="missing required headers: created_at"):
-        migrate_workbook(workbook)
-
-
 @pytest.mark.parametrize(
     ("headers", "message"),
     [
+        (["id", "name", "active"], "missing required headers: created_at"),
         (["id", "name", "active", ""], "blank header"),
         (["id", "name", "active", "active"], "duplicate headers"),
     ],
@@ -224,6 +217,7 @@ def test_migration_rejects_malformed_payees_headers(
 @pytest.mark.parametrize(
     ("header_change", "message"),
     [
+        (lambda headers: headers.remove("category_id"), "missing required headers: category_id"),
         (lambda headers: headers.__setitem__(1, ""), "blank header"),
         (lambda headers: headers.__setitem__(1, headers[0]), "duplicate headers"),
         (lambda headers: headers.append("payee"), "exactly one payee"),
@@ -242,39 +236,6 @@ def test_migration_rejects_malformed_transaction_headers(
     original_payees = [list(row) for row in payee_sheet.rows]
 
     with pytest.raises(ValueError, match=message):
-        migrate_workbook(workbook)
-
-    assert transaction_sheet.rows == original_transactions
-    assert payee_sheet.rows == original_payees
-
-
-def test_migration_rejects_incomplete_transaction_schema_before_writes() -> None:
-    workbook = FakeWorkbook()
-    transaction_sheet = workbook.worksheet("Transactions")
-    headers = list(transaction_sheet.rows[0])
-    headers.remove("category_id")
-    transaction_sheet.rows[0] = headers
-    transaction_sheet.rows.append(
-        [
-            "txn",
-            "2026-09-01",
-            "Expense",
-            "10.00",
-            "account",
-            "",
-            "category",
-            "Legacy vendor",
-            "",
-            "",
-            "",
-            "now",
-        ]
-    )
-    original_transactions = [list(row) for row in transaction_sheet.rows]
-    payee_sheet = workbook.worksheet("Payees")
-    original_payees = [list(row) for row in payee_sheet.rows]
-
-    with pytest.raises(ValueError, match="missing required headers: category_id"):
         migrate_workbook(workbook)
 
     assert transaction_sheet.rows == original_transactions
