@@ -121,6 +121,15 @@ def test_copied_transaction_description_preserves_multiword_copy_from_memo() -> 
     ) == "Copy From vendor invoice. Copy From source-123"
 
 
+def test_copied_transaction_description_preserves_delimited_copy_from_memo() -> None:
+    assert copied_transaction_description(
+        {
+            "id": "source-123",
+            "description": "Copy From vendor invoice: awaiting approval",
+        }
+    ) == "Copy From vendor invoice: awaiting approval. Copy From source-123"
+
+
 def test_copied_transaction_description_normalizes_blank_whitespace_id_memo() -> None:
     assert copied_transaction_description(
         {"id": "source 1", "description": "Copy From source 1"}
