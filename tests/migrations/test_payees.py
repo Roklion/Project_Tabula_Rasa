@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from unittest.mock import Mock
 
 import pytest
@@ -229,7 +230,7 @@ def test_migration_rejects_malformed_payees_headers(
     ],
 )
 def test_migration_rejects_malformed_transaction_headers(
-    header_change, message: str
+    header_change: Callable[[list[str]], None], message: str
 ) -> None:
     workbook = FakeWorkbook()
     transaction_sheet = workbook.worksheet("Transactions")

@@ -155,7 +155,9 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
 
 
 
-def _ledger_setup(storage):
+def _ledger_setup(
+    storage: GoogleSheetsStorage,
+) -> tuple[dict[str, str], dict[str, str]]:
     account = next(item for item in storage.list_accounts(active_only=False) if item["name"] == "Checking")
     category = next(item for item in storage.list_categories() if item["name"] == "Office")
     return account, category
@@ -470,8 +472,11 @@ def test_tag_merge_accepts_commit_before_uncertain_response(
     target = default_storage.create_tag("Target")
     source = default_storage.create_tag("Source")
     original_batch_update = default_storage._workbook.batch_update
+    calls = 0
 
     def commit_then_lose_response(body: object) -> None:
+        nonlocal calls
+        calls += 1
         original_batch_update(body)
         raise OSError("response lost after commit")
 
@@ -482,6 +487,7 @@ def test_tag_merge_accepts_commit_before_uncertain_response(
     result = default_storage.merge_tags(target["id"], [source["id"]])
 
     assert result["status"] == "fully_applied"
+    assert calls == 1
     assert source["id"] not in {
         item["id"] for item in default_storage.list_tags(active_only=False)
     }

@@ -12,7 +12,9 @@ from tabula_rasa.storage import (
 )
 from tests.fakes import FakeWorkbook
 
-def _ledger_setup(storage):
+def _ledger_setup(
+    storage: GoogleSheetsStorage,
+) -> tuple[dict[str, str], dict[str, str]]:
     account = next(item for item in storage.list_accounts(active_only=False) if item["name"] == "Checking")
     category = next(item for item in storage.list_categories() if item["name"] == "Office")
     return account, category
