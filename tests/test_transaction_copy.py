@@ -115,13 +115,13 @@ def test_copied_transaction_description_strips_stale_punctuated_marker() -> None
     ) == "Copy From new-source"
 
 
-def test_copied_transaction_description_strips_stale_whitespace_provenance() -> None:
+def test_copied_transaction_description_preserves_numeric_multiword_memo() -> None:
     assert copied_transaction_description(
         {
-            "id": "new-source",
-            "description": "Memo. Copy From source 1",
+            "id": "source-123",
+            "description": "Quarterly filing. Copy From tax year 2025",
         }
-    ) == "Memo. Copy From new-source"
+    ) == "Quarterly filing. Copy From tax year 2025. Copy From source-123"
 
 
 def test_copied_transaction_description_normalizes_whitespace_source_ids() -> None:
