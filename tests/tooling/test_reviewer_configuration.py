@@ -41,6 +41,6 @@ def test_gemini_configuration_is_parseable_and_safe() -> None:
     uncommented_config = "\n".join(
         line.split("#", 1)[0] for line in raw_config.splitlines()
     )
-    assert re.search(
-        r"(?i)\b(?:credential|token|password)\b", uncommented_config
-    ) is None
+    credential_pattern = r"(?i)(?:credential|token|password)"
+    assert re.search(credential_pattern, uncommented_config) is None
+    assert re.search(credential_pattern, "github_token: configured") is not None
