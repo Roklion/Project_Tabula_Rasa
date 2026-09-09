@@ -69,6 +69,23 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         assert raised.value.retryable is False
         assert "Transactions" not in self.storage._row_cache
 
+    def test_definitive_write_failure_is_not_retried(self) -> None:
+        failure = StorageUnavailableError("definitive failure", retryable=False)
+        writes = 0
+
+        def write() -> None:
+            nonlocal writes
+            writes += 1
+            raise failure
+
+        with pytest.raises(StorageUnavailableError, match="definitive failure") as raised:
+            self.storage._write_with_uncertain_readback(
+                "transaction update", write, lambda: "changed"
+            )
+
+        assert writes == 1
+        assert raised.value is failure
+
     def test_retry_backoff_precedes_refresh_callback(self) -> None:
         events: list[str] = []
         storage = GoogleSheetsStorage(
