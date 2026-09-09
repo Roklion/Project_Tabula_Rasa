@@ -10,6 +10,7 @@ import requests
 from tabula_rasa.google_drive import (
     GoogleDriveAccessError, GoogleDriveClient, GoogleDriveConflictError,
 )
+from tests.drive_fixtures import receipt_drive_file
 
 from ._support import FakeResponse, DriveSession, drive_settings, oauth_config
 
@@ -160,20 +161,14 @@ class TestGoogleDriveReceiptRecovery:
 
     def test_receipt_recovery_reuses_stable_identity_and_checksum(self) -> None:
         checksum = hashlib.sha256(b"receipt").hexdigest()
-        existing = {
-            "id": "restored123456",
-            "name": "statement.pdf",
-            "mimeType": "application/pdf",
-            "size": "7",
-            "appProperties": {
-                "tabulaRasaKind": "receipt",
-                "tabulaRasaProfile": "north",
-                "tabulaRasaReceiptId": "a" * 32,
-                "tabulaRasaSha256": checksum,
-                "tabulaRasaOriginalName": "statement.pdf",
-                "tabulaRasaOriginalFileId": "receipt123456",
-            },
-        }
+        existing = receipt_drive_file(
+            "restored123456",
+            "statement.pdf",
+            profile_key="north",
+            receipt_id="a" * 32,
+            sha256=checksum,
+            original_file_id="receipt123456",
+        )
         session = DriveSession(
             [
                 FakeResponse(200, {"files": [existing]}),
@@ -202,6 +197,110 @@ class TestGoogleDriveReceiptRecovery:
         assert restored == existing
         assert reused is True
         assert [request[0] for request in session.requests] == ["GET", "GET"]
+        identity_query = session.requests[0][2]["params"]["q"]
+        assert "'folder123456' in parents" in identity_query
+        assert "value='north'" in identity_query
+
+    @pytest.mark.parametrize(
+        ("foreign_profile", "foreign_folder", "inventory_has_foreign_file"),
+        [
+            ("south", "folder123456", True),
+            ("north", "otherfolder123456", False),
+        ],
+    )
+    def test_receipt_recovery_does_not_reuse_foreign_profile_or_folder_state(
+        self,
+        foreign_profile: str,
+        foreign_folder: str,
+        inventory_has_foreign_file: bool,
+    ) -> None:
+        checksum = hashlib.sha256(b"receipt").hexdigest()
+        foreign_file = receipt_drive_file(
+            "foreign123456",
+            "statement.pdf",
+            profile_key=foreign_profile,
+            receipt_id="a" * 32,
+            sha256=checksum,
+            original_file_id="receipt123456",
+            parent_id=foreign_folder,
+        )
+        responses = [
+            FakeResponse(200, {"files": []}),
+            FakeResponse(
+                200,
+                {"files": [foreign_file] if inventory_has_foreign_file else []},
+            ),
+        ]
+        if not inventory_has_foreign_file:
+            responses.append(
+                FakeResponse(
+                    200,
+                    {"id": "restored123456", "name": "statement.pdf"},
+                )
+            )
+            responses.append(
+                FakeResponse(
+                    200,
+                    {
+                        "files": [
+                            receipt_drive_file(
+                                "restored123456",
+                                "statement.pdf",
+                                profile_key="north",
+                                receipt_id="a" * 32,
+                                sha256=checksum,
+                                original_file_id="receipt123456",
+                                parent_id="folder123456",
+                                recovery_attempt="recovery-attempt",
+                            )
+                        ]
+                    },
+                )
+            )
+        session = DriveSession(responses)
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        if inventory_has_foreign_file:
+            with pytest.raises(GoogleDriveConflictError, match="recovery filename"):
+                client.restore_receipt(
+                    profile_key="north",
+                    folder_id="folder123456",
+                    stored_filename="statement.pdf",
+                    original_filename="statement.pdf",
+                    content=b"receipt",
+                    mime_type="application/pdf",
+                    receipt_id="a" * 32,
+                    sha256=checksum,
+                    old_file_id="receipt123456",
+                )
+        else:
+            restored, reused = client.restore_receipt(
+                profile_key="north",
+                folder_id="folder123456",
+                stored_filename="statement.pdf",
+                original_filename="statement.pdf",
+                content=b"receipt",
+                mime_type="application/pdf",
+                receipt_id="a" * 32,
+                sha256=checksum,
+                old_file_id="receipt123456",
+            )
+            assert restored["id"] == "restored123456"
+            assert reused is False
+
+        identity_query = session.requests[0][2]["params"]["q"]
+        inventory_query = session.requests[1][2]["params"]["q"]
+        assert "'folder123456' in parents" in identity_query
+        assert "value='north'" in identity_query
+        assert "'folder123456' in parents" in inventory_query
+        assert [request[0] for request in session.requests].count("POST") == (
+            0 if inventory_has_foreign_file else 1
+        )
 
 
     def test_receipt_recovery_refuses_a_case_only_filename_collision(
@@ -243,19 +342,14 @@ class TestGoogleDriveReceiptRecovery:
 
     def test_receipt_recovery_refuses_corrupt_existing_identity(self) -> None:
         checksum = hashlib.sha256(b"receipt").hexdigest()
-        existing = {
-            "id": "restored123456",
-            "name": "statement.pdf",
-            "mimeType": "application/pdf",
-            "size": "7",
-            "description": "statement.pdf",
-            "appProperties": {
-                "tabulaRasaKind": "receipt",
-                "tabulaRasaProfile": "north",
-                "tabulaRasaReceiptId": "a" * 32,
-                "tabulaRasaSha256": checksum,
-            },
-        }
+        existing = receipt_drive_file(
+            "restored123456",
+            "statement.pdf",
+            profile_key="north",
+            receipt_id="a" * 32,
+            sha256=checksum,
+            original_name="statement.pdf",
+        )
         session = DriveSession(
             [
                 FakeResponse(200, {"files": [existing]}),
@@ -289,19 +383,13 @@ class TestGoogleDriveReceiptRecovery:
         self,
     ) -> None:
         checksum = hashlib.sha256(b"receipt").hexdigest()
-        committed = {
-            "id": "restored123456",
-            "name": "statement.pdf",
-            "mimeType": "application/pdf",
-            "size": "7",
-            "appProperties": {
-                "tabulaRasaKind": "receipt",
-                "tabulaRasaProfile": "north",
-                "tabulaRasaReceiptId": "a" * 32,
-                "tabulaRasaSha256": checksum,
-                "tabulaRasaOriginalName": "statement.pdf",
-            },
-        }
+        committed = receipt_drive_file(
+            "restored123456",
+            "statement.pdf",
+            profile_key="north",
+            receipt_id="a" * 32,
+            sha256=checksum,
+        )
         session = DriveSession(
             [
                 FakeResponse(200, {"files": []}),
@@ -339,34 +427,28 @@ class TestGoogleDriveReceiptRecovery:
         self,
     ) -> None:
         checksum = hashlib.sha256(b"receipt").hexdigest()
-        properties = {
-            "tabulaRasaKind": "receipt",
-            "tabulaRasaProfile": "north",
-            "tabulaRasaReceiptId": "a" * 32,
-            "tabulaRasaSha256": checksum,
-            "tabulaRasaOriginalFileId": "receipt123456",
-        }
-        canonical = {
-            "id": "restored123456",
-            "name": "statement.pdf",
-            "mimeType": "application/pdf",
-            "size": "7",
-            "createdTime": "2026-08-01T12:00:00Z",
-            "description": "statement.pdf",
-            "appProperties": {
-                **properties,
-                "tabulaRasaRecoveryAttempt": "other-attempt",
-            },
-        }
-        uncertain = {
-            **canonical,
-            "id": "restored234567",
-            "createdTime": "2026-08-01T12:00:01Z",
-            "appProperties": {
-                **properties,
-                "tabulaRasaRecoveryAttempt": "1" * 32,
-            },
-        }
+        canonical = receipt_drive_file(
+            "restored123456",
+            "statement.pdf",
+            profile_key="north",
+            receipt_id="a" * 32,
+            sha256=checksum,
+            original_file_id="receipt123456",
+            recovery_attempt="other-attempt",
+        )
+        canonical["createdTime"] = "2026-08-01T12:00:00Z"
+        canonical["description"] = "statement.pdf"
+        uncertain = receipt_drive_file(
+            "restored234567",
+            "statement.pdf",
+            profile_key="north",
+            receipt_id="a" * 32,
+            sha256=checksum,
+            original_file_id="receipt123456",
+            recovery_attempt="1" * 32,
+        )
+        uncertain["createdTime"] = "2026-08-01T12:00:01Z"
+        uncertain["description"] = "statement.pdf"
         session = DriveSession(
             [
                 FakeResponse(200, {"files": []}),
