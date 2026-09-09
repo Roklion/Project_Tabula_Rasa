@@ -194,6 +194,29 @@ def test_expected_management_snapshot_preserves_falsy_values() -> None:
     expected = {"id": "tag-1", "active": False, "count": 0}
     GoogleSheetsStorage._assert_expected_managed_records(current, expected)
 
+
+def test_tag_edit_preserves_id_and_supports_activation(default_storage) -> None:
+    tag = default_storage.create_tag("Client")
+
+    renamed = default_storage.edit_tag(tag["id"], name="Renamed client", active=False)
+    reactivated = default_storage.edit_tag(tag["id"], active=True)
+
+    assert renamed["id"] == tag["id"]
+    assert renamed["name"] == "Renamed client"
+    assert renamed["active"] == "FALSE"
+    assert reactivated["id"] == tag["id"]
+    assert reactivated["active"] == "TRUE"
+
+
+def test_tag_rename_rejects_normalized_name_collision(default_storage) -> None:
+    first = default_storage.create_tag("First label")
+    second = default_storage.create_tag("Second label")
+
+    with pytest.raises(StorageConflictError, match="already exists"):
+        default_storage.edit_tag(second["id"], name=" first   label ")
+
+    assert default_storage.list_tags(active_only=False) == [first, second]
+
 def test_tag_merge_deduplicates_transactions_and_mileage(default_storage) -> None:
     account, category = _ledger_setup(default_storage)
     target = default_storage.create_tag("Target")
@@ -215,6 +238,27 @@ def test_tag_merge_deduplicates_transactions_and_mileage(default_storage) -> Non
     assert default_storage.list_mileage_trips()[0]["tag_ids"] == [target["id"]]
     assert source["id"] not in {item["id"] for item in default_storage.list_tags(active_only=False)}
     assert mileage["id"] == default_storage.list_mileage_trips()[0]["id"]
+
+
+def test_tag_merge_rewrites_mixed_use_source_and_projection(default_storage) -> None:
+    account, category = _ledger_setup(default_storage)
+    target = default_storage.create_tag("Target")
+    source = default_storage.create_tag("Source")
+    mixed = default_storage.create_mixed_use_expense(
+        txn_date="2026-01-01",
+        account_id=account["id"],
+        category_id=category["id"],
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Shared use",
+        tag_ids=[source["id"]],
+    )
+
+    default_storage.merge_tags(target["id"], [source["id"]])
+
+    assert default_storage.list_transactions()[0]["tag_ids"] == [target["id"]]
+    assert default_storage.list_mixed_use_expenses()[0]["tag_ids"] == [target["id"]]
+    assert mixed["id"] == default_storage.list_mixed_use_expenses()[0]["id"]
 
 
 def test_management_expected_snapshot_rejects_stale_merge(default_storage) -> None:

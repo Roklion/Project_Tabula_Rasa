@@ -296,6 +296,35 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         with pytest.raises(StorageValidationError):
             GoogleSheetsStorage(FakeWorkbook(headers))
 
+    @pytest.mark.parametrize(
+        ("title", "missing_header"),
+        [("Payees", "active"), ("Transactions", "category_id")],
+    )
+    def test_current_schema_rejects_missing_required_headers(
+        self, title: str, missing_header: str
+    ) -> None:
+        headers = dict(WORKSHEET_HEADERS)
+        headers[title] = tuple(
+            header for header in headers[title] if header != missing_header
+        )
+
+        with pytest.raises(StorageValidationError, match="is missing headers"):
+            GoogleSheetsStorage(FakeWorkbook(headers))
+
+    def test_current_schema_rejects_blank_header(self) -> None:
+        headers = dict(WORKSHEET_HEADERS)
+        headers["Payees"] = ("id", "name", "active", "")
+
+        with pytest.raises(StorageValidationError, match="blank header"):
+            GoogleSheetsStorage(FakeWorkbook(headers))
+
+    def test_current_schema_rejects_duplicate_header(self) -> None:
+        headers = dict(WORKSHEET_HEADERS)
+        headers["Payees"] = ("id", "name", "active", "active")
+
+        with pytest.raises(StorageValidationError, match="duplicate headers"):
+            GoogleSheetsStorage(FakeWorkbook(headers))
+
     def test_failed_hierarchy_edit_does_not_report_success_or_clear_cache(
         self,
     ) -> None:

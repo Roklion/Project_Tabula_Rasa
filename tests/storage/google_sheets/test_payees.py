@@ -43,6 +43,31 @@ def test_expected_payee_snapshot_protects_rename(default_storage) -> None:
     with pytest.raises(StorageConflictError, match="changed"):
         default_storage.edit_payee(payee["id"], name="New", expected_payee=expected)
 
+
+def test_payee_edit_preserves_id_and_supports_activation(default_storage) -> None:
+    payee = default_storage.create_payee("Vendor")
+
+    renamed = default_storage.edit_payee(
+        payee["id"], name="Renamed Vendor", active=False
+    )
+    reactivated = default_storage.edit_payee(payee["id"], active=True)
+
+    assert renamed["id"] == payee["id"]
+    assert renamed["name"] == "Renamed Vendor"
+    assert renamed["active"] == "FALSE"
+    assert reactivated["id"] == payee["id"]
+    assert reactivated["active"] == "TRUE"
+
+
+def test_payee_rename_rejects_normalized_name_collision(default_storage) -> None:
+    first = default_storage.create_payee("First vendor")
+    second = default_storage.create_payee("Second vendor")
+
+    with pytest.raises(StorageConflictError, match="already exists"):
+        default_storage.edit_payee(second["id"], name=" first   vendor ")
+
+    assert default_storage.list_payees(active_only=False) == [first, second]
+
 @pytest.mark.parametrize("reference_kind", ["payee", "account", "transfer_destination"])
 def test_edit_preserves_unchanged_inactive_references(reference_kind: str) -> None:
     workbook = FakeWorkbook()

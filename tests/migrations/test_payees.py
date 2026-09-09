@@ -155,6 +155,38 @@ def test_migration_rejects_existing_payee_without_id_before_transaction_write() 
     assert transaction_sheet.rows == original_transactions
 
 
+def test_migration_rejects_malformed_payee_layout_before_writes() -> None:
+    workbook = FakeWorkbook()
+    payee_sheet = workbook.worksheet("Payees")
+    payee_sheet.rows[0] = ["id", "name", "created_at"]
+    transaction_sheet = workbook.worksheet("Transactions")
+    transaction_sheet.rows[0][transaction_sheet.rows[0].index("payee_id")] = "payee"
+    transaction_sheet.rows.append(
+        [
+            "txn",
+            "2026-09-01",
+            "Expense",
+            "10.00",
+            "account",
+            "",
+            "category",
+            "Legacy vendor",
+            "",
+            "",
+            "",
+            "now",
+        ]
+    )
+    before_payees = [list(row) for row in payee_sheet.rows]
+    before_transactions = [list(row) for row in transaction_sheet.rows]
+
+    with pytest.raises(ValueError, match="missing required headers: active"):
+        migrate_workbook(workbook)
+
+    assert payee_sheet.rows == before_payees
+    assert transaction_sheet.rows == before_transactions
+
+
 def test_migration_appends_payees_in_existing_header_order() -> None:
     workbook = FakeWorkbook()
     payee_sheet = workbook.worksheet("Payees")
