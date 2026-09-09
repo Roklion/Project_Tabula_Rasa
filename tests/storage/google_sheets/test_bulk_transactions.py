@@ -226,6 +226,28 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
 
         assert result == {"status": "fully_applied", "count": "2"}
 
+    def test_uncertain_bulk_category_response_is_confirmed_without_retry(
+        self,
+    ) -> None:
+        first, second, replacement = self._bulk_transaction_fixture()
+        expected = self.storage.list_transactions(_force_refresh=True)
+        original_batch = self.workbook.batch_update
+
+        def commit_then_timeout(body: dict[str, object]) -> None:
+            original_batch(body)
+            raise OSError("response lost after commit")
+
+        self.workbook.batch_update = Mock(side_effect=commit_then_timeout)
+
+        result = self.storage.bulk_change_transaction_category(
+            [first["id"], second["id"]],
+            expected_transactions=expected,
+            category_id=replacement["id"],
+        )
+
+        assert result == {"status": "fully_applied", "count": "2"}
+        assert self.workbook.batch_update.call_count == 1
+
     def test_uncertain_bulk_category_ignores_unselected_rows(self) -> None:
         first, second, replacement = self._bulk_transaction_fixture()
         unrelated = self.storage.create_transaction(
