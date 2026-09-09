@@ -118,6 +118,31 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         assert categories[first["id"]] == replacement["id"]
         assert categories[second["id"]] == replacement["id"]
 
+    def test_bulk_category_change_updates_all_pending_rows_in_one_batch(self) -> None:
+        first, second, replacement = self._bulk_transaction_fixture()
+        expected = [
+            transaction
+            for transaction in self.storage.list_transactions(_force_refresh=True)
+            if transaction["id"] in {first["id"], second["id"]}
+        ]
+        workbook_batch = Mock(wraps=self.workbook.batch_update)
+        self.workbook.batch_update = workbook_batch
+
+        result = self.storage.bulk_change_transaction_category(
+            [first["id"], second["id"]],
+            expected_transactions=expected,
+            category_id=replacement["id"],
+        )
+
+        assert result == {"status": "fully_applied", "count": "2"}
+        assert workbook_batch.call_count == 1
+        categories = {
+            item["id"]: item["category_id"]
+            for item in self.storage.list_transactions()
+        }
+        assert categories[first["id"]] == replacement["id"]
+        assert categories[second["id"]] == replacement["id"]
+
     def test_bulk_category_change_ignores_unrelated_concurrent_edit(self) -> None:
         first, second, replacement = self._bulk_transaction_fixture()
         expected = [
@@ -143,6 +168,13 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
 
     def test_bulk_delete_resolves_fresh_rows_after_row_order_changes(self) -> None:
         first, second, _ = self._bulk_transaction_fixture()
+        unrelated = self.storage.create_transaction(
+            txn_date="2026-07-20",
+            kind="Expense",
+            amount=3,
+            account_id=first["account_id"],
+            category_id=first["category_id"],
+        )
         expected = [
             transaction
             for transaction in self.storage.list_transactions(_force_refresh=True)
@@ -154,15 +186,13 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             transaction_sheet.rows[1],
         )
         result = self.storage.bulk_delete_transactions(
-            [first["id"]],
-            expected_transactions=[
-                item for item in expected if item["id"] == first["id"]
-            ],
+            [first["id"], second["id"]],
+            expected_transactions=expected,
         )
 
-        assert result == {"status": "fully_applied", "count": "1"}
+        assert result == {"status": "fully_applied", "count": "2"}
         assert [item["id"] for item in self.storage.list_transactions()] == [
-            second["id"]
+            unrelated["id"]
         ]
 
     def test_bulk_mutation_rejects_changed_complete_selection(self) -> None:

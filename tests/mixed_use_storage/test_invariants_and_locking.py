@@ -494,3 +494,44 @@ def test_receipt_recovery_rejects_half_populated_provenance(
         default_storage.apply_receipt_recovery_plan(
             [expected_transaction], {expected_transaction["id"]: []}
         )
+
+
+def test_receipt_link_scans_for_duplicate_ownership_inside_lock(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    scan_started = threading.Event()
+    finished = threading.Event()
+    errors: list[BaseException] = []
+    original_list_transactions = default_storage.list_transactions
+
+    def list_transactions(*args: object, **kwargs: object) -> list[dict[str, str]]:
+        scan_started.set()
+        return original_list_transactions(*args, **kwargs)
+
+    default_storage.list_transactions = list_transactions  # type: ignore[method-assign]
+
+    def link_receipt() -> None:
+        try:
+            default_storage.link_mixed_use_receipt(
+                source["id"],
+                reference={"id": "receipt-lock-check", "name": "Receipt"},
+            )
+        except BaseException as error:  # pragma: no cover - assertion below reports it
+            errors.append(error)
+        finally:
+            finished.set()
+
+    with default_storage._workbook_locks.ledger:
+        worker = threading.Thread(target=link_receipt)
+        worker.start()
+        assert not scan_started.wait(0.1)
+        assert not finished.wait(0.1)
+    assert finished.wait(1)
+    worker.join(timeout=1)
+    assert not errors
