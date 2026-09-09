@@ -599,6 +599,69 @@ def test_receipt_recovery_refreshes_transaction_rows_with_source_snapshot(
     ]
 
 
+def test_receipt_recovery_restarts_after_unrelated_receipt_drift_during_final_read(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+        receipt_references=[{"id": "old-receipt", "name": "Receipt"}],
+    )
+    unrelated = default_storage.create_transaction(
+        **expense_inputs(default_storage),
+        kind="Expense",
+        amount="20",
+    )
+    expected_transactions = default_storage.list_transactions()
+    original_snapshot = default_storage._snapshot
+    final_snapshot_seen = False
+
+    def snapshot_with_unrelated_receipt_drift(
+        titles: object, *, force_refresh: bool = False
+    ) -> dict[str, object]:
+        nonlocal final_snapshot_seen
+        titles_list = list(titles)  # type: ignore[arg-type]
+        if titles_list == ["Transactions", "MixedUseExpenses"]:
+            final_snapshot_seen = True
+            worksheet = default_storage._worksheet("Transactions")
+            headers = default_storage._headers("Transactions")
+            unrelated_row = next(
+                row
+                for row in worksheet.rows[1:]
+                if row[headers.index("id")] == unrelated["id"]
+            )
+            unrelated_row[headers.index("receipt_references")] = (
+                '[{"id":"unrelated-receipt","name":"Receipt"}]'
+            )
+            default_storage._invalidate("Transactions")
+        return original_snapshot(titles_list, force_refresh=force_refresh)
+
+    default_storage._snapshot = snapshot_with_unrelated_receipt_drift  # type: ignore[method-assign]
+    applied, fresh_transactions = default_storage.apply_receipt_recovery_plan(
+        expected_transactions,
+        {source["linked_transaction_id"]: [{"id": "new-receipt", "name": "Receipt"}]},
+    )
+
+    assert applied is False
+    assert final_snapshot_seen is True
+    assert (
+        next(row for row in fresh_transactions if row["id"] == unrelated["id"])[
+            "receipt_references"
+        ]
+        == '[{"id":"unrelated-receipt","name":"Receipt"}]'
+    )
+    assert (
+        next(
+            row
+            for row in fresh_transactions
+            if row["id"] == source["linked_transaction_id"]
+        )["receipt_references"]
+        == source["receipt_references"]
+    )
+
+
 def test_receipt_recovery_restarts_after_mixed_use_provenance_drift(
     default_storage: GoogleSheetsStorage,
 ) -> None:

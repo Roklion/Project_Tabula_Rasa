@@ -496,3 +496,64 @@ class TestGoogleDriveReceiptRecovery:
             session.requests[2][2]["data"]
         )
         assert session.requests[5][1].endswith("/files/restored234567")
+
+
+    def test_receipt_recovery_discards_its_concurrent_later_create(
+        self,
+    ) -> None:
+        checksum = hashlib.sha256(b"receipt").hexdigest()
+        canonical = receipt_drive_file(
+            "restored123456",
+            "statement.pdf",
+            profile_key="north",
+            receipt_id="a" * 32,
+            sha256=checksum,
+            original_file_id="receipt123456",
+        )
+        canonical["createdTime"] = "2026-08-01T12:00:00Z"
+        canonical["description"] = "statement.pdf"
+        later = {
+            **canonical,
+            "id": "restored234567",
+            "createdTime": "2026-08-01T12:00:01Z",
+        }
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, later),
+                FakeResponse(200, {"files": [later, canonical]}),
+                FakeResponse(200, content=b"receipt"),
+                FakeResponse(204),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        restored, reused = client.restore_receipt(
+            profile_key="north",
+            folder_id="folder123456",
+            stored_filename="statement.pdf",
+            original_filename="statement.pdf",
+            content=b"receipt",
+            mime_type="application/pdf",
+            receipt_id="a" * 32,
+            sha256=checksum,
+            old_file_id="receipt123456",
+        )
+
+        assert restored["id"] == canonical["id"]
+        assert reused is False
+        assert [request[0] for request in session.requests] == [
+            "GET",
+            "GET",
+            "POST",
+            "GET",
+            "GET",
+            "DELETE",
+        ]
+        assert session.requests[5][1].endswith("/files/restored234567")
