@@ -610,6 +610,7 @@ def reset_profile_presentation_state(
     mixed_use_prefixes = (
         f"mixed_use_log_{previous_profile_key}_",
         f"mixed_use_copy_{previous_profile_key}_",
+        f"mixed_cancel_copy_{previous_profile_key}_",
         f"mixed_use_edit_baseline_{previous_profile_key}",
         f"mixed_confirm_delete_{previous_profile_key}_",
         f"mixed_date_{previous_profile_key}_",
