@@ -259,7 +259,7 @@ def render_add_mileage_form(context: MileageContext, tags: object) -> None:
         return_miles = miles
         if round_trip:
             _set_widget_default("add_mileage_return_miles", float(miles))
-            return_miles = st.number_input(
+            return_miles = c2.number_input(
                 "Return business miles",
                 min_value=0.0,
                 step=0.1,
@@ -267,6 +267,12 @@ def render_add_mileage_form(context: MileageContext, tags: object) -> None:
                 key="add_mileage_return_miles",
                 help="The return route is editable independently.",
             )
+        else:
+            c2.empty()
+        tag_ids, new_tag_name = _render_tag_selector(
+            tags,
+            key="add_mileage_tag_ids",
+        )
         if _needs_google_maps_attribution(
             start, destination_value, route_state, fingerprint
         ):
@@ -275,10 +281,6 @@ def render_add_mileage_form(context: MileageContext, tags: object) -> None:
             "Business purpose", key="add_mileage_purpose"
         )
         notes = st.text_area("Notes (optional)", key="add_mileage_notes")
-        tag_ids, new_tag_name = _render_tag_selector(
-            tags,
-            key="add_mileage_tag_ids",
-        )
         save_error = st.empty()
         submitted = st.button("Save mileage trip", type="primary", width="stretch")
         if calculate_requested and context.route_mileage is not None:

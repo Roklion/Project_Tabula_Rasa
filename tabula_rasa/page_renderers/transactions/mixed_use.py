@@ -159,9 +159,7 @@ def _mixed_use_log_rows(
     return [
         {
             "Date": str(item.get("txn_date", "")),
-            "Payee / description": str(
-                item.get("payee") or item.get("description", "")
-            ),
+            "Payee": str(item.get("payee", "")),
             "Account": account_paths.get(str(item.get("account_id", "")), "Unknown"),
             "Category": category_paths.get(
                 str(item.get("category_id", "")), "Unknown"
@@ -170,7 +168,12 @@ def _mixed_use_log_rows(
             "Business %": str(item.get("business_use_percentage", "")),
             "Allocated": f"${item.get('allocated_amount', '0.00')}",
             "Rationale": str(item.get("allocation_rationale", "")),
-            "Status": str(item.get("ledger_status", "linked")),
+            "Description": str(item.get("description", "")),
+            "Receipt": (
+                "\U0001f4ce"
+                if decode_receipt_references(item.get("receipt_references", ""))
+                else ""
+            ),
         }
         for item in sources
     ]

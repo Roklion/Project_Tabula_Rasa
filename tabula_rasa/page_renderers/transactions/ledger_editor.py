@@ -203,6 +203,11 @@ def render_transaction_editor(
             edited_payee_id, edited_new_payee = resolve_payee_selection(
                 payee_value, available_payees, payee_options
             )
+            edited_reference = st.text_input(
+                "Edit reference",
+                value=selected.get("reference", ""),
+                key=f"edit_transaction_reference_{edit_widget_scope}",
+            )
             source_tag_ids = [
                 str(tag_id).strip()
                 for tag_id in selected.get("tag_ids", [])
@@ -218,11 +223,6 @@ def render_transaction_editor(
                 preserve_inactive_ids=(
                     source_tag_ids if not copy_mode else ()
                 ),
-            )
-            edited_reference = st.text_input(
-                "Edit reference",
-                value=selected.get("reference", ""),
-                key=f"edit_transaction_reference_{edit_widget_scope}",
             )
             edited_description = st.text_input(
                 "Edit description",

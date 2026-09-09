@@ -6,6 +6,7 @@ from tabula_rasa.page_renderers.transactions.mixed_use import (
     _MixedUseReceiptStorage,
     _clear_mixed_use_selection,
     _incomplete_source_ids,
+    _mixed_use_log_rows,
     _mixed_use_selection_ids,
     _mixed_use_receipt_recovery_active,
     _pending_create_ids,
@@ -42,6 +43,57 @@ def _mixed_tab(app):
 
 def _tab_field(tab, collection: str, label: str):
     return next(item for item in getattr(tab, collection) if item.label == label)
+
+
+def test_mixed_use_log_puts_receipt_indicator_at_the_end() -> None:
+    rows = _mixed_use_log_rows(
+        [
+            {
+                "txn_date": "2026-09-08",
+                "payee": "Vendor",
+                "description": "Shared office supplies",
+                "account_id": "account",
+                "category_id": "category",
+                "total_expense": "100.00",
+                "business_use_percentage": "25",
+                "allocated_amount": "25.00",
+                "allocation_rationale": "Shared workspace",
+                "receipt_references": (
+                    '[{"id":"' + "a" * 32 + '","name":"receipt.pdf"}]'
+                ),
+            },
+            {
+                "txn_date": "2026-09-07",
+                "payee": "Other vendor",
+                "account_id": "account",
+                "category_id": "category",
+                "total_expense": "50.00",
+                "business_use_percentage": "50",
+                "allocated_amount": "25.00",
+                "allocation_rationale": "Shared service",
+                "receipt_references": "[]",
+            },
+        ],
+        {"account": "Checking"},
+        {"category": "Office"},
+    )
+
+    assert list(rows[0]) == [
+        "Date",
+        "Payee",
+        "Account",
+        "Category",
+        "Total",
+        "Business %",
+        "Allocated",
+        "Rationale",
+        "Description",
+        "Receipt",
+    ]
+    assert rows[0]["Receipt"] == "\U0001f4ce"
+    assert rows[0]["Payee"] == "Vendor"
+    assert rows[0]["Description"] == "Shared office supplies"
+    assert rows[1]["Receipt"] == ""
 
 
 def test_mixed_use_preview_uses_decimal_allocation_and_rationale() -> None:
