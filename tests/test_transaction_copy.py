@@ -115,10 +115,10 @@ def test_copied_transaction_description_normalizes_whitespace_source_ids() -> No
     ) == "Memo. Copy From source 1"
     assert copied_transaction_description(
         {
-            "id": "new-source",
+            "id": "source 1",
             "description": "Copied from transaction source 1: Memo",
         }
-    ) == "Memo. Copy From new-source"
+    ) == "Memo. Copy From source 1"
 
 
 def test_copied_transaction_description_preserves_multiword_copy_from_memo() -> None:
@@ -128,6 +128,20 @@ def test_copied_transaction_description_preserves_multiword_copy_from_memo() -> 
             "description": "Copy From vendor invoice",
         }
     ) == "Copy From vendor invoice. Copy From source-123"
+
+
+def test_copied_transaction_description_preserves_multiword_legacy_prefix_memo() -> None:
+    assert copied_transaction_description(
+        {
+            "id": "source-123",
+            "description": (
+                "Copied from transaction vendor invoice: awaiting approval"
+            ),
+        }
+    ) == (
+        "Copied from transaction vendor invoice: awaiting approval. "
+        "Copy From source-123"
+    )
 
 
 def test_copied_transaction_description_preserves_delimited_copy_from_memo() -> None:

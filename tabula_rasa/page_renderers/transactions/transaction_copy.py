@@ -19,10 +19,11 @@ def copied_transaction_description(transaction: Mapping[str, object]) -> str:
     # the current format puts it after the memo. Remove either form repeatedly
     # so copying an already-copied transaction does not accumulate stale notes.
     provenance_prefix = re.compile(
-        r"^Copy From\s+(?:[^\s:.]+|"
+        r"^Copy From\s+(?:[^\s]+|"
         rf"{re.escape(source_id)})"
         r"(?:\s*:\s+|\.\s+)"
-        r"|^Copied from transaction\s+.+?"
+        r"|^Copied from transaction\s+(?:[^\s]+|"
+        rf"{re.escape(source_id)})"
         r"(?:\s*:\s+|\.\s+)"
     )
     provenance_prefix_only = re.compile(
