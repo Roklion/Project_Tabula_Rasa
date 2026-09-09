@@ -12,6 +12,11 @@ from tabula_rasa.page_renderers.tag_selector import (
     tag_selector_error,
 )
 from tabula_rasa.page_renderers.transactions.payee_selector import resolve_payee_selection
+from tabula_rasa.page_renderers.transactions.transaction_copy import (
+    _copyable_tag_ids,
+    _editable_account_ids,
+    copied_transaction_description,
+)
 from tabula_rasa.page_renderers.transactions.receipts import (
     RECEIPT_UPLOAD_TYPES,
     clear_receipt_creation_recovery,
@@ -25,6 +30,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
 )
 from tabula_rasa.storage import (
     StorageError,
+    StorageNotFoundError,
     StorageValidationError,
     decode_receipt_references,
 )
@@ -107,6 +113,67 @@ def _pending_create_ids(
     state[source_key] = source_id
     state[transaction_key] = transaction_id
     return source_id, transaction_id
+
+
+def _mixed_use_copy_keys(profile: str) -> dict[str, str]:
+    """Return the profile-local keys used by a mixed-use copy editor."""
+    return {
+        "source_id": _key(profile, "copy_source_id"),
+        "snapshot": _key(profile, "copy_snapshot"),
+        "new_source_id": _key(profile, "copy_new_source_id"),
+        "new_transaction_id": _key(profile, "copy_new_transaction_id"),
+        "generation": _key(profile, "copy_generation"),
+    }
+
+
+def _clear_mixed_use_copy(
+    state: MutableMapping[str, object], profile: str
+) -> None:
+    """Discard a copy snapshot without touching its authoritative source."""
+    keys = _mixed_use_copy_keys(profile)
+    for name in ("source_id", "snapshot", "new_source_id", "new_transaction_id"):
+        state.pop(keys[name], None)
+
+
+def _fresh_mixed_use_copy_source(storage, source_id: str) -> dict[str, str]:
+    """Re-read and validate a complete source/projection pair before copying."""
+    source_id = str(source_id or "").strip()
+    if not source_id:
+        raise StorageError("Select a mixed-use expense before copying it.")
+    try:
+        return dict(storage.get_mixed_use_expense(source_id, _force_refresh=True))
+    except StorageNotFoundError as error:
+        raise StorageError("The selected mixed-use expense no longer exists.") from error
+
+
+def _start_mixed_use_copy(
+    state: MutableMapping[str, object],
+    profile: str,
+    source: Mapping[str, object],
+) -> tuple[str, str]:
+    """Store an independent copy snapshot and stable IDs for a new source."""
+    keys = _mixed_use_copy_keys(profile)
+    source_id = str(source.get("id") or "").strip()
+    if not source_id:
+        raise ValueError("Mixed-use copy source must have an ID")
+    new_source_id = str(uuid4())
+    new_transaction_id = str(uuid4())
+    snapshot = dict(source)
+    # Receipt links belong only to the authoritative source. Keep the copy
+    # snapshot explicit so they cannot leak into a later create payload.
+    snapshot["receipt_references"] = "[]"
+    snapshot["description"] = copied_transaction_description(
+        {"id": source_id, "description": snapshot.get("description", "")}
+    )
+    state[keys["source_id"]] = source_id
+    state[keys["snapshot"]] = snapshot
+    state[keys["new_source_id"]] = new_source_id
+    state[keys["new_transaction_id"]] = new_transaction_id
+    state[keys["generation"]] = int(state.get(keys["generation"], 0)) + 1
+    state[_key(profile, "table_generation")] = int(
+        state.get(_key(profile, "table_generation"), 0)
+    ) + 1
+    return new_source_id, new_transaction_id
 
 def _active_ids(items: Sequence[Mapping[str, object]]) -> list[str]:
     return [str(item.get("id") or "") for item in items if str(item.get("id") or "")]
@@ -283,6 +350,19 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                 "",
             )
     source_by_id = {str(item["id"]): item for item in sources}
+    copy_keys = _mixed_use_copy_keys(profile)
+    copy_snapshot = st.session_state.get(copy_keys["snapshot"])
+    copy_source_id = str(st.session_state.get(copy_keys["source_id"]) or "")
+    copy_mode = isinstance(copy_snapshot, Mapping) and bool(copy_source_id)
+    if not copy_mode:
+        # Partial state can be left behind by a profile switch or an
+        # interrupted rerun. Never allow it to turn into a mutable editor.
+        if any(
+            st.session_state.get(copy_keys[name])
+            for name in ("source_id", "snapshot", "new_source_id", "new_transaction_id")
+        ):
+            _clear_mixed_use_copy(st.session_state, profile)
+        copy_snapshot = None
     recovery = st.session_state.get(receipt_creation_workflow_key(profile))
     if isinstance(recovery, Mapping):
         recovery_transaction_id = str(recovery.get("transaction_id") or "")
@@ -359,14 +439,39 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             hide_index=True,
             width="stretch",
             key=table_key,
-            on_select=select_mixed_use_source,
-            selection_mode="single-row",
+            on_select=("ignore" if copy_mode else select_mixed_use_source),
+            selection_mode=[] if copy_mode else "single-row",
         )
         selected_id = str(st.session_state.get(selected_key, "") or "")
+        copy_button = st.button(
+            "Copy mixed-use expense",
+            key=_key(profile, "copy_button"),
+            disabled=(
+                copy_mode
+                or not selected_id
+                or selected_id in incomplete_source_ids
+            ),
+            help=(
+                "Select a complete mixed-use expense to create an independent copy."
+                if not selected_id or selected_id not in incomplete_source_ids
+                else "Incomplete mixed-use sources are available for inspection only."
+            ),
+        )
+        if copy_button and selected_id:
+            try:
+                fresh_source = _fresh_mixed_use_copy_source(
+                    context.storage, selected_id
+                )
+                _start_mixed_use_copy(st.session_state, profile, fresh_source)
+            except StorageError as error:
+                st.error(str(error))
+            else:
+                st.rerun()
         if selected_id:
             if st.button(
                 "Add new mixed-use expense",
                 key=_key(profile, "clear_selection"),
+                disabled=copy_mode,
             ):
                 _clear_mixed_use_selection(st.session_state, profile)
                 st.session_state[selection_scope_key] = selection_scope
@@ -374,6 +479,10 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
     else:
         st.info("No mixed-use expenses exist for this business profile.")
     source = source_by_id.get(selected_id)
+    # A copy is based on its immutable initialization snapshot. The original
+    # source may be edited or removed while this form is open.
+    if copy_mode:
+        source = None
     mixed_use_receipt_recovery = _mixed_use_receipt_recovery_active(
         st.session_state,
         profile,
@@ -399,8 +508,13 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         if st.session_state.get(baseline_id_key) == selected_id:
             st.session_state[baseline_key] = dict(updated_source)
 
-    defaults = source or {}
-    scope = f"{profile}_{selected_id or 'new'}"
+    defaults = copy_snapshot if copy_mode else (source or {})
+    copy_generation = int(st.session_state.get(copy_keys["generation"], 0))
+    scope = (
+        f"{profile}_{copy_source_id}_copy_{copy_generation}"
+        if copy_mode
+        else f"{profile}_{selected_id or 'new'}"
+    )
     context.reset_widget_state_if_requested(
         _key(profile, "form_reset"),
         keys=[
@@ -424,7 +538,14 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         if item.get("kind") == "Expense"
         and str(item.get("active", "TRUE")).upper() == "TRUE"
     ]
-    if not source:
+    if copy_mode:
+        account_ids = _editable_account_ids(
+            accounts,
+            [str(defaults.get("account_id") or "")],
+            copy_mode=True,
+        )
+        category_ids = list(active_category_ids)
+    elif not source:
         account_ids, category_ids = active_account_ids, active_category_ids
     else:
         current_account = str(defaults.get("account_id") or "")
@@ -437,10 +558,22 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             category_ids.append(current_category)
     if not account_ids or not category_ids:
         st.warning("Create an active account and an Expense category before recording a mixed-use expense.")
+        if copy_mode and st.button(
+            "Cancel copy",
+            key=f"mixed_cancel_copy_{scope}",
+        ):
+            _clear_mixed_use_copy(st.session_state, profile)
+            st.rerun()
         return
     left, right = st.columns([3, 2])
     with left:
-        if source:
+        if copy_mode:
+            st.markdown("#### Copy mixed-use expense")
+            st.caption(
+                f"Create a new mixed-use source copied from {copy_source_id}. "
+                "The original source and projection will not be changed."
+            )
+        elif source:
             st.markdown("#### Edit mixed-use expense")
             st.caption(
                 "Editing the selected source updates its existing ledger "
@@ -454,8 +587,32 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             )
         txn_date = st.date_input("Date", date.fromisoformat(str(defaults.get("txn_date", date.today().isoformat()))), key=f"mixed_date_{scope}")
         c1, c2 = st.columns(2)
-        account_id = c1.selectbox("Account", account_ids, index=account_ids.index(str(defaults.get("account_id", account_ids[0]))) if str(defaults.get("account_id", account_ids[0])) in account_ids else 0, format_func=account_paths.get, key=f"mixed_account_{scope}")
-        category_id = c2.selectbox("Category", category_ids, index=category_ids.index(str(defaults.get("category_id", category_ids[0]))) if str(defaults.get("category_id", category_ids[0])) in category_ids else 0, format_func=category_paths.get, key=f"mixed_category_{scope}")
+        current_account_id = str(defaults.get("account_id") or "")
+        account_index = (
+            account_ids.index(current_account_id)
+            if current_account_id in account_ids
+            else (None if copy_mode else 0)
+        )
+        account_id = c1.selectbox(
+            "Account",
+            account_ids,
+            index=account_index,
+            format_func=account_paths.get,
+            key=f"mixed_account_{scope}",
+        )
+        current_category_id = str(defaults.get("category_id") or "")
+        category_index = (
+            category_ids.index(current_category_id)
+            if current_category_id in category_ids
+            else (None if copy_mode else 0)
+        )
+        category_id = c2.selectbox(
+            "Category",
+            category_ids,
+            index=category_index,
+            format_func=category_paths.get,
+            key=f"mixed_category_{scope}",
+        )
         options, payee_by_id = _payee_options(payees)
         current_payee = str(defaults.get("payee_id", ""))
         if source and current_payee and current_payee not in options:
@@ -470,56 +627,100 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         c1, c2 = st.columns(2)
         reference = c1.text_input("Reference (optional)", value=str(defaults.get("reference", "")), key=f"mixed_reference_{scope}")
         description = c2.text_input("Description / memo", value=str(defaults.get("description", "")), key=f"mixed_description_{scope}")
+        source_tag_ids = _copyable_tag_ids(tags, defaults.get("tag_ids", ())) if copy_mode else defaults.get("tag_ids", ())
         tag_ids, new_tag_name = render_tag_selector(
             tags,
             label="Tags",
             key=f"mixed_tags_{scope}",
-            selected_ids=defaults.get("tag_ids", ()),
+            selected_ids=source_tag_ids,
             preserve_inactive_ids=defaults.get("tag_ids", ()) if source else (),
         )
         c1, c2 = st.columns(2)
         total_expense = c1.text_input("Total Expense", value=str(defaults.get("total_expense", "0.00") or "0.00"), key=f"mixed_total_{scope}", help="Enter a positive currency amount.")
         business_use_percentage = c2.text_input("Business Use %", value=str(defaults.get("business_use_percentage", "0") or "0"), key=f"mixed_percentage_{scope}", help="Greater than 0 and no more than 100; up to five decimal places.")
         rationale = st.text_area("Allocation Rationale (required)", value=str(defaults.get("allocation_rationale", "")), key=f"mixed_rationale_{scope}")
-        receipt_uploads = st.file_uploader(
-            "Receipt (optional)",
-            type=RECEIPT_UPLOAD_TYPES,
-            accept_multiple_files=True,
-            key=f"mixed_receipts_{scope}",
-            disabled=bool(
-                isinstance(recovery, Mapping)
-                and not recovery_source
-                or mixed_use_receipt_recovery
-            ),
-            help=(
-                "Resolve the pending receipt recovery in the transaction editor "
-                "before uploading receipts here."
-                if mixed_use_receipt_recovery
-                else "Resolve the pending receipt recovery in Add transaction "
-                "before uploading receipts here."
-                if isinstance(recovery, Mapping) and not recovery_source
-                else None
-            ),
-        )
+        if copy_mode:
+            receipt_uploads = None
+            st.info(
+                "Receipts are not copied. Save this source first, then attach "
+                "receipts from its editor."
+            )
+        else:
+            receipt_uploads = st.file_uploader(
+                "Receipt (optional)",
+                type=RECEIPT_UPLOAD_TYPES,
+                accept_multiple_files=True,
+                key=f"mixed_receipts_{scope}",
+                disabled=bool(
+                    isinstance(recovery, Mapping)
+                    and not recovery_source
+                    or mixed_use_receipt_recovery
+                ),
+                help=(
+                    "Resolve the pending receipt recovery in the transaction editor "
+                    "before uploading receipts here."
+                    if mixed_use_receipt_recovery
+                    else "Resolve the pending receipt recovery in Add transaction "
+                    "before uploading receipts here."
+                    if isinstance(recovery, Mapping) and not recovery_source
+                    else None
+                ),
+            )
         save_error = st.empty()
-        save_label = "Save changes" if source else "Save mixed-use expense"
+        save_label = (
+            "Save copied mixed-use expense"
+            if copy_mode
+            else "Save changes"
+            if source
+            else "Save mixed-use expense"
+        )
         if source_incomplete:
             st.info(
                 "Inspection only: saving and repair are unavailable. Inspect "
                 "this source in Mixed-use expenses and compare its ledger "
                 "projection before taking corrective action."
             )
-        if st.button(
-            save_label,
-            type="primary",
-            key=f"mixed_save_{scope}",
-            disabled=source_incomplete,
-        ):
+        if copy_mode and not account_id:
+            st.warning(
+                "Choose an active account before saving this copied mixed-use expense."
+            )
+        if copy_mode and not category_id:
+            st.warning(
+                "Choose an active Expense category before saving this copied mixed-use expense."
+            )
+        cancel_copy_requested = False
+        if copy_mode:
+            save_column, cancel_column = st.columns(2)
+            save_button = save_column.button(
+                save_label,
+                type="primary",
+                key=f"mixed_save_{scope}",
+            )
+            cancel_copy_requested = cancel_column.button(
+                "Cancel copy",
+                key=f"mixed_cancel_copy_{scope}",
+            )
+        else:
+            save_button = st.button(
+                save_label,
+                type="primary",
+                key=f"mixed_save_{scope}",
+                disabled=source_incomplete,
+            )
+        if save_button:
             tag_error = inline_tag_name_error(new_tag_name)
             if (selector_error := tag_selector_error(f"mixed_tags_{scope}")):
                 save_error.error(selector_error)
             elif tag_error:
                 save_error.error(tag_error)
+            elif copy_mode and not account_id:
+                save_error.error(
+                    "Choose an active account before saving this copied mixed-use expense."
+                )
+            elif copy_mode and not category_id:
+                save_error.error(
+                    "Choose an active Expense category before saving this copied mixed-use expense."
+                )
             elif not rationale.strip():
                 save_error.error("Allocation rationale is required.")
             elif isinstance(recovery, Mapping) and not recovery_source and receipt_uploads:
@@ -534,7 +735,9 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                 )
             else:
                 try:
-                    if source and not source_incomplete:
+                    if copy_mode:
+                        prepared_receipts = []
+                    elif source and not source_incomplete:
                         prepared_receipts = prepare_editor_receipt_uploads(
                             context,
                             str(source["linked_transaction_id"]),
@@ -572,7 +775,14 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                     # Keep the log and source actions visible after a receipt
                     # validation error; the write is skipped below.
                     pass
-                payload = {"txn_date": txn_date, "account_id": account_id, "category_id": category_id, "payee_id": payee_id, "new_payee_name": new_payee_name, "tag_ids": tag_ids, "new_tag_name": new_tag_name or "", "reference": reference, "description": description, "total_expense": total_expense, "business_use_percentage": business_use_percentage, "allocation_rationale": rationale}
+                saved_description = (
+                    copied_transaction_description(
+                        {"id": copy_source_id, "description": description}
+                    )
+                    if copy_mode
+                    else description
+                )
+                payload = {"txn_date": txn_date, "account_id": account_id, "category_id": category_id, "payee_id": payee_id, "new_payee_name": new_payee_name, "tag_ids": tag_ids, "new_tag_name": new_tag_name or "", "reference": reference, "description": saved_description, "total_expense": total_expense, "business_use_percentage": business_use_percentage, "allocation_rationale": rationale}
                 if source and not source_incomplete:
                     payload["expected_source"] = expected_source
                     def operation():
@@ -584,12 +794,20 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                     payload["source_id"] = (
                         str(source["id"])
                         if source_incomplete
-                        else pending_source_id
+                        else (
+                            str(st.session_state[copy_keys["new_source_id"]])
+                            if copy_mode
+                            else pending_source_id
+                        )
                     )
                     payload["linked_transaction_id"] = (
                         str(source["linked_transaction_id"])
                         if source_incomplete
-                        else pending_transaction_id
+                        else (
+                            str(st.session_state[copy_keys["new_transaction_id"]])
+                            if copy_mode
+                            else pending_transaction_id
+                        )
                     )
                     if source_incomplete:
                         payload["expected_source"] = expected_source
@@ -598,13 +816,20 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                         )
                     def operation():
                         return context.storage.create_mixed_use_expense(**payload)
-                    action, success = "create_mixed_use_expense", "Mixed-use expense saved."
+                    action, success = (
+                        ("copy_mixed_use_expense", "Mixed-use expense copied.")
+                        if copy_mode
+                        else ("create_mixed_use_expense", "Mixed-use expense saved.")
+                    )
 
                 def reset_after_success() -> None:
                     st.session_state.pop(baseline_key, None)
                     st.session_state.pop(baseline_id_key, None)
                     st.session_state.pop(pending_source_key, None)
                     st.session_state.pop(pending_transaction_key, None)
+                    if copy_mode:
+                        _clear_mixed_use_copy(st.session_state, profile)
+                        _clear_mixed_use_selection(st.session_state, profile)
                     context.schedule_widget_reset(_key(profile, "form_reset"))
                 def process_mixed_receipts(result):
                     if not prepared_receipts:
@@ -631,8 +856,18 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
 
                 if prepared_receipts is not None:
                     context.confirmed_write(action, payload, operation, success, on_success=reset_after_success, on_confirmed=process_mixed_receipts, report_error=save_error.error)
+        if cancel_copy_requested:
+            _clear_mixed_use_copy(st.session_state, profile)
+            st.rerun()
     with right:
-        _render_preview(mixed_use_preview(txn_date=txn_date, account=account_paths.get(account_id, account_id), payee=payee_by_id.get(payee_id, new_payee_name), category=category_paths.get(category_id, category_id), description=description, total_expense=total_expense, business_use_percentage=business_use_percentage, allocation_rationale=rationale))
+        preview_description = (
+            copied_transaction_description(
+                {"id": copy_source_id, "description": description}
+            )
+            if copy_mode
+            else description
+        )
+        _render_preview(mixed_use_preview(txn_date=txn_date, account=account_paths.get(account_id, account_id), payee=payee_by_id.get(payee_id, new_payee_name), category=category_paths.get(category_id, category_id), description=preview_description, total_expense=total_expense, business_use_percentage=business_use_percentage, allocation_rationale=rationale))
     if source:
         linked_transactions = context.storage.list_transactions()
         linked = next(

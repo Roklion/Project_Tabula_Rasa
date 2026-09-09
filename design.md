@@ -516,9 +516,16 @@ The linked projection remains visible in the ordinary ledger at the allocated
 amount and is marked **Mixed-use**. It is read-only there; edit, delete, copy,
 bulk mutation, and receipt actions are managed from the Mixed-use expenses tab.
 Receipt operations use the same profile receipt folder and Drive recovery
-workflow as ordinary transactions. Mixed-use source copy and bulk source
-editing are intentionally not implemented; they are follow-up work tracked by
-#149.
+workflow as ordinary transactions. The Mixed-use Expense Log also provides
+**Copy mixed-use expense** for one selected complete source. Copy initiation
+re-reads and validates the source/projection pair, then opens a distinct
+new-source editor from an independent snapshot with pre-generated source and
+projection IDs. The copy preserves the date, normal Expense fields, allocation
+inputs, and active managed associations; its memo ends with exactly one
+`Copy From <mixed-use source ID>` suffix. Allocation is normalized again when
+the copy is saved. Copy mode has no receipt uploader or receipt references,
+and Cancel creates nothing. The authoritative source and its projection are
+never mutated; incomplete sources remain inspection-only and cannot be copied.
 
 The Mixed-use expenses tab shows a single-row-selectable **Mixed-use Expense
 Log** before its editor. The table's displayed row position is translated to
@@ -528,8 +535,9 @@ include the visible source IDs and workbook data revision. A changed or
 invalid scope clears the selection and edit baseline, and a new table
 generation prevents an old table selection from being replayed. The tab opens
 in clearly labeled **Add mixed-use expense** mode. Selecting a row changes to
-**Edit mixed-use expense**; **Add new mixed-use expense** clears the selection
-and returns to Add mode. If a source exists without its linked ledger
+**Edit mixed-use expense**; **Copy mixed-use expense** opens an independent
+new-source editor; **Add new mixed-use expense** clears the selection and
+returns to Add mode. If a source exists without its linked ledger
 projection, it is shown for inspection only: Save and permanent deletion are
 unavailable until the source and ledger relationship has been reviewed.
 The log columns, in exact order, are Date, Payee, Account, Category, Total,
