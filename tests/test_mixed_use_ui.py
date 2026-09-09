@@ -96,6 +96,22 @@ def test_mixed_use_log_puts_receipt_indicator_at_the_end() -> None:
     assert rows[1]["Receipt"] == ""
 
 
+def test_mixed_use_log_keeps_malformed_receipts_inspectable() -> None:
+    rows = _mixed_use_log_rows(
+        [
+            {
+                "txn_date": "2026-09-08",
+                "payee": "Vendor",
+                "receipt_references": "not-json",
+            }
+        ],
+        {},
+        {},
+    )
+
+    assert rows[0]["Receipt"] == ""
+
+
 def test_mixed_use_preview_uses_decimal_allocation_and_rationale() -> None:
     preview = mixed_use_preview(
         txn_date=date(2026, 9, 3),
