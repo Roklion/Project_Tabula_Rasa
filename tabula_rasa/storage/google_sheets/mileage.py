@@ -24,10 +24,7 @@ from .validation import (
     _positive_miles,
     _utc_now,
 )
-from .base import (
-    _MIXED_USE_CREATE_LOCK,
-    _active_ledger_mutation_lock,
-)
+from .base import _workbook_mutation_lock
 
 class MileageMixin:
     """Mixin for the mileage storage boundary."""
@@ -140,7 +137,7 @@ class MileageMixin:
         )
 
     def create_mileage_trip(self, **data: Any) -> dict[str, str]:
-        with _MIXED_USE_CREATE_LOCK:
+        with self._workbook_locks.ledger:
             record = self._prepare_mileage_trip(data)
             self._append("Mileage", record)
             return record
@@ -157,7 +154,7 @@ class MileageMixin:
         one distance for both legs.  When supplied, it is validated and used
         only for the reversed return entry.
         """
-        with _MIXED_USE_CREATE_LOCK:
+        with self._workbook_locks.ledger:
             created_at = _utc_now()
             new_tag_name = _clean_text(data.get("new_tag_name"), "New tag")
             prepared_data = dict(data)
@@ -194,7 +191,7 @@ class MileageMixin:
             return records
 
     def edit_mileage_trip(self, trip_id: str, **changes: Any) -> dict[str, str]:
-        with _MIXED_USE_CREATE_LOCK:
+        with self._workbook_locks.ledger:
             current = self._find_row("Mileage", trip_id)
             merged = dict(current.values)
             merged.update(changes)
@@ -208,7 +205,7 @@ class MileageMixin:
             return updated
 
     def delete_mileage_trip(self, trip_id: str) -> None:
-        with _MIXED_USE_CREATE_LOCK:
+        with self._workbook_locks.ledger:
             current = self._find_row("Mileage", trip_id)
             original = dict(current.values)
             current_row = current
@@ -297,7 +294,7 @@ class MileageMixin:
             },
         }
 
-    @_active_ledger_mutation_lock
+    @_workbook_mutation_lock
     def import_quickbooks_mileage(
         self, rows: Iterable[Mapping[str, Any]]
     ) -> list[dict[str, str]]:

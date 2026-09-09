@@ -148,12 +148,30 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             credential_info, scopes=[SHEETS_SCOPE]
         )
         assert storage.workbook_title == workbook.title
+        same_spreadsheet_storage = GoogleSheetsStorage(
+            FakeWorkbook(), spreadsheet_id="given-spreadsheet-id"
+        )
+        assert (
+            storage._workbook_locks is same_spreadsheet_storage._workbook_locks
+        )
         assert workbook.worksheets.call_count == 1
         assert workbook.sheets["Accounts"].get_all_values.call_count == 1
         assert workbook.sheets["Accounts"].row_values.call_count == 0
         assert workbook.sheets["Sheet1"].rows == [[]]
         for title, headers in WORKSHEET_HEADERS.items():
             assert workbook.sheets[title].rows == [list(headers)]
+
+    def test_profile_storage_rejects_null_spreadsheet_id(self) -> None:
+        with pytest.raises(
+            StorageAuthenticationError,
+            match="Profile Google settings are incomplete or malformed",
+        ):
+            GoogleSheetsStorage.from_secrets(
+                {
+                    "spreadsheet_id": None,
+                    "gcp_service_account": {"type": "service_account"},
+                }
+            )
 
     def test_read_only_profile_storage_validates_without_mutating_workbook(
         self,

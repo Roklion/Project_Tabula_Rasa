@@ -16,8 +16,6 @@ from .validation import _clean_text
 from .validation import _utc_now
 from .validation import _validate_mixed_use_tables
 from .validation import normalize_payee_name
-from .base import _MIXED_USE_CREATE_LOCK
-from .base import _PAYEE_WRITE_LOCK
 from .base import _StoredRow
 from .managed import _ManagedMixin
 
@@ -47,7 +45,7 @@ class PayeesMixin(_ManagedMixin):
 
     def create_payee(self, name: str, *, active: bool = True) -> dict[str, str]:
         name = _clean_text(name, "Payee name", required=True)
-        with _PAYEE_WRITE_LOCK:
+        with self._workbook_locks.payee:
             existing = self.list_payees(_force_refresh=True)
             key = normalize_payee_name(name)
             match = next(
@@ -70,7 +68,7 @@ class PayeesMixin(_ManagedMixin):
     def _ensure_payee_names(
         self, names: Iterable[Any]
     ) -> dict[str, dict[str, str]]:
-        with _PAYEE_WRITE_LOCK:
+        with self._workbook_locks.payee:
             payees = self.list_payees(_force_refresh=True)
             by_key = {normalize_payee_name(item["name"]): item for item in payees}
             rows_by_id = {
@@ -116,7 +114,7 @@ class PayeesMixin(_ManagedMixin):
         expected: Mapping[str, Any] | None = None,
         **changes: Any,
     ) -> dict[str, str]:
-        with _PAYEE_WRITE_LOCK:
+        with self._workbook_locks.payee:
             current = self._find_row("Payees", payee_id)
             updated = dict(current.values)
             expected_record = expected_payee or expected
@@ -168,7 +166,7 @@ class PayeesMixin(_ManagedMixin):
             raise StorageValidationError("Select at least one source payee")
         if target_id in source_ids:
             raise StorageValidationError("The target payee cannot also be a source")
-        with _MIXED_USE_CREATE_LOCK, _PAYEE_WRITE_LOCK:
+        with self._workbook_locks.ledger, self._workbook_locks.payee:
             snapshot = self._snapshot(
                 ["Payees", "Transactions", "MixedUseExpenses"], force_refresh=True
             )
@@ -368,7 +366,7 @@ class PayeesMixin(_ManagedMixin):
     ) -> dict[str, str]:
         """Permanently remove one unreferenced payee after a fresh check."""
         payee_id = _clean_text(payee_id, "Payee", required=True)
-        with _MIXED_USE_CREATE_LOCK, _PAYEE_WRITE_LOCK:
+        with self._workbook_locks.ledger, self._workbook_locks.payee:
             snapshot = self._snapshot(
                 ["Payees", "Transactions", "MixedUseExpenses"], force_refresh=True
             )

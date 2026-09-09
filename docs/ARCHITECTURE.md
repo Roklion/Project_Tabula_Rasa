@@ -163,6 +163,21 @@ can reuse stale rows. This boundary keeps duplicate prevention and stale-write
 protection while avoiding a growing state-machine that pretends Sheets offers
 guarantees it does not provide.
 
+### Process-local workbook mutation coordination
+
+The Sheets storage layer keeps a private, process-local lock bundle for each
+configured spreadsheet ID. Its ledger lock coordinates mutations whose fresh
+checks and row-number writes must not overlap within this process; its Payee
+and Tag locks protect their workbook-local duplicate-name and merge/remove
+reference checks. When a mutation needs more than one lock, it acquires the
+ledger lock before the Payee or Tag lock.
+
+These locks coordinate storage instances in the same Python process that target
+the same workbook. They do not serialize another process or replica, manual
+Google Sheets edits, or otherwise turn Sheets into a transactional backend.
+Mixed-use projection immutability remains an explicit storage API invariant,
+independent of this coordination.
+
 ### Recoverable cross-service partial failure
 
 Drive and Sheets operations are also not atomic. Receipt workflows prepare a

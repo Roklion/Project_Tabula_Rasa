@@ -21,10 +21,7 @@ from .validation import (
     _encode_receipt_references,
     decode_receipt_references,
 )
-from .base import (
-    _MIXED_USE_CREATE_LOCK,
-    _StoredRow,
-)
+from .base import _StoredRow
 
 class ReceiptsMixin:
     """Mixin for the receipts storage boundary."""
@@ -34,7 +31,7 @@ class ReceiptsMixin:
         current: _StoredRow,
         encoded_references: str,
     ) -> dict[str, str]:
-        with _MIXED_USE_CREATE_LOCK:
+        with self._workbook_locks.ledger:
             return self._replace_receipt_references_locked(
                 current, encoded_references
             )
@@ -174,7 +171,7 @@ class ReceiptsMixin:
         expected_transaction: Mapping[str, Any] | None = None,
     ) -> dict[str, str]:
         """Replace the Drive receipt references attached to one transaction."""
-        with _MIXED_USE_CREATE_LOCK:
+        with self._workbook_locks.ledger:
             transaction_id = _clean_text(transaction_id, "ID", required=True)
             transaction_rows = self._managed_rows_by_id(
                 self._rows("Transactions", force_refresh=True),
@@ -243,7 +240,7 @@ class ReceiptsMixin:
         expected_source: Mapping[str, Any] | None = None,
     ) -> dict[str, str]:
         """Replace paired receipt references through a source-aware path."""
-        with _MIXED_USE_CREATE_LOCK:
+        with self._workbook_locks.ledger:
             _source, transaction = self._mixed_use_receipt_pair(
                 source_id, expected_source=expected_source
             )
@@ -262,7 +259,7 @@ class ReceiptsMixin:
         reference: Mapping[str, Any] | None = None,
     ) -> dict[str, str]:
         """Attach or refresh one Drive file reference on a transaction."""
-        with _MIXED_USE_CREATE_LOCK:
+        with self._workbook_locks.ledger:
             current = self._find_row("Transactions", transaction_id)
             self._reject_mixed_use_projection(current.values)
             try:
@@ -304,7 +301,7 @@ class ReceiptsMixin:
         expected_source: Mapping[str, Any] | None = None,
     ) -> dict[str, str]:
         """Link one receipt while authorizing the mixed-use source pair."""
-        with _MIXED_USE_CREATE_LOCK:
+        with self._workbook_locks.ledger:
             try:
                 normalized = validate_receipt_reference(reference)
             except ReceiptManifestError as exc:
@@ -334,7 +331,7 @@ class ReceiptsMixin:
         old_file_id: str,
         reference: Mapping[str, Any],
     ) -> dict[str, str]:
-        with _MIXED_USE_CREATE_LOCK:
+        with self._workbook_locks.ledger:
             return self._remap_transaction_receipt(
                 transaction_id, old_file_id=old_file_id, reference=reference
             )
@@ -405,7 +402,7 @@ class ReceiptsMixin:
         expected_source: Mapping[str, Any] | None = None,
     ) -> dict[str, str]:
         """Replace a recovered receipt through the source-aware path."""
-        with _MIXED_USE_CREATE_LOCK:
+        with self._workbook_locks.ledger:
             try:
                 normalized = validate_receipt_reference(
                     reference, allow_legacy=False
@@ -449,7 +446,7 @@ class ReceiptsMixin:
         expected_transactions: Sequence[Mapping[str, Any]],
         updates: Mapping[str, Sequence[Mapping[str, Any]]],
     ) -> tuple[bool, list[dict[str, str]]]:
-        with _MIXED_USE_CREATE_LOCK:
+        with self._workbook_locks.ledger:
             return self._apply_receipt_recovery_plan(
                 expected_transactions, updates
             )
@@ -809,7 +806,7 @@ class ReceiptsMixin:
         file_id: str,
     ) -> dict[str, str]:
         """Remove one Drive reference without modifying the Drive file."""
-        with _MIXED_USE_CREATE_LOCK:
+        with self._workbook_locks.ledger:
             current = self._find_row("Transactions", transaction_id)
             self._reject_mixed_use_projection(current.values)
             references = decode_receipt_references(
@@ -836,7 +833,7 @@ class ReceiptsMixin:
         expected_source: Mapping[str, Any] | None = None,
     ) -> dict[str, str]:
         """Remove one receipt reference through the source-aware path."""
-        with _MIXED_USE_CREATE_LOCK:
+        with self._workbook_locks.ledger:
             _source, transaction = self._mixed_use_receipt_pair(
                 source_id, expected_source=expected_source
             )

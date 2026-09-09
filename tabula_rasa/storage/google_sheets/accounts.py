@@ -22,9 +22,6 @@ from .validation import (
     _validate_account_classification,
     _validate_hierarchy_records,
 )
-from .base import (
-    _MIXED_USE_CREATE_LOCK,
-)
 
 class AccountsMixin:
     """Mixin for the accounts storage boundary."""
@@ -239,7 +236,7 @@ class AccountsMixin:
         return record
 
     def edit_category(self, category_id: str, **changes: Any) -> dict[str, str]:
-        with _MIXED_USE_CREATE_LOCK:
+        with self._workbook_locks.ledger:
             return self._edit_category(category_id, **changes)
 
     def _edit_category(self, category_id: str, **changes: Any) -> dict[str, str]:
@@ -314,7 +311,7 @@ class AccountsMixin:
         return updated
 
     def delete_category(self, category_id: str) -> None:
-        with _MIXED_USE_CREATE_LOCK:
+        with self._workbook_locks.ledger:
             self._delete_category(category_id)
 
     def _delete_category(self, category_id: str) -> None:
