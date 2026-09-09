@@ -276,6 +276,46 @@ def test_mixed_use_copy_rejects_missing_projection(default_storage) -> None:
         _fresh_mixed_use_copy_source(default_storage, source["id"])
 
 
+def test_mixed_use_copy_fresh_lookup_allows_valid_pair_with_unrelated_orphan(
+    default_storage,
+) -> None:
+    account = next(item for item in default_storage.list_accounts() if item["active"])
+    category = next(
+        item
+        for item in default_storage.list_categories()
+        if item["kind"] == "Expense"
+    )
+    valid = default_storage.create_mixed_use_expense(
+        txn_date="2026-09-03",
+        total_expense="100",
+        business_use_percentage="25",
+        account_id=account["id"],
+        category_id=category["id"],
+        allocation_rationale="Valid source",
+    )
+    orphan = default_storage.create_mixed_use_expense(
+        txn_date="2026-09-04",
+        total_expense="200",
+        business_use_percentage="50",
+        account_id=account["id"],
+        category_id=category["id"],
+        allocation_rationale="Incomplete source",
+    )
+    worksheet = default_storage._worksheet("Transactions")
+    id_column = worksheet.rows[0].index("id")
+    worksheet.rows = [
+        row
+        for row in worksheet.rows
+        if row[id_column] != orphan["linked_transaction_id"]
+    ]
+    default_storage._invalidate("Transactions")
+
+    fresh = _fresh_mixed_use_copy_source(default_storage, valid["id"])
+
+    assert fresh["id"] == valid["id"]
+    assert fresh["linked_transaction_id"] == valid["linked_transaction_id"]
+
+
 def test_pending_create_ids_remain_stable_for_uncertain_retries() -> None:
     state: dict[str, object] = {}
     first = _pending_create_ids(state, "north")
@@ -711,6 +751,46 @@ def test_mixed_use_copy_requires_active_account_before_save(default_storage) -> 
         if item["id"] != source["id"]
     )
     assert copied["account_id"] == replacement["id"]
+
+
+def test_mixed_use_copy_cancel_remains_available_without_active_account(
+    default_storage,
+) -> None:
+    source_account = next(
+        item for item in default_storage.list_accounts() if item["active"]
+    )
+    category = next(
+        item
+        for item in default_storage.list_categories()
+        if item["kind"] == "Expense"
+    )
+    source = default_storage.create_mixed_use_expense(
+        txn_date="2026-09-03",
+        total_expense="100",
+        business_use_percentage="25",
+        account_id=source_account["id"],
+        category_id=category["id"],
+        allocation_rationale="Measured use",
+    )
+    for account in default_storage.list_accounts():
+        if account["active"]:
+            default_storage.deactivate_account(account["id"])
+    original_sources = default_storage.list_mixed_use_expenses()
+    original_transactions = default_storage.list_transactions()
+
+    with authenticated_app(default_storage) as app:
+        navigate_to(app, "Transactions")
+        app.session_state["mixed_use_selected_source_id_test"] = source["id"]
+        app.run()
+        by_label(_mixed_tab(app).button, "Copy mixed-use expense").click().run()
+
+        tab = _mixed_tab(app)
+        assert by_label(tab.button, "Cancel copy")
+        by_label(tab.button, "Cancel copy").click().run()
+        assert app.session_state["mixed_use_selected_source_id_test"] == source["id"]
+
+    assert default_storage.list_mixed_use_expenses() == original_sources
+    assert default_storage.list_transactions() == original_transactions
 
 
 def test_mixed_use_selection_clears_after_revision_change(default_storage) -> None:

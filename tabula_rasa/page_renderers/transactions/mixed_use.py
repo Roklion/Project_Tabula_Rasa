@@ -30,6 +30,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
 )
 from tabula_rasa.storage import (
     StorageError,
+    StorageNotFoundError,
     StorageValidationError,
     decode_receipt_references,
 )
@@ -139,14 +140,10 @@ def _fresh_mixed_use_copy_source(storage, source_id: str) -> dict[str, str]:
     source_id = str(source_id or "").strip()
     if not source_id:
         raise StorageError("Select a mixed-use expense before copying it.")
-    sources = storage.list_mixed_use_expenses(_force_refresh=True)
-    source = next(
-        (item for item in sources if str(item.get("id") or "") == source_id),
-        None,
-    )
-    if source is None:
-        raise StorageError("The selected mixed-use expense no longer exists.")
-    return dict(source)
+    try:
+        return dict(storage.get_mixed_use_expense(source_id, _force_refresh=True))
+    except StorageNotFoundError as error:
+        raise StorageError("The selected mixed-use expense no longer exists.") from error
 
 
 def _start_mixed_use_copy(
@@ -561,6 +558,12 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             category_ids.append(current_category)
     if not account_ids or not category_ids:
         st.warning("Create an active account and an Expense category before recording a mixed-use expense.")
+        if copy_mode and st.button(
+            "Cancel copy",
+            key=f"mixed_cancel_copy_{scope}",
+        ):
+            _clear_mixed_use_copy(st.session_state, profile)
+            st.rerun()
         return
     left, right = st.columns([3, 2])
     with left:
