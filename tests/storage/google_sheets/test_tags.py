@@ -1,4 +1,6 @@
 from threading import Event, Thread
+from unittest.mock import Mock
+
 from tabula_rasa.storage import StorageConflictError, StorageUnavailableError
 
 from ._support import (
@@ -271,36 +273,6 @@ def test_management_expected_snapshot_rejects_stale_merge(default_storage) -> No
         default_storage.merge_tags(target["id"], [source["id"]], expected_tags=expected)
 
 
-def test_tag_removal_rechecks_references_after_retry_backoff(default_storage) -> None:
-    account, category = _ledger_setup(default_storage)
-    tag = default_storage.create_tag("Referenced during retry")
-    calls = 0
-
-    def add_reference_during_backoff(_: float) -> None:
-        default_storage.create_transaction(
-            txn_date="2026-01-01",
-            kind="Expense",
-            amount="10",
-            account_id=account["id"],
-            category_id=category["id"],
-            tag_ids=[tag["id"]],
-        )
-
-    def fail_once(_: object) -> None:
-        nonlocal calls
-        calls += 1
-        raise OSError("temporary response lost")
-
-    default_storage._sleeper = add_reference_during_backoff
-    default_storage._workbook.batch_update = fail_once
-
-    with pytest.raises(StorageConflictError, match="became referenced"):
-        default_storage.remove_tag(tag["id"])
-
-    assert calls == 1
-    assert tag["id"] in {
-        item["id"] for item in default_storage.list_tags(active_only=False)
-    }
 
 
 def test_tag_merge_partial_write_stops_without_retry(default_storage, monkeypatch) -> None:
@@ -448,3 +420,100 @@ def test_mileage_import_cannot_interleave_management_remove(default_storage) -> 
     management.join(timeout=5)
     assert not management.is_alive()
     assert tag["id"] not in {item["id"] for item in default_storage.list_tags(active_only=False)}
+
+
+def test_tag_removal_retries_once_then_invalidates_on_unchanged_failure(
+    default_storage, monkeypatch
+) -> None:
+    tag = default_storage.create_tag("Unused")
+    batch_update = Mock(side_effect=OSError("temporary response lost"))
+    monkeypatch.setattr(default_storage._workbook, "batch_update", batch_update)
+
+    with pytest.raises(StorageUnavailableError, match="could not confirm"):
+        default_storage.remove_tag(tag["id"])
+
+    assert batch_update.call_count == 2
+    assert "Tags" not in default_storage._row_cache
+
+
+def test_tag_removal_rebuilds_row_after_shift_before_retry(default_storage, monkeypatch) -> None:
+    tag = default_storage.create_tag("Shifted")
+    worksheet = default_storage._worksheet("Tags")
+    original_batch_update = default_storage._workbook.batch_update
+    calls = 0
+
+    def shift_then_lose_response(body: object) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            worksheet.rows.insert(1, list(worksheet.rows[1]))
+            worksheet.rows[1][0] = "inserted-before-retry"
+            raise OSError("temporary response lost")
+        original_batch_update(body)
+
+    monkeypatch.setattr(
+        default_storage._workbook, "batch_update", shift_then_lose_response
+    )
+
+    default_storage.remove_tag(tag["id"])
+
+    assert calls == 2
+    assert tag["id"] not in {
+        item["id"] for item in default_storage.list_tags(active_only=False)
+    }
+    assert worksheet.rows[1][0] == "inserted-before-retry"
+
+
+def test_tag_merge_accepts_commit_before_uncertain_response(
+    default_storage, monkeypatch
+) -> None:
+    target = default_storage.create_tag("Target")
+    source = default_storage.create_tag("Source")
+    original_batch_update = default_storage._workbook.batch_update
+
+    def commit_then_lose_response(body: object) -> None:
+        original_batch_update(body)
+        raise OSError("response lost after commit")
+
+    monkeypatch.setattr(
+        default_storage._workbook, "batch_update", commit_then_lose_response
+    )
+
+    result = default_storage.merge_tags(target["id"], [source["id"]])
+
+    assert result["status"] == "fully_applied"
+    assert source["id"] not in {
+        item["id"] for item in default_storage.list_tags(active_only=False)
+    }
+
+
+def test_tag_removal_rechecks_references_after_retry_backoff(default_storage) -> None:
+    account, category = _ledger_setup(default_storage)
+    tag = default_storage.create_tag("Referenced during retry")
+    calls = 0
+
+    def add_reference_during_backoff(_: float) -> None:
+        default_storage.create_transaction(
+            txn_date="2026-01-01",
+            kind="Expense",
+            amount="10",
+            account_id=account["id"],
+            category_id=category["id"],
+            tag_ids=[tag["id"]],
+        )
+
+    def fail_once(_: object) -> None:
+        nonlocal calls
+        calls += 1
+        raise OSError("temporary response lost")
+
+    default_storage._sleeper = add_reference_during_backoff
+    default_storage._workbook.batch_update = fail_once
+
+    with pytest.raises(StorageConflictError, match="became referenced"):
+        default_storage.remove_tag(tag["id"])
+
+    assert calls == 1
+    assert tag["id"] in {
+        item["id"] for item in default_storage.list_tags(active_only=False)
+    }

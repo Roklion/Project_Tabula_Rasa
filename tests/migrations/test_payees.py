@@ -187,6 +187,99 @@ def test_migration_rejects_malformed_payee_layout_before_writes() -> None:
     assert transaction_sheet.rows == before_transactions
 
 
+def test_migration_rejects_payees_worksheet_missing_created_at() -> None:
+    workbook = FakeWorkbook()
+    workbook.worksheet("Payees").rows[0] = ["id", "name", "active"]
+
+    with pytest.raises(ValueError, match="missing required headers: created_at"):
+        migrate_workbook(workbook)
+
+
+@pytest.mark.parametrize(
+    ("headers", "message"),
+    [
+        (["id", "name", "active", ""], "blank header"),
+        (["id", "name", "active", "active"], "duplicate headers"),
+    ],
+)
+def test_migration_rejects_malformed_payees_headers(
+    headers: list[str], message: str
+) -> None:
+    workbook = FakeWorkbook()
+    payee_sheet = workbook.worksheet("Payees")
+    payee_sheet.rows[0] = headers
+    payee_sheet.rows.append(["existing-id", "Existing vendor", "", ""])
+    original_payees = [list(row) for row in payee_sheet.rows]
+    transaction_sheet = workbook.worksheet("Transactions")
+    original_transactions = [list(row) for row in transaction_sheet.rows]
+
+    with pytest.raises(ValueError, match=message):
+        migrate_workbook(workbook)
+
+    assert payee_sheet.rows == original_payees
+    assert transaction_sheet.rows == original_transactions
+
+
+@pytest.mark.parametrize(
+    ("header_change", "message"),
+    [
+        (lambda headers: headers.__setitem__(1, ""), "blank header"),
+        (lambda headers: headers.__setitem__(1, headers[0]), "duplicate headers"),
+        (lambda headers: headers.append("payee"), "exactly one payee"),
+    ],
+)
+def test_migration_rejects_malformed_transaction_headers(
+    header_change, message: str
+) -> None:
+    workbook = FakeWorkbook()
+    transaction_sheet = workbook.worksheet("Transactions")
+    headers = list(transaction_sheet.rows[0])
+    header_change(headers)
+    transaction_sheet.rows[0] = headers
+    original_transactions = [list(row) for row in transaction_sheet.rows]
+    payee_sheet = workbook.worksheet("Payees")
+    original_payees = [list(row) for row in payee_sheet.rows]
+
+    with pytest.raises(ValueError, match=message):
+        migrate_workbook(workbook)
+
+    assert transaction_sheet.rows == original_transactions
+    assert payee_sheet.rows == original_payees
+
+
+def test_migration_rejects_incomplete_transaction_schema_before_writes() -> None:
+    workbook = FakeWorkbook()
+    transaction_sheet = workbook.worksheet("Transactions")
+    headers = list(transaction_sheet.rows[0])
+    headers.remove("category_id")
+    transaction_sheet.rows[0] = headers
+    transaction_sheet.rows.append(
+        [
+            "txn",
+            "2026-09-01",
+            "Expense",
+            "10.00",
+            "account",
+            "",
+            "category",
+            "Legacy vendor",
+            "",
+            "",
+            "",
+            "now",
+        ]
+    )
+    original_transactions = [list(row) for row in transaction_sheet.rows]
+    payee_sheet = workbook.worksheet("Payees")
+    original_payees = [list(row) for row in payee_sheet.rows]
+
+    with pytest.raises(ValueError, match="missing required headers: category_id"):
+        migrate_workbook(workbook)
+
+    assert transaction_sheet.rows == original_transactions
+    assert payee_sheet.rows == original_payees
+
+
 def test_migration_appends_payees_in_existing_header_order() -> None:
     workbook = FakeWorkbook()
     payee_sheet = workbook.worksheet("Payees")
@@ -220,6 +313,66 @@ def test_migration_appends_payees_in_existing_header_order() -> None:
     assert stored["created_at"]
     assert stored["notes"] == ""
     assert transaction_sheet.rows[1][payee_index] == stored["id"]
+
+
+def test_migration_resumes_after_partial_payee_append() -> None:
+    workbook = FakeWorkbook()
+    transaction_sheet = workbook.worksheet("Transactions")
+    payee_index = transaction_sheet.rows[0].index("payee_id")
+    transaction_sheet.rows[0][payee_index] = "payee"
+    transaction_sheet.rows.extend(
+        [
+            [
+                "one",
+                "2026-09-01",
+                "Expense",
+                "10.00",
+                "account",
+                "",
+                "category",
+                "First vendor",
+                "",
+                "",
+                "",
+                "now",
+            ],
+            [
+                "two",
+                "2026-09-02",
+                "Expense",
+                "11.00",
+                "account",
+                "",
+                "category",
+                "Second vendor",
+                "",
+                "",
+                "",
+                "now",
+            ],
+        ]
+    )
+    payee_sheet = workbook.worksheet("Payees")
+    original_append = payee_sheet.append_rows
+
+    def append_first_then_fail(values: list[list[str]], **kwargs: object) -> None:
+        original_append(values[:1], **kwargs)
+        raise OSError("simulated interrupted payee append")
+
+    payee_sheet.append_rows = append_first_then_fail  # type: ignore[method-assign]
+    with pytest.raises(OSError, match="payee append"):
+        migrate_workbook(workbook)
+
+    payee_sheet.append_rows = original_append  # type: ignore[method-assign]
+    result = migrate_workbook(workbook)
+
+    assert result == {"payees": 1, "transactions": 2}
+    assert {row[1] for row in payee_sheet.rows[1:]} == {
+        "First vendor",
+        "Second vendor",
+    }
+    assert transaction_sheet.rows[0][payee_index] == "payee_id"
+    assert all(transaction_sheet.rows[index][payee_index] for index in (1, 2))
 
 
 def test_migration_normalizes_existing_payee_id_before_detecting_additions() -> None:
