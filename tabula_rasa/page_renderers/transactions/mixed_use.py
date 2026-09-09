@@ -147,6 +147,9 @@ def _fresh_mixed_use_copy_source(storage, source_id: str) -> dict[str, str]:
     if source is None:
         raise StorageError("The selected mixed-use expense no longer exists.")
     linked_id = str(source.get("linked_transaction_id") or "").strip()
+    # The source listing validates source fields but deliberately permits an
+    # incomplete source for inspection. Re-read Transactions to ensure copy
+    # starts only from a complete authoritative source/projection pair.
     transactions = storage.list_transactions(_force_refresh=True)
     linked = next(
         (
