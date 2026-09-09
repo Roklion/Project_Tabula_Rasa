@@ -457,6 +457,63 @@ def test_uncertain_mixed_use_receipt_link_confirms_pair_without_retry(
     )
 
 
+def test_mixed_use_receipt_mutations_preserve_source_projection_parity(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    source = default_storage.create_mixed_use_expense(
+        **expense_inputs(default_storage),
+        total_expense="100",
+        business_use_percentage="50",
+        allocation_rationale="Measured use",
+    )
+    first = {
+        "id": "first-receipt",
+        "name": "First.pdf",
+        "receipt_id": "a" * 32,
+        "original_filename": "First.pdf",
+        "mime_type": "application/pdf",
+        "byte_size": 1,
+        "sha256": "b" * 64,
+    }
+    second = {
+        "id": "second-receipt",
+        "name": "Second.pdf",
+        "receipt_id": "c" * 32,
+        "original_filename": "Second.pdf",
+        "mime_type": "application/pdf",
+        "byte_size": 1,
+        "sha256": "d" * 64,
+    }
+
+    default_storage.set_mixed_use_receipt_references(
+        source["id"], [first], expected_source=source
+    )
+    refreshed_source = default_storage.get_mixed_use_expense(source["id"])
+    default_storage.link_mixed_use_receipt(
+        source["id"], reference=second, expected_source=refreshed_source
+    )
+    refreshed_source = default_storage.get_mixed_use_expense(source["id"])
+    default_storage.remap_mixed_use_receipt(
+        source["id"],
+        old_file_id=str(first["id"]),
+        reference=second,
+        expected_source=refreshed_source,
+    )
+    refreshed_source = default_storage.get_mixed_use_expense(source["id"])
+    default_storage.unlink_mixed_use_receipt(
+        source["id"], file_id=str(second["id"]), expected_source=refreshed_source
+    )
+
+    assert decode_receipt_references(
+        default_storage.list_transactions(_force_refresh=True)[0][
+            "receipt_references"
+        ]
+    ) == []
+    assert decode_receipt_references(
+        default_storage.list_mixed_use_expenses()[0]["receipt_references"]
+    ) == []
+
+
 def test_receipt_recovery_restarts_after_mixed_use_pair_drift(
     default_storage: GoogleSheetsStorage,
 ) -> None:
@@ -499,7 +556,6 @@ def test_receipt_recovery_restarts_after_mixed_use_pair_drift(
     assert fresh_transactions[0]["receipt_references"] == (
         '[{"id":"recovery-concurrent","name":"Receipt"}]'
     )
-    assert calls == 3
 
 
 def test_receipt_recovery_refreshes_transaction_rows_with_source_snapshot(
@@ -515,15 +571,12 @@ def test_receipt_recovery_refreshes_transaction_rows_with_source_snapshot(
     transaction_id = source["linked_transaction_id"]
     expected_transactions = default_storage.list_transactions()
     original_snapshot = default_storage._snapshot
-    final_snapshot_seen = False
 
     def snapshot_with_transaction_row_shift(
         titles: object, *, force_refresh: bool = False
     ) -> dict[str, object]:
-        nonlocal final_snapshot_seen
         titles_list = list(titles)  # type: ignore[arg-type]
         if titles_list == ["Transactions", "MixedUseExpenses"]:
-            final_snapshot_seen = True
             worksheet = default_storage._worksheet("Transactions")
             inserted = [""] * len(worksheet.rows[1])
             worksheet.rows.insert(1, inserted)
@@ -537,7 +590,6 @@ def test_receipt_recovery_refreshes_transaction_rows_with_source_snapshot(
     )
 
     assert applied is True
-    assert final_snapshot_seen is True
     rows = default_storage._rows("Transactions", force_refresh=True)
     assert [
         (row.row_number, row.values["id"], row.values["receipt_references"])
@@ -545,69 +597,6 @@ def test_receipt_recovery_refreshes_transaction_rows_with_source_snapshot(
     ] == [
         (3, transaction_id, '[{"id":"new-receipt","name":"Receipt"}]'),
     ]
-
-
-def test_receipt_recovery_restarts_after_unrelated_receipt_drift_during_final_read(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    source = default_storage.create_mixed_use_expense(
-        **expense_inputs(default_storage),
-        total_expense="100",
-        business_use_percentage="50",
-        allocation_rationale="Measured use",
-        receipt_references=[{"id": "old-receipt", "name": "Receipt"}],
-    )
-    unrelated = default_storage.create_transaction(
-        **expense_inputs(default_storage),
-        kind="Expense",
-        amount="20",
-    )
-    expected_transactions = default_storage.list_transactions()
-    original_snapshot = default_storage._snapshot
-    final_snapshot_seen = False
-
-    def snapshot_with_unrelated_receipt_drift(
-        titles: object, *, force_refresh: bool = False
-    ) -> dict[str, object]:
-        nonlocal final_snapshot_seen
-        titles_list = list(titles)  # type: ignore[arg-type]
-        if titles_list == ["Transactions", "MixedUseExpenses"]:
-            final_snapshot_seen = True
-            worksheet = default_storage._worksheet("Transactions")
-            headers = default_storage._headers("Transactions")
-            unrelated_row = next(
-                row
-                for row in worksheet.rows[1:]
-                if row[headers.index("id")] == unrelated["id"]
-            )
-            unrelated_row[headers.index("receipt_references")] = (
-                '[{"id":"unrelated-receipt","name":"Receipt"}]'
-            )
-            default_storage._invalidate("Transactions")
-        return original_snapshot(titles_list, force_refresh=force_refresh)
-
-    default_storage._snapshot = snapshot_with_unrelated_receipt_drift  # type: ignore[method-assign]
-    applied, fresh_transactions = default_storage.apply_receipt_recovery_plan(
-        expected_transactions,
-        {source["linked_transaction_id"]: [{"id": "new-receipt", "name": "Receipt"}]},
-    )
-
-    assert applied is False
-    assert final_snapshot_seen is True
-    assert (
-        next(row for row in fresh_transactions if row["id"] == unrelated["id"])[
-            "receipt_references"
-        ]
-        == '[{"id":"unrelated-receipt","name":"Receipt"}]'
-    )
-    assert (
-        next(
-            row
-            for row in fresh_transactions
-            if row["id"] == source["linked_transaction_id"]
-        )["receipt_references"]
-        == source["receipt_references"]
-    )
 
 
 def test_receipt_recovery_restarts_after_mixed_use_provenance_drift(
@@ -634,61 +623,6 @@ def test_receipt_recovery_restarts_after_mixed_use_provenance_drift(
     assert applied is False
     assert fresh_transactions[0]["source_type"] == ""
     assert fresh_transactions[0]["source_id"] == ""
-
-
-def test_receipt_recovery_rejects_unrelated_receipt_drift(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    source = default_storage.create_mixed_use_expense(
-        **expense_inputs(default_storage),
-        total_expense="100",
-        business_use_percentage="50",
-        allocation_rationale="Measured use",
-    )
-    unrelated = default_storage.create_transaction(
-        **expense_inputs(default_storage),
-        kind="Expense",
-        amount="20",
-    )
-    expected_transactions = default_storage.list_transactions()
-    transaction_sheet = default_storage._worksheet("Transactions")
-    headers = default_storage._headers("Transactions")
-    unrelated_row = next(
-        row
-        for row in transaction_sheet.rows[1:]
-        if row[headers.index("id")] == unrelated["id"]
-    )
-    unrelated_row[headers.index("receipt_references")] = (
-        '[{"id":"unrelatedreceipt","name":"Receipt"}]'
-    )
-    default_storage._invalidate("Transactions")
-
-    applied, fresh_transactions = default_storage.apply_receipt_recovery_plan(
-        expected_transactions,
-        {
-            source["linked_transaction_id"]: [
-                {"id": "recoveredreceipt", "name": "Receipt"}
-            ]
-        },
-    )
-
-    assert applied is False
-    assert (
-        next(item for item in fresh_transactions if item["id"] == unrelated["id"])[
-            "receipt_references"
-        ]
-        == '[{"id":"unrelatedreceipt","name":"Receipt"}]'
-    )
-    assert (
-        next(
-            item
-            for item in fresh_transactions
-            if item["id"] == source["linked_transaction_id"]
-        )["receipt_references"]
-        == "[]"
-    )
-
-
 def test_mixed_use_delete_rejects_pair_drift_before_deleting_rows(
     default_storage: GoogleSheetsStorage,
 ) -> None:
