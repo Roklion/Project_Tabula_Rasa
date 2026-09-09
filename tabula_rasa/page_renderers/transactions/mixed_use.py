@@ -860,7 +860,14 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             _clear_mixed_use_copy(st.session_state, profile)
             st.rerun()
     with right:
-        _render_preview(mixed_use_preview(txn_date=txn_date, account=account_paths.get(account_id, account_id), payee=payee_by_id.get(payee_id, new_payee_name), category=category_paths.get(category_id, category_id), description=description, total_expense=total_expense, business_use_percentage=business_use_percentage, allocation_rationale=rationale))
+        preview_description = (
+            copied_transaction_description(
+                {"id": copy_source_id, "description": description}
+            )
+            if copy_mode
+            else description
+        )
+        _render_preview(mixed_use_preview(txn_date=txn_date, account=account_paths.get(account_id, account_id), payee=payee_by_id.get(payee_id, new_payee_name), category=category_paths.get(category_id, category_id), description=preview_description, total_expense=total_expense, business_use_percentage=business_use_percentage, allocation_rationale=rationale))
     if source:
         linked_transactions = context.storage.list_transactions()
         linked = next(

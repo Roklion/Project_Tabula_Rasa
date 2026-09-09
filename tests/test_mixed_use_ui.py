@@ -675,6 +675,10 @@ def test_mixed_use_copy_cancel_and_save_create_new_pair_without_receipts(
             "Custom memo. Copy From stale-source. Copy From older-source"
         ).run()
         tab = _mixed_tab(app)
+        assert any(
+            str(item.value).startswith(f"Description: Custom memo. Copy From {source['id']}")
+            for item in tab.caption
+        )
         _tab_field(tab, "text_input", "Total Expense").set_value("240").run()
         tab = _mixed_tab(app)
         _tab_field(tab, "text_input", "Business Use %").set_value("50").run()

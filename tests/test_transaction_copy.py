@@ -88,6 +88,15 @@ def test_copied_transaction_description_preserves_user_copy_text_at_end() -> Non
     ) == "Reminder: Copy From project-123. Copy From source-123"
 
 
+def test_copied_transaction_description_normalizes_punctuated_source_ids() -> None:
+    assert copied_transaction_description(
+        {
+            "id": "source:1.2",
+            "description": "Memo. Copy From source:1.2",
+        }
+    ) == "Memo. Copy From source:1.2"
+
+
 def test_copied_transaction_description_has_no_separator_for_blank_memo() -> None:
     assert copied_transaction_description(
         {"id": "source-123", "description": "  Copy From old-1  "}
