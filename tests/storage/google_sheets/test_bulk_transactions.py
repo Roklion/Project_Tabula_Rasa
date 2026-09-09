@@ -152,8 +152,11 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         ]
         original_batch = self.workbook.batch_update
         transaction_sheet = self.workbook.sheets["Transactions"]
+        id_index = transaction_sheet.rows[0].index("id")
         description_index = transaction_sheet.rows[0].index("description")
-        first_row = next(row for row in transaction_sheet.rows if row[0] == first["id"])
+        first_row = next(
+            row for row in transaction_sheet.rows[1:] if row[id_index] == first["id"]
+        )
 
         def apply_category_after_edit(body: dict[str, object]) -> None:
             first_row[description_index] = "Collaborator edit"
@@ -238,9 +241,10 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             if transaction["id"] in {first["id"], second["id"]}
         ]
         transaction_sheet = self.workbook.sheets["Transactions"]
+        id_index = transaction_sheet.rows[0].index("id")
         payee_index = transaction_sheet.rows[0].index("payee_id")
         transaction_row = next(
-            row for row in transaction_sheet.rows if row[0] == first["id"]
+            row for row in transaction_sheet.rows[1:] if row[id_index] == first["id"]
         )
         transaction_row[payee_index] = f"  {payee['id']}  "
 
@@ -295,8 +299,11 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             if transaction["id"] in {first["id"], second["id"]}
         ]
         transaction_sheet = self.workbook.sheets["Transactions"]
+        id_index = transaction_sheet.rows[0].index("id")
         amount_index = transaction_sheet.rows[0].index("amount")
-        first_row = next(row for row in transaction_sheet.rows if row[0] == first["id"])
+        first_row = next(
+            row for row in transaction_sheet.rows[1:] if row[id_index] == first["id"]
+        )
         first_row[amount_index] = "1"
         original_batch = self.workbook.batch_update
         workbook_batch = Mock(
