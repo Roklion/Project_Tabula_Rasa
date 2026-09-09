@@ -148,6 +148,12 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             credential_info, scopes=[SHEETS_SCOPE]
         )
         assert storage.workbook_title == workbook.title
+        same_spreadsheet_storage = GoogleSheetsStorage(
+            FakeWorkbook(), spreadsheet_id="given-spreadsheet-id"
+        )
+        assert (
+            storage._workbook_locks is same_spreadsheet_storage._workbook_locks
+        )
         assert workbook.worksheets.call_count == 1
         assert workbook.sheets["Accounts"].get_all_values.call_count == 1
         assert workbook.sheets["Accounts"].row_values.call_count == 0

@@ -10,6 +10,7 @@ from tabula_rasa.storage import (
     StorageValidationError,
 )
 from tabula_rasa.storage import google_sheets as google_sheets_module
+from tests.fakes import FakeWorkbook
 from tests.mixed_use_storage._support import expense_inputs
 
 
@@ -34,70 +35,7 @@ def test_category_kind_change_rejects_mixed_use_references(
     assert category["kind"] == "Expense"
 
 
-def test_category_edit_shares_mixed_use_creation_lock(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    category = next(
-        item for item in default_storage.list_categories() if item["name"] == "Office"
-    )
-    started = threading.Event()
-    finished = threading.Event()
-    errors: list[BaseException] = []
-
-    def edit_category() -> None:
-        started.set()
-        try:
-            default_storage.edit_category(category["id"], name="Office updated")
-        except BaseException as error:  # pragma: no cover - assertion below reports it
-            errors.append(error)
-        finally:
-            finished.set()
-
-    worker = threading.Thread(target=edit_category)
-    with google_sheets_module._MIXED_USE_CREATE_LOCK:
-        worker.start()
-        assert started.wait(1)
-        assert not finished.wait(0.1)
-    assert finished.wait(1)
-    worker.join(timeout=1)
-    assert not errors
-
-
-def test_mixed_use_edit_shares_mixed_use_creation_lock(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    source = default_storage.create_mixed_use_expense(
-        **expense_inputs(default_storage),
-        total_expense="100",
-        business_use_percentage="50",
-        allocation_rationale="Measured use",
-    )
-    started = threading.Event()
-    finished = threading.Event()
-    errors: list[BaseException] = []
-
-    def edit_mixed_use() -> None:
-        started.set()
-        try:
-            default_storage.edit_mixed_use_expense(
-                source["id"], allocation_rationale="Updated use"
-            )
-        except BaseException as error:  # pragma: no cover - assertion below reports it
-            errors.append(error)
-        finally:
-            finished.set()
-
-    worker = threading.Thread(target=edit_mixed_use)
-    with google_sheets_module._MIXED_USE_CREATE_LOCK:
-        worker.start()
-        assert started.wait(1)
-        assert not finished.wait(0.1)
-    assert finished.wait(1)
-    worker.join(timeout=1)
-    assert not errors
-
-
-def test_transaction_edit_shares_mixed_use_creation_lock(
+def test_transaction_mutation_uses_workbook_ledger_lock(
     default_storage: GoogleSheetsStorage,
 ) -> None:
     transaction = default_storage.create_transaction(
@@ -117,7 +55,7 @@ def test_transaction_edit_shares_mixed_use_creation_lock(
             finished.set()
 
     worker = threading.Thread(target=edit_transaction)
-    with google_sheets_module._MIXED_USE_CREATE_LOCK:
+    with default_storage._workbook_locks.ledger:
         worker.start()
         assert started.wait(1)
         assert not finished.wait(0.1)
@@ -126,36 +64,33 @@ def test_transaction_edit_shares_mixed_use_creation_lock(
     assert not errors
 
 
-def test_bulk_category_change_shares_mixed_use_creation_lock(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    transaction = default_storage.create_transaction(
-        **expense_inputs(default_storage), kind="Expense", amount="10"
+def test_storage_instances_for_same_spreadsheet_share_ledger_lock() -> None:
+    first = GoogleSheetsStorage(
+        FakeWorkbook(), spreadsheet_id="shared-spreadsheet", sleeper=lambda _: None
     )
+    second = GoogleSheetsStorage(
+        FakeWorkbook(), spreadsheet_id="shared-spreadsheet", sleeper=lambda _: None
+    )
+    first.ensure_defaults()
+    second.ensure_defaults()
     category = next(
-        item
-        for item in default_storage.list_categories()
-        if item["kind"] == "Expense" and item["id"] != transaction["category_id"]
+        item for item in second.list_categories() if item["name"] == "Office"
     )
     started = threading.Event()
     finished = threading.Event()
     errors: list[BaseException] = []
 
-    def change_category() -> None:
+    def edit_category() -> None:
         started.set()
         try:
-            default_storage.bulk_change_transaction_category(
-                [transaction["id"]],
-                expected_transactions=[transaction],
-                category_id=category["id"],
-            )
+            second.edit_category(category["id"], name="Office updated")
         except BaseException as error:  # pragma: no cover - assertion below reports it
             errors.append(error)
         finally:
             finished.set()
 
-    worker = threading.Thread(target=change_category)
-    with google_sheets_module._MIXED_USE_CREATE_LOCK:
+    worker = threading.Thread(target=edit_category)
+    with first._workbook_locks.ledger:
         worker.start()
         assert started.wait(1)
         assert not finished.wait(0.1)
@@ -164,229 +99,45 @@ def test_bulk_category_change_shares_mixed_use_creation_lock(
     assert not errors
 
 
-def test_transaction_receipt_setter_shares_mixed_use_creation_lock(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    transaction = default_storage.create_transaction(
-        **expense_inputs(default_storage), kind="Expense", amount="10"
+def test_different_spreadsheets_have_independent_ledger_locks() -> None:
+    first = GoogleSheetsStorage(
+        FakeWorkbook(), spreadsheet_id="first-spreadsheet", sleeper=lambda _: None
+    )
+    second = GoogleSheetsStorage(
+        FakeWorkbook(), spreadsheet_id="second-spreadsheet", sleeper=lambda _: None
+    )
+    first.ensure_defaults()
+    second.ensure_defaults()
+    category = next(
+        item for item in second.list_categories() if item["name"] == "Office"
     )
     started = threading.Event()
     finished = threading.Event()
     errors: list[BaseException] = []
 
-    def set_receipt() -> None:
+    def edit_category() -> None:
         started.set()
         try:
-            default_storage.set_transaction_receipt_references(transaction["id"], [])
+            second.edit_category(category["id"], name="Office updated")
         except BaseException as error:  # pragma: no cover - assertion below reports it
             errors.append(error)
         finally:
             finished.set()
 
-    worker = threading.Thread(target=set_receipt)
-    with google_sheets_module._MIXED_USE_CREATE_LOCK:
+    worker = threading.Thread(target=edit_category)
+    with first._workbook_locks.ledger:
         worker.start()
         assert started.wait(1)
-        assert not finished.wait(0.1)
-    assert finished.wait(1)
+        assert finished.wait(1)
     worker.join(timeout=1)
     assert not errors
 
 
-def test_transaction_receipt_unlink_shares_mixed_use_creation_lock(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    transaction = default_storage.create_transaction(
-        **expense_inputs(default_storage), kind="Expense", amount="10"
-    )
-    started = threading.Event()
-    finished = threading.Event()
-    errors: list[BaseException] = []
-
-    def unlink_receipt() -> None:
-        started.set()
-        try:
-            default_storage.unlink_transaction_receipt(
-                transaction["id"], file_id="missing-file"
-            )
-        except BaseException as error:  # pragma: no cover - assertion below reports it
-            errors.append(error)
-        finally:
-            finished.set()
-
-    worker = threading.Thread(target=unlink_receipt)
-    with google_sheets_module._MIXED_USE_CREATE_LOCK:
-        worker.start()
-        assert started.wait(1)
-        assert not finished.wait(0.1)
-    assert finished.wait(1)
-    worker.join(timeout=1)
-    assert not errors
-
-
-def test_receipt_remap_shares_mixed_use_creation_lock(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    transaction = default_storage.create_transaction(
-        **expense_inputs(default_storage), kind="Expense", amount="10"
-    )
-    old_reference = {
-        "id": "oldreceipt01",
-        "name": "old.pdf",
-        "receipt_id": "fedcba9876543210fedcba9876543210",
-        "original_filename": "old.pdf",
-        "mime_type": "application/pdf",
-        "byte_size": 1,
-        "sha256": "a" * 64,
-    }
-    new_reference = {**old_reference, "id": "newreceipt01", "name": "new.pdf"}
-    default_storage.set_transaction_receipt_references(
-        transaction["id"], [old_reference]
-    )
-    started = threading.Event()
-    finished = threading.Event()
-    errors: list[BaseException] = []
-
-    def remap_receipt() -> None:
-        started.set()
-        try:
-            default_storage.remap_transaction_receipt(
-                transaction["id"],
-                old_file_id=old_reference["id"],
-                reference=new_reference,
-            )
-        except BaseException as error:  # pragma: no cover - assertion below reports it
-            errors.append(error)
-        finally:
-            finished.set()
-
-    worker = threading.Thread(target=remap_receipt)
-    with google_sheets_module._MIXED_USE_CREATE_LOCK:
-        worker.start()
-        assert started.wait(1)
-        assert not finished.wait(0.1)
-    assert finished.wait(1)
-    worker.join(timeout=1)
-    assert not errors
-
-
-def test_mixed_use_delete_shares_mixed_use_creation_lock(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    source = default_storage.create_mixed_use_expense(
-        **expense_inputs(default_storage),
-        total_expense="100",
-        business_use_percentage="50",
-        allocation_rationale="Measured use",
-    )
-    started = threading.Event()
-    finished = threading.Event()
-    errors: list[BaseException] = []
-
-    def delete_mixed_use() -> None:
-        started.set()
-        try:
-            default_storage.delete_mixed_use_expense(source["id"])
-        except BaseException as error:  # pragma: no cover - assertion below reports it
-            errors.append(error)
-        finally:
-            finished.set()
-
-    worker = threading.Thread(target=delete_mixed_use)
-    with google_sheets_module._MIXED_USE_CREATE_LOCK:
-        worker.start()
-        assert started.wait(1)
-        assert not finished.wait(0.1)
-    assert finished.wait(1)
-    worker.join(timeout=1)
-    assert not errors
-
-
-def test_category_delete_shares_mixed_use_creation_lock(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    category = default_storage.create_category("Unused category", "Expense")
-    started = threading.Event()
-    finished = threading.Event()
-    errors: list[BaseException] = []
-
-    def delete_category() -> None:
-        started.set()
-        try:
-            default_storage.delete_category(category["id"])
-        except BaseException as error:  # pragma: no cover - assertion below reports it
-            errors.append(error)
-        finally:
-            finished.set()
-
-    worker = threading.Thread(target=delete_category)
-    with google_sheets_module._MIXED_USE_CREATE_LOCK:
-        worker.start()
-        assert started.wait(1)
-        assert not finished.wait(0.1)
-    assert finished.wait(1)
-    worker.join(timeout=1)
-    assert not errors
-
-
-def test_transaction_delete_shares_mixed_use_creation_lock(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    transaction = default_storage.create_transaction(
-        **expense_inputs(default_storage), kind="Expense", amount="10"
-    )
-    started = threading.Event()
-    finished = threading.Event()
-    errors: list[BaseException] = []
-
-    def delete_transaction() -> None:
-        started.set()
-        try:
-            default_storage.delete_transaction(transaction["id"])
-        except BaseException as error:  # pragma: no cover - assertion below reports it
-            errors.append(error)
-        finally:
-            finished.set()
-
-    worker = threading.Thread(target=delete_transaction)
-    with google_sheets_module._MIXED_USE_CREATE_LOCK:
-        worker.start()
-        assert started.wait(1)
-        assert not finished.wait(0.1)
-    assert finished.wait(1)
-    worker.join(timeout=1)
-    assert not errors
-
-
-def test_bulk_transaction_delete_shares_mixed_use_creation_lock(
-    default_storage: GoogleSheetsStorage,
-) -> None:
-    transaction = default_storage.create_transaction(
-        **expense_inputs(default_storage), kind="Expense", amount="10"
-    )
-    started = threading.Event()
-    finished = threading.Event()
-    errors: list[BaseException] = []
-
-    def delete_transaction() -> None:
-        started.set()
-        try:
-            default_storage.bulk_delete_transactions(
-                [transaction["id"]], expected_transactions=[transaction]
-            )
-        except BaseException as error:  # pragma: no cover - assertion below reports it
-            errors.append(error)
-        finally:
-            finished.set()
-
-    worker = threading.Thread(target=delete_transaction)
-    with google_sheets_module._MIXED_USE_CREATE_LOCK:
-        worker.start()
-        assert started.wait(1)
-        assert not finished.wait(0.1)
-    assert finished.wait(1)
-    worker.join(timeout=1)
-    assert not errors
+def test_lock_primitives_are_not_google_sheets_facade_exports() -> None:
+    assert "_workbook_mutation_lock" not in google_sheets_module.__all__
+    assert "_MIXED_USE_CREATE_LOCK" not in google_sheets_module.__dict__
+    assert "_PAYEE_WRITE_LOCK" not in google_sheets_module.__dict__
+    assert "_TAG_WRITE_LOCK" not in google_sheets_module.__dict__
 
 
 def test_category_delete_rejects_orphaned_mixed_use_source(
@@ -749,7 +500,7 @@ def test_receipt_link_scans_for_duplicate_ownership_inside_lock(
         finally:
             finished.set()
 
-    with google_sheets_module._MIXED_USE_CREATE_LOCK:
+    with default_storage._workbook_locks.ledger:
         worker = threading.Thread(target=link_receipt)
         worker.start()
         assert not scan_started.wait(0.1)
