@@ -99,6 +99,18 @@ def test_storage_instances_for_same_spreadsheet_share_ledger_lock() -> None:
     assert not errors
 
 
+def test_unconfigured_workbooks_use_their_stable_id_for_lock_identity() -> None:
+    first_workbook = FakeWorkbook()
+    first_workbook.id = "shared-workbook"
+    second_workbook = FakeWorkbook()
+    second_workbook.id = "shared-workbook"
+
+    first = GoogleSheetsStorage(first_workbook, sleeper=lambda _: None)
+    second = GoogleSheetsStorage(second_workbook, sleeper=lambda _: None)
+
+    assert first._workbook_locks is second._workbook_locks
+
+
 def test_different_spreadsheets_have_independent_ledger_locks() -> None:
     first = GoogleSheetsStorage(
         FakeWorkbook(), spreadsheet_id="first-spreadsheet", sleeper=lambda _: None

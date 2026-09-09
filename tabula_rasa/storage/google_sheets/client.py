@@ -54,8 +54,11 @@ T = TypeVar("T")
 def _configured_spreadsheet_id(secrets: Mapping[str, Any]) -> str:
     """Read and normalize the stable workbook identity from profile settings."""
     try:
-        spreadsheet_id = str(secrets["spreadsheet_id"]).strip()
-        if not spreadsheet_id:
+        raw_spreadsheet_id = secrets["spreadsheet_id"]
+        if raw_spreadsheet_id is None:
+            raise ValueError("spreadsheet_id is None")
+        spreadsheet_id = str(raw_spreadsheet_id).strip()
+        if not spreadsheet_id or spreadsheet_id.casefold() == "none":
             raise ValueError("spreadsheet_id is empty")
     except (KeyError, TypeError, ValueError) as exc:
         raise StorageAuthenticationError(
