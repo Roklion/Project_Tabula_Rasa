@@ -28,7 +28,8 @@ def copied_transaction_description(transaction: Mapping[str, object]) -> str:
     )
     provenance_suffix = re.compile(
         r"\.\s+(?:Copy From|Copied from transaction)\s+"
-        r".+$"
+        r"(?:[^\s:.]+|"
+        rf"{re.escape(source_id)})$"
     )
     while description:
         stripped = provenance_prefix.sub("", description, count=1).strip()

@@ -127,6 +127,15 @@ def test_copied_transaction_description_normalizes_blank_whitespace_id_memo() ->
     ) == "Copy From source 1"
 
 
+def test_copied_transaction_description_preserves_multiword_suffix_memo() -> None:
+    assert copied_transaction_description(
+        {
+            "id": "source-123",
+            "description": "My memo. Copy From vendor invoice",
+        }
+    ) == "My memo. Copy From vendor invoice. Copy From source-123"
+
+
 def test_copied_transaction_description_has_no_separator_for_blank_memo() -> None:
     assert copied_transaction_description(
         {"id": "source-123", "description": "  Copy From old-1  "}
