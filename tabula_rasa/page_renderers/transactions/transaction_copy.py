@@ -23,7 +23,8 @@ def copied_transaction_description(transaction: Mapping[str, object]) -> str:
         r"(?:\s*:\s+|\.\s+)"
     )
     provenance_prefix_only = re.compile(
-        r"^(?:Copy From|Copied from transaction)\s+[^\s:.]+$"
+        r"^(?:Copy From|Copied from transaction)\s+(?:[^\s:.]+|"
+        rf"{re.escape(source_id)})$"
     )
     provenance_suffix = re.compile(
         r"\.\s+(?:Copy From|Copied from transaction)\s+"
