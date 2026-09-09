@@ -17,9 +17,7 @@ from .validation import _normalize_tag_ids
 from .validation import _raw_tag_ids_may_contain
 from .validation import _utc_now
 from .validation import normalize_tag_name
-from .base import _MIXED_USE_CREATE_LOCK
 from .base import _StoredRow
-from .base import _TAG_WRITE_LOCK
 from .managed import _ManagedMixin
 
 class TagsMixin(_ManagedMixin):
@@ -51,7 +49,7 @@ class TagsMixin(_ManagedMixin):
     def create_tag(self, name: str, *, active: bool = True) -> dict[str, str]:
         """Create or reactivate a profile-local tag by normalized name."""
         name = _clean_text(name, "Tag name", required=True)
-        with _TAG_WRITE_LOCK:
+        with self._workbook_locks.tag:
             existing = self.list_tags(_force_refresh=True)
             key = normalize_tag_name(name)
             match = next(
@@ -85,7 +83,7 @@ class TagsMixin(_ManagedMixin):
     ) -> dict[str, str]:
         """Rename or activate/deactivate a tag while retaining its stable ID."""
         tag_id = _clean_text(tag_id, "Tag", required=True)
-        with _TAG_WRITE_LOCK:
+        with self._workbook_locks.tag:
             current = self._find_row("Tags", tag_id)
             updated = dict(current.values)
             expected_record = expected_tag or expected
@@ -129,7 +127,7 @@ class TagsMixin(_ManagedMixin):
             raise StorageValidationError("Select at least one source tag")
         if target_id in source_ids:
             raise StorageValidationError("The target tag cannot also be a source")
-        with _MIXED_USE_CREATE_LOCK, _TAG_WRITE_LOCK:
+        with self._workbook_locks.ledger, self._workbook_locks.tag:
             snapshot = self._snapshot(
                 ["Tags", "Transactions", "Mileage", "MixedUseExpenses"],
                 force_refresh=True,
@@ -326,7 +324,7 @@ class TagsMixin(_ManagedMixin):
     ) -> dict[str, str]:
         """Permanently remove one tag only when no tagged row uses it."""
         tag_id = _clean_text(tag_id, "Tag", required=True)
-        with _MIXED_USE_CREATE_LOCK, _TAG_WRITE_LOCK:
+        with self._workbook_locks.ledger, self._workbook_locks.tag:
             snapshot = self._snapshot(
                 ["Tags", "Transactions", "Mileage", "MixedUseExpenses"],
                 force_refresh=True,

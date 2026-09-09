@@ -1,11 +1,7 @@
 """Stable public facade for Google Sheets persistence."""
 
 from .base import (
-    _MIXED_USE_CREATE_LOCK,
-    _PAYEE_WRITE_LOCK,
-    _TAG_WRITE_LOCK,
     _StoredRow,
-    _active_ledger_mutation_lock,
 )
 from .client import Credentials, _GoogleSheetsStorageClient, gspread
 from .errors import (
@@ -95,11 +91,7 @@ __all__ = [
     "TRANSACTION_KINDS",
     "DEFAULT_ACCOUNTS",
     "DEFAULT_CATEGORIES",
-    "_MIXED_USE_CREATE_LOCK",
-    "_PAYEE_WRITE_LOCK",
-    "_TAG_WRITE_LOCK",
     "_StoredRow",
-    "_active_ledger_mutation_lock",
     "_mutation_guidance",
     "_clean_text",
     "_looks_like_partial_blank_workbook",

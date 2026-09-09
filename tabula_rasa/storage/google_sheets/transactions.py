@@ -40,11 +40,7 @@ from .validation import (
     decode_receipt_references,
     normalize_payee_name,
 )
-from .base import (
-    _MIXED_USE_CREATE_LOCK,
-    _StoredRow,
-    _active_ledger_mutation_lock,
-)
+from .base import _StoredRow, _workbook_mutation_lock
 
 class TransactionsMixin:
     """Mixin for the transactions storage boundary."""
@@ -200,7 +196,7 @@ class TransactionsMixin:
         expected_transactions: Sequence[Mapping[str, Any]],
         category_id: str,
     ) -> dict[str, str]:
-        with _MIXED_USE_CREATE_LOCK:
+        with self._workbook_locks.ledger:
             return self._bulk_change_transaction_category(
                 transaction_ids,
                 expected_transactions=expected_transactions,
@@ -305,7 +301,7 @@ class TransactionsMixin:
         expected_transactions: Sequence[Mapping[str, Any]],
     ) -> dict[str, str]:
         """Revalidate and delete transactions with one atomic row-index batch."""
-        with _MIXED_USE_CREATE_LOCK:
+        with self._workbook_locks.ledger:
             selected_rows, current_by_id = self._fresh_bulk_transaction_snapshot(
                 transaction_ids, expected_transactions
             )
@@ -676,7 +672,7 @@ class TransactionsMixin:
         )
 
     def create_transaction(self, **data: Any) -> dict[str, str]:
-        with _MIXED_USE_CREATE_LOCK:
+        with self._workbook_locks.ledger:
             # Generic transaction creation cannot manufacture a derived
             # projection. Mixed-use projections are created only as the paired
             # result of create_mixed_use_expense.
@@ -687,7 +683,7 @@ class TransactionsMixin:
             return record
 
     def edit_transaction(self, transaction_id: str, **changes: Any) -> dict[str, str]:
-        with _MIXED_USE_CREATE_LOCK:
+        with self._workbook_locks.ledger:
             return self._edit_transaction(transaction_id, **changes)
 
     def _edit_transaction(self, transaction_id: str, **changes: Any) -> dict[str, str]:
@@ -706,7 +702,7 @@ class TransactionsMixin:
         return updated
 
     def delete_transaction(self, transaction_id: str) -> None:
-        with _MIXED_USE_CREATE_LOCK:
+        with self._workbook_locks.ledger:
             current = self._find_row("Transactions", transaction_id)
             self._reject_mixed_use_projection(current.values)
             original = dict(current.values)
@@ -740,7 +736,7 @@ class TransactionsMixin:
                 invalidate=("Transactions",),
             )
 
-    @_active_ledger_mutation_lock
+    @_workbook_mutation_lock
     def import_csv_transactions(
         self, rows: Iterable[Mapping[str, Any]]
     ) -> list[dict[str, str]]:
@@ -876,7 +872,7 @@ class TransactionsMixin:
             "summary": {"ready": len(ready), "duplicates": len(duplicate_rows), **counts},
         }
 
-    @_active_ledger_mutation_lock
+    @_workbook_mutation_lock
     def import_quickbooks_transactions(
         self, rows: Iterable[Mapping[str, Any]], *, auto_create: bool = False
     ) -> list[dict[str, str]]:

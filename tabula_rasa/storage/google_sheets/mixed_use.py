@@ -30,9 +30,6 @@ from .validation import (
     decode_receipt_references,
     mixed_use_ledger_description,
 )
-from .base import (
-    _MIXED_USE_CREATE_LOCK,
-)
 
 class _MixedUseMixin:
     """Mixin for the mixed use storage boundary."""
@@ -345,7 +342,7 @@ class _MixedUseMixin:
         return self.get_mixed_use_expense(source_id)
 
     def create_mixed_use_expense(self, **data: Any) -> dict[str, str]:
-        with _MIXED_USE_CREATE_LOCK:
+        with self._workbook_locks.ledger:
             return self._create_mixed_use_expense(**data)
 
     def _create_mixed_use_expense(self, **data: Any) -> dict[str, str]:
@@ -515,7 +512,7 @@ class _MixedUseMixin:
         expected: Mapping[str, Any] | None = None,
         **changes: Any,
     ) -> dict[str, str]:
-        with _MIXED_USE_CREATE_LOCK:
+        with self._workbook_locks.ledger:
             return self._edit_mixed_use_expense(
                 source_id,
                 expected_source=expected_source,
@@ -635,7 +632,7 @@ class _MixedUseMixin:
         expected_source: Mapping[str, Any] | None = None,
         expected: Mapping[str, Any] | None = None,
     ) -> None:
-        with _MIXED_USE_CREATE_LOCK:
+        with self._workbook_locks.ledger:
             self._delete_mixed_use_expense(
                 source_id,
                 expected_source=expected_source,

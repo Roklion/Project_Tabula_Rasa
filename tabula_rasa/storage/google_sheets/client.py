@@ -41,6 +41,7 @@ from .validation import (
 )
 from .base import (
     _StoredRow,
+    _workbook_lock_bundle,
 )
 from typing import TYPE_CHECKING, TypeVar
 
@@ -48,6 +49,19 @@ if TYPE_CHECKING:
     from . import GoogleSheetsStorage
 
 T = TypeVar("T")
+
+
+def _configured_spreadsheet_id(secrets: Mapping[str, Any]) -> str:
+    """Read and normalize the stable workbook identity from profile settings."""
+    try:
+        spreadsheet_id = str(secrets["spreadsheet_id"]).strip()
+        if not spreadsheet_id:
+            raise ValueError("spreadsheet_id is empty")
+    except (KeyError, TypeError, ValueError) as exc:
+        raise StorageAuthenticationError(
+            "Profile Google settings are incomplete or malformed"
+        ) from exc
+    return spreadsheet_id
 
 
 class _GoogleSheetsStorageClient:
@@ -61,6 +75,7 @@ class _GoogleSheetsStorageClient:
         retry_attempts: int = 4,
         retry_base_delay_seconds: float = 0.25,
         sleeper: Callable[[float], None] = time.sleep,
+        spreadsheet_id: str | None = None,
         _initial_worksheets: Mapping[str, Any] | None = None,
         _initial_values: Mapping[str, list[list[Any]]] | None = None,
     ):
@@ -69,6 +84,7 @@ class _GoogleSheetsStorageClient:
         self._retry_attempts = retry_attempts
         self._retry_base_delay_seconds = retry_base_delay_seconds
         self._sleeper = sleeper
+        self._workbook_locks = _workbook_lock_bundle(workbook, spreadsheet_id)
         self._worksheet_cache = dict(_initial_worksheets or {})
         self._header_cache: dict[str, list[str]] = {}
         self._row_cache: dict[str, tuple[float, list[_StoredRow]]] = {}
@@ -93,9 +109,7 @@ class _GoogleSheetsStorageClient:
         """Open a configured workbook without changing its contents."""
         try:
             credential_info = dict(secrets["gcp_service_account"])
-            spreadsheet_id = str(secrets["spreadsheet_id"]).strip()
-            if not spreadsheet_id:
-                raise ValueError("spreadsheet_id is empty")
+            spreadsheet_id = _configured_spreadsheet_id(secrets)
         except (KeyError, TypeError, ValueError) as exc:
             raise StorageAuthenticationError(
                 "Profile Google settings are incomplete or malformed"
@@ -143,12 +157,13 @@ class _GoogleSheetsStorageClient:
         secrets: Mapping[str, Any],
     ) -> "GoogleSheetsStorage":
         """Create storage using only read access to the configured workbook."""
+        spreadsheet_id = _configured_spreadsheet_id(secrets)
         workbook = cls._open_workbook_from_secrets(
             secrets,
             scopes=[SHEETS_READONLY_SCOPE],
         )
         try:
-            return cls(workbook)
+            return cls(workbook, spreadsheet_id=spreadsheet_id)
         except StorageValidationError:
             raise
         except StorageUnavailableError as exc:
@@ -164,6 +179,7 @@ class _GoogleSheetsStorageClient:
         schema conversion is performed by ``scripts/migrate_workbook.py`` so
         an ordinary application startup cannot mutate ledger data.
         """
+        spreadsheet_id = _configured_spreadsheet_id(secrets)
         workbook = cls._open_workbook_from_secrets(
             secrets,
             scopes=[SHEETS_SCOPE],
@@ -195,6 +211,7 @@ class _GoogleSheetsStorageClient:
                     worksheet.update([list(headers)], range_name="A1", raw=True)
                 return cls(
                     workbook,
+                    spreadsheet_id=spreadsheet_id,
                     _initial_worksheets=worksheets,
                     _initial_values={
                         title: [list(headers)]
@@ -205,6 +222,7 @@ class _GoogleSheetsStorageClient:
             try:
                 return cls(
                     workbook,
+                    spreadsheet_id=spreadsheet_id,
                     _initial_worksheets=worksheets,
                     _initial_values=values,
                 )
