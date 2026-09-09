@@ -22,6 +22,22 @@ def _ledger_setup(storage):
     return account, category
 
 
+def test_legacy_payee_and_tag_aliases_remain_available(default_storage) -> None:
+    payee_target = default_storage.create_payee("Alias target")
+    payee_source = default_storage.create_payee("Alias source")
+    tag_target = default_storage.create_tag("Alias target")
+    tag_source = default_storage.create_tag("Alias source")
+
+    assert default_storage.merge_payee(
+        payee_target["id"], [payee_source["id"]]
+    )["status"] == "fully_applied"
+    assert default_storage.delete_payee(payee_target["id"])["status"] == "fully_applied"
+    assert default_storage.merge_tag(
+        tag_target["id"], [tag_source["id"]]
+    )["status"] == "fully_applied"
+    assert default_storage.delete_tag(tag_target["id"])["status"] == "fully_applied"
+
+
 def test_payee_rename_preserves_id_and_references(default_storage) -> None:
     account, category = _ledger_setup(default_storage)
     payee = default_storage.create_payee("Vendor")

@@ -32,6 +32,19 @@ from tabula_rasa.page_renderers.mileage import (
 )
 
 
+def _mileage_source() -> str:
+    return "\n".join(
+        Path(path).read_text()
+        for path in (
+            "tabula_rasa/page_renderers/mileage.py",
+            "tabula_rasa/page_renderers/mileage_routing.py",
+            "tabula_rasa/page_renderers/mileage_locations.py",
+            "tabula_rasa/page_renderers/mileage_form.py",
+            "tabula_rasa/page_renderers/mileage_ledger.py",
+        )
+    )
+
+
 def test_round_trip_calculation_uses_reversed_place_ids() -> None:
     calls: list[tuple[str, str]] = []
 
@@ -456,7 +469,7 @@ def test_recalculation_rearms_recorded_location_tracking(monkeypatch) -> None:
 
 
 def test_recorded_google_text_is_saved_only_by_the_explicit_save_action() -> None:
-    source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
+    source = _mileage_source()
 
     assert 'st.checkbox(\n        f"Confirm {label.lower()} text"' not in source
     assert "_recorded_location_is_confirmed" not in source
@@ -465,13 +478,13 @@ def test_recorded_google_text_is_saved_only_by_the_explicit_save_action() -> Non
 
 
 def test_add_trip_calculate_button_is_before_recorded_location_fields() -> None:
-    source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
+    source = _mileage_source()
 
     assert source.index("calculate_requested = st.button(") < source.index(
         "recorded_start = _ledger_location_text(\n"
     )
     assert source.index("calculate_requested = st.button(") < source.index(
-        'st.checkbox(\n            "Round trip"'
+        'st.checkbox(\n        "Round trip"'
     )
     assert "No return-route mileage has been calculated for this round " in source
     assert "No mileage has been calculated for the selected addresses." in source
@@ -480,7 +493,7 @@ def test_add_trip_calculate_button_is_before_recorded_location_fields() -> None:
 
 
 def test_edit_calculate_button_is_before_delete_controls() -> None:
-    source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
+    source = _mileage_source()
     edit_address_section = source[
         source.index("edit_start = address_autocomplete(") : source.index(
             "edit_route_key = _route_key",
@@ -493,7 +506,7 @@ def test_edit_calculate_button_is_before_delete_controls() -> None:
         'st.caption("Update this saved mileage row.")'
     )
     assert source.index("calculate_edit_requested = st.button(") < source.index(
-        'st.warning(\n                        "Deleting this mileage trip is permanent'
+        "Deleting this mileage trip is permanent"
     )
     assert source.index("calculate_edit_requested = st.button(") < source.index(
         '"Permanently delete mileage trip"'
@@ -651,7 +664,7 @@ def test_mileage_tag_helpers_dedupe_and_support_legacy_display_names() -> None:
 
 
 def test_mileage_tag_ux_is_profile_scoped_and_persisted_through_add_edit() -> None:
-    source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
+    source = _mileage_source()
 
     assert "render_tag_selector(" in source
     assert 'key="add_mileage_tag_ids"' in source
@@ -665,7 +678,7 @@ def test_mileage_tag_ux_is_profile_scoped_and_persisted_through_add_edit() -> No
 
 
 def test_mileage_save_paths_validate_blank_inline_tag_names() -> None:
-    source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
+    source = _mileage_source()
 
     assert "inline_tag_name_error(new_tag_name)" in source
     assert "inline_tag_name_error(edited_new_tag_name)" in source
@@ -675,9 +688,9 @@ def test_mileage_save_paths_validate_blank_inline_tag_names() -> None:
 
 
 def test_add_mileage_route_invalidation_preserves_business_miles() -> None:
-    source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
+    source = _mileage_source()
 
-    assert '            _route_key(context, "add"),' in source
+    assert '        _route_key(context, "add"),' in source
     assert '                st.session_state["add_mileage_miles"] = 0.0' not in source
     assert (
         '                st.session_state["add_mileage_return_miles"] = 0.0'
@@ -695,7 +708,7 @@ def test_add_mileage_route_invalidation_preserves_business_miles() -> None:
 
 
 def test_mileage_drafts_are_not_buffered_in_forms() -> None:
-    source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
+    source = _mileage_source()
 
     assert 'with st.form("add_mileage_trip"' not in source
     assert 'with st.form("edit_mileage_trip")' not in source
@@ -703,7 +716,7 @@ def test_mileage_drafts_are_not_buffered_in_forms() -> None:
 
 
 def test_manual_fallback_explains_why_calculation_is_disabled() -> None:
-    source = Path("tabula_rasa/page_renderers/mileage.py").read_text()
+    source = _mileage_source()
 
     assert "Choose a Google suggestion for both endpoints to enable mileage " in source
     assert "calculation. Manual entries can still be saved" in source

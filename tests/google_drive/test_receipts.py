@@ -1,0 +1,494 @@
+from __future__ import annotations
+
+import hashlib
+
+import pytest
+import requests
+
+from tabula_rasa.google_drive import (
+    GoogleDriveAccessError, GoogleDriveClient, safe_receipt_filename, suffixed_receipt_filename,
+)
+
+from ._support import FakeResponse, DriveSession, drive_settings, oauth_config
+
+class TestGoogleDriveReceipts:
+    def test_receipt_upload_is_transaction_scoped_and_sanitizes_name(self) -> None:
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, {"files": []}),
+                FakeResponse(
+                    200,
+                    {
+                        "id": "receipt123456",
+                        "name": "statement.pdf",
+                    },
+                ),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        uploaded = client.upload_receipt(
+            profile_key="north",
+            folder_id="folder123456",
+            original_name=r"..\statement.pdf",
+            content=b"receipt",
+            mime_type="application/pdf",
+        )
+
+        assert uploaded["id"] == "receipt123456"
+        create_request = session.requests[-1]
+        body = create_request[2]["data"]
+        assert b'"tabulaRasaProfile":"north"' in body
+        assert b'"tabulaRasaTransaction"' not in body
+        assert (
+            f'"tabulaRasaSha256":"{hashlib.sha256(b"receipt").hexdigest()}"'.encode()
+            in body
+        )
+        assert b'"tabulaRasaReceiptId":' in body
+        assert uploaded["size"] == "7"
+        assert b"..\\" not in body
+        assert safe_receipt_filename("../../statement.pdf") == "statement.pdf"
+        assert safe_receipt_filename("CON.pdf") == "_CON.pdf"
+        assert suffixed_receipt_filename("statement.pdf", 2) == (
+            "statement (2).pdf"
+        )
+        assert suffixed_receipt_filename("receipt", 3) == "receipt (3)"
+
+
+    def test_receipt_upload_adds_suffix_for_case_only_name_collision(
+        self,
+    ) -> None:
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": []}),
+                FakeResponse(
+                    200,
+                    {
+                        "files": [
+                            {
+                                "id": "receipt123456",
+                                "name": "Statement.pdf",
+                            }
+                        ]
+                    },
+                ),
+                FakeResponse(
+                    200,
+                    {
+                        "id": "receipt234567",
+                        "name": "statement (2).pdf",
+                    },
+                ),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        uploaded = client.upload_receipt(
+            profile_key="north",
+            folder_id="folder123456",
+            original_name="statement.pdf",
+            content=b"second receipt",
+            mime_type="application/pdf",
+        )
+
+        assert uploaded["name"] == "statement (2).pdf"
+        assert [request[0] for request in session.requests] == [
+            "GET",
+            "GET",
+            "POST",
+        ]
+        assert "name =" not in session.requests[0][2]["params"]["q"]
+        assert session.requests[0][2]["params"]["pageSize"] == 2
+        assert session.requests[1][2]["params"]["pageSize"] == 1000
+        assert b'"name":"statement (2).pdf"' in (
+            session.requests[2][2]["data"]
+        )
+
+
+    def test_receipt_upload_recovers_an_uncertain_create_response(self) -> None:
+        committed = {
+            "id": "receipt123456",
+            "name": "statement.pdf",
+        }
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, {"files": []}),
+                requests.ConnectionError("response lost"),
+                FakeResponse(200, {"files": [committed]}),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        uploaded = client.upload_receipt(
+            profile_key="north",
+            folder_id="folder123456",
+            original_name="statement.pdf",
+            content=b"receipt",
+            mime_type="application/pdf",
+        )
+
+        assert uploaded["id"] == committed["id"]
+        assert uploaded["name"] == committed["name"]
+        assert uploaded["appProperties"]["tabulaRasaSha256"] == hashlib.sha256(
+            b"receipt"
+        ).hexdigest()
+        recovery_query = session.requests[-1][2]["params"]["q"]
+        assert "value='north'" in recovery_query
+        assert "tabulaRasaTransaction" not in recovery_query
+        assert "key='tabulaRasaReceiptId'" in recovery_query
+        assert "key='tabulaRasaSha256'" in recovery_query
+
+
+    def test_receipt_upload_retries_once_after_unreadable_success(self) -> None:
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, payload="not-json"),
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, {"id": "receipt123456", "name": "statement.pdf"}),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        uploaded = client.upload_receipt(
+            profile_key="north",
+            folder_id="folder123456",
+            original_name="statement.pdf",
+            content=b"receipt",
+            mime_type="application/pdf",
+            receipt_id="a" * 32,
+        )
+
+        assert uploaded["id"] == "receipt123456"
+        assert [request[0] for request in session.requests] == [
+            "GET",
+            "GET",
+            "POST",
+            "GET",
+            "POST",
+        ]
+
+
+    def test_receipt_upload_retries_once_after_transient_failure(self) -> None:
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, {"files": []}),
+                FakeResponse(500),
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, {"id": "receipt123456", "name": "statement.pdf"}),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        uploaded = client.upload_receipt(
+            profile_key="north",
+            folder_id="folder123456",
+            original_name="statement.pdf",
+            content=b"receipt",
+            mime_type="application/pdf",
+            receipt_id="a" * 32,
+        )
+
+        assert uploaded["id"] == "receipt123456"
+        assert [request[0] for request in session.requests] == [
+            "GET",
+            "GET",
+            "POST",
+            "GET",
+            "POST",
+        ]
+
+
+    def test_receipt_upload_keeps_preflight_failure_retryable_without_upload_attempt(
+        self,
+    ) -> None:
+        session = DriveSession([FakeResponse(500) for _ in range(4)])
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        with pytest.raises(GoogleDriveAccessError) as raised:
+            client.upload_receipt(
+                profile_key="north",
+                folder_id="folder123456",
+                original_name="statement.pdf",
+                content=b"receipt",
+                mime_type="application/pdf",
+                receipt_id="a" * 32,
+            )
+
+        assert raised.value.retryable is True
+        assert raised.value.upload_attempted is False
+        assert [request[0] for request in session.requests] == [
+            "GET",
+            "GET",
+            "GET",
+            "GET",
+        ]
+
+
+    def test_receipt_upload_preserves_create_uncertainty_when_readback_fails(
+        self,
+    ) -> None:
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, {"files": []}),
+                requests.ConnectionError("response lost"),
+                FakeResponse(200, payload="not-json"),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        with pytest.raises(GoogleDriveAccessError) as raised:
+            client.upload_receipt(
+                profile_key="north",
+                folder_id="folder123456",
+                original_name="statement.pdf",
+                content=b"receipt",
+                mime_type="application/pdf",
+                receipt_id="a" * 32,
+            )
+
+        assert raised.value.retryable is True
+        assert raised.value.upload_attempted is True
+        assert [request[0] for request in session.requests] == [
+            "GET",
+            "GET",
+            "POST",
+            "GET",
+        ]
+
+
+    def test_receipt_upload_retries_with_a_stable_identity(self) -> None:
+        receipt_id = "a" * 32
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": []}),
+                FakeResponse(200, {"files": []}),
+                requests.ConnectionError("response lost"),
+                FakeResponse(200, {"files": []}),
+                FakeResponse(
+                    200,
+                    {
+                        "id": "receipt123456",
+                        "name": "statement.pdf",
+                    },
+                ),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        uploaded = client.upload_receipt(
+            profile_key="north",
+            folder_id="folder123456",
+            original_name="statement.pdf",
+            content=b"receipt",
+            mime_type="application/pdf",
+            receipt_id=receipt_id,
+        )
+
+        assert uploaded["id"] == "receipt123456"
+        post_bodies = [
+            request[2]["data"]
+            for request in session.requests
+            if request[0] == "POST"
+        ]
+        assert len(post_bodies) == 2
+        assert all(
+            f'"tabulaRasaReceiptId":"{receipt_id}"'.encode() in body
+            for body in post_bodies
+        )
+        assert all(b'"name":"statement.pdf"' in body for body in post_bodies)
+
+
+    def test_profile_receipt_listing_is_not_transaction_scoped(self) -> None:
+        receipt = {
+            "id": "receipt123456",
+            "name": "txn-1-statement.pdf",
+            "appProperties": {
+                "tabulaRasaKind": "receipt",
+                "tabulaRasaProfile": "north",
+                "tabulaRasaTransaction": "txn-1",
+            },
+        }
+        session = DriveSession(
+            [FakeResponse(200, {"files": [receipt]})]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        receipts = client.list_profile_receipts(
+            profile_key="north",
+            folder_id="folder123456",
+        )
+
+        assert receipts == [receipt]
+        query = session.requests[0][2]["params"]["q"]
+        assert "'folder123456' in parents" in query
+        assert "value='receipt'" in query
+        assert "value='north'" in query
+        assert "tabulaRasaTransaction" not in query
+
+
+    def test_profile_receipt_listing_fetches_every_drive_page(self) -> None:
+        first = {"id": "receipt123456", "name": "first.pdf"}
+        second = {"id": "receipt789012", "name": "second.pdf"}
+        session = DriveSession(
+            [
+                FakeResponse(
+                    200,
+                    {"files": [first], "nextPageToken": "next-receipt-page"},
+                ),
+                FakeResponse(200, {"files": [second]}),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        receipts = client.list_profile_receipts(
+            profile_key="north",
+            folder_id="folder123456",
+        )
+
+        assert receipts == [first, second]
+        assert len(session.requests) == 2
+        assert "pageToken" not in session.requests[0][2]["params"]
+        assert (
+            session.requests[1][2]["params"]["pageToken"]
+            == "next-receipt-page"
+        )
+        assert "nextPageToken" in session.requests[0][2]["params"]["fields"]
+
+
+    def test_profile_receipt_listing_rejects_a_repeated_page_token(self) -> None:
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": [], "nextPageToken": "repeated"}),
+                FakeResponse(200, {"files": [], "nextPageToken": "repeated"}),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        with pytest.raises(GoogleDriveAccessError, match="unreadable"):
+            client.list_profile_receipts(
+                profile_key="north",
+                folder_id="folder123456",
+            )
+
+        assert len(session.requests) == 2
+
+
+    def test_legacy_receipt_checksum_backfill_downloads_once_and_patches_metadata(
+        self,
+    ) -> None:
+        legacy = {
+            "id": "receipt123456",
+            "name": "statement.pdf",
+            "mimeType": "application/pdf",
+            "size": "7",
+            "appProperties": {
+                "tabulaRasaKind": "receipt",
+                "tabulaRasaProfile": "north",
+                "tabulaRasaTransaction": "txn-1",
+            },
+        }
+        session = DriveSession(
+            [
+                FakeResponse(200, {"files": [legacy]}),
+                FakeResponse(200, content=b"receipt"),
+                FakeResponse(
+                    200,
+                    {
+                        "id": legacy["id"],
+                        "name": legacy["name"],
+                        "mimeType": legacy["mimeType"],
+                        "size": legacy["size"],
+                    },
+                ),
+            ]
+        )
+        client = GoogleDriveClient(
+            oauth_config(),
+            drive_settings(),
+            session=session,
+            sleeper=lambda _delay: None,
+        )
+
+        updated = client.backfill_receipt_checksum(
+            profile_key="north",
+            folder_id="folder123456",
+            file_id="receipt123456",
+        )
+
+        assert [request[0] for request in session.requests] == [
+            "GET",
+            "GET",
+            "PATCH",
+        ]
+        patch_body = session.requests[-1][2]["data"]
+        expected_hash = hashlib.sha256(b"receipt").hexdigest()
+        expected_receipt_id = hashlib.sha256(
+            b"tabula-rasa-legacy-receipt:north:receipt123456"
+        ).hexdigest()[:32]
+        assert expected_hash in patch_body
+        assert updated["appProperties"]["tabulaRasaSha256"] == expected_hash
+        assert (
+            updated["appProperties"]["tabulaRasaReceiptId"]
+            == expected_receipt_id
+        )

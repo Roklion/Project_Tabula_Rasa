@@ -490,7 +490,7 @@ retry; identity and checksum rules prevent unnecessary duplicate uploads.
 
 | Responsibility | Implementation |
 | --- | --- |
-| Backup format and storage validation | tabula_rasa/storage/google_sheets.py |
+| Backup format and storage validation | `tabula_rasa/storage/google_sheets/backup.py` and `validation.py` |
 | Local and Drive backup command | scripts/backup_google_sheets.py |
 | Scheduled task registration | scripts/register_weekly_backup_task.ps1 |
 | Archive validation | scripts/validate_google_sheets_backup.py |

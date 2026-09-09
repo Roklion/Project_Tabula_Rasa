@@ -6,14 +6,19 @@ from unittest.mock import Mock, patch
 import pytest
 import streamlit as st
 
-from tabula_rasa.local_profile_admin import (
-    _initialize_candidate_storage,
-    _export_hosted_secrets_file,
-    _profile_rows,
-    _profile_setup_error_message,
-    _fresh_profile_readiness,
-    _readiness_for_display,
-    _validate_profile_edit_action,
+from tabula_rasa.local_profile_admin import _profile_rows
+from tabula_rasa.local_profile_admin_readiness import (
+    fresh_profile_readiness,
+    readiness_for_display,
+)
+from tabula_rasa.local_profile_admin_security import (
+    export_hosted_secrets_file,
+    render_security_deployment_info,
+)
+from tabula_rasa.local_profile_admin_support import (
+    initialize_candidate_storage,
+    profile_setup_error_message,
+    validate_profile_edit_action,
 )
 from scripts.export_streamlit_secrets import SecretsExportError
 from tabula_rasa.profile_readiness import ProfileReadiness, profile_settings_fingerprint
@@ -59,7 +64,7 @@ def test_profile_setup_error_identifies_stage_without_exposing_secrets(
     error: Exception,
     expected: str,
 ) -> None:
-    message = _profile_setup_error_message(error, SETTINGS)
+    message = profile_setup_error_message(error, SETTINGS)
 
     assert expected.casefold() in message.casefold()
     assert "…34567890" in message
@@ -71,10 +76,10 @@ def test_profile_setup_error_identifies_stage_without_exposing_secrets(
 
 def test_profile_edit_rejects_a_credential_upload_on_settings_save() -> None:
     with pytest.raises(LocalProfileStoreError, match="rotate credential"):
-        _validate_profile_edit_action(True, False, object())
+        validate_profile_edit_action(True, False, object())
 
     with pytest.raises(LocalProfileStoreError, match="Upload a replacement"):
-        _validate_profile_edit_action(False, True, None)
+        validate_profile_edit_action(False, True, None)
 
 
 def test_profile_rows_use_a_safe_fallback_for_null_backup_paths() -> None:
@@ -108,23 +113,23 @@ def test_candidate_storage_preserves_specific_storage_errors(
     candidate = Mock()
     candidate.ensure_defaults.side_effect = error
     with patch(
-        "tabula_rasa.local_profile_admin.GoogleSheetsStorage.from_secrets",
+        "tabula_rasa.local_profile_admin_support.GoogleSheetsStorage.from_secrets",
         return_value=candidate,
     ):
         with pytest.raises(type(error)) as raised:
-            _initialize_candidate_storage(SETTINGS)
+            initialize_candidate_storage(SETTINGS)
 
     assert raised.value is error
 
 
 def test_fresh_readiness_reports_sheets_failure_without_secret_values() -> None:
     with patch(
-        "tabula_rasa.local_profile_admin.GoogleSheetsStorage.from_secrets_read_only",
+        "tabula_rasa.local_profile_admin_readiness.GoogleSheetsStorage.from_secrets_read_only",
         side_effect=StorageWorkbookAccessError("contains no secret"),
     ), patch(
-        "tabula_rasa.local_profile_admin.validate_google_drive_profile"
+        "tabula_rasa.local_profile_admin_readiness.validate_google_drive_profile"
     ) as validate_drive:
-        report = _fresh_profile_readiness(
+        report = fresh_profile_readiness(
             "north",
             {
                 **SETTINGS,
@@ -142,11 +147,11 @@ def test_fresh_readiness_reports_sheets_failure_without_secret_values() -> None:
 
 def test_fresh_readiness_skips_drive_validation_without_a_storage_root() -> None:
     with patch(
-        "tabula_rasa.local_profile_admin.GoogleSheetsStorage.from_secrets_read_only"
+        "tabula_rasa.local_profile_admin_readiness.GoogleSheetsStorage.from_secrets_read_only"
     ), patch(
-        "tabula_rasa.local_profile_admin.validate_google_drive_profile"
+        "tabula_rasa.local_profile_admin_readiness.validate_google_drive_profile"
     ) as validate_drive:
-        report = _fresh_profile_readiness(
+        report = fresh_profile_readiness(
             "north",
             {
                 **SETTINGS,
@@ -184,11 +189,11 @@ def test_fresh_readiness_uses_visible_drive_parent_ids_only() -> None:
         },
     }
     with patch(
-        "tabula_rasa.local_profile_admin.GoogleSheetsStorage.from_secrets_read_only"
+        "tabula_rasa.local_profile_admin_readiness.GoogleSheetsStorage.from_secrets_read_only"
     ), patch(
-        "tabula_rasa.local_profile_admin.validate_google_drive_profile"
+        "tabula_rasa.local_profile_admin_readiness.validate_google_drive_profile"
     ) as validate_drive:
-        report = _fresh_profile_readiness(
+        report = fresh_profile_readiness(
             "north",
             settings,
             app_secrets={},
@@ -218,7 +223,7 @@ def test_readiness_cache_is_ignored_after_profile_settings_change() -> None:
             )
         },
     ):
-        report = _readiness_for_display(
+        report = readiness_for_display(
             "north",
             changed,
         )
@@ -237,16 +242,16 @@ def test_hosted_export_reloads_and_includes_every_local_profile() -> None:
     generated = "app_password_hash = \"hash\"\n"
     destination = Path(".streamlit/tabula-rasa-streamlit-secrets-test.toml")
     with patch(
-        "tabula_rasa.local_profile_admin.load_local_profiles",
+        "tabula_rasa.local_profile_admin_security.load_local_profiles",
         return_value=local_profiles,
     ) as load_profiles, patch(
-        "tabula_rasa.local_profile_admin.build_streamlit_secrets_toml",
+        "tabula_rasa.local_profile_admin_security.build_streamlit_secrets_toml",
         return_value=generated,
     ) as build_document, patch(
-        "tabula_rasa.local_profile_admin.write_secure_export",
+        "tabula_rasa.local_profile_admin_security.write_secure_export",
         return_value=destination,
     ) as write_export:
-        result = _export_hosted_secrets_file(
+        result = export_hosted_secrets_file(
             {"app_password_hash": "hash"},
             store_path=Path("profile-store.json"),
         )
@@ -262,13 +267,13 @@ def test_hosted_export_reloads_and_includes_every_local_profile() -> None:
 
 def test_hosted_export_refuses_empty_included_profile_set() -> None:
     with patch(
-        "tabula_rasa.local_profile_admin.load_local_profiles",
+        "tabula_rasa.local_profile_admin_security.load_local_profiles",
         return_value={},
     ), patch(
-        "tabula_rasa.local_profile_admin.build_streamlit_secrets_toml"
+        "tabula_rasa.local_profile_admin_security.build_streamlit_secrets_toml"
     ) as build_document:
         with pytest.raises(LocalProfileStoreError, match="local business profile"):
-            _export_hosted_secrets_file({}, store_path=Path("profile-store.json"))
+            export_hosted_secrets_file({}, store_path=Path("profile-store.json"))
 
     build_document.assert_not_called()
 
@@ -280,12 +285,10 @@ def test_hosted_export_failure_ui_does_not_echo_secret_values() -> None:
     ), patch.object(st, "markdown"), patch.object(
         st, "button", return_value=True
     ), patch.object(st, "error") as render_error, patch(
-        "tabula_rasa.local_profile_admin._export_hosted_secrets_file",
+        "tabula_rasa.local_profile_admin_security.export_hosted_secrets_file",
         side_effect=SecretsExportError(secret),
     ):
-        from tabula_rasa.local_profile_admin import _render_security_deployment_info
-
-        _render_security_deployment_info({"app_password_hash": secret})
+        render_security_deployment_info({"app_password_hash": secret})
 
     message = str(render_error.call_args.args[0])
     assert "failed" in message.casefold()
@@ -300,12 +303,10 @@ def test_hosted_export_success_ui_shows_only_path_and_complete_handoff() -> None
     ) as render_info, patch.object(st, "markdown"), patch.object(
         st, "button", return_value=True
     ), patch.object(st, "success") as render_success, patch(
-        "tabula_rasa.local_profile_admin._export_hosted_secrets_file",
+        "tabula_rasa.local_profile_admin_security.export_hosted_secrets_file",
         return_value=destination,
     ):
-        from tabula_rasa.local_profile_admin import _render_security_deployment_info
-
-        _render_security_deployment_info({"refresh_token": secret})
+        render_security_deployment_info({"refresh_token": secret})
 
     rendered = " ".join(
         str(call.args[0])
@@ -327,9 +328,7 @@ def test_security_deployment_info_links_use_canonical_guides() -> None:
     ), patch.object(st, "markdown") as render_markdown, patch.object(
         st, "button", return_value=False
     ):
-        from tabula_rasa.local_profile_admin import _render_security_deployment_info
-
-        _render_security_deployment_info({})
+        render_security_deployment_info({})
 
     rendered = " ".join(
         str(call.args[0]) for call in render_markdown.call_args_list if call.args

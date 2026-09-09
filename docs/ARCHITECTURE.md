@@ -228,24 +228,33 @@ Lower-level storage, client, and schema helpers must not depend on Streamlit
 page renderers, and shared helpers are justified only when they clarify a
 real responsibility or remove real duplication.
 
-The target seams for the decomposition work are:
+The current decomposition uses these seams:
 
-| Responsibility | Target boundary |
+| Responsibility | Current boundary |
 | --- | --- |
 | Sheets storage facade | `tabula_rasa/storage/google_sheets/__init__.py` keeps `GoogleSheetsStorage` and re-exports intentionally public names. |
 | Sheets primitives | `tabula_rasa/storage/google_sheets/errors.py`, `tabula_rasa/storage/google_sheets/schema.py`, `tabula_rasa/storage/google_sheets/validation.py`, `tabula_rasa/storage/google_sheets/client.py`, and a small `tabula_rasa/storage/google_sheets/base.py` own errors, current schema, API access, validation, and shared row/cache/read/write helpers. |
-| Sheets domains | `tabula_rasa/storage/google_sheets/accounts.py`, `tabula_rasa/storage/google_sheets/categories.py`, `tabula_rasa/storage/google_sheets/payees.py`, `tabula_rasa/storage/google_sheets/tags.py`, `tabula_rasa/storage/google_sheets/transactions.py`, `tabula_rasa/storage/google_sheets/mileage.py`, `tabula_rasa/storage/google_sheets/mixed_use.py`, `tabula_rasa/storage/google_sheets/receipts.py`, and `tabula_rasa/storage/google_sheets/backups.py` own cohesive domain operations. Historical migration code stays in scripts. |
+| Sheets domains | `tabula_rasa/storage/google_sheets/accounts.py` owns account and category hierarchies; `tabula_rasa/storage/google_sheets/payees.py`, `tags.py`, `transactions.py`, `mileage.py`, `mixed_use.py`, `receipts.py`, and `backup.py` own the other cohesive domain operations. Historical migration code stays in scripts. |
 | Receipt page workflow | `tabula_rasa/page_renderers/transactions/receipt_workflows.py` owns reusable upload/recovery state; `tabula_rasa/page_renderers/transactions/receipt_editor.py` owns editor rendering; `tabula_rasa/page_renderers/transactions/receipt_display.py` owns listing/unlink UI. `tabula_rasa/page_renderers/transactions/receipts.py` may remain a thin compatibility facade. |
-| Mileage page | `tabula_rasa/page_renderers/mileage/mileage_routing.py`, `tabula_rasa/page_renderers/mileage/mileage_form.py`, `tabula_rasa/page_renderers/mileage/mileage_ledger.py`, and `tabula_rasa/page_renderers/mileage/mileage_locations.py` separate route state, forms, ledger behavior, and location helpers; `tabula_rasa/page_renderers/mileage.py` remains orchestration-focused. |
-| Transaction ledger page | `tabula_rasa/page_renderers/transactions/ledger_filters.py`, `tabula_rasa/page_renderers/transactions/ledger_bulk.py`, `tabula_rasa/page_renderers/transactions/ledger_editor.py`, and `tabula_rasa/page_renderers/transactions/transaction_copy.py` separate search/filter state, bulk actions, single-record editing, and provenance/copy behavior; `tabula_rasa/page_renderers/ledger.py` composes them. |
-| Drive integration | `tabula_rasa/storage/google_drive/__init__.py` preserves `GoogleDriveClient`; `tabula_rasa/storage/google_drive/oauth.py`, `tabula_rasa/storage/google_drive/client.py`, `tabula_rasa/storage/google_drive/folders.py`, `tabula_rasa/storage/google_drive/receipts.py`, and `tabula_rasa/storage/google_drive/backups.py` separate identity/auth, generic requests, managed folders, receipts, and backups. |
-| Tests | Test files follow these production seams, with shared fixtures in the appropriate `conftest.py` or helper module rather than duplicated per domain. |
+| Mileage page | `tabula_rasa/page_renderers/mileage_routing.py`, `tabula_rasa/page_renderers/mileage_form.py`, `tabula_rasa/page_renderers/mileage_ledger.py`, and `tabula_rasa/page_renderers/mileage_locations.py` separate route state, forms, ledger behavior, and location helpers; `tabula_rasa/page_renderers/mileage.py` remains orchestration-focused. |
+| Transaction ledger page | `tabula_rasa/page_renderers/transactions/ledger_filters.py`, `tabula_rasa/page_renderers/transactions/ledger_bulk.py`, `tabula_rasa/page_renderers/transactions/ledger_editor.py`, and `tabula_rasa/page_renderers/transactions/transaction_copy.py` separate search/filter state, bulk actions, single-record editing, and provenance/copy behavior; `tabula_rasa/page_renderers/transactions/ledger.py` composes them. |
+| Drive integration | `tabula_rasa/google_drive/__init__.py` preserves `GoogleDriveClient`; `tabula_rasa/google_drive/oauth.py`, `tabula_rasa/google_drive/client.py`, `tabula_rasa/google_drive/folders.py`, `tabula_rasa/google_drive/receipts.py`, and `tabula_rasa/google_drive/backups.py` separate identity/auth, generic requests, managed folders, receipts, and backups. |
+| Local profile administration | `local_profile_admin.py` remains the page entry point and profile-summary composer; `local_profile_admin_forms.py`, `local_profile_admin_readiness.py`, `local_profile_admin_security.py`, `local_profile_admin_support.py`, and `local_profile_admin_synology.py` own the distinct form, readiness, deployment-security, shared setup, and Synology responsibilities. |
+| Tests | `tests/storage/google_sheets/`, `tests/google_drive/`, `tests/mixed_use_storage/`, and `tests/receipt_recovery/` follow the production/workflow seams and keep shared fixtures in local support modules rather than duplicating them per domain. |
 
-`tabula_rasa/local_profile_admin.py` is split only if profile form, readiness,
-credential, and storage responsibilities remain genuinely distinct after the
-cleanup; otherwise its cohesion is documented and it remains intact. These
-boundaries are architectural ownership guidance, not a demand that every row
-of code become a separate class or file.
+The current Sheets package implements the first slice with a stable facade,
+explicit primitive modules, and a flat set of domain mixins. `base.py` is kept
+to genuinely shared row/lock primitives for now; any later split of remaining
+shared behavior must have a clear ownership boundary and preserve imports and
+behavior. This is composition for compatibility, not a new storage framework.
+
+The local administration review found durable seams between profile forms,
+readiness checks, deployment-security guidance, local Synology metadata, and
+the page-level profile summary/orchestration. Its entry point stays stable,
+while private helpers are imported and tested from their owning modules rather
+than re-exported as permanent compatibility aliases. These boundaries are
+architectural ownership guidance, not a demand that every row of code become a
+separate class or file.
 
 ## Receipt boundary
 
@@ -344,9 +353,10 @@ local-only recovery metadata.
 | Shared presentation tokens and CSS | tabula_rasa/presentation.py |
 | Profile selection and readiness | tabula_rasa/business_profiles.py and tabula_rasa/profile_readiness.py |
 | Local profile persistence | tabula_rasa/local_profile_store.py |
-| Sheets storage, current v10 backup format, and restore validation | tabula_rasa/storage/google_sheets.py |
+| Sheets storage, current v10 backup format, and restore validation | `tabula_rasa/storage/google_sheets/` |
 | Legacy backup conversion (v1–v9 to v10) | scripts/migrate_legacy_backup.py |
-| Drive OAuth and file operations | tabula_rasa/google_drive.py |
+| Legacy workbook conversion and historical schema definitions | `scripts/migrate_workbook.py`, `scripts/migrate_payees.py`, and `scripts/migration_schemas.py` |
+| Drive OAuth and file operations | tabula_rasa/google_drive/__init__.py, with `oauth.py`, `client.py`, `folders.py`, `receipts.py`, and `backups.py` responsibility modules |
 | Drive administration and Picker | tabula_rasa/google_drive_admin.py and tabula_rasa/google_drive_picker.py |
 | Maps autocomplete and route distance | tabula_rasa/address_autocomplete.py and tabula_rasa/maps_routing.py |
 | Receipts and recovery metadata | tabula_rasa/receipt_manifest.py and tabula_rasa/receipt_recovery.py |

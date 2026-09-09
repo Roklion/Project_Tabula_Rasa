@@ -1,0 +1,1 @@
+"""Receipt recovery test package."""
