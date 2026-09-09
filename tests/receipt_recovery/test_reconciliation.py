@@ -220,6 +220,54 @@ def test_recovery_confirms_batch_write_after_lost_response() -> None:
     assert worksheet.batch_update.call_count == 1
 
 
+def test_recovery_retries_unchanged_batch_after_lost_response() -> None:
+    content = b"receipt"
+    reference = make_reference(1, content)
+    backup, target, _ = backup_with_receipts([reference])
+    worksheet = target._workbook.sheets["Transactions"]
+    original_batch_update = worksheet.batch_update
+    attempts = 0
+
+    def timeout_before_commit(
+        data: list[dict[str, object]],
+        **kwargs: object,
+    ) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise OSError("response lost before commit")
+        original_batch_update(data, **kwargs)
+
+    worksheet.batch_update = Mock(side_effect=timeout_before_commit)
+    drive = Mock()
+    drive.restore_receipt.return_value = (
+        make_drive_file(reference, file_id="newreceipt01"),
+        False,
+    )
+
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / str(reference["name"])).write_bytes(content)
+
+        report = recover_receipts_from_synology(
+            backup,
+            root,
+            profile_key="north",
+            folder_id="folder123456",
+            storage=target,
+            drive=drive,
+        )
+
+    assert report["restored"] == 1
+    assert report["references_remapped"] == 1
+    assert report["errors"] == 0
+    assert worksheet.batch_update.call_count == 2
+    current = target.list_transactions(_force_refresh=True)[0]
+    assert decode_receipt_references(current["receipt_references"])[0]["id"] == (
+        "newreceipt01"
+    )
+
+
 def test_recovery_preserves_manual_edit_after_lost_batch_response() -> None:
     content = b"receipt"
     reference = make_reference(1, content)
