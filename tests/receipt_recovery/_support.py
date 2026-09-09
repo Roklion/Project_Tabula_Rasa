@@ -36,8 +36,8 @@ def make_drive_file(
         sha256=str(reference["sha256"]),
         original_name=str(reference["original_filename"]),
         size=int(reference["byte_size"]),
+        original_file_id=str(reference["id"]),
     )
-    drive_file["appProperties"]["tabulaRasaOriginalFileId"] = str(reference["id"])
     return drive_file
 
 
