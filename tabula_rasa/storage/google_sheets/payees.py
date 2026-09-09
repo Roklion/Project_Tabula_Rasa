@@ -357,6 +357,8 @@ class PayeesMixin(_ManagedMixin):
             )
             return {"status": "fully_applied", "count": str(len(source_ids))}
 
+    merge_payee = merge_payees
+
     def remove_payee(
         self,
         payee_id: str,
@@ -441,6 +443,8 @@ class PayeesMixin(_ManagedMixin):
                 invalidate=("Payees", "Transactions", "MixedUseExpenses"),
             )
             return {"status": "fully_applied"}
+
+    delete_payee = remove_payee
 
     def _payee_lookup(self, *, force_refresh: bool = False) -> dict[str, dict[str, str]]:
         return {item["id"]: item for item in self.list_payees(_force_refresh=force_refresh)}

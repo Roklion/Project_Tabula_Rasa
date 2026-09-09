@@ -67,6 +67,16 @@ def _looks_like_historical_workbook(
                 return True
             if (
                 "MixedUseExpenses" not in present_titles
+                and header_set != set(WORKSHEET_HEADERS["Transactions"])
+                and {"payee_id", "source_type", "source_id", "tag_ids"}
+                <= header_set
+            ):
+                # The explicit migration updates Transactions before Mileage;
+                # preserve the historical marker if startup observes that
+                # supported intermediate layout after an interrupted run.
+                return True
+            if (
+                "MixedUseExpenses" not in present_titles
                 and "payee_id" in header_set
                 and "source_type" not in header_set
             ):

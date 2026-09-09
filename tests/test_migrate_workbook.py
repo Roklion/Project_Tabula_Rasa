@@ -20,6 +20,7 @@ from tabula_rasa.storage.google_sheets.validation import (
     _looks_like_historical_workbook,
 )
 from scripts.migration_schemas import (
+    LEGACY_TAGS_WORKBOOK_HEADERS,
     VERSION_3_WORKSHEET_HEADERS,
     VERSION_7_WORKSHEET_HEADERS,
 )
@@ -122,6 +123,15 @@ def test_historical_detection_handles_missing_mixed_use_tab() -> None:
     }
 
     assert not _looks_like_historical_workbook(values)
+
+
+def test_historical_detection_handles_interrupted_tag_migration() -> None:
+    values = {
+        title: [list(headers)]
+        for title, headers in LEGACY_TAGS_WORKBOOK_HEADERS.items()
+    }
+
+    assert _looks_like_historical_workbook(values)
 
 
 def test_migration_validates_hierarchy_before_reporting_success() -> None:

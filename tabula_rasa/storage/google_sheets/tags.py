@@ -315,6 +315,8 @@ class TagsMixin(_ManagedMixin):
             )
             return {"status": "fully_applied", "count": str(len(source_ids))}
 
+    merge_tag = merge_tags
+
     def remove_tag(
         self,
         tag_id: str,
@@ -415,6 +417,8 @@ class TagsMixin(_ManagedMixin):
                 invalidate=("Tags", "Transactions", "Mileage", "MixedUseExpenses"),
             )
             return {"status": "fully_applied"}
+
+    delete_tag = remove_tag
 
     def _tag_lookup(self, *, force_refresh: bool = False) -> dict[str, dict[str, str]]:
         return {item["id"]: item for item in self.list_tags(_force_refresh=force_refresh)}
