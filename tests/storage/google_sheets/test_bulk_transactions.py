@@ -562,6 +562,56 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             south_transaction["id"]
         ]
 
+    def test_bulk_edit_payee_and_tags_are_isolated_between_profile_storages(
+        self,
+    ) -> None:
+        north = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+        south = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+        north_account = north.create_account("Checking", "Bank")
+        south_account = south.create_account("Checking", "Bank")
+        north_category = north.create_category("Office", "Expense")
+        south_category = south.create_category("Office", "Expense")
+        north_old_payee = north.create_payee("North old")
+        north_new_payee = north.create_payee("North new")
+        south_payee = south.create_payee("South vendor")
+        north_tag = north.create_tag("North tag")
+        south_tag = south.create_tag("South tag")
+        north_transaction = north.create_transaction(
+            txn_date="2026-07-18",
+            kind="Expense",
+            amount=1,
+            account_id=north_account["id"],
+            category_id=north_category["id"],
+            payee_id=north_old_payee["id"],
+            tag_ids=[north_tag["id"]],
+        )
+        south_transaction = south.create_transaction(
+            txn_date="2026-07-18",
+            kind="Expense",
+            amount=2,
+            account_id=south_account["id"],
+            category_id=south_category["id"],
+            payee_id=south_payee["id"],
+            tag_ids=[south_tag["id"]],
+        )
+
+        north.bulk_edit_transactions(
+            [north_transaction["id"]],
+            expected_transactions=north.list_transactions(_force_refresh=True),
+            changes={
+                "payee_id": north_new_payee["id"],
+                "tag_ids": [north_tag["id"]],
+            },
+        )
+
+        north_current = north.list_transactions(_force_refresh=True)
+        south_current = south.list_transactions(_force_refresh=True)
+        assert north_current[0]["payee_id"] == north_new_payee["id"]
+        assert north_current[0]["tag_ids"] == [north_tag["id"]]
+        assert south_current[0]["id"] == south_transaction["id"]
+        assert south_current[0]["payee_id"] == south_payee["id"]
+        assert south_current[0]["tag_ids"] == [south_tag["id"]]
+
     def test_lost_delete_response_does_not_delete_following_row(self) -> None:
         account = self.storage.create_account("Checking", "Bank")
         category = self.storage.create_category("Software", "Expense")
