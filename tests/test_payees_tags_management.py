@@ -38,6 +38,25 @@ def test_management_workflows_are_profile_scoped_and_require_confirmation() -> N
         payee_id=source_payee["id"],
         tag_ids=[source_tag["id"]],
     )
+    mixed_source = north.create_mixed_use_expense(
+        txn_date="2026-09-03",
+        total_expense="100",
+        business_use_percentage="50",
+        account_id=account["id"],
+        category_id=category["id"],
+        payee_id=source_payee["id"],
+        tag_ids=[source_tag["id"]],
+        description="Shared vehicle expense",
+        allocation_rationale="Shared use",
+    )
+    mileage_trip = north.create_mileage_trip(
+        trip_date="2026-09-04",
+        miles="12.5",
+        start_location="North office",
+        destination="Client site",
+        business_purpose="Client visit",
+        tag_ids=[source_tag["id"]],
+    )
     north.create_transaction(
         txn_date="2026-09-02",
         kind="Expense",
@@ -83,6 +102,11 @@ def test_management_workflows_are_profile_scoped_and_require_confirmation() -> N
             for item in north.list_transactions()
             if item["id"] == referenced_transaction["id"]
         )["payee_id"] == target_payee["id"]
+        assert next(
+            item
+            for item in north.list_mixed_use_expenses()
+            if item["id"] == mixed_source["id"]
+        )["payee_id"] == target_payee["id"]
         assert any("Payees merged." in str(item.value) for item in app.success)
 
         navigate_to(app, "Accounts")
@@ -110,7 +134,7 @@ def test_management_workflows_are_profile_scoped_and_require_confirmation() -> N
             target_payee["id"]
         ).run()
         assert by_label(app.button, "Permanently remove payee").disabled is True
-        assert any("1 references" in str(item.value) for item in app.info)
+        assert any("3 references" in str(item.value) for item in app.info)
 
         by_label(app.text_input, "New tag name").input("Created tag")
         by_label(app.button, "Add tag").click().run()
@@ -142,8 +166,17 @@ def test_management_workflows_are_profile_scoped_and_require_confirmation() -> N
             for item in north.list_transactions()
             if item["id"] == referenced_transaction["id"]
         )["tag_ids"] == [target_tag["id"]]
+        assert next(
+            item
+            for item in north.list_mileage_trips()
+            if item["id"] == mileage_trip["id"]
+        )["tag_ids"] == [target_tag["id"]]
 
         navigate_to(app, "Accounts")
+        navigate_to(app, "Transactions")
+        by_label(app.selectbox, "Tag to remove").set_value(target_tag["id"]).run()
+        assert any("3 references" in str(item.value) for item in app.info)
+
         navigate_to(app, "Transactions")
         by_label(app.selectbox, "Business").set_value("south").run()
         navigate_to(app, "Transactions")

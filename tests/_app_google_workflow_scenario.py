@@ -42,6 +42,8 @@ def main() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook())
     for payee_name in ("Test vendor", "Test customer", "Test transfer"):
         storage.create_payee(payee_name)
+    mileage_add_tag = storage.create_tag("Mileage add tag")
+    mileage_edit_tag = storage.create_tag("Mileage edit tag")
     with authenticated_app(storage) as app:
 
         navigate_to(app, "Accounts")
@@ -402,6 +404,13 @@ def main() -> None:
         assert by_label(app.text_area, "Notes (optional)").value == "Keep this note"
 
         by_label(app.text_input, "Business purpose").input("Project meeting")
+        add_tag_selector = next(
+            item
+            for item in app.multiselect
+            if item.key == "add_mileage_tag_ids"
+        )
+        add_tag_selector.set_value([mileage_add_tag["id"]]).run()
+        assert add_tag_selector.value == [mileage_add_tag["id"]]
         by_label(app.button, "Save mileage trip").click().run()
         assert len(app.exception) == 0
         mileage_trips = storage.list_mileage_trips()
@@ -435,6 +444,8 @@ def main() -> None:
         assert set(return_trip) == set(outbound)
         assert outbound["miles"] == return_trip["miles"] == "18.6"
         assert outbound["business_purpose"] == "Project meeting"
+        assert outbound["tag_ids"] == [mileage_add_tag["id"]]
+        assert return_trip["tag_ids"] == [mileage_add_tag["id"]]
         return_trip_id = return_trip["id"]
         return_trip_snapshot = {
             key: return_trip[key]
@@ -463,6 +474,13 @@ def main() -> None:
         by_label(app.selectbox, "Mileage trip to edit").set_value(
             outbound["id"]
         ).run()
+        edit_tag_selector = next(
+            item
+            for item in app.multiselect
+            if item.key == f"edit_mileage_trip_tag_ids_test_{outbound['id']}"
+        )
+        edit_tag_selector.set_value([mileage_edit_tag["id"]]).run()
+        assert edit_tag_selector.value == [mileage_edit_tag["id"]]
         by_label(app.number_input, "Edit business miles").set_value(20.1)
         by_label(app.button, "Save mileage changes").click().run()
         edited_outbound = next(
@@ -471,6 +489,7 @@ def main() -> None:
             if trip["id"] == outbound["id"]
         )
         assert edited_outbound["miles"] == "20.1"
+        assert edited_outbound["tag_ids"] == [mileage_edit_tag["id"]]
         unchanged_return = next(
             trip
             for trip in storage.list_mileage_trips()
