@@ -53,6 +53,7 @@ def seed_editor(storage: GoogleSheetsStorage) -> dict[str, object]:
     ]
     return {
         "office": office,
+        "travel": travel,
         "alpha": alpha,
         "project": project,
         "transactions": transactions,
@@ -79,9 +80,11 @@ def main() -> None:
     assert isinstance(transactions, list)
     first, second, third, fourth = transactions
     office = fixture["office"]
+    travel = fixture["travel"]
     alpha = fixture["alpha"]
     project = fixture["project"]
     assert isinstance(office, dict)
+    assert isinstance(travel, dict)
     assert isinstance(alpha, dict)
     assert isinstance(project, dict)
 
@@ -147,6 +150,14 @@ def main() -> None:
         assert bulk_widget(app.selectbox, "Payee").value == alpha["id"]
         assert bulk_widget(app.multiselect, "Tags").value == [project["id"]]
 
+        by_label(app.button, "Apply changes").click().run()
+        assert any(
+            "No changes selected; no transactions were updated." in str(element.value)
+            for element in app.info
+        )
+
+        bulk_widget(app.selectbox, "Category").set_value(travel["id"]).run()
+        bulk_widget(app.selectbox, "Category").set_value(office["id"]).run()
         by_label(app.button, "Apply changes").click().run()
         assert any(
             "No changes selected; no transactions were updated." in str(element.value)

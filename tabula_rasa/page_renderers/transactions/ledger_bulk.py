@@ -47,12 +47,15 @@ def _bulk_widget_keys(scope: str, field: str) -> tuple[str, str, str]:
     )
 
 
-def _mark_bulk_value_intent(intent_key: str) -> None:
-    st.session_state[intent_key] = True
-
-
-def _sync_bulk_checkbox_intent(apply_key: str, intent_key: str) -> None:
-    st.session_state[intent_key] = bool(st.session_state.get(apply_key, False))
+def _sync_bulk_field_intent(
+    widget_key: str,
+    initial_value: object,
+    apply_key: str,
+    intent_key: str,
+) -> None:
+    st.session_state[intent_key] = bool(
+        st.session_state.get(apply_key, False)
+    ) or st.session_state.get(widget_key) != initial_value
 
 
 def _initialize_bulk_widget(
@@ -78,6 +81,8 @@ def _clear_bulk_editor_intent(scope: str) -> None:
 def _render_bulk_field_apply_checkbox(
     label: str,
     *,
+    widget_key: str,
+    initial_value: object,
     apply_key: str,
     intent_key: str,
     disabled: bool,
@@ -86,8 +91,8 @@ def _render_bulk_field_apply_checkbox(
         f"Apply {label} to all selected",
         key=apply_key,
         disabled=disabled,
-        on_change=_sync_bulk_checkbox_intent,
-        args=(apply_key, intent_key),
+        on_change=_sync_bulk_field_intent,
+        args=(widget_key, initial_value, apply_key, intent_key),
         help=(
             "Select this to intentionally reapply the displayed shared value "
             "or to confirm an explicit replacement, including clearing it."
@@ -157,9 +162,14 @@ def _render_bulk_editor(
             if common_category == MIXED_FIELD_VALUE:
                 category_options.insert(0, MIXED_FIELD_VALUE)
             category_key, apply_key, intent_key = _bulk_widget_keys(scope, "category")
+            initial_category = (
+                common_category
+                if common_category in category_options
+                else MIXED_FIELD_VALUE
+            )
             _initialize_bulk_widget(
                 category_key,
-                common_category if common_category in category_options else MIXED_FIELD_VALUE,
+                initial_category,
                 intent_key,
                 reset=reset_widgets,
             )
@@ -173,14 +183,16 @@ def _render_bulk_editor(
                     else category_paths.get(value, value)
                 ),
                 disabled=disabled,
-                on_change=_mark_bulk_value_intent,
-                args=(intent_key,),
+                on_change=_sync_bulk_field_intent,
+                args=(category_key, initial_category, apply_key, intent_key),
                 help="Current value is informational until you explicitly apply Category.",
             )
             if common_category == MIXED_FIELD_VALUE:
                 st.caption("Current Category: Mixed / Multiple values")
             _render_bulk_field_apply_checkbox(
                 "Category",
+                widget_key=category_key,
+                initial_value=initial_category,
                 apply_key=apply_key,
                 intent_key=intent_key,
                 disabled=disabled,
@@ -222,14 +234,16 @@ def _render_bulk_editor(
             else "No Payee / blank" if value == "" else payee_names.get(value, value)
         ),
         disabled=disabled,
-        on_change=_mark_bulk_value_intent,
-        args=(intent_key,),
+        on_change=_sync_bulk_field_intent,
+        args=(payee_key, initial_payee, apply_key, intent_key),
         help="Bulk Payee uses existing profile-local Payee records only.",
     )
     if common_payee == MIXED_FIELD_VALUE:
         st.caption("Current Payee: Mixed / Multiple values")
     _render_bulk_field_apply_checkbox(
         "Payee",
+        widget_key=payee_key,
+        initial_value=initial_payee,
         apply_key=apply_key,
         intent_key=intent_key,
         disabled=disabled,
@@ -270,8 +284,8 @@ def _render_bulk_editor(
         key=tag_key,
         format_func=lambda value: tag_names.get(value, value),
         disabled=disabled,
-        on_change=_mark_bulk_value_intent,
-        args=(intent_key,),
+        on_change=_sync_bulk_field_intent,
+        args=(tag_key, initial_tags, apply_key, intent_key),
         placeholder="No Tag",
         help="Replacement model: applying Tags replaces the complete Tag set.",
     )
@@ -279,6 +293,8 @@ def _render_bulk_editor(
         st.caption("Current Tags: Mixed / Multiple values")
     _render_bulk_field_apply_checkbox(
         "Tags",
+        widget_key=tag_key,
+        initial_value=initial_tags,
         apply_key=apply_key,
         intent_key=intent_key,
         disabled=disabled,
