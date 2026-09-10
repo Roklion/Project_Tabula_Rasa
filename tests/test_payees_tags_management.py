@@ -73,11 +73,43 @@ def test_management_workflows_are_profile_scoped_and_require_confirmation() -> N
         )
         assert any("Payees merged." in str(item.value) for item in app.success)
 
+        by_label(app.text_input, "New payee name").input("Created payee")
+        by_label(app.button, "Add payee").click().run()
+        created_payee = next(
+            item for item in north.list_payees() if item["name"] == "Created payee"
+        )
+        by_label(app.selectbox, "Payee to rename").set_value(
+            target_payee["id"]
+        ).run()
+        by_label(app.text_input, "Renamed payee name").set_value(
+            "Renamed target"
+        )
+        by_label(app.button, "Rename payee").click().run()
+        assert next(
+            item for item in north.list_payees() if item["id"] == target_payee["id"]
+        )["name"] == "Renamed target"
+        assert created_payee["id"] in {
+            item["id"] for item in north.list_payees()
+        }
+
         by_label(app.selectbox, "Payee to remove").set_value(
             target_payee["id"]
         ).run()
         assert by_label(app.button, "Permanently remove payee").disabled is True
         assert any("1 references" in str(item.value) for item in app.info)
+
+        by_label(app.text_input, "New tag name").input("Created tag")
+        by_label(app.button, "Add tag").click().run()
+        created_tag = next(
+            item for item in north.list_tags() if item["name"] == "Created tag"
+        )
+        by_label(app.selectbox, "Tag to rename").set_value(target_tag["id"]).run()
+        by_label(app.text_input, "Renamed tag name").set_value("Renamed target tag")
+        by_label(app.button, "Rename tag").click().run()
+        assert next(
+            item for item in north.list_tags() if item["id"] == target_tag["id"]
+        )["name"] == "Renamed target tag"
+        assert created_tag["id"] in {item["id"] for item in north.list_tags()}
 
         by_label(app.selectbox, "Target tag").set_value(target_tag["id"]).run()
         by_label(app.multiselect, "Source tags").set_value(

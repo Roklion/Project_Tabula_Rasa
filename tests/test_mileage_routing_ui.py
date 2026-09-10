@@ -1,7 +1,8 @@
 """Focused mileage routing/location unit tests.
 
-The rendered add/edit workflow is exercised by the AppTest scenario in
-``tests/_app_google_workflow_scenario.py``; this module keeps only direct
+The primary rendered add/edit workflow is exercised by the AppTest scenario in
+``tests/_app_google_workflow_scenario.py``. This module also keeps the
+profile-isolation boundary local to the mileage UI while retaining direct
 coverage for helper behavior with distinct fallback or edge-case contracts.
 """
 
@@ -36,6 +37,9 @@ from tabula_rasa.page_renderers.mileage import (
     _trip_tag_ids,
     mileage_frame,
 )
+from tests.app_support import authenticated_app, by_label, navigate_to, profile_config
+from tests.fakes import FakeWorkbook
+from tabula_rasa.storage import GoogleSheetsStorage
 
 
 def test_round_trip_calculation_uses_reversed_place_ids() -> None:
@@ -609,6 +613,39 @@ def test_mileage_tag_helpers_dedupe_and_support_legacy_display_names() -> None:
     assert _tag_names_for_trip({"tag_ids": ["tax", "project"]}, tags) == (
         "Tax, Project Alpha"
     )
+
+
+def test_mileage_workflow_is_profile_scoped_in_app_test() -> None:
+    north = GoogleSheetsStorage(FakeWorkbook())
+    south = GoogleSheetsStorage(FakeWorkbook())
+    for storage, location in ((north, "North office"), (south, "South office")):
+        storage.create_mileage_trip(
+            trip_date="2026-09-01",
+            miles="12.5",
+            start_location=location,
+            destination="Client site",
+            business_purpose="Profile check",
+        )
+
+    with authenticated_app(
+        storages={"north-sheet": north, "south-sheet": south},
+        profiles={
+            "north": profile_config(name="North", spreadsheet_id="north-sheet"),
+            "south": profile_config(name="South", spreadsheet_id="south-sheet"),
+        },
+    ) as app:
+        navigate_to(app, "Mileage")
+        assert app.dataframe[0].value["From"].tolist() == ["North office"]
+        assert app.session_state["mileage_filter_tags_north"] == []
+
+        by_label(app.selectbox, "Business").set_value("south").run()
+        navigate_to(app, "Mileage")
+        assert app.dataframe[0].value["From"].tolist() == ["South office"]
+        assert app.session_state["mileage_filter_tags_south"] == []
+
+        by_label(app.selectbox, "Business").set_value("north").run()
+        navigate_to(app, "Mileage")
+        assert app.dataframe[0].value["From"].tolist() == ["North office"]
 
 
 def test_route_disabled_reason_reports_missing_autocomplete_before_routing() -> None:
