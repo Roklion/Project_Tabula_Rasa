@@ -154,6 +154,14 @@ def main() -> None:
         )
 
         by_label(app.checkbox, "Apply Category to all selected").check().run()
+        by_label(app.checkbox, "Apply Category to all selected").uncheck().run()
+        by_label(app.button, "Apply changes").click().run()
+        assert any(
+            "No changes selected; no transactions were updated." in str(element.value)
+            for element in app.info
+        )
+
+        by_label(app.checkbox, "Apply Category to all selected").check().run()
         by_label(app.checkbox, "Apply Payee to all selected").check().run()
         by_label(app.checkbox, "Apply Tags to all selected").check().run()
         by_label(app.button, "Apply changes").click().run()

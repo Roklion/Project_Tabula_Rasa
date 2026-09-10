@@ -47,8 +47,12 @@ def _bulk_widget_keys(scope: str, field: str) -> tuple[str, str, str]:
     )
 
 
-def _mark_bulk_field_intent(intent_key: str) -> None:
+def _mark_bulk_value_intent(intent_key: str) -> None:
     st.session_state[intent_key] = True
+
+
+def _sync_bulk_checkbox_intent(apply_key: str, intent_key: str) -> None:
+    st.session_state[intent_key] = bool(st.session_state.get(apply_key, False))
 
 
 def _initialize_bulk_widget(
@@ -82,8 +86,8 @@ def _render_bulk_field_apply_checkbox(
         f"Apply {label} to all selected",
         key=apply_key,
         disabled=disabled,
-        on_change=_mark_bulk_field_intent,
-        args=(intent_key,),
+        on_change=_sync_bulk_checkbox_intent,
+        args=(apply_key, intent_key),
         help=(
             "Select this to intentionally reapply the displayed shared value "
             "or to confirm an explicit replacement, including clearing it."
@@ -169,7 +173,7 @@ def _render_bulk_editor(
                     else category_paths.get(value, value)
                 ),
                 disabled=disabled,
-                on_change=_mark_bulk_field_intent,
+                on_change=_mark_bulk_value_intent,
                 args=(intent_key,),
                 help="Current value is informational until you explicitly apply Category.",
             )
@@ -218,7 +222,7 @@ def _render_bulk_editor(
             else "No Payee / blank" if value == "" else payee_names.get(value, value)
         ),
         disabled=disabled,
-        on_change=_mark_bulk_field_intent,
+        on_change=_mark_bulk_value_intent,
         args=(intent_key,),
         help="Bulk Payee uses existing profile-local Payee records only.",
     )
@@ -266,7 +270,7 @@ def _render_bulk_editor(
         key=tag_key,
         format_func=lambda value: tag_names.get(value, value),
         disabled=disabled,
-        on_change=_mark_bulk_field_intent,
+        on_change=_mark_bulk_value_intent,
         args=(intent_key,),
         placeholder="No Tag",
         help="Replacement model: applying Tags replaces the complete Tag set.",
