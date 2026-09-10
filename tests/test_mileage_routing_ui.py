@@ -1,7 +1,13 @@
+"""Focused mileage routing/location unit tests.
+
+The rendered add/edit workflow is exercised by the AppTest scenario in
+``tests/_app_google_workflow_scenario.py``; this module keeps only direct
+coverage for helper behavior with distinct fallback or edge-case contracts.
+"""
+
 from __future__ import annotations
 
 from datetime import date
-from pathlib import Path
 
 import pytest
 
@@ -30,19 +36,6 @@ from tabula_rasa.page_renderers.mileage import (
     _trip_tag_ids,
     mileage_frame,
 )
-
-
-def _mileage_source() -> str:
-    return "\n".join(
-        Path(path).read_text()
-        for path in (
-            "tabula_rasa/page_renderers/mileage.py",
-            "tabula_rasa/page_renderers/mileage_routing.py",
-            "tabula_rasa/page_renderers/mileage_locations.py",
-            "tabula_rasa/page_renderers/mileage_form.py",
-            "tabula_rasa/page_renderers/mileage_ledger.py",
-        )
-    )
 
 
 def test_round_trip_calculation_uses_reversed_place_ids() -> None:
@@ -468,51 +461,6 @@ def test_recalculation_rearms_recorded_location_tracking(monkeypatch) -> None:
     }
 
 
-def test_recorded_google_text_is_saved_only_by_the_explicit_save_action() -> None:
-    source = _mileage_source()
-
-    assert 'st.checkbox(\n        f"Confirm {label.lower()} text"' not in source
-    assert "_recorded_location_is_confirmed" not in source
-    assert "context.confirmed_write(" in source
-    assert '"create_mileage_trip"' in source
-
-
-def test_add_trip_calculate_button_is_before_recorded_location_fields() -> None:
-    source = _mileage_source()
-
-    assert source.index("calculate_requested = st.button(") < source.index(
-        "recorded_start = _ledger_location_text(\n"
-    )
-    assert source.index("calculate_requested = st.button(") < source.index(
-        'st.checkbox(\n        "Round trip"'
-    )
-    assert "No return-route mileage has been calculated for this round " in source
-    assert "No mileage has been calculated for the selected addresses." in source
-    assert "if context.maps_api_key and _edit_route_warning_visible(" in source
-    assert source.count("always_render=bool(context.maps_api_key)") >= 4
-
-
-def test_edit_calculate_button_is_before_delete_controls() -> None:
-    source = _mileage_source()
-    edit_address_section = source[
-        source.index("edit_start = address_autocomplete(") : source.index(
-            "edit_route_key = _route_key",
-            source.index("edit_start = address_autocomplete("),
-        )
-    ]
-
-    assert "value=selected.get" not in edit_address_section
-    assert source.index("calculate_edit_requested = st.button(") < source.index(
-        'st.caption("Update this saved mileage row.")'
-    )
-    assert source.index("calculate_edit_requested = st.button(") < source.index(
-        "Deleting this mileage trip is permanent"
-    )
-    assert source.index("calculate_edit_requested = st.button(") < source.index(
-        '"Permanently delete mileage trip"'
-    )
-
-
 def test_round_trip_preserves_outbound_when_return_lookup_fails() -> None:
     calls: list[tuple[str, str]] = []
 
@@ -663,66 +611,6 @@ def test_mileage_tag_helpers_dedupe_and_support_legacy_display_names() -> None:
     )
 
 
-def test_mileage_tag_ux_is_profile_scoped_and_persisted_through_add_edit() -> None:
-    source = _mileage_source()
-
-    assert "render_tag_selector(" in source
-    assert 'key="add_mileage_tag_ids"' in source
-    assert 'f"edit_mileage_trip_tag_ids_{edit_widget_scope}"' in source
-    assert 'f"mileage_filter_tags_{context.profile_key}"' in source
-    assert '"tag_ids": tag_ids' in source
-    assert '"tag_ids": edited_tag_ids' in source
-    assert '"new_tag_name": new_tag_name' in source
-    assert '"new_tag_name": edited_new_tag_name' in source
-    assert 'if str(tag_id).strip() and str(item.get("name") or "").strip()' in source
-
-
-def test_mileage_save_paths_validate_blank_inline_tag_names() -> None:
-    source = _mileage_source()
-
-    assert "inline_tag_name_error(new_tag_name)" in source
-    assert "inline_tag_name_error(edited_new_tag_name)" in source
-    edit_guard = source.index("inline_tag_name_error(edited_new_tag_name)")
-    edit_write = source.index("context.confirmed_write(", edit_guard)
-    assert edit_guard < edit_write
-
-
-def test_add_mileage_route_invalidation_preserves_business_miles() -> None:
-    source = _mileage_source()
-
-    assert '        _route_key(context, "add"),' in source
-    assert '                st.session_state["add_mileage_miles"] = 0.0' not in source
-    assert (
-        '                st.session_state["add_mileage_return_miles"] = 0.0'
-        not in source
-    )
-    assert "                        st.session_state[miles_key] = 0.1" not in source
-    assert "The selected addresses changed, so any mileage left in " in source
-    assert "may not match the current route." in source
-    assert "mileage manually" in source
-    assert "edit_address_changed = _address_text_changed(" in source
-    assert 'stale_route_key = f"{add_route_key}__stale"' in source
-    assert "address_changed = bool(st.session_state.get(stale_route_key))" in source
-    assert "recorded_text_changed = bool(" in source
-    assert '"add_mileage_recorded_start__manually_edited"' in source
-
-
-def test_mileage_drafts_are_not_buffered_in_forms() -> None:
-    source = _mileage_source()
-
-    assert 'with st.form("add_mileage_trip"' not in source
-    assert 'with st.form("edit_mileage_trip")' not in source
-    assert "st.form_submit_button" not in source
-
-
-def test_manual_fallback_explains_why_calculation_is_disabled() -> None:
-    source = _mileage_source()
-
-    assert "Choose a Google suggestion for both endpoints to enable mileage " in source
-    assert "calculation. Manual entries can still be saved" in source
-    assert "disabled=not route_ready" in source
-
-
 def test_route_disabled_reason_reports_missing_autocomplete_before_routing() -> None:
     assert "suggestions are unavailable" in _route_disabled_reason(
         AddressSelection("Office"),
@@ -752,15 +640,6 @@ def test_route_disabled_reason_distinguishes_unconfigured_and_invalid_inputs() -
     )
     assert "different" in _route_disabled_reason(
         start, AddressSelection("Office", "office", 2), lambda *_: 1.0
-    )
-
-
-def test_route_disabled_reason_explains_missing_browser_autocomplete() -> None:
-    assert "suggestions are unavailable" in _route_disabled_reason(
-        AddressSelection("Office"),
-        AddressSelection("Client"),
-        lambda *_: 1.0,
-        autocomplete_available=False,
     )
 
 

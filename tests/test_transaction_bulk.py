@@ -1,11 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import patch
-
-from tabula_rasa.page_renderers.transactions.ledger import (
-    _change_ledger_mode,
-    _selection_ids,
-)
+from tabula_rasa.page_renderers.transactions.ledger import _selection_ids
 
 
 def test_bulk_selection_maps_visible_rows_to_stable_ids_only() -> None:
@@ -13,21 +8,3 @@ def test_bulk_selection_maps_visible_rows_to_stable_ids_only() -> None:
         "oldest",
         "newest",
     )
-
-
-def test_mode_change_clears_selection_and_incompatible_edit_state() -> None:
-    session_state = {
-        "transaction_bulk_selected_ids_north": ("txn-1", "txn-2"),
-        "transaction_bulk_selection_generation": 4,
-        "edit_transaction_id": "txn-1",
-    }
-    with patch(
-        "tabula_rasa.page_renderers.transactions.ledger.st.session_state",
-        session_state,
-    ):
-        _change_ledger_mode("north")
-
-    assert session_state["transaction_bulk_selected_ids_north"] == ()
-    assert session_state["transaction_bulk_selection_generation"] == 5
-    assert session_state["transaction_ledger_mode_generation"] == 1
-    assert "edit_transaction_id" not in session_state

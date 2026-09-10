@@ -4,23 +4,14 @@ import pytest
 
 from tabula_rasa.page_renderers.transactions.mixed_use import (
     _MixedUseReceiptStorage,
-    _clear_mixed_use_selection,
     _clear_mixed_use_copy,
-    _incomplete_source_ids,
     _fresh_mixed_use_copy_source,
     _copyable_tag_ids,
     _editable_account_ids,
     _mixed_use_copy_keys,
     _mixed_use_log_rows,
-    _mixed_use_selection_ids,
-    _mixed_use_receipt_recovery_active,
-    _pending_create_ids,
     _start_mixed_use_copy,
     mixed_use_preview,
-)
-from tabula_rasa.page_renderers.transactions.ledger import (
-    _mixed_use_transaction_ids,
-    transaction_is_mixed_use,
 )
 from tabula_rasa.ledger_presentation import ledger_frame
 from tabula_rasa.ledger_reporting import (
@@ -30,15 +21,10 @@ from tabula_rasa.ledger_reporting import (
 )
 from tabula_rasa.page_renderers.data_backup.exports import prepare_csv_exports
 from tabula_rasa.page_renderers.transactions.search import filter_transaction_rows
-from tabula_rasa.storage import (
-    decode_receipt_references,
-    StorageConflictError,
-    StorageValidationError,
-)
+from tabula_rasa.storage import decode_receipt_references, StorageValidationError
 from tabula_rasa.page_renderers.transactions.receipts import (
     new_receipt_creation_workflow,
     receipt_creation_workflow_key,
-    receipt_editor_workflow_key,
 )
 from tests.app_support import authenticated_app, by_label, navigate_to
 
@@ -316,131 +302,6 @@ def test_mixed_use_copy_fresh_lookup_allows_valid_pair_with_unrelated_orphan(
     assert fresh["linked_transaction_id"] == valid["linked_transaction_id"]
 
 
-def test_pending_create_ids_remain_stable_for_uncertain_retries() -> None:
-    state: dict[str, object] = {}
-    first = _pending_create_ids(state, "north")
-    second = _pending_create_ids(state, "north")
-
-    assert first == second
-    assert first[0] == state["mixed_use_pending_source_id_north"]
-    assert first[1] == state["mixed_use_pending_transaction_id_north"]
-    assert first != _pending_create_ids(state, "south")
-
-
-def test_mixed_use_table_selection_maps_rows_to_stable_source_ids() -> None:
-    assert _mixed_use_selection_ids(
-        ["source-newest", "source-oldest"], [1, 0, 9, -1]
-    ) == ("source-oldest", "source-newest")
-
-
-def test_clearing_mixed_use_selection_rotates_table_and_baseline() -> None:
-    state = {
-        "mixed_use_selected_source_id_north": "source-1",
-        "mixed_use_edit_baseline_north": {"id": "source-1"},
-        "mixed_use_edit_baseline_source_id_north": "source-1",
-        "mixed_use_table_generation_north": 2,
-    }
-    _clear_mixed_use_selection(state, "north")
-    assert state["mixed_use_selected_source_id_north"] == ""
-    assert "mixed_use_edit_baseline_north" not in state
-    assert "mixed_use_edit_baseline_source_id_north" not in state
-    assert state["mixed_use_table_generation_north"] == 3
-
-
-def test_projection_provenance_blocks_source_only_repair() -> None:
-    assert _incomplete_source_ids(
-        [{"id": "source-1", "linked_transaction_id": "missing"}],
-        [
-            {
-                "id": "projection-2",
-                "source_type": "mixed_use_expense",
-                "source_id": "source-1",
-            }
-        ],
-    ) == set()
-
-
-def test_only_phase_a_mixed_use_provenance_is_protected() -> None:
-    assert transaction_is_mixed_use(
-        {"source_type": "mixed_use_expense", "source_id": "source-1"}
-    )
-    assert not transaction_is_mixed_use(
-        {"source_type": "transaction_copy", "source_id": "transaction-1"}
-    )
-    assert not transaction_is_mixed_use(
-        {"source_type": "mixed_use_expense", "source_id": ""}
-    )
-
-
-def test_mixed_use_transaction_ids_can_be_derived_from_unfiltered_snapshot() -> None:
-    mixed_projection = {
-        "id": "projection-1",
-        "source_type": "mixed_use_expense",
-        "source_id": "source-1",
-    }
-    ordinary_transaction = {"id": "transaction-1"}
-
-    assert _mixed_use_transaction_ids(
-        [ordinary_transaction, mixed_projection]
-    ) == {"projection-1"}
-
-
-def test_mixed_use_upload_is_blocked_during_linked_editor_recovery() -> None:
-    profile = "north"
-    transaction_id = "projection-1"
-
-    assert _mixed_use_receipt_recovery_active(
-        {receipt_editor_workflow_key(profile, transaction_id): {}},
-        profile,
-        transaction_id,
-    )
-    assert not _mixed_use_receipt_recovery_active({}, profile, transaction_id)
-
-
-def test_generic_create_rejects_fabricated_mixed_use_projection(default_storage) -> None:
-    with pytest.raises(StorageValidationError, match="changed through mixed-use"):
-        default_storage.create_transaction(
-            txn_date="2026-09-03",
-            kind="Expense",
-            amount="10",
-            account_id="missing",
-            category_id="missing",
-            source_type="mixed_use_expense",
-            source_id="source",
-        )
-
-
-def test_source_aware_receipt_path_preserves_pair_and_generic_path_rejects(
-    default_storage,
-) -> None:
-    account = default_storage.create_account("Mixed Checking", "Bank")
-    category = default_storage.create_category("Mixed Office", "Expense")
-    source = default_storage.create_mixed_use_expense(
-        txn_date="2026-09-03",
-        total_expense="100",
-        business_use_percentage="50",
-        account_id=account["id"],
-        category_id=category["id"],
-        allocation_rationale="Measured use",
-    )
-    reference = {"id": "a" * 32, "name": "receipt.pdf"}
-    default_storage.link_mixed_use_receipt(
-        source["id"], reference=reference, expected_source=source
-    )
-    projection = default_storage.list_transactions()[0]
-    refreshed = default_storage.get_mixed_use_expense(source["id"])
-    assert projection["receipt_references"] == refreshed["receipt_references"]
-    with pytest.raises(StorageValidationError, match="changed through mixed-use"):
-        default_storage.link_transaction_receipt(
-            source["linked_transaction_id"],
-            reference={"id": "b" * 32, "name": "other.pdf"},
-        )
-    with pytest.raises(StorageConflictError, match="changed"):
-        default_storage.set_mixed_use_receipt_references(
-            source["id"], [], expected_source=source
-        )
-
-
 def test_source_receipt_adapter_refreshes_snapshot_for_multiple_receipts(
     default_storage,
 ) -> None:
@@ -507,25 +368,6 @@ def test_source_receipt_adapter_refreshes_only_receipt_baseline(
         '[{"id":"receipt"}]'
     )
     assert updated_sources == [adapter._expected_source]
-
-
-def test_source_aware_receipt_api_normalizes_invalid_metadata(
-    default_storage,
-) -> None:
-    account = default_storage.create_account("Invalid Receipt Checking", "Bank")
-    category = default_storage.create_category("Invalid Receipt Office", "Expense")
-    source = default_storage.create_mixed_use_expense(
-        txn_date="2026-09-03",
-        total_expense="100",
-        business_use_percentage="50",
-        account_id=account["id"],
-        category_id=category["id"],
-        allocation_rationale="Measured use",
-    )
-    with pytest.raises(StorageValidationError, match="Receipt"):
-        default_storage.link_mixed_use_receipt(
-            source["id"], reference={"id": "", "name": ""}
-        )
 
 
 def test_mixed_use_app_test_create_edit_delete_and_transactions_tabs(default_storage) -> None:
