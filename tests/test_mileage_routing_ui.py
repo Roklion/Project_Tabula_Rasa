@@ -618,13 +618,19 @@ def test_mileage_tag_helpers_dedupe_and_support_legacy_display_names() -> None:
 def test_mileage_workflow_is_profile_scoped_in_app_test() -> None:
     north = GoogleSheetsStorage(FakeWorkbook())
     south = GoogleSheetsStorage(FakeWorkbook())
-    for storage, location in ((north, "North office"), (south, "South office")):
+    north_tag = north.create_tag("North filter")
+    south_tag = south.create_tag("South filter")
+    for storage, location, tag in (
+        (north, "North office", north_tag),
+        (south, "South office", south_tag),
+    ):
         storage.create_mileage_trip(
             trip_date="2026-09-01",
             miles="12.5",
             start_location=location,
             destination="Client site",
             business_purpose="Profile check",
+            tag_ids=[tag["id"]],
         )
 
     with authenticated_app(
@@ -636,16 +642,35 @@ def test_mileage_workflow_is_profile_scoped_in_app_test() -> None:
     ) as app:
         navigate_to(app, "Mileage")
         assert app.dataframe[0].value["From"].tolist() == ["North office"]
-        assert app.session_state["mileage_filter_tags_north"] == []
+        north_filter = next(
+            item for item in app.multiselect if item.key == "mileage_filter_tags_north"
+        )
+        north_filter.set_value([north_tag["id"]]).run()
+        assert app.dataframe[0].value["From"].tolist() == ["North office"]
+        assert app.session_state["mileage_filter_tags_north"] == [north_tag["id"]]
 
         by_label(app.selectbox, "Business").set_value("south").run()
         navigate_to(app, "Mileage")
         assert app.dataframe[0].value["From"].tolist() == ["South office"]
         assert app.session_state["mileage_filter_tags_south"] == []
+        south_filter = next(
+            item for item in app.multiselect if item.key == "mileage_filter_tags_south"
+        )
+        assert south_filter.options == ["South filter"]
+        assert south_filter.value == []
+
+        south_filter.set_value([south_tag["id"]]).run()
+        assert app.dataframe[0].value["From"].tolist() == ["South office"]
+        assert south_filter.value == [south_tag["id"]]
 
         by_label(app.selectbox, "Business").set_value("north").run()
         navigate_to(app, "Mileage")
         assert app.dataframe[0].value["From"].tolist() == ["North office"]
+        north_filter = next(
+            item for item in app.multiselect if item.key == "mileage_filter_tags_north"
+        )
+        assert north_filter.options == ["North filter"]
+        assert south_tag["id"] not in north_filter.value
 
 
 def test_route_disabled_reason_reports_missing_autocomplete_before_routing() -> None:
