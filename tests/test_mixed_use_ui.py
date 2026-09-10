@@ -10,6 +10,7 @@ from tabula_rasa.page_renderers.transactions.mixed_use import (
     _editable_account_ids,
     _mixed_use_copy_keys,
     _mixed_use_log_rows,
+    _mixed_use_receipt_recovery_active,
     _mixed_use_selection_ids,
     _pending_create_ids,
     _start_mixed_use_copy,
@@ -27,6 +28,7 @@ from tabula_rasa.storage import decode_receipt_references, StorageValidationErro
 from tabula_rasa.page_renderers.transactions.receipts import (
     new_receipt_creation_workflow,
     receipt_creation_workflow_key,
+    receipt_editor_workflow_key,
 )
 from tests.app_support import authenticated_app, by_label, navigate_to
 
@@ -54,6 +56,18 @@ def test_mixed_use_table_selection_maps_rows_to_stable_source_ids() -> None:
     assert _mixed_use_selection_ids(
         ["source-newest", "source-oldest"], [1, 0, 9, -1]
     ) == ("source-oldest", "source-newest")
+
+
+def test_mixed_use_upload_is_blocked_during_linked_editor_recovery() -> None:
+    profile = "north"
+    transaction_id = "projection-1"
+
+    assert _mixed_use_receipt_recovery_active(
+        {receipt_editor_workflow_key(profile, transaction_id): {}},
+        profile,
+        transaction_id,
+    )
+    assert not _mixed_use_receipt_recovery_active({}, profile, transaction_id)
 
 
 def test_mixed_use_log_puts_receipt_indicator_at_the_end() -> None:

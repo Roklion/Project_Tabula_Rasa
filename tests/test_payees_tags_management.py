@@ -29,14 +29,21 @@ def test_management_workflows_are_profile_scoped_and_require_confirmation() -> N
     source_payee = north.create_payee("North source")
     target_tag = north.create_tag("North target tag")
     source_tag = north.create_tag("North source tag")
-    north.create_transaction(
+    referenced_transaction = north.create_transaction(
         txn_date="2026-09-01",
         kind="Expense",
         amount="10",
         account_id=account["id"],
         category_id=category["id"],
-        payee_id=target_payee["id"],
-        tag_ids=[target_tag["id"]],
+        payee_id=source_payee["id"],
+        tag_ids=[source_tag["id"]],
+    )
+    north.create_transaction(
+        txn_date="2026-09-02",
+        kind="Expense",
+        amount="11",
+        account_id=account["id"],
+        category_id=category["id"],
     )
     south.create_payee("South only")
     south.create_tag("South only tag")
@@ -71,8 +78,15 @@ def test_management_workflows_are_profile_scoped_and_require_confirmation() -> N
         assert not any(
             item["id"] == source_payee["id"] for item in north.list_payees()
         )
+        assert next(
+            item
+            for item in north.list_transactions()
+            if item["id"] == referenced_transaction["id"]
+        )["payee_id"] == target_payee["id"]
         assert any("Payees merged." in str(item.value) for item in app.success)
 
+        navigate_to(app, "Accounts")
+        navigate_to(app, "Transactions")
         by_label(app.text_input, "New payee name").input("Created payee")
         by_label(app.button, "Add payee").click().run()
         created_payee = next(
@@ -123,7 +137,14 @@ def test_management_workflows_are_profile_scoped_and_require_confirmation() -> N
         assert not any(
             item["id"] == source_tag["id"] for item in north.list_tags()
         )
+        assert next(
+            item
+            for item in north.list_transactions()
+            if item["id"] == referenced_transaction["id"]
+        )["tag_ids"] == [target_tag["id"]]
 
+        navigate_to(app, "Accounts")
+        navigate_to(app, "Transactions")
         by_label(app.selectbox, "Business").set_value("south").run()
         navigate_to(app, "Transactions")
         assert target_payee["id"] not in by_label(
