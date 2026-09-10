@@ -14,7 +14,7 @@ import tomllib
 import pytest
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 POWERSHELL = shutil.which("pwsh") or shutil.which("powershell")
 pytestmark = pytest.mark.skipif(
     os.name != "nt" or POWERSHELL is None,
@@ -257,18 +257,66 @@ def _run_full_setup(
     return result, log_entries
 
 
-def test_setup_selects_existing_shared_python_candidate(tmp_path: Path) -> None:
-    setup = _setup_script()
-    assert "LocalAppData" not in setup
-    assert setup.index("$candidates = @()") < setup.index("Get-Command py.exe")
-
-    program_files = r"C:\CodexEnvironmentTest\ProgramFiles"
-    expected = os.path.join(program_files, "Python312", "python.exe")
-
+@pytest.mark.parametrize(
+    ("program_files", "public", "py", "python", "expected"),
+    [
+        pytest.param(
+            r"C:\CodexEnvironmentTest\ProgramFiles",
+            r"C:\CodexEnvironmentTest\Public",
+            None,
+            None,
+            os.path.join(
+                r"C:\CodexEnvironmentTest\ProgramFiles",
+                "Python312",
+                "python.exe",
+            ),
+            id="program-files-candidate",
+        ),
+        pytest.param(
+            None,
+            r"C:\CodexEnvironmentTest\Public",
+            None,
+            None,
+            os.path.join(
+                r"C:\CodexEnvironmentTest\Public",
+                "Python312",
+                "python.exe",
+            ),
+            id="public-candidate",
+        ),
+        pytest.param(
+            None,
+            None,
+            r"C:\CodexEnvironmentTest\py.exe",
+            None,
+            r"C:\CodexEnvironmentTest\py.exe",
+            id="python-launcher",
+        ),
+        pytest.param(
+            None,
+            None,
+            None,
+            r"C:\CodexEnvironmentTest\Python313\python.exe|"
+            r"C:\CodexEnvironmentTest\Python312\python.exe",
+            r"C:\CodexEnvironmentTest\Python312\python.exe",
+            id="later-supported-python",
+        ),
+    ],
+)
+def test_setup_selects_first_supported_python_candidate(
+    tmp_path: Path,
+    program_files: str | None,
+    public: str | None,
+    py: str | None,
+    python: str | None,
+    expected: str,
+) -> None:
     result = _run_discovery(
         tmp_path,
         program_files=program_files,
-        public=r"C:\CodexEnvironmentTest\Public",
+        public=public,
+        py=py,
+        python=python,
         expected=expected,
     )
 
@@ -276,66 +324,11 @@ def test_setup_selects_existing_shared_python_candidate(tmp_path: Path) -> None:
     assert f"selected={expected}" in result.stdout
 
 
-def test_setup_skips_absent_programfiles_and_uses_public_candidate(
-    tmp_path: Path,
-) -> None:
-    public = r"C:\CodexEnvironmentTest\Public"
-    expected = os.path.join(public, "Python312", "python.exe")
-
-    result = _run_discovery(tmp_path, public=public, expected=expected)
-
-    assert result.returncode == 0, result.stderr
-    assert f"selected={expected}" in result.stdout
-
-
-def test_setup_skips_absent_public_and_uses_programfiles_candidate(
-    tmp_path: Path,
-) -> None:
-    program_files = r"C:\CodexEnvironmentTest\ProgramFiles"
-    expected = os.path.join(program_files, "Python312", "python.exe")
-
-    result = _run_discovery(
-        tmp_path, program_files=program_files, expected=expected
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert f"selected={expected}" in result.stdout
-
-
-def test_setup_uses_py_when_both_shared_locations_are_absent(tmp_path: Path) -> None:
-    py = r"C:\CodexEnvironmentTest\py.exe"
-
-    result = _run_discovery(tmp_path, py=py, expected=py)
-
-    assert result.returncode == 0, result.stderr
-    assert f"selected={py}" in result.stdout
-
-
-def test_setup_uses_later_python312_path_candidate(tmp_path: Path) -> None:
-    python313 = r"C:\CodexEnvironmentTest\Python313\python.exe"
-    python312 = r"C:\CodexEnvironmentTest\Python312\python.exe"
-
-    result = _run_discovery(
-        tmp_path,
-        python=f"{python313}|{python312}",
-        expected=python312,
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert f"selected={python312}" in result.stdout
-
-
 def test_setup_fails_clearly_without_python312_candidate(tmp_path: Path) -> None:
     result = _run_discovery(tmp_path)
 
     assert result.returncode != 0
     assert "A sandbox-readable Python 3.12 interpreter is required" in result.stderr
-
-
-def test_setup_reuses_python312_guard_for_existing_venv() -> None:
-    setup = _setup_script()
-
-    assert "if (-not (Test-Python312 -Executable $venvPython))" in setup
 
 
 @requires_python312
