@@ -188,6 +188,12 @@ def test_generic_transaction_mutations_reject_mixed_use_projections(
             category_id=replacement["id"],
         )
     with pytest.raises(StorageValidationError, match="mixed-use expense APIs"):
+        default_storage.bulk_edit_transactions(
+            [projection["id"]],
+            expected_transactions=[projection],
+            changes={"payee_id": ""},
+        )
+    with pytest.raises(StorageValidationError, match="mixed-use expense APIs"):
         default_storage.bulk_delete_transactions(
             [projection["id"]], expected_transactions=[projection]
         )

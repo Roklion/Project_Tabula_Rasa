@@ -6,6 +6,10 @@ from tabula_rasa.page_renderers.transactions.ledger import (
     _change_ledger_mode,
     _selection_ids,
 )
+from tabula_rasa.page_renderers.transactions.ledger_bulk import (
+    MIXED_FIELD_VALUE,
+    _shared_bulk_value,
+)
 
 
 def test_bulk_selection_maps_visible_rows_to_stable_ids_only() -> None:
@@ -31,3 +35,10 @@ def test_mode_change_clears_selection_and_incompatible_edit_state() -> None:
     assert session_state["transaction_bulk_selection_generation"] == 5
     assert session_state["transaction_ledger_mode_generation"] == 1
     assert "edit_transaction_id" not in session_state
+
+
+def test_bulk_editor_common_value_distinguishes_shared_and_mixed_values() -> None:
+    assert _shared_bulk_value(["category-a", "category-a"]) == "category-a"
+    assert _shared_bulk_value(["category-a", "category-b"]) == MIXED_FIELD_VALUE
+    assert _shared_bulk_value([(), ()]) == ()
+    assert _shared_bulk_value([(), ("tag-a",)]) == MIXED_FIELD_VALUE

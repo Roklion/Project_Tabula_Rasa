@@ -196,71 +196,149 @@ class TransactionsMixin:
         expected_transactions: Sequence[Mapping[str, Any]],
         category_id: str,
     ) -> dict[str, str]:
-        with self._workbook_locks.ledger:
-            return self._bulk_change_transaction_category(
-                transaction_ids,
-                expected_transactions=expected_transactions,
-                category_id=category_id,
-            )
+        return self.bulk_edit_transactions(
+            transaction_ids,
+            expected_transactions=expected_transactions,
+            changes={"category_id": category_id},
+        )
 
-    def _bulk_change_transaction_category(
+    def bulk_edit_transactions(
         self,
         transaction_ids: Sequence[str],
         *,
         expected_transactions: Sequence[Mapping[str, Any]],
-        category_id: str,
+        changes: Mapping[str, Any],
     ) -> dict[str, str]:
-        """Revalidate and change categories with one atomic minimal-cell batch."""
+        """Apply an explicit partial Category/Payee/Tags update in one batch."""
+        with self._workbook_locks.ledger:
+            return self._bulk_edit_transactions(
+                transaction_ids,
+                expected_transactions=expected_transactions,
+                changes=changes,
+            )
+
+    def _bulk_edit_transactions(
+        self,
+        transaction_ids: Sequence[str],
+        *,
+        expected_transactions: Sequence[Mapping[str, Any]],
+        changes: Mapping[str, Any],
+    ) -> dict[str, str]:
+        """Revalidate a selection and apply only the requested fields."""
         selected_rows, current_by_id = self._fresh_bulk_transaction_snapshot(
             transaction_ids, expected_transactions
         )
         for transaction in current_by_id.values():
             self._reject_mixed_use_projection(transaction)
-        categories = self._category_lookup(force_refresh=True)
-        category_id = _clean_text(category_id, "Category", required=True)
-        target = categories.get(category_id)
-        if target is None:
-            raise StorageValidationError("Category does not exist")
-        kinds = {transaction["kind"] for transaction in current_by_id.values()}
-        if len(kinds) != 1 or kinds == {"Transfer"}:
+
+        normalized_changes = dict(changes)
+        supported_fields = {"category_id", "payee_id", "tag_ids"}
+        unknown_fields = sorted(set(normalized_changes) - supported_fields)
+        if unknown_fields:
             raise StorageValidationError(
-                "Category changes require a homogeneous Income or Expense selection"
+                "Unsupported bulk transaction fields: " + ", ".join(unknown_fields)
             )
-        kind = next(iter(kinds))
-        if kind not in {"Income", "Expense"} or target["kind"] != kind:
-            raise StorageValidationError(
-                "The selected category must match the transaction kind"
-            )
-        if all(transaction["category_id"] == category_id for transaction in current_by_id.values()):
+        if not normalized_changes:
             return {"status": "fully_applied", "count": "0"}
+
+        if "category_id" in normalized_changes:
+            category_id = _clean_text(
+                normalized_changes["category_id"], "Category", required=True
+            )
+            categories = self._category_lookup(force_refresh=True)
+            target = categories.get(category_id)
+            if target is None:
+                raise StorageValidationError("Category does not exist")
+            kinds = {transaction["kind"] for transaction in current_by_id.values()}
+            if len(kinds) != 1 or kinds == {"Transfer"}:
+                raise StorageValidationError(
+                    "Category changes require a homogeneous Income or Expense selection"
+                )
+            kind = next(iter(kinds))
+            if kind not in {"Income", "Expense"} or target["kind"] != kind:
+                raise StorageValidationError(
+                    "The selected category must match the transaction kind"
+                )
+            normalized_changes["category_id"] = category_id
+
+        if "payee_id" in normalized_changes:
+            payee_id = _clean_text(normalized_changes["payee_id"], "Payee")
+            if payee_id:
+                payees = self._payee_lookup(force_refresh=True)
+                payee = payees.get(payee_id)
+                if payee is None:
+                    raise StorageValidationError("Payee does not exist")
+                if not _as_bool(payee["active"], "Payee active") and any(
+                    transaction["payee_id"] != payee_id
+                    for transaction in current_by_id.values()
+                ):
+                    raise StorageValidationError("Payee is inactive")
+            normalized_changes["payee_id"] = payee_id
+
+        if "tag_ids" in normalized_changes:
+            tag_ids = _normalize_tag_ids(normalized_changes["tag_ids"])
+            tags = self._tag_lookup(force_refresh=True)
+            for tag_id in tag_ids:
+                tag = tags.get(tag_id)
+                if tag is None:
+                    raise StorageValidationError("Tag does not exist")
+                if not _as_bool(tag["active"], "Tag active") and any(
+                    tag_id not in _normalize_tag_ids(transaction.get("tag_ids", ""))
+                    for transaction in current_by_id.values()
+                ):
+                    raise StorageValidationError("Tag is inactive")
+            normalized_changes["tag_ids"] = _encode_tag_ids(tag_ids)
+
         pending_by_id = {
             transaction_id: transaction
             for transaction_id, transaction in current_by_id.items()
-            if transaction["category_id"] != category_id
+            if any(
+                not self._transaction_value_matches(
+                    field, transaction.get(field), value
+                )
+                for field, value in normalized_changes.items()
+            )
         }
+        if not pending_by_id:
+            return {"status": "fully_applied", "count": "0"}
 
         headers = self._headers("Transactions")
-        category_column = self._sheet_column_index(headers, "category_id")
+        column_indexes = {
+            field: self._sheet_column_index(headers, field)
+            for field in normalized_changes
+        }
         sheet_id = self._transactions_sheet_id()
+
         def write() -> None:
-            requests = [
-                {
-                    "updateCells": {
-                        "range": {
-                            "sheetId": sheet_id,
-                            "startRowIndex": selected_rows[transaction_id].row_number - 1,
-                            "endRowIndex": selected_rows[transaction_id].row_number,
-                            "startColumnIndex": category_column,
-                            "endColumnIndex": category_column + 1,
-                        },
-                        "rows": [
-                            {"values": [{"userEnteredValue": {"stringValue": category_id}}]}
-                        ],
-                        "fields": "userEnteredValue",
-                    }
-                }
-                for transaction_id in pending_by_id
-            ]
+            requests = []
+            for transaction_id in pending_by_id:
+                row = selected_rows[transaction_id]
+                for field, value in normalized_changes.items():
+                    requests.append(
+                        {
+                            "updateCells": {
+                                "range": {
+                                    "sheetId": sheet_id,
+                                    "startRowIndex": row.row_number - 1,
+                                    "endRowIndex": row.row_number,
+                                    "startColumnIndex": column_indexes[field],
+                                    "endColumnIndex": column_indexes[field] + 1,
+                                },
+                                "rows": [
+                                    {
+                                        "values": [
+                                            {
+                                                "userEnteredValue": {
+                                                    "stringValue": str(value)
+                                                }
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "fields": "userEnteredValue",
+                            }
+                        }
+                    )
             self._batch_update_spreadsheet(requests)
 
         def state() -> str:
@@ -269,30 +347,64 @@ class TransactionsMixin:
                 for row in self._rows("Transactions", force_refresh=True)
             }
             if all(
-                item in current and current[item].get("category_id") == category_id
-                for item in pending_by_id
+                transaction_id in current
+                and all(
+                    self._transaction_value_matches(
+                        field, current[transaction_id].get(field), value
+                    )
+                    for field, value in normalized_changes.items()
+                )
+                for transaction_id in pending_by_id
             ):
                 return "applied"
             if all(
-                item in current
-                and self._transaction_rows_match(current[item], pending_by_id[item])
-                for item in pending_by_id
+                transaction_id in current
+                and self._transaction_rows_match(current[transaction_id], transaction)
+                for transaction_id, transaction in pending_by_id.items()
             ):
                 return "unchanged"
             return "ambiguous"
 
         def refresh() -> None:
-            nonlocal selected_rows, current_by_id
+            nonlocal selected_rows, current_by_id, pending_by_id
             selected_rows, current_by_id = self._fresh_bulk_transaction_snapshot(
                 transaction_ids, expected_transactions
             )
             for transaction in current_by_id.values():
                 self._reject_mixed_use_projection(transaction)
+            pending_by_id = {
+                transaction_id: transaction
+                for transaction_id, transaction in current_by_id.items()
+                if any(
+                    not self._transaction_value_matches(
+                        field, transaction.get(field), value
+                    )
+                    for field, value in normalized_changes.items()
+                )
+            }
 
         self._write_with_uncertain_readback(
-            "category change", write, state, before_retry=refresh, invalidate=("Transactions",)
+            "bulk transaction edit",
+            write,
+            state,
+            before_retry=refresh,
+            invalidate=("Transactions",),
         )
         return {"status": "fully_applied", "count": str(len(pending_by_id))}
+
+    def _bulk_change_transaction_category(
+        self,
+        transaction_ids: Sequence[str],
+        *,
+        expected_transactions: Sequence[Mapping[str, Any]],
+        category_id: str,
+    ) -> dict[str, str]:
+        """Compatibility implementation for the former category-only path."""
+        return self._bulk_edit_transactions(
+            transaction_ids,
+            expected_transactions=expected_transactions,
+            changes={"category_id": category_id},
+        )
 
     def bulk_delete_transactions(
         self,

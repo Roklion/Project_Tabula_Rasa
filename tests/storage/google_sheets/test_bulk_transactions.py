@@ -66,6 +66,158 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         )
         assert delete_result == {"status": "fully_applied", "count": "1"}
 
+    def test_bulk_edit_updates_only_requested_fields_in_one_batch(self) -> None:
+        first, second, replacement = self._bulk_transaction_fixture()
+        first_payee = self.storage.create_payee("First vendor")
+        target_payee = self.storage.create_payee("Target vendor")
+        first_tag = self.storage.create_tag("First")
+        second_tag = self.storage.create_tag("Second")
+        self.storage.edit_transaction(
+            first["id"], payee_id=first_payee["id"], tag_ids=[first_tag["id"]]
+        )
+        self.storage.edit_transaction(
+            second["id"], tag_ids=[second_tag["id"]]
+        )
+        expected = [
+            item
+            for item in self.storage.list_transactions(_force_refresh=True)
+            if item["id"] in {first["id"], second["id"]}
+        ]
+        workbook_batch = Mock(wraps=self.workbook.batch_update)
+        self.workbook.batch_update = workbook_batch
+
+        result = self.storage.bulk_edit_transactions(
+            [first["id"], second["id"]],
+            expected_transactions=expected,
+            changes={"payee_id": target_payee["id"], "tag_ids": [first_tag["id"]]},
+        )
+
+        assert result == {"status": "fully_applied", "count": "2"}
+        assert workbook_batch.call_count == 1
+        updated = {
+            item["id"]: item
+            for item in self.storage.list_transactions(_force_refresh=True)
+        }
+        assert updated[first["id"]]["category_id"] != replacement["id"]
+        assert updated[second["id"]]["category_id"] != replacement["id"]
+        assert updated[first["id"]]["payee_id"] == target_payee["id"]
+        assert updated[second["id"]]["payee_id"] == target_payee["id"]
+        assert updated[first["id"]]["tag_ids"] == [first_tag["id"]]
+        assert updated[second["id"]]["tag_ids"] == [first_tag["id"]]
+
+    def test_bulk_edit_can_explicitly_clear_payee_and_tags(self) -> None:
+        first, second, replacement = self._bulk_transaction_fixture()
+        payee = self.storage.create_payee("Vendor")
+        tag = self.storage.create_tag("Project")
+        for transaction in (first, second):
+            self.storage.edit_transaction(
+                transaction["id"], payee_id=payee["id"], tag_ids=[tag["id"]]
+            )
+        expected = [
+            item
+            for item in self.storage.list_transactions(_force_refresh=True)
+            if item["id"] in {first["id"], second["id"]}
+        ]
+
+        result = self.storage.bulk_edit_transactions(
+            [first["id"], second["id"]],
+            expected_transactions=expected,
+            changes={"payee_id": "", "tag_ids": []},
+        )
+
+        assert result == {"status": "fully_applied", "count": "2"}
+        updated = {
+            item["id"]: item
+            for item in self.storage.list_transactions(_force_refresh=True)
+        }
+        assert all(item["category_id"] != replacement["id"] for item in updated.values())
+        assert all(item["payee_id"] == "" for item in updated.values())
+        assert all(item["tag_ids"] == [] for item in updated.values())
+
+    def test_bulk_edit_noop_has_no_storage_mutation(self) -> None:
+        first, second, _ = self._bulk_transaction_fixture()
+        expected = [
+            item
+            for item in self.storage.list_transactions(_force_refresh=True)
+            if item["id"] in {first["id"], second["id"]}
+        ]
+        workbook_batch = Mock(wraps=self.workbook.batch_update)
+        self.workbook.batch_update = workbook_batch
+
+        result = self.storage.bulk_edit_transactions(
+            [first["id"], second["id"]],
+            expected_transactions=expected,
+            changes={},
+        )
+
+        assert result == {"status": "fully_applied", "count": "0"}
+        assert workbook_batch.call_count == 0
+
+    def test_bulk_edit_rejects_category_for_transfers_and_mixed_kinds(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        destination = self.storage.create_account("Savings", "Bank")
+        expense = self.storage.create_category("Office", "Expense")
+        transfer = self.storage.create_transaction(
+            txn_date="2026-07-18",
+            kind="Transfer",
+            amount=1,
+            account_id=account["id"],
+            to_account_id=destination["id"],
+        )
+        expected = self.storage.list_transactions(_force_refresh=True)
+        with pytest.raises(StorageValidationError, match="homogeneous Income or Expense"):
+            self.storage.bulk_edit_transactions(
+                [transfer["id"]],
+                expected_transactions=expected,
+                changes={"category_id": expense["id"]},
+            )
+
+    def test_bulk_edit_revalidates_the_complete_selection(self) -> None:
+        first, second, _ = self._bulk_transaction_fixture()
+        payee = self.storage.create_payee("Vendor")
+        expected = [
+            item
+            for item in self.storage.list_transactions(_force_refresh=True)
+            if item["id"] in {first["id"], second["id"]}
+        ]
+        transaction_sheet = self.workbook.sheets["Transactions"]
+        description_index = transaction_sheet.rows[0].index("description")
+        first_row = next(row for row in transaction_sheet.rows if row[0] == first["id"])
+        first_row[description_index] = "Changed elsewhere"
+
+        with pytest.raises(StorageConflictError, match="changed"):
+            self.storage.bulk_edit_transactions(
+                [first["id"], second["id"]],
+                expected_transactions=expected,
+                changes={"payee_id": payee["id"]},
+            )
+
+        assert all(
+            transaction["payee_id"] == ""
+            for transaction in self.storage.list_transactions(_force_refresh=True)
+        )
+
+    def test_uncertain_bulk_edit_response_is_confirmed_without_retry(self) -> None:
+        first, second, _ = self._bulk_transaction_fixture()
+        payee = self.storage.create_payee("Vendor")
+        expected = self.storage.list_transactions(_force_refresh=True)
+        original_batch = self.workbook.batch_update
+
+        def commit_then_timeout(body: dict[str, object]) -> None:
+            original_batch(body)
+            raise OSError("response lost after commit")
+
+        self.workbook.batch_update = Mock(side_effect=commit_then_timeout)
+
+        result = self.storage.bulk_edit_transactions(
+            [first["id"], second["id"]],
+            expected_transactions=expected,
+            changes={"payee_id": payee["id"]},
+        )
+
+        assert result == {"status": "fully_applied", "count": "2"}
+        assert self.workbook.batch_update.call_count == 1
+
     def test_payee_activation_retries_when_batch_update_is_not_applied(self) -> None:
         delays: list[float] = []
         storage = GoogleSheetsStorage(
