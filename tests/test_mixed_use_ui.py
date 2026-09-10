@@ -10,6 +10,8 @@ from tabula_rasa.page_renderers.transactions.mixed_use import (
     _editable_account_ids,
     _mixed_use_copy_keys,
     _mixed_use_log_rows,
+    _mixed_use_selection_ids,
+    _pending_create_ids,
     _start_mixed_use_copy,
     mixed_use_preview,
 )
@@ -35,6 +37,23 @@ def _mixed_tab(app):
 
 def _tab_field(tab, collection: str, label: str):
     return next(item for item in getattr(tab, collection) if item.label == label)
+
+
+def test_pending_create_ids_remain_stable_for_uncertain_retries() -> None:
+    state: dict[str, object] = {}
+    first = _pending_create_ids(state, "north")
+    second = _pending_create_ids(state, "north")
+
+    assert first == second
+    assert first[0] == state["mixed_use_pending_source_id_north"]
+    assert first[1] == state["mixed_use_pending_transaction_id_north"]
+    assert first != _pending_create_ids(state, "south")
+
+
+def test_mixed_use_table_selection_maps_rows_to_stable_source_ids() -> None:
+    assert _mixed_use_selection_ids(
+        ["source-newest", "source-oldest"], [1, 0, 9, -1]
+    ) == ("source-oldest", "source-newest")
 
 
 def test_mixed_use_log_puts_receipt_indicator_at_the_end() -> None:
