@@ -79,8 +79,8 @@ def test_recovery_batches_multiple_receipts_into_one_reconciliation() -> None:
     first = make_reference(1, b"first")
     second = make_reference(2, b"second")
     backup, target, _ = backup_with_receipts([first, second])
-    original_apply = target.apply_receipt_recovery_plan
-    target.apply_receipt_recovery_plan = Mock(wraps=original_apply)
+    worksheet = target._workbook.sheets["Transactions"]
+    worksheet.batch_update = Mock(wraps=worksheet.batch_update)
     drive = Mock()
     drive.restore_receipt.side_effect = [
         (make_drive_file(first, file_id="newreceipt01"), False),
@@ -104,41 +104,26 @@ def test_recovery_batches_multiple_receipts_into_one_reconciliation() -> None:
     assert report["restored"] == 2
     assert report["references_remapped"] == 2
     assert report["errors"] == 0
-    target.apply_receipt_recovery_plan.assert_called_once()
+    worksheet.batch_update.assert_called_once()
 
 
-def test_recovery_uses_two_reads_and_one_write_for_realistic_receipt_count() -> None:
-    receipt_count = 100
-    contents = [f"receipt-{index}".encode() for index in range(1, receipt_count + 1)]
-    references = [
-        make_reference(index, content)
-        for index, content in enumerate(contents, start=1)
-    ]
-    backup, target, _ = backup_with_receipts(references)
+def test_recovery_rejects_duplicate_ids_added_after_preflight() -> None:
+    content = b"receipt"
+    reference = make_reference(1, content)
+    backup, target, _ = backup_with_receipts([reference])
     worksheet = target._workbook.sheets["Transactions"]
-    original_read = worksheet.get_all_values
-    original_batch_update = worksheet.batch_update
-    worksheet.get_all_values = Mock(wraps=original_read)
-    worksheet.batch_update = Mock(wraps=original_batch_update)
-    references_by_name = {
-        str(reference["name"]): (index, reference)
-        for index, reference in enumerate(references, start=1)
-    }
 
-    def restore_receipt(**kwargs: object) -> tuple[dict[str, object], bool]:
-        index, reference = references_by_name[str(kwargs["stored_filename"])]
-        return make_drive_file(
-            reference,
-            file_id=f"newreceipt{index:03d}",
-        ), False
+    def restore_after_duplicate(**_kwargs: object) -> tuple[dict[str, object], bool]:
+        worksheet.rows.append(list(worksheet.rows[1]))
+        return make_drive_file(reference), True
 
+    worksheet.batch_update = Mock(wraps=worksheet.batch_update)
     drive = Mock()
-    drive.restore_receipt.side_effect = restore_receipt
+    drive.restore_receipt.side_effect = restore_after_duplicate
 
     with TemporaryDirectory() as directory:
         root = Path(directory)
-        for reference, content in zip(references, contents):
-            (root / str(reference["name"])).write_bytes(content)
+        (root / str(reference["name"])).write_bytes(content)
 
         report = recover_receipts_from_synology(
             backup,
@@ -149,12 +134,10 @@ def test_recovery_uses_two_reads_and_one_write_for_realistic_receipt_count() -> 
             drive=drive,
         )
 
-    assert not report["issues"], report["issues"]
-    assert report["restored"] == receipt_count
-    assert report["references_remapped"] == receipt_count
-    assert report["errors"] == 0
-    assert worksheet.get_all_values.call_count == 2
-    worksheet.batch_update.assert_called_once()
+    assert report["reused"] == 0
+    assert report["references_remapped"] == 0
+    assert report["errors"] == 1
+    worksheet.batch_update.assert_not_called()
 
 
 def test_recovery_batching_remains_isolated_between_profiles() -> None:

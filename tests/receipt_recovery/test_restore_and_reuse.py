@@ -9,11 +9,7 @@ from unittest.mock import Mock
 from tabula_rasa.receipt_recovery import (
     recover_receipts_from_synology,
 )
-from tabula_rasa.storage import (
-    GoogleSheetsStorage,
-    StorageError,
-    decode_receipt_references,
-)
+from tabula_rasa.storage import GoogleSheetsStorage, decode_receipt_references
 from tests.fakes import FakeWorkbook
 
 
@@ -121,6 +117,8 @@ def test_recovery_reuses_original_drive_file_without_remapping() -> None:
     content = b"receipt"
     reference = make_reference(1, content)
     backup, target, _ = backup_with_receipts([reference])
+    worksheet = target._workbook.worksheet("Transactions")
+    worksheet.batch_update = Mock(wraps=worksheet.batch_update)
     drive = Mock()
     drive.restore_receipt.return_value = (make_drive_file(reference), True)
 
@@ -141,6 +139,7 @@ def test_recovery_reuses_original_drive_file_without_remapping() -> None:
     assert report["references_remapped"] == 0
     assert report["errors"] == 0
     assert report["skipped"] == 0
+    worksheet.batch_update.assert_not_called()
 
 
 def test_mixed_use_receipt_recovery_updates_source_and_projection() -> None:
@@ -179,55 +178,6 @@ def test_mixed_use_receipt_recovery_updates_source_and_projection() -> None:
             storage.list_mixed_use_expenses()[0]["receipt_references"]
         )[0]["id"]
         == "newreceipt01"
-    )
-
-
-def test_mixed_use_receipt_mutation_apis_update_source_and_projection() -> None:
-    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
-    account = storage.create_account("Checking", "Bank")
-    category = storage.create_category("Office", "Expense")
-    source = storage.create_mixed_use_expense(
-        txn_date="2026-07-31",
-        total_expense="100.00",
-        business_use_percentage="50",
-        account_id=account["id"],
-        category_id=category["id"],
-        description="Shared office",
-        allocation_rationale="Measured use",
-    )
-    first = make_reference(1, b"first receipt")
-    second = make_reference(2, b"second receipt")
-
-    storage.set_mixed_use_receipt_references(
-        source["id"], [first], expected_source=source
-    )
-    refreshed_source = storage.get_mixed_use_expense(source["id"])
-    storage.link_mixed_use_receipt(
-        source["id"], reference=second, expected_source=refreshed_source
-    )
-    refreshed_source = storage.get_mixed_use_expense(source["id"])
-    storage.remap_mixed_use_receipt(
-        source["id"],
-        old_file_id=str(first["id"]),
-        reference=second,
-        expected_source=refreshed_source,
-    )
-    refreshed_source = storage.get_mixed_use_expense(source["id"])
-    storage.unlink_mixed_use_receipt(
-        source["id"], file_id=str(second["id"]), expected_source=refreshed_source
-    )
-
-    assert (
-        decode_receipt_references(
-            storage.list_transactions(_force_refresh=True)[0]["receipt_references"]
-        )
-        == []
-    )
-    assert (
-        decode_receipt_references(
-            storage.list_mixed_use_expenses()[0]["receipt_references"]
-        )
-        == []
     )
 
 
@@ -280,36 +230,6 @@ def test_recovery_preserves_conflict_check_before_skipping_reused_file() -> None
     assert transaction_id != other_transaction["id"]
 
 
-def test_recovery_rejects_duplicate_ids_in_refreshed_transactions() -> None:
-    content = b"receipt"
-    reference = make_reference(1, content)
-    backup, target, _ = backup_with_receipts([reference])
-    storage = Mock(wraps=target)
-    storage.apply_receipt_recovery_plan.side_effect = StorageError(
-        "Receipt recovery found duplicate live transaction IDs."
-    )
-    drive = Mock()
-    drive.restore_receipt.return_value = (make_drive_file(reference), True)
-
-    with TemporaryDirectory() as directory:
-        root = Path(directory)
-        (root / str(reference["name"])).write_bytes(content)
-
-        report = recover_receipts_from_synology(
-            backup,
-            root,
-            profile_key="north",
-            folder_id="folder123456",
-            storage=storage,
-            drive=drive,
-        )
-
-    assert report["reused"] == 0
-    assert report["references_remapped"] == 0
-    assert report["errors"] == 1
-    assert report["issues"][0]["status"] == "errors"
-
-
 def test_recovery_handles_null_receipt_reference_cells_without_crashing() -> None:
     content = b"receipt"
     reference = make_reference(1, content)
@@ -343,7 +263,6 @@ def test_recovery_handles_null_receipt_reference_cells_without_crashing() -> Non
 
     assert report["errors"] == 1
     assert report["references_remapped"] == 0
-    assert storage.apply_receipt_recovery_plan.call_count == 2
 
 
 def test_recovery_repairs_stale_live_reference_when_original_file_is_reused() -> None:

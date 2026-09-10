@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 LOCAL_OID = "1" * 40
 REMOTE_OID = "0" * 40
 
