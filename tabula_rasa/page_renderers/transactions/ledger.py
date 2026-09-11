@@ -217,6 +217,8 @@ def render_ledger(
         (
             f"{value} · Mixed-use"
             if transaction_is_mixed_use(transaction_by_id.get(str(row_id), {}))
+            else f"{value} · Recurring"
+            if transaction_by_id.get(str(row_id), {}).get("recurring_schedule_id")
             else value
         )
         for value, row_id in zip(

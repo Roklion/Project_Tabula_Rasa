@@ -112,8 +112,9 @@ def test_mixed_use_log_puts_receipt_indicator_at_the_end() -> None:
         "Business %",
         "Allocated",
         "Rationale",
-        "Description",
-        "Receipt",
+            "Description",
+            "Receipt",
+            "Recurring",
     ]
     assert rows[0]["Receipt"] == "\U0001f4ce"
     assert rows[0]["Payee"] == "Vendor"
@@ -467,7 +468,7 @@ def test_mixed_use_app_test_create_edit_delete_and_transactions_tabs(default_sto
 
         # A fresh render after the confirmed edit starts in Add mode. Deletion
         # remains source-aware and is exercised by the storage/API coverage.
-        assert not _mixed_tab(app).checkbox
+        assert any("Repeat this mixed-use Expense" in item.label for item in _mixed_tab(app).checkbox)
 
 
 def test_mixed_use_table_target_switch_and_delete_are_source_scoped(default_storage) -> None:

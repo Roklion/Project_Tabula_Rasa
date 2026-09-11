@@ -64,20 +64,53 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
                     context.report_storage_error(error)
     if not schedules:
         return
+    current_transactions = context.storage.list_transactions(_force_refresh=True)
+    current_sources = context.storage.list_mixed_use_expenses(_force_refresh=True)
     rows = []
     for item in schedules:
+        linked = current_sources if item.get("expense_type") == "mixed_use" else current_transactions
+        current_dates = [str(row.get("txn_date") or "") for row in linked if row.get("recurring_schedule_id") == item["id"]]
         rows.append({
             "Name": item["name"],
             "Type": "Mixed-use" if item.get("expense_type") == "mixed_use" else "Expense",
+            "Description": item.get("description", ""),
+            "Amount / allocated": item.get("amount", "") if item.get("expense_type") != "mixed_use" else item.get("total_expense", ""),
             "Cadence": f"Every {item['recurrence_interval']} {item['recurrence_unit']}",
+            "Start": item.get("start_date", ""),
+            "End": item.get("end_date", "") or "—",
+            "Latest current": max(current_dates) if current_dates else "—",
             "Next due": item.get("next_due_date") or "—",
             "Status": item["status"].title(),
+            "Attention": item.get("attention_code", "") or "—",
             "Schedule ID": item["id"],
         })
     st.dataframe(rows, hide_index=True, use_container_width=True)
     choices = {f"{item['name']} · {item['id']}": item for item in schedules}
     selected_label = st.selectbox("Schedule", list(choices), key=f"recurring_selected_{context.profile_key}")
     selected = choices[selected_label]
+    with st.expander("Edit schedule template"):
+        with st.form(f"recurring_edit_{context.profile_key}_{selected['id']}"):
+            edit_name = st.text_input("Schedule name", value=selected["name"])
+            edit_unit = st.selectbox("Repeat every", ["day", "week", "month", "year"], index=["day", "week", "month", "year"].index(selected["recurrence_unit"]))
+            edit_interval = st.number_input("Interval", min_value=1, value=int(selected["recurrence_interval"]), step=1)
+            edit_start = st.date_input("Start date", value=date.fromisoformat(selected["start_date"]))
+            edit_end = st.date_input("End date", value=date.fromisoformat(selected["end_date"]) if selected.get("end_date") else None)
+            edit_amount = st.text_input("Amount", value=selected.get("amount", ""))
+            edit_description = st.text_input("Description", value=selected.get("description", ""))
+            edit_reference = st.text_input("Reference", value=selected.get("reference", ""))
+            save_template = st.form_submit_button("Save schedule template")
+        if save_template:
+            try:
+                context.storage.edit_recurring_schedule(
+                    selected["id"], expected_schedule=selected, name=edit_name,
+                    recurrence_unit=edit_unit, recurrence_interval=edit_interval,
+                    start_date=edit_start, anchor_date=edit_start, end_date=edit_end,
+                    amount=edit_amount, description=edit_description, reference=edit_reference,
+                )
+                st.success("Schedule template updated; existing occurrences were unchanged.")
+                st.rerun()
+            except Exception as error:
+                context.report_storage_error(error)
     left, right = st.columns(2)
     with left:
         if selected["status"] == "active" and st.button("Pause", key=f"recurring_pause_{selected['id']}"):

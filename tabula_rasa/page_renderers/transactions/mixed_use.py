@@ -254,6 +254,7 @@ def _mixed_use_log_rows(
             "Rationale": str(item.get("allocation_rationale", "")),
             "Description": str(item.get("description", "")),
             "Receipt": receipt_indicator(item),
+            "Recurring": "Recurring" if item.get("recurring_schedule_id") else "",
         }
         for item in sources
     ]
@@ -639,6 +640,16 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         total_expense = c1.text_input("Total Expense", value=str(defaults.get("total_expense", "0.00") or "0.00"), key=f"mixed_total_{scope}", help="Enter a positive currency amount.")
         business_use_percentage = c2.text_input("Business Use %", value=str(defaults.get("business_use_percentage", "0") or "0"), key=f"mixed_percentage_{scope}", help="Greater than 0 and no more than 100; up to five decimal places.")
         rationale = st.text_area("Allocation Rationale (required)", value=str(defaults.get("allocation_rationale", "")), key=f"mixed_rationale_{scope}")
+        recurring = False
+        recurrence_unit = recurrence_interval = recurrence_name = recurrence_end = None
+        if not source and not copy_mode:
+            recurring = st.checkbox("Repeat this mixed-use Expense", key=f"mixed_recurring_{scope}")
+            if recurring:
+                r1, r2 = st.columns(2)
+                recurrence_unit = r1.selectbox("Repeat every", ["day", "week", "month", "year"], key=f"mixed_recurrence_unit_{scope}")
+                recurrence_interval = r2.number_input("Interval", min_value=1, value=1, step=1, key=f"mixed_recurrence_interval_{scope}")
+                recurrence_name = st.text_input("Schedule name", key=f"mixed_recurrence_name_{scope}")
+                recurrence_end = st.date_input("End date (optional)", value=None, key=f"mixed_recurrence_end_{scope}")
         if copy_mode:
             receipt_uploads = None
             st.info(
@@ -783,6 +794,13 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                     else description
                 )
                 payload = {"txn_date": txn_date, "account_id": account_id, "category_id": category_id, "payee_id": payee_id, "new_payee_name": new_payee_name, "tag_ids": tag_ids, "new_tag_name": new_tag_name or "", "reference": reference, "description": saved_description, "total_expense": total_expense, "business_use_percentage": business_use_percentage, "allocation_rationale": rationale}
+                if recurring:
+                    payload.update({
+                        "name": recurrence_name or description or "Recurring mixed-use expense",
+                        "recurrence_unit": recurrence_unit,
+                        "recurrence_interval": recurrence_interval,
+                        "end_date": recurrence_end,
+                    })
                 if source and not source_incomplete:
                     payload["expected_source"] = expected_source
                     def operation():
@@ -815,6 +833,8 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                             "receipt_references", ""
                         )
                     def operation():
+                        if recurring:
+                            return context.storage.create_recurring_mixed_use_expense(**payload)["source"]
                         return context.storage.create_mixed_use_expense(**payload)
                     action, success = (
                         ("copy_mixed_use_expense", "Mixed-use expense copied.")

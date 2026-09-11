@@ -196,9 +196,13 @@ class RecurringMixin:
             self._append("RecurringSchedules", schedule)
             return self.get_recurring_schedule(schedule["id"], _force_refresh=True)
 
-    def edit_recurring_schedule(self, schedule_id: str, **changes: Any) -> dict[str, str]:
+    def edit_recurring_schedule(self, schedule_id: str, *, expected_schedule: Mapping[str, Any] | None = None, **changes: Any) -> dict[str, str]:
         with self._workbook_locks.ledger:
             current = self.get_recurring_schedule(schedule_id, _force_refresh=True)
+            if expected_schedule is not None:
+                for field in WORKSHEET_HEADERS["RecurringSchedules"]:
+                    if str(expected_schedule.get(field, "") or "") != str(current.get(field, "") or ""):
+                        raise StorageConflictError("The recurring schedule changed; refresh it before editing.")
             merged = {**current, **changes}
             merged.pop("next_due_date", None)
             updated = self._schedule_template(merged, schedule_id=schedule_id,

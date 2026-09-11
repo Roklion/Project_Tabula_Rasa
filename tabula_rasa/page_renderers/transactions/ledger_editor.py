@@ -263,6 +263,18 @@ def render_transaction_editor(
                     "Deleting this transaction is permanent and cannot be undone.",
                     icon="⚠️",
                 )
+                recurring_id = str(selected.get("recurring_schedule_id") or "")
+                if recurring_id:
+                    linked_dates = [
+                        str(item.get("txn_date") or "")
+                        for item in all_transactions
+                        if str(item.get("recurring_schedule_id") or "") == recurring_id
+                    ]
+                    if linked_dates and str(selected.get("txn_date") or "") == max(linked_dates):
+                        st.warning(
+                            "This is the latest current occurrence in an active recurring series. "
+                            "Deleting it may make the next reconciliation regenerate the due date."
+                        )
                 confirm_delete = st.checkbox(
                     "I understand this transaction will be permanently deleted",
                     key=f"edit_transaction_confirm_delete_{edit_widget_scope}",

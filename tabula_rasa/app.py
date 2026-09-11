@@ -459,6 +459,15 @@ else:
         if selected_profile_key not in initialized_profiles:
             storage.ensure_defaults()
             initialized_profiles.add(selected_profile_key)
+        reconciled_profiles = st.session_state.setdefault(
+            "recurring_reconciled_profiles", set()
+        )
+        if selected_profile_key not in reconciled_profiles:
+            # Reconciliation is deliberately one bounded pass per profile and
+            # session. Schedule-level failures are persisted as attention by
+            # storage; they must not block unrelated schedules or trigger reruns.
+            storage.reconcile_recurring_schedules()
+            reconciled_profiles.add(selected_profile_key)
 
     except (LocalProfileStoreError, StorageError) as error:
         if isinstance(error, StorageError):
