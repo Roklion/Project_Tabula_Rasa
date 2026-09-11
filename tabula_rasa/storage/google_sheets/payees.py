@@ -457,11 +457,11 @@ class PayeesMixin(_ManagedMixin):
                 )
 
             def is_applied(state: Any) -> bool:
-                current_payees, _, _ = state
+                current_payees, _, _, _ = state
                 return payee_id not in current_payees and not references_present(state)
 
             def is_unchanged(state: Any) -> bool:
-                current_payees, _, _ = state
+                current_payees, _, _, _ = state
                 return (
                     payee_id in current_payees
                     and current_payees[payee_id].values == payee_rows[payee_id].values
@@ -474,7 +474,7 @@ class PayeesMixin(_ManagedMixin):
                     raise StorageConflictError(
                         "The payee changed or became referenced while removal was being retried."
                     )
-                current_payees, _, _ = state
+                current_payees, _, _, _ = state
                 refreshed = self._managed_delete_request(
                     "Payees", current_payees[payee_id]
                 )

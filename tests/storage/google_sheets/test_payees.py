@@ -8,6 +8,7 @@ import pytest
 from tabula_rasa.storage import (
     GoogleSheetsStorage,
     StorageConflictError,
+    StorageUnavailableError,
     StorageValidationError,
 )
 from tests.fakes import FakeWorkbook
@@ -51,6 +52,23 @@ def test_referenced_payee_remove_is_blocked(default_storage) -> None:
     )
     with pytest.raises(StorageConflictError, match="referenced by 1"):
         default_storage.remove_payee(payee["id"])
+
+
+def test_payee_removal_retries_with_schedule_state_snapshot(default_storage, monkeypatch) -> None:
+    payee = default_storage.create_payee("Retry unused")
+    calls = 0
+
+    def fail_without_response(_: object) -> None:
+        nonlocal calls
+        calls += 1
+        raise OSError("temporary response lost")
+
+    monkeypatch.setattr(default_storage._workbook, "batch_update", fail_without_response)
+
+    with pytest.raises(StorageUnavailableError, match="could not confirm"):
+        default_storage.remove_payee(payee["id"])
+
+    assert calls == 2
 
 
 def test_recurring_schedule_payee_reference_blocks_remove(default_storage) -> None:
