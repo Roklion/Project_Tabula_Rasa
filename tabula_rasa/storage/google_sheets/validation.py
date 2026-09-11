@@ -634,6 +634,8 @@ def _parse_backup_zip(
         start_date = _iso_date(schedule.get("start_date"))
         anchor_date = _iso_date(schedule.get("anchor_date"))
         end_date = _clean_text(schedule.get("end_date"), "Schedule end date")
+        if end_date:
+            end_date = _iso_date(end_date)
         if anchor_date != start_date or (end_date and end_date < start_date and schedule.get("status") != "ended"):
             raise StorageValidationError("Recurring schedule dates are invalid")
         if schedule.get("account_id") not in account_ids or schedule.get("category_id") not in category_ids:

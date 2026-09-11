@@ -74,15 +74,15 @@ class RecurringMixin:
         )
         anchor = _iso_date(data.get("anchor_date", data.get("start_date", data.get("txn_date"))))
         start = _iso_date(data.get("start_date", anchor))
+        status = self._schedule_status(data.get("status", "active"))
         end_value = _clean_text(data.get("end_date"), "Schedule end date")
         end = _iso_date(end_value) if end_value else ""
-        if end and end < start and not data.get("_allow_end_before_start"):
+        if end and end < start and status != "ended":
             raise StorageValidationError("Schedule end date must not precede its start date")
         if anchor != start:
             # The first occurrence is the anchor; exposing two dates that differ
             # makes a schedule ambiguous and causes month/year drift.
             raise StorageValidationError("Schedule anchor date must equal its start date")
-        status = self._schedule_status(data.get("status", "active"))
         account_id = _clean_text(data.get("account_id"), "Account", required=True)
         category_id = _clean_text(data.get("category_id"), "Category", required=True)
         accounts = self._account_lookup(force_refresh=True)
@@ -189,6 +189,9 @@ class RecurringMixin:
 
     def _validate_recurring_references(self) -> None:
         schedules = self._snapshot(("RecurringSchedules",), force_refresh=True)["RecurringSchedules"]
+        schedule_ids = [str(row.values.get("id", "") or "").strip() for row in schedules]
+        if len(schedule_ids) != len(set(schedule_ids)):
+            raise StorageValidationError("Recurring schedule IDs are missing or duplicated")
         schedule_values = {str(row.values.get("id", "")): row.values for row in schedules}
         schedule_ids = set(schedule_values)
         for row in schedules:
@@ -304,16 +307,20 @@ class RecurringMixin:
             rows = transaction_rows if transaction_rows is not None else self._rows("Transactions", force_refresh=True)
             projection_ids = set()
             field = "txn_date"
-        dates = [
-            _as_date(row.values[field])
-            for row in rows
-            if row.values.get("recurring_schedule_id") == schedule_id
-            and row.values.get(field)
-            and (
-                source_kind != "mixed_use"
-                or str(row.values.get("linked_transaction_id", "")) in projection_ids
-            )
-        ]
+        dates = []
+        for row in rows:
+            if (
+                row.values.get("recurring_schedule_id") == schedule_id
+                and row.values.get(field)
+                and (
+                    source_kind != "mixed_use"
+                    or str(row.values.get("linked_transaction_id", "")) in projection_ids
+                )
+            ):
+                try:
+                    dates.append(_as_date(row.values[field]))
+                except (StorageValidationError, TypeError, ValueError):
+                    continue
         return max(dates) if dates else None
 
     def create_recurring_schedule(self, **data: Any) -> dict[str, str]:
@@ -332,7 +339,11 @@ class RecurringMixin:
             if "status" in changes:
                 target_status = self._schedule_status(changes["status"])
                 current_status = current.get("status")
-                if current_status == "ended" and target_status != "ended" and not changes.get("end_date"):
+                if (
+                    current_status == "ended"
+                    and target_status != "ended"
+                    and not changes.get("end_date", current.get("end_date"))
+                ):
                     raise StorageValidationError(
                         "Ended schedules require an explicit end date before reactivation"
                     )
@@ -362,7 +373,6 @@ class RecurringMixin:
             raise StorageConflictError("Schedule is already ended")
         return self.edit_recurring_schedule(
             schedule_id, expected_schedule=expected_schedule, status="ended", end_date=date.today().isoformat(),
-            _allow_end_before_start=True,
         )
 
     def _recurring_occurrence(self, schedule: Mapping[str, str], scheduled: date, *, role: str) -> dict[str, str]:
@@ -385,7 +395,9 @@ class RecurringMixin:
             "recurring_occurrence_type": role,
         })
 
-    def _recurring_mixed_occurrence(self, schedule: Mapping[str, str], scheduled: date, *, role: str) -> dict[str, str]:
+    def _recurring_mixed_occurrence(
+        self, schedule: Mapping[str, str], scheduled: date, *, role: str
+    ) -> tuple[dict[str, str], dict[str, str]]:
         source_id = occurrence_id(schedule["id"], scheduled, f"{role}-source")
         transaction_id = occurrence_id(schedule["id"], scheduled, f"{role}-projection")
         return self._prepare_mixed_use_expense({
@@ -437,6 +449,10 @@ class RecurringMixin:
         }
 
     def reconcile_recurring_schedules(self, *, as_of: date | str | None = None) -> dict[str, Any]:
+        with self._workbook_locks.ledger:
+            return self._reconcile_recurring_schedules(as_of=as_of)
+
+    def _reconcile_recurring_schedules(self, *, as_of: date | str | None = None) -> dict[str, Any]:
         cutoff = _iso_date(as_of or date.today())
         generated: list[dict[str, str]] = []
         attention: dict[str, str] = {}

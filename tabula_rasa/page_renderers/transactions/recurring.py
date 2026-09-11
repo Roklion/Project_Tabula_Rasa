@@ -213,6 +213,7 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
             else:
                 st.success(f"Generated {len(result['generated'])} occurrence(s).")
             context.mark_workbook_data_changed and context.mark_workbook_data_changed()
+            st.rerun()
         except Exception as error:
             context.report_storage_error(error)
 

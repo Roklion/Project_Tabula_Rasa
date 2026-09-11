@@ -264,6 +264,40 @@ def test_current_backup_rejects_partial_provenance(default_storage) -> None:
         default_storage.validate_backup_zip(tampered)
 
 
+def test_recurring_backup_rejects_duplicate_schedule_ids(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    default_storage.create_recurring_expense(
+        schedule_id="duplicate-schedule", name="First", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    default_storage.create_recurring_expense(
+        schedule_id="second-schedule", name="Second", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    second = default_storage._find_row("RecurringSchedules", "second-schedule")
+    duplicate = dict(second.values)
+    duplicate["id"] = "duplicate-schedule"
+    default_storage._replace_row("RecurringSchedules", second, duplicate)
+    with pytest.raises(StorageValidationError, match="missing or duplicated"):
+        default_storage.export_backup_zip(backup_receipt_manifest(default_storage))
+
+
+def test_current_backup_rejects_malformed_schedule_end_date(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    default_storage.create_recurring_expense(
+        schedule_id="bad-end-date", name="Bad end", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    backup = default_storage.export_backup_zip(backup_receipt_manifest(default_storage))
+
+    def corrupt_end_date(rows: list[list[str]]) -> None:
+        rows[1][rows[0].index("end_date")] = "not-a-date"
+
+    tampered = rewrite_backup_tables(backup, {"RecurringSchedules": corrupt_end_date})
+    with pytest.raises(StorageValidationError, match="YYYY-MM-DD"):
+        default_storage.validate_backup_zip(tampered)
+
+
 def test_invalid_schedule_status_needs_attention_but_can_be_repaired(default_storage) -> None:
     account_id, category_id = _ids(default_storage)
     default_storage.create_recurring_schedule(
@@ -338,6 +372,23 @@ def test_invalid_stored_schedule_does_not_hide_other_schedules(default_storage) 
     assert {item["id"] for item in schedules} == {"valid", "invalid"}
 
 
+def test_malformed_occurrence_date_does_not_block_schedule_listing(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    default_storage.create_recurring_expense(
+        schedule_id="bad-occurrence-date", name="Bad date", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    row = default_storage._find_row("Transactions", next(iter(
+        item["id"] for item in default_storage.list_transactions()
+        if item["recurring_schedule_id"] == "bad-occurrence-date"
+    )))
+    broken = dict(row.values)
+    broken["txn_date"] = "not-a-date"
+    default_storage._replace_row("Transactions", row, broken)
+    schedule = default_storage.get_recurring_schedule("bad-occurrence-date")
+    assert schedule["latest_current_occurrence_date"] == ""
+
+
 def test_next_due_exposes_future_start_and_current_schedule_dates(default_storage) -> None:
     account_id, category_id = _ids(default_storage)
     default_storage.create_recurring_schedule(
@@ -386,3 +437,30 @@ def test_schedule_status_transitions_require_current_state_and_baseline(default_
     assert ended["status"] == "ended"
     with pytest.raises(StorageConflictError, match="already ended"):
         default_storage.end_recurring_schedule("states")
+
+
+def test_ending_future_schedule_remains_valid(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    default_storage.create_recurring_schedule(
+        schedule_id="future-ended", name="Future", txn_date="2099-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    ended = default_storage.end_recurring_schedule("future-ended")
+    assert ended["status"] == "ended"
+    assert ended["end_date"] < ended["start_date"]
+    assert default_storage.reconcile_recurring_schedules(as_of="2099-03-01")["attention"] == {}
+    default_storage.export_backup_zip(backup_receipt_manifest(default_storage))
+
+
+def test_reactivating_ended_schedule_keeps_existing_end_date(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    default_storage.create_recurring_schedule(
+        schedule_id="reactivate", name="Reactivate", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    ended = default_storage.end_recurring_schedule("reactivate")
+    reactivated = default_storage.edit_recurring_schedule(
+        "reactivate", status="active", expected_schedule=ended
+    )
+    assert reactivated["status"] == "active"
+    assert reactivated["end_date"] == ended["end_date"]

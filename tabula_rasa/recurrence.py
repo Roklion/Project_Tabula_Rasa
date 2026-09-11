@@ -96,9 +96,11 @@ def occurrences_between(
     if end < start:
         return
     unit = normalize_unit(unit)
-    current = anchor
-    while current < start:
-        current = next_occurrence(anchor, unit, interval, current)
+    current = (
+        anchor
+        if start <= anchor
+        else next_occurrence(anchor, unit, interval, start - timedelta(days=1))
+    )
     while current <= end:
         yield current
         current = next_occurrence(anchor, unit, interval, current)
