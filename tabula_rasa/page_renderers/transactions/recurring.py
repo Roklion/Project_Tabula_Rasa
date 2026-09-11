@@ -32,6 +32,12 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
     """Render profile-scoped schedule management and bounded controls."""
     st.subheader("Recurring expenses")
     st.caption("Schedules create Expense occurrences through the active Google Sheets ledger.")
+    notice_key = f"recurring_notice_{context.profile_key}"
+    if notice := st.session_state.pop(notice_key, None):
+        if notice["level"] == "warning":
+            st.warning(notice["message"])
+        else:
+            st.success(notice["message"])
     try:
         schedules = context.storage.list_recurring_schedules()
     except Exception as error:
@@ -209,9 +215,15 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
         try:
             result = context.storage.reconcile_recurring_schedules(as_of=date.today())
             if result["attention"]:
-                st.warning("Some schedules need attention; other schedules were processed.")
+                st.session_state[notice_key] = {
+                    "level": "warning",
+                    "message": "Some schedules need attention; other schedules were processed.",
+                }
             else:
-                st.success(f"Generated {len(result['generated'])} occurrence(s).")
+                st.session_state[notice_key] = {
+                    "level": "success",
+                    "message": f"Generated {len(result['generated'])} occurrence(s).",
+                }
             context.mark_workbook_data_changed and context.mark_workbook_data_changed()
             st.rerun()
         except Exception as error:

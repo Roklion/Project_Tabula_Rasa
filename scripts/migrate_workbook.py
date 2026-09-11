@@ -114,14 +114,14 @@ def _reorder_columns(
         return headers
     rows = worksheet.get_all_values()
     positions = {header: index for index, header in enumerate(headers)}
-    reordered = [
+    reordered = [list(expected)] + [
         [
             row[positions[header]]
             if header in positions and positions[header] < len(row)
             else ""
             for header in expected
         ]
-        for row in rows
+        for row in rows[1:]
     ]
     worksheet.update(reordered, range_name="A1", raw=True)
     return list(expected)

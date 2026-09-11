@@ -68,7 +68,7 @@ def test_reorder_columns_fills_missing_expected_columns() -> None:
 
     assert _reorder_columns(worksheet, ["name"], ("id", "name")) == ["id", "name"]
     worksheet.update.assert_called_once_with(
-        [["", "name"], ["", "Office"]], range_name="A1", raw=True
+        [["id", "name"], ["", "Office"]], range_name="A1", raw=True
     )
 
 
