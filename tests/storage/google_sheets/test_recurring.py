@@ -151,6 +151,12 @@ def test_recurring_provenance_is_immutable_and_generic_create_is_rejected(defaul
             recurring_schedule_id="immutable", recurring_scheduled_date="2024-02-01",
             recurring_occurrence_type="generated",
         )
+    with pytest.raises(StorageValidationError, match="created only"):
+        default_storage.create_transaction(
+            txn_date="2024-02-02", kind="Expense", amount=10,
+            account_id=account_id, category_id=category_id,
+            recurring_schedule_id="",
+        )
     with pytest.raises(StorageValidationError, match="cannot be changed"):
         default_storage.edit_transaction(result["transaction"]["id"], recurring_scheduled_date="2024-02-02")
 

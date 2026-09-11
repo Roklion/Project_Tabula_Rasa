@@ -804,7 +804,7 @@ class TransactionsMixin:
 
     def create_transaction(self, **data: Any) -> dict[str, str]:
         with self._workbook_locks.ledger:
-            if any(data.get(field) for field in (
+            if any(field in data for field in (
                 "recurring_schedule_id",
                 "recurring_scheduled_date",
                 "recurring_occurrence_type",
