@@ -614,7 +614,10 @@ def _parse_backup_zip(
     _validate_tag_records(tables["Tags"][1])
 
     account_ids = {record["id"] for record in tables["Accounts"][1]}
-    category_ids = {record["id"] for record in tables["Categories"][1]}
+    category_records = {
+        record["id"]: record for record in tables["Categories"][1]
+    }
+    category_ids = set(category_records)
     payee_ids = {record["id"] for record in tables["Payees"][1]}
     tag_ids = {record["id"] for record in tables["Tags"][1]}
     schedules = {record["id"]: record for record in tables["RecurringSchedules"][1]}
@@ -638,7 +641,11 @@ def _parse_backup_zip(
             end_date = _iso_date(end_date)
         if anchor_date != start_date or (end_date and end_date < start_date and schedule.get("status") != "ended"):
             raise StorageValidationError("Recurring schedule dates are invalid")
-        if schedule.get("account_id") not in account_ids or schedule.get("category_id") not in category_ids:
+        if (
+            schedule.get("account_id") not in account_ids
+            or schedule.get("category_id") not in category_ids
+            or category_records[schedule["category_id"]].get("kind") != "Expense"
+        ):
             raise StorageValidationError("Recurring schedule references an unknown account or category")
         payee_id = schedule.get("payee_id", "")
         if payee_id and payee_id not in payee_ids:
@@ -681,6 +688,8 @@ def _parse_backup_zip(
         _validate_recurring_provenance(transaction, "Transaction")
         recurring_id = transaction.get("recurring_schedule_id", "")
         if recurring_id:
+            if transaction.get("kind") != "Expense":
+                raise StorageValidationError("Recurring transaction must be an Expense")
             if recurring_id not in schedules:
                 raise StorageValidationError("Transaction references an unknown recurring schedule")
             _iso_date(transaction.get("recurring_scheduled_date"))
@@ -724,9 +733,6 @@ def _parse_backup_zip(
                 raise StorageValidationError("Mixed-use recurring source kind is invalid")
             _iso_date(source.get("recurring_scheduled_date"))
 
-    category_records = {
-        record["id"]: record for record in tables["Categories"][1]
-    }
     for source in tables.get("MixedUseExpenses", ((), []))[1]:
         _iso_date(source.get("txn_date"))
         account_id = _clean_text(source.get("account_id"), "Account", required=True)

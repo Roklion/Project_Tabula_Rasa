@@ -18,6 +18,7 @@ from .errors import StorageConflictError, StorageNotFoundError, StorageValidatio
 from .schema import WORKSHEET_HEADERS
 from .validation import (
     _clean_text,
+    decode_receipt_references,
     _encode_tag_ids,
     _iso_date,
     _normalize_tag_ids,
@@ -98,7 +99,11 @@ class RecurringMixin:
         known_tags = self._tag_lookup(force_refresh=True)
         if any(tag not in known_tags for tag in tags):
             raise StorageValidationError("Tag does not exist")
-        if _clean_text(data.get("receipt_references"), "Receipt references"):
+        try:
+            receipt_references = decode_receipt_references(data.get("receipt_references", ""))
+        except StorageValidationError as exc:
+            raise StorageValidationError("Receipts cannot be part of a recurring template") from exc
+        if receipt_references:
             raise StorageValidationError("Receipts cannot be part of a recurring template")
         timestamp = created_at or _utc_now()
         try:
@@ -190,7 +195,7 @@ class RecurringMixin:
     def _validate_recurring_references(self) -> None:
         schedules = self._snapshot(("RecurringSchedules",), force_refresh=True)["RecurringSchedules"]
         schedule_ids = [str(row.values.get("id", "") or "").strip() for row in schedules]
-        if len(schedule_ids) != len(set(schedule_ids)):
+        if any(not schedule_id for schedule_id in schedule_ids) or len(schedule_ids) != len(set(schedule_ids)):
             raise StorageValidationError("Recurring schedule IDs are missing or duplicated")
         schedule_values = {str(row.values.get("id", "")): row.values for row in schedules}
         schedule_ids = set(schedule_values)
@@ -458,6 +463,10 @@ class RecurringMixin:
         attention: dict[str, str] = {}
         transaction_rows = self._rows("Transactions", force_refresh=True)
         mixed_rows = self._rows("MixedUseExpenses", force_refresh=True)
+        for row in transaction_rows:
+            _validate_recurring_provenance(row.values, "Transaction")
+        for row in mixed_rows:
+            _validate_recurring_provenance(row.values, "Mixed-use source")
         for schedule in self.list_recurring_schedules(_force_refresh=True):
             try:
                 schedule = self._schedule_template(

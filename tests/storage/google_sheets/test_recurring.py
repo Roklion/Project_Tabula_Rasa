@@ -42,6 +42,16 @@ def test_recurring_template_rejects_receipts_and_non_expenses(default_storage) -
         )
 
 
+def test_recurring_template_accepts_an_empty_receipt_list(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    result = default_storage.create_recurring_expense(
+        schedule_id="empty-receipts", name="No receipt", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id,
+        category_id=category_id, receipt_references="[]",
+    )
+    assert result["schedule"]["id"] == "empty-receipts"
+
+
 def test_recurring_create_resolves_inline_payee_and_tag_values(default_storage) -> None:
     account_id, category_id = _ids(default_storage)
     result = default_storage.create_recurring_expense(
@@ -280,6 +290,67 @@ def test_recurring_backup_rejects_duplicate_schedule_ids(default_storage) -> Non
     default_storage._replace_row("RecurringSchedules", second, duplicate)
     with pytest.raises(StorageValidationError, match="missing or duplicated"):
         default_storage.export_backup_zip(backup_receipt_manifest(default_storage))
+
+
+def test_recurring_backup_rejects_missing_schedule_id(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    default_storage.create_recurring_expense(
+        schedule_id="missing-schedule-id", name="Missing ID", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    row = default_storage._find_row("RecurringSchedules", "missing-schedule-id")
+    worksheet = default_storage._worksheet("RecurringSchedules")
+    worksheet.rows[row.row_number - 1][worksheet.rows[0].index("id")] = ""
+    default_storage._invalidate("RecurringSchedules")
+    with pytest.raises(StorageValidationError, match="missing or duplicated"):
+        default_storage.export_backup_zip(backup_receipt_manifest(default_storage))
+
+
+def test_reconcile_rejects_partial_occurrence_provenance_before_generation(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    result = default_storage.create_recurring_expense(
+        schedule_id="partial-reconcile", name="Partial", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    row = default_storage._find_row("Transactions", result["transaction"]["id"])
+    broken = dict(row.values)
+    broken["recurring_schedule_id"] = ""
+    default_storage._replace_row("Transactions", row, broken)
+    with pytest.raises(StorageValidationError, match="provided together"):
+        default_storage.reconcile_recurring_schedules(as_of="2024-02-01")
+
+
+def test_recurring_backup_rejects_non_expense_occurrence(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    default_storage.create_recurring_expense(
+        schedule_id="income-occurrence", name="Wrong kind", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    backup = default_storage.export_backup_zip(backup_receipt_manifest(default_storage))
+
+    def change_kind(rows: list[list[str]]) -> None:
+        rows[1][rows[0].index("kind")] = "Income"
+
+    tampered = rewrite_backup_tables(backup, {"Transactions": change_kind})
+    with pytest.raises(StorageValidationError, match="must be an Expense"):
+        default_storage.validate_backup_zip(tampered)
+
+
+def test_recurring_backup_rejects_income_schedule_category(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    income_category = default_storage.create_category("Income category", "Income")
+    default_storage.create_recurring_expense(
+        schedule_id="income-category", name="Wrong category", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    backup = default_storage.export_backup_zip(backup_receipt_manifest(default_storage))
+
+    def change_category(rows: list[list[str]]) -> None:
+        rows[1][rows[0].index("category_id")] = income_category["id"]
+
+    tampered = rewrite_backup_tables(backup, {"RecurringSchedules": change_category})
+    with pytest.raises(StorageValidationError, match="unknown account or category"):
+        default_storage.validate_backup_zip(tampered)
 
 
 def test_current_backup_rejects_malformed_schedule_end_date(default_storage) -> None:
