@@ -622,6 +622,7 @@ def _parse_backup_zip(
     tag_ids = {record["id"] for record in tables["Tags"][1]}
     schedules = {record["id"]: record for record in tables["RecurringSchedules"][1]}
     for schedule in schedules.values():
+        _clean_text(schedule.get("name"), "Schedule name", required=True)
         if schedule.get("kind") != "Expense":
             raise StorageValidationError("Recurring schedules must be Expense records")
         if schedule.get("source_kind", "transaction") not in {"transaction", "mixed_use"}:

@@ -218,11 +218,14 @@ class RecurringMixin:
         label: str,
         *,
         mixed_source: bool,
+        filter_schedule_id: str | None = None,
     ) -> None:
         for row in rows:
             values = row.values
-            _validate_recurring_provenance(values, label)
             schedule_id = str(values.get("recurring_schedule_id", "") or "")
+            if filter_schedule_id is not None and schedule_id != filter_schedule_id:
+                continue
+            _validate_recurring_provenance(values, label)
             if not schedule_id:
                 continue
             if values.get("kind") != "Expense":
@@ -507,6 +510,17 @@ class RecurringMixin:
         with self._workbook_locks.ledger:
             return self._reconcile_recurring_schedules(as_of=as_of)
 
+    def _clear_recurring_attention(self, schedule_id: str) -> None:
+        try:
+            row = self._find_row("RecurringSchedules", schedule_id)
+            if row.values.get("attention_code") or row.values.get("attention_at"):
+                updated = dict(row.values)
+                updated["attention_code"] = ""
+                updated["attention_at"] = ""
+                self._replace_row("RecurringSchedules", row, updated)
+        except Exception:
+            pass
+
     def _reconcile_recurring_schedules(self, *, as_of: date | str | None = None) -> dict[str, Any]:
         cutoff = _iso_date(as_of or date.today())
         generated: list[dict[str, str]] = []
@@ -527,16 +541,32 @@ class RecurringMixin:
             mixed_rows=mixed_rows,
         )
         schedule_values = {schedule["id"]: schedule for schedule in schedules if schedule["id"]}
-        self._validate_recurring_occurrence_rows(
-            transaction_rows, schedule_values, "Transaction", mixed_source=False
-        )
-        self._validate_recurring_occurrence_rows(
-            mixed_rows, schedule_values, "Mixed-use source", mixed_source=True
-        )
+        schedule_ids = [schedule["id"] for schedule in schedules if schedule["id"]]
+        if len(schedule_ids) != len(set(schedule_ids)):
+            raise StorageValidationError("Recurring schedule IDs are duplicated")
+        for row in (*transaction_rows, *mixed_rows):
+            _validate_recurring_provenance(row.values, "Recurring occurrence")
+            occurrence_schedule_id = str(row.values.get("recurring_schedule_id", "") or "")
+            if occurrence_schedule_id and occurrence_schedule_id not in schedule_values:
+                raise StorageValidationError("Recurring occurrence references an unknown schedule")
         for schedule in schedules:
             try:
                 if not schedule["id"]:
                     raise StorageValidationError("Schedule ID is missing")
+                self._validate_recurring_occurrence_rows(
+                    transaction_rows,
+                    schedule_values,
+                    "Transaction",
+                    mixed_source=False,
+                    filter_schedule_id=schedule["id"],
+                )
+                self._validate_recurring_occurrence_rows(
+                    mixed_rows,
+                    schedule_values,
+                    "Mixed-use source",
+                    mixed_source=True,
+                    filter_schedule_id=schedule["id"],
+                )
                 schedule = self._schedule_template(
                     schedule,
                     schedule_id=schedule["id"],
@@ -548,6 +578,7 @@ class RecurringMixin:
                     tag_lookup=tags,
                 )
                 if schedule["status"] != "active":
+                    self._clear_recurring_attention(schedule["id"])
                     continue
                 end = min(cutoff, schedule["end_date"]) if schedule.get("end_date") else cutoff
                 existing = self._existing_recurring_dates(
@@ -589,15 +620,7 @@ class RecurringMixin:
                 except Exception:
                     pass
             else:
-                try:
-                    row = self._find_row("RecurringSchedules", schedule["id"])
-                    if row.values.get("attention_code") or row.values.get("attention_at"):
-                        updated = dict(row.values)
-                        updated["attention_code"] = ""
-                        updated["attention_at"] = ""
-                        self._replace_row("RecurringSchedules", row, updated)
-                except Exception:
-                    pass
+                self._clear_recurring_attention(schedule["id"])
         return {"generated": generated, "attention": attention}
 
     # Clear aliases make the public operation discoverable without coupling UI

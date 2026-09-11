@@ -336,12 +336,19 @@ def test_reconcile_rejects_invalid_complete_occurrence_provenance_before_generat
         schedule_id="invalid-reconcile", name="Invalid", txn_date="2024-01-01",
         recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
     )
+    default_storage.create_recurring_expense(
+        schedule_id="healthy-reconcile", name="Healthy", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
     row = default_storage._find_row("Transactions", result["transaction"]["id"])
     broken = dict(row.values)
     broken["recurring_occurrence_type"] = "corrupt"
     default_storage._replace_row("Transactions", row, broken)
-    with pytest.raises(StorageValidationError, match="occurrence type is invalid"):
-        default_storage.reconcile_recurring_schedules(as_of="2024-02-01")
+    outcome = default_storage.reconcile_recurring_schedules(as_of="2024-02-01")
+    assert outcome["attention"] == {"invalid-reconcile": "validation"}
+    assert [item["recurring_schedule_id"] for item in outcome["generated"]] == [
+        "healthy-reconcile"
+    ]
 
 
 def test_missing_schedule_id_does_not_block_other_schedule_listing(default_storage) -> None:
@@ -358,6 +365,24 @@ def test_missing_schedule_id_does_not_block_other_schedule_listing(default_stora
     assert len(schedules) == 1
     assert schedules[0]["id"] == ""
     assert schedules[0]["attention_code"] == "validation"
+
+
+def test_reconcile_rejects_duplicate_schedule_ids_before_generation(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    default_storage.create_recurring_expense(
+        schedule_id="duplicate-one", name="One", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    default_storage.create_recurring_expense(
+        schedule_id="duplicate-two", name="Two", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    row = default_storage._find_row("RecurringSchedules", "duplicate-two")
+    worksheet = default_storage._worksheet("RecurringSchedules")
+    worksheet.rows[row.row_number - 1][worksheet.rows[0].index("id")] = "duplicate-one"
+    default_storage._invalidate("RecurringSchedules")
+    with pytest.raises(StorageValidationError, match="schedule IDs are duplicated"):
+        default_storage.reconcile_recurring_schedules(as_of="2024-02-01")
 
 
 def test_recurring_backup_rejects_non_expense_occurrence(default_storage) -> None:
@@ -390,6 +415,22 @@ def test_recurring_export_rejects_non_expense_occurrence(default_storage) -> Non
         default_storage.export_backup_zip(
             {"schema_version": 1, "business_profile_key": "test", "receipts": []}
         )
+
+
+def test_recurring_backup_rejects_missing_schedule_name(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    default_storage.create_recurring_expense(
+        schedule_id="missing-name", name="Named", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    backup = default_storage.export_backup_zip(backup_receipt_manifest(default_storage))
+
+    def clear_name(rows: list[list[str]]) -> None:
+        rows[1][rows[0].index("name")] = ""
+
+    tampered = rewrite_backup_tables(backup, {"RecurringSchedules": clear_name})
+    with pytest.raises(StorageValidationError, match="Schedule name is required"):
+        default_storage.validate_backup_zip(tampered)
 
 
 def test_recurring_backup_rejects_income_schedule_category(default_storage) -> None:
@@ -441,6 +482,8 @@ def test_invalid_schedule_status_needs_attention_but_can_be_repaired(default_sto
 
     repaired = default_storage.edit_recurring_schedule("invalid-status", status="active")
     assert repaired["status"] == "active"
+    default_storage.reconcile_recurring_schedules(as_of="2024-02-01")
+    assert default_storage.get_recurring_schedule("invalid-status")["attention_code"] == ""
 
 
 def test_schedule_pause_resume_and_end_do_not_change_occurrences(default_storage) -> None:
