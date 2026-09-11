@@ -330,6 +330,36 @@ def test_reconcile_rejects_partial_occurrence_provenance_before_generation(defau
         default_storage.reconcile_recurring_schedules(as_of="2024-02-01")
 
 
+def test_reconcile_rejects_invalid_complete_occurrence_provenance_before_generation(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    result = default_storage.create_recurring_expense(
+        schedule_id="invalid-reconcile", name="Invalid", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    row = default_storage._find_row("Transactions", result["transaction"]["id"])
+    broken = dict(row.values)
+    broken["recurring_occurrence_type"] = "corrupt"
+    default_storage._replace_row("Transactions", row, broken)
+    with pytest.raises(StorageValidationError, match="occurrence type is invalid"):
+        default_storage.reconcile_recurring_schedules(as_of="2024-02-01")
+
+
+def test_missing_schedule_id_does_not_block_other_schedule_listing(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    default_storage.create_recurring_expense(
+        schedule_id="healthy", name="Healthy", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    row = default_storage._find_row("RecurringSchedules", "healthy")
+    worksheet = default_storage._worksheet("RecurringSchedules")
+    worksheet.rows[row.row_number - 1][worksheet.rows[0].index("id")] = ""
+    default_storage._invalidate("RecurringSchedules")
+    schedules = default_storage.list_recurring_schedules()
+    assert len(schedules) == 1
+    assert schedules[0]["id"] == ""
+    assert schedules[0]["attention_code"] == "validation"
+
+
 def test_recurring_backup_rejects_non_expense_occurrence(default_storage) -> None:
     account_id, category_id = _ids(default_storage)
     default_storage.create_recurring_expense(
@@ -344,6 +374,22 @@ def test_recurring_backup_rejects_non_expense_occurrence(default_storage) -> Non
     tampered = rewrite_backup_tables(backup, {"Transactions": change_kind})
     with pytest.raises(StorageValidationError, match="must be an Expense"):
         default_storage.validate_backup_zip(tampered)
+
+
+def test_recurring_export_rejects_non_expense_occurrence(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    result = default_storage.create_recurring_expense(
+        schedule_id="export-wrong-kind", name="Wrong kind", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    row = default_storage._find_row("Transactions", result["transaction"]["id"])
+    broken = dict(row.values)
+    broken["kind"] = "Income"
+    default_storage._replace_row("Transactions", row, broken)
+    with pytest.raises(StorageValidationError, match="must be an Expense"):
+        default_storage.export_backup_zip(
+            {"schema_version": 1, "business_profile_key": "test", "receipts": []}
+        )
 
 
 def test_recurring_backup_rejects_income_schedule_category(default_storage) -> None:
@@ -533,15 +579,14 @@ def test_ending_future_schedule_remains_valid(default_storage) -> None:
     default_storage.export_backup_zip(backup_receipt_manifest(default_storage))
 
 
-def test_reactivating_ended_schedule_keeps_existing_end_date(default_storage) -> None:
+def test_ended_schedule_cannot_be_reactivated(default_storage) -> None:
     account_id, category_id = _ids(default_storage)
     default_storage.create_recurring_schedule(
         schedule_id="reactivate", name="Reactivate", txn_date="2024-01-01",
         recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
     )
     ended = default_storage.end_recurring_schedule("reactivate")
-    reactivated = default_storage.edit_recurring_schedule(
-        "reactivate", status="active", expected_schedule=ended
-    )
-    assert reactivated["status"] == "active"
-    assert reactivated["end_date"] == ended["end_date"]
+    with pytest.raises(StorageValidationError, match="cannot be reactivated"):
+        default_storage.edit_recurring_schedule(
+            "reactivate", status="active", expected_schedule=ended
+        )

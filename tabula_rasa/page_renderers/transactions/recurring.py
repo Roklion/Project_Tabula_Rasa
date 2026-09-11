@@ -33,14 +33,14 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
     st.subheader("Recurring expenses")
     st.caption("Schedules create Expense occurrences through the active Google Sheets ledger.")
     try:
-        schedules = context.storage.list_recurring_schedules(_force_refresh=True)
+        schedules = context.storage.list_recurring_schedules()
     except Exception as error:
         context.report_storage_error(error)
         return
     if not schedules:
         return
-    current_transactions = context.storage.list_transactions(_force_refresh=True)
-    current_sources = context.storage.list_mixed_use_expense_sources(_force_refresh=True)
+    current_transactions = context.storage.list_transactions()
+    current_sources = context.storage.list_mixed_use_expense_sources()
     rows = []
     for item in schedules:
         linked = current_sources if item.get("source_kind") == "mixed_use" else current_transactions
