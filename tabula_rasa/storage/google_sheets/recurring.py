@@ -476,10 +476,16 @@ class RecurringMixin:
             else:
                 self._append("RecurringSchedules", schedule)
             pair = self.create_mixed_use_expense(**source)
-            projection = next(
-                item for item in self.list_transactions(_force_refresh=True)
-                if item.get("id") == source["linked_transaction_id"]
-            )
+            try:
+                projection = next(
+                    item for item in self.list_transactions(_force_refresh=True)
+                    if item.get("id") == source["linked_transaction_id"]
+                )
+            except StopIteration:
+                raise StorageConflictError(
+                    "Could not find the linked projection for the recurring "
+                    "mixed-use expense. The ledger may be inconsistent."
+                ) from None
             return {
                 "schedule": self.get_recurring_schedule(schedule["id"], _force_refresh=True),
                 "source": pair,

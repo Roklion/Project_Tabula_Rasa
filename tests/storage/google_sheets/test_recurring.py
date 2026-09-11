@@ -64,6 +64,22 @@ def test_recurring_interval_rejects_fractional_values(default_storage) -> None:
         default_storage.export_backup_zip(
             {"schema_version": 1, "business_profile_key": "test", "receipts": []}
         )
+
+
+def test_recurring_backup_rejects_missing_interval(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    default_storage.create_recurring_expense(
+        schedule_id="missing-interval", name="Valid", txn_date="2024-01-01",
+        recurrence_interval=1, amount=10, account_id=account_id, category_id=category_id,
+    )
+    row = default_storage._find_row("RecurringSchedules", "missing-interval")
+    broken = dict(row.values)
+    broken["recurrence_interval"] = ""
+    default_storage._replace_row("RecurringSchedules", row, broken)
+    with pytest.raises(StorageValidationError, match="positive integer"):
+        default_storage.export_backup_zip(
+            {"schema_version": 1, "business_profile_key": "test", "receipts": []}
+        )
 def test_mixed_use_recurring_occurrence_preserves_source_projection_pair(default_storage) -> None:
     account_id, category_id = _ids(default_storage)
     result = default_storage.create_recurring_mixed_use_expense(
@@ -117,6 +133,21 @@ def test_mixed_use_recurring_initial_retry_reuses_schedule_and_pair(default_stor
     assert first["source"]["id"] == second["source"]["id"]
     assert len(default_storage.list_recurring_schedules()) == 1
     assert len(default_storage.list_mixed_use_expenses()) == 1
+
+
+def test_mixed_use_recurring_missing_projection_is_actionable(default_storage, monkeypatch) -> None:
+    account_id, category_id = _ids(default_storage)
+
+    def create_source_only(**source):
+        return {"id": source["id"]}, {}
+
+    monkeypatch.setattr(default_storage, "create_mixed_use_expense", create_source_only)
+    with pytest.raises(StorageConflictError, match="linked projection"):
+        default_storage.create_recurring_mixed_use_expense(
+            schedule_id="missing-projection", name="Vehicle", txn_date="2024-01-31",
+            recurrence_unit="month", total_expense="20.00", business_use_percentage="50",
+            account_id=account_id, category_id=category_id, allocation_rationale="Business travel",
+        )
 
 
 def test_recurring_retries_ignore_new_timestamps_but_not_payload_changes(default_storage, monkeypatch) -> None:

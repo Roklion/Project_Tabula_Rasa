@@ -613,7 +613,7 @@ def _parse_backup_zip(
         if schedule.get("recurrence_unit") not in {"day", "week", "month", "year"}:
             raise StorageValidationError("Recurring schedule unit is invalid")
         _positive_integer(
-            schedule.get("recurrence_interval", "0"),
+            schedule.get("recurrence_interval"),
             "Recurring schedule interval",
         )
         if schedule.get("status") not in {"active", "paused", "ended"}:

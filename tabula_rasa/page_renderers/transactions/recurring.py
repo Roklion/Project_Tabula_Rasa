@@ -50,7 +50,15 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
     with st.expander("Edit schedule template"):
         with st.form(f"recurring_edit_{context.profile_key}_{selected['id']}"):
             edit_name = st.text_input("Schedule name", value=selected["name"])
-            edit_unit = st.selectbox("Repeat every", ["day", "week", "month", "year"], index=["day", "week", "month", "year"].index(selected["recurrence_unit"]))
+            recurrence_units = ["day", "week", "month", "year"]
+            selected_unit = selected.get("recurrence_unit")
+            edit_unit = st.selectbox(
+                "Repeat every",
+                recurrence_units,
+                index=recurrence_units.index(selected_unit)
+                if selected_unit in recurrence_units
+                else 0,
+            )
             edit_interval = st.number_input("Interval", min_value=1, value=int(selected["recurrence_interval"]), step=1)
             edit_start = st.date_input("Start date", value=date.fromisoformat(selected["start_date"]))
             edit_end = st.date_input("End date", value=date.fromisoformat(selected["end_date"]) if selected.get("end_date") else None)
