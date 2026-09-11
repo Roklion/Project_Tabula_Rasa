@@ -124,6 +124,16 @@ def test_mixed_use_recurring_occurrence_preserves_source_projection_pair(default
     assert all(item.get("recurring_source_kind") == "mixed_use" for item in sources)
 
 
+def test_mixed_use_recurring_template_requires_allocation_rationale(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    with pytest.raises(StorageValidationError, match="Allocation rationale"):
+        default_storage.create_recurring_mixed_use_expense(
+            schedule_id="missing-rationale", name="Missing rationale", txn_date="2024-01-01",
+            recurrence_unit="month", total_expense="20.00", business_use_percentage="50",
+            account_id=account_id, category_id=category_id,
+        )
+
+
 def test_mixed_recurring_create_resolves_inline_payee_and_tag_values(default_storage) -> None:
     account_id, category_id = _ids(default_storage)
     result = default_storage.create_recurring_mixed_use_expense(

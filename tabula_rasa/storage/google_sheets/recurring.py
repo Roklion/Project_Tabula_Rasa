@@ -115,6 +115,11 @@ class RecurringMixin:
             if source_kind == "mixed_use":
                 raise StorageValidationError(str(exc)) from exc
             allocation = None
+        allocation_rationale = _clean_text(
+            data.get("allocation_rationale"),
+            "Allocation rationale",
+            required=source_kind == "mixed_use",
+        )
         return {
             "id": schedule_id,
             "name": name,
@@ -136,7 +141,7 @@ class RecurringMixin:
             "payee_id": payee_id,
             "description": _clean_text(data.get("description"), "Description"),
             "reference": _clean_text(data.get("reference"), "Reference"),
-            "allocation_rationale": _clean_text(data.get("allocation_rationale"), "Allocation rationale"),
+            "allocation_rationale": allocation_rationale,
             "tag_ids": _encode_tag_ids(tags),
             "created_at": timestamp,
             "updated_at": updated_at or timestamp,
