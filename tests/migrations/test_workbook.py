@@ -23,6 +23,7 @@ from scripts.migration_schemas import (
     LEGACY_TAGS_WORKBOOK_HEADERS,
     VERSION_3_WORKSHEET_HEADERS,
     VERSION_7_WORKSHEET_HEADERS,
+    VERSION_10_WORKSHEET_HEADERS,
 )
 from tests.fakes import FakeWorkbook
 
@@ -43,6 +44,20 @@ def test_migrates_standard_pre_mixed_layout_to_current_headers() -> None:
     assert result["source_tags"] == 0
     for title, headers in WORKSHEET_HEADERS.items():
         assert workbook.sheets[title].rows[0] == list(headers)
+    GoogleSheetsStorage(workbook)
+
+
+def test_migrates_prior_v10_layout_to_current_headers_and_empty_schedules() -> None:
+    workbook = FakeWorkbook(VERSION_10_WORKSHEET_HEADERS)
+
+    result = migrate_workbook(workbook)
+
+    assert result["source_tags"] == 0
+    for title, headers in WORKSHEET_HEADERS.items():
+        assert workbook.sheets[title].rows[0] == list(headers)
+    assert workbook.sheets["RecurringSchedules"].rows == [
+        list(WORKSHEET_HEADERS["RecurringSchedules"])
+    ]
     GoogleSheetsStorage(workbook)
 
 
@@ -356,8 +371,8 @@ def test_v9_migration_backfills_source_tags_from_linked_projection() -> None:
 
     assert result["source_tags"] == 1
     source = workbook.sheets["MixedUseExpenses"]
-    assert source.rows[0][-1] == "tag_ids"
-    assert source.rows[1][-1] == '["tag-1"]'
+    assert source.rows[0] == list(WORKSHEET_HEADERS["MixedUseExpenses"])
+    assert source.rows[1][source.rows[0].index("tag_ids")] == '["tag-1"]'
     GoogleSheetsStorage(workbook)
 
 

@@ -275,7 +275,7 @@ directory from the protected Synology recovery set to a safe local path, then
 recover against the new workbook using the converted archive:
 
 ```powershell
-python scripts\recover_synology_receipts.py "C:\Safe-Recovery\tabula-rasa-backup-YYYYMMDDTHHMMSSZ-format10.zip" "C:\Safe-Recovery\Receipts" --profile PROFILE_KEY --target-spreadsheet-id NEW_SPREADSHEET_ID
+python scripts\recover_synology_receipts.py "C:\Safe-Recovery\tabula-rasa-backup-YYYYMMDDTHHMMSSZ-format11.zip" "C:\Safe-Recovery\Receipts" --profile PROFILE_KEY --target-spreadsheet-id NEW_SPREADSHEET_ID
 ```
 
 The command refuses every configured live workbook. Before a Drive change it
@@ -313,8 +313,8 @@ recovery operation.
 
 ## Convert a legacy archive
 
-Convert a format-1 through format-9 archive offline. The default output is a
-new `-format10.zip` file beside the source; use `--output` for another new
+Convert a format-1 through format-10 archive offline. The default output is a
+new `-format11.zip` file beside the source; use `--output` for another new
 path. For ledger-only archives (formats 1–4), pass the business profile key so
 the generated empty receipt inventory is scoped correctly.
 

@@ -105,6 +105,22 @@ def _append_columns(worksheet: Any, headers: list[str], additions: list[str]) ->
     worksheet.update([updated_headers], range_name="A1", raw=True)
     return updated_headers
 
+
+def _reorder_columns(
+    worksheet: Any, headers: list[str], expected: tuple[str, ...]
+) -> list[str]:
+    """Rewrite a migrated sheet into the current canonical column order."""
+    if tuple(headers) == expected:
+        return headers
+    rows = worksheet.get_all_values()
+    positions = {header: index for index, header in enumerate(headers)}
+    reordered = [
+        [row[positions[header]] if positions[header] < len(row) else "" for header in expected]
+        for row in rows
+    ]
+    worksheet.update(reordered, range_name="A1", raw=True)
+    return list(expected)
+
 def _validate_receipt_ownership(transactions: list[dict[str, Any]]) -> None:
     owners: dict[str, str] = {}
     for transaction in transactions:
@@ -355,11 +371,12 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
             mixed_headers.extend(missing_columns)
         mixed.update([mixed_headers], range_name="A1", raw=True)
     else:
-        _append_columns(
+        mixed_headers = _append_columns(
             mixed,
             mixed_headers,
             ["receipt_references", "tag_ids", "recurring_schedule_id", "recurring_scheduled_date", "recurring_source_kind", "recurring_occurrence_type"],
         )
+    _reorder_columns(mixed, mixed_headers, MIXED_USE_WORKSHEET_HEADERS)
 
     _ensure_sheet(workbook, "RecurringSchedules", worksheets, initial)
 
