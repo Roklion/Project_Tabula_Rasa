@@ -2,7 +2,7 @@ from datetime import date
 
 import pytest
 
-from tabula_rasa.storage.google_sheets import StorageValidationError
+from tabula_rasa.storage.google_sheets import StorageConflictError, StorageValidationError
 
 
 def _ids(storage):
@@ -127,3 +127,47 @@ def test_invalid_stored_schedule_does_not_hide_other_schedules(default_storage) 
     default_storage._replace_row("RecurringSchedules", row, broken)
     schedules = default_storage.list_recurring_schedules(_force_refresh=True)
     assert {item["id"] for item in schedules} == {"valid", "invalid"}
+
+
+def test_next_due_exposes_future_start_and_current_schedule_dates(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    default_storage.create_recurring_schedule(
+        schedule_id="future", name="Future", txn_date="2099-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    assert default_storage.get_recurring_schedule("future")["next_due_date"] == "2099-01-01"
+
+
+def test_recurring_provenance_is_immutable_and_generic_create_is_rejected(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    result = default_storage.create_recurring_expense(
+        schedule_id="immutable", name="Immutable", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    with pytest.raises(StorageValidationError, match="created only"):
+        default_storage.create_transaction(
+            txn_date="2024-02-01", kind="Expense", amount=10,
+            account_id=account_id, category_id=category_id,
+            recurring_schedule_id="immutable", recurring_scheduled_date="2024-02-01",
+            recurring_occurrence_type="generated",
+        )
+    with pytest.raises(StorageValidationError, match="cannot be changed"):
+        default_storage.edit_transaction(result["transaction"]["id"], recurring_scheduled_date="2024-02-02")
+
+
+def test_schedule_status_transitions_require_current_state_and_baseline(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    default_storage.create_recurring_schedule(
+        schedule_id="states", name="States", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    active = default_storage.get_recurring_schedule("states")
+    default_storage.pause_recurring_schedule("states", expected_schedule=active)
+    with pytest.raises(StorageConflictError, match="active"):
+        default_storage.pause_recurring_schedule("states")
+    paused = default_storage.get_recurring_schedule("states")
+    default_storage.resume_recurring_schedule("states", expected_schedule=paused)
+    ended = default_storage.end_recurring_schedule("states", expected_schedule=default_storage.get_recurring_schedule("states"))
+    assert ended["status"] == "ended"
+    with pytest.raises(StorageConflictError, match="already ended"):
+        default_storage.end_recurring_schedule("states")

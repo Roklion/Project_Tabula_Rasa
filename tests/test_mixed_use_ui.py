@@ -119,7 +119,21 @@ def test_mixed_use_log_puts_receipt_indicator_at_the_end() -> None:
     assert rows[0]["Receipt"] == "\U0001f4ce"
     assert rows[0]["Payee"] == "Vendor"
     assert rows[0]["Description"] == "Shared office supplies"
+    assert rows[0]["Recurring"] == ""
     assert rows[1]["Receipt"] == ""
+
+
+def test_mixed_use_log_marks_recurring_sources() -> None:
+    rows = _mixed_use_log_rows(
+        [{
+            "txn_date": "2026-09-08", "account_id": "a", "category_id": "c",
+            "total_expense": "1", "business_use_percentage": "50",
+            "allocated_amount": "0.50", "allocation_rationale": "Use",
+            "recurring_schedule_id": "schedule",
+        }],
+        {"a": "Checking"}, {"c": "Office"},
+    )
+    assert rows[0]["Recurring"] == "Recurring"
 
 
 def test_mixed_use_log_keeps_malformed_receipts_inspectable() -> None:
@@ -469,6 +483,33 @@ def test_mixed_use_app_test_create_edit_delete_and_transactions_tabs(default_sto
         # A fresh render after the confirmed edit starts in Add mode. Deletion
         # remains source-aware and is exercised by the storage/API coverage.
         assert any("Repeat this mixed-use Expense" in item.label for item in _mixed_tab(app).checkbox)
+
+
+def test_mixed_use_app_test_recurring_create_creates_source_projection_pair(default_storage) -> None:
+    default_storage.create_account("Recurring Mixed Checking", "Bank")
+    default_storage.create_category("Recurring Mixed Office", "Expense")
+
+    with authenticated_app(default_storage) as app:
+        navigate_to(app, "Transactions")
+        tab = _mixed_tab(app)
+        _tab_field(tab, "text_input", "Total Expense").set_value("100.00").run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "text_input", "Business Use %").set_value("25").run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "text_area", "Allocation Rationale (required)").set_value("Recurring workspace").run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "checkbox", "Repeat this mixed-use Expense").set_value(True).run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "text_input", "Schedule name").set_value("Recurring workspace").run()
+        _tab_field(tab, "button", "Save mixed-use expense").click().run()
+
+    schedules = default_storage.list_recurring_schedules()
+    sources = default_storage.list_mixed_use_expenses()
+    projections = default_storage.list_transactions()
+    assert len(schedules) == len(sources) == len(projections) == 1
+    assert sources[0]["recurring_schedule_id"] == schedules[0]["id"]
+    assert projections[0]["id"] == sources[0]["linked_transaction_id"]
+    assert projections[0]["recurring_schedule_id"] == schedules[0]["id"]
 
 
 def test_mixed_use_table_target_switch_and_delete_are_source_scoped(default_storage) -> None:

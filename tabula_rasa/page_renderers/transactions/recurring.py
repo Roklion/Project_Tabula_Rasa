@@ -30,12 +30,17 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
                 start = st.date_input("First occurrence", date.today())
                 unit = st.selectbox("Cadence", ["day", "week", "month", "year"])
                 interval = st.number_input("Every", min_value=1, value=1, step=1)
+                end = st.date_input("End date (optional)", value=None)
                 amount = st.number_input("Amount", min_value=0.01, value=1.0, step=0.01, format="%.2f")
                 percentage = st.number_input("Business use %", min_value=0.01, max_value=100.0, value=50.0, step=0.01, format="%.2f")
                 rationale = st.text_input("Allocation rationale")
                 account = st.selectbox("Account", active_accounts, format_func=lambda item: item["name"])
                 category = st.selectbox("Category", expense_categories, format_func=lambda item: item["name"])
+                payee_ids = [""] + [str(item["id"]) for item in payees]
+                payee_id = st.selectbox("Payee", payee_ids, format_func=lambda value: next((str(item.get("name")) for item in payees if str(item.get("id")) == value), "No payee" if not value else value))
+                tag_ids = st.multiselect("Tags", [str(item["id"]) for item in tags], format_func=lambda value: next((str(item.get("name")) for item in tags if str(item.get("id")) == value), value))
                 description = st.text_input("Description")
+                reference = st.text_input("Reference")
                 submitted = st.form_submit_button("Create schedule")
             if submitted:
                 payload = {
@@ -43,8 +48,12 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
                     "txn_date": start,
                     "recurrence_unit": unit,
                     "recurrence_interval": interval,
+                    "end_date": end,
                     "account_id": account["id"],
                     "category_id": category["id"],
+                    "payee_id": payee_id,
+                    "tag_ids": tag_ids,
+                    "reference": reference,
                     "description": description,
                 }
                 try:
@@ -82,7 +91,10 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
             "Latest current": max(current_dates) if current_dates else "—",
             "Next due": item.get("next_due_date") or "—",
             "Status": item["status"].title(),
-            "Attention": item.get("attention_code", "") or "—",
+            "Attention": (
+                f"{item.get('attention_message', '')} ({item.get('attention_at', '')})"
+                if item.get("attention_message") else "—"
+            ),
             "Schedule ID": item["id"],
         })
     st.dataframe(rows, hide_index=True, use_container_width=True)
@@ -140,14 +152,14 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
     with left:
         if selected["status"] == "active" and st.button("Pause", key=f"recurring_pause_{selected['id']}"):
             try:
-                context.storage.pause_recurring_schedule(selected["id"])
+                context.storage.pause_recurring_schedule(selected["id"], expected_schedule=selected)
                 context.mark_workbook_data_changed and context.mark_workbook_data_changed()
                 st.rerun()
             except Exception as error:
                 context.report_storage_error(error)
         elif selected["status"] == "paused" and st.button("Resume", key=f"recurring_resume_{selected['id']}"):
             try:
-                context.storage.resume_recurring_schedule(selected["id"])
+                context.storage.resume_recurring_schedule(selected["id"], expected_schedule=selected)
                 context.mark_workbook_data_changed and context.mark_workbook_data_changed()
                 st.rerun()
             except Exception as error:
@@ -155,7 +167,7 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
     with right:
         if selected["status"] != "ended" and st.button("End schedule", key=f"recurring_end_{selected['id']}"):
             try:
-                context.storage.end_recurring_schedule(selected["id"])
+                context.storage.end_recurring_schedule(selected["id"], expected_schedule=selected)
                 context.mark_workbook_data_changed and context.mark_workbook_data_changed()
                 st.rerun()
             except Exception as error:

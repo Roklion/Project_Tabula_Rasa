@@ -923,6 +923,23 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             )
         else:
             st.warning("Deleting this source permanently removes its linked ledger projection. Receipt files remain in Drive as unreferenced files.")
+            recurring_id = str(source.get("recurring_schedule_id") or "")
+            if recurring_id:
+                try:
+                    schedule = context.storage.get_recurring_schedule(recurring_id, _force_refresh=True)
+                    current_sources = context.storage.list_mixed_use_expenses(_force_refresh=True)
+                    latest = max(
+                        (str(item.get("txn_date") or "") for item in current_sources
+                         if item.get("recurring_schedule_id") == recurring_id),
+                        default="",
+                    )
+                    if schedule.get("status") == "active" and str(source.get("txn_date") or "") == latest:
+                        st.warning(
+                            "This is the latest current occurrence in an active recurring series. "
+                            "Deleting it may make reconciliation regenerate the due date."
+                        )
+                except StorageError:
+                    pass
             confirmed = st.checkbox("I understand this deletion is permanent", key=f"mixed_confirm_delete_{scope}")
             delete_error = st.empty()
             if st.button("Permanently delete", type="primary", key=f"mixed_delete_{scope}"):

@@ -139,6 +139,13 @@ class RecurringMixin:
             schedule["status"] = RecurringMixin._schedule_status(schedule.get("status", "active"))
         except StorageValidationError:
             schedule["status"] = str(schedule.get("status", ""))
+        attention_messages = {
+            "validation": "Invalid template references; edit the schedule.",
+            "storage": "Storage unavailable; retry or inspect the workbook.",
+        }
+        schedule["attention_message"] = attention_messages.get(
+            schedule.get("attention_code", ""), ""
+        )
         try:
             schedule["tag_ids"] = _encode_tag_ids(_normalize_tag_ids(schedule.get("tag_ids", "")))
         except StorageValidationError:
@@ -194,12 +201,11 @@ class RecurringMixin:
     def _next_due_for_schedule(self, schedule: Mapping[str, str], *, as_of: date | None = None) -> str:
         if schedule["status"] != "active":
             return ""
-        today = as_of or date.today()
         current = _as_date(schedule["start_date"])
         latest = self._latest_current_occurrence_date(schedule["id"], schedule.get("expense_type"))
         if latest:
             current = next_occurrence(_as_date(schedule["anchor_date"]), schedule["recurrence_unit"], int(schedule["recurrence_interval"]), latest)
-        if current > today or (schedule.get("end_date") and current.isoformat() > schedule["end_date"]):
+        if schedule.get("end_date") and current.isoformat() > schedule["end_date"]:
             return ""
         return current.isoformat()
 
@@ -230,6 +236,13 @@ class RecurringMixin:
                 for field in WORKSHEET_HEADERS["RecurringSchedules"]:
                     if str(expected_schedule.get(field, "") or "") != str(current.get(field, "") or ""):
                         raise StorageConflictError("The recurring schedule changed; refresh it before editing.")
+            if "status" in changes:
+                target_status = self._schedule_status(changes["status"])
+                current_status = current.get("status")
+                if current_status == "ended" and target_status != "ended" and not changes.get("end_date"):
+                    raise StorageValidationError(
+                        "Ended schedules require an explicit end date before reactivation"
+                    )
             merged = {**current, **changes}
             merged.pop("next_due_date", None)
             updated = self._schedule_template(merged, schedule_id=schedule_id,
@@ -238,15 +251,24 @@ class RecurringMixin:
             self._replace_row("RecurringSchedules", row, updated)
             return self.get_recurring_schedule(schedule_id, _force_refresh=True)
 
-    def pause_recurring_schedule(self, schedule_id: str) -> dict[str, str]:
-        return self.edit_recurring_schedule(schedule_id, status="paused")
+    def pause_recurring_schedule(self, schedule_id: str, *, expected_schedule: Mapping[str, Any] | None = None) -> dict[str, str]:
+        current = self.get_recurring_schedule(schedule_id, _force_refresh=True)
+        if current.get("status") != "active":
+            raise StorageConflictError("Only an active schedule can be paused")
+        return self.edit_recurring_schedule(schedule_id, expected_schedule=expected_schedule, status="paused")
 
-    def resume_recurring_schedule(self, schedule_id: str) -> dict[str, str]:
-        return self.edit_recurring_schedule(schedule_id, status="active")
+    def resume_recurring_schedule(self, schedule_id: str, *, expected_schedule: Mapping[str, Any] | None = None) -> dict[str, str]:
+        current = self.get_recurring_schedule(schedule_id, _force_refresh=True)
+        if current.get("status") != "paused":
+            raise StorageConflictError("Only a paused schedule can be resumed")
+        return self.edit_recurring_schedule(schedule_id, expected_schedule=expected_schedule, status="active")
 
-    def end_recurring_schedule(self, schedule_id: str) -> dict[str, str]:
+    def end_recurring_schedule(self, schedule_id: str, *, expected_schedule: Mapping[str, Any] | None = None) -> dict[str, str]:
+        current = self.get_recurring_schedule(schedule_id, _force_refresh=True)
+        if current.get("status") == "ended":
+            raise StorageConflictError("Schedule is already ended")
         return self.edit_recurring_schedule(
-            schedule_id, status="ended", end_date=date.today().isoformat(),
+            schedule_id, expected_schedule=expected_schedule, status="ended", end_date=date.today().isoformat(),
             _allow_end_before_start=True,
         )
 

@@ -619,6 +619,13 @@ class _MixedUseMixin:
         )
         if "id" in changes or "source_id" in changes or "linked_transaction_id" in changes:
             raise StorageValidationError("Mixed-use source IDs cannot be edited")
+        for field in (
+            "recurring_schedule_id",
+            "recurring_scheduled_date",
+            "recurring_occurrence_type",
+        ):
+            if field in changes and str(changes[field] or "") != str(current_source.get(field, "") or ""):
+                raise StorageValidationError("Recurring provenance cannot be changed")
         merged = {**current_source, **changes}
         if "tag_ids" not in changes:
             merged["tag_ids"] = current_transaction.get("tag_ids", "")

@@ -93,6 +93,8 @@ def render_add_transaction(
             key="add_transaction_date",
         )
         category_id = None
+        recurring = False
+        recurrence_unit = recurrence_interval = recurrence_name = recurrence_end = None
         if kind == "Transfer":
             amount = st.number_input(
                 "Amount",
@@ -124,18 +126,18 @@ def render_add_transaction(
                 format="%.2f",
                 key="add_transaction_amount",
             )
-            recurring = st.checkbox(
-                "Repeat this Expense",
-                key="add_transaction_recurring",
-                help="Create a profile-local schedule and this transaction as its initial occurrence.",
-            )
-            recurrence_unit = recurrence_interval = recurrence_name = recurrence_end = None
-            if recurring:
-                r1, r2 = st.columns(2)
-                recurrence_unit = r1.selectbox("Repeat every", ["day", "week", "month", "year"], key="add_transaction_recurrence_unit")
-                recurrence_interval = r2.number_input("Interval", min_value=1, value=1, step=1, key="add_transaction_recurrence_interval")
-                recurrence_name = st.text_input("Schedule name", key="add_transaction_recurrence_name")
-                recurrence_end = st.date_input("End date (optional)", value=None, key="add_transaction_recurrence_end")
+            if kind == "Expense":
+                recurring = st.checkbox(
+                    "Repeat this Expense",
+                    key="add_transaction_recurring",
+                    help="Create a profile-local schedule and this transaction as its initial occurrence.",
+                )
+                if recurring:
+                    r1, r2 = st.columns(2)
+                    recurrence_unit = r1.selectbox("Repeat every", ["day", "week", "month", "year"], key="add_transaction_recurrence_unit")
+                    recurrence_interval = r2.number_input("Interval", min_value=1, value=1, step=1, key="add_transaction_recurrence_interval")
+                    recurrence_name = st.text_input("Schedule name", key="add_transaction_recurrence_name")
+                    recurrence_end = st.date_input("End date (optional)", value=None, key="add_transaction_recurrence_end")
         source = st.selectbox(
             "To Account" if kind == "Income" else "From Account",
             list(account_map),

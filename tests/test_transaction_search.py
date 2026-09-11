@@ -6,6 +6,7 @@ from fractions import Fraction
 import pytest
 
 from tabula_rasa.page_renderers.transactions.search import filter_transaction_rows
+from tabula_rasa.page_renderers.transactions.ledger_filters import transaction_type_label
 
 
 SEARCH_FIELDS = (
@@ -123,3 +124,14 @@ def test_search_matches_any_displayed_tag() -> None:
     assert [row["ID"] for row in filter_transaction_rows(rows, "client")] == [
         "one"
     ]
+
+
+def test_ledger_type_label_shows_both_recurring_indicators() -> None:
+    transaction = {
+        "source_type": "mixed_use_expense",
+        "source_id": "source-1",
+        "recurring_schedule_id": "schedule-1",
+    }
+    assert transaction_type_label("Expense", transaction) == (
+        "Expense · Mixed-use · Recurring"
+    )

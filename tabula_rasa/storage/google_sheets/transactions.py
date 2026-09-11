@@ -804,6 +804,14 @@ class TransactionsMixin:
 
     def create_transaction(self, **data: Any) -> dict[str, str]:
         with self._workbook_locks.ledger:
+            if any(data.get(field) for field in (
+                "recurring_schedule_id",
+                "recurring_scheduled_date",
+                "recurring_occurrence_type",
+            )):
+                raise StorageValidationError(
+                    "Recurring provenance is created only by recurring expense APIs"
+                )
             # Generic transaction creation cannot manufacture a derived
             # projection. Mixed-use projections are created only as the paired
             # result of create_mixed_use_expense.
@@ -821,6 +829,18 @@ class TransactionsMixin:
         transaction_id = _clean_text(transaction_id, "Transaction ID", required=True)
         current = self._find_row("Transactions", transaction_id)
         self._reject_mixed_use_projection(current.values)
+        recurring_fields = (
+            "recurring_schedule_id",
+            "recurring_scheduled_date",
+            "recurring_occurrence_type",
+        )
+        if any(field in changes for field in recurring_fields):
+            if any(
+                str(changes.get(field, current.values.get(field, "")) or "")
+                != str(current.values.get(field, "") or "")
+                for field in recurring_fields
+            ):
+                raise StorageValidationError("Recurring provenance cannot be changed")
         merged = dict(current.values)
         merged.update(changes)
         updated = self._prepare_transaction(
