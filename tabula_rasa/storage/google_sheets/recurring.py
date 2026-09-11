@@ -174,6 +174,13 @@ class RecurringMixin:
                 schedule["next_due_date"] = self._next_due_for_schedule(schedule)
             except (StorageValidationError, ValueError, TypeError):
                 schedule["next_due_date"] = ""
+            try:
+                latest = self._latest_current_occurrence_date(
+                    schedule["id"], schedule.get("expense_type")
+                )
+            except (StorageValidationError, ValueError, TypeError):
+                latest = None
+            schedule["latest_current_occurrence_date"] = latest.isoformat() if latest else ""
             result.append(schedule)
         return sorted(result, key=lambda item: (item["start_date"], item["id"]), reverse=True)
 
