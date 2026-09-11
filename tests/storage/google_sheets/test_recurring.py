@@ -84,6 +84,19 @@ def test_reconcile_cutoff_uses_current_visible_transaction_date(default_storage)
     assert [item["recurring_scheduled_date"] for item in generated] == ["2024-04-01"]
 
 
+def test_delete_latest_occurrence_allows_its_scheduled_date_to_regenerate(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    default_storage.create_recurring_expense(
+        schedule_id="delete-latest", name="Charge", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    generated = default_storage.reconcile_recurring_schedules(as_of="2024-03-01")["generated"]
+    latest_id = generated[-1]["id"]
+    default_storage.delete_transaction(latest_id)
+    regenerated = default_storage.reconcile_recurring_schedules(as_of="2024-03-01")["generated"]
+    assert [item["recurring_scheduled_date"] for item in regenerated] == ["2024-03-01"]
+
+
 def test_invalid_stored_schedule_does_not_hide_other_schedules(default_storage) -> None:
     account_id, category_id = _ids(default_storage)
     default_storage.create_recurring_expense(
