@@ -17,8 +17,52 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
     except Exception as error:
         context.report_storage_error(error)
         return
+    with st.expander("Create recurring expense", expanded=not schedules):
+        active_accounts = [item for item in accounts if item.get("active")]
+        expense_categories = [item for item in categories if item.get("kind") == "Expense"]
+        if not active_accounts or not expense_categories:
+            st.warning("Create an active account and an Expense category before adding a schedule.")
+        else:
+            with st.form(f"recurring_create_{context.profile_key}"):
+                expense_type = st.segmented_control("Schedule type", ["Expense", "Mixed-use"], default="Expense")
+                name = st.text_input("Schedule name")
+                start = st.date_input("First occurrence", date.today())
+                unit = st.selectbox("Cadence", ["day", "week", "month", "year"])
+                interval = st.number_input("Every", min_value=1, value=1, step=1)
+                amount = st.number_input("Amount", min_value=0.01, value=1.0, step=0.01, format="%.2f")
+                percentage = st.number_input("Business use %", min_value=0.01, max_value=100.0, value=50.0, step=0.01, format="%.2f")
+                rationale = st.text_input("Allocation rationale")
+                account = st.selectbox("Account", active_accounts, format_func=lambda item: item["name"])
+                category = st.selectbox("Category", expense_categories, format_func=lambda item: item["name"])
+                description = st.text_input("Description")
+                submitted = st.form_submit_button("Create schedule")
+            if submitted:
+                payload = {
+                    "name": name,
+                    "txn_date": start,
+                    "recurrence_unit": unit,
+                    "recurrence_interval": interval,
+                    "account_id": account["id"],
+                    "category_id": category["id"],
+                    "description": description,
+                }
+                try:
+                    if expense_type == "Mixed-use":
+                        payload.update({
+                            "total_expense": amount,
+                            "business_use_percentage": percentage,
+                            "allocation_rationale": rationale,
+                        })
+                        context.storage.create_recurring_mixed_use_expense(**payload)
+                    else:
+                        payload["amount"] = amount
+                        context.storage.create_recurring_expense(**payload)
+                    context.mark_workbook_data_changed and context.mark_workbook_data_changed()
+                    st.success("Recurring schedule created.")
+                    st.rerun()
+                except Exception as error:
+                    context.report_storage_error(error)
     if not schedules:
-        st.info("No recurring expense schedules yet. Create one from an Expense or mixed-use entry.")
         return
     rows = []
     for item in schedules:
