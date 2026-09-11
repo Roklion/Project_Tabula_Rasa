@@ -8,6 +8,7 @@ from tabula_rasa.page_renderers.transactions.ledger import (
 )
 from tabula_rasa.page_renderers.transactions.ledger_bulk import (
     MIXED_FIELD_VALUE,
+    _bulk_payee_names,
     _shared_bulk_value,
 )
 
@@ -42,3 +43,17 @@ def test_bulk_editor_common_value_distinguishes_shared_and_mixed_values() -> Non
     assert _shared_bulk_value(["category-a", "category-b"]) == MIXED_FIELD_VALUE
     assert _shared_bulk_value([(), ()]) == ()
     assert _shared_bulk_value([(), ("tag-a",)]) == MIXED_FIELD_VALUE
+
+
+def test_bulk_editor_includes_selected_inactive_payees_after_id_normalization() -> None:
+    assert _bulk_payee_names(
+        [
+            {"id": "  inactive-payee  ", "name": "Inactive", "active": "FALSE"},
+            {"id": "active-payee", "name": "Active", "active": "TRUE"},
+            {"id": "other-payee", "name": "Other", "active": "FALSE"},
+        ],
+        [" inactive-payee "],
+    ) == {
+        "inactive-payee": "Inactive",
+        "active-payee": "Active",
+    }

@@ -31,8 +31,7 @@ def _shared_bulk_value(values: Sequence[object]) -> object:
     return unique[0] if len(unique) == 1 else MIXED_FIELD_VALUE
 
 
-def _bulk_scope_key(context: TransactionsContext, selected_snapshot_key: str) -> str:
-    del selected_snapshot_key
+def _bulk_scope_key(context: TransactionsContext) -> str:
     return (
         f"{context.profile_key}_"
         f"{st.session_state.get('transaction_bulk_selection_generation', 0)}"
@@ -69,6 +68,26 @@ def _initialize_bulk_widget(
         st.session_state[widget_key] = initial_value
     if reset or intent_key not in st.session_state:
         st.session_state[intent_key] = False
+
+
+def _bulk_payee_names(
+    payees: Sequence[Mapping[str, object]],
+    selected_payee_ids: Sequence[str],
+) -> dict[str, str]:
+    selected_ids = {
+        str(payee_id).strip()
+        for payee_id in selected_payee_ids
+        if str(payee_id).strip()
+    }
+    payee_names: dict[str, str] = {}
+    for payee in payees:
+        payee_id = str(payee.get("id") or "").strip()
+        if not payee_id:
+            continue
+        if str(payee.get("active")) != "TRUE" and payee_id not in selected_ids:
+            continue
+        payee_names[payee_id] = str(payee.get("name") or "").strip()
+    return payee_names
 
 
 def _clear_bulk_editor_intent(scope: str) -> None:
@@ -113,7 +132,7 @@ def _render_bulk_editor(
     selected_snapshot_key: str,
 ) -> None:
     """Render the explicit partial-change editor for the selected rows."""
-    scope = _bulk_scope_key(context, selected_snapshot_key)
+    scope = _bulk_scope_key(context)
     disabled = selected_protected
     changes: dict[str, Any] = {}
     invalid_fields: list[str] = []
@@ -204,18 +223,9 @@ def _render_bulk_editor(
                 else:
                     changes["category_id"] = requested_category
 
-    payee_ids = [str(item.get("payee_id") or "") for item in expected_selected]
-    selected_payee_ids = set(payee_ids)
+    payee_ids = [str(item.get("payee_id") or "").strip() for item in expected_selected]
     common_payee = _shared_bulk_value(payee_ids)
-    payee_names = {
-        str(payee.get("id") or "").strip(): str(payee.get("name") or "").strip()
-        for payee in payees
-        if str(payee.get("id") or "").strip()
-        and (
-            str(payee.get("active")) == "TRUE"
-            or str(payee.get("id")) in selected_payee_ids
-        )
-    }
+    payee_names = _bulk_payee_names(payees, payee_ids)
     payee_options = ["", *payee_names]
     if common_payee == MIXED_FIELD_VALUE:
         payee_options.insert(0, MIXED_FIELD_VALUE)
