@@ -62,6 +62,17 @@ def test_migrates_prior_v10_layout_to_current_headers_and_empty_schedules() -> N
     GoogleSheetsStorage(workbook)
 
 
+def test_migration_repairs_an_existing_blank_schedule_sheet() -> None:
+    workbook = FakeWorkbook(VERSION_10_WORKSHEET_HEADERS)
+    workbook.add_worksheet("RecurringSchedules", rows=1000, cols=len(WORKSHEET_HEADERS["RecurringSchedules"]))
+
+    migrate_workbook(workbook)
+
+    assert workbook.sheets["RecurringSchedules"].rows == [
+        list(WORKSHEET_HEADERS["RecurringSchedules"])
+    ]
+
+
 def test_reorder_columns_fills_missing_expected_columns() -> None:
     worksheet = Mock()
     worksheet.get_all_values.return_value = [["name"], ["Office"]]

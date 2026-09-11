@@ -383,7 +383,12 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
         )
     _reorder_columns(mixed, mixed_headers, MIXED_USE_WORKSHEET_HEADERS)
 
-    _ensure_sheet(workbook, "RecurringSchedules", worksheets, initial)
+    recurring_schedules = _ensure_sheet(workbook, "RecurringSchedules", worksheets, initial)
+    _ensure_headers(
+        recurring_schedules,
+        WORKSHEET_HEADERS["RecurringSchedules"],
+        rows=initial.get("RecurringSchedules"),
+    )
 
     source_tags = _backfill_mixed_use_source_tags(workbook)
     # This read-only validation also checks current relationship, domain, and

@@ -150,6 +150,7 @@ class TagsMixin(_ManagedMixin):
                     *snapshot["Transactions"],
                     *snapshot["Mileage"],
                     *snapshot["MixedUseExpenses"],
+                    *snapshot["RecurringSchedules"],
                 ):
                     raw_tags = row.values.get("tag_ids", "")
                     if _raw_tag_ids_may_contain(raw_tags, source_ids) and any(

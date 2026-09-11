@@ -87,6 +87,7 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
                 context.storage.edit_recurring_schedule(
                     selected["id"], expected_schedule=selected, status=repair_status,
                 )
+                context.mark_workbook_data_changed and context.mark_workbook_data_changed()
                 st.rerun()
             except Exception as error:
                 context.report_storage_error(error)
@@ -183,6 +184,7 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
                     allocation_rationale=edit_rationale if selected.get("source_kind") == "mixed_use" else selected.get("allocation_rationale", ""),
                     description=edit_description, reference=edit_reference,
                 )
+                context.mark_workbook_data_changed and context.mark_workbook_data_changed()
                 st.success("Schedule template updated; existing occurrences were unchanged.")
                 st.rerun()
             except Exception as error:

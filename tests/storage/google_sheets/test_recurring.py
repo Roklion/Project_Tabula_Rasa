@@ -69,6 +69,23 @@ def test_recurring_create_resolves_inline_payee_and_tag_values(default_storage) 
         )
 
 
+def test_recurring_invalid_template_does_not_create_inline_references(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    payee_count = len(default_storage.list_payees())
+    tag_count = len(default_storage.list_tags())
+
+    with pytest.raises(StorageValidationError, match="greater than zero"):
+        default_storage.create_recurring_expense(
+            schedule_id="invalid-inline-refs", name="Invalid", txn_date="2024-01-01",
+            recurrence_unit="month", amount=0, account_id=account_id,
+            category_id=category_id, new_payee_name="Orphan vendor",
+            new_tag_name="Orphan tag",
+        )
+
+    assert len(default_storage.list_payees()) == payee_count
+    assert len(default_storage.list_tags()) == tag_count
+
+
 def test_recurring_interval_rejects_fractional_values(default_storage) -> None:
     account_id, category_id = _ids(default_storage)
     with pytest.raises(StorageValidationError, match="positive integer"):
@@ -180,6 +197,42 @@ def test_mixed_use_recurring_initial_retry_reuses_schedule_and_pair(default_stor
     assert first["source"]["id"] == second["source"]["id"]
     assert len(default_storage.list_recurring_schedules()) == 1
     assert len(default_storage.list_mixed_use_expenses()) == 1
+
+
+def test_recurring_initial_retry_converges_to_generated_occurrence(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    payload = dict(
+        schedule_id="partial-create", name="Rent", txn_date="2024-01-01",
+        recurrence_unit="month", recurrence_interval=1, amount=10,
+        account_id=account_id, category_id=category_id,
+    )
+    default_storage.create_recurring_schedule(**payload)
+    generated = default_storage.reconcile_recurring_schedules(as_of="2024-01-01")
+    assert len(generated["generated"]) == 1
+
+    retry = default_storage.create_recurring_expense(**payload)
+
+    assert retry["transaction"]["recurring_occurrence_type"] == "generated"
+    assert len(default_storage.list_transactions()) == 1
+
+
+def test_mixed_recurring_initial_retry_converges_to_generated_pair(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    payload = dict(
+        schedule_id="partial-mixed-create", name="Vehicle", txn_date="2024-01-01",
+        recurrence_unit="month", recurrence_interval=1, total_expense=20,
+        business_use_percentage=50, account_id=account_id, category_id=category_id,
+        allocation_rationale="Business travel",
+    )
+    default_storage.create_recurring_schedule(**payload, source_kind="mixed_use")
+    generated = default_storage.reconcile_recurring_schedules(as_of="2024-01-01")
+    assert len(generated["generated"]) == 1
+
+    retry = default_storage.create_recurring_mixed_use_expense(**payload)
+
+    assert retry["source"]["recurring_occurrence_type"] == "generated"
+    assert len(default_storage.list_mixed_use_expenses()) == 1
+    assert len(default_storage.list_transactions()) == 1
 
 
 def test_mixed_use_recurring_missing_projection_is_actionable(default_storage, monkeypatch) -> None:

@@ -323,7 +323,7 @@ class PayeesMixin(_ManagedMixin):
 
             def refresh_requests() -> None:
                 current = self._snapshot(
-                    ["Payees", "Transactions", "MixedUseExpenses"],
+                    ["Payees", "Transactions", "MixedUseExpenses", "RecurringSchedules"],
                     force_refresh=True,
                 )
                 current_state = (

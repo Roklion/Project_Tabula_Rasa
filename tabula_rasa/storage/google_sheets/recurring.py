@@ -100,7 +100,7 @@ class RecurringMixin:
         categories = category_lookup if category_lookup is not None else self._category_lookup(force_refresh=True)
         if account_id not in accounts:
             raise StorageValidationError("Source account does not exist")
-        if category_id not in categories or categories[category_id]["kind"] != "Expense":
+        if category_id not in categories or categories[category_id].get("kind") != "Expense":
             raise StorageValidationError("Category kind does not match transaction kind")
         payee_id = _clean_text(data.get("payee_id"), "Payee")
         payees = payee_lookup if payee_lookup is not None else self._payee_lookup(force_refresh=True)
@@ -117,15 +117,15 @@ class RecurringMixin:
         if receipt_references:
             raise StorageValidationError("Receipts cannot be part of a recurring template")
         timestamp = created_at or _utc_now()
-        try:
-            allocation = validate_mixed_use_allocation(
-                data.get("total_expense", data.get("amount")),
-                data.get("business_use_percentage", "100"),
-            )
-        except Exception as exc:
-            if source_kind == "mixed_use":
+        allocation = None
+        if source_kind == "mixed_use":
+            try:
+                allocation = validate_mixed_use_allocation(
+                    data.get("total_expense", data.get("amount")),
+                    data.get("business_use_percentage", "100"),
+                )
+            except Exception as exc:
                 raise StorageValidationError(str(exc)) from exc
-            allocation = None
         allocation_rationale = _clean_text(
             data.get("allocation_rationale"),
             "Allocation rationale",
@@ -161,7 +161,7 @@ class RecurringMixin:
         }
 
     def _resolve_recurring_inline_references(self, data: Mapping[str, Any]) -> dict[str, Any]:
-        """Resolve Add-form payee/tag values before validating a schedule template."""
+        """Resolve Add-form payee/tag values after non-reference validation."""
         resolved = dict(data)
         payee_id = _clean_text(resolved.get("payee_id"), "Payee")
         new_payee_name = _clean_text(resolved.get("new_payee_name"), "New payee")
@@ -179,6 +179,28 @@ class RecurringMixin:
         resolved["tag_ids"] = tag_ids
         resolved["new_tag_name"] = ""
         return resolved
+
+    def _prevalidate_recurring_form(self, data: Mapping[str, Any]) -> dict[str, str]:
+        """Validate a new schedule before creating inline managed references."""
+        preflight = dict(data)
+        preflight["payee_id"] = _clean_text(preflight.get("payee_id"), "Payee")
+        preflight["tag_ids"] = _normalize_tag_ids(preflight.get("tag_ids", ""))
+        preflight["new_payee_name"] = ""
+        preflight["new_tag_name"] = ""
+        return self._schedule_template(preflight)
+
+    @staticmethod
+    def _partial_recurring_record_matches(
+        actual: Mapping[str, Any],
+        expected: Mapping[str, Any],
+        *,
+        ignored: frozenset[str],
+    ) -> bool:
+        return all(
+            str(actual.get(field, "") or "") == str(value or "")
+            for field, value in expected.items()
+            if field not in ignored
+        )
 
     @staticmethod
     def _decode_schedule(values: Mapping[str, Any]) -> dict[str, str]:
@@ -610,9 +632,13 @@ class RecurringMixin:
                     existing.add(key)
             except Exception as exc:  # one bad schedule must not block others
                 code = "validation" if isinstance(exc, StorageValidationError) else "storage"
-                attention[schedule["id"]] = code
+                schedule_id = schedule.get("id", "")
+                if schedule_id:
+                    attention[schedule_id] = code
                 try:
-                    row = self._find_row("RecurringSchedules", schedule["id"])
+                    if not schedule_id:
+                        continue
+                    row = self._find_row("RecurringSchedules", schedule_id)
                     updated = dict(row.values)
                     updated["attention_code"] = code
                     updated["attention_at"] = _utc_now()
@@ -628,11 +654,12 @@ class RecurringMixin:
     generate_recurring_expenses = reconcile_recurring_schedules
     reconcile_recurring_expenses = reconcile_recurring_schedules
 
-    def create_recurring_expense(self, **data: Any) -> dict[str, str]:
+    def create_recurring_expense(self, **data: Any) -> dict[str, Any]:
         """Create one schedule and its initial Expense occurrence."""
         with self._workbook_locks.ledger:
+            preflight = self._prevalidate_recurring_form(data)
             data = self._resolve_recurring_inline_references(data)
-            schedule = self._schedule_template(data)
+            schedule = self._schedule_template(data, schedule_id=preflight["id"])
             initial_date = _as_date(schedule["start_date"])
             initial_id = _clean_text(data.get("transaction_id"), "Transaction ID") or occurrence_id(schedule["id"], initial_date, "initial")
             initial = self._recurring_occurrence(schedule, initial_date, role="initial")
@@ -647,6 +674,24 @@ class RecurringMixin:
             else:
                 self._append("RecurringSchedules", schedule)
             current = {str(row.values.get("id")): row.values for row in self._rows("Transactions", force_refresh=True)}
+            matching_dates = [
+                row for row in current.values()
+                if row.get("recurring_schedule_id") == schedule["id"]
+                and row.get("recurring_scheduled_date") == initial_date.isoformat()
+            ]
+            if matching_dates:
+                if len(matching_dates) != 1 or not self._partial_recurring_record_matches(
+                    matching_dates[0], initial,
+                    ignored=frozenset({"id", "created_at", "recurring_occurrence_type"}),
+                ):
+                    raise StorageConflictError(
+                        "A recurring occurrence for this schedule and date conflicts with the requested data"
+                    )
+                self._clear_recurring_attention(schedule["id"])
+                return {
+                    "schedule": self.get_recurring_schedule(schedule["id"], _force_refresh=True),
+                    "transaction": matching_dates[0],
+                }
             if initial_id in current:
                 if not self._logical_record_matches(
                     current[initial_id], initial,
@@ -655,14 +700,16 @@ class RecurringMixin:
                     raise StorageConflictError("Initial recurring transaction ID is already in use")
             else:
                 self._append("Transactions", initial)
+            self._clear_recurring_attention(schedule["id"])
             return {"schedule": self.get_recurring_schedule(schedule["id"], _force_refresh=True), "transaction": initial}
 
     def create_recurring_mixed_use_expense(self, **data: Any) -> dict[str, Any]:
         """Create one mixed-use schedule and its source/projection pair."""
         with self._workbook_locks.ledger:
-            data = self._resolve_recurring_inline_references(data)
             data = {**data, "source_kind": "mixed_use"}
-            schedule = self._schedule_template(data)
+            preflight = self._prevalidate_recurring_form(data)
+            data = self._resolve_recurring_inline_references(data)
+            schedule = self._schedule_template(data, schedule_id=preflight["id"])
             scheduled = _as_date(schedule["start_date"])
             source_id = _clean_text(data.get("source_id"), "Mixed-use source ID") or occurrence_id(schedule["id"], scheduled, "initial-source")
             transaction_id = _clean_text(data.get("transaction_id"), "Transaction ID") or occurrence_id(schedule["id"], scheduled, "initial-projection")
@@ -687,6 +734,44 @@ class RecurringMixin:
                     raise StorageConflictError("Recurring schedule ID is already in use")
             else:
                 self._append("RecurringSchedules", schedule)
+            current_sources = [
+                row.values for row in self._rows("MixedUseExpenses", force_refresh=True)
+                if row.values.get("recurring_schedule_id") == schedule["id"]
+                and row.values.get("recurring_scheduled_date") == scheduled.isoformat()
+            ]
+            current_transactions = {
+                str(row.values.get("id")): row.values
+                for row in self._rows("Transactions", force_refresh=True)
+            }
+            if current_sources:
+                if len(current_sources) != 1:
+                    raise StorageConflictError(
+                        "Multiple mixed-use occurrences exist for this schedule and date"
+                    )
+                current_source = current_sources[0]
+                current_projection = current_transactions.get(
+                    str(current_source.get("linked_transaction_id", ""))
+                )
+                if current_projection is None:
+                    raise StorageConflictError(
+                        "A mixed-use recurring source exists without its linked projection"
+                    )
+                if not self._partial_recurring_record_matches(
+                    current_source, source,
+                    ignored=frozenset({"id", "linked_transaction_id", "created_at", "recurring_occurrence_type"}),
+                ) or not self._partial_recurring_record_matches(
+                    current_projection, projection,
+                    ignored=frozenset({"id", "source_id", "created_at", "recurring_occurrence_type"}),
+                ):
+                    raise StorageConflictError(
+                        "A mixed-use occurrence for this schedule and date conflicts with the requested data"
+                    )
+                self._clear_recurring_attention(schedule["id"])
+                return {
+                    "schedule": self.get_recurring_schedule(schedule["id"], _force_refresh=True),
+                    "source": current_source,
+                    "transaction": current_projection,
+                }
             pair = self.create_mixed_use_expense(**source)
             try:
                 projection = next(
@@ -698,6 +783,7 @@ class RecurringMixin:
                     "Could not find the linked projection for the recurring "
                     "mixed-use expense. The ledger may be inconsistent."
                 ) from None
+            self._clear_recurring_attention(schedule["id"])
             return {
                 "schedule": self.get_recurring_schedule(schedule["id"], _force_refresh=True),
                 "source": pair,
