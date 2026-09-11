@@ -28,6 +28,17 @@ def _safe_interval(value: Any) -> int:
     return interval if interval > 0 else 1
 
 
+def _recurring_category_options(categories, selected_category: str) -> list[dict[str, Any]]:
+    return [
+        item for item in categories
+        if (
+            item.get("kind") == "Expense"
+            and str(item.get("active", "")).upper() == "TRUE"
+        )
+        or str(item.get("id")) == selected_category
+    ]
+
+
 def render_recurring_expenses(context: Any, *, accounts, categories, payees, tags) -> None:
     """Render profile-scoped schedule management and bounded controls."""
     st.subheader("Recurring expenses")
@@ -142,7 +153,7 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
                 format_func=lambda value: account_names.get(value, value),
             )
             selected_category = str(selected.get("category_id", ""))
-            category_options = [item for item in categories if item.get("kind") == "Expense"]
+            category_options = _recurring_category_options(categories, selected_category)
             if selected_category and selected_category not in {
                 str(item.get("id")) for item in category_options
             }:
