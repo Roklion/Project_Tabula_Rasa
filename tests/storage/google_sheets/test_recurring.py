@@ -532,6 +532,26 @@ def test_recurring_backup_rejects_missing_schedule_name(default_storage) -> None
         default_storage.validate_backup_zip(tampered)
 
 
+@pytest.mark.parametrize("replacement, expected", [("backup-one", "duplicated"), ("", "missing")])
+def test_recurring_backup_rejects_missing_or_duplicate_schedule_ids(
+    default_storage, replacement: str, expected: str
+) -> None:
+    account_id, category_id = _ids(default_storage)
+    for schedule_id in ("backup-one", "backup-two"):
+        default_storage.create_recurring_expense(
+            schedule_id=schedule_id, name=schedule_id, txn_date="2024-01-01",
+            recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+        )
+    backup = default_storage.export_backup_zip(backup_receipt_manifest(default_storage))
+
+    def corrupt_id(rows: list[list[str]]) -> None:
+        rows[2][rows[0].index("id")] = replacement
+
+    tampered = rewrite_backup_tables(backup, {"RecurringSchedules": corrupt_id})
+    with pytest.raises(StorageValidationError, match=expected):
+        default_storage.validate_backup_zip(tampered)
+
+
 def test_recurring_backup_rejects_income_schedule_category(default_storage) -> None:
     account_id, category_id = _ids(default_storage)
     income_category = default_storage.create_category("Income category", "Income")

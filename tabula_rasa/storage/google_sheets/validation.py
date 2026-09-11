@@ -620,7 +620,11 @@ def _parse_backup_zip(
     category_ids = set(category_records)
     payee_ids = {record["id"] for record in tables["Payees"][1]}
     tag_ids = {record["id"] for record in tables["Tags"][1]}
-    schedules = {record["id"]: record for record in tables["RecurringSchedules"][1]}
+    schedule_records = tables["RecurringSchedules"][1]
+    schedule_ids = [record.get("id", "") for record in schedule_records]
+    if any(not schedule_id for schedule_id in schedule_ids) or len(schedule_ids) != len(set(schedule_ids)):
+        raise StorageValidationError("Backup contains missing or duplicated recurring schedule IDs")
+    schedules = {record["id"]: record for record in schedule_records}
     for schedule in schedules.values():
         _clean_text(schedule.get("name"), "Schedule name", required=True)
         if schedule.get("kind") != "Expense":
