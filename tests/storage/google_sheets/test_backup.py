@@ -480,6 +480,22 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             with pytest.raises(StorageValidationError):
                 self.storage.validate_backup_zip(tampered)
 
+    def test_backup_validation_rejects_malformed_transaction_receipts(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Office", "Expense")
+        self.storage.create_transaction(
+            txn_date="2026-09-01", kind="Expense", amount="10.00",
+            account_id=account["id"], category_id=category["id"],
+        )
+        backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
+
+        def corrupt_receipts(rows: list[list[str]]) -> None:
+            rows[1][rows[0].index("receipt_references")] = "not-json"
+
+        tampered = rewrite_backup_tables(backup, {"Transactions": corrupt_receipts})
+        with pytest.raises(StorageValidationError, match="receipt"):
+            self.storage.validate_backup_zip(tampered)
+
     def test_backup_validation_rejects_incompatible_category_parent(self) -> None:
         expense = self.storage.create_category("Travel", "Expense")
         income = self.storage.create_category("Sales", "Income")

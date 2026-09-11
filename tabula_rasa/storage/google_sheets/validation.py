@@ -591,6 +591,20 @@ def _parse_backup_zip(
             raise StorageValidationError("Recurring schedules must be Expense records")
         if schedule.get("expense_type", "ordinary") not in {"ordinary", "mixed_use"}:
             raise StorageValidationError("Recurring schedule expense type is invalid")
+        if schedule.get("recurrence_unit") not in {"day", "week", "month", "year"}:
+            raise StorageValidationError("Recurring schedule unit is invalid")
+        try:
+            if int(schedule.get("recurrence_interval", "0")) < 1:
+                raise ValueError
+        except (TypeError, ValueError):
+            raise StorageValidationError("Recurring schedule interval is invalid") from None
+        if schedule.get("status") not in {"active", "paused", "ended"}:
+            raise StorageValidationError("Recurring schedule status is invalid")
+        start_date = _iso_date(schedule.get("start_date"))
+        anchor_date = _iso_date(schedule.get("anchor_date"))
+        end_date = _clean_text(schedule.get("end_date"), "Schedule end date")
+        if anchor_date != start_date or (end_date and end_date < start_date and schedule.get("status") != "ended"):
+            raise StorageValidationError("Recurring schedule dates are invalid")
         if schedule.get("account_id") not in account_ids or schedule.get("category_id") not in category_ids:
             raise StorageValidationError("Recurring schedule references an unknown account or category")
         payee_id = schedule.get("payee_id", "")
@@ -598,7 +612,22 @@ def _parse_backup_zip(
             raise StorageValidationError("Recurring schedule references an unknown payee")
         if schedule.get("receipt_references", ""):
             raise StorageValidationError("Recurring schedules cannot contain receipts")
-        _normalize_tag_ids(schedule.get("tag_ids", ""))
+        schedule_tags = _normalize_tag_ids(schedule.get("tag_ids", ""))
+        if any(tag_id not in tag_ids for tag_id in schedule_tags):
+            raise StorageValidationError("Recurring schedule references an unknown tag")
+        if schedule.get("expense_type", "ordinary") == "ordinary":
+            _positive_amount(schedule.get("amount"))
+        else:
+            try:
+                allocation = validate_mixed_use_allocation(
+                    schedule.get("total_expense"),
+                    schedule.get("business_use_percentage"),
+                )
+            except MixedUseAllocationError as exc:
+                raise StorageValidationError(str(exc)) from exc
+            if not _decimal_values_match(schedule.get("amount"), allocation.allocated_amount):
+                raise StorageValidationError("Recurring mixed-use allocation is invalid")
+            _clean_text(schedule.get("allocation_rationale"), "Allocation rationale", required=True)
     for title in ("Transactions", "Mileage", "MixedUseExpenses"):
         if title not in tables:
             continue
@@ -634,9 +663,7 @@ def _parse_backup_zip(
         payee_id = transaction.get("payee_id", "")
         if payee_id and payee_id not in payee_ids:
             raise StorageValidationError("Backup contains an unknown transaction payee")
-            decode_receipt_references(
-                transaction.get("receipt_references", "")
-            )
+        decode_receipt_references(transaction.get("receipt_references", ""))
     for source in tables["MixedUseExpenses"][1]:
         recurring_id = source.get("recurring_schedule_id", "")
         if recurring_id:
