@@ -651,6 +651,25 @@ class TransactionsMixin:
             "tag_ids": _encode_tag_ids(tag_ids),
             "created_at": created_at or _utc_now(),
         }
+        recurring_schedule_id = _clean_text(
+            data.get("recurring_schedule_id"), "Recurring schedule ID"
+        )
+        recurring_scheduled_date = _clean_text(
+            data.get("recurring_scheduled_date"), "Recurring scheduled date"
+        )
+        recurring_occurrence_type = _clean_text(
+            data.get("recurring_occurrence_type"), "Recurring occurrence type"
+        )
+        if any((recurring_schedule_id, recurring_scheduled_date, recurring_occurrence_type)):
+            if not (recurring_schedule_id and recurring_scheduled_date and recurring_occurrence_type):
+                raise StorageValidationError(
+                    "Recurring provenance fields must be provided together"
+                )
+            record["recurring_schedule_id"] = recurring_schedule_id
+            record["recurring_scheduled_date"] = _iso_date(recurring_scheduled_date)
+            if recurring_occurrence_type not in {"initial", "generated"}:
+                raise StorageValidationError("Unknown recurring occurrence type")
+            record["recurring_occurrence_type"] = recurring_occurrence_type
         if original_transaction is not None:
             source_type = _clean_text(
                 original_transaction.get("source_type"),

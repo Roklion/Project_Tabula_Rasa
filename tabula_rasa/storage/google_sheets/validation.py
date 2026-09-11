@@ -47,6 +47,15 @@ def _looks_like_historical_workbook(
     older workbook to the explicit migration command.
     """
     present_titles = set(values)
+    if "RecurringSchedules" not in present_titles and (
+        "Transactions" in present_titles
+        or any(
+            str(value).strip()
+            for row in values.get("MixedUseExpenses", [])
+            for value in row
+        )
+    ):
+        return True
     for title, rows in values.items():
         if not rows:
             continue
@@ -407,6 +416,9 @@ def _validate_mixed_use_tables(
             "category_id",
             "payee_id",
             "reference",
+            "recurring_schedule_id",
+            "recurring_scheduled_date",
+            "recurring_occurrence_type",
         ):
             if _clean_text(transaction.get(field), field) != _clean_text(
                 source.get(field), field

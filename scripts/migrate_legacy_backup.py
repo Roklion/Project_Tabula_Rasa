@@ -1,4 +1,4 @@
-"""Convert a supported legacy backup archive into the current v10 format.
+"""Convert a supported legacy backup archive into the current v11 format.
 
 This is an explicit, offline migration tool.  The running application accepts
 only v10 archives; conversion always writes a new archive and leaves the
@@ -218,6 +218,9 @@ def _current_tables(version: int, manifest: dict[str, Any], source: dict[str, li
         tables["Mileage"] = []
     if "MixedUseExpenses" not in tables:
         tables["MixedUseExpenses"] = []
+    # Recurring schedules were introduced in v11. Historical archives have
+    # no schedules; the current archive still carries an empty table.
+    tables["RecurringSchedules"] = []
 
     for row in tables["Transactions"]:
         if version < 5:
@@ -264,7 +267,7 @@ def _encode_csv(headers: list[str], records: list[dict[str, str]]) -> bytes:
 
 
 def migrate_legacy_backup(backup: bytes, *, profile_key: str | None = None) -> bytes:
-    """Return a validated v10 archive converted from a v1-v9 archive."""
+    """Return a validated v11 archive converted from a v1-v9 archive."""
     version, source_manifest, source_tables, source_receipts = _read_source(backup)
     if version < 5 and not profile_key:
         raise StorageValidationError(
@@ -311,12 +314,12 @@ def migrate_legacy_backup(backup: bytes, *, profile_key: str | None = None) -> b
     converted = output.getvalue()
     validated = GoogleSheetsStorage.validate_backup_zip(converted)
     if validated.get("format_version") != BACKUP_FORMAT_VERSION:
-        raise StorageValidationError("Converted backup did not validate as format version 10")
+        raise StorageValidationError("Converted backup did not validate as format version 11")
     return converted
 
 
 def default_output_path(source: Path) -> Path:
-    return source.with_name(f"{source.stem}-format10.zip")
+    return source.with_name(f"{source.stem}-format11.zip")
 
 
 def migrate_backup_file(

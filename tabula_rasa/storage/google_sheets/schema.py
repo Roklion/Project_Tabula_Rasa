@@ -18,6 +18,9 @@ MIXED_USE_WORKSHEET_HEADERS = (
     "allocation_rationale",
     "linked_transaction_id",
     "tag_ids",
+    "recurring_schedule_id",
+    "recurring_scheduled_date",
+    "recurring_occurrence_type",
     "created_at",
 )
 
@@ -50,8 +53,35 @@ WORKSHEET_HEADERS = {
         "source_type",
         "source_id",
         "tag_ids",
+        "recurring_schedule_id",
+        "recurring_scheduled_date",
+        "recurring_occurrence_type",
     ),
     "MixedUseExpenses": MIXED_USE_WORKSHEET_HEADERS,
+    "RecurringSchedules": (
+        "id",
+        "name",
+        "kind",
+        "expense_type",
+        "recurrence_unit",
+        "recurrence_interval",
+        "anchor_date",
+        "start_date",
+        "end_date",
+        "status",
+        "amount",
+        "total_expense",
+        "business_use_percentage",
+        "account_id",
+        "category_id",
+        "payee_id",
+        "description",
+        "reference",
+        "allocation_rationale",
+        "tag_ids",
+        "created_at",
+        "updated_at",
+    ),
     "Tags": ("id", "name", "active", "created_at"),
     "Mileage": (
         "id",
@@ -90,7 +120,7 @@ CATEGORY_KINDS = {"Income", "Expense"}
 
 TRANSACTION_KINDS = {"Income", "Expense", "Transfer"}
 
-BACKUP_FORMAT_VERSION = 10
+BACKUP_FORMAT_VERSION = 11
 
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 

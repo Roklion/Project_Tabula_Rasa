@@ -39,6 +39,7 @@ from scripts.migration_schemas import (  # noqa: E402
     VERSION_5_WORKSHEET_HEADERS,
     VERSION_6_WORKSHEET_HEADERS,
     VERSION_7_WORKSHEET_HEADERS,
+    VERSION_10_WORKSHEET_HEADERS,
 )
 from scripts.migrate_payees import migrate_workbook as migrate_payees  # noqa: E402
 
@@ -157,12 +158,14 @@ def _preflight(workbook: Any) -> dict[str, list[list[Any]]]:
             frozenset(LEGACY_TAGS_WORKBOOK_HEADERS["Transactions"]),
             frozenset(PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"]),
             frozenset(WORKSHEET_HEADERS["Transactions"]),
+            frozenset(VERSION_10_WORKSHEET_HEADERS["Transactions"]),
         },
         "Mileage": {
             frozenset(VERSION_3_WORKSHEET_HEADERS["Mileage"]),
             frozenset(VERSION_5_WORKSHEET_HEADERS["Mileage"]),
             frozenset(LEGACY_TAGS_WORKBOOK_HEADERS["Mileage"]),
             frozenset(WORKSHEET_HEADERS["Mileage"]),
+            frozenset(VERSION_10_WORKSHEET_HEADERS["Mileage"]),
         },
         "Payees": {frozenset(WORKSHEET_HEADERS["Payees"])},
         "Tags": {frozenset(WORKSHEET_HEADERS["Tags"])},
@@ -173,6 +176,7 @@ def _preflight(workbook: Any) -> dict[str, list[list[Any]]]:
                 if header != "tag_ids"
             ),
             frozenset(MIXED_USE_WORKSHEET_HEADERS),
+            frozenset(VERSION_10_WORKSHEET_HEADERS["MixedUseExpenses"]),
             frozenset(
                 "tag_ids__migration_pending"
                 if header == "tag_ids"
@@ -309,7 +313,12 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     transaction_headers = [
         "payee_id" if header == "payee" else header for header in transaction_headers
     ]
-    _append_columns(transactions, transaction_headers, ["source_type", "source_id", "tag_ids"])
+    transaction_headers = _append_columns(transactions, transaction_headers, ["source_type", "source_id", "tag_ids"])
+    transaction_headers = _append_columns(
+        transactions,
+        transaction_headers,
+        ["recurring_schedule_id", "recurring_scheduled_date", "recurring_occurrence_type"],
+    )
 
     mileage = _ensure_sheet(workbook, "Mileage", worksheets, initial)
     mileage_headers = _ensure_headers(
@@ -342,7 +351,13 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
             mixed_headers.extend(missing_columns)
         mixed.update([mixed_headers], range_name="A1", raw=True)
     else:
-        _append_columns(mixed, mixed_headers, ["receipt_references", "tag_ids"])
+        _append_columns(
+            mixed,
+            mixed_headers,
+            ["receipt_references", "tag_ids", "recurring_schedule_id", "recurring_scheduled_date", "recurring_occurrence_type"],
+        )
+
+    _ensure_sheet(workbook, "RecurringSchedules", worksheets, initial)
 
     source_tags = _backfill_mixed_use_source_tags(workbook)
     # This read-only validation also checks current relationship, domain, and

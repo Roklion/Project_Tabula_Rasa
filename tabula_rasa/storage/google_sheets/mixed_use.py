@@ -263,6 +263,14 @@ class _MixedUseMixin:
             "tag_ids": transaction["tag_ids"],
             "created_at": created_at or _utc_now(),
         }
+        for field in (
+            "recurring_schedule_id",
+            "recurring_scheduled_date",
+            "recurring_occurrence_type",
+        ):
+            value = _clean_text(transaction.get(field), field.replace("_", " ").title())
+            if value:
+                source[field] = value
         projection = {
             **transaction,
             "id": linked_transaction_id,
