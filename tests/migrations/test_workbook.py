@@ -81,7 +81,7 @@ def test_reorder_columns_fills_missing_expected_columns() -> None:
     worksheet.update.assert_called_once_with(
         [["id", "name"], ["", "Office"]], range_name="A1", raw=True
     )
-    worksheet.clear.assert_called_once_with()
+    worksheet.resize.assert_called_once_with(rows=2, cols=2)
 
 
 def test_reorder_columns_clears_trailing_worksheet_data() -> None:

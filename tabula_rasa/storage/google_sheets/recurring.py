@@ -75,7 +75,10 @@ class RecurringMixin:
         kind = _clean_text(data.get("kind", "Expense"), "Schedule kind", required=True).title()
         if kind != "Expense":
             raise StorageValidationError("Recurring schedules support Expense records only")
-        unit = normalize_unit(data.get("recurrence_unit", data.get("unit", "month"))).value
+        try:
+            unit = normalize_unit(data.get("recurrence_unit", data.get("unit", "month"))).value
+        except ValueError as exc:
+            raise StorageValidationError(str(exc)) from exc
         source_kind = _clean_text(data.get("source_kind", "transaction"), "Source kind").casefold()
         if source_kind not in {"transaction", "mixed_use"}:
             raise StorageValidationError("Source kind must be transaction or mixed_use")
@@ -268,6 +271,21 @@ class RecurringMixin:
                 raise StorageValidationError(f"{label} recurring source kind is invalid")
             if values.get("recurring_occurrence_type") not in {"initial", "generated"}:
                 raise StorageValidationError(f"{label} recurring occurrence type is invalid")
+
+    @staticmethod
+    def _validate_mixed_use_projection_parity(
+        source: Mapping[str, Any], projection: Mapping[str, Any]
+    ) -> None:
+        for field in (
+            "recurring_schedule_id",
+            "recurring_scheduled_date",
+            "recurring_source_kind",
+            "recurring_occurrence_type",
+        ):
+            if str(source.get(field, "") or "") != str(projection.get(field, "") or ""):
+                raise StorageValidationError(
+                    "Mixed-use source and projection recurring provenance does not match"
+                )
 
     def _validate_recurring_references(self) -> None:
         schedules = self._snapshot(("RecurringSchedules",), force_refresh=True)["RecurringSchedules"]
@@ -632,6 +650,14 @@ class RecurringMixin:
                     mixed_source=True,
                     filter_schedule_id=schedule["id"],
                 )
+                for source_row in mixed_rows:
+                    source = source_row.values
+                    if str(source.get("recurring_schedule_id", "") or "") != schedule["id"]:
+                        continue
+                    projection = projections.get(str(source.get("linked_transaction_id", "") or ""))
+                    self._valid_mixed_use_projection(source, projection)
+                    if projection is not None:
+                        self._validate_mixed_use_projection_parity(source, projection)
                 schedule = self._schedule_template(
                     schedule,
                     schedule_id=schedule["id"],

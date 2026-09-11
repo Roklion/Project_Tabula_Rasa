@@ -123,8 +123,8 @@ def _reorder_columns(
         ]
         for row in rows[1:]
     ]
-    worksheet.clear()
     worksheet.update(reordered, range_name="A1", raw=True)
+    worksheet.resize(rows=len(reordered), cols=len(expected))
     return list(expected)
 
 def _validate_receipt_ownership(transactions: list[dict[str, Any]]) -> None:

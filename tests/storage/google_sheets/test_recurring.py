@@ -42,6 +42,15 @@ def test_recurring_template_rejects_receipts_and_non_expenses(default_storage) -
         )
 
 
+def test_recurring_template_wraps_invalid_unit_as_storage_validation(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    with pytest.raises(StorageValidationError, match="unit"):
+        default_storage.create_recurring_schedule(
+            name="Invalid unit", txn_date="2024-01-01", amount=10,
+            recurrence_unit="fortnight", account_id=account_id, category_id=category_id,
+        )
+
+
 def test_recurring_template_accepts_an_empty_receipt_list(default_storage) -> None:
     account_id, category_id = _ids(default_storage)
     result = default_storage.create_recurring_expense(
@@ -283,6 +292,25 @@ def test_mixed_use_invalid_projection_back_reference_needs_attention(default_sto
     outcome = default_storage.reconcile_recurring_schedules(as_of="2024-02-01")
 
     assert outcome["attention"] == {"bad-projection-link": "validation"}
+
+
+def test_mixed_use_projection_provenance_parity_needs_attention(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    result = default_storage.create_recurring_mixed_use_expense(
+        schedule_id="parity-mismatch", name="Vehicle", txn_date="2024-01-01",
+        recurrence_unit="month", total_expense=20, business_use_percentage=50,
+        account_id=account_id, category_id=category_id,
+        allocation_rationale="Business travel",
+    )
+    row = default_storage._find_row("Transactions", result["transaction"]["id"])
+    broken = dict(row.values)
+    broken["recurring_scheduled_date"] = "2024-02-01"
+    default_storage._replace_row("Transactions", row, broken)
+
+    outcome = default_storage.reconcile_recurring_schedules(as_of="2024-02-01")
+
+    assert outcome["generated"] == []
+    assert outcome["attention"] == {"parity-mismatch": "validation"}
 
 
 def test_recurring_retries_ignore_new_timestamps_but_not_payload_changes(default_storage, monkeypatch) -> None:

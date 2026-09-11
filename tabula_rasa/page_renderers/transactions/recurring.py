@@ -135,12 +135,11 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
             }:
                 account_options.append({"id": selected_account, "name": f"Missing ({selected_account})"})
             account_ids = [str(item["id"]) for item in account_options]
+            account_names = {str(item["id"]): str(item.get("name", "")) for item in account_options}
             edit_account = st.selectbox(
                 "Account", account_ids,
                 index=account_ids.index(selected_account) if selected_account in account_ids else 0,
-                format_func=lambda value: next(
-                    (str(item.get("name")) for item in account_options if str(item.get("id")) == value), value
-                ),
+                format_func=lambda value: account_names.get(value, value),
             )
             selected_category = str(selected.get("category_id", ""))
             category_options = [item for item in categories if item.get("kind") == "Expense"]
@@ -149,23 +148,22 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
             }:
                 category_options.append({"id": selected_category, "name": f"Missing ({selected_category})", "kind": "Expense"})
             category_ids = [str(item["id"]) for item in category_options]
+            category_names = {str(item["id"]): str(item.get("name", "")) for item in category_options}
             edit_category = st.selectbox(
                 "Category", category_ids,
                 index=category_ids.index(selected_category) if selected_category in category_ids else 0,
-                format_func=lambda value: next(
-                    (str(item.get("name")) for item in category_options if str(item.get("id")) == value), value
-                ),
+                format_func=lambda value: category_names.get(value, value),
             )
             payee_ids = [""] + [str(item["id"]) for item in payees]
             selected_payee = str(selected.get("payee_id", ""))
             if selected_payee and selected_payee not in payee_ids:
                 payee_ids.append(selected_payee)
+            payee_names = {str(item["id"]): str(item.get("name", "")) for item in payees}
             edit_payee = st.selectbox(
                 "Payee", payee_ids,
                 index=payee_ids.index(selected_payee) if selected_payee in payee_ids else 0,
-                format_func=lambda value: next(
-                    (str(item.get("name")) for item in payees if str(item.get("id")) == value),
-                    "No payee" if not value else f"Missing ({value})",
+                format_func=lambda value: payee_names.get(
+                    value, "No payee" if not value else f"Missing ({value})"
                 ),
             )
             try:
