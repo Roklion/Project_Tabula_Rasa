@@ -446,6 +446,8 @@ def render_ledger(
             context,
             categories=categories,
             category_paths=category_paths,
+            payees=payees,
+            tags=tags,
             transaction_frame=transaction_frame,
             transactions=transactions,
             selected_ids=selected_ids,

@@ -249,21 +249,30 @@ bulk selection. Bulk mode provides only:
   new-transaction copy editor;
 - **Export selected**, which downloads the selected visible ledger columns
   without changing the workbook;
-- **Change category**, only for an all-Income or all-Expense selection, using
-  categories of that same kind; and
+- **Apply changes**, which edits Category, Payee, and Tags for the selected
+  visible transactions. Category is available only for an all-Income or
+  all-Expense selection and uses categories of that same kind. Payee uses an
+  existing profile-local Payee, including an explicit **No Payee / blank**
+  choice. Tags use complete-set replacement.
 - **Permanently delete selected**, which shows the count and aggregate
   absolute amount, requires acknowledgement, removes the ledger rows, and
   leaves linked Drive files in place as unreferenced files.
 
-Transfers and mixed Income/Expense selections cannot use Change category.
+Transfers and mixed Income/Expense selections cannot use Category changes.
+The editor shows the shared current Category, Payee, or complete Tag set, or
+the explicit **Mixed / Multiple values** state. Changing a control or selecting
+**Apply <field> to all selected** marks only that field for mutation. Untouched
+fields—including mixed fields—remain unchanged. Applying Tags replaces the
+complete set; clearing all Tags requires the explicit Apply action.
+
 Bulk actions recheck the complete stable-ID selection immediately before a
 write. If a transient response is uncertain, the application performs one
 fresh readback: a confirmed result is reported as success, an entirely
 unchanged selection may be retried once, and any partial or unreadable result
 invalidates caches and gives explicit inspection guidance.
 
-No bulk changes are available for dates, amounts, payees, Tags, descriptions,
-references, accounts, transfer fields, or receipts. Reconciliation,
+No bulk changes are available for dates, amounts, descriptions, references,
+accounts, transfer fields, or receipts. Reconciliation,
 receipt-content search, and cash-flow reporting are not part of this workflow.
 
 ### Payees & Tags

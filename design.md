@@ -638,19 +638,26 @@ count and only these actions:
   new-transaction copy editor.
 - **Export selected:** downloads selected visible ledger columns without a
   workbook change.
-- **Change category:** available only for a homogeneous Income or Expense
-  selection and restricted to categories of that kind.
+- **Apply changes:** edits Category, Payee, and Tags through an explicit
+  partial-change editor. Category is available only for a homogeneous Income
+  or Expense selection and is restricted to categories of that kind. Payee
+  uses existing profile-local Payee records, and Tags use complete-set
+  replacement.
 - **Permanently delete selected:** shows count and aggregate absolute amount,
   requires acknowledgement, removes selected ledger rows, and retains linked
   Drive files as unreferenced files.
 
 Bulk actions revalidate all selected stable IDs immediately before one batch
 write and never silently partially apply. Transfers and mixed Income/Expense
-selections cannot use Change category. Bulk changes are not available for
-dates, amounts, payees, descriptions, references, accounts, transfers, or
-receipts.
+selections cannot use Category changes. Category, Payee, and Tags controls show
+their shared current value or **Mixed / Multiple values**. A field is included
+in the mutation only after the user changes it or explicitly selects **Apply
+<field> to all selected**; untouched fields remain unchanged. Tags use
+complete-set replacement, so clearing all Tags requires that explicit action.
+Bulk changes are not available for dates, amounts, descriptions, references,
+accounts, transfer structure, or receipts.
 
-Bulk category changes and deletions use one Google Sheets
+Bulk edits and deletions use one Google Sheets
 [spreadsheets.batchUpdate](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets/batchUpdate)
 request per mutation. The complete request is validated before application.
 An uncertain response is followed by a fresh stable-ID read and classified;
@@ -1033,7 +1040,8 @@ verified. Do not show success before confirmation.
 
 The current design does not include reconciliation, Tag hierarchies,
 Tag-based financial reports, receipt-content search, cash-flow reports, per-profile user authorization, or
-bulk changes beyond export, compatible category change, and permanent delete.
+bulk changes beyond export, compatible Category/Payee/Tags editing, and
+permanent delete.
 Do not add them as implied badges, controls, status fields, or backlog entries
 in this design specification.
 

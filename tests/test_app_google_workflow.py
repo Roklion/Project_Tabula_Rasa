@@ -25,6 +25,9 @@ HIERARCHY_SCENARIO = Path(__file__).with_name(
     "_app_hierarchy_workflow_scenario.py"
 )
 BULK_SCENARIO = Path(__file__).with_name("_app_transaction_bulk_scenario.py")
+BULK_EDITOR_SCENARIO = Path(__file__).with_name(
+    "_app_transaction_bulk_editor_scenario.py"
+)
 
 
 class TestAppGoogleWorkflow:
@@ -63,6 +66,7 @@ class TestAppGoogleWorkflow:
             (RECEIPT_CREATE_GUARDS_SCENARIO, "receipt_create_prewrite_guards"),
             (HIERARCHY_SCENARIO, "hierarchy_profile_isolation"),
             (BULK_SCENARIO, "transaction_bulk_profile_isolation"),
+            (BULK_EDITOR_SCENARIO, "transaction_bulk_editor_fields"),
         ],
         ids=[
             "account_category_transaction_edit_delete",
@@ -72,6 +76,7 @@ class TestAppGoogleWorkflow:
             "receipt_create_prewrite_guards",
             "hierarchy_profile_isolation",
             "transaction_bulk_profile_isolation",
+            "transaction_bulk_editor_fields",
         ],
     )
     def test_app_scenario(self, scenario: Path, case_name: str) -> None:
