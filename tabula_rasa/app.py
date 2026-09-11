@@ -462,12 +462,13 @@ else:
         reconciled_profiles = st.session_state.setdefault(
             "recurring_reconciled_profiles", set()
         )
-        if selected_profile_key not in reconciled_profiles:
+        reconciliation_key = (selected_profile_key, revision)
+        if reconciliation_key not in reconciled_profiles:
             # Reconciliation is deliberately one bounded pass per profile and
             # session. Schedule-level failures are persisted as attention by
             # storage; they must not block unrelated schedules or trigger reruns.
             storage.reconcile_recurring_schedules()
-            reconciled_profiles.add(selected_profile_key)
+            reconciled_profiles.add(reconciliation_key)
 
     except (LocalProfileStoreError, StorageError) as error:
         if isinstance(error, StorageError):

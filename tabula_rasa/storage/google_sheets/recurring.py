@@ -502,6 +502,21 @@ class RecurringMixin:
             "recurring_occurrence_type": role,
         })
 
+    @staticmethod
+    def _valid_mixed_use_projection(
+        source: Mapping[str, Any], projection: Mapping[str, Any] | None
+    ) -> bool:
+        if projection is None:
+            return False
+        if (
+            projection.get("source_type") != MIXED_USE_SOURCE_TYPE
+            or str(projection.get("source_id", "")) != str(source.get("id", ""))
+        ):
+            raise StorageValidationError(
+                "Mixed-use source projection does not point back to its source"
+            )
+        return True
+
     def _existing_recurring_dates(
         self,
         schedule_id: str,
@@ -511,19 +526,22 @@ class RecurringMixin:
         mixed_rows=None,
     ) -> set[str]:
         if source_kind == "mixed_use":
-            rows = mixed_rows if mixed_rows is not None else self._rows("MixedUseExpenses", force_refresh=True)
-            projection_ids = {
-                str(row.values.get("id", ""))
+            rows = mixed_rows if mixed_rows is not None else self._rows("MixedUseExpenses", force_refresh=False)
+            projections = {
+                str(row.values.get("id", "")): row.values
                 for row in (
                     transaction_rows
                     if transaction_rows is not None
-                    else self._rows("Transactions", force_refresh=True)
+                    else self._rows("Transactions", force_refresh=False)
                 )
             }
             return {str(row.values.get("recurring_scheduled_date", "")) for row in rows
                     if row.values.get("recurring_schedule_id") == schedule_id
-                    and str(row.values.get("linked_transaction_id", "")) in projection_ids}
-        rows = transaction_rows if transaction_rows is not None else self._rows("Transactions", force_refresh=True)
+                    and self._valid_mixed_use_projection(
+                        row.values,
+                        projections.get(str(row.values.get("linked_transaction_id", ""))),
+                    )}
+        rows = transaction_rows if transaction_rows is not None else self._rows("Transactions", force_refresh=False)
         return {
             str(row.values.get("recurring_scheduled_date", ""))
             for row in rows
