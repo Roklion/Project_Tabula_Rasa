@@ -115,7 +115,12 @@ def _reorder_columns(
     rows = worksheet.get_all_values()
     positions = {header: index for index, header in enumerate(headers)}
     reordered = [
-        [row[positions[header]] if positions[header] < len(row) else "" for header in expected]
+        [
+            row[positions[header]]
+            if header in positions and positions[header] < len(row)
+            else ""
+            for header in expected
+        ]
         for row in rows
     ]
     worksheet.update(reordered, range_name="A1", raw=True)

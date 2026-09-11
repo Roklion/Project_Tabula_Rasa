@@ -10,6 +10,7 @@ import pytest
 
 import scripts.migrate_workbook as migration_script
 from scripts.migrate_workbook import migrate_workbook
+from scripts.migrate_workbook import _reorder_columns
 from tabula_rasa.storage.google_sheets import (
     StorageInitializationError,
     StorageValidationError,
@@ -59,6 +60,16 @@ def test_migrates_prior_v10_layout_to_current_headers_and_empty_schedules() -> N
         list(WORKSHEET_HEADERS["RecurringSchedules"])
     ]
     GoogleSheetsStorage(workbook)
+
+
+def test_reorder_columns_fills_missing_expected_columns() -> None:
+    worksheet = Mock()
+    worksheet.get_all_values.return_value = [["name"], ["Office"]]
+
+    assert _reorder_columns(worksheet, ["name"], ("id", "name")) == ["id", "name"]
+    worksheet.update.assert_called_once_with(
+        [["", "name"], ["", "Office"]], range_name="A1", raw=True
+    )
 
 
 def test_migrates_pre_receipt_v3_layout_to_current_headers() -> None:

@@ -278,10 +278,24 @@ class RecurringMixin:
                 tag_lookup=tags,
             )
 
-    def list_recurring_schedules(self, *, _force_refresh: bool = False) -> list[dict[str, str]]:
+    def list_recurring_schedules(
+        self,
+        *,
+        _force_refresh: bool = False,
+        transaction_rows: list[Any] | None = None,
+        mixed_rows: list[Any] | None = None,
+    ) -> list[dict[str, str]]:
         rows = self._rows("RecurringSchedules", force_refresh=_force_refresh)
-        transaction_rows = self._rows("Transactions", force_refresh=_force_refresh)
-        mixed_rows = self._rows("MixedUseExpenses", force_refresh=_force_refresh)
+        transaction_rows = (
+            transaction_rows
+            if transaction_rows is not None
+            else self._rows("Transactions", force_refresh=_force_refresh)
+        )
+        mixed_rows = (
+            mixed_rows
+            if mixed_rows is not None
+            else self._rows("MixedUseExpenses", force_refresh=_force_refresh)
+        )
         result = []
         for row in rows:
             schedule = self._decode_schedule(row.values)
@@ -507,7 +521,11 @@ class RecurringMixin:
             _validate_recurring_provenance(row.values, "Transaction")
         for row in mixed_rows:
             _validate_recurring_provenance(row.values, "Mixed-use source")
-        schedules = self.list_recurring_schedules(_force_refresh=True)
+        schedules = self.list_recurring_schedules(
+            _force_refresh=True,
+            transaction_rows=transaction_rows,
+            mixed_rows=mixed_rows,
+        )
         schedule_values = {schedule["id"]: schedule for schedule in schedules if schedule["id"]}
         self._validate_recurring_occurrence_rows(
             transaction_rows, schedule_values, "Transaction", mixed_source=False
