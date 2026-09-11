@@ -23,6 +23,13 @@ def test_next_occurrence_supports_every_n_days_and_weeks() -> None:
     assert next_occurrence(date(2024, 1, 1), "week", 2, date(2024, 1, 15)) == date(2024, 1, 29)
 
 
+def test_next_occurrence_rejects_non_positive_or_fractional_intervals() -> None:
+    with pytest.raises(ValueError, match="positive integer"):
+        next_occurrence(date(2024, 1, 1), "month", 0, date(2024, 1, 1))
+    with pytest.raises(ValueError, match="positive integer"):
+        next_occurrence(date(2024, 1, 1), "day", 1.5, date(2024, 1, 1))
+
+
 def test_occurrences_between_is_inclusive_and_ids_are_stable() -> None:
     values = list(occurrences_between(date(2024, 1, 1), "month", 1, date(2024, 2, 1), date(2024, 4, 1)))
     assert values == [date(2024, 2, 1), date(2024, 3, 1), date(2024, 4, 1)]

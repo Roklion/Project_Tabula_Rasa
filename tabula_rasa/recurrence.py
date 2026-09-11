@@ -63,6 +63,8 @@ def occurrence_date(anchor: date, unit: str | RecurrenceUnit, interval: int, ind
 
 def next_occurrence(anchor: date, unit: str | RecurrenceUnit, interval: int, after: date) -> date:
     """Return the first occurrence strictly after *after*."""
+    if interval < 1 or int(interval) != interval:
+        raise ValueError("recurrence interval must be a positive integer")
     unit = normalize_unit(unit)
     if after < anchor:
         return anchor

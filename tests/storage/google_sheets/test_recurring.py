@@ -662,6 +662,26 @@ def test_schedule_status_transitions_require_current_state_and_baseline(default_
         default_storage.end_recurring_schedule("states")
 
 
+def test_schedule_edit_ignores_system_attention_changes(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    expected = default_storage.create_recurring_schedule(
+        schedule_id="attention-edit", name="Attention", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id,
+        category_id=category_id,
+    )
+    row = default_storage._find_row("RecurringSchedules", "attention-edit")
+    changed = dict(row.values)
+    changed["attention_code"] = "storage"
+    changed["attention_at"] = "2024-01-02T00:00:00+00:00"
+    default_storage._replace_row("RecurringSchedules", row, changed)
+
+    updated = default_storage.edit_recurring_schedule(
+        "attention-edit", expected_schedule=expected, description="Updated"
+    )
+
+    assert updated["description"] == "Updated"
+
+
 def test_ending_future_schedule_remains_valid(default_storage) -> None:
     account_id, category_id = _ids(default_storage)
     default_storage.create_recurring_schedule(

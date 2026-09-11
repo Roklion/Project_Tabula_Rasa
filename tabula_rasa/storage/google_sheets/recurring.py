@@ -418,6 +418,8 @@ class RecurringMixin:
             current = self.get_recurring_schedule(schedule_id, _force_refresh=True)
             if expected_schedule is not None:
                 for field in WORKSHEET_HEADERS["RecurringSchedules"]:
+                    if field in {"updated_at", "attention_code", "attention_at"}:
+                        continue
                     if str(expected_schedule.get(field, "") or "") != str(current.get(field, "") or ""):
                         raise StorageConflictError("The recurring schedule changed; refresh it before editing.")
             if "status" in changes:
@@ -774,11 +776,10 @@ class RecurringMixin:
                 }
             pair = self.create_mixed_use_expense(**source)
             try:
-                projection = next(
-                    item for item in self.list_transactions(_force_refresh=True)
-                    if item.get("id") == source["linked_transaction_id"]
-                )
-            except StopIteration:
+                projection = self._find_row(
+                    "Transactions", source["linked_transaction_id"]
+                ).values
+            except StorageNotFoundError:
                 raise StorageConflictError(
                     "Could not find the linked projection for the recurring "
                     "mixed-use expense. The ledger may be inconsistent."
