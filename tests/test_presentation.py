@@ -217,6 +217,8 @@ def test_profile_switch_clears_unscoped_presentation_state() -> None:
         "mixed_use_edit_baseline_source_id_north": "north-source",
         "mixed_use_pending_source_id_north": "pending-source",
         "mixed_use_pending_transaction_id_north": "pending-transaction",
+        "recurring_pending_schedule_id_north": "pending-schedule",
+        "recurring_pending_transaction_id_north": "pending-transaction",
         "mixed_use_copy_source_id_north": "north-source",
         "mixed_use_copy_snapshot_north": {"id": "north-source"},
         "mixed_use_copy_new_source_id_north": "new-source",
@@ -282,6 +284,8 @@ def test_profile_switch_clears_unscoped_presentation_state() -> None:
     assert "mixed_cancel_copy_north_north-source_copy_3" not in session_state
     assert session_state["mixed_use_pending_source_id_north"] == "pending-source"
     assert session_state["mixed_use_pending_transaction_id_north"] == "pending-transaction"
+    assert "recurring_pending_schedule_id_north" not in session_state
+    assert "recurring_pending_transaction_id_north" not in session_state
     assert "mixed_date_north_north-source" not in session_state
     assert "mixed_total_north_north-source" not in session_state
     assert "mixed_confirm_delete_north_north-source" not in session_state

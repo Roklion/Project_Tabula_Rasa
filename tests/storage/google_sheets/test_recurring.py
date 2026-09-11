@@ -23,6 +23,8 @@ def test_recurring_create_reconcile_is_idempotent(default_storage) -> None:
         description="Rent",
     )
     assert result["transaction"]["recurring_schedule_id"] == "rent-schedule"
+    assert result["schedule"]["source_kind"] == "transaction"
+    assert result["transaction"]["recurring_source_kind"] == "transaction"
     generated = default_storage.reconcile_recurring_schedules(as_of=date(2024, 4, 30))
     assert len(generated["generated"]) == 3
     assert default_storage.reconcile_recurring_schedules(as_of=date(2024, 4, 30))["generated"] == []
@@ -43,6 +45,25 @@ def test_recurring_template_rejects_receipts_and_non_expenses(default_storage) -
         )
 
 
+def test_recurring_interval_rejects_fractional_values(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    with pytest.raises(StorageValidationError, match="positive integer"):
+        default_storage.create_recurring_expense(
+            name="Invalid", txn_date="2024-01-01", recurrence_interval=1.5,
+            amount=10, account_id=account_id, category_id=category_id,
+        )
+    default_storage.create_recurring_expense(
+        schedule_id="fractional-backup", name="Valid", txn_date="2024-01-01",
+        recurrence_interval=1, amount=10, account_id=account_id, category_id=category_id,
+    )
+    row = default_storage._find_row("RecurringSchedules", "fractional-backup")
+    broken = dict(row.values)
+    broken["recurrence_interval"] = "1.5"
+    default_storage._replace_row("RecurringSchedules", row, broken)
+    with pytest.raises(StorageValidationError, match="positive integer"):
+        default_storage.export_backup_zip(
+            {"schema_version": 1, "business_profile_key": "test", "receipts": []}
+        )
 def test_mixed_use_recurring_occurrence_preserves_source_projection_pair(default_storage) -> None:
     account_id, category_id = _ids(default_storage)
     result = default_storage.create_recurring_mixed_use_expense(
@@ -52,14 +73,35 @@ def test_mixed_use_recurring_occurrence_preserves_source_projection_pair(default
         allocation_rationale="Business travel",
     )
     assert result["source"]["recurring_schedule_id"] == "vehicle-schedule"
+    assert result["schedule"]["source_kind"] == "mixed_use"
+    assert result["source"]["recurring_source_kind"] == "mixed_use"
+    assert result["transaction"]["recurring_source_kind"] == "mixed_use"
     default_storage.reconcile_recurring_schedules(as_of="2024-02-29")
     sources = default_storage.list_mixed_use_expenses(_force_refresh=True)
     assert len(sources) == 2
     assert len(default_storage.list_transactions(_force_refresh=True)) == 2
     assert all(item.get("recurring_schedule_id") == "vehicle-schedule" for item in sources)
+    assert all(item.get("recurring_source_kind") == "mixed_use" for item in sources)
 
 
-def test_mixed_use_recurring_initial_retry_reuses_schedule_and_pair(default_storage) -> None:
+def test_recurring_source_kind_mismatch_is_rejected(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    result = default_storage.create_recurring_mixed_use_expense(
+        schedule_id="kind-mismatch", name="Shared", txn_date="2024-01-01",
+        recurrence_unit="month", total_expense="20.00", business_use_percentage="50",
+        account_id=account_id, category_id=category_id, allocation_rationale="Use",
+    )
+    row = default_storage._find_row("MixedUseExpenses", result["source"]["id"])
+    broken = dict(row.values)
+    broken["recurring_source_kind"] = "transaction"
+    default_storage._replace_row("MixedUseExpenses", row, broken)
+    with pytest.raises(StorageValidationError, match="recurring_source_kind|source kind"):
+        default_storage.export_backup_zip(
+            {"schema_version": 1, "business_profile_key": "test", "receipts": []}
+        )
+
+
+def test_mixed_use_recurring_initial_retry_reuses_schedule_and_pair(default_storage, monkeypatch) -> None:
     account_id, category_id = _ids(default_storage)
     payload = dict(
         schedule_id="retry-schedule", name="Vehicle", txn_date="2024-01-31",
@@ -67,10 +109,33 @@ def test_mixed_use_recurring_initial_retry_reuses_schedule_and_pair(default_stor
         account_id=account_id, category_id=category_id, allocation_rationale="Business travel",
     )
     first = default_storage.create_recurring_mixed_use_expense(**payload)
+    monkeypatch.setattr(
+        "tabula_rasa.storage.google_sheets.recurring._utc_now",
+        lambda: "2099-01-01T00:00:00+00:00",
+    )
     second = default_storage.create_recurring_mixed_use_expense(**payload)
     assert first["source"]["id"] == second["source"]["id"]
     assert len(default_storage.list_recurring_schedules()) == 1
     assert len(default_storage.list_mixed_use_expenses()) == 1
+
+
+def test_recurring_retries_ignore_new_timestamps_but_not_payload_changes(default_storage, monkeypatch) -> None:
+    account_id, category_id = _ids(default_storage)
+    payload = dict(
+        schedule_id="timestamp-retry", name="Rent", txn_date="2024-01-01",
+        recurrence_unit="month", recurrence_interval=1, amount=10,
+        account_id=account_id, category_id=category_id,
+    )
+    first = default_storage.create_recurring_expense(**payload)
+    monkeypatch.setattr(
+        "tabula_rasa.storage.google_sheets.recurring._utc_now",
+        lambda: "2099-01-01T00:00:00+00:00",
+    )
+    second = default_storage.create_recurring_expense(**payload)
+    assert second["schedule"]["id"] == first["schedule"]["id"]
+    assert second["transaction"]["id"] == first["transaction"]["id"]
+    assert len(default_storage.list_recurring_schedules()) == 1
+    assert len(default_storage.list_transactions()) == 1
 
 
 def test_schedule_pause_resume_and_end_do_not_change_occurrences(default_storage) -> None:

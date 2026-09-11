@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import date
+from uuid import uuid4
 
 import streamlit as st
 
@@ -23,6 +24,19 @@ from tabula_rasa.page_renderers.tag_selector import (
     render_tag_selector,
     tag_selector_error,
 )
+
+
+def _pending_recurring_ids(
+    state: dict[str, object], profile: str
+) -> tuple[str, str]:
+    """Keep a recurring schedule and initial transaction ID stable on retry."""
+    schedule_key = f"recurring_pending_schedule_id_{profile}"
+    transaction_key = f"recurring_pending_transaction_id_{profile}"
+    schedule_id = str(state.get(schedule_key) or uuid4())
+    transaction_id = str(state.get(transaction_key) or uuid4())
+    state[schedule_key] = schedule_id
+    state[transaction_key] = transaction_id
+    return schedule_id, transaction_id
 
 
 def render_add_transaction(
@@ -138,6 +152,10 @@ def render_add_transaction(
                     recurrence_interval = r2.number_input("Interval", min_value=1, value=1, step=1, key="add_transaction_recurrence_interval")
                     recurrence_name = st.text_input("Schedule name", key="add_transaction_recurrence_name")
                     recurrence_end = st.date_input("End date (optional)", value=None, key="add_transaction_recurrence_end")
+        pending_schedule_key = f"recurring_pending_schedule_id_{context.profile_key}"
+        pending_transaction_key = f"recurring_pending_transaction_id_{context.profile_key}"
+        pending_schedule_id = str(st.session_state.get(pending_schedule_key) or "")
+        pending_transaction_id = str(st.session_state.get(pending_transaction_key) or "")
         source = st.selectbox(
             "To Account" if kind == "Income" else "From Account",
             list(account_map),
@@ -226,8 +244,12 @@ def render_add_transaction(
                     "reference": reference,
                 }
                 if kind == "Expense" and recurring:
+                    pending_schedule_id, pending_transaction_id = _pending_recurring_ids(
+                        st.session_state, context.profile_key
+                    )
                     payload.update({
-                        "schedule_id": None,
+                        "schedule_id": pending_schedule_id,
+                        "transaction_id": pending_transaction_id,
                         "name": recurrence_name or description or "Recurring expense",
                         "recurrence_unit": recurrence_unit,
                         "recurrence_interval": recurrence_interval,
@@ -253,6 +275,10 @@ def render_add_transaction(
                             "profile before saving a transaction with receipts."
                         )
                     else:
+                        def clear_pending_recurring_ids() -> None:
+                            st.session_state.pop(pending_schedule_key, None)
+                            st.session_state.pop(pending_transaction_key, None)
+
                         context.confirmed_write(
                             "create_transaction",
                             payload,
@@ -276,17 +302,21 @@ def render_add_transaction(
                                 else "Transaction saved."
                             ),
                             on_success=(
-                                lambda: context.schedule_widget_reset(
-                                    "reset_add_transaction_form"
+                                lambda: (
+                                    clear_pending_recurring_ids(),
+                                    context.schedule_widget_reset("reset_add_transaction_form"),
                                 )
                                 if not prepared_receipts
                                 else None
                             ),
                             on_confirmed=(
-                                lambda result: handle_confirmed_transaction_receipts(
-                                    context,
-                                    result,
-                                    prepared_receipts,
+                                lambda result: (
+                                    clear_pending_recurring_ids(),
+                                    handle_confirmed_transaction_receipts(
+                                        context,
+                                        result,
+                                        prepared_receipts,
+                                    ),
                                 )
                                 if prepared_receipts
                                 else None

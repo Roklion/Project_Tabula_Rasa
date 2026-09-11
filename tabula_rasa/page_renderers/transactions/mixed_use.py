@@ -115,6 +115,16 @@ def _pending_create_ids(
     return source_id, transaction_id
 
 
+def _pending_recurring_schedule_id(
+    state: MutableMapping[str, object], profile: str
+) -> str:
+    """Keep a recurring schedule ID stable while its create is retried."""
+    key = _key(profile, "pending_schedule_id")
+    schedule_id = str(state.get(key) or uuid4())
+    state[key] = schedule_id
+    return schedule_id
+
+
 def _mixed_use_copy_keys(profile: str) -> dict[str, str]:
     """Return the profile-local keys used by a mixed-use copy editor."""
     return {
@@ -400,6 +410,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
     baseline_id_key = _key(profile, "edit_baseline_source_id")
     pending_source_key = _key(profile, "pending_source_id")
     pending_transaction_key = _key(profile, "pending_transaction_id")
+    pending_schedule_key = _key(profile, "pending_schedule_id")
     source_ids = [str(item["id"]) for item in sources]
     selection_scope_key = _key(profile, "selection_scope")
     selection_scope = (
@@ -504,6 +515,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         pending_source_id, pending_transaction_id = _pending_create_ids(
             st.session_state, profile
         )
+        pending_schedule_id = ""
 
     def update_receipt_baseline(updated_source):
         if st.session_state.get(baseline_id_key) == selected_id:
@@ -795,7 +807,11 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                 )
                 payload = {"txn_date": txn_date, "account_id": account_id, "category_id": category_id, "payee_id": payee_id, "new_payee_name": new_payee_name, "tag_ids": tag_ids, "new_tag_name": new_tag_name or "", "reference": reference, "description": saved_description, "total_expense": total_expense, "business_use_percentage": business_use_percentage, "allocation_rationale": rationale}
                 if recurring:
+                    pending_schedule_id = _pending_recurring_schedule_id(
+                        st.session_state, profile
+                    )
                     payload.update({
+                        "schedule_id": pending_schedule_id,
                         "name": recurrence_name or description or "Recurring mixed-use expense",
                         "recurrence_unit": recurrence_unit,
                         "recurrence_interval": recurrence_interval,
@@ -847,6 +863,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                     st.session_state.pop(baseline_id_key, None)
                     st.session_state.pop(pending_source_key, None)
                     st.session_state.pop(pending_transaction_key, None)
+                    st.session_state.pop(pending_schedule_key, None)
                     if copy_mode:
                         _clear_mixed_use_copy(st.session_state, profile)
                         _clear_mixed_use_selection(st.session_state, profile)

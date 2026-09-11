@@ -253,6 +253,24 @@ def _positive_amount(value: Any) -> str:
         raise StorageValidationError("Amount must be greater than zero")
     return format(amount.quantize(Decimal("0.01")), "f")
 
+
+def _positive_integer(value: Any, label: str = "Value") -> int:
+    """Return a strict positive integer, rejecting bools and fractions."""
+    if isinstance(value, bool):
+        raise StorageValidationError(f"{label} must be a positive integer")
+    if isinstance(value, float) and not value.is_integer():
+        raise StorageValidationError(f"{label} must be a positive integer")
+    try:
+        number = int(value)
+    except (TypeError, ValueError, OverflowError):
+        raise StorageValidationError(f"{label} must be a positive integer") from None
+    text = str(value).strip()
+    if not isinstance(value, float) and text not in {str(number), f"+{number}"}:
+        raise StorageValidationError(f"{label} must be a positive integer")
+    if number < 1:
+        raise StorageValidationError(f"{label} must be a positive integer")
+    return number
+
 def _positive_miles(value: Any) -> str:
     try:
         miles = Decimal(str(value))
@@ -418,6 +436,7 @@ def _validate_mixed_use_tables(
             "reference",
             "recurring_schedule_id",
             "recurring_scheduled_date",
+            "recurring_source_kind",
             "recurring_occurrence_type",
         ):
             if _clean_text(transaction.get(field), field) != _clean_text(
@@ -589,15 +608,14 @@ def _parse_backup_zip(
     for schedule in schedules.values():
         if schedule.get("kind") != "Expense":
             raise StorageValidationError("Recurring schedules must be Expense records")
-        if schedule.get("expense_type", "ordinary") not in {"ordinary", "mixed_use"}:
-            raise StorageValidationError("Recurring schedule expense type is invalid")
+        if schedule.get("source_kind", "transaction") not in {"transaction", "mixed_use"}:
+            raise StorageValidationError("Recurring schedule source kind is invalid")
         if schedule.get("recurrence_unit") not in {"day", "week", "month", "year"}:
             raise StorageValidationError("Recurring schedule unit is invalid")
-        try:
-            if int(schedule.get("recurrence_interval", "0")) < 1:
-                raise ValueError
-        except (TypeError, ValueError):
-            raise StorageValidationError("Recurring schedule interval is invalid") from None
+        _positive_integer(
+            schedule.get("recurrence_interval", "0"),
+            "Recurring schedule interval",
+        )
         if schedule.get("status") not in {"active", "paused", "ended"}:
             raise StorageValidationError("Recurring schedule status is invalid")
         start_date = _iso_date(schedule.get("start_date"))
@@ -615,7 +633,7 @@ def _parse_backup_zip(
         schedule_tags = _normalize_tag_ids(schedule.get("tag_ids", ""))
         if any(tag_id not in tag_ids for tag_id in schedule_tags):
             raise StorageValidationError("Recurring schedule references an unknown tag")
-        if schedule.get("expense_type", "ordinary") == "ordinary":
+        if schedule.get("source_kind", "transaction") == "transaction":
             _positive_amount(schedule.get("amount"))
         else:
             try:
@@ -650,6 +668,17 @@ def _parse_backup_zip(
             if recurring_id not in schedules:
                 raise StorageValidationError("Transaction references an unknown recurring schedule")
             _iso_date(transaction.get("recurring_scheduled_date"))
+            expected_source_kind = (
+                "mixed_use"
+                if transaction.get("source_type") == MIXED_USE_SOURCE_TYPE
+                and transaction.get("source_id")
+                else "transaction"
+            )
+            if (
+                transaction.get("recurring_source_kind") != expected_source_kind
+                or schedules[recurring_id].get("source_kind") != expected_source_kind
+            ):
+                raise StorageValidationError("Transaction recurring source kind is invalid")
             if transaction.get("recurring_occurrence_type") not in {"initial", "generated"}:
                 raise StorageValidationError("Transaction recurring occurrence type is invalid")
         if transaction.get("account_id") not in account_ids:
@@ -671,6 +700,11 @@ def _parse_backup_zip(
                 raise StorageValidationError("Mixed-use source references an unknown recurring schedule")
             if source.get("recurring_occurrence_type") not in {"initial", "generated"}:
                 raise StorageValidationError("Mixed-use recurring occurrence type is invalid")
+            if (
+                source.get("recurring_source_kind") != "mixed_use"
+                or schedules[recurring_id].get("source_kind") != "mixed_use"
+            ):
+                raise StorageValidationError("Mixed-use recurring source kind is invalid")
             _iso_date(source.get("recurring_scheduled_date"))
 
     category_records = {

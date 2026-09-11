@@ -99,15 +99,40 @@ def _rewrite_legacy(
     return output.getvalue()
 
 
-def test_all_supported_legacy_versions_migrate_to_v10() -> None:
+def test_all_supported_legacy_versions_migrate_to_v11() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     current = storage.export_backup_zip(
         {"schema_version": 1, "business_profile_key": "test", "receipts": []}
     )
 
-    for version in range(1, 10):
+    for version in range(1, 11):
         converted = migrate_legacy_backup(_downgrade(current, version), profile_key="test")
         assert GoogleSheetsStorage.validate_backup_zip(converted)["format_version"] == 11
+
+
+def test_real_v10_shaped_archive_converts_to_v11_with_empty_recurring_table() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    account = storage.create_account("Checking", "Bank")
+    category = storage.create_category("Office", "Expense")
+    storage.create_transaction(
+        txn_date="2026-09-01", kind="Expense", amount="10.00",
+        account_id=account["id"], category_id=category["id"],
+    )
+    current = storage.export_backup_zip(
+        {"schema_version": 1, "business_profile_key": "test", "receipts": []}
+    )
+    legacy = _downgrade(current, 10)
+    with zipfile.ZipFile(io.BytesIO(legacy)) as archive:
+        assert json.loads(archive.read("manifest.json"))["format_version"] == 10
+        assert "RecurringSchedules.csv" not in archive.namelist()
+    converted = migrate_legacy_backup(legacy, profile_key="test")
+    with zipfile.ZipFile(io.BytesIO(converted)) as archive:
+        assert "RecurringSchedules.csv" in archive.namelist()
+        transactions = list(
+            csv.DictReader(io.StringIO(archive.read("Transactions.csv").decode()))
+        )
+        assert transactions and transactions[0]["recurring_source_kind"] == ""
+    assert GoogleSheetsStorage.validate_backup_zip(converted)["format_version"] == 11
 
 
 def test_v9_projection_tags_are_copied_to_mixed_use_source() -> None:
@@ -190,7 +215,7 @@ def test_v6_payee_text_and_hierarchy_become_current_records() -> None:
     assert target.list_accounts(active_only=False)[1]["parent_id"] == parent["id"]
 
 
-def test_v5_receipt_inventory_is_carried_into_v10() -> None:
+def test_v5_receipt_inventory_is_carried_into_v11() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     account = storage.create_account("Checking", "Bank")
     category = storage.create_category("Office", "Expense")

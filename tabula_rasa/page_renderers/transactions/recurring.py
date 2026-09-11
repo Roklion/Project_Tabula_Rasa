@@ -18,73 +18,19 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
     except Exception as error:
         context.report_storage_error(error)
         return
-    with st.expander("Create recurring expense", expanded=not schedules):
-        active_accounts = [item for item in accounts if str(item.get("active", "")).upper() == "TRUE"]
-        expense_categories = [item for item in categories if item.get("kind") == "Expense"]
-        if not active_accounts or not expense_categories:
-            st.warning("Create an active account and an Expense category before adding a schedule.")
-        else:
-            with st.form(f"recurring_create_{context.profile_key}"):
-                expense_type = st.segmented_control("Schedule type", ["Expense", "Mixed-use"], default="Expense")
-                name = st.text_input("Schedule name")
-                start = st.date_input("First occurrence", date.today())
-                unit = st.selectbox("Cadence", ["day", "week", "month", "year"])
-                interval = st.number_input("Every", min_value=1, value=1, step=1)
-                end = st.date_input("End date (optional)", value=None)
-                amount = st.number_input("Amount", min_value=0.01, value=1.0, step=0.01, format="%.2f")
-                percentage = st.number_input("Business use %", min_value=0.01, max_value=100.0, value=50.0, step=0.01, format="%.2f")
-                rationale = st.text_input("Allocation rationale")
-                account = st.selectbox("Account", active_accounts, format_func=lambda item: item["name"])
-                category = st.selectbox("Category", expense_categories, format_func=lambda item: item["name"])
-                payee_ids = [""] + [str(item["id"]) for item in payees]
-                payee_id = st.selectbox("Payee", payee_ids, format_func=lambda value: next((str(item.get("name")) for item in payees if str(item.get("id")) == value), "No payee" if not value else value))
-                tag_ids = st.multiselect("Tags", [str(item["id"]) for item in tags], format_func=lambda value: next((str(item.get("name")) for item in tags if str(item.get("id")) == value), value))
-                description = st.text_input("Description")
-                reference = st.text_input("Reference")
-                submitted = st.form_submit_button("Create schedule")
-            if submitted:
-                payload = {
-                    "name": name,
-                    "txn_date": start,
-                    "recurrence_unit": unit,
-                    "recurrence_interval": interval,
-                    "end_date": end,
-                    "account_id": account["id"],
-                    "category_id": category["id"],
-                    "payee_id": payee_id,
-                    "tag_ids": tag_ids,
-                    "reference": reference,
-                    "description": description,
-                }
-                try:
-                    if expense_type == "Mixed-use":
-                        payload.update({
-                            "total_expense": amount,
-                            "business_use_percentage": percentage,
-                            "allocation_rationale": rationale,
-                        })
-                        context.storage.create_recurring_mixed_use_expense(**payload)
-                    else:
-                        payload["amount"] = amount
-                        context.storage.create_recurring_expense(**payload)
-                    context.mark_workbook_data_changed and context.mark_workbook_data_changed()
-                    st.success("Recurring schedule created.")
-                    st.rerun()
-                except Exception as error:
-                    context.report_storage_error(error)
     if not schedules:
         return
     current_transactions = context.storage.list_transactions(_force_refresh=True)
     current_sources = context.storage.list_mixed_use_expenses(_force_refresh=True)
     rows = []
     for item in schedules:
-        linked = current_sources if item.get("expense_type") == "mixed_use" else current_transactions
+        linked = current_sources if item.get("source_kind") == "mixed_use" else current_transactions
         current_dates = [str(row.get("txn_date") or "") for row in linked if row.get("recurring_schedule_id") == item["id"]]
         rows.append({
             "Name": item["name"],
-            "Type": "Mixed-use" if item.get("expense_type") == "mixed_use" else "Expense",
+            "Type": "Mixed-use" if item.get("source_kind") == "mixed_use" else "Expense",
             "Description": item.get("description", ""),
-            "Amount / allocated": item.get("amount", "") if item.get("expense_type") != "mixed_use" else item.get("total_expense", ""),
+            "Amount / allocated": item.get("amount", ""),
             "Cadence": f"Every {item['recurrence_interval']} {item['recurrence_unit']}",
             "Start": item.get("start_date", ""),
             "End": item.get("end_date", "") or "—",
@@ -108,7 +54,7 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
             edit_interval = st.number_input("Interval", min_value=1, value=int(selected["recurrence_interval"]), step=1)
             edit_start = st.date_input("Start date", value=date.fromisoformat(selected["start_date"]))
             edit_end = st.date_input("End date", value=date.fromisoformat(selected["end_date"]) if selected.get("end_date") else None)
-            if selected.get("expense_type") == "mixed_use":
+            if selected.get("source_kind") == "mixed_use":
                 edit_amount = st.text_input("Total expense", value=selected.get("total_expense", ""))
                 edit_percentage = st.text_input("Business use %", value=selected.get("business_use_percentage", ""))
                 edit_rationale = st.text_input("Allocation rationale", value=selected.get("allocation_rationale", ""))
@@ -137,11 +83,11 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
                     selected["id"], expected_schedule=selected, name=edit_name,
                     recurrence_unit=edit_unit, recurrence_interval=edit_interval,
                     start_date=edit_start, anchor_date=edit_start, end_date=edit_end,
-                    amount=edit_amount if selected.get("expense_type") != "mixed_use" else selected.get("amount", ""),
+                    amount=edit_amount if selected.get("source_kind") != "mixed_use" else selected.get("amount", ""),
                     account_id=edit_account, category_id=edit_category, payee_id=edit_payee, tag_ids=edit_tags,
-                    total_expense=edit_amount if selected.get("expense_type") == "mixed_use" else selected.get("total_expense", ""),
-                    business_use_percentage=edit_percentage if selected.get("expense_type") == "mixed_use" else selected.get("business_use_percentage", ""),
-                    allocation_rationale=edit_rationale if selected.get("expense_type") == "mixed_use" else selected.get("allocation_rationale", ""),
+                    total_expense=edit_amount if selected.get("source_kind") == "mixed_use" else selected.get("total_expense", ""),
+                    business_use_percentage=edit_percentage if selected.get("source_kind") == "mixed_use" else selected.get("business_use_percentage", ""),
+                    allocation_rationale=edit_rationale if selected.get("source_kind") == "mixed_use" else selected.get("allocation_rationale", ""),
                     description=edit_description, reference=edit_reference,
                 )
                 st.success("Schedule template updated; existing occurrences were unchanged.")

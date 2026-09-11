@@ -411,6 +411,35 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         ]
         assert restored_storage.list_mileage_trips()[0]["id"] == mileage["id"]
 
+    def test_backup_round_trips_mixed_recurring_source_kind(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Office", "Expense")
+        result = self.storage.create_recurring_mixed_use_expense(
+            schedule_id="mixed-backup-schedule",
+            name="Shared office",
+            txn_date="2026-09-01",
+            recurrence_unit="month",
+            recurrence_interval=1,
+            total_expense="100.00",
+            business_use_percentage="50",
+            account_id=account["id"],
+            category_id=category["id"],
+            allocation_rationale="Workspace",
+        )
+        backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
+        restored_storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+        restored_storage.restore_backup_zip(backup)
+        schedule = restored_storage.get_recurring_schedule("mixed-backup-schedule")
+        source = restored_storage.get_mixed_use_expense(result["source"]["id"])
+        projection = next(
+            item
+            for item in restored_storage.list_transactions()
+            if item["id"] == result["transaction"]["id"]
+        )
+        assert schedule["source_kind"] == "mixed_use"
+        assert source["recurring_source_kind"] == "mixed_use"
+        assert projection["recurring_source_kind"] == "mixed_use"
+
     def test_backup_round_trips_account_and_category_hierarchies(self) -> None:
         account_parent = self.storage.create_account("Operating", "Bank")
         account_child = self.storage.create_account(

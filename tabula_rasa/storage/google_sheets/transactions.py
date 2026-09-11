@@ -660,13 +660,19 @@ class TransactionsMixin:
         recurring_occurrence_type = _clean_text(
             data.get("recurring_occurrence_type"), "Recurring occurrence type"
         )
-        if any((recurring_schedule_id, recurring_scheduled_date, recurring_occurrence_type)):
-            if not (recurring_schedule_id and recurring_scheduled_date and recurring_occurrence_type):
+        recurring_source_kind = _clean_text(
+            data.get("recurring_source_kind"), "Recurring source kind"
+        )
+        if any((recurring_schedule_id, recurring_scheduled_date, recurring_source_kind, recurring_occurrence_type)):
+            if not (recurring_schedule_id and recurring_scheduled_date and recurring_source_kind and recurring_occurrence_type):
                 raise StorageValidationError(
                     "Recurring provenance fields must be provided together"
                 )
             record["recurring_schedule_id"] = recurring_schedule_id
             record["recurring_scheduled_date"] = _iso_date(recurring_scheduled_date)
+            if recurring_source_kind not in {"transaction", "mixed_use"}:
+                raise StorageValidationError("Unknown recurring source kind")
+            record["recurring_source_kind"] = recurring_source_kind
             if recurring_occurrence_type not in {"initial", "generated"}:
                 raise StorageValidationError("Unknown recurring occurrence type")
             record["recurring_occurrence_type"] = recurring_occurrence_type
@@ -807,6 +813,7 @@ class TransactionsMixin:
             if any(field in data for field in (
                 "recurring_schedule_id",
                 "recurring_scheduled_date",
+                "recurring_source_kind",
                 "recurring_occurrence_type",
             )):
                 raise StorageValidationError(
@@ -832,6 +839,7 @@ class TransactionsMixin:
         recurring_fields = (
             "recurring_schedule_id",
             "recurring_scheduled_date",
+            "recurring_source_kind",
             "recurring_occurrence_type",
         )
         if any(field in changes for field in recurring_fields):

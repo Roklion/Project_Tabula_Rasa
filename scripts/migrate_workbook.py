@@ -317,7 +317,7 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     transaction_headers = _append_columns(
         transactions,
         transaction_headers,
-        ["recurring_schedule_id", "recurring_scheduled_date", "recurring_occurrence_type"],
+        ["recurring_schedule_id", "recurring_scheduled_date", "recurring_source_kind", "recurring_occurrence_type"],
     )
 
     mileage = _ensure_sheet(workbook, "Mileage", worksheets, initial)
@@ -343,7 +343,11 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
         mixed_headers[mixed_headers.index(LEGACY_MIXED_USE_TAG_MIGRATION_HEADER)] = "tag_ids"
         missing_columns = [
             header
-            for header in ("receipt_references", "tag_ids")
+            for header in (
+                "receipt_references", "tag_ids", "recurring_schedule_id",
+                "recurring_scheduled_date", "recurring_source_kind",
+                "recurring_occurrence_type",
+            )
             if header not in mixed_headers
         ]
         if missing_columns:
@@ -354,7 +358,7 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
         _append_columns(
             mixed,
             mixed_headers,
-            ["receipt_references", "tag_ids", "recurring_schedule_id", "recurring_scheduled_date", "recurring_occurrence_type"],
+            ["receipt_references", "tag_ids", "recurring_schedule_id", "recurring_scheduled_date", "recurring_source_kind", "recurring_occurrence_type"],
         )
 
     _ensure_sheet(workbook, "RecurringSchedules", worksheets, initial)

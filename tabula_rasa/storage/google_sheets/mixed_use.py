@@ -266,6 +266,7 @@ class _MixedUseMixin:
         for field in (
             "recurring_schedule_id",
             "recurring_scheduled_date",
+            "recurring_source_kind",
             "recurring_occurrence_type",
         ):
             value = _clean_text(transaction.get(field), field.replace("_", " ").title())
@@ -622,6 +623,7 @@ class _MixedUseMixin:
         for field in (
             "recurring_schedule_id",
             "recurring_scheduled_date",
+            "recurring_source_kind",
             "recurring_occurrence_type",
         ):
             if field in changes and str(changes[field] or "") != str(current_source.get(field, "") or ""):

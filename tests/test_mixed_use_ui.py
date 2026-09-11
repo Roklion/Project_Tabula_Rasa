@@ -13,6 +13,7 @@ from tabula_rasa.page_renderers.transactions.mixed_use import (
     _mixed_use_receipt_recovery_active,
     _mixed_use_selection_ids,
     _pending_create_ids,
+    _pending_recurring_schedule_id,
     _start_mixed_use_copy,
     mixed_use_preview,
 )
@@ -50,6 +51,13 @@ def test_pending_create_ids_remain_stable_for_uncertain_retries() -> None:
     assert first[0] == state["mixed_use_pending_source_id_north"]
     assert first[1] == state["mixed_use_pending_transaction_id_north"]
     assert first != _pending_create_ids(state, "south")
+
+
+def test_pending_recurring_schedule_id_remains_stable_for_uncertain_retries() -> None:
+    state: dict[str, object] = {}
+    first = _pending_recurring_schedule_id(state, "north")
+    assert first == _pending_recurring_schedule_id(state, "north")
+    assert first != _pending_recurring_schedule_id(state, "south")
 
 
 def test_mixed_use_table_selection_maps_rows_to_stable_source_ids() -> None:

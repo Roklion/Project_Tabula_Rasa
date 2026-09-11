@@ -1,7 +1,7 @@
 """Convert a supported legacy backup archive into the current v11 format.
 
 This is an explicit, offline migration tool.  The running application accepts
-only v10 archives; conversion always writes a new archive and leaves the
+only v11 archives; conversion always writes a new archive and leaves the
 source untouched.
 """
 
@@ -31,6 +31,7 @@ from tabula_rasa.storage.google_sheets import (
     normalize_payee_name,
 )
 from scripts._legacy_payees import legacy_payee_id
+from scripts.migration_schemas import VERSION_10_WORKSHEET_HEADERS
 
 
 _V1_ACCOUNTS = (
@@ -57,9 +58,16 @@ _TAGS = _PAYEES
 _TRANSACTIONS_V8 = (*_TRANSACTIONS_V7, "tag_ids")
 _MILEAGE_V8 = (*_MILEAGE, "tag_ids")
 _TRANSACTIONS_V9 = (*_TRANSACTIONS_V7, "source_type", "source_id", "tag_ids")
-_MIXED_USE_V9 = tuple(
-    header for header in WORKSHEET_HEADERS["MixedUseExpenses"] if header != "tag_ids"
+_MIXED_USE_V9 = (
+    "id", "txn_date", "kind", "total_expense", "business_use_percentage",
+    "allocated_amount", "account_id", "category_id", "payee_id", "description",
+    "reference", "receipt_references", "allocation_rationale",
+    "linked_transaction_id", "created_at",
 )
+_VERSION_10_WORKSHEET_HEADERS = {
+    title: tuple(headers)
+    for title, headers in VERSION_10_WORKSHEET_HEADERS.items()
+}
 SOURCE_HEADERS: dict[int, dict[str, tuple[str, ...]]] = {
     1: {"Accounts": _V1_ACCOUNTS, "Categories": _CATEGORIES, "Transactions": _TRANSACTIONS_V2},
     2: {"Accounts": _V2_ACCOUNTS, "Categories": _CATEGORIES, "Transactions": _TRANSACTIONS_V2},
@@ -70,6 +78,7 @@ SOURCE_HEADERS: dict[int, dict[str, tuple[str, ...]]] = {
     7: {"Accounts": _V6_ACCOUNTS, "Categories": _V6_CATEGORIES, "Payees": _PAYEES, "Transactions": _TRANSACTIONS_V7, "Mileage": _MILEAGE},
     8: {"Accounts": _V6_ACCOUNTS, "Categories": _V6_CATEGORIES, "Payees": _PAYEES, "Tags": _TAGS, "Transactions": _TRANSACTIONS_V8, "Mileage": _MILEAGE_V8},
     9: {"Accounts": _V6_ACCOUNTS, "Categories": _V6_CATEGORIES, "Payees": _PAYEES, "Tags": _TAGS, "Transactions": _TRANSACTIONS_V9, "Mileage": _MILEAGE_V8, "MixedUseExpenses": _MIXED_USE_V9},
+    10: _VERSION_10_WORKSHEET_HEADERS,
 }
 
 
@@ -103,7 +112,7 @@ def _read_source(backup: bytes) -> tuple[int, dict[str, Any], dict[str, list[dic
                 raise StorageValidationError("Backup manifest must be a JSON object")
             version = manifest.get("format_version")
             if version not in SOURCE_HEADERS:
-                raise StorageValidationError("Only backup formats 1 through 9 can be migrated")
+                raise StorageValidationError("Only backup formats 1 through 10 can be migrated")
             schemas = SOURCE_HEADERS[version]
             names = set(names)
             required_names = {f"{title}.csv" for title in schemas} | {"manifest.json"}
@@ -225,7 +234,7 @@ def _current_tables(version: int, manifest: dict[str, Any], source: dict[str, li
     for row in tables["Transactions"]:
         if version < 5:
             # Pre-inventory archives cannot prove receipt identity or retain
-            # the integrity metadata required by v10. Keep the source archive
+            # the integrity metadata required by v11. Keep the source archive
             # intact, but unlink those historical associations in the output.
             row["receipt_references"] = ""
         row.setdefault("receipt_references", "")
@@ -238,10 +247,18 @@ def _current_tables(version: int, manifest: dict[str, Any], source: dict[str, li
             row.setdefault("source_type", "")
             row.setdefault("source_id", "")
         row.setdefault("tag_ids", "[]")
+        row.setdefault("recurring_schedule_id", "")
+        row.setdefault("recurring_scheduled_date", "")
+        row.setdefault("recurring_source_kind", "")
+        row.setdefault("recurring_occurrence_type", "")
     for row in tables["Mileage"]:
         row.setdefault("tag_ids", "[]")
     for row in tables["MixedUseExpenses"]:
         row.setdefault("tag_ids", "[]")
+        row.setdefault("recurring_schedule_id", "")
+        row.setdefault("recurring_scheduled_date", "")
+        row.setdefault("recurring_source_kind", "")
+        row.setdefault("recurring_occurrence_type", "")
 
     transactions_by_id = {str(row.get("id")): row for row in tables["Transactions"]}
     for source_row in tables["MixedUseExpenses"]:
@@ -267,7 +284,7 @@ def _encode_csv(headers: list[str], records: list[dict[str, str]]) -> bytes:
 
 
 def migrate_legacy_backup(backup: bytes, *, profile_key: str | None = None) -> bytes:
-    """Return a validated v11 archive converted from a v1-v9 archive."""
+    """Return a validated v11 archive converted from a v1-v10 archive."""
     version, source_manifest, source_tables, source_receipts = _read_source(backup)
     if version < 5 and not profile_key:
         raise StorageValidationError(
@@ -341,8 +358,8 @@ def migrate_backup_file(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("backup", type=Path, help="Legacy v1-v9 backup ZIP")
-    parser.add_argument("--output", type=Path, help="Separate v10 output ZIP (never overwritten)")
+    parser.add_argument("backup", type=Path, help="Legacy v1-v10 backup ZIP")
+    parser.add_argument("--output", type=Path, help="Separate v11 output ZIP (never overwritten)")
     parser.add_argument("--profile", help="Profile key for a ledger-only archive's empty receipt inventory")
     args = parser.parse_args()
     try:
@@ -353,7 +370,7 @@ def main() -> None:
         )
     except (OSError, StorageValidationError) as error:
         raise SystemExit(f"Migration failed: {error}") from error
-    print(f"Validated format-10 backup created: {destination}")
+    print(f"Validated format-11 backup created: {destination}")
 
 
 if __name__ == "__main__":

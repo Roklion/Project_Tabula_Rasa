@@ -22,6 +22,7 @@ from .validation import (
     _iso_date,
     _normalize_tag_ids,
     _positive_amount,
+    _positive_integer,
     _utc_now,
 )
 
@@ -32,6 +33,21 @@ def _as_date(value: Any) -> date:
 
 class RecurringMixin:
     """Schedule reads and bounded recurring Expense mutations."""
+
+    @staticmethod
+    def _logical_record_matches(
+        existing: Mapping[str, Any] | None,
+        expected: Mapping[str, Any],
+        *,
+        ignored: frozenset[str] = frozenset(),
+    ) -> bool:
+        if existing is None:
+            return False
+        return all(
+            str(existing.get(field, "") or "") == str(value or "")
+            for field, value in expected.items()
+            if field not in ignored
+        )
 
     @staticmethod
     def _schedule_status(value: Any) -> str:
@@ -48,15 +64,13 @@ class RecurringMixin:
         if kind != "Expense":
             raise StorageValidationError("Recurring schedules support Expense records only")
         unit = normalize_unit(data.get("recurrence_unit", data.get("unit", "month"))).value
-        expense_type = _clean_text(data.get("expense_type", "ordinary"), "Expense type").casefold()
-        if expense_type not in {"ordinary", "mixed_use"}:
-            raise StorageValidationError("Expense type must be ordinary or mixed_use")
-        try:
-            interval = int(data.get("recurrence_interval", data.get("interval", 1)))
-        except (TypeError, ValueError):
-            raise StorageValidationError("Recurrence interval must be a positive integer") from None
-        if interval < 1:
-            raise StorageValidationError("Recurrence interval must be a positive integer")
+        source_kind = _clean_text(data.get("source_kind", "transaction"), "Source kind").casefold()
+        if source_kind not in {"transaction", "mixed_use"}:
+            raise StorageValidationError("Source kind must be transaction or mixed_use")
+        interval = _positive_integer(
+            data.get("recurrence_interval", data.get("interval", 1)),
+            "Recurrence interval",
+        )
         anchor = _iso_date(data.get("anchor_date", data.get("start_date", data.get("txn_date"))))
         start = _iso_date(data.get("start_date", anchor))
         end_value = _clean_text(data.get("end_date"), "Schedule end date")
@@ -92,14 +106,14 @@ class RecurringMixin:
                 data.get("business_use_percentage", "100"),
             )
         except Exception as exc:
-            if expense_type == "mixed_use":
+            if source_kind == "mixed_use":
                 raise StorageValidationError(str(exc)) from exc
             allocation = None
         return {
             "id": schedule_id,
             "name": name,
             "kind": "Expense",
-            "expense_type": expense_type,
+            "source_kind": source_kind,
             "recurrence_unit": unit,
             "recurrence_interval": str(interval),
             "anchor_date": start,
@@ -107,7 +121,7 @@ class RecurringMixin:
             "end_date": end,
             "status": status,
             "amount": _positive_amount(
-                data.get("amount") if expense_type == "ordinary" else allocation.allocated_amount
+                data.get("amount") if source_kind == "transaction" else allocation.allocated_amount
             ),
             "total_expense": allocation.total_expense if allocation else "",
             "business_use_percentage": allocation.business_use_percentage if allocation else "",
@@ -130,7 +144,7 @@ class RecurringMixin:
         schedule = {header: str(values.get(header, "") or "") for header in WORKSHEET_HEADERS["RecurringSchedules"]}
         schedule["id"] = _clean_text(schedule.get("id"), "Schedule ID", required=True)
         schedule["kind"] = schedule.get("kind", "Expense").title()
-        schedule["expense_type"] = schedule.get("expense_type", "ordinary").casefold()
+        schedule["source_kind"] = schedule.get("source_kind", "transaction").casefold()
         try:
             schedule["recurrence_unit"] = normalize_unit(schedule.get("recurrence_unit", "month")).value
         except ValueError:
@@ -154,7 +168,8 @@ class RecurringMixin:
 
     def _validate_recurring_references(self) -> None:
         schedules = self._snapshot(("RecurringSchedules",), force_refresh=True)["RecurringSchedules"]
-        schedule_ids = {str(row.values.get("id", "")) for row in schedules}
+        schedule_values = {str(row.values.get("id", "")): row.values for row in schedules}
+        schedule_ids = set(schedule_values)
         for row in schedules:
             self._schedule_template(row.values, schedule_id=row.values.get("id"), created_at=row.values.get("created_at"), updated_at=row.values.get("updated_at"))
         for row in self._rows("Transactions", force_refresh=True):
@@ -164,6 +179,17 @@ class RecurringMixin:
                 if schedule_id not in schedule_ids:
                     raise StorageValidationError("Transaction references an unknown recurring schedule")
                 _iso_date(values.get("recurring_scheduled_date"))
+                expected_source_kind = (
+                    "mixed_use"
+                    if values.get("source_type") == "mixed_use_expense"
+                    and values.get("source_id")
+                    else "transaction"
+                )
+                if (
+                    values.get("recurring_source_kind") != expected_source_kind
+                    or schedule_values[schedule_id].get("source_kind") != expected_source_kind
+                ):
+                    raise StorageValidationError("Transaction recurring source kind is invalid")
         for row in self._rows("MixedUseExpenses", force_refresh=True):
             values = row.values
             schedule_id = str(values.get("recurring_schedule_id", "") or "")
@@ -171,6 +197,11 @@ class RecurringMixin:
                 if schedule_id not in schedule_ids:
                     raise StorageValidationError("Mixed-use source references an unknown recurring schedule")
                 _iso_date(values.get("recurring_scheduled_date"))
+                if (
+                    values.get("recurring_source_kind") != "mixed_use"
+                    or schedule_values[schedule_id].get("source_kind") != "mixed_use"
+                ):
+                    raise StorageValidationError("Mixed-use recurring source kind is invalid")
 
     def list_recurring_schedules(self, *, _force_refresh: bool = False) -> list[dict[str, str]]:
         rows = self._rows("RecurringSchedules", force_refresh=_force_refresh)
@@ -183,7 +214,7 @@ class RecurringMixin:
                 schedule["next_due_date"] = ""
             try:
                 latest = self._latest_current_occurrence_date(
-                    schedule["id"], schedule.get("expense_type")
+                    schedule["id"], schedule.get("source_kind")
                 )
             except (StorageValidationError, ValueError, TypeError):
                 latest = None
@@ -202,15 +233,15 @@ class RecurringMixin:
         if schedule["status"] != "active":
             return ""
         current = _as_date(schedule["start_date"])
-        latest = self._latest_current_occurrence_date(schedule["id"], schedule.get("expense_type"))
+        latest = self._latest_current_occurrence_date(schedule["id"], schedule.get("source_kind"))
         if latest:
             current = next_occurrence(_as_date(schedule["anchor_date"]), schedule["recurrence_unit"], int(schedule["recurrence_interval"]), latest)
         if schedule.get("end_date") and current.isoformat() > schedule["end_date"]:
             return ""
         return current.isoformat()
 
-    def _latest_current_occurrence_date(self, schedule_id: str, expense_type: str | None) -> date | None:
-        if expense_type == "mixed_use":
+    def _latest_current_occurrence_date(self, schedule_id: str, source_kind: str | None) -> date | None:
+        if source_kind == "mixed_use":
             rows = self._rows("MixedUseExpenses", force_refresh=True)
             field = "txn_date"
         else:
@@ -288,6 +319,7 @@ class RecurringMixin:
             "receipt_references": "",
             "recurring_schedule_id": schedule["id"],
             "recurring_scheduled_date": scheduled,
+            "recurring_source_kind": schedule["source_kind"],
             "recurring_occurrence_type": role,
         })
 
@@ -310,11 +342,12 @@ class RecurringMixin:
             "receipt_references": "",
             "recurring_schedule_id": schedule["id"],
             "recurring_scheduled_date": scheduled,
+            "recurring_source_kind": schedule["source_kind"],
             "recurring_occurrence_type": role,
         })
 
-    def _existing_recurring_dates(self, schedule_id: str, expense_type: str = "ordinary") -> set[str]:
-        if expense_type == "mixed_use":
+    def _existing_recurring_dates(self, schedule_id: str, source_kind: str = "transaction") -> set[str]:
+        if source_kind == "mixed_use":
             rows = self._rows("MixedUseExpenses", force_refresh=True)
             return {str(row.values.get("recurring_scheduled_date", "")) for row in rows
                     if row.values.get("recurring_schedule_id") == schedule_id}
@@ -329,9 +362,15 @@ class RecurringMixin:
             if schedule["status"] != "active":
                 continue
             try:
+                schedule = self._schedule_template(
+                    schedule,
+                    schedule_id=schedule["id"],
+                    created_at=schedule.get("created_at"),
+                    updated_at=schedule.get("updated_at"),
+                )
                 end = min(cutoff, schedule["end_date"]) if schedule.get("end_date") else cutoff
-                existing = self._existing_recurring_dates(schedule["id"], schedule.get("expense_type", "ordinary"))
-                latest = self._latest_current_occurrence_date(schedule["id"], schedule.get("expense_type"))
+                existing = self._existing_recurring_dates(schedule["id"], schedule.get("source_kind", "transaction"))
+                latest = self._latest_current_occurrence_date(schedule["id"], schedule.get("source_kind"))
                 candidate_start = _as_date(schedule["start_date"])
                 if latest is not None:
                     candidate_start = next_occurrence(
@@ -342,7 +381,7 @@ class RecurringMixin:
                     key = scheduled.isoformat()
                     if key in existing:
                         continue
-                    if schedule.get("expense_type") == "mixed_use":
+                    if schedule.get("source_kind") == "mixed_use":
                         source, record = self._recurring_mixed_occurrence(schedule, scheduled, role="generated")
                         self.create_mixed_use_expense(**source)
                         generated.append(source)
@@ -389,13 +428,19 @@ class RecurringMixin:
             initial["id"] = initial_id
             existing = {str(row.values.get("id")): row.values for row in self._rows("RecurringSchedules", force_refresh=True)}
             if schedule["id"] in existing:
-                if existing[schedule["id"]] != {header: str(schedule.get(header, "")) for header in WORKSHEET_HEADERS["RecurringSchedules"]}:
+                if not self._logical_record_matches(
+                    existing[schedule["id"]], schedule,
+                    ignored=frozenset({"created_at", "updated_at", "attention_code", "attention_at"}),
+                ):
                     raise StorageConflictError("Recurring schedule ID is already in use")
             else:
                 self._append("RecurringSchedules", schedule)
             current = {str(row.values.get("id")): row.values for row in self._rows("Transactions", force_refresh=True)}
             if initial_id in current:
-                if current[initial_id] != {header: str(initial.get(header, "")) for header in WORKSHEET_HEADERS["Transactions"]}:
+                if not self._logical_record_matches(
+                    current[initial_id], initial,
+                    ignored=frozenset({"created_at"}),
+                ):
                     raise StorageConflictError("Initial recurring transaction ID is already in use")
             else:
                 self._append("Transactions", initial)
@@ -404,17 +449,18 @@ class RecurringMixin:
     def create_recurring_mixed_use_expense(self, **data: Any) -> dict[str, Any]:
         """Create one mixed-use schedule and its source/projection pair."""
         with self._workbook_locks.ledger:
-            data = {**data, "expense_type": "mixed_use"}
+            data = {**data, "source_kind": "mixed_use"}
             schedule = self._schedule_template(data)
             scheduled = _as_date(schedule["start_date"])
             source_id = _clean_text(data.get("source_id"), "Mixed-use source ID") or occurrence_id(schedule["id"], scheduled, "initial-source")
             transaction_id = _clean_text(data.get("transaction_id"), "Transaction ID") or occurrence_id(schedule["id"], scheduled, "initial-projection")
             payload = {**data, "source_id": source_id, "linked_transaction_id": transaction_id}
             source, projection = self._prepare_mixed_use_expense(payload)
-            for field in ("recurring_schedule_id", "recurring_scheduled_date", "recurring_occurrence_type"):
+            for field in ("recurring_schedule_id", "recurring_scheduled_date", "recurring_source_kind", "recurring_occurrence_type"):
                 source[field] = projection[field] = {
                     "recurring_schedule_id": schedule["id"],
                     "recurring_scheduled_date": scheduled.isoformat(),
+                    "recurring_source_kind": schedule["source_kind"],
                     "recurring_occurrence_type": "initial",
                 }[field]
             existing_schedules = {
@@ -422,11 +468,10 @@ class RecurringMixin:
                 for row in self._rows("RecurringSchedules", force_refresh=True)
             }
             if schedule["id"] in existing_schedules:
-                expected = {
-                    header: str(schedule.get(header, ""))
-                    for header in WORKSHEET_HEADERS["RecurringSchedules"]
-                }
-                if existing_schedules[schedule["id"]] != expected:
+                if not self._logical_record_matches(
+                    existing_schedules[schedule["id"]], schedule,
+                    ignored=frozenset({"created_at", "updated_at", "attention_code", "attention_at"}),
+                ):
                     raise StorageConflictError("Recurring schedule ID is already in use")
             else:
                 self._append("RecurringSchedules", schedule)

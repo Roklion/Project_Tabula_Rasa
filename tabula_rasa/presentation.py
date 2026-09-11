@@ -592,6 +592,8 @@ def reset_profile_presentation_state(
         "transaction_bulk_scope",
         "transaction_bulk_selection_generation",
         "transaction_ledger_mode_generation",
+        f"recurring_pending_schedule_id_{previous_profile_key}",
+        f"recurring_pending_transaction_id_{previous_profile_key}",
     }
     mixed_use_keys = {
         f"mixed_use_selected_source_id_{previous_profile_key}",
@@ -604,6 +606,7 @@ def reset_profile_presentation_state(
         f"mixed_use_copy_snapshot_{previous_profile_key}",
         f"mixed_use_copy_new_source_id_{previous_profile_key}",
         f"mixed_use_copy_new_transaction_id_{previous_profile_key}",
+        f"mixed_use_pending_schedule_id_{previous_profile_key}",
         f"mixed_use_copy_generation_{previous_profile_key}",
         f"mixed_use_copy_button_{previous_profile_key}",
     }
