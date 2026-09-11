@@ -377,18 +377,18 @@ class RecurringMixin:
         mixed_rows=None,
     ) -> date | None:
         if source_kind == "mixed_use":
-            rows = mixed_rows if mixed_rows is not None else self._rows("MixedUseExpenses", force_refresh=True)
+            rows = mixed_rows if mixed_rows is not None else self._rows("MixedUseExpenses", force_refresh=False)
             projection_ids = {
                 str(row.values.get("id", ""))
                 for row in (
                     transaction_rows
                     if transaction_rows is not None
-                    else self._rows("Transactions", force_refresh=True)
+                    else self._rows("Transactions", force_refresh=False)
                 )
             }
             field = "txn_date"
         else:
-            rows = transaction_rows if transaction_rows is not None else self._rows("Transactions", force_refresh=True)
+            rows = transaction_rows if transaction_rows is not None else self._rows("Transactions", force_refresh=False)
             projection_ids = set()
             field = "txn_date"
         dates = []

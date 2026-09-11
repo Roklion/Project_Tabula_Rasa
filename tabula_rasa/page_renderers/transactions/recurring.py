@@ -44,6 +44,10 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
         context.report_storage_error(error)
         return
     if not schedules:
+        st.info(
+            "No recurring expense schedules found. Check 'Repeat this Expense' "
+            "when adding a transaction to create one."
+        )
         return
     current_transactions = context.storage.list_transactions()
     current_sources = context.storage.list_mixed_use_expense_sources()
@@ -91,6 +95,7 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
                 st.rerun()
             except Exception as error:
                 context.report_storage_error(error)
+        return
     with st.expander("Edit schedule template"):
         with st.form(f"recurring_edit_{context.profile_key}_{selected['id']}"):
             edit_name = st.text_input("Schedule name", value=selected["name"])
