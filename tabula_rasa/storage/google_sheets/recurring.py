@@ -7,7 +7,7 @@ from datetime import date
 from typing import Any
 from uuid import uuid4
 
-from tabula_rasa.mixed_use import validate_mixed_use_allocation
+from tabula_rasa.mixed_use import MIXED_USE_SOURCE_TYPE, validate_mixed_use_allocation
 from tabula_rasa.recurrence import (
     next_occurrence,
     occurrence_id,
@@ -240,7 +240,7 @@ class RecurringMixin:
                 _iso_date(values.get("recurring_scheduled_date"))
                 expected_source_kind = (
                     "mixed_use"
-                    if values.get("source_type") == "mixed_use_expense"
+                    if values.get("source_type") == MIXED_USE_SOURCE_TYPE
                     and values.get("source_id")
                     else "transaction"
                 )
@@ -424,7 +424,7 @@ class RecurringMixin:
             "tag_ids": schedule.get("tag_ids", ""),
             "receipt_references": "",
             "recurring_schedule_id": schedule["id"],
-            "recurring_scheduled_date": scheduled,
+            "recurring_scheduled_date": scheduled.isoformat(),
             "recurring_source_kind": schedule["source_kind"],
             "recurring_occurrence_type": role,
         })
@@ -449,7 +449,7 @@ class RecurringMixin:
             "tag_ids": schedule.get("tag_ids", ""),
             "receipt_references": "",
             "recurring_schedule_id": schedule["id"],
-            "recurring_scheduled_date": scheduled,
+            "recurring_scheduled_date": scheduled.isoformat(),
             "recurring_source_kind": schedule["source_kind"],
             "recurring_occurrence_type": role,
         })
