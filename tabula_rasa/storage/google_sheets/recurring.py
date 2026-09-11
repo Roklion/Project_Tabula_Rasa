@@ -209,16 +209,21 @@ class RecurringMixin:
 
     def list_recurring_schedules(self, *, _force_refresh: bool = False) -> list[dict[str, str]]:
         rows = self._rows("RecurringSchedules", force_refresh=_force_refresh)
+        transaction_rows = self._rows("Transactions", force_refresh=_force_refresh)
+        mixed_rows = self._rows("MixedUseExpenses", force_refresh=_force_refresh)
         result = []
         for row in rows:
             schedule = self._decode_schedule(row.values)
             try:
-                schedule["next_due_date"] = self._next_due_for_schedule(schedule)
+                schedule["next_due_date"] = self._next_due_for_schedule(
+                    schedule, transaction_rows=transaction_rows, mixed_rows=mixed_rows
+                )
             except (StorageValidationError, ValueError, TypeError):
                 schedule["next_due_date"] = ""
             try:
                 latest = self._latest_current_occurrence_date(
-                    schedule["id"], schedule.get("source_kind")
+                    schedule["id"], schedule.get("source_kind"),
+                    transaction_rows=transaction_rows, mixed_rows=mixed_rows,
                 )
             except (StorageValidationError, ValueError, TypeError):
                 latest = None
@@ -233,27 +238,47 @@ class RecurringMixin:
                 return item
         raise StorageNotFoundError("Recurring schedule no longer exists")
 
-    def _next_due_for_schedule(self, schedule: Mapping[str, str], *, as_of: date | None = None) -> str:
+    def _next_due_for_schedule(
+        self,
+        schedule: Mapping[str, str],
+        *,
+        transaction_rows=None,
+        mixed_rows=None,
+    ) -> str:
         if schedule["status"] != "active":
             return ""
         current = _as_date(schedule["start_date"])
-        latest = self._latest_current_occurrence_date(schedule["id"], schedule.get("source_kind"))
+        latest = self._latest_current_occurrence_date(
+            schedule["id"], schedule.get("source_kind"),
+            transaction_rows=transaction_rows, mixed_rows=mixed_rows,
+        )
         if latest:
             current = next_occurrence(_as_date(schedule["anchor_date"]), schedule["recurrence_unit"], int(schedule["recurrence_interval"]), latest)
         if schedule.get("end_date") and current.isoformat() > schedule["end_date"]:
             return ""
         return current.isoformat()
 
-    def _latest_current_occurrence_date(self, schedule_id: str, source_kind: str | None) -> date | None:
+    def _latest_current_occurrence_date(
+        self,
+        schedule_id: str,
+        source_kind: str | None,
+        *,
+        transaction_rows=None,
+        mixed_rows=None,
+    ) -> date | None:
         if source_kind == "mixed_use":
-            rows = self._rows("MixedUseExpenses", force_refresh=True)
+            rows = mixed_rows if mixed_rows is not None else self._rows("MixedUseExpenses", force_refresh=True)
             projection_ids = {
                 str(row.values.get("id", ""))
-                for row in self._rows("Transactions", force_refresh=True)
+                for row in (
+                    transaction_rows
+                    if transaction_rows is not None
+                    else self._rows("Transactions", force_refresh=True)
+                )
             }
             field = "txn_date"
         else:
-            rows = self._rows("Transactions", force_refresh=True)
+            rows = transaction_rows if transaction_rows is not None else self._rows("Transactions", force_refresh=True)
             projection_ids = set()
             field = "txn_date"
         dates = [
@@ -360,23 +385,40 @@ class RecurringMixin:
             "recurring_occurrence_type": role,
         })
 
-    def _existing_recurring_dates(self, schedule_id: str, source_kind: str = "transaction") -> set[str]:
+    def _existing_recurring_dates(
+        self,
+        schedule_id: str,
+        source_kind: str = "transaction",
+        *,
+        transaction_rows=None,
+        mixed_rows=None,
+    ) -> set[str]:
         if source_kind == "mixed_use":
-            rows = self._rows("MixedUseExpenses", force_refresh=True)
+            rows = mixed_rows if mixed_rows is not None else self._rows("MixedUseExpenses", force_refresh=True)
             projection_ids = {
                 str(row.values.get("id", ""))
-                for row in self._rows("Transactions", force_refresh=True)
+                for row in (
+                    transaction_rows
+                    if transaction_rows is not None
+                    else self._rows("Transactions", force_refresh=True)
+                )
             }
             return {str(row.values.get("recurring_scheduled_date", "")) for row in rows
                     if row.values.get("recurring_schedule_id") == schedule_id
                     and str(row.values.get("linked_transaction_id", "")) in projection_ids}
-        return {str(item.get("recurring_scheduled_date", "")) for item in self.list_transactions(_force_refresh=True)
-                if item.get("recurring_schedule_id") == schedule_id}
+        rows = transaction_rows if transaction_rows is not None else self._rows("Transactions", force_refresh=True)
+        return {
+            str(row.values.get("recurring_scheduled_date", ""))
+            for row in rows
+            if row.values.get("recurring_schedule_id") == schedule_id
+        }
 
     def reconcile_recurring_schedules(self, *, as_of: date | str | None = None) -> dict[str, Any]:
         cutoff = _iso_date(as_of or date.today())
         generated: list[dict[str, str]] = []
         attention: dict[str, str] = {}
+        transaction_rows = self._rows("Transactions", force_refresh=True)
+        mixed_rows = self._rows("MixedUseExpenses", force_refresh=True)
         for schedule in self.list_recurring_schedules(_force_refresh=True):
             if schedule["status"] != "active":
                 continue
@@ -388,8 +430,14 @@ class RecurringMixin:
                     updated_at=schedule.get("updated_at"),
                 )
                 end = min(cutoff, schedule["end_date"]) if schedule.get("end_date") else cutoff
-                existing = self._existing_recurring_dates(schedule["id"], schedule.get("source_kind", "transaction"))
-                latest = self._latest_current_occurrence_date(schedule["id"], schedule.get("source_kind"))
+                existing = self._existing_recurring_dates(
+                    schedule["id"], schedule.get("source_kind", "transaction"),
+                    transaction_rows=transaction_rows, mixed_rows=mixed_rows,
+                )
+                latest = self._latest_current_occurrence_date(
+                    schedule["id"], schedule.get("source_kind"),
+                    transaction_rows=transaction_rows, mixed_rows=mixed_rows,
+                )
                 candidate_start = _as_date(schedule["start_date"])
                 if latest is not None:
                     candidate_start = next_occurrence(
