@@ -123,6 +123,7 @@ def _reorder_columns(
         ]
         for row in rows[1:]
     ]
+    worksheet.clear()
     worksheet.update(reordered, range_name="A1", raw=True)
     return list(expected)
 

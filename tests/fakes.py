@@ -70,6 +70,9 @@ class FakeWorksheet:
     def delete_rows(self, row_number: int) -> None:
         del self.rows[row_number - 1]
 
+    def clear(self) -> None:
+        self.rows = []
+
 
 class FakeWorkbook:
     title = "Test Ledger"

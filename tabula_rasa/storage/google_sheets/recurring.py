@@ -507,7 +507,9 @@ class RecurringMixin:
         source: Mapping[str, Any], projection: Mapping[str, Any] | None
     ) -> bool:
         if projection is None:
-            return False
+            raise StorageValidationError(
+                "Mixed-use source has no linked projection"
+            )
         if (
             projection.get("source_type") != MIXED_USE_SOURCE_TYPE
             or str(projection.get("source_id", "")) != str(source.get("id", ""))

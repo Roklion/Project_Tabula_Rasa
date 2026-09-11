@@ -26,7 +26,7 @@ from scripts.migration_schemas import (
     VERSION_7_WORKSHEET_HEADERS,
     VERSION_10_WORKSHEET_HEADERS,
 )
-from tests.fakes import FakeWorkbook
+from tests.fakes import FakeWorkbook, FakeWorksheet
 
 
 def _append_record(workbook: FakeWorkbook, title: str, values: dict[str, str]) -> None:
@@ -81,6 +81,17 @@ def test_reorder_columns_fills_missing_expected_columns() -> None:
     worksheet.update.assert_called_once_with(
         [["id", "name"], ["", "Office"]], range_name="A1", raw=True
     )
+    worksheet.clear.assert_called_once_with()
+
+
+def test_reorder_columns_clears_trailing_worksheet_data() -> None:
+    worksheet = FakeWorksheet("Legacy", ("name", "legacy"))
+    worksheet.rows.append(["Office", "stale"])
+
+    assert _reorder_columns(worksheet, ["name", "legacy"], ("id", "name")) == [
+        "id", "name"
+    ]
+    assert worksheet.rows == [["id", "name"], ["", "Office"]]
 
 
 def test_migrates_pre_receipt_v3_layout_to_current_headers() -> None:
