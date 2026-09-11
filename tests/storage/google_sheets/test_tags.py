@@ -15,6 +15,21 @@ from ._support import (
 
 class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
 
+    def test_merge_tags_rewrites_recurring_schedule_references(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Office", "Expense")
+        target = self.storage.create_tag("Target")
+        source = self.storage.create_tag("Source")
+        self.storage.create_recurring_expense(
+            schedule_id="tag-schedule", name="Subscription", txn_date="2026-01-01",
+            recurrence_unit="month", amount=10, account_id=account["id"],
+            category_id=category["id"], tag_ids=[source["id"]],
+        )
+
+        self.storage.merge_tags(target["id"], [source["id"]])
+
+        assert json.loads(self.storage.get_recurring_schedule("tag-schedule")["tag_ids"]) == [target["id"]]
+
     def test_tags_are_profile_local_and_deduplicated_by_normalized_name(self) -> None:
         first = self.storage.create_tag("  Client   Visit ")
         duplicate = self.storage.create_tag("client visit")

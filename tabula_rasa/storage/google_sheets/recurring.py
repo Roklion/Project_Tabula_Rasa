@@ -190,6 +190,8 @@ class RecurringMixin:
                     or schedule_values[schedule_id].get("source_kind") != expected_source_kind
                 ):
                     raise StorageValidationError("Transaction recurring source kind is invalid")
+                if values.get("recurring_occurrence_type") not in {"initial", "generated"}:
+                    raise StorageValidationError("Transaction recurring occurrence type is invalid")
         for row in self._rows("MixedUseExpenses", force_refresh=True):
             values = row.values
             schedule_id = str(values.get("recurring_schedule_id", "") or "")
@@ -202,6 +204,8 @@ class RecurringMixin:
                     or schedule_values[schedule_id].get("source_kind") != "mixed_use"
                 ):
                     raise StorageValidationError("Mixed-use recurring source kind is invalid")
+                if values.get("recurring_occurrence_type") not in {"initial", "generated"}:
+                    raise StorageValidationError("Mixed-use recurring occurrence type is invalid")
 
     def list_recurring_schedules(self, *, _force_refresh: bool = False) -> list[dict[str, str]]:
         rows = self._rows("RecurringSchedules", force_refresh=_force_refresh)
@@ -243,14 +247,24 @@ class RecurringMixin:
     def _latest_current_occurrence_date(self, schedule_id: str, source_kind: str | None) -> date | None:
         if source_kind == "mixed_use":
             rows = self._rows("MixedUseExpenses", force_refresh=True)
+            projection_ids = {
+                str(row.values.get("id", ""))
+                for row in self._rows("Transactions", force_refresh=True)
+            }
             field = "txn_date"
         else:
             rows = self._rows("Transactions", force_refresh=True)
+            projection_ids = set()
             field = "txn_date"
         dates = [
             _as_date(row.values[field])
             for row in rows
-            if row.values.get("recurring_schedule_id") == schedule_id and row.values.get(field)
+            if row.values.get("recurring_schedule_id") == schedule_id
+            and row.values.get(field)
+            and (
+                source_kind != "mixed_use"
+                or str(row.values.get("linked_transaction_id", "")) in projection_ids
+            )
         ]
         return max(dates) if dates else None
 
@@ -349,8 +363,13 @@ class RecurringMixin:
     def _existing_recurring_dates(self, schedule_id: str, source_kind: str = "transaction") -> set[str]:
         if source_kind == "mixed_use":
             rows = self._rows("MixedUseExpenses", force_refresh=True)
+            projection_ids = {
+                str(row.values.get("id", ""))
+                for row in self._rows("Transactions", force_refresh=True)
+            }
             return {str(row.values.get("recurring_scheduled_date", "")) for row in rows
-                    if row.values.get("recurring_schedule_id") == schedule_id}
+                    if row.values.get("recurring_schedule_id") == schedule_id
+                    and str(row.values.get("linked_transaction_id", "")) in projection_ids}
         return {str(item.get("recurring_scheduled_date", "")) for item in self.list_transactions(_force_refresh=True)
                 if item.get("recurring_schedule_id") == schedule_id}
 

@@ -168,7 +168,7 @@ class PayeesMixin(_ManagedMixin):
             raise StorageValidationError("The target payee cannot also be a source")
         with self._workbook_locks.ledger, self._workbook_locks.payee:
             snapshot = self._snapshot(
-                ["Payees", "Transactions", "MixedUseExpenses"], force_refresh=True
+                ["Payees", "Transactions", "MixedUseExpenses", "RecurringSchedules"], force_refresh=True
             )
             _validate_mixed_use_tables(
                 {
@@ -201,7 +201,11 @@ class PayeesMixin(_ManagedMixin):
                 )
                 references = [
                     row
-                    for row in (*snapshot["Transactions"], *snapshot["MixedUseExpenses"])
+                    for row in (
+                        *snapshot["Transactions"],
+                        *snapshot["MixedUseExpenses"],
+                        *snapshot["RecurringSchedules"],
+                    )
                     if _clean_text(row.values.get("payee_id"), "Payee") in source_ids
                 ]
                 if not references:
@@ -215,6 +219,7 @@ class PayeesMixin(_ManagedMixin):
 
             transaction_rows = self._managed_rows_by_id(snapshot["Transactions"], "Transactions")
             mixed_rows = self._managed_rows_by_id(snapshot["MixedUseExpenses"], "MixedUseExpenses")
+            schedule_rows = self._managed_rows_by_id(snapshot["RecurringSchedules"], "RecurringSchedules")
             transaction_updates = {
                 record_id: row
                 for record_id, row in transaction_rows.items()
@@ -223,6 +228,11 @@ class PayeesMixin(_ManagedMixin):
             mixed_updates = {
                 record_id: row
                 for record_id, row in mixed_rows.items()
+                if _clean_text(row.values.get("payee_id"), "Payee") in source_ids
+            }
+            schedule_updates = {
+                record_id: row
+                for record_id, row in schedule_rows.items()
                 if _clean_text(row.values.get("payee_id"), "Payee") in source_ids
             }
             requests: list[dict[str, Any]] = []
@@ -238,30 +248,41 @@ class PayeesMixin(_ManagedMixin):
                         "MixedUseExpenses", row, "payee_id", target_id
                     )
                 )
+            for row in schedule_updates.values():
+                requests.append(
+                    self._managed_update_request(
+                        "RecurringSchedules", row, "payee_id", target_id
+                    )
+                )
             for source_id in sorted(source_ids, key=lambda item: payee_rows[item].row_number, reverse=True):
                 requests.append(self._managed_delete_request("Payees", payee_rows[source_id]))
             if not requests:
                 raise StorageValidationError("The selected payees have no mergeable changes")
 
-            def fresh_state() -> tuple[dict[str, dict[str, str]], dict[str, _StoredRow], dict[str, _StoredRow]]:
+            def fresh_state() -> tuple[dict[str, dict[str, str]], dict[str, _StoredRow], dict[str, _StoredRow], dict[str, _StoredRow]]:
                 current = self._snapshot(
-                    ["Payees", "Transactions", "MixedUseExpenses"], force_refresh=True
+                    ["Payees", "Transactions", "MixedUseExpenses", "RecurringSchedules"], force_refresh=True
                 )
                 return (
                     {record_id: dict(row.values) for record_id, row in self._managed_rows_by_id(current["Payees"], "Payees").items()},
                     self._managed_rows_by_id(current["Transactions"], "Transactions"),
                     self._managed_rows_by_id(current["MixedUseExpenses"], "MixedUseExpenses"),
+                    self._managed_rows_by_id(current["RecurringSchedules"], "RecurringSchedules"),
                 )
 
             def is_applied(state: Any) -> bool:
-                current_payees, current_transactions, current_mixed = state
+                current_payees, current_transactions, current_mixed, current_schedules = state
                 return (
                     target_id in current_payees
                     and not any(item in current_payees for item in source_ids)
                     and all(
                         _clean_text(row.values.get("payee_id"), "Payee") != source_id
                         for source_id in source_ids
-                        for row in (*current_transactions.values(), *current_mixed.values())
+                        for row in (
+                            *current_transactions.values(),
+                            *current_mixed.values(),
+                            *current_schedules.values(),
+                        )
                     )
                     and all(
                         record_id in current_transactions
@@ -273,10 +294,15 @@ class PayeesMixin(_ManagedMixin):
                         and _clean_text(current_mixed[record_id].values.get("payee_id"), "Payee") == target_id
                         for record_id in mixed_updates
                     )
+                    and all(
+                        record_id in current_schedules
+                        and _clean_text(current_schedules[record_id].values.get("payee_id"), "Payee") == target_id
+                        for record_id in schedule_updates
+                    )
                 )
 
             def is_unchanged(state: Any) -> bool:
-                current_payees, current_transactions, current_mixed = state
+                current_payees, current_transactions, current_mixed, current_schedules = state
                 if any(
                     record_id not in current_payees
                     or current_payees[record_id] != row.values
@@ -290,6 +316,9 @@ class PayeesMixin(_ManagedMixin):
                 ) and all(
                     record_id in current_mixed and current_mixed[record_id].values == row.values
                     for record_id, row in mixed_updates.items()
+                ) and all(
+                    record_id in current_schedules and current_schedules[record_id].values == row.values
+                    for record_id, row in schedule_updates.items()
                 )
 
             def refresh_requests() -> None:
@@ -310,6 +339,9 @@ class PayeesMixin(_ManagedMixin):
                     self._managed_rows_by_id(
                         current["MixedUseExpenses"], "MixedUseExpenses"
                     ),
+                    self._managed_rows_by_id(
+                        current["RecurringSchedules"], "RecurringSchedules"
+                    ),
                 )
                 if not is_unchanged(current_state):
                     raise StorageConflictError(
@@ -322,6 +354,9 @@ class PayeesMixin(_ManagedMixin):
                 current_mixed = self._managed_rows_by_id(
                     current["MixedUseExpenses"], "MixedUseExpenses"
                 )
+                current_schedules = self._managed_rows_by_id(
+                    current["RecurringSchedules"], "RecurringSchedules"
+                )
                 refreshed = [
                     self._managed_update_request(
                         "Transactions", current_transactions[record_id], "payee_id", target_id
@@ -333,6 +368,12 @@ class PayeesMixin(_ManagedMixin):
                         "MixedUseExpenses", current_mixed[record_id], "payee_id", target_id
                     )
                     for record_id in mixed_updates
+                )
+                refreshed.extend(
+                    self._managed_update_request(
+                        "RecurringSchedules", current_schedules[record_id], "payee_id", target_id
+                    )
+                    for record_id in schedule_updates
                 )
                 refreshed.extend(
                     self._managed_delete_request("Payees", current_payees[source_id])
@@ -351,7 +392,7 @@ class PayeesMixin(_ManagedMixin):
                 applied=is_applied,
                 unchanged=is_unchanged,
                 before_retry=refresh_requests,
-                invalidate=("Payees", "Transactions", "MixedUseExpenses"),
+                invalidate=("Payees", "Transactions", "MixedUseExpenses", "RecurringSchedules"),
             )
             return {"status": "fully_applied", "count": str(len(source_ids))}
 

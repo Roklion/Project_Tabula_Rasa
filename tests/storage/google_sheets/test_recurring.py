@@ -150,6 +150,23 @@ def test_mixed_use_recurring_missing_projection_is_actionable(default_storage, m
         )
 
 
+def test_mixed_use_source_only_partial_does_not_advance_cutoff(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    result = default_storage.create_recurring_mixed_use_expense(
+        schedule_id="source-only", name="Vehicle", txn_date="2024-01-01",
+        recurrence_unit="month", total_expense="20.00", business_use_percentage="50",
+        account_id=account_id, category_id=category_id, allocation_rationale="Business travel",
+    )
+    projection_row = default_storage._find_row("Transactions", result["transaction"]["id"])
+    default_storage._worksheet("Transactions").delete_rows(projection_row.row_number)
+    default_storage._invalidate("Transactions")
+
+    outcome = default_storage.reconcile_recurring_schedules(as_of="2024-02-01")
+
+    assert outcome["generated"] == []
+    assert outcome["attention"] == {"source-only": "validation"}
+
+
 def test_recurring_retries_ignore_new_timestamps_but_not_payload_changes(default_storage, monkeypatch) -> None:
     account_id, category_id = _ids(default_storage)
     payload = dict(
@@ -167,6 +184,23 @@ def test_recurring_retries_ignore_new_timestamps_but_not_payload_changes(default
     assert second["transaction"]["id"] == first["transaction"]["id"]
     assert len(default_storage.list_recurring_schedules()) == 1
     assert len(default_storage.list_transactions()) == 1
+
+
+def test_recurring_export_rejects_invalid_occurrence_type(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    result = default_storage.create_recurring_expense(
+        schedule_id="bad-occurrence", name="Rent", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    row = default_storage._find_row("Transactions", result["transaction"]["id"])
+    broken = dict(row.values)
+    broken["recurring_occurrence_type"] = "corrupt"
+    default_storage._replace_row("Transactions", row, broken)
+
+    with pytest.raises(StorageValidationError, match="occurrence type"):
+        default_storage.export_backup_zip(
+            {"schema_version": 1, "business_profile_key": "test", "receipts": []}
+        )
 
 
 def test_schedule_pause_resume_and_end_do_not_change_occurrences(default_storage) -> None:

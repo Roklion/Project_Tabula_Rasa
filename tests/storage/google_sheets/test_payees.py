@@ -27,6 +27,21 @@ def test_legacy_payee_aliases_remain_available(default_storage) -> None:
     assert default_storage.delete_payee(target["id"])["status"] == "fully_applied"
 
 
+def test_merge_payees_rewrites_recurring_schedule_references(default_storage) -> None:
+    account, category = _ledger_setup(default_storage)
+    target = default_storage.create_payee("Target vendor")
+    source = default_storage.create_payee("Source vendor")
+    default_storage.create_recurring_expense(
+        schedule_id="payee-schedule", name="Subscription", txn_date="2026-01-01",
+        recurrence_unit="month", amount=10, account_id=account["id"],
+        category_id=category["id"], payee_id=source["id"],
+    )
+
+    default_storage.merge_payees(target["id"], [source["id"]])
+
+    assert default_storage.get_recurring_schedule("payee-schedule")["payee_id"] == target["id"]
+
+
 def test_referenced_payee_remove_is_blocked(default_storage) -> None:
     account, category = _ledger_setup(default_storage)
     payee = default_storage.create_payee("Used")

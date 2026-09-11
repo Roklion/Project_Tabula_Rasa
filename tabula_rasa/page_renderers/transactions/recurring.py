@@ -9,6 +9,25 @@ from typing import Any
 import streamlit as st
 
 
+def _safe_date(value: Any, fallback: date | None = None) -> date | None:
+    """Return a form-safe date while leaving corrupted schedule data visible."""
+    if not value:
+        return fallback
+    try:
+        return date.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _safe_interval(value: Any) -> int:
+    """Return a valid editor interval without hiding the stored invalid value."""
+    try:
+        interval = int(str(value))
+    except (TypeError, ValueError):
+        return 1
+    return interval if interval > 0 else 1
+
+
 def render_recurring_expenses(context: Any, *, accounts, categories, payees, tags) -> None:
     """Render profile-scoped schedule management and bounded controls."""
     st.subheader("Recurring expenses")
@@ -59,9 +78,15 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
                 if selected_unit in recurrence_units
                 else 0,
             )
-            edit_interval = st.number_input("Interval", min_value=1, value=int(selected["recurrence_interval"]), step=1)
-            edit_start = st.date_input("Start date", value=date.fromisoformat(selected["start_date"]))
-            edit_end = st.date_input("End date", value=date.fromisoformat(selected["end_date"]) if selected.get("end_date") else None)
+            edit_interval = st.number_input(
+                "Interval", min_value=1, value=_safe_interval(selected.get("recurrence_interval")), step=1
+            )
+            edit_start = st.date_input(
+                "Start date", value=_safe_date(selected.get("start_date"), date.today())
+            )
+            edit_end = st.date_input(
+                "End date", value=_safe_date(selected.get("end_date"))
+            )
             if selected.get("source_kind") == "mixed_use":
                 edit_amount = st.text_input("Total expense", value=selected.get("total_expense", ""))
                 edit_percentage = st.text_input("Business use %", value=selected.get("business_use_percentage", ""))
@@ -69,14 +94,50 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
             else:
                 edit_amount = st.text_input("Amount", value=selected.get("amount", ""))
                 edit_percentage = edit_rationale = None
-            account_options = [item for item in accounts if str(item.get("active", "")).upper() == "TRUE" or str(item.get("id")) == selected.get("account_id")]
+            selected_account = str(selected.get("account_id", ""))
+            account_options = [
+                item for item in accounts
+                if str(item.get("active", "")).upper() == "TRUE"
+                or str(item.get("id")) == selected_account
+            ]
+            if selected_account and selected_account not in {
+                str(item.get("id")) for item in account_options
+            }:
+                account_options.append({"id": selected_account, "name": f"Missing ({selected_account})"})
             account_ids = [str(item["id"]) for item in account_options]
-            edit_account = st.selectbox("Account", account_ids, index=account_ids.index(selected["account_id"]) if selected.get("account_id") in account_ids else 0, format_func=lambda value: next((str(item.get("name")) for item in account_options if str(item.get("id")) == value), value))
+            edit_account = st.selectbox(
+                "Account", account_ids,
+                index=account_ids.index(selected_account) if selected_account in account_ids else 0,
+                format_func=lambda value: next(
+                    (str(item.get("name")) for item in account_options if str(item.get("id")) == value), value
+                ),
+            )
+            selected_category = str(selected.get("category_id", ""))
             category_options = [item for item in categories if item.get("kind") == "Expense"]
+            if selected_category and selected_category not in {
+                str(item.get("id")) for item in category_options
+            }:
+                category_options.append({"id": selected_category, "name": f"Missing ({selected_category})", "kind": "Expense"})
             category_ids = [str(item["id"]) for item in category_options]
-            edit_category = st.selectbox("Category", category_ids, index=category_ids.index(selected["category_id"]) if selected.get("category_id") in category_ids else 0, format_func=lambda value: next((str(item.get("name")) for item in category_options if str(item.get("id")) == value), value))
+            edit_category = st.selectbox(
+                "Category", category_ids,
+                index=category_ids.index(selected_category) if selected_category in category_ids else 0,
+                format_func=lambda value: next(
+                    (str(item.get("name")) for item in category_options if str(item.get("id")) == value), value
+                ),
+            )
             payee_ids = [""] + [str(item["id"]) for item in payees]
-            edit_payee = st.selectbox("Payee", payee_ids, index=payee_ids.index(selected.get("payee_id", "")) if selected.get("payee_id", "") in payee_ids else 0, format_func=lambda value: next((str(item.get("name")) for item in payees if str(item.get("id")) == value), "No payee" if not value else value))
+            selected_payee = str(selected.get("payee_id", ""))
+            if selected_payee and selected_payee not in payee_ids:
+                payee_ids.append(selected_payee)
+            edit_payee = st.selectbox(
+                "Payee", payee_ids,
+                index=payee_ids.index(selected_payee) if selected_payee in payee_ids else 0,
+                format_func=lambda value: next(
+                    (str(item.get("name")) for item in payees if str(item.get("id")) == value),
+                    "No payee" if not value else f"Missing ({value})",
+                ),
+            )
             try:
                 selected_tags = json.loads(selected.get("tag_ids", "[]"))
             except (TypeError, json.JSONDecodeError):
