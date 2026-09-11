@@ -172,7 +172,15 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
                 selected_tags = json.loads(selected.get("tag_ids", "[]"))
             except (TypeError, json.JSONDecodeError):
                 selected_tags = []
-            edit_tags = st.multiselect("Tags", [str(item["id"]) for item in tags], default=[tag for tag in selected_tags if tag in {str(item["id"]) for item in tags}], format_func=lambda value: next((str(item.get("name")) for item in tags if str(item.get("id")) == value), value))
+            tag_ids = [str(item["id"]) for item in tags]
+            tag_id_set = set(tag_ids)
+            tag_names = {str(item["id"]): str(item.get("name", "")) for item in tags}
+            edit_tags = st.multiselect(
+                "Tags",
+                tag_ids,
+                default=[tag for tag in selected_tags if tag in tag_id_set],
+                format_func=lambda value: tag_names.get(value, value),
+            )
             edit_description = st.text_input("Description", value=selected.get("description", ""))
             edit_reference = st.text_input("Reference", value=selected.get("reference", ""))
             save_template = st.form_submit_button("Save schedule template")

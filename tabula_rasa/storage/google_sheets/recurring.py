@@ -309,6 +309,7 @@ class RecurringMixin:
         _force_refresh: bool = False,
         transaction_rows: list[Any] | None = None,
         mixed_rows: list[Any] | None = None,
+        projections: Mapping[str, Mapping[str, Any]] | None = None,
     ) -> list[dict[str, str]]:
         rows = self._rows("RecurringSchedules", force_refresh=_force_refresh)
         transaction_rows = (
@@ -321,12 +322,18 @@ class RecurringMixin:
             if mixed_rows is not None
             else self._rows("MixedUseExpenses", force_refresh=_force_refresh)
         )
+        projections = projections or {
+            str(row.values.get("id", "")): row.values for row in transaction_rows
+        }
         result = []
         for row in rows:
             schedule = self._decode_schedule(row.values)
             try:
                 schedule["next_due_date"] = self._next_due_for_schedule(
-                    schedule, transaction_rows=transaction_rows, mixed_rows=mixed_rows
+                    schedule,
+                    transaction_rows=transaction_rows,
+                    mixed_rows=mixed_rows,
+                    projections=projections,
                 )
             except (StorageValidationError, ValueError, TypeError):
                 schedule["next_due_date"] = ""
@@ -334,6 +341,7 @@ class RecurringMixin:
                 latest = self._latest_current_occurrence_date(
                     schedule["id"], schedule.get("source_kind"),
                     transaction_rows=transaction_rows, mixed_rows=mixed_rows,
+                    projections=projections,
                 )
             except (StorageValidationError, ValueError, TypeError):
                 latest = None
@@ -354,13 +362,16 @@ class RecurringMixin:
         *,
         transaction_rows=None,
         mixed_rows=None,
+        projections=None,
     ) -> str:
         if schedule["status"] != "active":
             return ""
         current = _as_date(schedule["start_date"])
         latest = self._latest_current_occurrence_date(
             schedule["id"], schedule.get("source_kind"),
-            transaction_rows=transaction_rows, mixed_rows=mixed_rows,
+            transaction_rows=transaction_rows,
+            mixed_rows=mixed_rows,
+            projections=projections,
         )
         if latest:
             current = next_occurrence(_as_date(schedule["anchor_date"]), schedule["recurrence_unit"], int(schedule["recurrence_interval"]), latest)
@@ -375,31 +386,35 @@ class RecurringMixin:
         *,
         transaction_rows=None,
         mixed_rows=None,
+        projections=None,
     ) -> date | None:
         if source_kind == "mixed_use":
             rows = mixed_rows if mixed_rows is not None else self._rows("MixedUseExpenses", force_refresh=False)
-            projection_ids = {
-                str(row.values.get("id", ""))
-                for row in (
-                    transaction_rows
-                    if transaction_rows is not None
-                    else self._rows("Transactions", force_refresh=False)
-                )
-            }
+            if projections is None:
+                projections = {
+                    str(row.values.get("id", "")): row.values
+                    for row in (
+                        transaction_rows
+                        if transaction_rows is not None
+                        else self._rows("Transactions", force_refresh=False)
+                    )
+                }
             field = "txn_date"
         else:
             rows = transaction_rows if transaction_rows is not None else self._rows("Transactions", force_refresh=False)
-            projection_ids = set()
             field = "txn_date"
         dates = []
         for row in rows:
             if (
-                row.values.get("recurring_schedule_id") == schedule_id
-                and row.values.get(field)
-                and (
-                    source_kind != "mixed_use"
-                    or str(row.values.get("linked_transaction_id", "")) in projection_ids
-                )
+                    row.values.get("recurring_schedule_id") == schedule_id
+                    and row.values.get(field)
+                    and (
+                        source_kind != "mixed_use"
+                        or self._valid_mixed_use_projection(
+                            row.values,
+                            projections.get(str(row.values.get("linked_transaction_id", ""))),
+                        )
+                    )
             ):
                 try:
                     dates.append(_as_date(row.values[field]))
@@ -526,17 +541,19 @@ class RecurringMixin:
         *,
         transaction_rows=None,
         mixed_rows=None,
+        projections=None,
     ) -> set[str]:
         if source_kind == "mixed_use":
             rows = mixed_rows if mixed_rows is not None else self._rows("MixedUseExpenses", force_refresh=False)
-            projections = {
-                str(row.values.get("id", "")): row.values
-                for row in (
-                    transaction_rows
-                    if transaction_rows is not None
-                    else self._rows("Transactions", force_refresh=False)
-                )
-            }
+            if projections is None:
+                projections = {
+                    str(row.values.get("id", "")): row.values
+                    for row in (
+                        transaction_rows
+                        if transaction_rows is not None
+                        else self._rows("Transactions", force_refresh=False)
+                    )
+                }
             return {str(row.values.get("recurring_scheduled_date", "")) for row in rows
                     if row.values.get("recurring_schedule_id") == schedule_id
                     and self._valid_mixed_use_projection(
@@ -571,6 +588,9 @@ class RecurringMixin:
         attention: dict[str, str] = {}
         transaction_rows = self._rows("Transactions", force_refresh=True)
         mixed_rows = self._rows("MixedUseExpenses", force_refresh=True)
+        projections = {
+            str(row.values.get("id", "")): row.values for row in transaction_rows
+        }
         accounts = self._account_lookup(force_refresh=True)
         categories = self._category_lookup(force_refresh=True)
         payees = self._payee_lookup(force_refresh=True)
@@ -583,6 +603,7 @@ class RecurringMixin:
             _force_refresh=True,
             transaction_rows=transaction_rows,
             mixed_rows=mixed_rows,
+            projections=projections,
         )
         schedule_values = {schedule["id"]: schedule for schedule in schedules if schedule["id"]}
         schedule_ids = [schedule["id"] for schedule in schedules if schedule["id"]]
@@ -627,11 +648,15 @@ class RecurringMixin:
                 end = min(cutoff, schedule["end_date"]) if schedule.get("end_date") else cutoff
                 existing = self._existing_recurring_dates(
                     schedule["id"], schedule.get("source_kind", "transaction"),
-                    transaction_rows=transaction_rows, mixed_rows=mixed_rows,
+                    transaction_rows=transaction_rows,
+                    mixed_rows=mixed_rows,
+                    projections=projections,
                 )
                 latest = self._latest_current_occurrence_date(
                     schedule["id"], schedule.get("source_kind"),
-                    transaction_rows=transaction_rows, mixed_rows=mixed_rows,
+                    transaction_rows=transaction_rows,
+                    mixed_rows=mixed_rows,
+                    projections=projections,
                 )
                 candidate_start = _as_date(schedule["start_date"])
                 if latest is not None:
