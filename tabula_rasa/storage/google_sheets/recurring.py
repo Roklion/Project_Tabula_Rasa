@@ -61,7 +61,7 @@ class RecurringMixin:
         start = _iso_date(data.get("start_date", anchor))
         end_value = _clean_text(data.get("end_date"), "Schedule end date")
         end = _iso_date(end_value) if end_value else ""
-        if end and end < start:
+        if end and end < start and not data.get("_allow_end_before_start"):
             raise StorageValidationError("Schedule end date must not precede its start date")
         if anchor != start:
             # The first occurrence is the anchor; exposing two dates that differ
@@ -145,6 +145,26 @@ class RecurringMixin:
             schedule["tag_ids"] = "[]"
         return schedule
 
+    def _validate_recurring_references(self) -> None:
+        schedules = self._snapshot(("RecurringSchedules",), force_refresh=True)["RecurringSchedules"]
+        schedule_ids = {str(row.values.get("id", "")) for row in schedules}
+        for row in schedules:
+            self._schedule_template(row.values, schedule_id=row.values.get("id"), created_at=row.values.get("created_at"), updated_at=row.values.get("updated_at"))
+        for row in self._rows("Transactions", force_refresh=True):
+            values = row.values
+            schedule_id = str(values.get("recurring_schedule_id", "") or "")
+            if schedule_id:
+                if schedule_id not in schedule_ids:
+                    raise StorageValidationError("Transaction references an unknown recurring schedule")
+                _iso_date(values.get("recurring_scheduled_date"))
+        for row in self._rows("MixedUseExpenses", force_refresh=True):
+            values = row.values
+            schedule_id = str(values.get("recurring_schedule_id", "") or "")
+            if schedule_id:
+                if schedule_id not in schedule_ids:
+                    raise StorageValidationError("Mixed-use source references an unknown recurring schedule")
+                _iso_date(values.get("recurring_scheduled_date"))
+
     def list_recurring_schedules(self, *, _force_refresh: bool = False) -> list[dict[str, str]]:
         rows = self._rows("RecurringSchedules", force_refresh=_force_refresh)
         result = []
@@ -206,7 +226,7 @@ class RecurringMixin:
             merged = {**current, **changes}
             merged.pop("next_due_date", None)
             updated = self._schedule_template(merged, schedule_id=schedule_id,
-                                              created_at=current["created_at"])
+                                              created_at=current["created_at"], updated_at=_utc_now())
             row = self._find_row("RecurringSchedules", schedule_id)
             self._replace_row("RecurringSchedules", row, updated)
             return self.get_recurring_schedule(schedule_id, _force_refresh=True)
@@ -218,7 +238,10 @@ class RecurringMixin:
         return self.edit_recurring_schedule(schedule_id, status="active")
 
     def end_recurring_schedule(self, schedule_id: str) -> dict[str, str]:
-        return self.edit_recurring_schedule(schedule_id, status="ended", end_date=date.today().isoformat())
+        return self.edit_recurring_schedule(
+            schedule_id, status="ended", end_date=date.today().isoformat(),
+            _allow_end_before_start=True,
+        )
 
     def _recurring_occurrence(self, schedule: Mapping[str, str], scheduled: date, *, role: str) -> dict[str, str]:
         transaction_id = occurrence_id(schedule["id"], scheduled, role)

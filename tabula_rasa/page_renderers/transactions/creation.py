@@ -60,6 +60,11 @@ def render_add_transaction(
         "add_transaction_reference",
         "add_transaction_description",
         "add_transaction_receipts",
+        "add_transaction_recurring",
+        "add_transaction_recurrence_unit",
+        "add_transaction_recurrence_interval",
+        "add_transaction_recurrence_name",
+        "add_transaction_recurrence_end",
     )
     context.reset_widget_state_if_requested(
         "reset_add_transaction_form",

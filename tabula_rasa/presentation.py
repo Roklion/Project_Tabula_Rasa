@@ -624,6 +624,11 @@ def reset_profile_presentation_state(
         f"mixed_percentage_{previous_profile_key}_",
         f"mixed_rationale_{previous_profile_key}_",
         f"mixed_receipts_{previous_profile_key}_",
+        f"mixed_recurring_{previous_profile_key}_",
+        f"mixed_recurrence_unit_{previous_profile_key}_",
+        f"mixed_recurrence_interval_{previous_profile_key}_",
+        f"mixed_recurrence_name_{previous_profile_key}_",
+        f"mixed_recurrence_end_{previous_profile_key}_",
     )
     prefixes = (
         "add_transaction_",
@@ -660,6 +665,13 @@ def reset_profile_presentation_state(
         "transaction_ledger_mode_",
         "transaction_copy_source_",
         "transaction_copy_generation_",
+        "recurring_selected_",
+        "recurring_pause_",
+        "recurring_resume_",
+        "recurring_end_",
+        "recurring_reconcile_",
+        "recurring_create_",
+        "recurring_edit_",
     )
     for key in list(session_state):
         if (

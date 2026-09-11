@@ -264,7 +264,13 @@ def render_transaction_editor(
                     icon="⚠️",
                 )
                 recurring_id = str(selected.get("recurring_schedule_id") or "")
+                recurring_active = False
                 if recurring_id:
+                    try:
+                        recurring_active = context.storage.get_recurring_schedule(recurring_id).get("status") == "active"
+                    except StorageError:
+                        recurring_active = False
+                if recurring_active:
                     linked_dates = [
                         str(item.get("txn_date") or "")
                         for item in all_transactions

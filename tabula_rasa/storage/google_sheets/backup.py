@@ -49,6 +49,7 @@ class BackupMixin:
                 for title, rows in snapshot.items()
             }
         )
+        self._validate_recurring_references()
         accounts = self._account_lookup(force_refresh=True)
         categories = self._category_lookup(force_refresh=True)
         payees = self._payee_lookup(force_refresh=True)

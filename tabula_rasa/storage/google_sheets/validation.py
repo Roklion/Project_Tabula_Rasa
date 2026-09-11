@@ -585,6 +585,20 @@ def _parse_backup_zip(
     category_ids = {record["id"] for record in tables["Categories"][1]}
     payee_ids = {record["id"] for record in tables["Payees"][1]}
     tag_ids = {record["id"] for record in tables["Tags"][1]}
+    schedules = {record["id"]: record for record in tables["RecurringSchedules"][1]}
+    for schedule in schedules.values():
+        if schedule.get("kind") != "Expense":
+            raise StorageValidationError("Recurring schedules must be Expense records")
+        if schedule.get("expense_type", "ordinary") not in {"ordinary", "mixed_use"}:
+            raise StorageValidationError("Recurring schedule expense type is invalid")
+        if schedule.get("account_id") not in account_ids or schedule.get("category_id") not in category_ids:
+            raise StorageValidationError("Recurring schedule references an unknown account or category")
+        payee_id = schedule.get("payee_id", "")
+        if payee_id and payee_id not in payee_ids:
+            raise StorageValidationError("Recurring schedule references an unknown payee")
+        if schedule.get("receipt_references", ""):
+            raise StorageValidationError("Recurring schedules cannot contain receipts")
+        _normalize_tag_ids(schedule.get("tag_ids", ""))
     for title in ("Transactions", "Mileage", "MixedUseExpenses"):
         if title not in tables:
             continue
@@ -602,6 +616,13 @@ def _parse_backup_zip(
                 )
             record["tag_ids"] = _encode_tag_ids(normalized_tag_ids)
     for transaction in tables["Transactions"][1]:
+        recurring_id = transaction.get("recurring_schedule_id", "")
+        if recurring_id:
+            if recurring_id not in schedules:
+                raise StorageValidationError("Transaction references an unknown recurring schedule")
+            _iso_date(transaction.get("recurring_scheduled_date"))
+            if transaction.get("recurring_occurrence_type") not in {"initial", "generated"}:
+                raise StorageValidationError("Transaction recurring occurrence type is invalid")
         if transaction.get("account_id") not in account_ids:
             raise StorageValidationError("Backup contains an unknown transaction account")
         to_account_id = transaction.get("to_account_id", "")
@@ -613,9 +634,17 @@ def _parse_backup_zip(
         payee_id = transaction.get("payee_id", "")
         if payee_id and payee_id not in payee_ids:
             raise StorageValidationError("Backup contains an unknown transaction payee")
-        decode_receipt_references(
-            transaction.get("receipt_references", "")
-        )
+            decode_receipt_references(
+                transaction.get("receipt_references", "")
+            )
+    for source in tables["MixedUseExpenses"][1]:
+        recurring_id = source.get("recurring_schedule_id", "")
+        if recurring_id:
+            if recurring_id not in schedules:
+                raise StorageValidationError("Mixed-use source references an unknown recurring schedule")
+            if source.get("recurring_occurrence_type") not in {"initial", "generated"}:
+                raise StorageValidationError("Mixed-use recurring occurrence type is invalid")
+            _iso_date(source.get("recurring_scheduled_date"))
 
     category_records = {
         record["id"]: record for record in tables["Categories"][1]
