@@ -107,7 +107,7 @@ def test_all_supported_legacy_versions_migrate_to_v10() -> None:
 
     for version in range(1, 10):
         converted = migrate_legacy_backup(_downgrade(current, version), profile_key="test")
-        assert GoogleSheetsStorage.validate_backup_zip(converted)["format_version"] == 10
+        assert GoogleSheetsStorage.validate_backup_zip(converted)["format_version"] == 11
 
 
 def test_v9_projection_tags_are_copied_to_mixed_use_source() -> None:
@@ -380,7 +380,7 @@ def test_migration_accepts_reordered_legacy_headers() -> None:
         migrate_legacy_backup(legacy, profile_key="test")
     )[
         "format_version"
-    ] == 10
+    ] == 11
 
 
 def test_pre_v9_provenance_columns_are_cleared_during_migration() -> None:
@@ -446,7 +446,7 @@ def test_migration_strips_legacy_header_whitespace() -> None:
         _rewrite_legacy(legacy, update_manifest=add_header_whitespace),
         profile_key="test",
     )
-    assert GoogleSheetsStorage.validate_backup_zip(converted)["format_version"] == 10
+    assert GoogleSheetsStorage.validate_backup_zip(converted)["format_version"] == 11
 
 
 def test_cli_requires_profile_for_ledger_only_migrations(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -415,6 +415,7 @@ def test_mixed_use_app_test_create_edit_delete_and_transactions_tabs(default_sto
             "Add transaction",
             "View & edit ledger",
             "Mixed-use expenses",
+            "Recurring expenses",
             "Payees & Tags",
             "Payees",
             "Tags",

@@ -277,7 +277,7 @@ receipt-content search, and cash-flow reporting are not part of this workflow.
 
 ### Payees & Tags
 
-The third Transactions tab, **Payees & Tags**, manages the stored values for
+The fifth Transactions tab, **Payees & Tags**, manages the stored values for
 the selected business profile. Its separate **Payees** and **Tags** subtabs
 show active and inactive records and provide **Add**, **Rename**, **Merge**, and
 **Remove** workflows. Names are normalized case-insensitively, while renaming
@@ -297,6 +297,22 @@ Every operation is scoped to the selected profile and reports success only
 after the Sheets write is confirmed. An uncertain response is read back once;
 only a clearly unchanged operation is retried, while a partial or unreadable
 state invalidates caches and gives explicit inspection guidance.
+
+### Recurring expenses
+
+The fourth Transactions tab, **Recurring expenses**, lists profile-local
+Expense schedules with their cadence, next due date, status, and stable ID.
+Recurring templates contain only flat Expense fields; receipt references are
+never copied into a schedule or generated occurrence. Creating a schedule
+also creates its initial occurrence. Startup reconciliation generates due
+occurrences using deterministic schedule/date IDs and is safe to repeat.
+
+Schedules can be paused, resumed, or ended. Editing or deleting an occurrence
+does not change its schedule; changing a schedule affects only future
+occurrences. A schedule with a failed or invalid occurrence reports attention
+for that schedule while other schedules remain available. Mixed-use schedules
+retain the source-authoritative source/projection pair and keep receipts
+specific to individual occurrences.
 
 ### Edit and delete
 

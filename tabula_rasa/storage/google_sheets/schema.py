@@ -81,6 +81,8 @@ WORKSHEET_HEADERS = {
         "tag_ids",
         "created_at",
         "updated_at",
+        "attention_code",
+        "attention_at",
     ),
     "Tags": ("id", "name", "active", "created_at"),
     "Mileage": (
