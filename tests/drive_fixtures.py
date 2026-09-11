@@ -78,20 +78,27 @@ def receipt_drive_file(
     original_name: str | None = None,
     size: int = 7,
     parent_id: str | None = None,
+    original_file_id: str | None = None,
+    recovery_attempt: str | None = None,
 ) -> dict[str, Any]:
     """Build canonical receipt metadata used by Drive and recovery tests."""
 
+    properties = {
+        "tabulaRasaKind": "receipt",
+        "tabulaRasaProfile": profile_key,
+        "tabulaRasaReceiptId": receipt_id,
+        "tabulaRasaSha256": sha256,
+        "tabulaRasaOriginalName": original_name or name,
+    }
+    if original_file_id is not None:
+        properties["tabulaRasaOriginalFileId"] = original_file_id
+    if recovery_attempt is not None:
+        properties["tabulaRasaRecoveryAttempt"] = recovery_attempt
     return drive_file(
         file_id,
         name,
         mime_type="application/pdf",
         parent_id=parent_id,
         size=str(size),
-        app_properties={
-            "tabulaRasaKind": "receipt",
-            "tabulaRasaProfile": profile_key,
-            "tabulaRasaReceiptId": receipt_id,
-            "tabulaRasaSha256": sha256,
-            "tabulaRasaOriginalName": original_name or name,
-        },
+        app_properties=properties,
     )

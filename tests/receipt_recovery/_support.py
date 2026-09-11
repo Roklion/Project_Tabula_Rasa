@@ -4,6 +4,7 @@ import hashlib
 
 from tabula_rasa.receipt_manifest import build_receipt_manifest
 from tabula_rasa.storage import GoogleSheetsStorage
+from tests.drive_fixtures import receipt_drive_file
 from tests.fakes import FakeWorkbook
 
 
@@ -27,20 +28,17 @@ def make_drive_file(
     file_id: str | None = None,
     profile_key: str = "north",
 ) -> dict[str, object]:
-    return {
-        "id": file_id or reference["id"],
-        "name": reference["name"],
-        "mimeType": reference["mime_type"],
-        "size": str(reference["byte_size"]),
-        "appProperties": {
-            "tabulaRasaKind": "receipt",
-            "tabulaRasaProfile": profile_key,
-            "tabulaRasaReceiptId": reference["receipt_id"],
-            "tabulaRasaSha256": reference["sha256"],
-            "tabulaRasaOriginalName": reference["original_filename"],
-            "tabulaRasaOriginalFileId": reference["id"],
-        },
-    }
+    drive_file = receipt_drive_file(
+        str(file_id or reference["id"]),
+        str(reference["name"]),
+        profile_key=profile_key,
+        receipt_id=str(reference["receipt_id"]),
+        sha256=str(reference["sha256"]),
+        original_name=str(reference["original_filename"]),
+        size=int(reference["byte_size"]),
+        original_file_id=str(reference["id"]),
+    )
+    return drive_file
 
 
 def backup_with_receipts(
