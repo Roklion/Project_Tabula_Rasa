@@ -23,6 +23,7 @@ from .validation import (
     _normalize_tag_ids,
     _positive_amount,
     _positive_integer,
+    _validate_recurring_provenance,
     _utc_now,
 )
 
@@ -138,6 +139,26 @@ class RecurringMixin:
             "attention_at": _clean_text(data.get("attention_at"), "Attention timestamp"),
         }
 
+    def _resolve_recurring_inline_references(self, data: Mapping[str, Any]) -> dict[str, Any]:
+        """Resolve Add-form payee/tag values before validating a schedule template."""
+        resolved = dict(data)
+        payee_id = _clean_text(resolved.get("payee_id"), "Payee")
+        new_payee_name = _clean_text(resolved.get("new_payee_name"), "New payee")
+        if payee_id and new_payee_name:
+            raise StorageValidationError("Choose an existing payee or add a new payee")
+        if not payee_id and new_payee_name:
+            resolved["payee_id"] = self.create_payee(new_payee_name)["id"]
+        resolved["new_payee_name"] = ""
+        tag_ids = _normalize_tag_ids(resolved.get("tag_ids", ""))
+        new_tag_name = _clean_text(resolved.get("new_tag_name"), "New tag")
+        if new_tag_name:
+            new_tag_id = self.create_tag(new_tag_name)["id"]
+            if new_tag_id not in tag_ids:
+                tag_ids.append(new_tag_id)
+        resolved["tag_ids"] = tag_ids
+        resolved["new_tag_name"] = ""
+        return resolved
+
     @staticmethod
     def _decode_schedule(values: Mapping[str, Any]) -> dict[str, str]:
         """Normalize stored schedule fields without validating references."""
@@ -174,6 +195,7 @@ class RecurringMixin:
             self._schedule_template(row.values, schedule_id=row.values.get("id"), created_at=row.values.get("created_at"), updated_at=row.values.get("updated_at"))
         for row in self._rows("Transactions", force_refresh=True):
             values = row.values
+            _validate_recurring_provenance(values, "Transaction")
             schedule_id = str(values.get("recurring_schedule_id", "") or "")
             if schedule_id:
                 if schedule_id not in schedule_ids:
@@ -194,6 +216,7 @@ class RecurringMixin:
                     raise StorageValidationError("Transaction recurring occurrence type is invalid")
         for row in self._rows("MixedUseExpenses", force_refresh=True):
             values = row.values
+            _validate_recurring_provenance(values, "Mixed-use source")
             schedule_id = str(values.get("recurring_schedule_id", "") or "")
             if schedule_id:
                 if schedule_id not in schedule_ids:
@@ -420,8 +443,6 @@ class RecurringMixin:
         transaction_rows = self._rows("Transactions", force_refresh=True)
         mixed_rows = self._rows("MixedUseExpenses", force_refresh=True)
         for schedule in self.list_recurring_schedules(_force_refresh=True):
-            if schedule["status"] != "active":
-                continue
             try:
                 schedule = self._schedule_template(
                     schedule,
@@ -429,6 +450,8 @@ class RecurringMixin:
                     created_at=schedule.get("created_at"),
                     updated_at=schedule.get("updated_at"),
                 )
+                if schedule["status"] != "active":
+                    continue
                 end = min(cutoff, schedule["end_date"]) if schedule.get("end_date") else cutoff
                 existing = self._existing_recurring_dates(
                     schedule["id"], schedule.get("source_kind", "transaction"),
@@ -488,6 +511,7 @@ class RecurringMixin:
     def create_recurring_expense(self, **data: Any) -> dict[str, str]:
         """Create one schedule and its initial Expense occurrence."""
         with self._workbook_locks.ledger:
+            data = self._resolve_recurring_inline_references(data)
             schedule = self._schedule_template(data)
             initial_date = _as_date(schedule["start_date"])
             initial_id = _clean_text(data.get("transaction_id"), "Transaction ID") or occurrence_id(schedule["id"], initial_date, "initial")
@@ -516,6 +540,7 @@ class RecurringMixin:
     def create_recurring_mixed_use_expense(self, **data: Any) -> dict[str, Any]:
         """Create one mixed-use schedule and its source/projection pair."""
         with self._workbook_locks.ledger:
+            data = self._resolve_recurring_inline_references(data)
             data = {**data, "source_kind": "mixed_use"}
             schedule = self._schedule_template(data)
             scheduled = _as_date(schedule["start_date"])

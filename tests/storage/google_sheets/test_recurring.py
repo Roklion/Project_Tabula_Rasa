@@ -1,8 +1,10 @@
 from datetime import date
+import json
 
 import pytest
 
 from tabula_rasa.storage.google_sheets import StorageConflictError, StorageValidationError
+from tests.storage.google_sheets._support import backup_receipt_manifest, rewrite_backup_tables
 
 
 def _ids(storage):
@@ -38,6 +40,18 @@ def test_recurring_template_rejects_receipts_and_non_expenses(default_storage) -
             account_id=account_id, category_id=category_id,
             receipt_references="[{}]",
         )
+
+
+def test_recurring_create_resolves_inline_payee_and_tag_values(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    result = default_storage.create_recurring_expense(
+        schedule_id="inline-refs", name="Inline", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+        new_payee_name="Inline vendor", new_tag_name="Inline tag",
+    )
+    schedule = result["schedule"]
+    assert schedule["payee_id"] == default_storage.list_payees()[0]["id"]
+    assert json.loads(schedule["tag_ids"]) == [default_storage.list_tags()[0]["id"]]
     with pytest.raises(StorageValidationError, match="Expense records"):
         default_storage.create_recurring_schedule(
             name="Invalid", txn_date="2024-01-01", amount=10,
@@ -98,6 +112,19 @@ def test_mixed_use_recurring_occurrence_preserves_source_projection_pair(default
     assert len(default_storage.list_transactions(_force_refresh=True)) == 2
     assert all(item.get("recurring_schedule_id") == "vehicle-schedule" for item in sources)
     assert all(item.get("recurring_source_kind") == "mixed_use" for item in sources)
+
+
+def test_mixed_recurring_create_resolves_inline_payee_and_tag_values(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    result = default_storage.create_recurring_mixed_use_expense(
+        schedule_id="mixed-inline-refs", name="Inline mixed", txn_date="2024-01-01",
+        recurrence_unit="month", total_expense="20.00", business_use_percentage="50",
+        account_id=account_id, category_id=category_id, allocation_rationale="Use",
+        new_payee_name="Mixed inline vendor", new_tag_name="Mixed inline tag",
+    )
+    schedule = result["schedule"]
+    assert schedule["payee_id"] == default_storage.list_payees()[0]["id"]
+    assert json.loads(schedule["tag_ids"]) == [default_storage.list_tags()[0]["id"]]
 
 
 def test_recurring_source_kind_mismatch_is_rejected(default_storage) -> None:
@@ -201,6 +228,58 @@ def test_recurring_export_rejects_invalid_occurrence_type(default_storage) -> No
         default_storage.export_backup_zip(
             {"schema_version": 1, "business_profile_key": "test", "receipts": []}
         )
+
+
+def test_recurring_export_rejects_partial_provenance(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    result = default_storage.create_recurring_expense(
+        schedule_id="partial-provenance", name="Rent", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    row = default_storage._find_row("Transactions", result["transaction"]["id"])
+    broken = dict(row.values)
+    broken["recurring_schedule_id"] = ""
+    default_storage._replace_row("Transactions", row, broken)
+
+    with pytest.raises(StorageValidationError, match="provided together"):
+        default_storage.export_backup_zip(
+            {"schema_version": 1, "business_profile_key": "test", "receipts": []}
+        )
+
+
+def test_current_backup_rejects_partial_provenance(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    default_storage.create_recurring_expense(
+        schedule_id="partial-backup-provenance", name="Rent", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    backup = default_storage.export_backup_zip(backup_receipt_manifest(default_storage))
+
+    def clear_schedule_id(rows: list[list[str]]) -> None:
+        schedule_index = rows[0].index("recurring_schedule_id")
+        rows[1][schedule_index] = ""
+
+    tampered = rewrite_backup_tables(backup, {"Transactions": clear_schedule_id})
+    with pytest.raises(StorageValidationError, match="provided together"):
+        default_storage.validate_backup_zip(tampered)
+
+
+def test_invalid_schedule_status_needs_attention_but_can_be_repaired(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    default_storage.create_recurring_schedule(
+        schedule_id="invalid-status", name="Invalid", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    row = default_storage._find_row("RecurringSchedules", "invalid-status")
+    broken = dict(row.values)
+    broken["status"] = "corrupt"
+    default_storage._replace_row("RecurringSchedules", row, broken)
+
+    outcome = default_storage.reconcile_recurring_schedules(as_of="2024-02-01")
+    assert outcome["attention"] == {"invalid-status": "validation"}
+
+    repaired = default_storage.edit_recurring_schedule("invalid-status", status="active")
+    assert repaired["status"] == "active"
 
 
 def test_schedule_pause_resume_and_end_do_not_change_occurrences(default_storage) -> None:

@@ -40,7 +40,7 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
     if not schedules:
         return
     current_transactions = context.storage.list_transactions(_force_refresh=True)
-    current_sources = context.storage.list_mixed_use_expenses(_force_refresh=True)
+    current_sources = context.storage.list_mixed_use_expense_sources(_force_refresh=True)
     rows = []
     for item in schedules:
         linked = current_sources if item.get("source_kind") == "mixed_use" else current_transactions
@@ -70,6 +70,20 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
     choices = {f"{item['name']} · {item['id']}": item for item in schedules}
     selected_label = st.selectbox("Schedule", list(choices), key=f"recurring_selected_{context.profile_key}")
     selected = choices[selected_label]
+    if selected.get("status") not in {"active", "paused", "ended"}:
+        st.warning("This schedule has an invalid status. Choose a valid status to repair it.")
+        repair_status = st.selectbox(
+            "Repair status", ["active", "paused", "ended"],
+            key=f"recurring_repair_status_{context.profile_key}_{selected['id']}",
+        )
+        if st.button("Repair schedule status", key=f"recurring_repair_status_button_{selected['id']}"):
+            try:
+                context.storage.edit_recurring_schedule(
+                    selected["id"], expected_schedule=selected, status=repair_status,
+                )
+                st.rerun()
+            except Exception as error:
+                context.report_storage_error(error)
     with st.expander("Edit schedule template"):
         with st.form(f"recurring_edit_{context.profile_key}_{selected['id']}"):
             edit_name = st.text_input("Schedule name", value=selected["name"])

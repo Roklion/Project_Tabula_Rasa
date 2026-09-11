@@ -53,6 +53,19 @@ def test_referenced_payee_remove_is_blocked(default_storage) -> None:
         default_storage.remove_payee(payee["id"])
 
 
+def test_recurring_schedule_payee_reference_blocks_remove(default_storage) -> None:
+    account, category = _ledger_setup(default_storage)
+    payee = default_storage.create_payee("Recurring vendor")
+    default_storage.create_recurring_expense(
+        schedule_id="payee-reference-schedule", name="Subscription", txn_date="2026-01-01",
+        recurrence_unit="month", amount=10, account_id=account["id"],
+        category_id=category["id"], payee_id=payee["id"],
+    )
+
+    with pytest.raises(StorageConflictError, match="referenced by 2"):
+        default_storage.remove_payee(payee["id"])
+
+
 def test_expected_payee_snapshot_protects_rename(default_storage) -> None:
     payee = default_storage.create_payee("Vendor")
     expected = dict(payee)

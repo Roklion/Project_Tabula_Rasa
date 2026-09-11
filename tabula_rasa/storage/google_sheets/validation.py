@@ -271,6 +271,19 @@ def _positive_integer(value: Any, label: str = "Value") -> int:
         raise StorageValidationError(f"{label} must be a positive integer")
     return number
 
+
+def _validate_recurring_provenance(record: Mapping[str, Any], label: str) -> None:
+    """Require recurring provenance columns to be present together."""
+    fields = (
+        "recurring_schedule_id",
+        "recurring_scheduled_date",
+        "recurring_source_kind",
+        "recurring_occurrence_type",
+    )
+    present = [bool(str(record.get(field, "") or "").strip()) for field in fields]
+    if any(present) and not all(present):
+        raise StorageValidationError(f"{label} recurring provenance fields must be provided together")
+
 def _positive_miles(value: Any) -> str:
     try:
         miles = Decimal(str(value))
@@ -663,6 +676,7 @@ def _parse_backup_zip(
                 )
             record["tag_ids"] = _encode_tag_ids(normalized_tag_ids)
     for transaction in tables["Transactions"][1]:
+        _validate_recurring_provenance(transaction, "Transaction")
         recurring_id = transaction.get("recurring_schedule_id", "")
         if recurring_id:
             if recurring_id not in schedules:
@@ -694,6 +708,7 @@ def _parse_backup_zip(
             raise StorageValidationError("Backup contains an unknown transaction payee")
         decode_receipt_references(transaction.get("receipt_references", ""))
     for source in tables["MixedUseExpenses"][1]:
+        _validate_recurring_provenance(source, "Mixed-use source")
         recurring_id = source.get("recurring_schedule_id", "")
         if recurring_id:
             if recurring_id not in schedules:

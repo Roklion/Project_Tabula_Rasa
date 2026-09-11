@@ -409,7 +409,7 @@ class PayeesMixin(_ManagedMixin):
         payee_id = _clean_text(payee_id, "Payee", required=True)
         with self._workbook_locks.ledger, self._workbook_locks.payee:
             snapshot = self._snapshot(
-                ["Payees", "Transactions", "MixedUseExpenses"], force_refresh=True
+                ["Payees", "Transactions", "MixedUseExpenses", "RecurringSchedules"], force_refresh=True
             )
             payee_rows = self._managed_rows_by_id(snapshot["Payees"], "Payees")
             if payee_id not in payee_rows:
@@ -421,7 +421,11 @@ class PayeesMixin(_ManagedMixin):
                 )
             references = sum(
                 _clean_text(row.values.get("payee_id"), "Payee") == payee_id
-                for row in (*snapshot["Transactions"], *snapshot["MixedUseExpenses"])
+                for row in (
+                    *snapshot["Transactions"],
+                    *snapshot["MixedUseExpenses"],
+                    *snapshot["RecurringSchedules"],
+                )
             )
             if references:
                 raise StorageConflictError(
@@ -429,22 +433,27 @@ class PayeesMixin(_ManagedMixin):
                 )
             request = self._managed_delete_request("Payees", payee_rows[payee_id])
 
-            def read_state() -> tuple[dict[str, _StoredRow], dict[str, _StoredRow], dict[str, _StoredRow]]:
+            def read_state() -> tuple[dict[str, _StoredRow], dict[str, _StoredRow], dict[str, _StoredRow], dict[str, _StoredRow]]:
                 current = self._snapshot(
-                    ["Payees", "Transactions", "MixedUseExpenses"],
+                    ["Payees", "Transactions", "MixedUseExpenses", "RecurringSchedules"],
                     force_refresh=True,
                 )
                 return (
                     self._managed_rows_by_id(current["Payees"], "Payees"),
                     self._managed_rows_by_id(current["Transactions"], "Transactions"),
                     self._managed_rows_by_id(current["MixedUseExpenses"], "MixedUseExpenses"),
+                    self._managed_rows_by_id(current["RecurringSchedules"], "RecurringSchedules"),
                 )
 
             def references_present(state: Any) -> bool:
-                _, current_transactions, current_mixed = state
+                _, current_transactions, current_mixed, current_schedules = state
                 return any(
                     _clean_text(row.values.get("payee_id"), "Payee") == payee_id
-                    for row in (*current_transactions.values(), *current_mixed.values())
+                    for row in (
+                        *current_transactions.values(),
+                        *current_mixed.values(),
+                        *current_schedules.values(),
+                    )
                 )
 
             def is_applied(state: Any) -> bool:
@@ -479,7 +488,7 @@ class PayeesMixin(_ManagedMixin):
                 applied=is_applied,
                 unchanged=is_unchanged,
                 before_retry=refresh_request,
-                invalidate=("Payees", "Transactions", "MixedUseExpenses"),
+                invalidate=("Payees", "Transactions", "MixedUseExpenses", "RecurringSchedules"),
             )
             return {"status": "fully_applied"}
 

@@ -200,6 +200,19 @@ def test_referenced_tag_remove_is_blocked_and_unreferenced_remove_succeeds(defau
     assert unused["id"] not in {item["id"] for item in default_storage.list_tags(active_only=False)}
 
 
+def test_recurring_schedule_tag_reference_blocks_remove(default_storage) -> None:
+    account, category = _ledger_setup(default_storage)
+    tag = default_storage.create_tag("Recurring tag")
+    default_storage.create_recurring_expense(
+        schedule_id="tag-reference-schedule", name="Subscription", txn_date="2026-01-01",
+        recurrence_unit="month", amount=10, account_id=account["id"],
+        category_id=category["id"], tag_ids=[tag["id"]],
+    )
+
+    with pytest.raises(StorageConflictError, match="referenced by 2"):
+        default_storage.remove_tag(tag["id"])
+
+
 def test_expected_tag_snapshot_protects_remove(default_storage) -> None:
     tag = default_storage.create_tag("Label")
     expected = dict(tag)
