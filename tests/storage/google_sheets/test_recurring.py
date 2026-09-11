@@ -130,7 +130,9 @@ def test_recurring_backup_rejects_missing_interval(default_storage) -> None:
         default_storage.export_backup_zip(
             {"schema_version": 1, "business_profile_key": "test", "receipts": []}
         )
-def test_mixed_use_recurring_occurrence_preserves_source_projection_pair(default_storage) -> None:
+def test_mixed_use_recurring_occurrence_returns_persisted_source(
+    default_storage, monkeypatch
+) -> None:
     account_id, category_id = _ids(default_storage)
     result = default_storage.create_recurring_mixed_use_expense(
         schedule_id="vehicle-schedule", name="Vehicle", txn_date="2024-01-31",
@@ -142,7 +144,17 @@ def test_mixed_use_recurring_occurrence_preserves_source_projection_pair(default
     assert result["schedule"]["source_kind"] == "mixed_use"
     assert result["source"]["recurring_source_kind"] == "mixed_use"
     assert result["transaction"]["recurring_source_kind"] == "mixed_use"
-    default_storage.reconcile_recurring_schedules(as_of="2024-02-29")
+    original_create = default_storage.create_mixed_use_expense
+
+    def create_with_persisted_marker(**source):
+        persisted = original_create(**source)
+        persisted["persisted_marker"] = "confirmed"
+        return persisted
+
+    monkeypatch.setattr(default_storage, "create_mixed_use_expense", create_with_persisted_marker)
+    generated = default_storage.reconcile_recurring_schedules(as_of="2024-02-29")
+
+    assert generated["generated"][0]["persisted_marker"] == "confirmed"
     sources = default_storage.list_mixed_use_expenses(_force_refresh=True)
     assert len(sources) == 2
     assert len(default_storage.list_transactions(_force_refresh=True)) == 2

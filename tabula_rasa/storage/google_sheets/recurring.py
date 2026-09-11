@@ -696,8 +696,8 @@ class RecurringMixin:
                         continue
                     if schedule.get("source_kind") == "mixed_use":
                         source, record = self._recurring_mixed_occurrence(schedule, scheduled, role="generated")
-                        self.create_mixed_use_expense(**source)
-                        generated.append(source)
+                        persisted_source = self.create_mixed_use_expense(**source)
+                        generated.append(persisted_source)
                     else:
                         record = self._recurring_occurrence(schedule, scheduled, role="generated")
                         self._append("Transactions", record)
