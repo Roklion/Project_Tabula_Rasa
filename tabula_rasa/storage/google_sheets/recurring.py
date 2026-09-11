@@ -388,7 +388,19 @@ class RecurringMixin:
                     "recurring_scheduled_date": scheduled.isoformat(),
                     "recurring_occurrence_type": "initial",
                 }[field]
-            self._append("RecurringSchedules", schedule)
+            existing_schedules = {
+                str(row.values.get("id")): row.values
+                for row in self._rows("RecurringSchedules", force_refresh=True)
+            }
+            if schedule["id"] in existing_schedules:
+                expected = {
+                    header: str(schedule.get(header, ""))
+                    for header in WORKSHEET_HEADERS["RecurringSchedules"]
+                }
+                if existing_schedules[schedule["id"]] != expected:
+                    raise StorageConflictError("Recurring schedule ID is already in use")
+            else:
+                self._append("RecurringSchedules", schedule)
             pair = self.create_mixed_use_expense(**source)
             projection = next(
                 item for item in self.list_transactions(_force_refresh=True)

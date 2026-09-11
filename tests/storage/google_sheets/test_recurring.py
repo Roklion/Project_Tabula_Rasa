@@ -59,6 +59,20 @@ def test_mixed_use_recurring_occurrence_preserves_source_projection_pair(default
     assert all(item.get("recurring_schedule_id") == "vehicle-schedule" for item in sources)
 
 
+def test_mixed_use_recurring_initial_retry_reuses_schedule_and_pair(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    payload = dict(
+        schedule_id="retry-schedule", name="Vehicle", txn_date="2024-01-31",
+        recurrence_unit="month", total_expense="20.00", business_use_percentage="50",
+        account_id=account_id, category_id=category_id, allocation_rationale="Business travel",
+    )
+    first = default_storage.create_recurring_mixed_use_expense(**payload)
+    second = default_storage.create_recurring_mixed_use_expense(**payload)
+    assert first["source"]["id"] == second["source"]["id"]
+    assert len(default_storage.list_recurring_schedules()) == 1
+    assert len(default_storage.list_mixed_use_expenses()) == 1
+
+
 def test_schedule_pause_resume_and_end_do_not_change_occurrences(default_storage) -> None:
     account_id, category_id = _ids(default_storage)
     default_storage.create_recurring_expense(
