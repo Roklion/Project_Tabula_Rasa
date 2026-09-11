@@ -10,6 +10,7 @@ import pandas as pd
 import streamlit as st
 
 from tabula_rasa.storage import GoogleSheetsStorage, StorageError
+from tabula_rasa.storage.google_sheets import _normalize_tag_ids
 
 
 @dataclass(frozen=True)
@@ -36,11 +37,13 @@ def _payee_reference_counts(
 
 
 def _tag_reference_counts(
-    transactions: list[dict[str, Any]], mileage: list[dict[str, Any]]
+    transactions: list[dict[str, Any]],
+    mileage: list[dict[str, Any]],
+    mixed_sources: list[dict[str, Any]],
 ) -> dict[str, int]:
     counts: dict[str, int] = {}
-    for record in (*transactions, *mileage):
-        for tag_id in record.get("tag_ids", []):
+    for record in (*transactions, *mileage, *mixed_sources):
+        for tag_id in _normalize_tag_ids(record.get("tag_ids", [])):
             counts[tag_id] = counts.get(tag_id, 0) + 1
     return counts
 
@@ -153,8 +156,9 @@ def _render_tags(
     tags: list[dict[str, str]],
     transactions: list[dict[str, Any]],
     mileage: list[dict[str, Any]],
+    mixed_sources: list[dict[str, Any]],
 ) -> None:
-    counts = _tag_reference_counts(transactions, mileage)
+    counts = _tag_reference_counts(transactions, mileage, mixed_sources)
     st.subheader("Tags")
     st.caption(
         "Tags are profile-local labels shared by Transactions and Mileage. "
@@ -247,4 +251,4 @@ def render_payees_tags(context: PayeesTagsContext) -> None:
     with payees_tab:
         _render_payees(context, payees, transactions, mixed_sources)
     with tags_tab:
-        _render_tags(context, tags, transactions, mileage)
+        _render_tags(context, tags, transactions, mileage, mixed_sources)

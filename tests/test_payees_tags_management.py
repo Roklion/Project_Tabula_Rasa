@@ -116,6 +116,36 @@ def test_management_workflows_are_profile_scoped_and_require_confirmation() -> N
         created_payee = next(
             item for item in north.list_payees() if item["name"] == "Created payee"
         )
+        by_label(app.selectbox, "Payee to remove").set_value(
+            created_payee["id"]
+        ).run()
+        assert by_label(app.button, "Permanently remove payee").disabled is False
+        assert next(
+            item
+            for item in app.checkbox
+            if "I understand payee" in item.label
+            and "permanently removed" in item.label
+        ).disabled is False
+        by_label(app.button, "Permanently remove payee").click().run()
+        assert any(
+            "Acknowledge permanent removal" in str(item.value)
+            for item in app.error
+        )
+        assert any(item["id"] == created_payee["id"] for item in north.list_payees())
+        assert next(
+            item
+            for item in app.checkbox
+            if "I understand payee" in item.label
+            and "permanently removed" in item.label
+        ).disabled is False
+        next(
+            item
+            for item in app.checkbox
+            if "I understand payee" in item.label
+            and "permanently removed" in item.label
+        ).check()
+        by_label(app.button, "Permanently remove payee").click().run()
+        assert not any(item["id"] == created_payee["id"] for item in north.list_payees())
         by_label(app.selectbox, "Payee to rename").set_value(
             target_payee["id"]
         ).run()
@@ -126,9 +156,6 @@ def test_management_workflows_are_profile_scoped_and_require_confirmation() -> N
         assert next(
             item for item in north.list_payees() if item["id"] == target_payee["id"]
         )["name"] == "Renamed target"
-        assert created_payee["id"] in {
-            item["id"] for item in north.list_payees()
-        }
 
         by_label(app.selectbox, "Payee to remove").set_value(
             target_payee["id"]
@@ -141,18 +168,45 @@ def test_management_workflows_are_profile_scoped_and_require_confirmation() -> N
         created_tag = next(
             item for item in north.list_tags() if item["name"] == "Created tag"
         )
+        by_label(app.selectbox, "Tag to remove").set_value(created_tag["id"]).run()
+        assert by_label(app.button, "Permanently remove tag").disabled is False
+        assert next(
+            item
+            for item in app.checkbox
+            if "I understand tag" in item.label
+            and "permanently removed" in item.label
+        ).disabled is False
+        by_label(app.button, "Permanently remove tag").click().run()
+        assert any(
+            "Acknowledge permanent removal" in str(item.value)
+            for item in app.error
+        )
+        assert any(item["id"] == created_tag["id"] for item in north.list_tags())
+        next(
+            item
+            for item in app.checkbox
+            if "I understand tag" in item.label
+            and "permanently removed" in item.label
+        ).check()
+        by_label(app.button, "Permanently remove tag").click().run()
+        assert not any(item["id"] == created_tag["id"] for item in north.list_tags())
         by_label(app.selectbox, "Tag to rename").set_value(target_tag["id"]).run()
         by_label(app.text_input, "Renamed tag name").set_value("Renamed target tag")
         by_label(app.button, "Rename tag").click().run()
         assert next(
             item for item in north.list_tags() if item["id"] == target_tag["id"]
         )["name"] == "Renamed target tag"
-        assert created_tag["id"] in {item["id"] for item in north.list_tags()}
 
         by_label(app.selectbox, "Target tag").set_value(target_tag["id"]).run()
         by_label(app.multiselect, "Source tags").set_value(
             [source_tag["id"]]
         ).run()
+        by_label(app.button, "Merge tags").click().run()
+        assert any(
+            "Acknowledge the permanent source removal" in str(item.value)
+            for item in app.error
+        )
+        assert any(item["id"] == source_tag["id"] for item in north.list_tags())
         by_label(
             app.checkbox,
             "I understand the selected source tags will be permanently removed",
@@ -171,11 +225,23 @@ def test_management_workflows_are_profile_scoped_and_require_confirmation() -> N
             for item in north.list_mileage_trips()
             if item["id"] == mileage_trip["id"]
         )["tag_ids"] == [target_tag["id"]]
+        assert next(
+            item
+            for item in north.list_mixed_use_expenses()
+            if item["id"] == mixed_source["id"]
+        )["tag_ids"] == [target_tag["id"]]
 
         navigate_to(app, "Accounts")
         navigate_to(app, "Transactions")
         by_label(app.selectbox, "Tag to remove").set_value(target_tag["id"]).run()
-        assert any("3 references" in str(item.value) for item in app.info)
+        assert any("4 references" in str(item.value) for item in app.info)
+        assert by_label(app.button, "Permanently remove tag").disabled is True
+        assert next(
+            item
+            for item in app.checkbox
+            if "I understand tag" in item.label
+            and "permanently removed" in item.label
+        ).disabled is True
 
         navigate_to(app, "Transactions")
         by_label(app.selectbox, "Business").set_value("south").run()

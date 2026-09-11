@@ -42,7 +42,6 @@ def main() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook())
     for payee_name in ("Test vendor", "Test customer", "Test transfer"):
         storage.create_payee(payee_name)
-    mileage_add_tag = storage.create_tag("Mileage add tag")
     mileage_edit_tag = storage.create_tag("Mileage edit tag")
     with authenticated_app(storage) as app:
 
@@ -409,8 +408,13 @@ def main() -> None:
             for item in app.multiselect
             if item.key == "add_mileage_tag_ids"
         )
-        add_tag_selector.set_value([mileage_add_tag["id"]]).run()
-        assert add_tag_selector.value == [mileage_add_tag["id"]]
+        add_tag_selector.options.append("Mileage inline tag")
+        add_tag_selector.set_value(["Mileage inline tag"]).run()
+        next(
+            item
+            for item in app.multiselect
+            if item.key == "add_mileage_tag_ids"
+        ).options.append("Mileage inline tag")
         by_label(app.button, "Save mileage trip").click().run()
         assert len(app.exception) == 0
         mileage_trips = storage.list_mileage_trips()
@@ -444,6 +448,11 @@ def main() -> None:
         assert set(return_trip) == set(outbound)
         assert outbound["miles"] == return_trip["miles"] == "18.6"
         assert outbound["business_purpose"] == "Project meeting"
+        mileage_add_tag = next(
+            tag
+            for tag in storage.list_tags()
+            if tag["name"] == "Mileage inline tag"
+        )
         assert outbound["tag_ids"] == [mileage_add_tag["id"]]
         assert return_trip["tag_ids"] == [mileage_add_tag["id"]]
         return_trip_id = return_trip["id"]
