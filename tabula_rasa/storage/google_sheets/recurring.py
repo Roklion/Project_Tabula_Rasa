@@ -58,8 +58,18 @@ class RecurringMixin:
             raise StorageValidationError("Schedule status must be active, paused, or ended")
         return status
 
-    def _schedule_template(self, data: Mapping[str, Any], *, schedule_id: str | None = None,
-                           created_at: str | None = None, updated_at: str | None = None) -> dict[str, str]:
+    def _schedule_template(
+        self,
+        data: Mapping[str, Any],
+        *,
+        schedule_id: str | None = None,
+        created_at: str | None = None,
+        updated_at: str | None = None,
+        account_lookup: Mapping[str, Any] | None = None,
+        category_lookup: Mapping[str, Any] | None = None,
+        payee_lookup: Mapping[str, Any] | None = None,
+        tag_lookup: Mapping[str, Any] | None = None,
+    ) -> dict[str, str]:
         schedule_id = _clean_text(schedule_id or data.get("schedule_id") or data.get("id"), "Schedule ID") or str(uuid4())
         name = _clean_text(data.get("name"), "Schedule name", required=True)
         kind = _clean_text(data.get("kind", "Expense"), "Schedule kind", required=True).title()
@@ -86,17 +96,18 @@ class RecurringMixin:
             raise StorageValidationError("Schedule anchor date must equal its start date")
         account_id = _clean_text(data.get("account_id"), "Account", required=True)
         category_id = _clean_text(data.get("category_id"), "Category", required=True)
-        accounts = self._account_lookup(force_refresh=True)
-        categories = self._category_lookup(force_refresh=True)
+        accounts = account_lookup if account_lookup is not None else self._account_lookup(force_refresh=True)
+        categories = category_lookup if category_lookup is not None else self._category_lookup(force_refresh=True)
         if account_id not in accounts:
             raise StorageValidationError("Source account does not exist")
         if category_id not in categories or categories[category_id]["kind"] != "Expense":
             raise StorageValidationError("Category kind does not match transaction kind")
         payee_id = _clean_text(data.get("payee_id"), "Payee")
-        if payee_id and payee_id not in self._payee_lookup(force_refresh=True):
+        payees = payee_lookup if payee_lookup is not None else self._payee_lookup(force_refresh=True)
+        if payee_id and payee_id not in payees:
             raise StorageValidationError("Payee does not exist")
         tags = _normalize_tag_ids(data.get("tag_ids", ""))
-        known_tags = self._tag_lookup(force_refresh=True)
+        known_tags = tag_lookup if tag_lookup is not None else self._tag_lookup(force_refresh=True)
         if any(tag not in known_tags for tag in tags):
             raise StorageValidationError("Tag does not exist")
         try:
@@ -204,8 +215,21 @@ class RecurringMixin:
             raise StorageValidationError("Recurring schedule IDs are missing or duplicated")
         schedule_values = {str(row.values.get("id", "")): row.values for row in schedules}
         schedule_ids = set(schedule_values)
+        accounts = self._account_lookup(force_refresh=True)
+        categories = self._category_lookup(force_refresh=True)
+        payees = self._payee_lookup(force_refresh=True)
+        tags = self._tag_lookup(force_refresh=True)
         for row in schedules:
-            self._schedule_template(row.values, schedule_id=row.values.get("id"), created_at=row.values.get("created_at"), updated_at=row.values.get("updated_at"))
+            self._schedule_template(
+                row.values,
+                schedule_id=row.values.get("id"),
+                created_at=row.values.get("created_at"),
+                updated_at=row.values.get("updated_at"),
+                account_lookup=accounts,
+                category_lookup=categories,
+                payee_lookup=payees,
+                tag_lookup=tags,
+            )
         for row in self._rows("Transactions", force_refresh=True):
             values = row.values
             _validate_recurring_provenance(values, "Transaction")
@@ -468,6 +492,10 @@ class RecurringMixin:
         attention: dict[str, str] = {}
         transaction_rows = self._rows("Transactions", force_refresh=True)
         mixed_rows = self._rows("MixedUseExpenses", force_refresh=True)
+        accounts = self._account_lookup(force_refresh=True)
+        categories = self._category_lookup(force_refresh=True)
+        payees = self._payee_lookup(force_refresh=True)
+        tags = self._tag_lookup(force_refresh=True)
         for row in transaction_rows:
             _validate_recurring_provenance(row.values, "Transaction")
         for row in mixed_rows:
@@ -479,6 +507,10 @@ class RecurringMixin:
                     schedule_id=schedule["id"],
                     created_at=schedule.get("created_at"),
                     updated_at=schedule.get("updated_at"),
+                    account_lookup=accounts,
+                    category_lookup=categories,
+                    payee_lookup=payees,
+                    tag_lookup=tags,
                 )
                 if schedule["status"] != "active":
                     continue
