@@ -9,6 +9,12 @@ from typing import Any
 import streamlit as st
 
 
+def _mark_workbook_data_changed(context: Any) -> None:
+    callback = getattr(context, "mark_workbook_data_changed", None)
+    if callable(callback):
+        callback()
+
+
 def _safe_date(value: Any, fallback: date | None = None) -> date | None:
     """Return a form-safe date while leaving corrupted schedule data visible."""
     if not value:
@@ -102,7 +108,7 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
                 context.storage.edit_recurring_schedule(
                     selected["id"], expected_schedule=selected, status=repair_status,
                 )
-                context.mark_workbook_data_changed and context.mark_workbook_data_changed()
+                _mark_workbook_data_changed(context)
                 st.rerun()
             except Exception as error:
                 context.report_storage_error(error)
@@ -206,7 +212,7 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
                     allocation_rationale=edit_rationale if selected.get("source_kind") == "mixed_use" else selected.get("allocation_rationale", ""),
                     description=edit_description, reference=edit_reference,
                 )
-                context.mark_workbook_data_changed and context.mark_workbook_data_changed()
+                _mark_workbook_data_changed(context)
                 st.success("Schedule template updated; existing occurrences were unchanged.")
                 st.rerun()
             except Exception as error:
@@ -216,14 +222,14 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
         if selected["status"] == "active" and st.button("Pause", key=f"recurring_pause_{selected['id']}"):
             try:
                 context.storage.pause_recurring_schedule(selected["id"], expected_schedule=selected)
-                context.mark_workbook_data_changed and context.mark_workbook_data_changed()
+                _mark_workbook_data_changed(context)
                 st.rerun()
             except Exception as error:
                 context.report_storage_error(error)
         elif selected["status"] == "paused" and st.button("Resume", key=f"recurring_resume_{selected['id']}"):
             try:
                 context.storage.resume_recurring_schedule(selected["id"], expected_schedule=selected)
-                context.mark_workbook_data_changed and context.mark_workbook_data_changed()
+                _mark_workbook_data_changed(context)
                 st.rerun()
             except Exception as error:
                 context.report_storage_error(error)
@@ -231,7 +237,7 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
         if selected["status"] != "ended" and st.button("End schedule", key=f"recurring_end_{selected['id']}"):
             try:
                 context.storage.end_recurring_schedule(selected["id"], expected_schedule=selected)
-                context.mark_workbook_data_changed and context.mark_workbook_data_changed()
+                _mark_workbook_data_changed(context)
                 st.rerun()
             except Exception as error:
                 context.report_storage_error(error)
@@ -248,7 +254,7 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
                     "level": "success",
                     "message": f"Generated {len(result['generated'])} occurrence(s).",
                 }
-            context.mark_workbook_data_changed and context.mark_workbook_data_changed()
+            _mark_workbook_data_changed(context)
             st.rerun()
         except Exception as error:
             context.report_storage_error(error)

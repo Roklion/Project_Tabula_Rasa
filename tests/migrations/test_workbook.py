@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 import gspread
 import pytest
@@ -84,6 +84,18 @@ def test_reorder_columns_fills_missing_expected_columns() -> None:
     worksheet.resize.assert_called_once_with(rows=2, cols=2)
 
 
+def test_reorder_columns_expands_before_updating_a_small_worksheet() -> None:
+    worksheet = Mock(row_count=1, col_count=1)
+    worksheet.get_all_values.return_value = [["name"], ["Office"]]
+
+    _reorder_columns(worksheet, ["name"], ("id", "name"))
+
+    assert worksheet.resize.call_args_list == [call(rows=2, cols=2), call(rows=2, cols=2)]
+    worksheet.update.assert_called_once_with(
+        [["id", "name"], ["", "Office"]], range_name="A1", raw=True
+    )
+
+
 def test_reorder_columns_clears_trailing_worksheet_data() -> None:
     worksheet = FakeWorksheet("Legacy", ("name", "legacy"))
     worksheet.rows.append(["Office", "stale"])
@@ -159,6 +171,12 @@ def test_empty_worksheet_not_in_historical_layout_is_not_historical() -> None:
         "Accounts": [list(WORKSHEET_HEADERS["Accounts"])],
         "MixedUseExpenses": [[]],
     }
+
+    assert not _looks_like_historical_workbook(values)
+
+
+def test_historical_detection_tolerates_empty_mixed_use_values() -> None:
+    values = {"MixedUseExpenses": None}
 
     assert not _looks_like_historical_workbook(values)
 

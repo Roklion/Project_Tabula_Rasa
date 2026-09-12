@@ -51,7 +51,7 @@ def _looks_like_historical_workbook(
         "Transactions" in present_titles
         or any(
             str(value).strip()
-            for row in values.get("MixedUseExpenses", [])
+            for row in values.get("MixedUseExpenses") or []
             for value in row
         )
     ):

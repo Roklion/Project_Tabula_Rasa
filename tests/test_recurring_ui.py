@@ -1,6 +1,9 @@
 from datetime import date
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 from tabula_rasa.page_renderers.transactions.recurring import (
+    _mark_workbook_data_changed,
     _recurring_category_options,
     _safe_date,
     _safe_interval,
@@ -12,6 +15,16 @@ def test_recurring_editor_uses_safe_defaults_for_corrupt_schedule_fields() -> No
     assert _safe_interval("0") == 1
     assert _safe_date("not-a-date", date(2026, 9, 11)) == date(2026, 9, 11)
     assert _safe_date("") is None
+
+
+def test_recurring_change_marker_is_optional() -> None:
+    context = object()
+    _mark_workbook_data_changed(context)
+
+    callback = Mock()
+    _mark_workbook_data_changed(SimpleNamespace(mark_workbook_data_changed=callback))
+
+    callback.assert_called_once_with()
 
 
 def test_recurring_editor_filters_inactive_categories_but_preserves_selection() -> None:

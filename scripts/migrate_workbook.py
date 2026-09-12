@@ -123,6 +123,16 @@ def _reorder_columns(
         ]
         for row in rows[1:]
     ]
+    current_rows = getattr(worksheet, "row_count", None)
+    current_cols = getattr(worksheet, "col_count", None)
+    if not isinstance(current_rows, int):
+        current_rows = len(reordered)
+    if not isinstance(current_cols, int):
+        current_cols = len(expected)
+    expanded_rows = max(current_rows, len(reordered))
+    expanded_cols = max(current_cols, len(expected))
+    if (expanded_rows, expanded_cols) != (current_rows, current_cols):
+        worksheet.resize(rows=expanded_rows, cols=expanded_cols)
     worksheet.update(reordered, range_name="A1", raw=True)
     worksheet.resize(rows=len(reordered), cols=len(expected))
     return list(expected)
