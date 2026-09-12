@@ -283,6 +283,29 @@ def _validate_recurring_provenance(record: Mapping[str, Any], label: str) -> Non
     present = [bool(str(record.get(field, "") or "").strip()) for field in fields]
     if any(present) and not all(present):
         raise StorageValidationError(f"{label} recurring provenance fields must be provided together")
+    if any(
+        str(record.get(field, "") or "")
+        != str(record.get(field, "") or "").strip()
+        for field in fields
+    ):
+        raise StorageValidationError(f"{label} recurring provenance fields must not be padded")
+
+
+def _validate_unique_recurring_occurrences(
+    records: Sequence[Mapping[str, Any]], label: str
+) -> None:
+    seen: set[tuple[str, str]] = set()
+    for record in records:
+        schedule_id = str(record.get("recurring_schedule_id", "") or "").strip()
+        scheduled_date = str(record.get("recurring_scheduled_date", "") or "").strip()
+        if not schedule_id or not scheduled_date:
+            continue
+        key = (schedule_id, scheduled_date)
+        if key in seen:
+            raise StorageValidationError(
+                f"{label} contains duplicate recurring occurrence dates"
+            )
+        seen.add(key)
 
 def _positive_miles(value: Any) -> str:
     try:
@@ -723,6 +746,7 @@ def _parse_backup_zip(
         if payee_id and payee_id not in payee_ids:
             raise StorageValidationError("Backup contains an unknown transaction payee")
         decode_receipt_references(transaction.get("receipt_references", ""))
+    _validate_unique_recurring_occurrences(tables["Transactions"][1], "Transactions")
     for source in tables["MixedUseExpenses"][1]:
         _validate_recurring_provenance(source, "Mixed-use source")
         recurring_id = source.get("recurring_schedule_id", "")
@@ -737,6 +761,9 @@ def _parse_backup_zip(
             ):
                 raise StorageValidationError("Mixed-use recurring source kind is invalid")
             _iso_date(source.get("recurring_scheduled_date"))
+    _validate_unique_recurring_occurrences(
+        tables["MixedUseExpenses"][1], "Mixed-use expenses"
+    )
 
     for source in tables["MixedUseExpenses"][1]:
         _iso_date(source.get("txn_date"))

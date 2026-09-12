@@ -25,6 +25,7 @@ from .validation import (
     _positive_amount,
     _positive_integer,
     _validate_recurring_provenance,
+    _validate_unique_recurring_occurrences,
     _utc_now,
 )
 
@@ -627,6 +628,12 @@ class RecurringMixin:
             _validate_recurring_provenance(row.values, "Transaction")
         for row in mixed_rows:
             _validate_recurring_provenance(row.values, "Mixed-use source")
+        _validate_unique_recurring_occurrences(
+            [row.values for row in transaction_rows], "Transactions"
+        )
+        _validate_unique_recurring_occurrences(
+            [row.values for row in mixed_rows], "Mixed-use expenses"
+        )
         schedules = self.list_recurring_schedules(
             _force_refresh=True,
             transaction_rows=transaction_rows,

@@ -264,6 +264,15 @@ class AccountsMixin:
                 raise StorageConflictError(
                     "Category kind cannot change while used by a mixed-use expense"
                 )
+            recurring_schedules = self._rows("RecurringSchedules", force_refresh=True)
+            if any(
+                _clean_text(row.values.get("category_id"), "Category")
+                == normalized_category_id
+                for row in recurring_schedules
+            ):
+                raise StorageConflictError(
+                    "Category kind cannot change while used by a recurring schedule"
+                )
         if kind != updated["kind"]:
             reject_mixed_use_kind_change()
             current = self._find_row("Categories", normalized_category_id)

@@ -32,6 +32,40 @@ def test_recurring_create_reconcile_is_idempotent(default_storage) -> None:
     assert default_storage.reconcile_recurring_schedules(as_of=date(2024, 4, 30))["generated"] == []
 
 
+def test_recurring_reconciliation_rejects_duplicate_occurrence_dates(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    result = default_storage.create_recurring_expense(
+        schedule_id="duplicate-date", name="Rent", txn_date="2024-01-01",
+        amount=10, account_id=account_id, category_id=category_id,
+    )
+    row = default_storage._find_row("Transactions", result["transaction"]["id"])
+    duplicate = dict(row.values)
+    duplicate["id"] = "duplicate-transaction"
+    headers = default_storage._headers("Transactions")
+    default_storage._worksheet("Transactions").append_row(
+        [duplicate.get(header, "") for header in headers]
+    )
+    default_storage._invalidate("Transactions")
+
+    with pytest.raises(StorageValidationError, match="duplicate recurring occurrence"):
+        default_storage.reconcile_recurring_schedules(as_of="2024-02-01")
+
+
+def test_recurring_reconciliation_rejects_padded_provenance_ids(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    result = default_storage.create_recurring_expense(
+        schedule_id="padded-id", name="Rent", txn_date="2024-01-01",
+        amount=10, account_id=account_id, category_id=category_id,
+    )
+    row = default_storage._find_row("Transactions", result["transaction"]["id"])
+    broken = dict(row.values)
+    broken["recurring_schedule_id"] = " padded-id "
+    default_storage._replace_row("Transactions", row, broken)
+
+    with pytest.raises(StorageValidationError, match="must not be padded"):
+        default_storage.reconcile_recurring_schedules(as_of="2024-02-01")
+
+
 def test_recurring_template_rejects_receipts_and_non_expenses(default_storage) -> None:
     account_id, category_id = _ids(default_storage)
     with pytest.raises(StorageValidationError, match="Receipts"):
