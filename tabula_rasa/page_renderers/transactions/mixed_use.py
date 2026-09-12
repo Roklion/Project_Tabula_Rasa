@@ -418,6 +418,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
     pending_source_key = _key(profile, "pending_source_id")
     pending_transaction_key = _key(profile, "pending_transaction_id")
     pending_schedule_key = _key(profile, "pending_schedule_id")
+    pending_payload_key = _key(profile, "pending_payload")
     source_ids = [str(item["id"]) for item in sources]
     selection_scope_key = _key(profile, "selection_scope")
     selection_scope = (
@@ -872,6 +873,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                     st.session_state.pop(pending_source_key, None)
                     st.session_state.pop(pending_transaction_key, None)
                     st.session_state.pop(pending_schedule_key, None)
+                    st.session_state.pop(pending_payload_key, None)
                     if copy_mode:
                         _clear_mixed_use_copy(st.session_state, profile)
                         _clear_mixed_use_selection(st.session_state, profile)
@@ -911,6 +913,14 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                             "recurrence_interval": recurrence_interval,
                             "end_date": recurrence_end,
                         })
+                        previous_payload = st.session_state.get(pending_payload_key)
+                        if isinstance(previous_payload, Mapping):
+                            payload = {
+                                **previous_payload,
+                                "schedule_id": pending_schedule_id,
+                            }
+                        else:
+                            st.session_state[pending_payload_key] = dict(payload)
                     context.confirmed_write(action, payload, operation, success, on_success=reset_after_success, on_confirmed=process_mixed_receipts, report_error=save_error.error)
         if cancel_copy_requested:
             _clear_mixed_use_copy(st.session_state, profile)

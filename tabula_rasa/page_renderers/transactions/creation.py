@@ -162,6 +162,7 @@ def render_add_transaction(
                     recurrence_end = st.date_input("End date (optional)", value=None, key="add_transaction_recurrence_end")
         pending_schedule_key = f"recurring_pending_schedule_id_{context.profile_key}"
         pending_transaction_key = f"recurring_pending_transaction_id_{context.profile_key}"
+        pending_payload_key = f"recurring_pending_payload_{context.profile_key}"
         pending_schedule_id = str(st.session_state.get(pending_schedule_key) or "")
         pending_transaction_id = str(st.session_state.get(pending_transaction_key) or "")
         source = st.selectbox(
@@ -286,6 +287,7 @@ def render_add_transaction(
                         def clear_pending_recurring_ids() -> None:
                             st.session_state.pop(pending_schedule_key, None)
                             st.session_state.pop(pending_transaction_key, None)
+                            st.session_state.pop(pending_payload_key, None)
 
                         if kind == "Expense" and recurring:
                             pending_schedule_id, pending_transaction_id = _pending_recurring_ids(
@@ -299,6 +301,15 @@ def render_add_transaction(
                                 "recurrence_interval": recurrence_interval,
                                 "end_date": recurrence_end,
                             })
+                            previous_payload = st.session_state.get(pending_payload_key)
+                            if isinstance(previous_payload, Mapping):
+                                payload = {
+                                    **previous_payload,
+                                    "schedule_id": pending_schedule_id,
+                                    "transaction_id": pending_transaction_id,
+                                }
+                            else:
+                                st.session_state[pending_payload_key] = dict(payload)
                         context.confirmed_write(
                             "create_transaction",
                             payload,
