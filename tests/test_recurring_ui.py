@@ -1,4 +1,5 @@
 from datetime import date
+import json
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -8,6 +9,7 @@ from tabula_rasa.page_renderers.transactions.recurring import (
     _recurring_category_options,
     _safe_date,
     _safe_interval,
+    _selected_tag_ids,
 )
 
 
@@ -59,3 +61,7 @@ def test_recurring_editor_filters_inactive_references_but_preserves_selection() 
     assert [item["id"] for item in _active_or_selected(items, ["inactive"])] == [
         "active", "inactive"
     ]
+
+
+def test_recurring_editor_treats_nonlist_tag_ids_as_empty() -> None:
+    assert _selected_tag_ids(json.dumps({"unexpected": "shape"})) == []

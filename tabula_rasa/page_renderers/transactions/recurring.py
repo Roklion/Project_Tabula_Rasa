@@ -57,6 +57,14 @@ def _active_or_selected(items, selected_ids) -> list[dict[str, Any]]:
     ]
 
 
+def _selected_tag_ids(value: Any) -> list[Any]:
+    try:
+        selected_tags = json.loads(value or "[]")
+    except (TypeError, json.JSONDecodeError):
+        return []
+    return selected_tags if isinstance(selected_tags, list) else []
+
+
 def render_recurring_expenses(context: Any, *, accounts, categories, payees, tags) -> None:
     """Render profile-scoped schedule management and bounded controls."""
     st.subheader("Recurring expenses")
@@ -186,10 +194,7 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
                     value, "No payee" if not value else f"Missing ({value})"
                 ),
             )
-            try:
-                selected_tags = json.loads(selected.get("tag_ids", "[]"))
-            except (TypeError, json.JSONDecodeError):
-                selected_tags = []
+            selected_tags = _selected_tag_ids(selected.get("tag_ids", "[]"))
             available_tags = _active_or_selected(tags, selected_tags)
             tag_ids = [str(item["id"]) for item in available_tags]
             tag_id_set = set(tag_ids)
