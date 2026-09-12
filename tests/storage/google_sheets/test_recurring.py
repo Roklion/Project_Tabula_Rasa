@@ -673,6 +673,23 @@ def test_invalid_stored_schedule_does_not_hide_other_schedules(default_storage) 
     assert {item["id"] for item in schedules} == {"valid", "invalid"}
 
 
+def test_malformed_schedule_tags_need_reconciliation_attention(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    default_storage.create_recurring_expense(
+        schedule_id="bad-tags", name="Bad tags", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    row = default_storage._find_row("RecurringSchedules", "bad-tags")
+    broken = dict(row.values)
+    broken["tag_ids"] = "not-json"
+    default_storage._replace_row("RecurringSchedules", row, broken)
+
+    outcome = default_storage.reconcile_recurring_schedules(as_of="2024-02-01")
+
+    assert outcome["generated"] == []
+    assert outcome["attention"] == {"bad-tags": "validation"}
+
+
 def test_malformed_occurrence_date_does_not_block_schedule_listing(default_storage) -> None:
     account_id, category_id = _ids(default_storage)
     default_storage.create_recurring_expense(

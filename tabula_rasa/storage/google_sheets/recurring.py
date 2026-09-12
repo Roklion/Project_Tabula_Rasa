@@ -233,7 +233,7 @@ class RecurringMixin:
         try:
             schedule["tag_ids"] = _encode_tag_ids(_normalize_tag_ids(schedule.get("tag_ids", "")))
         except StorageValidationError:
-            schedule["tag_ids"] = "[]"
+            schedule["tag_ids"] = str(values.get("tag_ids", "") or "")
         return schedule
 
     @staticmethod
