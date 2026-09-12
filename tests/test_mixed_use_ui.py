@@ -13,6 +13,7 @@ from tabula_rasa.page_renderers.transactions.mixed_use import (
     _mixed_use_receipt_recovery_active,
     _mixed_use_selection_ids,
     _pending_create_ids,
+    _preserve_pending_recurring_state,
     _pending_recurring_schedule_id,
     _pending_recurring_rationale,
     _pending_recurring_schedule_exists,
@@ -68,6 +69,20 @@ def test_pending_recurring_schedule_requires_recurring_retry() -> None:
 
     assert _pending_recurring_schedule_exists(state, "north")
     assert not _pending_recurring_schedule_exists(state, "south")
+
+
+def test_projection_conflicts_keep_recurring_retry_state() -> None:
+    from tabula_rasa.storage import StorageConflictError
+
+    assert _preserve_pending_recurring_state(
+        StorageConflictError("Could not find the linked projection")
+    )
+    assert _preserve_pending_recurring_state(
+        StorageConflictError("A source exists without its linked projection")
+    )
+    assert not _preserve_pending_recurring_state(
+        StorageConflictError("Recurring schedule ID is already in use")
+    )
 
 
 def test_pending_recurring_rationale_rehydrates_retry_validation() -> None:

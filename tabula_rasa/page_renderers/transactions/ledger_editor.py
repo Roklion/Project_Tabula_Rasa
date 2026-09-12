@@ -265,11 +265,21 @@ def render_transaction_editor(
                 )
                 recurring_id = str(selected.get("recurring_schedule_id") or "")
                 recurring_active = False
+                recurring_status_error = False
                 if recurring_id:
                     try:
-                        recurring_active = context.storage.get_recurring_schedule(recurring_id).get("status") == "active"
+                        recurring_active = (
+                            context.storage.get_recurring_schedule(
+                                recurring_id, _force_refresh=True
+                            ).get("status")
+                            == "active"
+                        )
                     except StorageError:
-                        recurring_active = False
+                        recurring_status_error = True
+                        st.warning(
+                            "Recurring schedule status could not be refreshed; "
+                            "deletion is disabled until the ledger can be refreshed."
+                        )
                 if recurring_active:
                     linked_dates = [
                         str(item.get("recurring_scheduled_date") or "")
@@ -453,7 +463,11 @@ def render_transaction_editor(
                 _clear_copy_state(context.profile_key)
                 st.rerun()
             if delete_requested:
-                if not confirm_delete:
+                if recurring_status_error:
+                    edit_error.error(
+                        "Refresh the recurring schedule status before deleting this transaction."
+                    )
+                elif not confirm_delete:
                     edit_error.error(
                         "Confirm that you understand deletion is permanent."
                     )

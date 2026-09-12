@@ -132,6 +132,11 @@ def _pending_recurring_schedule_id(
     return schedule_id
 
 
+def _preserve_pending_recurring_state(error: StorageConflictError) -> bool:
+    """Keep retry state when a mixed-use projection needs inspection."""
+    return "linked projection" in str(error).casefold()
+
+
 def _pending_recurring_schedule_exists(
     state: MutableMapping[str, object], profile: str
 ) -> bool:
@@ -911,7 +916,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                         except StorageConflictError as error:
                             if (
                                 recurring
-                                and "without its linked projection" not in str(error)
+                                and not _preserve_pending_recurring_state(error)
                             ):
                                 clear_pending_recurring_state()
                             raise
