@@ -893,8 +893,15 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                             if recurring:
                                 return context.storage.create_recurring_mixed_use_expense(**payload)["source"]
                             return context.storage.create_mixed_use_expense(**payload)
-                        except (StorageConflictError, StorageValidationError):
+                        except StorageValidationError:
                             if recurring:
+                                clear_pending_recurring_state()
+                            raise
+                        except StorageConflictError as error:
+                            if (
+                                recurring
+                                and "without its linked projection" not in str(error)
+                            ):
                                 clear_pending_recurring_state()
                             raise
                     action, success = (

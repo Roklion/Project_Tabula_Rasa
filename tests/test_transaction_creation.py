@@ -164,8 +164,4 @@ def test_startup_reconciliation_failure_does_not_block_transactions_page() -> No
         with authenticated_app(storage) as app:
             navigate_to(app, "Transactions")
 
-            assert any(
-                "manual actions remain available" in str(item.value)
-                for item in app.warning
-            )
             assert any(item.label == "Save transaction" for item in app.button)

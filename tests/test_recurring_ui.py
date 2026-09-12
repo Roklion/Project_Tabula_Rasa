@@ -7,6 +7,7 @@ from tabula_rasa.page_renderers.transactions.recurring import (
     _active_or_selected,
     _mark_workbook_data_changed,
     _recurring_category_options,
+    _recurring_payee_options,
     _safe_date,
     _safe_interval,
     _selected_tag_ids,
@@ -61,6 +62,18 @@ def test_recurring_editor_filters_inactive_references_but_preserves_selection() 
     assert [item["id"] for item in _active_or_selected(items, ["inactive"])] == [
         "active", "inactive"
     ]
+
+
+def test_recurring_editor_keeps_missing_payee_visible_for_repair() -> None:
+    options = _recurring_payee_options(
+        [{"id": "active", "name": "Active", "active": "TRUE"}],
+        "deleted-payee",
+    )
+
+    assert options[-1] == {
+        "id": "deleted-payee",
+        "name": "Missing (deleted-payee)",
+    }
 
 
 def test_recurring_editor_treats_nonlist_tag_ids_as_empty() -> None:

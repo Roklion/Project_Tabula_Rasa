@@ -57,6 +57,20 @@ def _active_or_selected(items, selected_ids) -> list[dict[str, Any]]:
     ]
 
 
+def _recurring_payee_options(
+    payees: list[dict[str, Any]], selected_payee: str
+) -> list[dict[str, Any]]:
+    """Keep a missing schedule payee visible and selectable for repair."""
+    available = _active_or_selected(payees, [selected_payee])
+    if selected_payee and selected_payee not in {
+        str(item.get("id")) for item in available
+    }:
+        available.append(
+            {"id": selected_payee, "name": f"Missing ({selected_payee})"}
+        )
+    return available
+
+
 def _selected_tag_ids(value: Any) -> list[Any]:
     try:
         selected_tags = json.loads(value or "[]")
@@ -184,7 +198,7 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
                 format_func=lambda value: category_names.get(value, value),
             )
             selected_payee = str(selected.get("payee_id", ""))
-            available_payees = _active_or_selected(payees, [selected_payee])
+            available_payees = _recurring_payee_options(payees, selected_payee)
             payee_ids = [""] + [str(item["id"]) for item in available_payees]
             payee_names = {str(item["id"]): str(item.get("name", "")) for item in available_payees}
             edit_payee = st.selectbox(

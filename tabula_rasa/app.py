@@ -474,7 +474,7 @@ else:
                     "Automatic recurring schedule reconciliation failed; "
                     f"manual actions remain available. {error}"
                 )
-            else:
+            finally:
                 reconciled_profiles.add(reconciliation_key)
 
     except (LocalProfileStoreError, StorageError) as error:

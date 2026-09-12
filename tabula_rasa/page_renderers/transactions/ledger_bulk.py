@@ -462,6 +462,7 @@ def render_bulk_actions(
                 "from the Mixed-use expenses tab."
             )
         active_schedule_ids: set[str] = set()
+        schedule_status_error: StorageError | None = None
         if any(
             str(transaction.get("recurring_schedule_id") or "").strip()
             for transaction in expected_selected
@@ -474,8 +475,8 @@ def render_bulk_actions(
                     )
                     if schedule.get("status") == "active"
                 }
-            except StorageError:
-                pass
+            except StorageError as error:
+                schedule_status_error = error
         warning_schedule_ids = _latest_active_recurring_ids(
             transactions, selected_ids, active_schedule_ids
         )
@@ -484,6 +485,11 @@ def render_bulk_actions(
                 "This selection includes the latest current occurrence of "
                 f"{len(warning_schedule_ids)} active recurring series. "
                 "Deleting it may make reconciliation regenerate the due date."
+            )
+        if schedule_status_error is not None:
+            st.warning(
+                "Recurring schedule status could not be refreshed; bulk deletion "
+                "is disabled until the ledger can be refreshed."
             )
         selected_snapshot_key = hashlib.sha256(
             repr(
@@ -551,6 +557,10 @@ def render_bulk_actions(
             delete_error.error(
                 "Bulk deletion is disabled because the selection includes "
                 "a mixed-use projection. Manage it from the Mixed-use expenses tab."
+            )
+        elif delete_requested and schedule_status_error is not None:
+            delete_error.error(
+                "Refresh the recurring schedule status before deleting this selection."
             )
         elif delete_requested:
             if not confirm_delete:

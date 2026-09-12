@@ -290,6 +290,10 @@ def render_add_transaction(
                             st.session_state.pop(pending_transaction_key, None)
                             st.session_state.pop(pending_payload_key, None)
 
+                        def clear_pending_recurring_if_active() -> None:
+                            if kind == "Expense" and recurring:
+                                clear_pending_recurring_ids()
+
                         if kind == "Expense" and recurring:
                             pending_schedule_id, pending_transaction_id = _pending_recurring_ids(
                                 st.session_state, context.profile_key
@@ -344,7 +348,7 @@ def render_add_transaction(
                             ),
                             on_success=(
                                 lambda: (
-                                    clear_pending_recurring_ids(),
+                                    clear_pending_recurring_if_active(),
                                     context.schedule_widget_reset("reset_add_transaction_form"),
                                 )
                                 if not prepared_receipts
@@ -352,7 +356,7 @@ def render_add_transaction(
                             ),
                             on_confirmed=(
                                 lambda result: (
-                                    clear_pending_recurring_ids(),
+                                    clear_pending_recurring_if_active(),
                                     handle_confirmed_transaction_receipts(
                                         context,
                                         result,
