@@ -108,6 +108,8 @@ class BackupMixin:
                     values = tag
                 elif title == "RecurringSchedules":
                     values = {**values, **self._decode_schedule(values)}
+                    for field in ("account_id", "category_id", "payee_id"):
+                        values[field] = str(values.get(field, "") or "").strip()
                 writer.writerow([values.get(header, "") for header in headers])
             csv_files[f"{title}.csv"] = csv_buffer.getvalue().encode("utf-8")
 

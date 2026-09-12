@@ -163,6 +163,7 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         self.storage.ensure_defaults()
         account = self.storage.list_accounts()[0]
         category = self.storage.list_categories(kind="Expense")[0]
+        payee = self.storage.create_payee("Noncanonical vendor")
         schedule = self.storage.create_recurring_schedule(
             schedule_id="noncanonical-export",
             name="Noncanonical export",
@@ -174,7 +175,14 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         )
         row = self.storage._find_row("RecurringSchedules", schedule["id"])
         changed = dict(row.values)
-        changed.update({"kind": "expense", "recurrence_unit": "months", "status": "ACTIVE"})
+        changed.update({
+            "kind": "expense",
+            "recurrence_unit": "months",
+            "status": "ACTIVE",
+            "account_id": f" {account['id']} ",
+            "category_id": f" {category['id']} ",
+            "payee_id": f" {payee['id']} ",
+        })
         self.storage._replace_row("RecurringSchedules", row, changed)
 
         backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
@@ -184,6 +192,9 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         assert schedules[0]["kind"] == "Expense"
         assert schedules[0]["recurrence_unit"] == "month"
         assert schedules[0]["status"] == "active"
+        assert schedules[0]["account_id"] == account["id"]
+        assert schedules[0]["category_id"] == category["id"]
+        assert schedules[0]["payee_id"] == payee["id"]
         assert self.storage.validate_backup_zip(backup)["format_version"] == BACKUP_FORMAT_VERSION
 
     def test_backup_rejects_an_externally_corrupted_hierarchy(self) -> None:
