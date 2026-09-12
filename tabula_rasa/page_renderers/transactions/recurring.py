@@ -78,17 +78,8 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
             "when adding a transaction to create one."
         )
         return
-    current_transactions = context.storage.list_transactions()
-    current_sources = context.storage.list_mixed_use_expense_sources()
     rows = []
     for item in schedules:
-        linked = current_sources if item.get("source_kind") == "mixed_use" else current_transactions
-        current_dates = [
-            str(row["recurring_scheduled_date"])
-            for row in linked
-            if row.get("recurring_schedule_id") == item["id"]
-            and row.get("recurring_scheduled_date")
-        ]
         rows.append({
             "Name": item["name"],
             "Type": "Mixed-use" if item.get("source_kind") == "mixed_use" else "Expense",
@@ -97,7 +88,7 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
             "Cadence": f"Every {item['recurrence_interval']} {item['recurrence_unit']}",
             "Start": item.get("start_date", ""),
             "End": item.get("end_date", "") or "—",
-            "Latest current": max(current_dates) if current_dates else "—",
+            "Latest current": item.get("latest_current_occurrence_date") or "—",
             "Next due": item.get("next_due_date") or "—",
             "Status": item["status"].title(),
             "Attention": (
@@ -226,7 +217,10 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
                     description=edit_description, reference=edit_reference,
                 )
                 _mark_workbook_data_changed(context)
-                st.success("Schedule template updated; existing occurrences were unchanged.")
+                st.session_state[notice_key] = {
+                    "level": "success",
+                    "message": "Schedule template updated; existing occurrences were unchanged.",
+                }
                 st.rerun()
             except Exception as error:
                 context.report_storage_error(error)

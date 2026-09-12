@@ -135,6 +135,29 @@ def test_real_v10_shaped_archive_converts_to_v11_with_empty_recurring_table() ->
     assert GoogleSheetsStorage.validate_backup_zip(converted)["format_version"] == 11
 
 
+def test_v10_migration_rejects_source_checksum_mismatch() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    account = storage.create_account("Checking", "Bank")
+    category = storage.create_category("Office", "Expense")
+    storage.create_transaction(
+        txn_date="2026-09-01", kind="Expense", amount="10.00",
+        account_id=account["id"], category_id=category["id"],
+    )
+    legacy = _downgrade(
+        storage.export_backup_zip(
+            {"schema_version": 1, "business_profile_key": "test", "receipts": []}
+        ),
+        10,
+    )
+
+    def corrupt_transactions(files: dict[str, bytes], _manifest: dict[str, Any]) -> None:
+        files["Transactions.csv"] = files["Transactions.csv"].replace(b",10.00,", b",11.00,")
+
+    legacy = _rewrite_legacy(legacy, update_manifest=corrupt_transactions)
+    with pytest.raises(StorageValidationError, match="Transactions backup checksum"):
+        migrate_legacy_backup(legacy, profile_key="test")
+
+
 def test_v9_projection_tags_are_copied_to_mixed_use_source() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     account = storage.create_account("Checking", "Bank")

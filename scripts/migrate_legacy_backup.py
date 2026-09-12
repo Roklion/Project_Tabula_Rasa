@@ -103,6 +103,42 @@ def _read_csv(
     return actual_headers, records
 
 
+def _validate_version_10_manifest(
+    archive: zipfile.ZipFile,
+    names: list[str],
+    manifest: dict[str, Any],
+    schemas: dict[str, tuple[str, ...]],
+) -> None:
+    expected_names = {f"{title}.csv" for title in schemas} | {"manifest.json", "receipts.json"}
+    if len(names) != len(set(names)) or set(names) != expected_names:
+        raise StorageValidationError("Backup must contain exactly the expected legacy files")
+
+    row_counts = manifest.get("row_counts")
+    file_hashes = manifest.get("sha256")
+    worksheet_headers = manifest.get("worksheet_headers")
+    if not all(isinstance(value, dict) for value in (row_counts, file_hashes, worksheet_headers)):
+        raise StorageValidationError("Legacy backup manifest is missing validation metadata")
+    expected_hash_names = {f"{title}.csv" for title in schemas} | {"receipts.json"}
+    if set(file_hashes) != expected_hash_names or set(row_counts) != set(schemas):
+        raise StorageValidationError("Legacy backup manifest entries are invalid")
+    if set(worksheet_headers) != set(schemas):
+        raise StorageValidationError("Legacy backup manifest worksheet headers are invalid")
+
+    for title, headers in schemas.items():
+        name = f"{title}.csv"
+        content = archive.read(name)
+        if hashlib.sha256(content).hexdigest() != file_hashes.get(name):
+            raise StorageValidationError(f"{title} backup checksum does not match")
+        actual_headers, rows = _read_csv(content, title, headers)
+        if worksheet_headers.get(title) != list(actual_headers):
+            raise StorageValidationError(f"{title} backup headers do not match its manifest")
+        if row_counts.get(title) != len(rows):
+            raise StorageValidationError(f"{title} backup row count does not match its manifest")
+    receipts = archive.read("receipts.json")
+    if hashlib.sha256(receipts).hexdigest() != file_hashes.get("receipts.json"):
+        raise StorageValidationError("receipts.json backup checksum does not match")
+
+
 def _read_source(backup: bytes) -> tuple[int, dict[str, Any], dict[str, list[dict[str, str]]], bytes | None]:
     try:
         with zipfile.ZipFile(io.BytesIO(backup)) as archive:
@@ -114,6 +150,8 @@ def _read_source(backup: bytes) -> tuple[int, dict[str, Any], dict[str, list[dic
             if version not in SOURCE_HEADERS:
                 raise StorageValidationError("Only backup formats 1 through 10 can be migrated")
             schemas = SOURCE_HEADERS[version]
+            if version == 10:
+                _validate_version_10_manifest(archive, names, manifest, schemas)
             names = set(names)
             required_names = {f"{title}.csv" for title in schemas} | {"manifest.json"}
             if version >= 5:
