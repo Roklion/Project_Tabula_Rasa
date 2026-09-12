@@ -12,6 +12,7 @@ from tabula_rasa.mixed_use import (
 from tabula_rasa.storage import (
     GoogleSheetsStorage,
     StorageConflictError,
+    StorageValidationError,
 )
 from tests.mixed_use_storage._support import expense_inputs
 
@@ -104,6 +105,19 @@ def test_mixed_use_create_persists_one_allocated_projection(
         "payee"
         not in default_storage._rows("MixedUseExpenses", force_refresh=True)[0].values
     )
+
+
+def test_generic_mixed_use_create_rejects_recurring_provenance(
+    default_storage: GoogleSheetsStorage,
+) -> None:
+    with pytest.raises(StorageValidationError, match="reserved for recurring"):
+        default_storage.create_mixed_use_expense(
+            **expense_inputs(default_storage),
+            recurring_schedule_id="schedule-1",
+            recurring_scheduled_date="2026-09-11",
+            recurring_source_kind="mixed_use",
+            recurring_occurrence_type="generated",
+        )
 
 
 def test_mixed_use_validation_accepts_insignificant_sheet_number_formatting(

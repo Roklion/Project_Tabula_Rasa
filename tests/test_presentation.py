@@ -10,6 +10,7 @@ from tabula_rasa.presentation import (
     global_styles,
     render_page_header,
     reset_profile_presentation_state,
+    reset_stale_recurring_pending_state,
 )
 
 
@@ -217,6 +218,11 @@ def test_profile_switch_clears_unscoped_presentation_state() -> None:
         "mixed_use_edit_baseline_source_id_north": "north-source",
         "mixed_use_pending_source_id_north": "pending-source",
         "mixed_use_pending_transaction_id_north": "pending-transaction",
+        "mixed_use_pending_schedule_id_north": "pending-schedule",
+        "mixed_use_pending_payload_north": {"description": "North recurring"},
+        "recurring_pending_schedule_id_north": "pending-schedule",
+        "recurring_pending_transaction_id_north": "pending-transaction",
+        "recurring_pending_payload_north": {"description": "North recurring"},
         "mixed_use_copy_source_id_north": "north-source",
         "mixed_use_copy_snapshot_north": {"id": "north-source"},
         "mixed_use_copy_new_source_id_north": "new-source",
@@ -282,6 +288,11 @@ def test_profile_switch_clears_unscoped_presentation_state() -> None:
     assert "mixed_cancel_copy_north_north-source_copy_3" not in session_state
     assert session_state["mixed_use_pending_source_id_north"] == "pending-source"
     assert session_state["mixed_use_pending_transaction_id_north"] == "pending-transaction"
+    assert session_state["mixed_use_pending_schedule_id_north"] == "pending-schedule"
+    assert session_state["mixed_use_pending_payload_north"] == {"description": "North recurring"}
+    assert session_state["recurring_pending_schedule_id_north"] == "pending-schedule"
+    assert session_state["recurring_pending_transaction_id_north"] == "pending-transaction"
+    assert session_state["recurring_pending_payload_north"] == {"description": "North recurring"}
     assert "mixed_date_north_north-source" not in session_state
     assert "mixed_total_north_north-source" not in session_state
     assert "mixed_confirm_delete_north_north-source" not in session_state
@@ -303,6 +314,46 @@ def test_profile_switch_clears_unscoped_presentation_state() -> None:
     assert "write_success_notice" not in session_state
     assert "add_transaction_amount" not in session_state
     assert session_state["profile_scoped_cache"] == "retain"
+
+
+def test_stale_recurring_pending_state_isolated_by_workbook_revision() -> None:
+    session_state = {
+        "recurring_pending_schedule_id_north": "old-schedule",
+        "recurring_pending_transaction_id_north": "old-transaction",
+        "recurring_pending_payload_north": {"amount": "10"},
+        "recurring_pending_configuration_revision_north": "old-revision",
+        "mixed_use_pending_source_id_north": "old-source",
+        "mixed_use_pending_transaction_id_north": "old-projection",
+        "mixed_use_pending_schedule_id_north": "old-mixed-schedule",
+        "mixed_use_pending_payload_north": {"total_expense": "20"},
+        "mixed_use_pending_configuration_revision_north": "old-revision",
+        "mixed_use_pending_source_id_south": "ordinary-pending-source",
+        "mixed_use_pending_transaction_id_south": "ordinary-pending-projection",
+    }
+
+    reset_stale_recurring_pending_state(
+        session_state,
+        profile_key="north",
+        workbook_identity="new-revision",
+    )
+
+    assert not any("north" in key for key in session_state if "pending" in key)
+    assert session_state["mixed_use_pending_source_id_south"] == (
+        "ordinary-pending-source"
+    )
+
+    reset_stale_recurring_pending_state(
+        session_state,
+        profile_key="south",
+        workbook_identity="new-revision",
+    )
+
+    assert session_state["mixed_use_pending_source_id_south"] == (
+        "ordinary-pending-source"
+    )
+    assert session_state["mixed_use_pending_transaction_id_south"] == (
+        "ordinary-pending-projection"
+    )
 
 
 def test_initial_profile_selection_preserves_existing_session_state() -> None:

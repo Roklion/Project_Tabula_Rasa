@@ -690,9 +690,32 @@ Receipt-on-create partial failure never duplicates or discards a confirmed
 transaction. Bulk mode cannot operate on rows outside the current visible
 scope. Tags remain independent of Categories and do not affect accounting.
 
+#### Recurring expenses management
+
+Transactions includes a fourth top-level tab named **Recurring expenses**,
+before Payees & Tags. It lists each profile-local Expense schedule with its
+cadence, next due date, latest current occurrence, status, attention state, and
+stable schedule ID. The schedule template is flat and validated: amount,
+account, Expense category, optional Payee, Tags, description, and reference.
+Receipt references are occurrence-specific and are never stored in a template.
+
+Creating an ordinary or mixed-use recurring Expense writes the schedule and
+initial occurrence as one logical operation. Reconciliation runs once per
+profile/session, creates due occurrences from stable schedule/date identities,
+and is safe to repeat after an uncertain response. A failed schedule is
+marked for attention without preventing other schedules from reconciling.
+Generated mixed-use rows always use the source-authoritative source/projection
+pair and mirror recurring provenance on both rows.
+
+Pause stops generation without changing the template or existing occurrences;
+Resume continues from the latest current linked scheduled date. End prevents
+future generation permanently. Editing or deleting an occurrence never edits
+or deletes its schedule. Schedule edits affect future generated occurrences;
+existing occurrences remain ordinary editable/deletable records.
+
 #### Payees & Tags management
 
-Transactions includes a third top-level tab named **Payees & Tags**. It has
+Transactions includes a fifth top-level tab named **Payees & Tags**. It has
 visually separate **Payees** and **Tags** subtabs and always identifies the
 selected business profile. Each section lists all stored values, including
 inactive values, and provides add, rename, merge, and remove workflows.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import date
+from uuid import uuid4
 
 import streamlit as st
 
@@ -23,6 +24,34 @@ from tabula_rasa.page_renderers.tag_selector import (
     render_tag_selector,
     tag_selector_error,
 )
+from tabula_rasa.storage import StorageConflictError, StorageValidationError
+
+
+def _pending_recurring_ids(
+    state: dict[str, object],
+    profile: str,
+    configuration_revision: str | None = None,
+) -> tuple[str, str]:
+    """Keep a recurring schedule and initial transaction ID stable on retry."""
+    schedule_key = f"recurring_pending_schedule_id_{profile}"
+    transaction_key = f"recurring_pending_transaction_id_{profile}"
+    schedule_id = str(state.get(schedule_key) or uuid4())
+    transaction_id = str(state.get(transaction_key) or uuid4())
+    state[schedule_key] = schedule_id
+    state[transaction_key] = transaction_id
+    if configuration_revision is not None:
+        state[f"recurring_pending_configuration_revision_{profile}"] = (
+            configuration_revision
+        )
+    return schedule_id, transaction_id
+
+
+def _pending_recurring_create_exists(state: dict[str, object], profile: str) -> bool:
+    """Keep an incomplete recurring create on its convergence path."""
+    return bool(
+        state.get(f"recurring_pending_schedule_id_{profile}")
+        or state.get(f"recurring_pending_transaction_id_{profile}")
+    )
 
 
 def render_add_transaction(
@@ -60,6 +89,11 @@ def render_add_transaction(
         "add_transaction_reference",
         "add_transaction_description",
         "add_transaction_receipts",
+        "add_transaction_recurring",
+        "add_transaction_recurrence_unit",
+        "add_transaction_recurrence_interval",
+        "add_transaction_recurrence_name",
+        "add_transaction_recurrence_end",
     )
     context.reset_widget_state_if_requested(
         "reset_add_transaction_form",
@@ -88,6 +122,8 @@ def render_add_transaction(
             key="add_transaction_date",
         )
         category_id = None
+        recurring = False
+        recurrence_unit = recurrence_interval = recurrence_name = recurrence_end = None
         if kind == "Transfer":
             amount = st.number_input(
                 "Amount",
@@ -119,6 +155,23 @@ def render_add_transaction(
                 format="%.2f",
                 key="add_transaction_amount",
             )
+            if kind == "Expense":
+                recurring = st.checkbox(
+                    "Repeat this Expense",
+                    key="add_transaction_recurring",
+                    help="Create a profile-local schedule and this transaction as its initial occurrence.",
+                )
+                if recurring:
+                    r1, r2 = st.columns(2)
+                    recurrence_unit = r1.selectbox("Repeat every", ["day", "week", "month", "year"], key="add_transaction_recurrence_unit")
+                    recurrence_interval = r2.number_input("Interval", min_value=1, value=1, step=1, key="add_transaction_recurrence_interval")
+                    recurrence_name = st.text_input("Schedule name", key="add_transaction_recurrence_name")
+                    recurrence_end = st.date_input("End date (optional)", value=None, key="add_transaction_recurrence_end")
+        pending_schedule_key = f"recurring_pending_schedule_id_{context.profile_key}"
+        pending_transaction_key = f"recurring_pending_transaction_id_{context.profile_key}"
+        pending_payload_key = f"recurring_pending_payload_{context.profile_key}"
+        pending_schedule_id = str(st.session_state.get(pending_schedule_key) or "")
+        pending_transaction_id = str(st.session_state.get(pending_transaction_key) or "")
         source = st.selectbox(
             "To Account" if kind == "Income" else "From Account",
             list(account_map),
@@ -191,6 +244,18 @@ def render_add_transaction(
                 save_error.error(tag_error)
             elif (tag_error := inline_tag_name_error(new_tag_name)):
                 save_error.error(tag_error)
+            elif (
+                kind == "Expense"
+                and not recurring
+                and _pending_recurring_create_exists(
+                    st.session_state, context.profile_key
+                )
+            ):
+                save_error.error(
+                    "A previous recurring save is incomplete. Re-enable "
+                    "Repeat this Expense to retry it before recording a "
+                    "different expense."
+                )
             else:
                 payload = {
                     "txn_date": transaction_date,
@@ -226,12 +291,62 @@ def render_add_transaction(
                             "profile before saving a transaction with receipts."
                         )
                     else:
+                        def clear_pending_recurring_ids() -> None:
+                            st.session_state.pop(pending_schedule_key, None)
+                            st.session_state.pop(pending_transaction_key, None)
+                            st.session_state.pop(pending_payload_key, None)
+                            st.session_state.pop(
+                                f"recurring_pending_configuration_revision_{context.profile_key}",
+                                None,
+                            )
+
+                        def clear_pending_recurring_if_active() -> None:
+                            if kind == "Expense" and recurring:
+                                clear_pending_recurring_ids()
+
+                        if kind == "Expense" and recurring:
+                            pending_schedule_id, pending_transaction_id = _pending_recurring_ids(
+                                st.session_state,
+                                context.profile_key,
+                                str(
+                                    context.profile_secrets.get("spreadsheet_id")
+                                    or context.configuration_revision
+                                ),
+                            )
+                            payload.update({
+                                "schedule_id": pending_schedule_id,
+                                "transaction_id": pending_transaction_id,
+                                "name": recurrence_name or description or "Recurring expense",
+                                "recurrence_unit": recurrence_unit,
+                                "recurrence_interval": recurrence_interval,
+                                "end_date": recurrence_end,
+                            })
+                            previous_payload = st.session_state.get(pending_payload_key)
+                            if isinstance(previous_payload, Mapping):
+                                payload = {
+                                    **previous_payload,
+                                    "schedule_id": pending_schedule_id,
+                                    "transaction_id": pending_transaction_id,
+                                }
+                            else:
+                                st.session_state[pending_payload_key] = dict(payload)
+
+                        def operation():
+                            try:
+                                return (
+                                    context.storage.create_recurring_expense(**payload)["transaction"]
+                                    if kind == "Expense" and recurring
+                                    else context.storage.create_transaction(**payload)
+                                )
+                            except (StorageConflictError, StorageValidationError):
+                                if kind == "Expense" and recurring:
+                                    clear_pending_recurring_ids()
+                                raise
+
                         context.confirmed_write(
                             "create_transaction",
                             payload,
-                            lambda: context.storage.create_transaction(
-                                **payload,
-                            ),
+                            operation,
                             lambda _result: st.session_state.get(
                                 "write_success_notice"
                             )
@@ -247,17 +362,21 @@ def render_add_transaction(
                                 else "Transaction saved."
                             ),
                             on_success=(
-                                lambda: context.schedule_widget_reset(
-                                    "reset_add_transaction_form"
+                                lambda: (
+                                    clear_pending_recurring_if_active(),
+                                    context.schedule_widget_reset("reset_add_transaction_form"),
                                 )
                                 if not prepared_receipts
                                 else None
                             ),
                             on_confirmed=(
-                                lambda result: handle_confirmed_transaction_receipts(
-                                    context,
-                                    result,
-                                    prepared_receipts,
+                                lambda result: (
+                                    clear_pending_recurring_if_active(),
+                                    handle_confirmed_transaction_receipts(
+                                        context,
+                                        result,
+                                        prepared_receipts,
+                                    ),
                                 )
                                 if prepared_receipts
                                 else None

@@ -27,6 +27,7 @@ from .ledger_filters import (
     _selection_ids,
     transaction_has_receipts,
     transaction_is_mixed_use,
+    transaction_type_label,
 )
 from .transaction_copy import (
     _clear_copy_state,
@@ -214,11 +215,7 @@ def render_ledger(
         for transaction in structured_transactions
     }
     transaction_frame["Type"] = [
-        (
-            f"{value} · Mixed-use"
-            if transaction_is_mixed_use(transaction_by_id.get(str(row_id), {}))
-            else value
-        )
+        transaction_type_label(value, transaction_by_id.get(str(row_id), {}))
         for value, row_id in zip(
             transaction_frame["Type"],
             transaction_frame["ID"],

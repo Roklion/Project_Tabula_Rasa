@@ -263,6 +263,35 @@ def render_transaction_editor(
                     "Deleting this transaction is permanent and cannot be undone.",
                     icon="⚠️",
                 )
+                recurring_id = str(selected.get("recurring_schedule_id") or "")
+                recurring_active = False
+                recurring_status_error = False
+                if recurring_id:
+                    try:
+                        recurring_active = (
+                            context.storage.get_recurring_schedule(
+                                recurring_id, _force_refresh=True
+                            ).get("status")
+                            == "active"
+                        )
+                    except StorageError:
+                        recurring_status_error = True
+                        st.warning(
+                            "Recurring schedule status could not be refreshed; "
+                            "deletion is disabled until the ledger can be refreshed."
+                        )
+                if recurring_active:
+                    linked_dates = [
+                        str(item.get("recurring_scheduled_date") or "")
+                        for item in all_transactions
+                        if str(item.get("recurring_schedule_id") or "") == recurring_id
+                        and item.get("recurring_scheduled_date")
+                    ]
+                    if linked_dates and str(selected.get("recurring_scheduled_date") or "") == max(linked_dates):
+                        st.warning(
+                            "This is the latest current occurrence in an active recurring series. "
+                            "Deleting it may make the next reconciliation regenerate the due date."
+                        )
                 confirm_delete = st.checkbox(
                     "I understand this transaction will be permanently deleted",
                     key=f"edit_transaction_confirm_delete_{edit_widget_scope}",
@@ -434,7 +463,11 @@ def render_transaction_editor(
                 _clear_copy_state(context.profile_key)
                 st.rerun()
             if delete_requested:
-                if not confirm_delete:
+                if recurring_status_error:
+                    edit_error.error(
+                        "Refresh the recurring schedule status before deleting this transaction."
+                    )
+                elif not confirm_delete:
                     edit_error.error(
                         "Confirm that you understand deletion is permanent."
                     )

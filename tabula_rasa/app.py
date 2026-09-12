@@ -64,6 +64,7 @@ from tabula_rasa.presentation import (
     apply_global_styles,
     render_global_footer,
     reset_profile_presentation_state,
+    reset_stale_recurring_pending_state,
 )
 from tabula_rasa.storage import (
     GoogleSheetsStorage,
@@ -75,7 +76,7 @@ from tabula_rasa.receipt_backfill import (
 )
 
 
-STORAGE_IMPLEMENTATION_VERSION = 14
+STORAGE_IMPLEMENTATION_VERSION = 15
 
 
 def _google_maps_browser_key(secrets: Mapping[str, object]) -> str | None:
@@ -448,10 +449,19 @@ else:
         revision = (
             local_profile_revision(LOCAL_PROFILE_STORE_PATH)
         )
+        workbook_identity = str(
+            profile_by_key[selected_profile_key].secrets.get("spreadsheet_id")
+            or revision
+        )
         storage = get_storage(
             selected_profile_key,
             STORAGE_IMPLEMENTATION_VERSION,
             revision,
+        )
+        reset_stale_recurring_pending_state(
+            st.session_state,
+            profile_key=selected_profile_key,
+            workbook_identity=workbook_identity,
         )
         initialized_profiles = st.session_state.setdefault(
             "defaults_initialized_profiles", set()
@@ -459,6 +469,23 @@ else:
         if selected_profile_key not in initialized_profiles:
             storage.ensure_defaults()
             initialized_profiles.add(selected_profile_key)
+        reconciled_profiles = st.session_state.setdefault(
+            "recurring_reconciled_profiles", set()
+        )
+        reconciliation_key = (selected_profile_key, workbook_identity)
+        if reconciliation_key not in reconciled_profiles:
+            # Reconciliation is deliberately one bounded pass per profile and
+            # session. Schedule-level failures are persisted as attention by
+            # storage; they must not block unrelated schedules or trigger reruns.
+            try:
+                storage.reconcile_recurring_schedules()
+            except StorageError as error:
+                st.warning(
+                    "Automatic recurring schedule reconciliation failed; "
+                    f"manual actions remain available. {error}"
+                )
+            finally:
+                reconciled_profiles.add(reconciliation_key)
 
     except (LocalProfileStoreError, StorageError) as error:
         if isinstance(error, StorageError):

@@ -70,6 +70,13 @@ class FakeWorksheet:
     def delete_rows(self, row_number: int) -> None:
         del self.rows[row_number - 1]
 
+    def resize(self, *, rows: int, cols: int) -> None:
+        self.rows = [row[:cols] for row in self.rows[:rows]]
+        while len(self.rows) < rows:
+            self.rows.append([""] * cols)
+        for row in self.rows:
+            row.extend([""] * (cols - len(row)))
+
 
 class FakeWorkbook:
     title = "Test Ledger"

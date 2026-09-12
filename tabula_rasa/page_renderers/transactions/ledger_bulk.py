@@ -10,6 +10,7 @@ from typing import Any
 import streamlit as st
 from tabula_rasa.ledger_presentation import money
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
+from tabula_rasa.storage import StorageError
 from .ledger_filters import _bulk_selection_key, transaction_is_mixed_use
 from .receipt_workflows import clear_receipt_creation_recovery
 
@@ -35,6 +36,51 @@ def _bulk_scope_key(context: TransactionsContext) -> str:
     return (
         f"{context.profile_key}_"
         f"{st.session_state.get('transaction_bulk_selection_generation', 0)}"
+    )
+
+
+def _latest_active_recurring_ids(
+    transactions: Sequence[Mapping[str, object]],
+    selected_ids: Sequence[str],
+    active_schedule_ids: set[str],
+) -> tuple[str, ...]:
+    latest_dates: dict[str, str] = {}
+    for transaction in transactions:
+        schedule_id = str(transaction.get("recurring_schedule_id") or "").strip()
+        scheduled_date = str(
+            transaction.get("recurring_scheduled_date") or ""
+        ).strip()
+        if schedule_id and scheduled_date:
+            latest_dates[schedule_id] = max(
+                latest_dates.get(schedule_id, ""), scheduled_date
+            )
+    selected_by_id = {
+        str(transaction.get("id") or ""): transaction
+        for transaction in transactions
+    }
+    return tuple(
+        sorted(
+            {
+                schedule_id
+                for transaction_id in selected_ids
+                for schedule_id in [
+                    str(
+                        selected_by_id.get(transaction_id, {}).get(
+                            "recurring_schedule_id"
+                        )
+                        or ""
+                    ).strip()
+                ]
+                if schedule_id in active_schedule_ids
+                and str(
+                    selected_by_id.get(transaction_id, {}).get(
+                        "recurring_scheduled_date"
+                    )
+                    or ""
+                ).strip()
+                == latest_dates.get(schedule_id)
+            }
+        )
     )
 
 
@@ -415,6 +461,36 @@ def render_bulk_actions(
                 "and deletion are disabled; manage it "
                 "from the Mixed-use expenses tab."
             )
+        active_schedule_ids: set[str] = set()
+        schedule_status_error: StorageError | None = None
+        if any(
+            str(transaction.get("recurring_schedule_id") or "").strip()
+            for transaction in expected_selected
+        ):
+            try:
+                active_schedule_ids = {
+                    str(schedule.get("id") or "").strip()
+                    for schedule in context.storage.list_recurring_schedules(
+                        _force_refresh=True
+                    )
+                    if schedule.get("status") == "active"
+                }
+            except StorageError as error:
+                schedule_status_error = error
+        warning_schedule_ids = _latest_active_recurring_ids(
+            transactions, selected_ids, active_schedule_ids
+        )
+        if warning_schedule_ids:
+            st.warning(
+                "This selection includes the latest current occurrence of "
+                f"{len(warning_schedule_ids)} active recurring series. "
+                "Deleting it may make reconciliation regenerate the due date."
+            )
+        if schedule_status_error is not None:
+            st.warning(
+                "Recurring schedule status could not be refreshed; bulk deletion "
+                "is disabled until the ledger can be refreshed."
+            )
         selected_snapshot_key = hashlib.sha256(
             repr(
                 tuple(
@@ -481,6 +557,10 @@ def render_bulk_actions(
             delete_error.error(
                 "Bulk deletion is disabled because the selection includes "
                 "a mixed-use projection. Manage it from the Mixed-use expenses tab."
+            )
+        elif delete_requested and schedule_status_error is not None:
+            delete_error.error(
+                "Refresh the recurring schedule status before deleting this selection."
             )
         elif delete_requested:
             if not confirm_delete:

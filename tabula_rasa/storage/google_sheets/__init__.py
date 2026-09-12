@@ -19,6 +19,7 @@ from .accounts import AccountsMixin
 from .backup import BackupMixin
 from .mileage import MileageMixin
 from .mixed_use import _MixedUseMixin
+from .recurring import RecurringMixin
 from .payees import PayeesMixin
 from .receipts import ReceiptsMixin
 from .schema import (
@@ -58,6 +59,7 @@ class GoogleSheetsStorage(
     TagsMixin,
     TransactionsMixin,
     _MixedUseMixin,
+    RecurringMixin,
     ReceiptsMixin,
     MileageMixin,
     BackupMixin,

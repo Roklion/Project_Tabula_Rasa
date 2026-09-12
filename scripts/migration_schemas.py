@@ -82,6 +82,36 @@ VERSION_3_WORKSHEET_HEADERS = {
     for title, headers in PRE_PAYEE_WORKSHEET_HEADERS.items()
 }
 
+# v10 was the last schema before recurring Expense schedules.  Keep this
+# explicit snapshot for the one-time workbook upgrader; runtime must accept
+# only the current layout.
+VERSION_10_WORKSHEET_HEADERS = {
+    title: tuple(
+        header for header in headers
+        if header not in {"recurring_schedule_id", "recurring_scheduled_date", "recurring_occurrence_type"}
+    )
+    for title, headers in {
+        **{title: headers for title, headers in VERSION_7_WORKSHEET_HEADERS.items()},
+        "Payees": ("id", "name", "active", "created_at"),
+        "Tags": ("id", "name", "active", "created_at"),
+        "Transactions": (
+            "id", "txn_date", "kind", "amount", "account_id", "to_account_id",
+            "category_id", "payee_id", "description", "reference",
+            "receipt_references", "created_at", "source_type", "source_id", "tag_ids",
+        ),
+        "Mileage": (
+            "id", "trip_date", "miles", "vehicle", "start_location", "destination",
+            "business_purpose", "notes", "created_at", "tag_ids",
+        ),
+        "MixedUseExpenses": (
+            "id", "txn_date", "kind", "total_expense", "business_use_percentage",
+            "allocated_amount", "account_id", "category_id", "payee_id", "description",
+            "reference", "receipt_references", "allocation_rationale",
+            "linked_transaction_id", "tag_ids", "created_at",
+        ),
+    }.items()
+}
+
 
 __all__ = [
     "LEGACY_TAGS_WORKBOOK_HEADERS",
@@ -91,4 +121,5 @@ __all__ = [
     "VERSION_5_WORKSHEET_HEADERS",
     "VERSION_6_WORKSHEET_HEADERS",
     "VERSION_7_WORKSHEET_HEADERS",
+    "VERSION_10_WORKSHEET_HEADERS",
 ]

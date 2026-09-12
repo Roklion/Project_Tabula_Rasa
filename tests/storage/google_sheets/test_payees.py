@@ -8,6 +8,7 @@ import pytest
 from tabula_rasa.storage import (
     GoogleSheetsStorage,
     StorageConflictError,
+    StorageUnavailableError,
     StorageValidationError,
 )
 from tests.fakes import FakeWorkbook
@@ -27,6 +28,21 @@ def test_legacy_payee_aliases_remain_available(default_storage) -> None:
     assert default_storage.delete_payee(target["id"])["status"] == "fully_applied"
 
 
+def test_merge_payees_rewrites_recurring_schedule_references(default_storage) -> None:
+    account, category = _ledger_setup(default_storage)
+    target = default_storage.create_payee("Target vendor")
+    source = default_storage.create_payee("Source vendor")
+    default_storage.create_recurring_expense(
+        schedule_id="payee-schedule", name="Subscription", txn_date="2026-01-01",
+        recurrence_unit="month", amount=10, account_id=account["id"],
+        category_id=category["id"], payee_id=source["id"],
+    )
+
+    default_storage.merge_payees(target["id"], [source["id"]])
+
+    assert default_storage.get_recurring_schedule("payee-schedule")["payee_id"] == target["id"]
+
+
 def test_referenced_payee_remove_is_blocked(default_storage) -> None:
     account, category = _ledger_setup(default_storage)
     payee = default_storage.create_payee("Used")
@@ -35,6 +51,36 @@ def test_referenced_payee_remove_is_blocked(default_storage) -> None:
         account_id=account["id"], category_id=category["id"], payee_id=payee["id"],
     )
     with pytest.raises(StorageConflictError, match="referenced by 1"):
+        default_storage.remove_payee(payee["id"])
+
+
+def test_payee_removal_retries_with_schedule_state_snapshot(default_storage, monkeypatch) -> None:
+    payee = default_storage.create_payee("Retry unused")
+    calls = 0
+
+    def fail_without_response(_: object) -> None:
+        nonlocal calls
+        calls += 1
+        raise OSError("temporary response lost")
+
+    monkeypatch.setattr(default_storage._workbook, "batch_update", fail_without_response)
+
+    with pytest.raises(StorageUnavailableError, match="could not confirm"):
+        default_storage.remove_payee(payee["id"])
+
+    assert calls == 2
+
+
+def test_recurring_schedule_payee_reference_blocks_remove(default_storage) -> None:
+    account, category = _ledger_setup(default_storage)
+    payee = default_storage.create_payee("Recurring vendor")
+    default_storage.create_recurring_expense(
+        schedule_id="payee-reference-schedule", name="Subscription", txn_date="2026-01-01",
+        recurrence_unit="month", amount=10, account_id=account["id"],
+        category_id=category["id"], payee_id=payee["id"],
+    )
+
+    with pytest.raises(StorageConflictError, match="referenced by 2"):
         default_storage.remove_payee(payee["id"])
 
 

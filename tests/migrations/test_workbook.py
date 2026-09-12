@@ -3,13 +3,14 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 import gspread
 import pytest
 
 import scripts.migrate_workbook as migration_script
 from scripts.migrate_workbook import migrate_workbook
+from scripts.migrate_workbook import _reorder_columns
 from tabula_rasa.storage.google_sheets import (
     StorageInitializationError,
     StorageValidationError,
@@ -23,8 +24,9 @@ from scripts.migration_schemas import (
     LEGACY_TAGS_WORKBOOK_HEADERS,
     VERSION_3_WORKSHEET_HEADERS,
     VERSION_7_WORKSHEET_HEADERS,
+    VERSION_10_WORKSHEET_HEADERS,
 )
-from tests.fakes import FakeWorkbook
+from tests.fakes import FakeWorkbook, FakeWorksheet
 
 
 def _append_record(workbook: FakeWorkbook, title: str, values: dict[str, str]) -> None:
@@ -44,6 +46,64 @@ def test_migrates_standard_pre_mixed_layout_to_current_headers() -> None:
     for title, headers in WORKSHEET_HEADERS.items():
         assert workbook.sheets[title].rows[0] == list(headers)
     GoogleSheetsStorage(workbook)
+
+
+def test_migrates_prior_v10_layout_to_current_headers_and_empty_schedules() -> None:
+    workbook = FakeWorkbook(VERSION_10_WORKSHEET_HEADERS)
+
+    result = migrate_workbook(workbook)
+
+    assert result["source_tags"] == 0
+    for title, headers in WORKSHEET_HEADERS.items():
+        assert workbook.sheets[title].rows[0] == list(headers)
+    assert workbook.sheets["RecurringSchedules"].rows == [
+        list(WORKSHEET_HEADERS["RecurringSchedules"])
+    ]
+    GoogleSheetsStorage(workbook)
+
+
+def test_migration_repairs_an_existing_blank_schedule_sheet() -> None:
+    workbook = FakeWorkbook(VERSION_10_WORKSHEET_HEADERS)
+    workbook.add_worksheet("RecurringSchedules", rows=1000, cols=len(WORKSHEET_HEADERS["RecurringSchedules"]))
+
+    migrate_workbook(workbook)
+
+    assert workbook.sheets["RecurringSchedules"].rows == [
+        list(WORKSHEET_HEADERS["RecurringSchedules"])
+    ]
+
+
+def test_reorder_columns_fills_missing_expected_columns() -> None:
+    worksheet = Mock()
+    worksheet.get_all_values.return_value = [["name"], ["Office"]]
+
+    assert _reorder_columns(worksheet, ["name"], ("id", "name")) == ["id", "name"]
+    worksheet.update.assert_called_once_with(
+        [["id", "name"], ["", "Office"]], range_name="A1", raw=True
+    )
+    worksheet.resize.assert_called_once_with(rows=2, cols=2)
+
+
+def test_reorder_columns_expands_before_updating_a_small_worksheet() -> None:
+    worksheet = Mock(row_count=1, col_count=1)
+    worksheet.get_all_values.return_value = [["name"], ["Office"]]
+
+    _reorder_columns(worksheet, ["name"], ("id", "name"))
+
+    assert worksheet.resize.call_args_list == [call(rows=2, cols=2), call(rows=2, cols=2)]
+    worksheet.update.assert_called_once_with(
+        [["id", "name"], ["", "Office"]], range_name="A1", raw=True
+    )
+
+
+def test_reorder_columns_clears_trailing_worksheet_data() -> None:
+    worksheet = FakeWorksheet("Legacy", ("name", "legacy"))
+    worksheet.rows.append(["Office", "stale"])
+
+    assert _reorder_columns(worksheet, ["name", "legacy"], ("id", "name")) == [
+        "id", "name"
+    ]
+    assert worksheet.rows == [["id", "name"], ["", "Office"]]
 
 
 def test_migrates_pre_receipt_v3_layout_to_current_headers() -> None:
@@ -111,6 +171,12 @@ def test_empty_worksheet_not_in_historical_layout_is_not_historical() -> None:
         "Accounts": [list(WORKSHEET_HEADERS["Accounts"])],
         "MixedUseExpenses": [[]],
     }
+
+    assert not _looks_like_historical_workbook(values)
+
+
+def test_historical_detection_tolerates_empty_mixed_use_values() -> None:
+    values = {"MixedUseExpenses": None}
 
     assert not _looks_like_historical_workbook(values)
 
@@ -356,8 +422,8 @@ def test_v9_migration_backfills_source_tags_from_linked_projection() -> None:
 
     assert result["source_tags"] == 1
     source = workbook.sheets["MixedUseExpenses"]
-    assert source.rows[0][-1] == "tag_ids"
-    assert source.rows[1][-1] == '["tag-1"]'
+    assert source.rows[0] == list(WORKSHEET_HEADERS["MixedUseExpenses"])
+    assert source.rows[1][source.rows[0].index("tag_ids")] == '["tag-1"]'
     GoogleSheetsStorage(workbook)
 
 

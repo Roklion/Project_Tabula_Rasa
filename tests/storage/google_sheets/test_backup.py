@@ -125,6 +125,7 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
                 "Transactions.csv",
                 "Mileage.csv",
                 "MixedUseExpenses.csv",
+                "RecurringSchedules.csv",
                 "Tags.csv",
                 "manifest.json",
                 "receipts.json",
@@ -157,6 +158,45 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         with zipfile.ZipFile(io.BytesIO(backup)) as archive:
             assert account["id"] in archive.read("Accounts.csv").decode("utf-8")
             assert "External" in archive.read("Accounts.csv").decode("utf-8")
+
+    def test_backup_serializes_normalized_recurring_schedule_enums(self) -> None:
+        self.storage.ensure_defaults()
+        account = self.storage.list_accounts()[0]
+        category = self.storage.list_categories(kind="Expense")[0]
+        payee = self.storage.create_payee("Noncanonical vendor")
+        schedule = self.storage.create_recurring_schedule(
+            schedule_id="noncanonical-export",
+            name="Noncanonical export",
+            txn_date="2026-07-31",
+            recurrence_unit="month",
+            amount=10,
+            account_id=account["id"],
+            category_id=category["id"],
+        )
+        row = self.storage._find_row("RecurringSchedules", schedule["id"])
+        changed = dict(row.values)
+        changed.update({
+            "kind": " expense ",
+            "source_kind": " transaction ",
+            "recurrence_unit": "months",
+            "status": "ACTIVE",
+            "account_id": f" {account['id']} ",
+            "category_id": f" {category['id']} ",
+            "payee_id": f" {payee['id']} ",
+        })
+        self.storage._replace_row("RecurringSchedules", row, changed)
+
+        backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
+
+        with zipfile.ZipFile(io.BytesIO(backup)) as archive:
+            schedules = list(csv.DictReader(io.StringIO(archive.read("RecurringSchedules.csv").decode())))
+        assert schedules[0]["kind"] == "Expense"
+        assert schedules[0]["recurrence_unit"] == "month"
+        assert schedules[0]["status"] == "active"
+        assert schedules[0]["account_id"] == account["id"]
+        assert schedules[0]["category_id"] == category["id"]
+        assert schedules[0]["payee_id"] == payee["id"]
+        assert self.storage.validate_backup_zip(backup)["format_version"] == BACKUP_FORMAT_VERSION
 
     def test_backup_rejects_an_externally_corrupted_hierarchy(self) -> None:
         parent = self.storage.create_account("Operating", "Bank")
@@ -398,6 +438,7 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             "Transactions": 1,
             "Mileage": 1,
             "Tags": 0,
+            "RecurringSchedules": 0,
         }
         assert restored_storage.list_accounts()[0]["id"] == account["id"]
         restored_transaction = restored_storage.list_transactions()[0]
@@ -408,6 +449,72 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             TEST_RECEIPT_REFERENCE
         ]
         assert restored_storage.list_mileage_trips()[0]["id"] == mileage["id"]
+
+    def test_backup_round_trips_mixed_recurring_source_kind(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Office", "Expense")
+        result = self.storage.create_recurring_mixed_use_expense(
+            schedule_id="mixed-backup-schedule",
+            name="Shared office",
+            txn_date="2026-09-01",
+            recurrence_unit="month",
+            recurrence_interval=1,
+            total_expense="100.00",
+            business_use_percentage="50",
+            account_id=account["id"],
+            category_id=category["id"],
+            allocation_rationale="Workspace",
+        )
+        backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
+        restored_storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+        restored_storage.restore_backup_zip(backup)
+        schedule = restored_storage.get_recurring_schedule("mixed-backup-schedule")
+        source = restored_storage.get_mixed_use_expense(result["source"]["id"])
+        projection = next(
+            item
+            for item in restored_storage.list_transactions()
+            if item["id"] == result["transaction"]["id"]
+        )
+        assert schedule["source_kind"] == "mixed_use"
+        assert source["recurring_source_kind"] == "mixed_use"
+        assert projection["recurring_source_kind"] == "mixed_use"
+
+    def test_backup_canonicalizes_mixed_recurring_allocation(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Office", "Expense")
+        self.storage.create_recurring_mixed_use_expense(
+            schedule_id="mixed-canonical-backup",
+            name="Shared office",
+            txn_date="2026-09-01",
+            recurrence_unit="month",
+            recurrence_interval=1,
+            total_expense="100.00",
+            business_use_percentage="50",
+            account_id=account["id"],
+            category_id=category["id"],
+            allocation_rationale="Workspace",
+        )
+        row = self.storage._find_row(
+            "RecurringSchedules", "mixed-canonical-backup"
+        )
+        corrupted = dict(row.values)
+        corrupted["amount"] = "99.00"
+        self.storage._replace_row("RecurringSchedules", row, corrupted)
+
+        backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
+
+        with zipfile.ZipFile(io.BytesIO(backup)) as archive:
+            schedules = list(
+                csv.DictReader(
+                    io.StringIO(
+                        archive.read("RecurringSchedules.csv").decode("utf-8")
+                    )
+                )
+            )
+        assert schedules[0]["amount"] == "50.00"
+        assert self.storage.validate_backup_zip(backup)["format_version"] == (
+            BACKUP_FORMAT_VERSION
+        )
 
     def test_backup_round_trips_account_and_category_hierarchies(self) -> None:
         account_parent = self.storage.create_account("Operating", "Bank")
@@ -477,6 +584,22 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             )
             with pytest.raises(StorageValidationError):
                 self.storage.validate_backup_zip(tampered)
+
+    def test_backup_validation_rejects_malformed_transaction_receipts(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Office", "Expense")
+        self.storage.create_transaction(
+            txn_date="2026-09-01", kind="Expense", amount="10.00",
+            account_id=account["id"], category_id=category["id"],
+        )
+        backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
+
+        def corrupt_receipts(rows: list[list[str]]) -> None:
+            rows[1][rows[0].index("receipt_references")] = "not-json"
+
+        tampered = rewrite_backup_tables(backup, {"Transactions": corrupt_receipts})
+        with pytest.raises(StorageValidationError, match="receipt"):
+            self.storage.validate_backup_zip(tampered)
 
     def test_backup_validation_rejects_incompatible_category_parent(self) -> None:
         expense = self.storage.create_category("Travel", "Expense")

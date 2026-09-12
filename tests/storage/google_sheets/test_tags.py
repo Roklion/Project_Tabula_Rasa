@@ -15,6 +15,21 @@ from ._support import (
 
 class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
 
+    def test_merge_tags_rewrites_recurring_schedule_references(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Office", "Expense")
+        target = self.storage.create_tag("Target")
+        source = self.storage.create_tag("Source")
+        self.storage.create_recurring_expense(
+            schedule_id="tag-schedule", name="Subscription", txn_date="2026-01-01",
+            recurrence_unit="month", amount=10, account_id=account["id"],
+            category_id=category["id"], tag_ids=[source["id"]],
+        )
+
+        self.storage.merge_tags(target["id"], [source["id"]])
+
+        assert json.loads(self.storage.get_recurring_schedule("tag-schedule")["tag_ids"]) == [target["id"]]
+
     def test_tags_are_profile_local_and_deduplicated_by_normalized_name(self) -> None:
         first = self.storage.create_tag("  Client   Visit ")
         duplicate = self.storage.create_tag("client visit")
@@ -183,6 +198,19 @@ def test_referenced_tag_remove_is_blocked_and_unreferenced_remove_succeeds(defau
     result = default_storage.remove_tag(unused["id"])
     assert result["status"] == "fully_applied"
     assert unused["id"] not in {item["id"] for item in default_storage.list_tags(active_only=False)}
+
+
+def test_recurring_schedule_tag_reference_blocks_remove(default_storage) -> None:
+    account, category = _ledger_setup(default_storage)
+    tag = default_storage.create_tag("Recurring tag")
+    default_storage.create_recurring_expense(
+        schedule_id="tag-reference-schedule", name="Subscription", txn_date="2026-01-01",
+        recurrence_unit="month", amount=10, account_id=account["id"],
+        category_id=category["id"], tag_ids=[tag["id"]],
+    )
+
+    with pytest.raises(StorageConflictError, match="referenced by 2"):
+        default_storage.remove_tag(tag["id"])
 
 
 def test_expected_tag_snapshot_protects_remove(default_storage) -> None:

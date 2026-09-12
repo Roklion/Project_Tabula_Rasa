@@ -129,7 +129,7 @@ class TagsMixin(_ManagedMixin):
             raise StorageValidationError("The target tag cannot also be a source")
         with self._workbook_locks.ledger, self._workbook_locks.tag:
             snapshot = self._snapshot(
-                ["Tags", "Transactions", "Mileage", "MixedUseExpenses"],
+                ["Tags", "Transactions", "Mileage", "MixedUseExpenses", "RecurringSchedules"],
                 force_refresh=True,
             )
             tag_rows = self._managed_rows_by_id(snapshot["Tags"], "Tags")
@@ -150,6 +150,7 @@ class TagsMixin(_ManagedMixin):
                     *snapshot["Transactions"],
                     *snapshot["Mileage"],
                     *snapshot["MixedUseExpenses"],
+                    *snapshot["RecurringSchedules"],
                 ):
                     raw_tags = row.values.get("tag_ids", "")
                     if _raw_tag_ids_may_contain(raw_tags, source_ids) and any(
@@ -165,7 +166,7 @@ class TagsMixin(_ManagedMixin):
                 raise StorageNotFoundError("A source tag no longer exists")
             self._assert_expected_managed_records(tags, expected_tags)
             update_rows: dict[str, tuple[str, _StoredRow, str]] = {}
-            for title in ("Transactions", "Mileage", "MixedUseExpenses"):
+            for title in ("Transactions", "Mileage", "MixedUseExpenses", "RecurringSchedules"):
                 for record_id, row in self._managed_rows_by_id(snapshot[title], title).items():
                     raw_tags = row.values.get("tag_ids", "")
                     if not _raw_tag_ids_may_contain(raw_tags, source_ids):
@@ -190,9 +191,10 @@ class TagsMixin(_ManagedMixin):
                 dict[str, _StoredRow],
                 dict[str, _StoredRow],
                 dict[str, _StoredRow],
+                dict[str, _StoredRow],
             ]:
                 current = self._snapshot(
-                    ["Tags", "Transactions", "Mileage", "MixedUseExpenses"],
+                    ["Tags", "Transactions", "Mileage", "MixedUseExpenses", "RecurringSchedules"],
                     force_refresh=True,
                 )
                 return (
@@ -202,6 +204,9 @@ class TagsMixin(_ManagedMixin):
                     self._managed_rows_by_id(
                         current["MixedUseExpenses"], "MixedUseExpenses"
                     ),
+                    self._managed_rows_by_id(
+                        current["RecurringSchedules"], "RecurringSchedules"
+                    ),
                 )
 
             def is_applied(state: Any) -> bool:
@@ -210,6 +215,7 @@ class TagsMixin(_ManagedMixin):
                     current_transactions,
                     current_mileage,
                     current_sources,
+                    current_schedules,
                 ) = state
                 if target_id not in current_tags or any(item in current_tags for item in source_ids):
                     return False
@@ -220,6 +226,7 @@ class TagsMixin(_ManagedMixin):
                         *current_transactions.values(),
                         *current_mileage.values(),
                         *current_sources.values(),
+                        *current_schedules.values(),
                     )
                 ):
                     return False
@@ -228,6 +235,7 @@ class TagsMixin(_ManagedMixin):
                         "Transactions": current_transactions,
                         "Mileage": current_mileage,
                         "MixedUseExpenses": current_sources,
+                        "RecurringSchedules": current_schedules,
                     }[title]
                     record_id = _clean_text(row.values.get("id"), "ID", required=True)
                     if record_id not in current_rows:
@@ -242,6 +250,7 @@ class TagsMixin(_ManagedMixin):
                     current_transactions,
                     current_mileage,
                     current_sources,
+                    current_schedules,
                 ) = state
                 if any(
                     record_id not in current_tags
@@ -254,6 +263,7 @@ class TagsMixin(_ManagedMixin):
                         "Transactions": current_transactions,
                         "Mileage": current_mileage,
                         "MixedUseExpenses": current_sources,
+                        "RecurringSchedules": current_schedules,
                     }[title]
                     current = current_rows.get(
                         _clean_text(row.values.get("id"), "ID", required=True)
@@ -263,7 +273,7 @@ class TagsMixin(_ManagedMixin):
                 return True
 
             def refresh_requests() -> None:
-                current_tags, current_transactions, current_mileage, current_sources = (
+                current_tags, current_transactions, current_mileage, current_sources, current_schedules = (
                     fresh_state()
                 )
                 current_state = (
@@ -271,6 +281,7 @@ class TagsMixin(_ManagedMixin):
                     current_transactions,
                     current_mileage,
                     current_sources,
+                    current_schedules,
                 )
                 if not is_unchanged(current_state):
                     raise StorageConflictError(
@@ -280,6 +291,7 @@ class TagsMixin(_ManagedMixin):
                     "Transactions": current_transactions,
                     "Mileage": current_mileage,
                     "MixedUseExpenses": current_sources,
+                    "RecurringSchedules": current_schedules,
                 }
                 refreshed = [
                     self._managed_update_request(
@@ -309,7 +321,7 @@ class TagsMixin(_ManagedMixin):
                 applied=is_applied,
                 unchanged=is_unchanged,
                 before_retry=refresh_requests,
-                invalidate=("Tags", "Transactions", "Mileage", "MixedUseExpenses"),
+                invalidate=("Tags", "Transactions", "Mileage", "MixedUseExpenses", "RecurringSchedules"),
             )
             return {"status": "fully_applied", "count": str(len(source_ids))}
 
@@ -326,7 +338,7 @@ class TagsMixin(_ManagedMixin):
         tag_id = _clean_text(tag_id, "Tag", required=True)
         with self._workbook_locks.ledger, self._workbook_locks.tag:
             snapshot = self._snapshot(
-                ["Tags", "Transactions", "Mileage", "MixedUseExpenses"],
+                ["Tags", "Transactions", "Mileage", "MixedUseExpenses", "RecurringSchedules"],
                 force_refresh=True,
             )
             tag_rows = self._managed_rows_by_id(snapshot["Tags"], "Tags")
@@ -342,6 +354,7 @@ class TagsMixin(_ManagedMixin):
                 *snapshot["Transactions"],
                 *snapshot["Mileage"],
                 *snapshot["MixedUseExpenses"],
+                *snapshot["RecurringSchedules"],
             ):
                 raw_tags = row.values.get("tag_ids", "")
                 if _raw_tag_ids_may_contain(
@@ -358,9 +371,10 @@ class TagsMixin(_ManagedMixin):
                 dict[str, _StoredRow],
                 dict[str, _StoredRow],
                 dict[str, _StoredRow],
+                dict[str, _StoredRow],
             ]:
                 current = self._snapshot(
-                    ["Tags", "Transactions", "Mileage", "MixedUseExpenses"],
+                    ["Tags", "Transactions", "Mileage", "MixedUseExpenses", "RecurringSchedules"],
                     force_refresh=True,
                 )
                 return (
@@ -370,15 +384,19 @@ class TagsMixin(_ManagedMixin):
                     self._managed_rows_by_id(
                         current["MixedUseExpenses"], "MixedUseExpenses"
                     ),
+                    self._managed_rows_by_id(
+                        current["RecurringSchedules"], "RecurringSchedules"
+                    ),
                 )
             def references_present(state: Any) -> bool:
-                _, current_transactions, current_mileage, current_sources = state
+                _, current_transactions, current_mileage, current_sources, current_schedules = state
                 return any(
                     tag_id in _normalize_tag_ids(row.values.get("tag_ids", ""))
                     for row in (
                         *current_transactions.values(),
                         *current_mileage.values(),
                         *current_sources.values(),
+                        *current_schedules.values(),
                     )
                 )
             def is_gone(state: Any) -> bool:
@@ -412,7 +430,7 @@ class TagsMixin(_ManagedMixin):
                 applied=is_gone,
                 unchanged=is_unchanged,
                 before_retry=refresh_requests,
-                invalidate=("Tags", "Transactions", "Mileage", "MixedUseExpenses"),
+                invalidate=("Tags", "Transactions", "Mileage", "MixedUseExpenses", "RecurringSchedules"),
             )
             return {"status": "fully_applied"}
 

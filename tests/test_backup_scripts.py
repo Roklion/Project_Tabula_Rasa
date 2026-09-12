@@ -652,6 +652,7 @@ class TestBackupScripts:
                 "Transactions": 0,
                 "Mileage": 0,
                 "MixedUseExpenses": 0,
+                "RecurringSchedules": 0,
             }
             timestamp = created.name.removeprefix("tabula-rasa-backup-").removesuffix(
                 ".zip"

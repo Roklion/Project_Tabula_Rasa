@@ -31,6 +31,7 @@ from .validation import (
     _validate_mixed_use_tables,
     _validate_tag_records,
 )
+from tabula_rasa.mixed_use import validate_mixed_use_allocation
 
 class BackupMixin:
     """Mixin for the backup storage boundary."""
@@ -49,6 +50,7 @@ class BackupMixin:
                 for title, rows in snapshot.items()
             }
         )
+        self._validate_recurring_references()
         accounts = self._account_lookup(force_refresh=True)
         categories = self._category_lookup(force_refresh=True)
         payees = self._payee_lookup(force_refresh=True)
@@ -105,6 +107,20 @@ class BackupMixin:
                     record_id = _clean_text(values.get("id"), "Tag ID", required=True)
                     tag = next(item for item in tag_records if item["id"] == record_id)
                     values = tag
+                elif title == "RecurringSchedules":
+                    values = {**values, **self._decode_schedule(values)}
+                    if values.get("source_kind") == "mixed_use":
+                        allocation = validate_mixed_use_allocation(
+                            values.get("total_expense"),
+                            values.get("business_use_percentage"),
+                        )
+                        values["amount"] = allocation.allocated_amount
+                        values["total_expense"] = allocation.total_expense
+                        values["business_use_percentage"] = (
+                            allocation.business_use_percentage
+                        )
+                    for field in ("account_id", "category_id", "payee_id"):
+                        values[field] = str(values.get(field, "") or "").strip()
                 writer.writerow([values.get(header, "") for header in headers])
             csv_files[f"{title}.csv"] = csv_buffer.getvalue().encode("utf-8")
 

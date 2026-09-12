@@ -624,6 +624,11 @@ def reset_profile_presentation_state(
         f"mixed_percentage_{previous_profile_key}_",
         f"mixed_rationale_{previous_profile_key}_",
         f"mixed_receipts_{previous_profile_key}_",
+        f"mixed_recurring_{previous_profile_key}_",
+        f"mixed_recurrence_unit_{previous_profile_key}_",
+        f"mixed_recurrence_interval_{previous_profile_key}_",
+        f"mixed_recurrence_name_{previous_profile_key}_",
+        f"mixed_recurrence_end_{previous_profile_key}_",
     )
     prefixes = (
         "add_transaction_",
@@ -660,6 +665,13 @@ def reset_profile_presentation_state(
         "transaction_ledger_mode_",
         "transaction_copy_source_",
         "transaction_copy_generation_",
+        "recurring_selected_",
+        "recurring_pause_",
+        "recurring_resume_",
+        "recurring_end_",
+        "recurring_reconcile_",
+        "recurring_create_",
+        "recurring_edit_",
     )
     for key in list(session_state):
         if (
@@ -668,6 +680,42 @@ def reset_profile_presentation_state(
             or key.startswith(prefixes)
             or key.startswith(mixed_use_prefixes)
         ):
+            session_state.pop(key, None)
+
+
+def reset_stale_recurring_pending_state(
+    session_state: MutableMapping[str, object],
+    *,
+    profile_key: str,
+    workbook_identity: str,
+) -> None:
+    """Discard retry state that belongs to an older workbook configuration."""
+    pending_groups = (
+        (
+            f"recurring_pending_configuration_revision_{profile_key}",
+            (
+                f"recurring_pending_schedule_id_{profile_key}",
+                f"recurring_pending_transaction_id_{profile_key}",
+                f"recurring_pending_payload_{profile_key}",
+            ),
+        ),
+        (
+            f"mixed_use_pending_configuration_revision_{profile_key}",
+            (
+                f"mixed_use_pending_source_id_{profile_key}",
+                f"mixed_use_pending_transaction_id_{profile_key}",
+                f"mixed_use_pending_schedule_id_{profile_key}",
+                f"mixed_use_pending_payload_{profile_key}",
+            ),
+        ),
+    )
+    for revision_key, pending_keys in pending_groups:
+        recurring_keys = pending_keys[2:] if revision_key.startswith("mixed_use_") else pending_keys
+        if not any(key in session_state for key in recurring_keys):
+            continue
+        if session_state.get(revision_key) == workbook_identity:
+            continue
+        for key in (*pending_keys, revision_key):
             session_state.pop(key, None)
 
 

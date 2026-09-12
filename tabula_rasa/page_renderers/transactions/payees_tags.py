@@ -26,10 +26,11 @@ def _name_map(records: list[dict[str, str]]) -> dict[str, dict[str, str]]:
 
 
 def _payee_reference_counts(
-    transactions: list[dict[str, str]], mixed_sources: list[dict[str, str]]
+    transactions: list[dict[str, str]], mixed_sources: list[dict[str, str]],
+    schedules: list[dict[str, str]],
 ) -> dict[str, int]:
     counts: dict[str, int] = {}
-    for record in (*transactions, *mixed_sources):
+    for record in (*transactions, *mixed_sources, *schedules):
         payee_id = str(record.get("payee_id") or "").strip()
         if payee_id:
             counts[payee_id] = counts.get(payee_id, 0) + 1
@@ -40,9 +41,10 @@ def _tag_reference_counts(
     transactions: list[dict[str, Any]],
     mileage: list[dict[str, Any]],
     mixed_sources: list[dict[str, Any]],
+    schedules: list[dict[str, Any]],
 ) -> dict[str, int]:
     counts: dict[str, int] = {}
-    for record in (*transactions, *mileage, *mixed_sources):
+    for record in (*transactions, *mileage, *mixed_sources, *schedules):
         for tag_id in _normalize_tag_ids(record.get("tag_ids", [])):
             counts[tag_id] = counts.get(tag_id, 0) + 1
     return counts
@@ -70,8 +72,9 @@ def _render_payees(
     payees: list[dict[str, str]],
     transactions: list[dict[str, str]],
     mixed_sources: list[dict[str, str]],
+    schedules: list[dict[str, str]],
 ) -> None:
-    counts = _payee_reference_counts(transactions, mixed_sources)
+    counts = _payee_reference_counts(transactions, mixed_sources, schedules)
     st.subheader("Payees")
     st.caption(
         "Payees are stored only in the selected business profile. Renaming keeps "
@@ -157,8 +160,9 @@ def _render_tags(
     transactions: list[dict[str, Any]],
     mileage: list[dict[str, Any]],
     mixed_sources: list[dict[str, Any]],
+    schedules: list[dict[str, Any]],
 ) -> None:
-    counts = _tag_reference_counts(transactions, mileage, mixed_sources)
+    counts = _tag_reference_counts(transactions, mileage, mixed_sources, schedules)
     st.subheader("Tags")
     st.caption(
         "Tags are profile-local labels shared by Transactions and Mileage. "
@@ -243,12 +247,13 @@ def render_payees_tags(context: PayeesTagsContext) -> None:
         tags = context.storage.list_tags(active_only=False)
         transactions = context.storage.list_transactions()
         mixed_sources = context.storage.list_mixed_use_expense_sources()
+        schedules = context.storage.list_recurring_schedules()
         mileage = context.storage.list_mileage_trips()
     except StorageError as error:
         context.report_storage_error(error)
         return
     payees_tab, tags_tab = st.tabs(["Payees", "Tags"])
     with payees_tab:
-        _render_payees(context, payees, transactions, mixed_sources)
+        _render_payees(context, payees, transactions, mixed_sources, schedules)
     with tags_tab:
-        _render_tags(context, tags, transactions, mileage, mixed_sources)
+        _render_tags(context, tags, transactions, mileage, mixed_sources, schedules)

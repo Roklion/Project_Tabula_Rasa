@@ -249,7 +249,7 @@ The current decomposition uses these seams:
 | --- | --- |
 | Sheets storage facade | `tabula_rasa/storage/google_sheets/__init__.py` keeps `GoogleSheetsStorage` and re-exports intentionally public names. |
 | Sheets primitives | `tabula_rasa/storage/google_sheets/errors.py`, `tabula_rasa/storage/google_sheets/schema.py`, `tabula_rasa/storage/google_sheets/validation.py`, `tabula_rasa/storage/google_sheets/client.py`, and a small `tabula_rasa/storage/google_sheets/base.py` own errors, current schema, API access, validation, and shared row/cache/read/write helpers. |
-| Sheets domains | `tabula_rasa/storage/google_sheets/accounts.py` owns account and category hierarchies; `tabula_rasa/storage/google_sheets/payees.py`, `tags.py`, `transactions.py`, `mileage.py`, `mixed_use.py`, `receipts.py`, and `backup.py` own the other cohesive domain operations. Historical migration code stays in scripts. |
+| Sheets domains | `tabula_rasa/storage/google_sheets/accounts.py` owns account and category hierarchies; `tabula_rasa/storage/google_sheets/payees.py`, `tags.py`, `transactions.py`, `recurring.py`, `mileage.py`, `mixed_use.py`, `receipts.py`, and `backup.py` own the other cohesive domain operations. Historical migration code stays in scripts. |
 | Receipt page workflow | `tabula_rasa/page_renderers/transactions/receipt_workflows.py` owns reusable upload/recovery state; `tabula_rasa/page_renderers/transactions/receipt_editor.py` owns editor rendering; `tabula_rasa/page_renderers/transactions/receipt_display.py` owns listing/unlink UI. `tabula_rasa/page_renderers/transactions/receipts.py` may remain a thin compatibility facade. |
 | Mileage page | `tabula_rasa/page_renderers/mileage_routing.py`, `tabula_rasa/page_renderers/mileage_form.py`, `tabula_rasa/page_renderers/mileage_ledger.py`, and `tabula_rasa/page_renderers/mileage_locations.py` separate route state, forms, ledger behavior, and location helpers; `tabula_rasa/page_renderers/mileage.py` remains orchestration-focused. |
 | Transaction ledger page | `tabula_rasa/page_renderers/transactions/ledger_filters.py`, `tabula_rasa/page_renderers/transactions/ledger_bulk.py`, `tabula_rasa/page_renderers/transactions/ledger_editor.py`, and `tabula_rasa/page_renderers/transactions/transaction_copy.py` separate search/filter state, bulk actions, single-record editing, and provenance/copy behavior; `tabula_rasa/page_renderers/transactions/ledger.py` composes them. |
@@ -368,8 +368,8 @@ local-only recovery metadata.
 | Shared presentation tokens and CSS | tabula_rasa/presentation.py |
 | Profile selection and readiness | tabula_rasa/business_profiles.py and tabula_rasa/profile_readiness.py |
 | Local profile persistence | tabula_rasa/local_profile_store.py |
-| Sheets storage, current v10 backup format, and restore validation | `tabula_rasa/storage/google_sheets/` |
-| Legacy backup conversion (v1–v9 to v10) | scripts/migrate_legacy_backup.py |
+| Sheets storage, current v11 backup format, and restore validation | `tabula_rasa/storage/google_sheets/` |
+| Legacy backup conversion (v1–v10 to v11) | scripts/migrate_legacy_backup.py |
 | Legacy workbook conversion and historical schema definitions | `scripts/migrate_workbook.py`, `scripts/migrate_payees.py`, and `scripts/migration_schemas.py` |
 | Drive OAuth and file operations | tabula_rasa/google_drive/__init__.py, with `oauth.py`, `client.py`, `folders.py`, `receipts.py`, and `backups.py` responsibility modules |
 | Drive administration and Picker | tabula_rasa/google_drive_admin.py and tabula_rasa/google_drive_picker.py |
