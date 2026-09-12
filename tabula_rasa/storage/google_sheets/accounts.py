@@ -341,6 +341,14 @@ class AccountsMixin:
             raise StorageConflictError(
                 "That category has mixed-use expenses and cannot be deleted"
             )
+        recurring_schedules = self._rows("RecurringSchedules", force_refresh=True)
+        if any(
+            _clean_text(row.values.get("category_id"), "Category") == category_id
+            for row in recurring_schedules
+        ):
+            raise StorageConflictError(
+                "That category has recurring schedules and cannot be deleted"
+            )
         original = dict(current.values)
         current_row = current
         worksheet = self._worksheet("Categories")
@@ -367,6 +375,14 @@ class AccountsMixin:
             ):
                 raise StorageConflictError(
                     "That category has mixed-use expenses and cannot be deleted"
+                )
+            recurring_schedules = self._rows("RecurringSchedules", force_refresh=True)
+            if any(
+                _clean_text(row.values.get("category_id"), "Category") == category_id
+                for row in recurring_schedules
+            ):
+                raise StorageConflictError(
+                    "That category has recurring schedules and cannot be deleted"
                 )
             current_row = self._find_row("Categories", category_id)
             if current_row.values != original:

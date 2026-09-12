@@ -103,6 +103,23 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             referenced["id"],
         }
 
+    def test_delete_category_rejects_recurring_schedule_references(self) -> None:
+        category = self.storage.create_category("Referenced recurring", "Expense")
+        self.storage.create_account("Checking", "Bank")
+        account = self.storage.list_accounts()[0]
+        result = self.storage.create_recurring_expense(
+            schedule_id="category-schedule",
+            name="Scheduled expense",
+            txn_date="2026-09-01",
+            amount="10.00",
+            account_id=account["id"],
+            category_id=category["id"],
+        )
+        self.storage.delete_transaction(result["transaction"]["id"])
+
+        with pytest.raises(StorageConflictError, match="recurring schedules"):
+            self.storage.delete_category(category["id"])
+
     def test_delete_category_rechecks_mixed_use_sources_after_retry(
         self,
     ) -> None:

@@ -39,7 +39,10 @@ def _recurring_category_options(categories, selected_category: str) -> list[dict
         item for item in categories
         if (
             item.get("kind") == "Expense"
-            and str(item.get("active", "")).upper() == "TRUE"
+            and (
+                "active" not in item
+                or str(item.get("active", "")).upper() == "TRUE"
+            )
         )
         or str(item.get("id")) == selected_category
     ]

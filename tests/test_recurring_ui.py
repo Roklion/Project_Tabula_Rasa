@@ -40,6 +40,15 @@ def test_recurring_editor_filters_inactive_categories_but_preserves_selection() 
         "active", "inactive"
     ]
 
+    categories_without_active_state = [
+        {"id": "office", "kind": "Expense"},
+        {"id": "sales", "kind": "Income"},
+    ]
+    assert [
+        item["id"]
+        for item in _recurring_category_options(categories_without_active_state, "")
+    ] == ["office"]
+
 
 def test_recurring_editor_filters_inactive_references_but_preserves_selection() -> None:
     items = [
