@@ -628,12 +628,6 @@ class RecurringMixin:
             _validate_recurring_provenance(row.values, "Transaction")
         for row in mixed_rows:
             _validate_recurring_provenance(row.values, "Mixed-use source")
-        _validate_unique_recurring_occurrences(
-            [row.values for row in transaction_rows], "Transactions"
-        )
-        _validate_unique_recurring_occurrences(
-            [row.values for row in mixed_rows], "Mixed-use expenses"
-        )
         schedules = self.list_recurring_schedules(
             _force_refresh=True,
             transaction_rows=transaction_rows,
@@ -650,6 +644,20 @@ class RecurringMixin:
             try:
                 if not schedule["id"]:
                     raise StorageValidationError("Schedule ID is missing")
+                _validate_unique_recurring_occurrences(
+                    [
+                        row.values
+                        for row in transaction_rows_by_schedule.get(schedule["id"], [])
+                    ],
+                    "Transactions",
+                )
+                _validate_unique_recurring_occurrences(
+                    [
+                        row.values
+                        for row in mixed_rows_by_schedule.get(schedule["id"], [])
+                    ],
+                    "Mixed-use expenses",
+                )
                 self._validate_recurring_occurrence_rows(
                     transaction_rows_by_schedule.get(schedule["id"], []),
                     schedule_values,

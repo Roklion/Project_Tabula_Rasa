@@ -47,8 +47,10 @@ def test_recurring_reconciliation_rejects_duplicate_occurrence_dates(default_sto
     )
     default_storage._invalidate("Transactions")
 
-    with pytest.raises(StorageValidationError, match="duplicate recurring occurrence"):
-        default_storage.reconcile_recurring_schedules(as_of="2024-02-01")
+    outcome = default_storage.reconcile_recurring_schedules(as_of="2024-02-01")
+
+    assert outcome["generated"] == []
+    assert outcome["attention"] == {"duplicate-date": "validation"}
 
 
 def test_recurring_reconciliation_rejects_padded_provenance_ids(default_storage) -> None:
@@ -594,6 +596,22 @@ def test_recurring_backup_rejects_missing_schedule_name(default_storage) -> None
 
     tampered = rewrite_backup_tables(backup, {"RecurringSchedules": clear_name})
     with pytest.raises(StorageValidationError, match="Schedule name is required"):
+        default_storage.validate_backup_zip(tampered)
+
+
+def test_recurring_backup_rejects_padded_schedule_id(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    default_storage.create_recurring_expense(
+        schedule_id="padded-backup", name="Padded", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    backup = default_storage.export_backup_zip(backup_receipt_manifest(default_storage))
+
+    def pad_id(rows: list[list[str]]) -> None:
+        rows[1][rows[0].index("id")] = " padded-backup "
+
+    tampered = rewrite_backup_tables(backup, {"RecurringSchedules": pad_id})
+    with pytest.raises(StorageValidationError, match="missing or duplicated"):
         default_storage.validate_backup_zip(tampered)
 
 
