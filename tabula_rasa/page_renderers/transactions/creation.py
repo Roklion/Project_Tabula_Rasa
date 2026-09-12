@@ -39,6 +39,14 @@ def _pending_recurring_ids(
     return schedule_id, transaction_id
 
 
+def _pending_recurring_create_exists(state: dict[str, object], profile: str) -> bool:
+    """Keep an incomplete recurring create on its convergence path."""
+    return bool(
+        state.get(f"recurring_pending_schedule_id_{profile}")
+        or state.get(f"recurring_pending_transaction_id_{profile}")
+    )
+
+
 def render_add_transaction(
     context: TransactionsContext,
     *,
@@ -228,6 +236,18 @@ def render_add_transaction(
                 save_error.error(tag_error)
             elif (tag_error := inline_tag_name_error(new_tag_name)):
                 save_error.error(tag_error)
+            elif (
+                kind == "Expense"
+                and not recurring
+                and _pending_recurring_create_exists(
+                    st.session_state, context.profile_key
+                )
+            ):
+                save_error.error(
+                    "A previous recurring save is incomplete. Re-enable "
+                    "Repeat this Expense to retry it before recording a "
+                    "different expense."
+                )
             else:
                 payload = {
                     "txn_date": transaction_date,

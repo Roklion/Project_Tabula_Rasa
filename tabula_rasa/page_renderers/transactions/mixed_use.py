@@ -125,6 +125,13 @@ def _pending_recurring_schedule_id(
     return schedule_id
 
 
+def _pending_recurring_schedule_exists(
+    state: MutableMapping[str, object], profile: str
+) -> bool:
+    """Keep an incomplete recurring create on its convergence path."""
+    return bool(state.get(_key(profile, "pending_schedule_id")))
+
+
 def _mixed_use_copy_keys(profile: str) -> dict[str, str]:
     """Return the profile-local keys used by a mixed-use copy editor."""
     return {
@@ -755,6 +762,18 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                 save_error.error(
                     "Resolve the pending receipt recovery in the transaction "
                     "editor before saving mixed-use receipts."
+                )
+            elif (
+                not recurring
+                and not source
+                and not source_incomplete
+                and not copy_mode
+                and _pending_recurring_schedule_exists(st.session_state, profile)
+            ):
+                save_error.error(
+                    "A previous recurring save is incomplete. Re-enable "
+                    "Repeat this mixed-use Expense to retry it before "
+                    "recording a different expense."
                 )
             else:
                 try:

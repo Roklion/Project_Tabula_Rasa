@@ -5,7 +5,10 @@ from unittest.mock import patch
 from tests.app_support import authenticated_app, by_label, navigate_to
 from tests.app_support import profile_config
 from tests.fakes import FakeWorkbook
-from tabula_rasa.page_renderers.transactions.creation import _pending_recurring_ids
+from tabula_rasa.page_renderers.transactions.creation import (
+    _pending_recurring_create_exists,
+    _pending_recurring_ids,
+)
 from tabula_rasa.storage import GoogleSheetsStorage
 
 
@@ -95,6 +98,13 @@ def test_pending_recurring_ids_are_stable_across_retries() -> None:
     second = _pending_recurring_ids(state, "north")
     assert first == second
     assert first != _pending_recurring_ids(state, "south")
+
+
+def test_pending_recurring_create_requires_recurring_retry() -> None:
+    state: dict[str, object] = {"recurring_pending_schedule_id_north": "schedule"}
+
+    assert _pending_recurring_create_exists(state, "north")
+    assert not _pending_recurring_create_exists(state, "south")
 
 
 def test_startup_reconciles_once_per_profile_and_keeps_profiles_isolated() -> None:
