@@ -662,12 +662,9 @@ class RecurringMixin:
                 )
                 for source_row in mixed_rows_by_schedule.get(schedule["id"], []):
                     source = source_row.values
-                    if str(source.get("recurring_schedule_id", "") or "") != schedule["id"]:
-                        continue
                     projection = projections.get(str(source.get("linked_transaction_id", "") or ""))
                     self._valid_mixed_use_projection(source, projection)
-                    if projection is not None:
-                        self._validate_mixed_use_projection_parity(source, projection)
+                    self._validate_mixed_use_projection_parity(source, projection)
                 schedule = self._schedule_template(
                     schedule,
                     schedule_id=schedule["id"],
