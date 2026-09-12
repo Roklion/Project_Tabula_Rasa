@@ -226,6 +226,7 @@ class TagsMixin(_ManagedMixin):
                         *current_transactions.values(),
                         *current_mileage.values(),
                         *current_sources.values(),
+                        *current_schedules.values(),
                     )
                 ):
                     return False

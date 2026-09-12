@@ -449,6 +449,20 @@ def test_recurring_backup_rejects_duplicate_schedule_ids(default_storage) -> Non
         default_storage.export_backup_zip(backup_receipt_manifest(default_storage))
 
 
+def test_recurring_export_rejects_duplicate_occurrence_dates(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    result = default_storage.create_recurring_expense(
+        schedule_id="duplicate-export-date", name="Duplicate", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    duplicate = dict(result["transaction"])
+    duplicate["id"] = "duplicate-export-occurrence"
+    default_storage._append("Transactions", duplicate)
+
+    with pytest.raises(StorageValidationError, match="duplicate recurring occurrence dates"):
+        default_storage.export_backup_zip(backup_receipt_manifest(default_storage))
+
+
 def test_recurring_backup_rejects_missing_schedule_id(default_storage) -> None:
     account_id, category_id = _ids(default_storage)
     default_storage.create_recurring_expense(
@@ -613,6 +627,25 @@ def test_recurring_backup_rejects_padded_schedule_id(default_storage) -> None:
     tampered = rewrite_backup_tables(backup, {"RecurringSchedules": pad_id})
     with pytest.raises(StorageValidationError, match="missing or duplicated"):
         default_storage.validate_backup_zip(tampered)
+
+
+def test_recurring_export_rejects_padded_schedule_id_without_occurrences(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    result = default_storage.create_recurring_expense(
+        schedule_id="padded-export", name="Padded", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    occurrence = default_storage._find_row("Transactions", result["transaction"]["id"])
+    worksheet = default_storage._worksheet("Transactions")
+    worksheet.rows.pop(occurrence.row_number - 1)
+    default_storage._invalidate("Transactions")
+    schedule = default_storage._find_row("RecurringSchedules", "padded-export")
+    broken = dict(schedule.values)
+    broken["id"] = " padded-export "
+    default_storage._replace_row("RecurringSchedules", schedule, broken)
+
+    with pytest.raises(StorageValidationError, match="missing or duplicated"):
+        default_storage.export_backup_zip(backup_receipt_manifest(default_storage))
 
 
 @pytest.mark.parametrize("replacement, expected", [("backup-one", "duplicated"), ("", "missing")])

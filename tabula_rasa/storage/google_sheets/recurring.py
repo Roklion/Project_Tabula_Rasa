@@ -290,25 +290,42 @@ class RecurringMixin:
 
     def _validate_recurring_references(self) -> None:
         schedules = self._snapshot(("RecurringSchedules",), force_refresh=True)["RecurringSchedules"]
-        schedule_ids = [str(row.values.get("id", "") or "").strip() for row in schedules]
-        if any(not schedule_id for schedule_id in schedule_ids) or len(schedule_ids) != len(set(schedule_ids)):
+        raw_schedule_ids = [str(row.values.get("id", "") or "") for row in schedules]
+        schedule_ids = [schedule_id.strip() for schedule_id in raw_schedule_ids]
+        if (
+            any(
+                not schedule_id or raw_schedule_id != schedule_id
+                for raw_schedule_id, schedule_id in zip(raw_schedule_ids, schedule_ids)
+            )
+            or len(schedule_ids) != len(set(schedule_ids))
+        ):
             raise StorageValidationError("Recurring schedule IDs are missing or duplicated")
         schedule_values = {str(row.values.get("id", "")): row.values for row in schedules}
         accounts = self._account_lookup(force_refresh=True)
         categories = self._category_lookup(force_refresh=True)
         payees = self._payee_lookup(force_refresh=True)
         tags = self._tag_lookup(force_refresh=True)
+        transaction_rows = self._rows("Transactions", force_refresh=True)
+        mixed_rows = self._rows("MixedUseExpenses", force_refresh=True)
         self._validate_recurring_occurrence_rows(
-            self._rows("Transactions", force_refresh=True),
+            transaction_rows,
             schedule_values,
             "Transaction",
             mixed_source=False,
         )
         self._validate_recurring_occurrence_rows(
-            self._rows("MixedUseExpenses", force_refresh=True),
+            mixed_rows,
             schedule_values,
             "Mixed-use source",
             mixed_source=True,
+        )
+        _validate_unique_recurring_occurrences(
+            [row.values for row in transaction_rows],
+            "Transactions",
+        )
+        _validate_unique_recurring_occurrences(
+            [row.values for row in mixed_rows],
+            "Mixed-use expenses",
         )
         for row in schedules:
             self._schedule_template(
