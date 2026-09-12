@@ -472,21 +472,16 @@ class RecurringMixin:
             field = "recurring_scheduled_date"
         dates = []
         for row in rows:
-            if (
-                    row.values.get("recurring_schedule_id") == schedule_id
-                    and row.values.get(field)
-                    and (
-                        source_kind != "mixed_use"
-                        or self._valid_mixed_use_projection(
-                            row.values,
-                            projections.get(str(row.values.get("linked_transaction_id", ""))),
-                        )
-                    )
-            ):
-                try:
-                    dates.append(_as_date(row.values[field]))
-                except (StorageValidationError, TypeError, ValueError):
-                    continue
+            if row.values.get("recurring_schedule_id") != schedule_id or not row.values.get(field):
+                continue
+            if source_kind == "mixed_use":
+                projection = projections.get(str(row.values.get("linked_transaction_id", "")))
+                self._valid_mixed_use_projection(row.values, projection)
+                self._validate_mixed_use_projection_parity(row.values, projection)
+            try:
+                dates.append(_as_date(row.values[field]))
+            except (StorageValidationError, TypeError, ValueError):
+                continue
         return max(dates) if dates else None
 
     def create_recurring_schedule(self, **data: Any) -> dict[str, str]:

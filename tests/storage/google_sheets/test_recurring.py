@@ -431,6 +431,9 @@ def test_mixed_use_projection_provenance_parity_needs_attention(default_storage)
 
     assert outcome["generated"] == []
     assert outcome["attention"] == {"parity-mismatch": "validation"}
+    schedule = default_storage.get_recurring_schedule("parity-mismatch")
+    assert schedule["latest_current_occurrence_date"] == ""
+    assert schedule["next_due_date"] == ""
 
 
 def test_recurring_retries_ignore_new_timestamps_but_not_payload_changes(default_storage, monkeypatch) -> None:
