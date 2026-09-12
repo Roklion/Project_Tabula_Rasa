@@ -519,6 +519,11 @@ def test_mixed_use_app_test_recurring_create_creates_source_projection_pair(defa
         _tab_field(tab, "text_input", "Schedule name").set_value("Recurring workspace").run()
         _tab_field(tab, "button", "Save mixed-use expense").click().run()
 
+        reset_tab = _mixed_tab(app)
+        assert _tab_field(
+            reset_tab, "checkbox", "Repeat this mixed-use Expense"
+        ).value is False
+
     schedules = default_storage.list_recurring_schedules()
     sources = default_storage.list_mixed_use_expenses()
     projections = default_storage.list_transactions()

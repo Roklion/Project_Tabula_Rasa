@@ -546,6 +546,11 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             f"mixed_tags_{scope}__new_name", f"mixed_total_{scope}",
             f"mixed_percentage_{scope}", f"mixed_rationale_{scope}",
             f"mixed_receipts_{scope}",
+            f"mixed_recurring_{scope}",
+            f"mixed_recurrence_unit_{scope}",
+            f"mixed_recurrence_interval_{scope}",
+            f"mixed_recurrence_name_{scope}",
+            f"mixed_recurrence_end_{scope}",
         ],
     )
     account_ids = _active_ids(accounts)
