@@ -249,7 +249,7 @@ class RecurringMixin:
         for row in rows:
             values = row.values
             schedule_id = str(values.get("recurring_schedule_id", "") or "")
-            if filter_schedule_id is not None and schedule_id != filter_schedule_id:
+            if filter_schedule_id is not None and schedule_id.strip() != filter_schedule_id:
                 continue
             _validate_recurring_provenance(values, label)
             if not schedule_id:
@@ -435,10 +435,10 @@ class RecurringMixin:
                         else self._rows("Transactions", force_refresh=False)
                     )
                 }
-            field = "txn_date"
+            field = "recurring_scheduled_date"
         else:
             rows = transaction_rows if transaction_rows is not None else self._rows("Transactions", force_refresh=False)
-            field = "txn_date"
+            field = "recurring_scheduled_date"
         dates = []
         for row in rows:
             if (
@@ -636,11 +636,11 @@ class RecurringMixin:
         mixed_rows_by_schedule: dict[str, list[Any]] = {}
         for row in transaction_rows:
             transaction_rows_by_schedule.setdefault(
-                str(row.values.get("recurring_schedule_id", "") or ""), []
+                str(row.values.get("recurring_schedule_id", "") or "").strip(), []
             ).append(row)
         for row in mixed_rows:
             mixed_rows_by_schedule.setdefault(
-                str(row.values.get("recurring_schedule_id", "") or ""), []
+                str(row.values.get("recurring_schedule_id", "") or "").strip(), []
             ).append(row)
         projections = {
             str(row.values.get("id", "")): row.values for row in transaction_rows
@@ -649,10 +649,6 @@ class RecurringMixin:
         categories = self._category_lookup(force_refresh=True)
         payees = self._payee_lookup(force_refresh=True)
         tags = self._tag_lookup(force_refresh=True)
-        for row in transaction_rows:
-            _validate_recurring_provenance(row.values, "Transaction")
-        for row in mixed_rows:
-            _validate_recurring_provenance(row.values, "Mixed-use source")
         schedules = self.list_recurring_schedules(
             _force_refresh=True,
             transaction_rows=transaction_rows,
@@ -664,7 +660,11 @@ class RecurringMixin:
         if len(schedule_ids) != len(set(schedule_ids)):
             raise StorageValidationError("Recurring schedule IDs are duplicated")
         for row in (*transaction_rows, *mixed_rows):
-            _validate_recurring_provenance(row.values, "Recurring occurrence")
+            if str(row.values.get("recurring_schedule_id", "") or "").strip() not in schedule_ids:
+                _validate_recurring_provenance(row.values, "Recurring occurrence")
+        mixed_sources_by_id = {
+            str(row.values.get("id", "")): row.values for row in mixed_rows
+        }
         for schedule in schedules:
             try:
                 if not schedule["id"]:
@@ -702,6 +702,13 @@ class RecurringMixin:
                     projection = projections.get(str(source.get("linked_transaction_id", "") or ""))
                     self._valid_mixed_use_projection(source, projection)
                     self._validate_mixed_use_projection_parity(source, projection)
+                for projection_row in transaction_rows_by_schedule.get(schedule["id"], []):
+                    projection = projection_row.values
+                    if projection.get("source_type") != MIXED_USE_SOURCE_TYPE:
+                        continue
+                    source = mixed_sources_by_id.get(str(projection.get("source_id", "") or ""))
+                    self._valid_mixed_use_projection(source or {}, projection)
+                    self._validate_mixed_use_projection_parity(source or {}, projection)
                 schedule = self._schedule_template(
                     schedule,
                     schedule_id=schedule["id"],

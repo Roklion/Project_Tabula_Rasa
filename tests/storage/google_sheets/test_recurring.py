@@ -53,7 +53,7 @@ def test_recurring_reconciliation_rejects_duplicate_occurrence_dates(default_sto
     assert outcome["attention"] == {"duplicate-date": "validation"}
 
 
-def test_recurring_reconciliation_rejects_padded_provenance_ids(default_storage) -> None:
+def test_recurring_reconciliation_marks_padded_provenance_for_attention(default_storage) -> None:
     account_id, category_id = _ids(default_storage)
     result = default_storage.create_recurring_expense(
         schedule_id="padded-id", name="Rent", txn_date="2024-01-01",
@@ -64,8 +64,10 @@ def test_recurring_reconciliation_rejects_padded_provenance_ids(default_storage)
     broken["recurring_schedule_id"] = " padded-id "
     default_storage._replace_row("Transactions", row, broken)
 
-    with pytest.raises(StorageValidationError, match="must not be padded"):
-        default_storage.reconcile_recurring_schedules(as_of="2024-02-01")
+    outcome = default_storage.reconcile_recurring_schedules(as_of="2024-02-01")
+
+    assert outcome["generated"] == []
+    assert outcome["attention"] == {"padded-id": "validation"}
 
 
 def test_recurring_template_rejects_receipts_and_non_expenses(default_storage) -> None:
@@ -512,6 +514,29 @@ def test_reconcile_rejects_invalid_complete_occurrence_provenance_before_generat
     ]
 
 
+def test_reconcile_isolates_known_schedule_provenance_failure(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    result = default_storage.create_recurring_expense(
+        schedule_id="invalid-known-provenance", name="Invalid", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    default_storage.create_recurring_expense(
+        schedule_id="healthy-known-provenance", name="Healthy", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    row = default_storage._find_row("Transactions", result["transaction"]["id"])
+    broken = dict(row.values)
+    broken["recurring_scheduled_date"] = ""
+    default_storage._replace_row("Transactions", row, broken)
+
+    outcome = default_storage.reconcile_recurring_schedules(as_of="2024-02-01")
+
+    assert outcome["attention"] == {"invalid-known-provenance": "validation"}
+    assert [item["recurring_schedule_id"] for item in outcome["generated"]] == [
+        "healthy-known-provenance"
+    ]
+
+
 def test_missing_schedule_id_does_not_block_other_schedule_listing(default_storage) -> None:
     account_id, category_id = _ids(default_storage)
     default_storage.create_recurring_expense(
@@ -735,7 +760,7 @@ def test_schedule_pause_resume_and_end_do_not_change_occurrences(default_storage
     assert default_storage.get_recurring_schedule("software-schedule")["status"] == "ended"
 
 
-def test_reconcile_cutoff_uses_current_visible_transaction_date(default_storage) -> None:
+def test_reconcile_cursor_uses_immutable_scheduled_date(default_storage) -> None:
     account_id, category_id = _ids(default_storage)
     result = default_storage.create_recurring_expense(
         schedule_id="date-cutoff", name="Charge", txn_date="2024-01-01",
@@ -743,7 +768,31 @@ def test_reconcile_cutoff_uses_current_visible_transaction_date(default_storage)
     )
     default_storage.edit_transaction(result["transaction"]["id"], txn_date="2024-03-15")
     generated = default_storage.reconcile_recurring_schedules(as_of="2024-04-30")["generated"]
-    assert [item["recurring_scheduled_date"] for item in generated] == ["2024-04-01"]
+    assert [item["recurring_scheduled_date"] for item in generated] == [
+        "2024-02-01", "2024-03-01", "2024-04-01"
+    ]
+
+
+def test_mixed_projection_provenance_keeps_source_and_projection_paired(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    result = default_storage.create_recurring_mixed_use_expense(
+        schedule_id="projection-pair", name="Shared", txn_date="2024-01-01",
+        recurrence_unit="month", total_expense=100, business_use_percentage=50,
+        allocation_rationale="Shared use", account_id=account_id, category_id=category_id,
+    )
+    source_row = default_storage._find_row("MixedUseExpenses", result["source"]["id"])
+    broken = dict(source_row.values)
+    for field in (
+        "recurring_schedule_id", "recurring_scheduled_date",
+        "recurring_source_kind", "recurring_occurrence_type",
+    ):
+        broken[field] = ""
+    default_storage._replace_row("MixedUseExpenses", source_row, broken)
+
+    outcome = default_storage.reconcile_recurring_schedules(as_of="2024-02-01")
+
+    assert outcome["generated"] == []
+    assert outcome["attention"] == {"projection-pair": "validation"}
 
 
 def test_delete_latest_occurrence_allows_its_scheduled_date_to_regenerate(default_storage) -> None:
@@ -808,7 +857,7 @@ def test_malformed_occurrence_date_does_not_block_schedule_listing(default_stora
     broken["txn_date"] = "not-a-date"
     default_storage._replace_row("Transactions", row, broken)
     schedule = default_storage.get_recurring_schedule("bad-occurrence-date")
-    assert schedule["latest_current_occurrence_date"] == ""
+    assert schedule["latest_current_occurrence_date"] == "2024-01-01"
 
 
 def test_next_due_exposes_future_start_and_current_schedule_dates(default_storage) -> None:
