@@ -159,6 +159,33 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             assert account["id"] in archive.read("Accounts.csv").decode("utf-8")
             assert "External" in archive.read("Accounts.csv").decode("utf-8")
 
+    def test_backup_serializes_normalized_recurring_schedule_enums(self) -> None:
+        self.storage.ensure_defaults()
+        account = self.storage.list_accounts()[0]
+        category = self.storage.list_categories(kind="Expense")[0]
+        schedule = self.storage.create_recurring_schedule(
+            schedule_id="noncanonical-export",
+            name="Noncanonical export",
+            txn_date="2026-07-31",
+            recurrence_unit="month",
+            amount=10,
+            account_id=account["id"],
+            category_id=category["id"],
+        )
+        row = self.storage._find_row("RecurringSchedules", schedule["id"])
+        changed = dict(row.values)
+        changed.update({"kind": "expense", "recurrence_unit": "months", "status": "ACTIVE"})
+        self.storage._replace_row("RecurringSchedules", row, changed)
+
+        backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
+
+        with zipfile.ZipFile(io.BytesIO(backup)) as archive:
+            schedules = list(csv.DictReader(io.StringIO(archive.read("RecurringSchedules.csv").decode())))
+        assert schedules[0]["kind"] == "Expense"
+        assert schedules[0]["recurrence_unit"] == "month"
+        assert schedules[0]["status"] == "active"
+        assert self.storage.validate_backup_zip(backup)["format_version"] == BACKUP_FORMAT_VERSION
+
     def test_backup_rejects_an_externally_corrupted_hierarchy(self) -> None:
         parent = self.storage.create_account("Operating", "Bank")
         child = self.storage.create_account(

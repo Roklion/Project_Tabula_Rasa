@@ -27,6 +27,8 @@ from .validation import (
     _validate_recurring_provenance,
     _validate_unique_recurring_occurrences,
     _utc_now,
+    normalize_payee_name,
+    normalize_tag_name,
 )
 
 
@@ -183,6 +185,35 @@ class RecurringMixin:
         resolved["tag_ids"] = tag_ids
         resolved["new_tag_name"] = ""
         return resolved
+
+    def _inline_references_match_existing_schedule(
+        self, data: Mapping[str, Any], existing: Mapping[str, Any]
+    ) -> bool:
+        new_payee_name = _clean_text(data.get("new_payee_name"), "New payee")
+        if new_payee_name:
+            payee = next(
+                (
+                    item
+                    for item in self.list_payees(_force_refresh=True)
+                    if normalize_payee_name(item["name"]) == normalize_payee_name(new_payee_name)
+                ),
+                None,
+            )
+            if payee is None or str(existing.get("payee_id", "")) != str(payee["id"]):
+                return False
+        new_tag_name = _clean_text(data.get("new_tag_name"), "New tag")
+        if new_tag_name:
+            tag = next(
+                (
+                    item
+                    for item in self.list_tags(_force_refresh=True)
+                    if normalize_tag_name(item["name"]) == normalize_tag_name(new_tag_name)
+                ),
+                None,
+            )
+            if tag is None or str(tag["id"]) not in _normalize_tag_ids(existing.get("tag_ids", "")):
+                return False
+        return True
 
     def _prevalidate_recurring_form(self, data: Mapping[str, Any]) -> dict[str, str]:
         """Validate a new schedule before creating inline managed references."""
@@ -800,8 +831,12 @@ class RecurringMixin:
                 str(row.values.get("id")): row.values
                 for row in self._rows("RecurringSchedules", force_refresh=True)
             }
-            if preflight["id"] in existing_schedules and (
-                data.get("new_payee_name") or data.get("new_tag_name")
+            if (
+                preflight["id"] in existing_schedules
+                and (data.get("new_payee_name") or data.get("new_tag_name"))
+                and not self._inline_references_match_existing_schedule(
+                    data, existing_schedules[preflight["id"]]
+                )
             ):
                 raise StorageConflictError(
                     "Recurring schedule ID is already in use; inline references were not created"
@@ -863,8 +898,12 @@ class RecurringMixin:
                 str(row.values.get("id")): row.values
                 for row in self._rows("RecurringSchedules", force_refresh=True)
             }
-            if preflight["id"] in existing_schedules and (
-                data.get("new_payee_name") or data.get("new_tag_name")
+            if (
+                preflight["id"] in existing_schedules
+                and (data.get("new_payee_name") or data.get("new_tag_name"))
+                and not self._inline_references_match_existing_schedule(
+                    data, existing_schedules[preflight["id"]]
+                )
             ):
                 raise StorageConflictError(
                     "Recurring schedule ID is already in use; inline references were not created"

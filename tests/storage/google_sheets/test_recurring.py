@@ -3,7 +3,11 @@ import json
 
 import pytest
 
-from tabula_rasa.storage.google_sheets import StorageConflictError, StorageValidationError
+from tabula_rasa.storage.google_sheets import (
+    StorageConflictError,
+    StorageUnavailableError,
+    StorageValidationError,
+)
 from tests.storage.google_sheets._support import backup_receipt_manifest, rewrite_backup_tables
 
 
@@ -64,6 +68,38 @@ def test_duplicate_schedule_rejects_inline_reference_creation(default_storage) -
 
     assert len(default_storage.list_payees()) == payee_count
     assert len(default_storage.list_tags()) == tag_count
+
+
+def test_partial_recurring_create_retry_reuses_inline_references(default_storage, monkeypatch) -> None:
+    account_id, category_id = _ids(default_storage)
+    original_append = default_storage._append
+
+    def fail_initial_transaction(title, record):
+        if title == "Transactions" and record.get("recurring_occurrence_type") == "initial":
+            raise StorageUnavailableError("initial occurrence write failed")
+        return original_append(title, record)
+
+    monkeypatch.setattr(default_storage, "_append", fail_initial_transaction)
+    data = {
+        "schedule_id": "retry-inline",
+        "name": "Retry inline",
+        "txn_date": "2024-01-01",
+        "recurrence_unit": "month",
+        "amount": 10,
+        "account_id": account_id,
+        "category_id": category_id,
+        "new_payee_name": "Retry vendor",
+        "new_tag_name": "Retry tag",
+    }
+    with pytest.raises(StorageUnavailableError, match="initial occurrence"):
+        default_storage.create_recurring_expense(**data)
+
+    monkeypatch.setattr(default_storage, "_append", original_append)
+    result = default_storage.create_recurring_expense(**data)
+
+    assert result["transaction"]["recurring_schedule_id"] == "retry-inline"
+    assert len(default_storage.list_payees()) == 1
+    assert len(default_storage.list_tags()) == 1
 
 
 def test_recurring_reconciliation_rejects_duplicate_occurrence_dates(default_storage) -> None:
