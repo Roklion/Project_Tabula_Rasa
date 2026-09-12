@@ -478,6 +478,43 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         assert source["recurring_source_kind"] == "mixed_use"
         assert projection["recurring_source_kind"] == "mixed_use"
 
+    def test_backup_canonicalizes_mixed_recurring_allocation(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Office", "Expense")
+        self.storage.create_recurring_mixed_use_expense(
+            schedule_id="mixed-canonical-backup",
+            name="Shared office",
+            txn_date="2026-09-01",
+            recurrence_unit="month",
+            recurrence_interval=1,
+            total_expense="100.00",
+            business_use_percentage="50",
+            account_id=account["id"],
+            category_id=category["id"],
+            allocation_rationale="Workspace",
+        )
+        row = self.storage._find_row(
+            "RecurringSchedules", "mixed-canonical-backup"
+        )
+        corrupted = dict(row.values)
+        corrupted["amount"] = "99.00"
+        self.storage._replace_row("RecurringSchedules", row, corrupted)
+
+        backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
+
+        with zipfile.ZipFile(io.BytesIO(backup)) as archive:
+            schedules = list(
+                csv.DictReader(
+                    io.StringIO(
+                        archive.read("RecurringSchedules.csv").decode("utf-8")
+                    )
+                )
+            )
+        assert schedules[0]["amount"] == "50.00"
+        assert self.storage.validate_backup_zip(backup)["format_version"] == (
+            BACKUP_FORMAT_VERSION
+        )
+
     def test_backup_round_trips_account_and_category_hierarchies(self) -> None:
         account_parent = self.storage.create_account("Operating", "Bank")
         account_child = self.storage.create_account(

@@ -31,6 +31,7 @@ from .validation import (
     _validate_mixed_use_tables,
     _validate_tag_records,
 )
+from tabula_rasa.mixed_use import validate_mixed_use_allocation
 
 class BackupMixin:
     """Mixin for the backup storage boundary."""
@@ -108,6 +109,16 @@ class BackupMixin:
                     values = tag
                 elif title == "RecurringSchedules":
                     values = {**values, **self._decode_schedule(values)}
+                    if values.get("source_kind") == "mixed_use":
+                        allocation = validate_mixed_use_allocation(
+                            values.get("total_expense"),
+                            values.get("business_use_percentage"),
+                        )
+                        values["amount"] = allocation.allocated_amount
+                        values["total_expense"] = allocation.total_expense
+                        values["business_use_percentage"] = (
+                            allocation.business_use_percentage
+                        )
                     for field in ("account_id", "category_id", "payee_id"):
                         values[field] = str(values.get(field, "") or "").strip()
                 writer.writerow([values.get(header, "") for header in headers])

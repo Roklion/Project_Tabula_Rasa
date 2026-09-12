@@ -457,7 +457,10 @@ else:
         reset_stale_recurring_pending_state(
             st.session_state,
             profile_key=selected_profile_key,
-            configuration_revision=revision,
+            workbook_identity=str(
+                profile_by_key[selected_profile_key].secrets.get("spreadsheet_id")
+                or revision
+            ),
         )
         initialized_profiles = st.session_state.setdefault(
             "defaults_initialized_profiles", set()

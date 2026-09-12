@@ -308,7 +308,10 @@ def render_add_transaction(
                             pending_schedule_id, pending_transaction_id = _pending_recurring_ids(
                                 st.session_state,
                                 context.profile_key,
-                                context.configuration_revision,
+                                str(
+                                    context.profile_secrets.get("spreadsheet_id")
+                                    or context.configuration_revision
+                                ),
                             )
                             payload.update({
                                 "schedule_id": pending_schedule_id,

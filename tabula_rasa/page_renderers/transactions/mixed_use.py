@@ -968,7 +968,10 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                         pending_schedule_id = _pending_recurring_schedule_id(
                             st.session_state,
                             profile,
-                            context.configuration_revision,
+                            str(
+                                context.profile_secrets.get("spreadsheet_id")
+                                or context.configuration_revision
+                            ),
                         )
                         payload.update({
                             "schedule_id": pending_schedule_id,

@@ -333,7 +333,7 @@ def test_stale_recurring_pending_state_isolated_by_workbook_revision() -> None:
     reset_stale_recurring_pending_state(
         session_state,
         profile_key="north",
-        configuration_revision="new-revision",
+        workbook_identity="new-revision",
     )
 
     assert not any("north" in key for key in session_state if "pending" in key)

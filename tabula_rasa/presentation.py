@@ -687,7 +687,7 @@ def reset_stale_recurring_pending_state(
     session_state: MutableMapping[str, object],
     *,
     profile_key: str,
-    configuration_revision: str,
+    workbook_identity: str,
 ) -> None:
     """Discard retry state that belongs to an older workbook configuration."""
     pending_groups = (
@@ -712,7 +712,7 @@ def reset_stale_recurring_pending_state(
     for revision_key, pending_keys in pending_groups:
         if not any(key in session_state for key in pending_keys):
             continue
-        if session_state.get(revision_key) == configuration_revision:
+        if session_state.get(revision_key) == workbook_identity:
             continue
         for key in (*pending_keys, revision_key):
             session_state.pop(key, None)
