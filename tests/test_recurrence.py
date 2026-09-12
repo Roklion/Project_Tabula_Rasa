@@ -3,6 +3,8 @@ from datetime import date
 import pytest
 
 from tabula_rasa.recurrence import (
+    RecurrenceUnit,
+    normalize_unit,
     next_occurrence,
     occurrence_date,
     occurrence_id,
@@ -50,3 +52,7 @@ def test_occurrences_between_jumps_to_the_first_date_in_range() -> None:
 def test_unknown_units_are_rejected(unit: str) -> None:
     with pytest.raises(ValueError):
         occurrence_date(date(2024, 1, 1), unit, 1, 1)
+
+
+def test_normalize_unit_accepts_an_existing_enum() -> None:
+    assert normalize_unit(RecurrenceUnit.MONTH) is RecurrenceUnit.MONTH

@@ -606,6 +606,16 @@ class RecurringMixin:
         attention: dict[str, str] = {}
         transaction_rows = self._rows("Transactions", force_refresh=True)
         mixed_rows = self._rows("MixedUseExpenses", force_refresh=True)
+        transaction_rows_by_schedule: dict[str, list[Any]] = {}
+        mixed_rows_by_schedule: dict[str, list[Any]] = {}
+        for row in transaction_rows:
+            transaction_rows_by_schedule.setdefault(
+                str(row.values.get("recurring_schedule_id", "") or ""), []
+            ).append(row)
+        for row in mixed_rows:
+            mixed_rows_by_schedule.setdefault(
+                str(row.values.get("recurring_schedule_id", "") or ""), []
+            ).append(row)
         projections = {
             str(row.values.get("id", "")): row.values for row in transaction_rows
         }
@@ -637,20 +647,20 @@ class RecurringMixin:
                 if not schedule["id"]:
                     raise StorageValidationError("Schedule ID is missing")
                 self._validate_recurring_occurrence_rows(
-                    transaction_rows,
+                    transaction_rows_by_schedule.get(schedule["id"], []),
                     schedule_values,
                     "Transaction",
                     mixed_source=False,
                     filter_schedule_id=schedule["id"],
                 )
                 self._validate_recurring_occurrence_rows(
-                    mixed_rows,
+                    mixed_rows_by_schedule.get(schedule["id"], []),
                     schedule_values,
                     "Mixed-use source",
                     mixed_source=True,
                     filter_schedule_id=schedule["id"],
                 )
-                for source_row in mixed_rows:
+                for source_row in mixed_rows_by_schedule.get(schedule["id"], []):
                     source = source_row.values
                     if str(source.get("recurring_schedule_id", "") or "") != schedule["id"]:
                         continue

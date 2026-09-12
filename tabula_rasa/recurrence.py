@@ -22,6 +22,8 @@ class RecurrenceUnit(StrEnum):
 
 
 def normalize_unit(value: str | RecurrenceUnit) -> RecurrenceUnit:
+    if isinstance(value, RecurrenceUnit):
+        return value
     text = str(value).strip().casefold()
     aliases = {"days": "day", "weeks": "week", "months": "month", "years": "year"}
     text = aliases.get(text, text)
