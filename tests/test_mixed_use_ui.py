@@ -14,6 +14,7 @@ from tabula_rasa.page_renderers.transactions.mixed_use import (
     _mixed_use_selection_ids,
     _pending_create_ids,
     _pending_recurring_schedule_id,
+    _pending_recurring_rationale,
     _pending_recurring_schedule_exists,
     _start_mixed_use_copy,
     mixed_use_preview,
@@ -66,6 +67,20 @@ def test_pending_recurring_schedule_requires_recurring_retry() -> None:
 
     assert _pending_recurring_schedule_exists(state, "north")
     assert not _pending_recurring_schedule_exists(state, "south")
+
+
+def test_pending_recurring_rationale_rehydrates_retry_validation() -> None:
+    state: dict[str, object] = {
+        "mixed_use_pending_schedule_id_north": "schedule",
+        "mixed_use_pending_payload_north": {
+            "allocation_rationale": "Saved rationale",
+        },
+    }
+
+    assert _pending_recurring_rationale(state, "north", "") == "Saved rationale"
+    assert _pending_recurring_rationale(state, "south", "Typed rationale") == (
+        "Typed rationale"
+    )
 
 
 def test_mixed_use_table_selection_maps_rows_to_stable_source_ids() -> None:

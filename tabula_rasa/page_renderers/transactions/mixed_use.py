@@ -132,6 +132,18 @@ def _pending_recurring_schedule_exists(
     return bool(state.get(_key(profile, "pending_schedule_id")))
 
 
+def _pending_recurring_rationale(
+    state: Mapping[str, object], profile: str, fallback: str
+) -> str:
+    """Reuse the saved rationale while retrying a pending recurring create."""
+    if not _pending_recurring_schedule_exists(state, profile):
+        return fallback.strip()
+    payload = state.get(_key(profile, "pending_payload"))
+    if not isinstance(payload, Mapping):
+        return fallback.strip()
+    return str(payload.get("allocation_rationale") or "").strip() or fallback.strip()
+
+
 def _mixed_use_copy_keys(profile: str) -> dict[str, str]:
     """Return the profile-local keys used by a mixed-use copy editor."""
     return {
@@ -743,6 +755,13 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                 key=f"mixed_save_{scope}",
                 disabled=source_incomplete,
             )
+        pending_rationale = (
+            _pending_recurring_rationale(
+                st.session_state, profile, rationale
+            )
+            if not source and not source_incomplete and not copy_mode
+            else ""
+        )
         if save_button:
             tag_error = inline_tag_name_error(new_tag_name)
             if (selector_error := tag_selector_error(f"mixed_tags_{scope}")):
@@ -757,7 +776,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                 save_error.error(
                     "Choose an active Expense category before saving this copied mixed-use expense."
                 )
-            elif not rationale.strip():
+            elif not (rationale.strip() or pending_rationale):
                 save_error.error("Allocation rationale is required.")
             elif isinstance(recovery, Mapping) and not recovery_source and receipt_uploads:
                 save_error.error(
