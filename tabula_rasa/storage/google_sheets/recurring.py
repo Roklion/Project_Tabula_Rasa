@@ -260,7 +260,7 @@ class RecurringMixin:
         """Normalize stored schedule fields without validating references."""
         schedule = {header: str(values.get(header, "") or "") for header in WORKSHEET_HEADERS["RecurringSchedules"]}
         schedule["id"] = _clean_text(schedule.get("id"), "Schedule ID")
-        schedule["kind"] = schedule.get("kind", "Expense").title()
+        schedule["kind"] = schedule.get("kind", "Expense").strip().title()
         schedule["source_kind"] = schedule.get("source_kind", "transaction").casefold()
         try:
             schedule["recurrence_unit"] = normalize_unit(schedule.get("recurrence_unit", "month")).value

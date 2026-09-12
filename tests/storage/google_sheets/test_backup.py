@@ -176,7 +176,7 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         row = self.storage._find_row("RecurringSchedules", schedule["id"])
         changed = dict(row.values)
         changed.update({
-            "kind": "expense",
+            "kind": " expense ",
             "recurrence_unit": "months",
             "status": "ACTIVE",
             "account_id": f" {account['id']} ",
