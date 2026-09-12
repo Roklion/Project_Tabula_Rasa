@@ -31,6 +31,14 @@ from .validation import (
     mixed_use_ledger_description,
 )
 
+_RECURRING_PROVENANCE_FIELDS = (
+    "recurring_schedule_id",
+    "recurring_scheduled_date",
+    "recurring_source_kind",
+    "recurring_occurrence_type",
+)
+
+
 class _MixedUseMixin:
     """Mixin for the mixed use storage boundary."""
 
@@ -397,11 +405,25 @@ class _MixedUseMixin:
         """Resolve one source record through its durable projection link."""
         return self.get_mixed_use_expense(source_id)
 
-    def create_mixed_use_expense(self, **data: Any) -> dict[str, str]:
+    def create_mixed_use_expense(
+        self, *, _allow_recurring_provenance: bool = False, **data: Any
+    ) -> dict[str, str]:
         with self._workbook_locks.ledger:
-            return self._create_mixed_use_expense(**data)
+            return self._create_mixed_use_expense(
+                _allow_recurring_provenance=_allow_recurring_provenance,
+                **data,
+            )
 
-    def _create_mixed_use_expense(self, **data: Any) -> dict[str, str]:
+    def _create_mixed_use_expense(
+        self, *, _allow_recurring_provenance: bool = False, **data: Any
+    ) -> dict[str, str]:
+        if not _allow_recurring_provenance and any(
+            str(data.get(field) or "").strip()
+            for field in _RECURRING_PROVENANCE_FIELDS
+        ):
+            raise StorageValidationError(
+                "Recurring provenance is reserved for recurring schedule creation"
+            )
         requested_source_id = _clean_text(
             data.get("source_id", data.get("id")), "Mixed-use source ID"
         )

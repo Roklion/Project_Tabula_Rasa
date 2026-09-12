@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 from tabula_rasa.page_renderers.transactions.recurring import (
+    _active_or_selected,
     _mark_workbook_data_changed,
     _recurring_category_options,
     _safe_date,
@@ -36,5 +37,16 @@ def test_recurring_editor_filters_inactive_categories_but_preserves_selection() 
 
     assert [item["id"] for item in _recurring_category_options(categories, "active")] == ["active"]
     assert [item["id"] for item in _recurring_category_options(categories, "inactive")] == [
+        "active", "inactive"
+    ]
+
+
+def test_recurring_editor_filters_inactive_references_but_preserves_selection() -> None:
+    items = [
+        {"id": "active", "active": "TRUE"},
+        {"id": "inactive", "active": "FALSE"},
+    ]
+
+    assert [item["id"] for item in _active_or_selected(items, ["inactive"])] == [
         "active", "inactive"
     ]

@@ -45,6 +45,15 @@ def _recurring_category_options(categories, selected_category: str) -> list[dict
     ]
 
 
+def _active_or_selected(items, selected_ids) -> list[dict[str, Any]]:
+    selected = {str(value) for value in selected_ids if str(value)}
+    return [
+        item for item in items
+        if str(item.get("active", "")).upper() == "TRUE"
+        or str(item.get("id")) in selected
+    ]
+
+
 def render_recurring_expenses(context: Any, *, accounts, categories, payees, tags) -> None:
     """Render profile-scoped schedule management and bounded controls."""
     st.subheader("Recurring expenses")
@@ -171,11 +180,10 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
                 index=category_ids.index(selected_category) if selected_category in category_ids else 0,
                 format_func=lambda value: category_names.get(value, value),
             )
-            payee_ids = [""] + [str(item["id"]) for item in payees]
             selected_payee = str(selected.get("payee_id", ""))
-            if selected_payee and selected_payee not in payee_ids:
-                payee_ids.append(selected_payee)
-            payee_names = {str(item["id"]): str(item.get("name", "")) for item in payees}
+            available_payees = _active_or_selected(payees, [selected_payee])
+            payee_ids = [""] + [str(item["id"]) for item in available_payees]
+            payee_names = {str(item["id"]): str(item.get("name", "")) for item in available_payees}
             edit_payee = st.selectbox(
                 "Payee", payee_ids,
                 index=payee_ids.index(selected_payee) if selected_payee in payee_ids else 0,
@@ -187,9 +195,10 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
                 selected_tags = json.loads(selected.get("tag_ids", "[]"))
             except (TypeError, json.JSONDecodeError):
                 selected_tags = []
-            tag_ids = [str(item["id"]) for item in tags]
+            available_tags = _active_or_selected(tags, selected_tags)
+            tag_ids = [str(item["id"]) for item in available_tags]
             tag_id_set = set(tag_ids)
-            tag_names = {str(item["id"]): str(item.get("name", "")) for item in tags}
+            tag_names = {str(item["id"]): str(item.get("name", "")) for item in available_tags}
             edit_tags = st.multiselect(
                 "Tags",
                 tag_ids,
