@@ -478,6 +478,25 @@ def test_missing_schedule_id_does_not_block_other_schedule_listing(default_stora
     assert schedules[0]["attention_code"] == "validation"
 
 
+def test_orphaned_occurrence_does_not_block_other_schedule_reconciliation(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    result = default_storage.create_recurring_expense(
+        schedule_id="orphaned-occurrence", name="Orphan", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    row = default_storage._find_row("Transactions", result["transaction"]["id"])
+    broken = dict(row.values)
+    broken["recurring_schedule_id"] = "deleted-schedule"
+    default_storage._replace_row("Transactions", row, broken)
+
+    outcome = default_storage.reconcile_recurring_schedules(as_of="2024-02-01")
+
+    assert outcome["attention"] == {}
+    assert [item["recurring_schedule_id"] for item in outcome["generated"]] == [
+        "orphaned-occurrence", "orphaned-occurrence"
+    ]
+
+
 def test_reconcile_rejects_duplicate_schedule_ids_before_generation(default_storage) -> None:
     account_id, category_id = _ids(default_storage)
     default_storage.create_recurring_expense(

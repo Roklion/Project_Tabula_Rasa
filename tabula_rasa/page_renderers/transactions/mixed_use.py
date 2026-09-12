@@ -944,7 +944,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             if recurring_id:
                 try:
                     schedule = context.storage.get_recurring_schedule(recurring_id, _force_refresh=True)
-                    current_sources = context.storage.list_mixed_use_expenses(_force_refresh=True)
+                    current_sources = context.storage.list_mixed_use_expenses()
                     latest = max(
                         (str(item.get("txn_date") or "") for item in current_sources
                          if item.get("recurring_schedule_id") == recurring_id),

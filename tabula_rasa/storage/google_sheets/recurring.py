@@ -639,9 +639,6 @@ class RecurringMixin:
             raise StorageValidationError("Recurring schedule IDs are duplicated")
         for row in (*transaction_rows, *mixed_rows):
             _validate_recurring_provenance(row.values, "Recurring occurrence")
-            occurrence_schedule_id = str(row.values.get("recurring_schedule_id", "") or "")
-            if occurrence_schedule_id and occurrence_schedule_id not in schedule_values:
-                raise StorageValidationError("Recurring occurrence references an unknown schedule")
         for schedule in schedules:
             try:
                 if not schedule["id"]:
