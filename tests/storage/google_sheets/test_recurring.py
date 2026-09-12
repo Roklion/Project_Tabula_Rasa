@@ -905,3 +905,19 @@ def test_ended_schedule_cannot_be_reactivated(default_storage) -> None:
         default_storage.edit_recurring_schedule(
             "reactivate", status="active", expected_schedule=ended
         )
+
+
+def test_mixed_use_schedule_source_kind_cannot_change(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    default_storage.create_recurring_mixed_use_expense(
+        schedule_id="immutable-source-kind", name="Mixed", txn_date="2024-01-01",
+        recurrence_unit="month", total_expense=100, business_use_percentage=50,
+        allocation_rationale="Shared use", account_id=account_id, category_id=category_id,
+    )
+
+    with pytest.raises(StorageValidationError, match="source kind cannot be changed"):
+        default_storage.edit_recurring_schedule(
+            "immutable-source-kind", source_kind="transaction"
+        )
+
+    assert default_storage.get_recurring_schedule("immutable-source-kind")["source_kind"] == "mixed_use"

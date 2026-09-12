@@ -40,6 +40,7 @@ The current backup format is version 11. Each archive contains:
 - Transactions.csv;
 - Mileage.csv;
 - MixedUseExpenses.csv;
+- RecurringSchedules.csv;
 - receipts.json; and
 - manifest.json.
 
@@ -74,7 +75,7 @@ intentionally unlinked. It is safe to rerun after an interrupted migration.
 The application validator and restore path accept **only format 11**. Older
 archives are not migrated during validation or restore: supplying one directly
 fails before any workbook write and points to the explicit migration command
-below. The migration command supports standard format-1 through format-9
+below. The migration command supports standard format-1 through format-10
 archives and emits a fresh format-11 archive.
 
 MixedUseExpenses.csv is the authoritative source record for each cost-based

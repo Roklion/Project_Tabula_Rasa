@@ -473,6 +473,14 @@ class RecurringMixin:
                         continue
                     if str(expected_schedule.get(field, "") or "") != str(current.get(field, "") or ""):
                         raise StorageConflictError("The recurring schedule changed; refresh it before editing.")
+            if "source_kind" in changes:
+                requested_source_kind = _clean_text(
+                    changes["source_kind"], "Source kind", required=True
+                ).casefold()
+                if requested_source_kind != current.get("source_kind"):
+                    raise StorageValidationError(
+                        "A recurring schedule's source kind cannot be changed"
+                    )
             if "status" in changes:
                 target_status = self._schedule_status(changes["status"])
                 current_status = current.get("status")
