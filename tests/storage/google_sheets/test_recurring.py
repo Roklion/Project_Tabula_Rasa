@@ -608,6 +608,9 @@ def test_reconcile_rejects_invalid_complete_occurrence_provenance_before_generat
     assert [item["recurring_schedule_id"] for item in outcome["generated"]] == [
         "healthy-reconcile"
     ]
+    schedule = default_storage.get_recurring_schedule("invalid-reconcile")
+    assert schedule["latest_current_occurrence_date"] == ""
+    assert schedule["next_due_date"] == "2024-01-01"
 
 
 def test_reconcile_isolates_known_schedule_provenance_failure(default_storage) -> None:

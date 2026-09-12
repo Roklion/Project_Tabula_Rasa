@@ -492,6 +492,17 @@ class RecurringMixin:
         for row in rows:
             if row.values.get("recurring_schedule_id") != schedule_id or not row.values.get(field):
                 continue
+            try:
+                _validate_recurring_provenance(row.values, "Recurring occurrence")
+            except StorageValidationError:
+                continue
+            if (
+                row.values.get("kind") != "Expense"
+                or row.values.get("recurring_source_kind") != source_kind
+                or row.values.get("recurring_occurrence_type")
+                not in {"initial", "generated"}
+            ):
+                continue
             if source_kind == "mixed_use":
                 projection = projections.get(str(row.values.get("linked_transaction_id", "")))
                 self._valid_mixed_use_projection(row.values, projection)
