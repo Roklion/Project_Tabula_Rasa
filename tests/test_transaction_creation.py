@@ -9,7 +9,7 @@ from tabula_rasa.page_renderers.transactions.creation import (
     _pending_recurring_create_exists,
     _pending_recurring_ids,
 )
-from tabula_rasa.storage import GoogleSheetsStorage
+from tabula_rasa.storage import GoogleSheetsStorage, StorageUnavailableError
 
 
 def test_add_transaction_can_create_inline_payee() -> None:
@@ -152,3 +152,20 @@ def test_startup_reconciles_once_per_profile_and_keeps_profiles_isolated() -> No
             assert calls == [storages["alpha-sheet"], storages["beta-sheet"]]
             app.run()
             assert calls == [storages["alpha-sheet"], storages["beta-sheet"]]
+
+
+def test_startup_reconciliation_failure_does_not_block_transactions_page() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    with patch.object(
+        GoogleSheetsStorage,
+        "reconcile_recurring_schedules",
+        side_effect=StorageUnavailableError("temporary Sheets outage"),
+    ):
+        with authenticated_app(storage) as app:
+            navigate_to(app, "Transactions")
+
+            assert any(
+                "manual actions remain available" in str(item.value)
+                for item in app.warning
+            )
+            assert any(item.label == "Save transaction" for item in app.button)

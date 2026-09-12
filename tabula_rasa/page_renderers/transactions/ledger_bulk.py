@@ -462,20 +462,18 @@ def render_bulk_actions(
                 "from the Mixed-use expenses tab."
             )
         active_schedule_ids: set[str] = set()
-        for transaction in expected_selected:
-            schedule_id = str(
-                transaction.get("recurring_schedule_id") or ""
-            ).strip()
-            if not schedule_id:
-                continue
+        if any(
+            str(transaction.get("recurring_schedule_id") or "").strip()
+            for transaction in expected_selected
+        ):
             try:
-                if (
-                    context.storage.get_recurring_schedule(
-                        schedule_id, _force_refresh=True
-                    ).get("status")
-                    == "active"
-                ):
-                    active_schedule_ids.add(schedule_id)
+                active_schedule_ids = {
+                    str(schedule.get("id") or "").strip()
+                    for schedule in context.storage.list_recurring_schedules(
+                        _force_refresh=True
+                    )
+                    if schedule.get("status") == "active"
+                }
             except StorageError:
                 pass
         warning_schedule_ids = _latest_active_recurring_ids(

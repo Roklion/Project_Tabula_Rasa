@@ -29,6 +29,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     receipt_editor_workflow_key,
 )
 from tabula_rasa.storage import (
+    StorageConflictError,
     StorageError,
     StorageNotFoundError,
     StorageValidationError,
@@ -892,7 +893,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                             if recurring:
                                 return context.storage.create_recurring_mixed_use_expense(**payload)["source"]
                             return context.storage.create_mixed_use_expense(**payload)
-                        except StorageValidationError:
+                        except (StorageConflictError, StorageValidationError):
                             if recurring:
                                 clear_pending_recurring_state()
                             raise
@@ -902,12 +903,21 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                         else ("create_mixed_use_expense", "Mixed-use expense saved.")
                     )
 
+                pending_recurring_before_save = _pending_recurring_schedule_exists(
+                    st.session_state, profile
+                )
+                recurring_create = (
+                    recurring and not source and not source_incomplete and not copy_mode
+                )
+
                 def reset_after_success() -> None:
                     st.session_state.pop(baseline_key, None)
                     st.session_state.pop(baseline_id_key, None)
-                    st.session_state.pop(pending_source_key, None)
-                    st.session_state.pop(pending_transaction_key, None)
-                    clear_pending_recurring_state()
+                    if recurring_create or not pending_recurring_before_save:
+                        st.session_state.pop(pending_source_key, None)
+                        st.session_state.pop(pending_transaction_key, None)
+                    if recurring_create:
+                        clear_pending_recurring_state()
                     if copy_mode:
                         _clear_mixed_use_copy(st.session_state, profile)
                         _clear_mixed_use_selection(st.session_state, profile)

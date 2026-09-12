@@ -467,8 +467,15 @@ else:
             # Reconciliation is deliberately one bounded pass per profile and
             # session. Schedule-level failures are persisted as attention by
             # storage; they must not block unrelated schedules or trigger reruns.
-            storage.reconcile_recurring_schedules()
-            reconciled_profiles.add(reconciliation_key)
+            try:
+                storage.reconcile_recurring_schedules()
+            except StorageError as error:
+                st.warning(
+                    "Automatic recurring schedule reconciliation failed; "
+                    f"manual actions remain available. {error}"
+                )
+            else:
+                reconciled_profiles.add(reconciliation_key)
 
     except (LocalProfileStoreError, StorageError) as error:
         if isinstance(error, StorageError):

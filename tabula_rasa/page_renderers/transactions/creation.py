@@ -24,7 +24,7 @@ from tabula_rasa.page_renderers.tag_selector import (
     render_tag_selector,
     tag_selector_error,
 )
-from tabula_rasa.storage import StorageValidationError
+from tabula_rasa.storage import StorageConflictError, StorageValidationError
 
 
 def _pending_recurring_ids(
@@ -319,7 +319,7 @@ def render_add_transaction(
                                     if kind == "Expense" and recurring
                                     else context.storage.create_transaction(**payload)
                                 )
-                            except StorageValidationError:
+                            except (StorageConflictError, StorageValidationError):
                                 if kind == "Expense" and recurring:
                                     clear_pending_recurring_ids()
                                 raise
