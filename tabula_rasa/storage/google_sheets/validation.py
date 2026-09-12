@@ -738,7 +738,7 @@ def _parse_backup_zip(
                 raise StorageValidationError("Mixed-use recurring source kind is invalid")
             _iso_date(source.get("recurring_scheduled_date"))
 
-    for source in tables.get("MixedUseExpenses", ((), []))[1]:
+    for source in tables["MixedUseExpenses"][1]:
         _iso_date(source.get("txn_date"))
         account_id = _clean_text(source.get("account_id"), "Account", required=True)
         if account_id not in account_ids:

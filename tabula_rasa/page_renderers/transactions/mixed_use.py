@@ -947,7 +947,8 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                     current_sources = context.storage.list_mixed_use_expenses()
                     latest = max(
                         (str(item.get("txn_date") or "") for item in current_sources
-                         if item.get("recurring_schedule_id") == recurring_id),
+                         if item.get("recurring_schedule_id") == recurring_id
+                         and item.get("txn_date")),
                         default="",
                     )
                     if schedule.get("status") == "active" and str(source.get("txn_date") or "") == latest:

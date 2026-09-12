@@ -275,6 +275,7 @@ def render_transaction_editor(
                         str(item.get("txn_date") or "")
                         for item in all_transactions
                         if str(item.get("recurring_schedule_id") or "") == recurring_id
+                        and item.get("txn_date")
                     ]
                     if linked_dates and str(selected.get("txn_date") or "") == max(linked_dates):
                         st.warning(
