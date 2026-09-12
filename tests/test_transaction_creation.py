@@ -92,6 +92,21 @@ def test_add_expense_recurring_flow_creates_initial_occurrence_and_schedule() ->
     assert transactions[0]["receipt_references"] == "[]"
 
 
+def test_invalid_recurring_submission_does_not_leave_pending_retry_state() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    storage.create_account("Checking", "Bank")
+    storage.create_category("Office", "Expense")
+
+    with authenticated_app(storage) as app:
+        navigate_to(app, "Transactions")
+        by_label(app.checkbox, "Repeat this Expense").set_value(True).run()
+        by_label(app.button, "Save transaction").click().run()
+
+        assert "recurring_pending_schedule_id_test" not in app.session_state
+        assert "recurring_pending_transaction_id_test" not in app.session_state
+        assert "recurring_pending_payload_test" not in app.session_state
+
+
 def test_pending_recurring_ids_are_stable_across_retries() -> None:
     state: dict[str, object] = {}
     first = _pending_recurring_ids(state, "north")

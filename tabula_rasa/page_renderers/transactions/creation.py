@@ -24,6 +24,7 @@ from tabula_rasa.page_renderers.tag_selector import (
     render_tag_selector,
     tag_selector_error,
 )
+from tabula_rasa.storage import StorageValidationError
 
 
 def _pending_recurring_ids(
@@ -310,14 +311,23 @@ def render_add_transaction(
                                 }
                             else:
                                 st.session_state[pending_payload_key] = dict(payload)
+
+                        def operation():
+                            try:
+                                return (
+                                    context.storage.create_recurring_expense(**payload)["transaction"]
+                                    if kind == "Expense" and recurring
+                                    else context.storage.create_transaction(**payload)
+                                )
+                            except StorageValidationError:
+                                if kind == "Expense" and recurring:
+                                    clear_pending_recurring_ids()
+                                raise
+
                         context.confirmed_write(
                             "create_transaction",
                             payload,
-                            lambda: (
-                                context.storage.create_recurring_expense(**payload)["transaction"]
-                                if kind == "Expense" and recurring
-                                else context.storage.create_transaction(**payload)
-                            ),
+                            operation,
                             lambda _result: st.session_state.get(
                                 "write_success_notice"
                             )

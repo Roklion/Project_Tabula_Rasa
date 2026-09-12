@@ -831,6 +831,11 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                     else description
                 )
                 payload = {"txn_date": txn_date, "account_id": account_id, "category_id": category_id, "payee_id": payee_id, "new_payee_name": new_payee_name, "tag_ids": tag_ids, "new_tag_name": new_tag_name or "", "reference": reference, "description": saved_description, "total_expense": total_expense, "business_use_percentage": business_use_percentage, "allocation_rationale": rationale}
+
+                def clear_pending_recurring_state() -> None:
+                    st.session_state.pop(pending_schedule_key, None)
+                    st.session_state.pop(pending_payload_key, None)
+
                 if source and not source_incomplete:
                     payload["expected_source"] = expected_source
                     def operation():
@@ -862,10 +867,16 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                         payload["receipt_references"] = source.get(
                             "receipt_references", ""
                         )
+
                     def operation():
-                        if recurring:
-                            return context.storage.create_recurring_mixed_use_expense(**payload)["source"]
-                        return context.storage.create_mixed_use_expense(**payload)
+                        try:
+                            if recurring:
+                                return context.storage.create_recurring_mixed_use_expense(**payload)["source"]
+                            return context.storage.create_mixed_use_expense(**payload)
+                        except StorageValidationError:
+                            if recurring:
+                                clear_pending_recurring_state()
+                            raise
                     action, success = (
                         ("copy_mixed_use_expense", "Mixed-use expense copied.")
                         if copy_mode
@@ -877,8 +888,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                     st.session_state.pop(baseline_id_key, None)
                     st.session_state.pop(pending_source_key, None)
                     st.session_state.pop(pending_transaction_key, None)
-                    st.session_state.pop(pending_schedule_key, None)
-                    st.session_state.pop(pending_payload_key, None)
+                    clear_pending_recurring_state()
                     if copy_mode:
                         _clear_mixed_use_copy(st.session_state, profile)
                         _clear_mixed_use_selection(st.session_state, profile)
