@@ -46,6 +46,26 @@ def test_standalone_schedule_creation_rejects_duplicate_id(default_storage) -> N
         )
 
 
+def test_duplicate_schedule_rejects_inline_reference_creation(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    default_storage.create_recurring_expense(
+        schedule_id="duplicate-inline", name="First", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+    payee_count = len(default_storage.list_payees())
+    tag_count = len(default_storage.list_tags())
+
+    with pytest.raises(StorageConflictError, match="inline references were not created"):
+        default_storage.create_recurring_expense(
+            schedule_id="duplicate-inline", name="Second", txn_date="2024-01-01",
+            recurrence_unit="month", amount=20, account_id=account_id, category_id=category_id,
+            new_payee_name="Duplicate vendor", new_tag_name="Duplicate tag",
+        )
+
+    assert len(default_storage.list_payees()) == payee_count
+    assert len(default_storage.list_tags()) == tag_count
+
+
 def test_recurring_reconciliation_rejects_duplicate_occurrence_dates(default_storage) -> None:
     account_id, category_id = _ids(default_storage)
     result = default_storage.create_recurring_expense(

@@ -84,9 +84,10 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
     for item in schedules:
         linked = current_sources if item.get("source_kind") == "mixed_use" else current_transactions
         current_dates = [
-            str(row["txn_date"])
+            str(row["recurring_scheduled_date"])
             for row in linked
-            if row.get("recurring_schedule_id") == item["id"] and row.get("txn_date")
+            if row.get("recurring_schedule_id") == item["id"]
+            and row.get("recurring_scheduled_date")
         ]
         rows.append({
             "Name": item["name"],

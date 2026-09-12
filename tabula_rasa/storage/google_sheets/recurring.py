@@ -796,13 +796,26 @@ class RecurringMixin:
         """Create one schedule and its initial Expense occurrence."""
         with self._workbook_locks.ledger:
             preflight = self._prevalidate_recurring_form(data)
+            existing_schedules = {
+                str(row.values.get("id")): row.values
+                for row in self._rows("RecurringSchedules", force_refresh=True)
+            }
+            if preflight["id"] in existing_schedules and (
+                data.get("new_payee_name") or data.get("new_tag_name")
+            ):
+                raise StorageConflictError(
+                    "Recurring schedule ID is already in use; inline references were not created"
+                )
             data = self._resolve_recurring_inline_references(data)
             schedule = self._schedule_template(data, schedule_id=preflight["id"])
             initial_date = _as_date(schedule["start_date"])
             initial_id = _clean_text(data.get("transaction_id"), "Transaction ID") or occurrence_id(schedule["id"], initial_date, "initial")
             initial = self._recurring_occurrence(schedule, initial_date, role="initial")
             initial["id"] = initial_id
-            existing = {str(row.values.get("id")): row.values for row in self._rows("RecurringSchedules", force_refresh=True)}
+            existing = {
+                str(row.values.get("id")): row.values
+                for row in self._rows("RecurringSchedules", force_refresh=True)
+            }
             if schedule["id"] in existing:
                 if not self._logical_record_matches(
                     existing[schedule["id"]], schedule,
@@ -846,6 +859,16 @@ class RecurringMixin:
         with self._workbook_locks.ledger:
             data = {**data, "source_kind": "mixed_use"}
             preflight = self._prevalidate_recurring_form(data)
+            existing_schedules = {
+                str(row.values.get("id")): row.values
+                for row in self._rows("RecurringSchedules", force_refresh=True)
+            }
+            if preflight["id"] in existing_schedules and (
+                data.get("new_payee_name") or data.get("new_tag_name")
+            ):
+                raise StorageConflictError(
+                    "Recurring schedule ID is already in use; inline references were not created"
+                )
             data = self._resolve_recurring_inline_references(data)
             schedule = self._schedule_template(data, schedule_id=preflight["id"])
             scheduled = _as_date(schedule["start_date"])
