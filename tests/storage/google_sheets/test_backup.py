@@ -177,6 +177,7 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         changed = dict(row.values)
         changed.update({
             "kind": " expense ",
+            "source_kind": " transaction ",
             "recurrence_unit": "months",
             "status": "ACTIVE",
             "account_id": f" {account['id']} ",
