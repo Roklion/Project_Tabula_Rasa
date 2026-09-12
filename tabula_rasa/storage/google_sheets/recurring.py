@@ -17,6 +17,7 @@ from tabula_rasa.recurrence import (
 from .errors import StorageConflictError, StorageNotFoundError, StorageValidationError
 from .schema import WORKSHEET_HEADERS
 from .validation import (
+    _as_bool,
     _clean_text,
     decode_receipt_references,
     _encode_tag_ids,
@@ -72,6 +73,7 @@ class RecurringMixin:
         category_lookup: Mapping[str, Any] | None = None,
         payee_lookup: Mapping[str, Any] | None = None,
         tag_lookup: Mapping[str, Any] | None = None,
+        require_active_references: bool = False,
     ) -> dict[str, str]:
         schedule_id = _clean_text(schedule_id or data.get("schedule_id") or data.get("id"), "Schedule ID") or str(uuid4())
         name = _clean_text(data.get("name"), "Schedule name", required=True)
@@ -106,16 +108,29 @@ class RecurringMixin:
         categories = category_lookup if category_lookup is not None else self._category_lookup(force_refresh=True)
         if account_id not in accounts:
             raise StorageValidationError("Source account does not exist")
+        if require_active_references and not _as_bool(
+            accounts[account_id].get("active"), "Account active"
+        ):
+            raise StorageValidationError("Source account is inactive")
         if category_id not in categories or categories[category_id].get("kind") != "Expense":
             raise StorageValidationError("Category kind does not match transaction kind")
         payee_id = _clean_text(data.get("payee_id"), "Payee")
         payees = payee_lookup if payee_lookup is not None else self._payee_lookup(force_refresh=True)
         if payee_id and payee_id not in payees:
             raise StorageValidationError("Payee does not exist")
+        if payee_id and require_active_references and not _as_bool(
+            payees[payee_id].get("active"), "Payee active"
+        ):
+            raise StorageValidationError("Payee is inactive")
         tags = _normalize_tag_ids(data.get("tag_ids", ""))
         known_tags = tag_lookup if tag_lookup is not None else self._tag_lookup(force_refresh=True)
         if any(tag not in known_tags for tag in tags):
             raise StorageValidationError("Tag does not exist")
+        if require_active_references and any(
+            not _as_bool(known_tags[tag].get("active"), "Tag active")
+            for tag in tags
+        ):
+            raise StorageValidationError("Tag is inactive")
         try:
             receipt_references = decode_receipt_references(data.get("receipt_references", ""))
         except StorageValidationError as exc:
@@ -222,7 +237,10 @@ class RecurringMixin:
         preflight["tag_ids"] = _normalize_tag_ids(preflight.get("tag_ids", ""))
         preflight["new_payee_name"] = ""
         preflight["new_tag_name"] = ""
-        return self._schedule_template(preflight)
+        return self._schedule_template(
+            preflight,
+            require_active_references=True,
+        )
 
     @staticmethod
     def _partial_recurring_record_matches(

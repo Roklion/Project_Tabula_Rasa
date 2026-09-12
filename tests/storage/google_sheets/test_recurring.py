@@ -186,6 +186,29 @@ def test_recurring_create_resolves_inline_payee_and_tag_values(default_storage) 
         )
 
 
+def test_recurring_preflight_rejects_inactive_account_before_inline_writes(
+    default_storage,
+) -> None:
+    account_id, category_id = _ids(default_storage)
+    default_storage.edit_account(account_id, active=False)
+
+    with pytest.raises(StorageValidationError, match="account is inactive"):
+        default_storage.create_recurring_expense(
+            schedule_id="inactive-reference-preflight",
+            name="Inactive reference",
+            txn_date="2024-01-01",
+            recurrence_unit="month",
+            amount=10,
+            account_id=account_id,
+            category_id=category_id,
+            new_payee_name="Should not be created",
+            new_tag_name="Should not be created",
+        )
+
+    assert default_storage.list_payees() == []
+    assert default_storage.list_tags() == []
+
+
 def test_recurring_invalid_template_does_not_create_inline_references(default_storage) -> None:
     account_id, category_id = _ids(default_storage)
     payee_count = len(default_storage.list_payees())
