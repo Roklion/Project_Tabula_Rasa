@@ -449,6 +449,10 @@ else:
         revision = (
             local_profile_revision(LOCAL_PROFILE_STORE_PATH)
         )
+        workbook_identity = str(
+            profile_by_key[selected_profile_key].secrets.get("spreadsheet_id")
+            or revision
+        )
         storage = get_storage(
             selected_profile_key,
             STORAGE_IMPLEMENTATION_VERSION,
@@ -457,10 +461,7 @@ else:
         reset_stale_recurring_pending_state(
             st.session_state,
             profile_key=selected_profile_key,
-            workbook_identity=str(
-                profile_by_key[selected_profile_key].secrets.get("spreadsheet_id")
-                or revision
-            ),
+            workbook_identity=workbook_identity,
         )
         initialized_profiles = st.session_state.setdefault(
             "defaults_initialized_profiles", set()
@@ -471,7 +472,7 @@ else:
         reconciled_profiles = st.session_state.setdefault(
             "recurring_reconciled_profiles", set()
         )
-        reconciliation_key = (selected_profile_key, revision)
+        reconciliation_key = (selected_profile_key, workbook_identity)
         if reconciliation_key not in reconciled_profiles:
             # Reconciliation is deliberately one bounded pass per profile and
             # session. Schedule-level failures are persisted as attention by

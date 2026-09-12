@@ -710,7 +710,8 @@ def reset_stale_recurring_pending_state(
         ),
     )
     for revision_key, pending_keys in pending_groups:
-        if not any(key in session_state for key in pending_keys):
+        recurring_keys = pending_keys[2:] if revision_key.startswith("mixed_use_") else pending_keys
+        if not any(key in session_state for key in recurring_keys):
             continue
         if session_state.get(revision_key) == workbook_identity:
             continue

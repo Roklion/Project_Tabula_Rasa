@@ -328,6 +328,7 @@ def test_stale_recurring_pending_state_isolated_by_workbook_revision() -> None:
         "mixed_use_pending_payload_north": {"total_expense": "20"},
         "mixed_use_pending_configuration_revision_north": "old-revision",
         "mixed_use_pending_source_id_south": "ordinary-pending-source",
+        "mixed_use_pending_transaction_id_south": "ordinary-pending-projection",
     }
 
     reset_stale_recurring_pending_state(
@@ -339,6 +340,19 @@ def test_stale_recurring_pending_state_isolated_by_workbook_revision() -> None:
     assert not any("north" in key for key in session_state if "pending" in key)
     assert session_state["mixed_use_pending_source_id_south"] == (
         "ordinary-pending-source"
+    )
+
+    reset_stale_recurring_pending_state(
+        session_state,
+        profile_key="south",
+        workbook_identity="new-revision",
+    )
+
+    assert session_state["mixed_use_pending_source_id_south"] == (
+        "ordinary-pending-source"
+    )
+    assert session_state["mixed_use_pending_transaction_id_south"] == (
+        "ordinary-pending-projection"
     )
 
 
