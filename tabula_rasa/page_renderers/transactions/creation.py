@@ -28,7 +28,9 @@ from tabula_rasa.storage import StorageConflictError, StorageValidationError
 
 
 def _pending_recurring_ids(
-    state: dict[str, object], profile: str
+    state: dict[str, object],
+    profile: str,
+    configuration_revision: str | None = None,
 ) -> tuple[str, str]:
     """Keep a recurring schedule and initial transaction ID stable on retry."""
     schedule_key = f"recurring_pending_schedule_id_{profile}"
@@ -37,6 +39,10 @@ def _pending_recurring_ids(
     transaction_id = str(state.get(transaction_key) or uuid4())
     state[schedule_key] = schedule_id
     state[transaction_key] = transaction_id
+    if configuration_revision is not None:
+        state[f"recurring_pending_configuration_revision_{profile}"] = (
+            configuration_revision
+        )
     return schedule_id, transaction_id
 
 
@@ -289,6 +295,10 @@ def render_add_transaction(
                             st.session_state.pop(pending_schedule_key, None)
                             st.session_state.pop(pending_transaction_key, None)
                             st.session_state.pop(pending_payload_key, None)
+                            st.session_state.pop(
+                                f"recurring_pending_configuration_revision_{context.profile_key}",
+                                None,
+                            )
 
                         def clear_pending_recurring_if_active() -> None:
                             if kind == "Expense" and recurring:
@@ -296,7 +306,9 @@ def render_add_transaction(
 
                         if kind == "Expense" and recurring:
                             pending_schedule_id, pending_transaction_id = _pending_recurring_ids(
-                                st.session_state, context.profile_key
+                                st.session_state,
+                                context.profile_key,
+                                context.configuration_revision,
                             )
                             payload.update({
                                 "schedule_id": pending_schedule_id,

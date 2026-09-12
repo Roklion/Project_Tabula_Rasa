@@ -64,6 +64,7 @@ from tabula_rasa.presentation import (
     apply_global_styles,
     render_global_footer,
     reset_profile_presentation_state,
+    reset_stale_recurring_pending_state,
 )
 from tabula_rasa.storage import (
     GoogleSheetsStorage,
@@ -452,6 +453,11 @@ else:
             selected_profile_key,
             STORAGE_IMPLEMENTATION_VERSION,
             revision,
+        )
+        reset_stale_recurring_pending_state(
+            st.session_state,
+            profile_key=selected_profile_key,
+            configuration_revision=revision,
         )
         initialized_profiles = st.session_state.setdefault(
             "defaults_initialized_profiles", set()

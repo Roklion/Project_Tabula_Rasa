@@ -117,12 +117,18 @@ def _pending_create_ids(
 
 
 def _pending_recurring_schedule_id(
-    state: MutableMapping[str, object], profile: str
+    state: MutableMapping[str, object],
+    profile: str,
+    configuration_revision: str | None = None,
 ) -> str:
     """Keep a recurring schedule ID stable while its create is retried."""
     key = _key(profile, "pending_schedule_id")
     schedule_id = str(state.get(key) or uuid4())
     state[key] = schedule_id
+    if configuration_revision is not None:
+        state[_key(profile, "pending_configuration_revision")] = (
+            configuration_revision
+        )
     return schedule_id
 
 
@@ -853,8 +859,13 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                 payload = {"txn_date": txn_date, "account_id": account_id, "category_id": category_id, "payee_id": payee_id, "new_payee_name": new_payee_name, "tag_ids": tag_ids, "new_tag_name": new_tag_name or "", "reference": reference, "description": saved_description, "total_expense": total_expense, "business_use_percentage": business_use_percentage, "allocation_rationale": rationale}
 
                 def clear_pending_recurring_state() -> None:
+                    st.session_state.pop(pending_source_key, None)
+                    st.session_state.pop(pending_transaction_key, None)
                     st.session_state.pop(pending_schedule_key, None)
                     st.session_state.pop(pending_payload_key, None)
+                    st.session_state.pop(
+                        _key(profile, "pending_configuration_revision"), None
+                    )
 
                 if source and not source_incomplete:
                     payload["expected_source"] = expected_source
@@ -955,7 +966,9 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                 if prepared_receipts is not None:
                     if recurring:
                         pending_schedule_id = _pending_recurring_schedule_id(
-                            st.session_state, profile
+                            st.session_state,
+                            profile,
+                            context.configuration_revision,
                         )
                         payload.update({
                             "schedule_id": pending_schedule_id,
@@ -1021,6 +1034,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         else:
             st.warning("Deleting this source permanently removes its linked ledger projection. Receipt files remain in Drive as unreferenced files.")
             recurring_id = str(source.get("recurring_schedule_id") or "")
+            schedule_status_error = False
             if recurring_id:
                 try:
                     schedule = context.storage.get_recurring_schedule(recurring_id, _force_refresh=True)
@@ -1037,11 +1051,19 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                             "Deleting it may make reconciliation regenerate the due date."
                         )
                 except StorageError:
-                    pass
+                    schedule_status_error = True
+                    st.warning(
+                        "Recurring schedule status could not be refreshed; "
+                        "deletion is disabled until the ledger can be refreshed."
+                    )
             confirmed = st.checkbox("I understand this deletion is permanent", key=f"mixed_confirm_delete_{scope}")
             delete_error = st.empty()
             if st.button("Permanently delete", type="primary", key=f"mixed_delete_{scope}"):
-                if not confirmed:
+                if schedule_status_error:
+                    delete_error.error(
+                        "Refresh the recurring schedule status before deleting this expense."
+                    )
+                elif not confirmed:
                     delete_error.error("Confirm the permanent deletion before continuing.")
                 else:
                     context.confirmed_write("delete_mixed_use_expense", {"id": source["id"], "expected_source": expected_source}, lambda: context.storage.delete_mixed_use_expense(source["id"], expected_source=expected_source), "Mixed-use expense deleted.", on_success=lambda: st.session_state.pop(selected_key, None), report_error=delete_error.error)

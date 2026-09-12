@@ -109,9 +109,10 @@ def test_invalid_recurring_submission_does_not_leave_pending_retry_state() -> No
 
 def test_pending_recurring_ids_are_stable_across_retries() -> None:
     state: dict[str, object] = {}
-    first = _pending_recurring_ids(state, "north")
+    first = _pending_recurring_ids(state, "north", "revision")
     second = _pending_recurring_ids(state, "north")
     assert first == second
+    assert state["recurring_pending_configuration_revision_north"] == "revision"
     assert first != _pending_recurring_ids(state, "south")
 
 

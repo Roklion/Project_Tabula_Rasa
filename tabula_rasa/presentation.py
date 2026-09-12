@@ -683,6 +683,41 @@ def reset_profile_presentation_state(
             session_state.pop(key, None)
 
 
+def reset_stale_recurring_pending_state(
+    session_state: MutableMapping[str, object],
+    *,
+    profile_key: str,
+    configuration_revision: str,
+) -> None:
+    """Discard retry state that belongs to an older workbook configuration."""
+    pending_groups = (
+        (
+            f"recurring_pending_configuration_revision_{profile_key}",
+            (
+                f"recurring_pending_schedule_id_{profile_key}",
+                f"recurring_pending_transaction_id_{profile_key}",
+                f"recurring_pending_payload_{profile_key}",
+            ),
+        ),
+        (
+            f"mixed_use_pending_configuration_revision_{profile_key}",
+            (
+                f"mixed_use_pending_source_id_{profile_key}",
+                f"mixed_use_pending_transaction_id_{profile_key}",
+                f"mixed_use_pending_schedule_id_{profile_key}",
+                f"mixed_use_pending_payload_{profile_key}",
+            ),
+        ),
+    )
+    for revision_key, pending_keys in pending_groups:
+        if not any(key in session_state for key in pending_keys):
+            continue
+        if session_state.get(revision_key) == configuration_revision:
+            continue
+        for key in (*pending_keys, revision_key):
+            session_state.pop(key, None)
+
+
 def render_page_header(title: str, description: str | None = None) -> None:
     """Render the compact title treatment shared by application pages."""
     st.title(title)

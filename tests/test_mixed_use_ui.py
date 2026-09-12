@@ -57,8 +57,9 @@ def test_pending_create_ids_remain_stable_for_uncertain_retries() -> None:
 
 def test_pending_recurring_schedule_id_remains_stable_for_uncertain_retries() -> None:
     state: dict[str, object] = {}
-    first = _pending_recurring_schedule_id(state, "north")
+    first = _pending_recurring_schedule_id(state, "north", "revision")
     assert first == _pending_recurring_schedule_id(state, "north")
+    assert state["mixed_use_pending_configuration_revision_north"] == "revision"
     assert first != _pending_recurring_schedule_id(state, "south")
 
 
