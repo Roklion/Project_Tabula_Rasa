@@ -9,6 +9,7 @@ from tabula_rasa.page_renderers.transactions.ledger import (
 from tabula_rasa.page_renderers.transactions.ledger_bulk import (
     MIXED_FIELD_VALUE,
     _bulk_payee_names,
+    _latest_active_recurring_ids,
     _shared_bulk_value,
 )
 
@@ -57,3 +58,23 @@ def test_bulk_editor_includes_selected_inactive_payees_after_id_normalization() 
         "inactive-payee": "Inactive",
         "active-payee": "Active",
     }
+
+
+def test_bulk_delete_warning_identifies_selected_latest_recurring_occurrences() -> None:
+    transactions = [
+        {
+            "id": "old",
+            "recurring_schedule_id": "schedule",
+            "recurring_scheduled_date": "2026-01-01",
+        },
+        {
+            "id": "latest",
+            "recurring_schedule_id": "schedule",
+            "recurring_scheduled_date": "2026-02-01",
+        },
+    ]
+
+    assert _latest_active_recurring_ids(transactions, ["latest"], {"schedule"}) == (
+        "schedule",
+    )
+    assert _latest_active_recurring_ids(transactions, ["old"], {"schedule"}) == ()
