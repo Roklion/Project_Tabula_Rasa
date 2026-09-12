@@ -461,7 +461,19 @@ class RecurringMixin:
     def create_recurring_schedule(self, **data: Any) -> dict[str, str]:
         with self._workbook_locks.ledger:
             schedule = self._schedule_template(data)
-            self._append("RecurringSchedules", schedule)
+            existing = {
+                str(row.values.get("id")): row.values
+                for row in self._rows("RecurringSchedules", force_refresh=True)
+            }
+            if schedule["id"] in existing:
+                if not self._logical_record_matches(
+                    existing[schedule["id"]],
+                    schedule,
+                    ignored=frozenset({"created_at", "updated_at", "attention_code", "attention_at"}),
+                ):
+                    raise StorageConflictError("Recurring schedule ID is already in use")
+            else:
+                self._append("RecurringSchedules", schedule)
             return self.get_recurring_schedule(schedule["id"], _force_refresh=True)
 
     def edit_recurring_schedule(self, schedule_id: str, *, expected_schedule: Mapping[str, Any] | None = None, **changes: Any) -> dict[str, str]:

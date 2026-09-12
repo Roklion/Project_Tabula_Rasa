@@ -32,6 +32,20 @@ def test_recurring_create_reconcile_is_idempotent(default_storage) -> None:
     assert default_storage.reconcile_recurring_schedules(as_of=date(2024, 4, 30))["generated"] == []
 
 
+def test_standalone_schedule_creation_rejects_duplicate_id(default_storage) -> None:
+    account_id, category_id = _ids(default_storage)
+    default_storage.create_recurring_schedule(
+        schedule_id="duplicate-standalone", name="First", txn_date="2024-01-01",
+        recurrence_unit="month", amount=10, account_id=account_id, category_id=category_id,
+    )
+
+    with pytest.raises(StorageConflictError, match="already in use"):
+        default_storage.create_recurring_schedule(
+            schedule_id="duplicate-standalone", name="Second", txn_date="2024-01-01",
+            recurrence_unit="month", amount=20, account_id=account_id, category_id=category_id,
+        )
+
+
 def test_recurring_reconciliation_rejects_duplicate_occurrence_dates(default_storage) -> None:
     account_id, category_id = _ids(default_storage)
     result = default_storage.create_recurring_expense(

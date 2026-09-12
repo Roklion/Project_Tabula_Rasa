@@ -272,12 +272,12 @@ def render_transaction_editor(
                         recurring_active = False
                 if recurring_active:
                     linked_dates = [
-                        str(item.get("txn_date") or "")
+                        str(item.get("recurring_scheduled_date") or "")
                         for item in all_transactions
                         if str(item.get("recurring_schedule_id") or "") == recurring_id
-                        and item.get("txn_date")
+                        and item.get("recurring_scheduled_date")
                     ]
-                    if linked_dates and str(selected.get("txn_date") or "") == max(linked_dates):
+                    if linked_dates and str(selected.get("recurring_scheduled_date") or "") == max(linked_dates):
                         st.warning(
                             "This is the latest current occurrence in an active recurring series. "
                             "Deleting it may make the next reconciliation regenerate the due date."
