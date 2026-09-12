@@ -825,17 +825,6 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                     else description
                 )
                 payload = {"txn_date": txn_date, "account_id": account_id, "category_id": category_id, "payee_id": payee_id, "new_payee_name": new_payee_name, "tag_ids": tag_ids, "new_tag_name": new_tag_name or "", "reference": reference, "description": saved_description, "total_expense": total_expense, "business_use_percentage": business_use_percentage, "allocation_rationale": rationale}
-                if recurring:
-                    pending_schedule_id = _pending_recurring_schedule_id(
-                        st.session_state, profile
-                    )
-                    payload.update({
-                        "schedule_id": pending_schedule_id,
-                        "name": recurrence_name or description or "Recurring mixed-use expense",
-                        "recurrence_unit": recurrence_unit,
-                        "recurrence_interval": recurrence_interval,
-                        "end_date": recurrence_end,
-                    })
                 if source and not source_incomplete:
                     payload["expected_source"] = expected_source
                     def operation():
@@ -911,6 +900,17 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                     )
 
                 if prepared_receipts is not None:
+                    if recurring:
+                        pending_schedule_id = _pending_recurring_schedule_id(
+                            st.session_state, profile
+                        )
+                        payload.update({
+                            "schedule_id": pending_schedule_id,
+                            "name": recurrence_name or description or "Recurring mixed-use expense",
+                            "recurrence_unit": recurrence_unit,
+                            "recurrence_interval": recurrence_interval,
+                            "end_date": recurrence_end,
+                        })
                     context.confirmed_write(action, payload, operation, success, on_success=reset_after_success, on_confirmed=process_mixed_receipts, report_error=save_error.error)
         if cancel_copy_requested:
             _clear_mixed_use_copy(st.session_state, profile)

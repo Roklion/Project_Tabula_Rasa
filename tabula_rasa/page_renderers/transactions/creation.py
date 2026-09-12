@@ -263,18 +263,6 @@ def render_add_transaction(
                     "description": description,
                     "reference": reference,
                 }
-                if kind == "Expense" and recurring:
-                    pending_schedule_id, pending_transaction_id = _pending_recurring_ids(
-                        st.session_state, context.profile_key
-                    )
-                    payload.update({
-                        "schedule_id": pending_schedule_id,
-                        "transaction_id": pending_transaction_id,
-                        "name": recurrence_name or description or "Recurring expense",
-                        "recurrence_unit": recurrence_unit,
-                        "recurrence_interval": recurrence_interval,
-                        "end_date": recurrence_end,
-                    })
                 try:
                     prepared_receipts = prepare_receipt_uploads(
                         receipt_uploads or []
@@ -299,6 +287,18 @@ def render_add_transaction(
                             st.session_state.pop(pending_schedule_key, None)
                             st.session_state.pop(pending_transaction_key, None)
 
+                        if kind == "Expense" and recurring:
+                            pending_schedule_id, pending_transaction_id = _pending_recurring_ids(
+                                st.session_state, context.profile_key
+                            )
+                            payload.update({
+                                "schedule_id": pending_schedule_id,
+                                "transaction_id": pending_transaction_id,
+                                "name": recurrence_name or description or "Recurring expense",
+                                "recurrence_unit": recurrence_unit,
+                                "recurrence_interval": recurrence_interval,
+                                "end_date": recurrence_end,
+                            })
                         context.confirmed_write(
                             "create_transaction",
                             payload,
