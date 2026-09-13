@@ -1044,9 +1044,6 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             None,
         )
         if linked is not None:
-            st.divider()
-            st.markdown("#### Receipts")
-            st.caption("Manage receipts here; the linked ledger projection is read-only.")
             render_receipts(
                 replace(
                     context,
@@ -1060,6 +1057,10 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                 selected=linked,
                 all_transactions=linked_transactions,
                 edit_id=str(linked["id"]),
+                section_title="Receipts",
+                section_caption=(
+                    "Manage receipts here; the linked ledger projection is read-only."
+                ),
             )
         st.divider()
         if source_incomplete:

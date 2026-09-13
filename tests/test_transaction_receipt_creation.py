@@ -449,6 +449,33 @@ def test_manual_unreferenced_link_reports_success_when_recovery_finishes() -> No
     rerun.assert_called_once_with()
 
 
+def test_render_receipts_accepts_one_custom_mixed_use_section_heading() -> None:
+    context = _context(storage=Mock(), drive=Mock())
+    context.get_drive_client.return_value.list_profile_receipts.return_value = []
+    with (
+        patch.object(st, "session_state", {}),
+        patch.object(st, "divider"),
+        patch.object(st, "subheader") as subheader,
+        patch.object(st, "caption") as caption,
+        patch.object(st, "info"),
+        patch.object(st, "warning"),
+        patch.object(st, "error"),
+    ):
+        render_receipts(
+            context,
+            selected={"receipt_references": ""},
+            all_transactions=[],
+            edit_id="source-1",
+            section_title="Receipts",
+            section_caption="Manage receipts here; the linked ledger projection is read-only.",
+        )
+
+    subheader.assert_called_once_with("Receipts")
+    caption.assert_any_call(
+        "Manage receipts here; the linked ledger projection is read-only."
+    )
+
+
 def test_cancel_and_delete_cleanup_are_profile_and_target_scoped() -> None:
     north_key = receipt_editor_workflow_key("north", "txn-1")
     south_key = receipt_editor_workflow_key("south", "txn-1")
