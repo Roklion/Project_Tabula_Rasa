@@ -633,6 +633,19 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             )
         txn_date = st.date_input("Date", date.fromisoformat(str(defaults.get("txn_date", date.today().isoformat()))), key=f"mixed_date_{scope}")
         c1, c2 = st.columns(2)
+        current_account_id = str(defaults.get("account_id") or "")
+        account_index = (
+            account_ids.index(current_account_id)
+            if current_account_id in account_ids
+            else (None if copy_mode else 0)
+        )
+        account_id = c1.selectbox(
+            "Account",
+            account_ids,
+            index=account_index,
+            format_func=account_paths.get,
+            key=f"mixed_account_{scope}",
+        )
         current_category_id = str(defaults.get("category_id") or "")
         category_index = (
             category_ids.index(current_category_id)
@@ -645,31 +658,6 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             index=category_index,
             format_func=category_paths.get,
             key=f"mixed_category_{scope}",
-        )
-        total_expense = c1.text_input(
-            "Total Expense",
-            value=str(defaults.get("total_expense", "0.00") or "0.00"),
-            key=f"mixed_total_{scope}",
-            help="Enter a positive currency amount.",
-        )
-        business_use_percentage = c2.text_input(
-            "Business Use %",
-            value=str(defaults.get("business_use_percentage", "0") or "0"),
-            key=f"mixed_percentage_{scope}",
-            help="Greater than 0 and no more than 100; up to five decimal places.",
-        )
-        current_account_id = str(defaults.get("account_id") or "")
-        account_index = (
-            account_ids.index(current_account_id)
-            if current_account_id in account_ids
-            else (None if copy_mode else 0)
-        )
-        account_id = st.selectbox(
-            "Account",
-            account_ids,
-            index=account_index,
-            format_func=account_paths.get,
-            key=f"mixed_account_{scope}",
         )
         current_payee = str(defaults.get("payee_id") or "")
         payee_id, new_payee_name = render_payee_selector(
@@ -691,6 +679,19 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             key=f"mixed_tags_{scope}",
             selected_ids=source_tag_ids,
             preserve_inactive_ids=defaults.get("tag_ids", ()) if source else (),
+        )
+        c1, c2 = st.columns(2)
+        total_expense = c1.text_input(
+            "Total Expense",
+            value=str(defaults.get("total_expense", "0.00") or "0.00"),
+            key=f"mixed_total_{scope}",
+            help="Enter a positive currency amount.",
+        )
+        business_use_percentage = c2.text_input(
+            "Business Use %",
+            value=str(defaults.get("business_use_percentage", "0") or "0"),
+            key=f"mixed_percentage_{scope}",
+            help="Greater than 0 and no more than 100; up to five decimal places.",
         )
         description = st.text_input(
             "Description / memo",
