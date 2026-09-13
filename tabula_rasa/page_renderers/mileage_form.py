@@ -69,10 +69,6 @@ def render_add_mileage_form(context: MileageContext, tags: object) -> None:
         save_error.error(tag_error)
     elif tag_error := inline_tag_name_error(draft["new_tag_name"]):
         save_error.error(tag_error)
-    elif draft["start_selection"].place_id and not draft["start_location"].strip():
-        save_error.error("Enter the starting location text to record in the ledger.")
-    elif draft["destination_selection"].place_id and not draft["destination"].strip():
-        save_error.error("Enter the destination text to record in the ledger.")
     else:
         payload = {
             "trip_date": draft["trip_date"],

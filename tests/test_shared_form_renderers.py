@@ -45,3 +45,25 @@ def test_mileage_common_validation_rejects_missing_selections() -> None:
     assert validate_mileage_draft({}) == (
         "Starting location and destination must be selected."
     )
+
+
+def test_mileage_common_validation_rejects_missing_recorded_text() -> None:
+    start = AddressSelection("Office", "place-1")
+    destination = AddressSelection("Client", "place-2")
+
+    assert validate_mileage_draft(
+        {
+            "start_selection": start,
+            "destination_selection": destination,
+            "start_location": "",
+            "destination": "Client",
+        }
+    ) == "Enter the starting location text to record in the ledger."
+    assert validate_mileage_draft(
+        {
+            "start_selection": start,
+            "destination_selection": destination,
+            "start_location": "Office",
+            "destination": "  ",
+        }
+    ) == "Enter the destination text to record in the ledger."

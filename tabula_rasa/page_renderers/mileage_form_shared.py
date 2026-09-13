@@ -60,6 +60,12 @@ def validate_mileage_draft(draft: Mapping[str, object]) -> str | None:
         start_selection, destination_selection
     ):
         return "Starting location and destination must be different."
+    start_location = str(draft.get("start_location") or "").strip()
+    destination = str(draft.get("destination") or "").strip()
+    if getattr(start_selection, "place_id", None) and not start_location:
+        return "Enter the starting location text to record in the ledger."
+    if getattr(destination_selection, "place_id", None) and not destination:
+        return "Enter the destination text to record in the ledger."
     return None
 
 
