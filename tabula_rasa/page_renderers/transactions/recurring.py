@@ -16,6 +16,31 @@ def _mark_workbook_data_changed(context: Any) -> None:
         callback()
 
 
+def _clear_pending_schedule_state(
+    state: Any, profile_key: str, schedule_id: str
+) -> None:
+    """Forget retry IDs that refer to a schedule the user just ended."""
+    schedule_id = str(schedule_id or "")
+    if not schedule_id:
+        return
+    edit_prefixes = (
+        f"recurring_edit_pending_schedule_id_{profile_key}_",
+        f"mixed_use_edit_pending_schedule_id_{profile_key}_",
+    )
+    for key in list(state.keys()):
+        if key.startswith(edit_prefixes) and str(state.get(key) or "") == schedule_id:
+            state.pop(key, None)
+
+    for root in ("recurring_pending", "mixed_use_pending"):
+        schedule_key = f"{root}_schedule_id_{profile_key}"
+        if str(state.get(schedule_key) or "") != schedule_id:
+            continue
+        profile_suffix = f"_{profile_key}"
+        for key in list(state.keys()):
+            if key.startswith(f"{root}_") and key.endswith(profile_suffix):
+                state.pop(key, None)
+
+
 def _safe_date(value: Any, fallback: date | None = None) -> date | None:
     """Return a form-safe date while leaving corrupted schedule data visible."""
     if not value:
@@ -265,6 +290,9 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
         if selected["status"] != "ended" and st.button("End schedule", key=f"recurring_end_{selected['id']}"):
             try:
                 context.storage.end_recurring_schedule(selected["id"], expected_schedule=selected)
+                _clear_pending_schedule_state(
+                    st.session_state, context.profile_key, selected["id"]
+                )
                 _mark_workbook_data_changed(context)
                 st.rerun()
             except Exception as error:

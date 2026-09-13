@@ -5,6 +5,7 @@ from unittest.mock import Mock
 
 from tabula_rasa.page_renderers.transactions.recurring import (
     _active_or_selected,
+    _clear_pending_schedule_state,
     _mark_workbook_data_changed,
     _recurring_category_options,
     _recurring_payee_options,
@@ -29,6 +30,28 @@ def test_recurring_change_marker_is_optional() -> None:
     _mark_workbook_data_changed(SimpleNamespace(mark_workbook_data_changed=callback))
 
     callback.assert_called_once_with()
+
+
+def test_ending_schedule_clears_only_matching_pending_retry_state() -> None:
+    state = {
+        "recurring_edit_pending_schedule_id_test_expense": "ended",
+        "mixed_use_edit_pending_schedule_id_test_source": "ended",
+        "recurring_pending_schedule_id_test": "ended",
+        "recurring_pending_transaction_id_test": "transaction",
+        "recurring_pending_payload_test": {"amount": "10"},
+        "recurring_edit_pending_schedule_id_test_other": "keep",
+        "unrelated": "ended",
+    }
+
+    _clear_pending_schedule_state(state, "test", "ended")
+
+    assert "recurring_edit_pending_schedule_id_test_expense" not in state
+    assert "mixed_use_edit_pending_schedule_id_test_source" not in state
+    assert "recurring_pending_schedule_id_test" not in state
+    assert "recurring_pending_transaction_id_test" not in state
+    assert "recurring_pending_payload_test" not in state
+    assert state["recurring_edit_pending_schedule_id_test_other"] == "keep"
+    assert state["unrelated"] == "ended"
 
 
 def test_recurring_editor_filters_inactive_categories_but_preserves_selection() -> None:
