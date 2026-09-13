@@ -34,8 +34,10 @@ def test_recurring_change_marker_is_optional() -> None:
 
 def test_ending_schedule_clears_only_matching_pending_retry_state() -> None:
     state = {
-        "recurring_edit_pending_schedule_id_shop_expense": "ended",
-        "mixed_use_edit_pending_schedule_id_shop_source": "ended",
+        "recurring_edit_pending_schedule_id_expense_profile_shop": "ended",
+        "mixed_use_edit_pending_schedule_id_source_profile_shop": "ended",
+        "recurring_edit_pending_schedule_id_shop_expense_profile_north_shop": "ended",
+        "mixed_use_edit_pending_schedule_id_shop_source_profile_north_shop": "ended",
         "recurring_pending_schedule_id_shop": "ended",
         "recurring_pending_transaction_id_shop": "transaction",
         "recurring_pending_payload_shop": {"amount": "10"},
@@ -48,14 +50,16 @@ def test_ending_schedule_clears_only_matching_pending_retry_state() -> None:
         "mixed_use_pending_schedule_id_north_shop": "other-ended",
         "mixed_use_pending_source_id_north_shop": "other-source",
         "mixed_use_pending_payload_north_shop": {"total_expense": "40"},
-        "recurring_edit_pending_schedule_id_shop_other": "keep",
+        "recurring_edit_pending_schedule_id_other_profile_shop": "keep",
         "unrelated": "ended",
     }
 
     _clear_pending_schedule_state(state, "shop", "ended")
 
-    assert "recurring_edit_pending_schedule_id_shop_expense" not in state
-    assert "mixed_use_edit_pending_schedule_id_shop_source" not in state
+    assert "recurring_edit_pending_schedule_id_expense_profile_shop" not in state
+    assert "mixed_use_edit_pending_schedule_id_source_profile_shop" not in state
+    assert state["recurring_edit_pending_schedule_id_shop_expense_profile_north_shop"] == "ended"
+    assert state["mixed_use_edit_pending_schedule_id_shop_source_profile_north_shop"] == "ended"
     assert "recurring_pending_schedule_id_shop" not in state
     assert "recurring_pending_transaction_id_shop" not in state
     assert "recurring_pending_payload_shop" not in state
@@ -68,7 +72,7 @@ def test_ending_schedule_clears_only_matching_pending_retry_state() -> None:
     assert state["mixed_use_pending_schedule_id_north_shop"] == "other-ended"
     assert "mixed_use_pending_source_id_north_shop" in state
     assert "mixed_use_pending_payload_north_shop" in state
-    assert state["recurring_edit_pending_schedule_id_shop_other"] == "keep"
+    assert state["recurring_edit_pending_schedule_id_other_profile_shop"] == "keep"
     assert state["unrelated"] == "ended"
 
 

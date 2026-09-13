@@ -30,6 +30,16 @@ class RecurrenceSelection:
         }
 
 
+def recurring_edit_pending_schedule_key(profile_key: str, record_id: str) -> str:
+    """Build an ordinary-edit retry key with an unambiguous profile suffix."""
+    return f"recurring_edit_pending_schedule_id_{record_id}_profile_{profile_key}"
+
+
+def mixed_use_edit_pending_schedule_key(profile_key: str, source_id: str) -> str:
+    """Build a mixed-use-edit retry key with an unambiguous profile suffix."""
+    return f"mixed_use_edit_pending_schedule_id_{source_id}_profile_{profile_key}"
+
+
 def render_recurrence_controls(
     *,
     label: str,
@@ -73,4 +83,9 @@ def render_recurrence_controls(
     return RecurrenceSelection(True, unit, int(interval), name, end_date)
 
 
-__all__ = ["RecurrenceSelection", "render_recurrence_controls"]
+__all__ = [
+    "RecurrenceSelection",
+    "mixed_use_edit_pending_schedule_key",
+    "recurring_edit_pending_schedule_key",
+    "render_recurrence_controls",
+]

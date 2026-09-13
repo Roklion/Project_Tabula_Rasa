@@ -24,11 +24,16 @@ def _clear_pending_schedule_state(
     if not schedule_id:
         return
     edit_prefixes = (
-        f"recurring_edit_pending_schedule_id_{profile_key}_",
-        f"mixed_use_edit_pending_schedule_id_{profile_key}_",
+        "recurring_edit_pending_schedule_id_",
+        "mixed_use_edit_pending_schedule_id_",
     )
+    edit_profile_suffix = f"_profile_{profile_key}"
     for key in list(state.keys()):
-        if key.startswith(edit_prefixes) and str(state.get(key) or "") == schedule_id:
+        if (
+            key.startswith(edit_prefixes)
+            and key.endswith(edit_profile_suffix)
+            and str(state.get(key) or "") == schedule_id
+        ):
             state.pop(key, None)
 
     for root in ("recurring_pending", "mixed_use_pending"):

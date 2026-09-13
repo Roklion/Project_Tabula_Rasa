@@ -673,11 +673,15 @@ def reset_profile_presentation_state(
         "recurring_create_",
         "recurring_edit_",
     )
+    preserved_retry_prefixes = ("recurring_edit_pending_schedule_id_",)
     for key in list(session_state):
         if (
             key in keys
             or key in mixed_use_keys
-            or key.startswith(prefixes)
+            or (
+                key.startswith(prefixes)
+                and not key.startswith(preserved_retry_prefixes)
+            )
             or key.startswith(mixed_use_prefixes)
         ):
             session_state.pop(key, None)

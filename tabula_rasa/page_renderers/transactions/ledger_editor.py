@@ -10,6 +10,7 @@ from tabula_rasa.ledger_presentation import money
 from tabula_rasa.google_drive import GoogleDriveAccessError
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
 from tabula_rasa.page_renderers.transactions.recurrence_controls import (
+    recurring_edit_pending_schedule_key,
     render_recurrence_controls,
 )
 from tabula_rasa.page_renderers.tag_selector import inline_tag_name_error
@@ -349,9 +350,8 @@ def render_transaction_editor(
                             )
                     if not receipt_preparation_failed:
                         edit_payload = dict(payload)
-                        pending_schedule_key = (
-                            "recurring_edit_pending_schedule_id_"
-                            f"{context.profile_key}_{edit_id}"
+                        pending_schedule_key = recurring_edit_pending_schedule_key(
+                            context.profile_key, edit_id
                         )
                         if make_recurring:
                             schedule_id = str(

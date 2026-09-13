@@ -16,6 +16,7 @@ from tabula_rasa.page_renderers.transactions.payee_selector import (
     render_payee_selector,
 )
 from tabula_rasa.page_renderers.transactions.recurrence_controls import (
+    mixed_use_edit_pending_schedule_key,
     render_recurrence_controls,
 )
 from tabula_rasa.page_renderers.transactions.transaction_copy import (
@@ -929,7 +930,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                     )
 
                 edit_pending_schedule_key = (
-                    f"mixed_use_edit_pending_schedule_id_{profile}_{source['id']}"
+                    mixed_use_edit_pending_schedule_key(profile, str(source["id"]))
                     if source and not source_incomplete
                     else ""
                 )
