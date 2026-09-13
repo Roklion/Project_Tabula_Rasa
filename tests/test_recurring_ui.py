@@ -34,23 +34,41 @@ def test_recurring_change_marker_is_optional() -> None:
 
 def test_ending_schedule_clears_only_matching_pending_retry_state() -> None:
     state = {
-        "recurring_edit_pending_schedule_id_test_expense": "ended",
-        "mixed_use_edit_pending_schedule_id_test_source": "ended",
-        "recurring_pending_schedule_id_test": "ended",
-        "recurring_pending_transaction_id_test": "transaction",
-        "recurring_pending_payload_test": {"amount": "10"},
-        "recurring_edit_pending_schedule_id_test_other": "keep",
+        "recurring_edit_pending_schedule_id_shop_expense": "ended",
+        "mixed_use_edit_pending_schedule_id_shop_source": "ended",
+        "recurring_pending_schedule_id_shop": "ended",
+        "recurring_pending_transaction_id_shop": "transaction",
+        "recurring_pending_payload_shop": {"amount": "10"},
+        "recurring_pending_schedule_id_north_shop": "other-ended",
+        "recurring_pending_transaction_id_north_shop": "other-transaction",
+        "recurring_pending_payload_north_shop": {"amount": "20"},
+        "mixed_use_pending_schedule_id_shop": "ended",
+        "mixed_use_pending_source_id_shop": "other-source",
+        "mixed_use_pending_payload_shop": {"total_expense": "30"},
+        "mixed_use_pending_schedule_id_north_shop": "other-ended",
+        "mixed_use_pending_source_id_north_shop": "other-source",
+        "mixed_use_pending_payload_north_shop": {"total_expense": "40"},
+        "recurring_edit_pending_schedule_id_shop_other": "keep",
         "unrelated": "ended",
     }
 
-    _clear_pending_schedule_state(state, "test", "ended")
+    _clear_pending_schedule_state(state, "shop", "ended")
 
-    assert "recurring_edit_pending_schedule_id_test_expense" not in state
-    assert "mixed_use_edit_pending_schedule_id_test_source" not in state
-    assert "recurring_pending_schedule_id_test" not in state
-    assert "recurring_pending_transaction_id_test" not in state
-    assert "recurring_pending_payload_test" not in state
-    assert state["recurring_edit_pending_schedule_id_test_other"] == "keep"
+    assert "recurring_edit_pending_schedule_id_shop_expense" not in state
+    assert "mixed_use_edit_pending_schedule_id_shop_source" not in state
+    assert "recurring_pending_schedule_id_shop" not in state
+    assert "recurring_pending_transaction_id_shop" not in state
+    assert "recurring_pending_payload_shop" not in state
+    assert state["recurring_pending_schedule_id_north_shop"] == "other-ended"
+    assert state["recurring_pending_transaction_id_north_shop"] == "other-transaction"
+    assert state["recurring_pending_payload_north_shop"] == {"amount": "20"}
+    assert "mixed_use_pending_schedule_id_shop" not in state
+    assert "mixed_use_pending_source_id_shop" not in state
+    assert "mixed_use_pending_payload_shop" not in state
+    assert state["mixed_use_pending_schedule_id_north_shop"] == "other-ended"
+    assert "mixed_use_pending_source_id_north_shop" in state
+    assert "mixed_use_pending_payload_north_shop" in state
+    assert state["recurring_edit_pending_schedule_id_shop_other"] == "keep"
     assert state["unrelated"] == "ended"
 
 

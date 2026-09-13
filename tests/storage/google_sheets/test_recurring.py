@@ -151,6 +151,50 @@ def test_existing_expense_recurring_pending_schedule_is_not_reconciled(
     assert len(default_storage.list_transactions()) == 1
 
 
+def test_linked_pending_expense_reconciles_later_due_occurrences_same_pass(
+    default_storage, monkeypatch,
+) -> None:
+    account_id, category_id = _ids(default_storage)
+    transaction = default_storage.create_transaction(
+        txn_date="2024-01-15", kind="Expense", amount="20",
+        account_id=account_id, category_id=category_id,
+    )
+    original_replace = default_storage._replace_rows_atomically
+
+    def mock_replace(*_args, **_kwargs):
+        raise StorageUnavailableError("transaction update failed")
+
+    monkeypatch.setattr(default_storage, "_replace_rows_atomically", mock_replace)
+    with pytest.raises(StorageUnavailableError):
+        default_storage.create_recurring_expense_from_transaction(
+            transaction["id"],
+            schedule_id="pending-same-pass",
+            name="Pending same pass", recurrence_unit="month", txn_date="2024-01-15",
+            amount="20", account_id=account_id, category_id=category_id,
+        )
+
+    monkeypatch.setattr(default_storage, "_replace_rows_atomically", original_replace)
+    row = default_storage._find_row("Transactions", transaction["id"])
+    linked = dict(row.values)
+    linked.update(
+        {
+            "recurring_schedule_id": "pending-same-pass",
+            "recurring_scheduled_date": "2024-01-15",
+            "recurring_source_kind": "transaction",
+            "recurring_occurrence_type": "initial",
+        }
+    )
+    default_storage._replace_row("Transactions", row, linked)
+
+    outcome = default_storage.reconcile_recurring_schedules(as_of="2024-02-15")
+
+    assert [item["recurring_scheduled_date"] for item in outcome["generated"]] == [
+        "2024-02-15"
+    ]
+    assert outcome["attention"] == {}
+    assert default_storage.get_recurring_schedule("pending-same-pass")["attention_code"] == ""
+
+
 def test_ending_pending_expense_conversion_clears_attention(
     default_storage, monkeypatch,
 ) -> None:

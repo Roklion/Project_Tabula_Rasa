@@ -35,10 +35,14 @@ def _clear_pending_schedule_state(
         schedule_key = f"{root}_schedule_id_{profile_key}"
         if str(state.get(schedule_key) or "") != schedule_id:
             continue
-        profile_suffix = f"_{profile_key}"
-        for key in list(state.keys()):
-            if key.startswith(f"{root}_") and key.endswith(profile_suffix):
-                state.pop(key, None)
+        for suffix in (
+            "schedule_id",
+            "transaction_id",
+            "source_id",
+            "payload",
+            "configuration_revision",
+        ):
+            state.pop(f"{root}_{suffix}_{profile_key}", None)
 
 
 def _safe_date(value: Any, fallback: date | None = None) -> date | None:

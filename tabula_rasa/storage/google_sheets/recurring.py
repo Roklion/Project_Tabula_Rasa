@@ -822,7 +822,7 @@ class RecurringMixin:
                         # of reconciliation, but leave an actionable marker
                         # visible after a session or server restart.
                         attention[schedule["id"]] = _PENDING_INITIAL_LINK
-                    continue
+                        continue
                 if schedule["status"] != "active":
                     self._clear_recurring_attention(schedule["id"])
                     continue
