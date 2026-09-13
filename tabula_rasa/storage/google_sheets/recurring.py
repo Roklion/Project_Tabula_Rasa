@@ -15,7 +15,7 @@ from tabula_rasa.recurrence import (
     normalize_unit,
 )
 from .errors import StorageConflictError, StorageNotFoundError, StorageValidationError
-from .schema import WORKSHEET_HEADERS
+from .schema import MIXED_USE_WORKSHEET_HEADERS, WORKSHEET_HEADERS
 from .validation import (
     _as_bool,
     _clean_text,
@@ -25,6 +25,7 @@ from .validation import (
     _normalize_tag_ids,
     _positive_amount,
     _positive_integer,
+    _validate_mixed_use_tables,
     _validate_recurring_provenance,
     _validate_unique_recurring_occurrences,
     _utc_now,
@@ -1088,6 +1089,18 @@ class RecurringMixin:
                 raise StorageValidationError(
                     "Mixed-use source has no linked projection transaction"
                 )
+            _validate_mixed_use_tables(
+                {
+                    "MixedUseExpenses": (
+                        MIXED_USE_WORKSHEET_HEADERS,
+                        list(sources.values()),
+                    ),
+                    "Transactions": (
+                        WORKSHEET_HEADERS["Transactions"],
+                        list(transactions.values()),
+                    ),
+                }
+            )
             if expected_source is not None and not self._mixed_use_source_matches(
                 current_source, expected_source, current_transaction
             ):

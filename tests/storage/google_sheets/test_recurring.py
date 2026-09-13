@@ -75,6 +75,37 @@ def test_existing_mixed_use_expense_can_become_recurring_with_pair_parity(
     assert projection["recurring_scheduled_date"] == "2024-01-20"
 
 
+def test_existing_mixed_use_recurring_conversion_rejects_stale_projection(
+    default_storage,
+) -> None:
+    account_id, category_id = _ids(default_storage)
+    source = default_storage.create_mixed_use_expense(
+        txn_date="2024-01-15", total_expense="100",
+        business_use_percentage="25", account_id=account_id,
+        category_id=category_id, allocation_rationale="Measured use",
+    )
+    projection_row = default_storage._find_row(
+        "Transactions", source["linked_transaction_id"]
+    )
+    broken_projection = dict(projection_row.values)
+    broken_projection["amount"] = "999.00"
+    default_storage._replace_row(
+        "Transactions", projection_row, broken_projection
+    )
+
+    with pytest.raises(StorageValidationError, match="projection amount"):
+        default_storage.create_recurring_expense_from_mixed_use(
+            source["id"], expected_source=source,
+            schedule_id="stale-projection", name="Stale projection",
+            recurrence_unit="month", txn_date="2024-01-15",
+            total_expense="100", business_use_percentage="25",
+            account_id=account_id, category_id=category_id,
+            allocation_rationale="Measured use",
+        )
+
+    assert default_storage.list_recurring_schedules() == []
+
+
 def test_existing_expense_recurring_retry_reuses_the_pending_schedule(
     default_storage, monkeypatch,
 ) -> None:
