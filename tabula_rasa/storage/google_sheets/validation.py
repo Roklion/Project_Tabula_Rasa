@@ -720,7 +720,7 @@ def _parse_backup_zip(
                 )
             record["tag_ids"] = _encode_tag_ids(normalized_tag_ids)
     from tabula_rasa.depreciation import DepreciationError, straight_line_schedule
-    from .assets import ASSET_TYPES, _decode_overrides
+    from .assets import ASSET_TYPES, _decode_overrides, _whole_quarters
 
     for asset in tables["Assets"][1]:
         _clean_text(asset.get("name"), "Asset name", required=True)
@@ -750,7 +750,7 @@ def _parse_backup_zip(
         )
         # Missing historical source transactions are allowed by the asset model.
         try:
-            quarters = int(str(asset.get("useful_life_quarters", "")).strip())
+            quarters = _whole_quarters(asset.get("useful_life_quarters"))
             straight_line_schedule(
                 asset.get("cost_basis"),
                 asset.get("salvage_value"),

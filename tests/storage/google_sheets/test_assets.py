@@ -301,4 +301,20 @@ class TestAssetStorage(GoogleSheetsStorageTestCase):
 
         with pytest.raises(StorageValidationError, match="Asset .* time"):
             self.storage.validate_backup_zip(invalid)
+
+    def test_backup_rejects_noncanonical_asset_life(self) -> None:
+        self.storage.create_asset(**_asset_data())
+        backup = self.storage.export_backup_zip(
+            backup_receipt_manifest(self.storage)
+        )
+
+        def pad_useful_life(rows: list[list[str]]) -> None:
+            rows[1][rows[0].index("useful_life_quarters")] = "020"
+
+        invalid = rewrite_backup_tables(
+            backup, {"Assets": pad_useful_life}
+        )
+
+        with pytest.raises(StorageValidationError, match="Useful life"):
+            self.storage.validate_backup_zip(invalid)
     backup_receipt_manifest,
