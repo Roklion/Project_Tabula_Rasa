@@ -7,6 +7,7 @@ from .receipt_display import render_receipts
 from .receipt_editor import (
     prepare_editor_receipt_uploads,
     process_editor_receipt_uploads,
+    render_receipt_uploader,
     render_editor_receipt_uploader,
     render_filtered_editor_receipt_recovery,
     render_receipt_creation_recovery,
@@ -65,6 +66,7 @@ __all__ = [
     "new_receipt_creation_workflow",
     "process_receipt_recovery",
     "render_editor_receipt_uploader",
+    "render_receipt_uploader",
     "prepare_editor_receipt_uploads",
     "process_editor_receipt_uploads",
     "clear_missing_editor_receipt_recoveries",

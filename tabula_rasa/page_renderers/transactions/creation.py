@@ -14,11 +14,11 @@ from tabula_rasa.page_renderers.transactions.transaction_form import (
     validate_transaction_draft,
 )
 from tabula_rasa.page_renderers.transactions.receipts import (
-    RECEIPT_UPLOAD_TYPES,
     handle_confirmed_transaction_receipts,
     prepare_receipt_uploads,
     receipt_creation_workflow_key,
     render_receipt_creation_recovery,
+    render_receipt_uploader,
 )
 from tabula_rasa.page_renderers.tag_selector import (
     inline_tag_name_error,
@@ -162,16 +162,8 @@ def render_add_transaction(
         pending_transaction_id = str(
             st.session_state.get(pending_transaction_key) or ""
         )
-        receipt_uploads = st.file_uploader(
-            "Receipt (optional)",
-            type=RECEIPT_UPLOAD_TYPES,
-            accept_multiple_files=True,
+        receipt_uploads = render_receipt_uploader(
             key="add_transaction_receipts",
-            help=(
-                "Select zero or more PDF, PNG, JPG, JPEG, WEBP, or HEIC "
-                "files. Each file must be non-empty and no larger than 20 MB; "
-                "the selected batch must not exceed 200 MB total."
-            ),
         )
         save_error = st.empty()
         submitted = st.form_submit_button(
