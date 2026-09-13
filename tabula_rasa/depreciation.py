@@ -106,13 +106,6 @@ def straight_line_schedule(
         for sequence in normalized_overrides
     ):
         raise DepreciationError(
-            "Retirement cannot hide an existing historical override"
-        )
-    if retired_date is not None and any(
-        _quarter_date(depreciation_start_date, sequence - 1) > retired_date
-        for sequence in normalized_overrides
-    ):
-        raise DepreciationError(
             "Retirement cannot hide a saved depreciation override"
         )
 
@@ -121,35 +114,9 @@ def straight_line_schedule(
         context.prec = max(28, len(depreciable_basis.as_tuple().digits) + 12)
         standard = (depreciable_basis / quarter_count).quantize(CURRENCY_QUANTUM)
 
-    locked_through = max(normalized_overrides, default=0)
-    locked_total = sum(
-        (
-            normalized_overrides.get(sequence, (standard, ""))[0]
-            for sequence in range(1, locked_through + 1)
-        ),
-        Decimal("0.00"),
-    )
-    if locked_total > depreciable_basis:
-        raise DepreciationError(
-            "Overrides through this period exceed the depreciable basis"
-        )
-    remaining_count = quarter_count - locked_through
-    remaining_basis = depreciable_basis - locked_total
-    if remaining_count == 0 and remaining_basis != 0:
-        raise DepreciationError(
-            "Overrides covering the full asset life must total the depreciable basis"
-        )
-    if remaining_count:
-        with localcontext() as context:
-            context.prec = max(28, len(remaining_basis.as_tuple().digits) + 12)
-            future_amount = (remaining_basis / remaining_count).quantize(
-                CURRENCY_QUANTUM
-            )
-    else:
-        future_amount = Decimal("0.00")
-
     periods: list[DepreciationPeriod] = []
     cumulative = Decimal("0.00")
+    future_amount = standard
     for offset in range(quarter_count):
         sequence = offset + 1
         scheduled_date = _quarter_date(depreciation_start_date, offset)
@@ -157,12 +124,14 @@ def straight_line_schedule(
             break
         if sequence in normalized_overrides:
             amount, reason = normalized_overrides[sequence]
-        elif sequence <= locked_through:
-            amount, reason = standard, ""
         elif sequence == quarter_count:
             amount, reason = depreciable_basis - cumulative, ""
         else:
             amount, reason = min(future_amount, depreciable_basis - cumulative), ""
+        if amount > depreciable_basis - cumulative:
+            raise DepreciationError(
+                "Overrides through this period exceed the depreciable basis"
+            )
         cumulative += amount
         periods.append(
             DepreciationPeriod(
@@ -174,6 +143,21 @@ def straight_line_schedule(
                 is_override=sequence in normalized_overrides,
                 override_reason=reason,
             )
+        )
+        if sequence in normalized_overrides and sequence < quarter_count:
+            remaining_basis = depreciable_basis - cumulative
+            remaining_count = quarter_count - sequence
+            with localcontext() as context:
+                context.prec = max(
+                    28,
+                    len(remaining_basis.as_tuple().digits) + 12,
+                )
+                future_amount = (remaining_basis / remaining_count).quantize(
+                    CURRENCY_QUANTUM
+                )
+    if len(periods) == quarter_count and cumulative != depreciable_basis:
+        raise DepreciationError(
+            "Overrides covering the full asset life must total the depreciable basis"
         )
     return periods
 

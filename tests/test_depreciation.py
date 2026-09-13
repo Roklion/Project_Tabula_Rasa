@@ -43,6 +43,27 @@ def test_past_override_rebalances_future_quarters() -> None:
     assert schedule[-1].remaining_book_value == Decimal("10.00")
 
 
+def test_later_override_preserves_all_earlier_schedule_results() -> None:
+    schedule = straight_line_schedule(
+        "100.00",
+        "0.00",
+        date(2025, 1, 15),
+        4,
+        overrides={
+            1: {"amount": "10", "reason": "Opening balance"},
+            3: {"amount": "10", "reason": "Corrected third quarter"},
+        },
+    )
+
+    assert [item.depreciation_amount for item in schedule] == [
+        Decimal("10.00"),
+        Decimal("30.00"),
+        Decimal("10.00"),
+        Decimal("50.00"),
+    ]
+    assert schedule[-1].remaining_book_value == Decimal("0.00")
+
+
 def test_retirement_stops_future_quarters_without_writeoff() -> None:
     schedule = straight_line_schedule(
         "100.00",
