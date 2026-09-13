@@ -652,7 +652,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             key=f"mixed_total_{scope}",
             help="Enter a positive currency amount.",
         )
-        business_use_percentage = st.text_input(
+        business_use_percentage = c2.text_input(
             "Business Use %",
             value=str(defaults.get("business_use_percentage", "0") or "0"),
             key=f"mixed_percentage_{scope}",

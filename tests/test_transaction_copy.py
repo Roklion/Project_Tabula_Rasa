@@ -442,6 +442,7 @@ def test_copy_with_inactive_source_allows_active_account_replacement() -> None:
         account_selector = by_key_prefix(app.selectbox, "edit_transaction_account_")
         assert source["account_id"] not in account_selector.options
         assert "Replacement" in account_selector.options
+        assert account_selector.value is None
         assert by_label(app.button, "Save copied transaction").disabled is False
 
         account_selector.set_value("Replacement").run()

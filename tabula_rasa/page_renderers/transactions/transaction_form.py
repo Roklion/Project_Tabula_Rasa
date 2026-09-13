@@ -163,7 +163,7 @@ def render_transaction_fields(
     account_index = (
         account_ids.index(account_id)
         if account_id in account_ids
-        else (0 if account_ids else None)
+        else (None if mode == "copy" else (0 if account_ids else None))
     )
     source_label = (
         "From Account" if kind == "Transfer" or kind == "Expense" else "To Account"
@@ -183,7 +183,7 @@ def render_transaction_fields(
         to_index = (
             to_account_ids.index(to_account_id)
             if to_account_id in to_account_ids
-            else (0 if to_account_ids else None)
+            else (None if mode == "copy" else (0 if to_account_ids else None))
         )
         to_account_id = (
             st.selectbox(
