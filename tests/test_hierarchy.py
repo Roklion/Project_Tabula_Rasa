@@ -7,6 +7,8 @@ from tabula_rasa.hierarchy import (
     has_hierarchy_children,
     hierarchy_paths,
     HierarchyValidationError,
+    ordered_accounts,
+    ordered_categories,
     ordered_hierarchy,
     validate_two_level_hierarchy,
 )
@@ -97,6 +99,40 @@ def test_hierarchy_display_and_parent_choices_are_two_level_and_compatible() -> 
         compatibility_value="Asset",
         item_id="cash",
     ) == ["asset"]
+
+
+def test_ordered_accounts_groups_classification_then_parent_and_name() -> None:
+    items = [
+        {**account("equity", classification="Equity"), "name": "Owner"},
+        {**account("liability", classification="Liability"), "name": "Payables"},
+        {**account("asset-child", parent_id="asset-parent"), "name": "Checking"},
+        {**account("asset-parent"), "name": "Operating"},
+        {**account("asset-other"), "name": "Cash"},
+    ]
+
+    assert [item["id"] for item in ordered_accounts(items)] == [
+        "asset-other",
+        "asset-parent",
+        "asset-child",
+        "liability",
+        "equity",
+    ]
+
+
+def test_ordered_categories_matches_the_category_table_hierarchy_order() -> None:
+    items = [
+        {"id": "utilities-child", "name": "Electric", "kind": "Expense", "parent_id": "utilities"},
+        {"id": "travel", "name": "Travel", "kind": "Expense", "parent_id": ""},
+        {"id": "utilities", "name": "Utilities", "kind": "Expense", "parent_id": ""},
+        {"id": "travel-child", "name": "Flights", "kind": "Expense", "parent_id": "travel"},
+    ]
+
+    assert [item["id"] for item in ordered_categories(items)] == [
+        "travel",
+        "travel-child",
+        "utilities",
+        "utilities-child",
+    ]
 
 
 def test_none_parent_ids_are_treated_as_layer_one() -> None:

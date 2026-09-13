@@ -5,6 +5,7 @@ from dataclasses import replace
 from datetime import date
 from uuid import uuid4
 import streamlit as st
+from tabula_rasa.hierarchy import ordered_accounts, ordered_categories
 from tabula_rasa.mixed_use import MixedUseAllocationError, calculate_allocated_amount
 from tabula_rasa.page_renderers.tag_selector import (
     inline_tag_name_error,
@@ -219,7 +220,11 @@ def _start_mixed_use_copy(
     return new_source_id, new_transaction_id
 
 def _active_ids(items: Sequence[Mapping[str, object]]) -> list[str]:
-    return [str(item.get("id") or "") for item in items if str(item.get("id") or "")]
+    return [
+        str(item.get("id") or "")
+        for item in ordered_accounts(items)
+        if str(item.get("id") or "")
+    ]
 
 def _mixed_use_receipt_recovery_active(
     state: Mapping[str, object], profile: str, transaction_id: str
@@ -573,14 +578,22 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             f"mixed_recurrence_end_{scope}",
         ],
     )
-    account_ids = _active_ids(accounts)
-    category_ids = [str(item["id"]) for item in categories if item.get("kind") == "Expense"]
+    ordered_category_items = ordered_categories(categories)
+    category_ids = [
+        str(item["id"])
+        for item in ordered_category_items
+        if item.get("kind") == "Expense"
+    ]
+    ordered_account_items = ordered_accounts(accounts)
+    account_ids = _active_ids(ordered_account_items)
     active_account_ids = [
-        str(item["id"]) for item in accounts if str(item.get("active", "")).upper() == "TRUE"
+        str(item["id"])
+        for item in ordered_account_items
+        if str(item.get("active", "")).upper() == "TRUE"
     ]
     active_category_ids = [
         str(item["id"])
-        for item in categories
+        for item in ordered_category_items
         if item.get("kind") == "Expense"
         and str(item.get("active", "TRUE")).upper() == "TRUE"
     ]

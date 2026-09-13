@@ -825,6 +825,10 @@ Maintain balance-sheet accounts, classifications, opening balances, active
 state, hierarchy, and calculated balances. The table retains Account, Layer,
 Parent, Classification, Type, Active, Balance, and Transaction count.
 
+The Accounts table and account selectors use the same stable order: Asset,
+Liability, then Equity; within each classification, Layer 1 accounts are sorted
+by name and each account's Layer 2 children follow their parent sorted by name.
+
 Add and edit fields are Account name, Type (Bank, Cash, Credit card,
 Short-term debt, Equity, or Other), balance-sheet Classification, Opening
 balance, Parent account, and Active where applicable.
@@ -1005,7 +1009,8 @@ scope. Reports As of is never combined with the income-and-expense range.
 ### Hierarchy selectors
 
 Display full hierarchy paths where used, preserve stable IDs behind labels,
-restrict category options by kind, and include inactive accounts only for
+sort category options by parent and category name, restrict category options by kind,
+and include inactive accounts only for
 historical edit contexts where supported. Transfer destinations must differ
 from the source.
 
