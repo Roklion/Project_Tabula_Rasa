@@ -47,6 +47,8 @@ def _looks_like_historical_workbook(
     older workbook to the explicit migration command.
     """
     present_titles = set(values)
+    if "Assets" not in present_titles and "RecurringSchedules" in present_titles:
+        return True
     if "RecurringSchedules" not in present_titles and (
         "Transactions" in present_titles
         or any(
@@ -700,7 +702,7 @@ def _parse_backup_zip(
             if not _decimal_values_match(schedule.get("amount"), allocation.allocated_amount):
                 raise StorageValidationError("Recurring mixed-use allocation is invalid")
             _clean_text(schedule.get("allocation_rationale"), "Allocation rationale", required=True)
-    for title in ("Transactions", "Mileage", "MixedUseExpenses"):
+    for title in ("Transactions", "Mileage", "MixedUseExpenses", "Assets"):
         if title not in tables:
             continue
         for record in tables[title][1]:
@@ -710,12 +712,51 @@ def _parse_backup_zip(
                     "Transactions": "transaction",
                     "Mileage": "mileage",
                     "MixedUseExpenses": "mixed-use source",
+                    "Assets": "asset",
                 }[title]
                 raise StorageValidationError(
                     "Backup contains an unknown "
                     f"{item_label} tag"
                 )
             record["tag_ids"] = _encode_tag_ids(normalized_tag_ids)
+    from tabula_rasa.depreciation import DepreciationError, straight_line_schedule
+    from .assets import ASSET_TYPES, _decode_overrides
+
+    for asset in tables["Assets"][1]:
+        _clean_text(asset.get("name"), "Asset name", required=True)
+        if asset.get("asset_type") not in ASSET_TYPES:
+            raise StorageValidationError("Backup contains an unknown asset type")
+        acquisition_date = _iso_date(asset.get("acquisition_date"))
+        start_date = _iso_date(asset.get("depreciation_start_date"))
+        if start_date < acquisition_date:
+            raise StorageValidationError("Backup contains invalid asset dates")
+        if asset.get("depreciation_method") != "Straight-line":
+            raise StorageValidationError("Backup contains an unsupported depreciation method")
+        if asset.get("status") not in {"active", "retired"}:
+            raise StorageValidationError("Backup contains an invalid asset status")
+        retired_text = _clean_text(asset.get("retired_date"), "Retired date")
+        retired = date.fromisoformat(_iso_date(retired_text)) if retired_text else None
+        if (asset.get("status") == "retired") != bool(retired):
+            raise StorageValidationError("Backup contains inconsistent asset retirement state")
+        payee_id = _clean_text(asset.get("payee_id"), "Payee")
+        if payee_id and payee_id not in payee_ids:
+            raise StorageValidationError("Backup contains an unknown asset payee")
+        _clean_text(
+            asset.get("source_transaction_id"), "Source transaction"
+        )
+        # Missing historical source transactions are allowed by the asset model.
+        try:
+            quarters = int(str(asset.get("useful_life_quarters", "")).strip())
+            straight_line_schedule(
+                asset.get("cost_basis"),
+                asset.get("salvage_value"),
+                date.fromisoformat(start_date),
+                quarters,
+                retired_date=retired,
+                overrides=_decode_overrides(asset.get("schedule_overrides", "")),
+            )
+        except (DepreciationError, StorageValidationError, ValueError) as exc:
+            raise StorageValidationError(f"Backup contains an invalid asset: {exc}") from exc
     for transaction in tables["Transactions"][1]:
         _validate_recurring_provenance(transaction, "Transaction")
         recurring_id = transaction.get("recurring_schedule_id", "")

@@ -41,6 +41,17 @@ fake_storage.create_mixed_use_expense(
     category_id=smoke_category["id"],
     allocation_rationale="Viewport smoke allocation",
 )
+fake_storage.create_asset(
+    name="Viewport smoke laptop",
+    asset_type="Computers & office equipment",
+    acquisition_date=date.today().isoformat(),
+    depreciation_start_date=date.today().isoformat(),
+    cost_basis="1200.00",
+    salvage_value="0.00",
+    useful_life_quarters=20,
+    depreciation_method="Straight-line",
+    payee_id=smoke_payee["id"],
+)
 
 
 def fake_from_secrets(cls, secrets):

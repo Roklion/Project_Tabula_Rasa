@@ -127,6 +127,7 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
                 "MixedUseExpenses.csv",
                 "RecurringSchedules.csv",
                 "Tags.csv",
+                "Assets.csv",
                 "manifest.json",
                 "receipts.json",
             }
@@ -439,6 +440,7 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             "Mileage": 1,
             "Tags": 0,
             "RecurringSchedules": 0,
+            "Assets": 0,
         }
         assert restored_storage.list_accounts()[0]["id"] == account["id"]
         restored_transaction = restored_storage.list_transactions()[0]

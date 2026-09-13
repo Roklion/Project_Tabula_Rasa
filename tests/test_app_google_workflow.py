@@ -28,6 +28,7 @@ BULK_SCENARIO = Path(__file__).with_name("_app_transaction_bulk_scenario.py")
 BULK_EDITOR_SCENARIO = Path(__file__).with_name(
     "_app_transaction_bulk_editor_scenario.py"
 )
+ASSETS_SCENARIO = Path(__file__).with_name("_app_assets_scenario.py")
 
 
 class TestAppGoogleWorkflow:
@@ -67,6 +68,7 @@ class TestAppGoogleWorkflow:
             (HIERARCHY_SCENARIO, "hierarchy_profile_isolation"),
             (BULK_SCENARIO, "transaction_bulk_profile_isolation"),
             (BULK_EDITOR_SCENARIO, "transaction_bulk_editor_fields"),
+            (ASSETS_SCENARIO, "assets_quarterly_schedule_and_override"),
         ],
         ids=[
             "account_category_transaction_edit_delete",
@@ -77,6 +79,7 @@ class TestAppGoogleWorkflow:
             "hierarchy_profile_isolation",
             "transaction_bulk_profile_isolation",
             "transaction_bulk_editor_fields",
+            "assets_quarterly_schedule_and_override",
         ],
     )
     def test_app_scenario(self, scenario: Path, case_name: str) -> None:

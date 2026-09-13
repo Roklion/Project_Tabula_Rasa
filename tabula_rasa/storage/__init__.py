@@ -1,6 +1,7 @@
 """Storage backends for Project Tabula Rasa."""
 
 from .google_sheets import (
+    ASSET_TYPES,
     decode_receipt_references,
     GoogleSheetsStorage,
     normalize_payee_name,
@@ -23,6 +24,7 @@ from tabula_rasa.mixed_use import (
 )
 
 __all__ = [
+    "ASSET_TYPES",
     "decode_receipt_references",
     "GoogleSheetsStorage",
     "normalize_payee_name",

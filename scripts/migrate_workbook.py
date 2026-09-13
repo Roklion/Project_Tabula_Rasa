@@ -201,6 +201,7 @@ def _preflight(workbook: Any) -> dict[str, list[list[Any]]]:
         },
         "Payees": {frozenset(WORKSHEET_HEADERS["Payees"])},
         "Tags": {frozenset(WORKSHEET_HEADERS["Tags"])},
+        "Assets": {frozenset(WORKSHEET_HEADERS["Assets"])},
         "MixedUseExpenses": {
             frozenset(
                 header
@@ -401,6 +402,13 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
         rows=initial.get("RecurringSchedules"),
     )
 
+    assets = _ensure_sheet(workbook, "Assets", worksheets, initial)
+    _ensure_headers(
+        assets,
+        WORKSHEET_HEADERS["Assets"],
+        rows=initial.get("Assets"),
+    )
+
     source_tags = _backfill_mixed_use_source_tags(workbook)
     # This read-only validation also checks current relationship, domain, and
     # reference invariants before success is reported.
@@ -424,6 +432,7 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     _validate_receipt_ownership(transactions)
     storage.list_mileage_trips()
     storage.list_mixed_use_expenses()
+    storage.list_assets()
     return {
         "payees": int(payee_result.get("payees", 0)),
         "transactions": int(payee_result.get("transactions", 0)),

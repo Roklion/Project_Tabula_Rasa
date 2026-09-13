@@ -211,13 +211,14 @@ surface, sidebar, and documentation. The authenticated sidebar is ordered:
 
 1. Dashboard
 2. Transactions
-3. Mileage
-4. Accounts
-5. Categories
-6. Reports
-7. Data & backup
-8. Account settings, only when local loopback administration is enabled
-9. Log out in the utility area
+3. Assets
+4. Mileage
+5. Accounts
+6. Categories
+7. Reports
+8. Data & backup
+9. Account settings, only when local loopback administration is enabled
+10. Log out in the utility area
 
 Below the workbook metadata and utility controls, the authenticated sidebar
 also contains a compact, read-only **Google Maps API usage** expander after
@@ -265,6 +266,10 @@ near the relevant content. Use tabs for current workflow divisions:
 - Transactions: Add transaction and View & edit ledger
 - Transactions: Payees & Tags management
 - Mileage: Add trip and View & edit mileage log
+
+Assets is a separate top-level master-record workflow. It is not a
+Transactions tab and does not expose a mixed-use placeholder before that
+workflow is implemented.
 
 Use bordered containers or expanders for dense independent workflows such as
 edit forms, imports, profile administration, and backup controls. Do not move
@@ -816,6 +821,52 @@ export remain available. Autocomplete remains keyboard and narrow-layout
 usable, its prediction list remains legible in the active app theme, manual
 entry is always available, and ordinary reruns do not trigger paid route
 requests. Mileage remains separate from financial transactions.
+
+### Assets
+
+Assets is the profile-local fixed-asset register for individually tracked
+business-use depreciable property. The page contains an Add asset expander, a
+compact selectable asset register, an edit/retire/delete surface, and the
+selected asset's manually triggered quarterly depreciation schedule. An asset
+has a stable ID, required name and enumerated type, optional notes, acquisition
+and depreciation-start dates, cost basis, salvage value, useful life in whole
+quarters, straight-line method, optional managed Payee and Tags, optional
+reference, and an optional acquisition-transaction audit link. The acquisition
+link reuses any transaction receipt context; it never copies a Drive file, and
+a missing linked transaction does not invalidate or remove the asset.
+
+The fixed asset types are Computers & office equipment; Furniture, fixtures &
+appliances; Photography, communication & video equipment; Machinery, equipment
+& tools; Vehicles; Construction equipment; Farm equipment;
+Residential rental property; Commercial real property; Land improvements;
+Leasehold improvements; Software & other intangibles; and Other depreciable
+property. Land itself is deliberately absent because it is not depreciable.
+The type is classification metadata and does not choose a tax recovery period
+or provide tax advice.
+
+The quarterly straight-line source schedule uses `(cost basis - salvage value)
+/ useful-life quarters`. The first occurrence is the configured depreciation
+start date and each later occurrence is three calendar months later on the same
+anchor day. A missing day uses that month's final day without changing the
+anchor. There is no automatic partial-quarter proration. Currency calculations
+use Decimal-safe cent rounding, and the final quarter absorbs the residual so
+the completed schedule ends exactly at salvage value.
+
+Only due or past schedule quarters can receive a durable amount override, and
+every override requires a reason. An override fixes that quarter and all
+earlier schedule results; the remaining depreciable basis is spread evenly
+over later quarters with a final-cent true-up. Asset schedule terms are locked
+while overrides exist, though descriptive metadata remains editable. Removing
+all overrides restores editable schedule terms and the ordinary straight-line
+calculation. Retirement stops occurrences after the retirement date without
+calculating disposal proceeds, gain/loss, recapture, or a remaining-basis
+write-off. Permanent deletion is allowed in this pre-posting phase; future
+posted history will require retirement instead.
+
+This phase calculates and stores no ledger transaction. Depreciation is
+non-cash accounting, and journal posting remains deferred until the balanced
+multi-line journal-entry model exists. The reserved depreciation account fields
+remain storage-only and are not exposed as unfinished controls.
 
 ### Accounts
 

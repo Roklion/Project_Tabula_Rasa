@@ -16,6 +16,7 @@ from .errors import (
     _mutation_guidance,
 )
 from .accounts import AccountsMixin
+from .assets import ASSET_TYPES, AssetsMixin
 from .backup import BackupMixin
 from .mileage import MileageMixin
 from .mixed_use import _MixedUseMixin
@@ -55,6 +56,7 @@ from .tags import TagsMixin
 class GoogleSheetsStorage(
     _GoogleSheetsStorageClient,
     AccountsMixin,
+    AssetsMixin,
     PayeesMixin,
     TagsMixin,
     TransactionsMixin,
@@ -69,6 +71,7 @@ class GoogleSheetsStorage(
 
 __all__ = [
     "GoogleSheetsStorage",
+    "ASSET_TYPES",
     "StorageError",
     "StorageUnavailableError",
     "StorageAuthenticationError",

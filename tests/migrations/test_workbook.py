@@ -25,8 +25,19 @@ from scripts.migration_schemas import (
     VERSION_3_WORKSHEET_HEADERS,
     VERSION_7_WORKSHEET_HEADERS,
     VERSION_10_WORKSHEET_HEADERS,
+    VERSION_11_WORKSHEET_HEADERS,
 )
 from tests.fakes import FakeWorkbook, FakeWorksheet
+
+
+def test_version_11_workbook_adds_empty_assets_sheet() -> None:
+    workbook = FakeWorkbook(VERSION_11_WORKSHEET_HEADERS)
+
+    migrate_workbook(workbook)
+
+    assert workbook.sheets["Assets"].rows == [list(WORKSHEET_HEADERS["Assets"])]
+    for title, headers in VERSION_11_WORKSHEET_HEADERS.items():
+        assert workbook.sheets[title].rows[0] == list(headers)
 
 
 def _append_record(workbook: FakeWorkbook, title: str, values: dict[str, str]) -> None:
