@@ -282,4 +282,23 @@ class TestAssetStorage(GoogleSheetsStorageTestCase):
 
         with pytest.raises(StorageValidationError, match="invalid asset dates"):
             self.storage.validate_backup_zip(invalid)
+
+    @pytest.mark.parametrize("timestamp_field", ["created_at", "updated_at"])
+    def test_backup_rejects_missing_asset_timestamps(
+        self, timestamp_field: str
+    ) -> None:
+        self.storage.create_asset(**_asset_data())
+        backup = self.storage.export_backup_zip(
+            backup_receipt_manifest(self.storage)
+        )
+
+        def remove_timestamp(rows: list[list[str]]) -> None:
+            rows[1][rows[0].index(timestamp_field)] = ""
+
+        invalid = rewrite_backup_tables(
+            backup, {"Assets": remove_timestamp}
+        )
+
+        with pytest.raises(StorageValidationError, match="Asset .* time"):
+            self.storage.validate_backup_zip(invalid)
     backup_receipt_manifest,

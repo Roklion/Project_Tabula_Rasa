@@ -724,6 +724,8 @@ def _parse_backup_zip(
 
     for asset in tables["Assets"][1]:
         _clean_text(asset.get("name"), "Asset name", required=True)
+        _clean_text(asset.get("created_at"), "Asset created time", required=True)
+        _clean_text(asset.get("updated_at"), "Asset updated time", required=True)
         if asset.get("asset_type") not in ASSET_TYPES:
             raise StorageValidationError("Backup contains an unknown asset type")
         acquisition_date = _iso_date(asset.get("acquisition_date"))
