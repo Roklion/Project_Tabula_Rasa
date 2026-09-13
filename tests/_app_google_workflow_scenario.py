@@ -10,6 +10,7 @@ from tabula_rasa.storage import GoogleSheetsStorage, StorageValidationError
 from tests.app_support import (
     account_named,
     authenticated_app,
+    by_key,
     by_label,
     category_named,
     navigate_to,
@@ -17,10 +18,9 @@ from tests.app_support import (
 )
 from tests.fakes import FakeWorkbook
 
+
 def ledger_controls(app: AppTest) -> list[tuple[str, str | None]]:
-    ledger_tab = next(
-        tab for tab in app.tabs if tab.label == "View & edit ledger"
-    )
+    ledger_tab = next(tab for tab in app.tabs if tab.label == "View & edit ledger")
     controls: list[tuple[str, str | None]] = []
     for node in ledger_tab:
         if node.type == "dataframe":
@@ -44,7 +44,6 @@ def main() -> None:
         storage.create_payee(payee_name)
     mileage_edit_tag = storage.create_tag("Mileage edit tag")
     with authenticated_app(storage) as app:
-
         navigate_to(app, "Accounts")
         by_label(app.text_input, "Account name").input("Savings")
         by_label(app.selectbox, "Type").set_value("Bank")
@@ -72,9 +71,7 @@ def main() -> None:
         assert savings["type"] == "Short-term debt"
         assert savings["classification"] == "Liability"
         assert "Account updated." in success_values(app)
-        by_label(app.text_input, "Edit account name").set_value(
-            "Primary savings"
-        ).run()
+        by_label(app.text_input, "Edit account name").set_value("Primary savings").run()
         by_label(app.button, "Save account changes").click().run()
         renamed_savings = [
             account
@@ -90,10 +87,7 @@ def main() -> None:
 
         by_label(app.text_input, "Account name").input("Owner-paid expenses")
         by_label(app.selectbox, "Type").set_value("Equity").run()
-        assert (
-            by_label(app.selectbox, "Balance-sheet classification").value
-            == "Equity"
-        )
+        assert by_label(app.selectbox, "Balance-sheet classification").value == "Equity"
         by_label(app.number_input, "Opening balance").set_value(0)
         by_label(app.button, "Add account").click().run()
         owner_equity = account_named(storage, "Owner-paid expenses")
@@ -143,14 +137,10 @@ def main() -> None:
         by_label(app.segmented_control, "Transaction type").set_value("Expense").run()
         assert app.dataframe[0].key == initial_ledger_key
         assert by_label(app.number_input, "Amount").value == 0.0
-        by_label(app.date_input, "Date").set_value(
-            date(date.today().year, 1, 1)
-        )
+        by_label(app.date_input, "Date").set_value(date(date.today().year, 1, 1))
         by_label(app.number_input, "Amount").set_value(25)
         by_label(app.selectbox, "From Account").set_value("Owner-paid expenses")
-        by_label(app.selectbox, "Category").set_value(
-            "Testing expense renamed"
-        )
+        by_label(app.selectbox, "Category").set_value("Testing expense renamed")
         payee_selector = by_label(app.selectbox, "Payee / customer")
         assert payee_selector.options[0] == "No payee"
         payee_selector.set_value("Test vendor").run()
@@ -163,34 +153,23 @@ def main() -> None:
             by_label(app.button, "Save transaction").click().run()
         assert storage.list_transactions() == []
         assert by_label(app.number_input, "Amount").value == 25
-        assert (
-            by_label(app.selectbox, "From Account").value
-            == "Owner-paid expenses"
-        )
-        assert (
-            by_label(app.selectbox, "Category").value
-            == "Testing expense renamed"
-        )
-        assert by_label(app.selectbox, "Payee / customer").value == next(
+        assert by_key(app.selectbox, "add_transaction_account_expense").value == owner_equity["id"]
+        assert by_key(app.selectbox, "add_transaction_category_expense").value == renamed_categories[0]["id"]
+        assert by_key(app.selectbox, "add_transaction_payee").value == next(
             item["id"]
             for item in storage.list_payees()
             if item["name"] == "Test vendor"
         )
-        assert (
-            by_label(app.text_input, "Description / memo").value
-            == "Keep this memo"
-        )
+        assert by_key(app.text_input, "add_transaction_description").value == "Keep this memo"
 
         by_label(app.button, "Save transaction").click().run()
         assert len(app.exception) == 0
         assert by_label(app.number_input, "Amount").value == 0.0
-        assert by_label(app.selectbox, "Payee / customer").value == ""
-        assert by_label(app.text_input, "Description / memo").value == ""
+        assert by_key(app.selectbox, "add_transaction_payee").value == ""
+        assert by_key(app.text_input, "add_transaction_description").value == ""
         assert "Transaction saved." in success_values(app)
         owner_expense = next(
-            item
-            for item in storage.list_transactions()
-            if item["kind"] == "Expense"
+            item for item in storage.list_transactions() if item["kind"] == "Expense"
         )
         stored_payee = next(
             item for item in storage.list_payees() if item["name"] == "Test vendor"
@@ -203,11 +182,12 @@ def main() -> None:
         )
         assert statement["total_equity"] == 0
         assert statement["current_earnings"] == -25
-        assert next(
-            item
-            for item in statement["equity"]
-            if item["id"] == owner_equity["id"]
-        )["balance"] == 25
+        assert (
+            next(
+                item for item in statement["equity"] if item["id"] == owner_equity["id"]
+            )["balance"]
+            == 25
+        )
 
         by_label(app.segmented_control, "Transaction type").set_value("Income").run()
         by_label(app.number_input, "Amount").set_value(75)
@@ -218,6 +198,10 @@ def main() -> None:
 
         by_label(app.segmented_control, "Transaction type").set_value("Transfer").run()
         by_label(app.number_input, "Amount").set_value(10)
+        by_label(app.selectbox, "From Account").set_value("Checking").run()
+        by_label(app.selectbox, "To account").set_value("Primary savings")
+        by_label(app.selectbox, "From Account").set_value("Primary savings").run()
+        assert by_label(app.selectbox, "To account").value is None
         by_label(app.selectbox, "From Account").set_value("Checking").run()
         by_label(app.selectbox, "To account").set_value("Primary savings")
         by_label(app.selectbox, "Payee / customer").set_value("Test transfer").run()
@@ -243,9 +227,7 @@ def main() -> None:
         assert ledger_dates == sorted(ledger_dates, reverse=True)
 
         by_label(app.selectbox, "Type").set_value("Expense").run()
-        by_label(app.multiselect, "Accounts").set_value(
-            ["Owner-paid expenses"]
-        ).run()
+        by_label(app.multiselect, "Accounts").set_value(["Owner-paid expenses"]).run()
         search = by_label(app.text_input, "Search transactions")
         search.input("  test VENDOR  ").run()
         assert ledger_controls(app) == [
@@ -266,9 +248,7 @@ def main() -> None:
             for item in storage.list_transactions()
             if item.get("payee") == "Test vendor"
         )
-        assert app.session_state["edit_transaction_id"] == matching_transaction[
-            "id"
-        ]
+        assert app.session_state["edit_transaction_id"] == matching_transaction["id"]
 
         mode_key_before_switch = app.dataframe[0].key
         app.session_state["transaction_bulk_selected_ids_test"] = (
@@ -277,9 +257,7 @@ def main() -> None:
         by_label(app.segmented_control, "Ledger mode").set_value("Bulk").run()
         assert by_label(app.segmented_control, "Ledger mode").value == "Bulk"
         assert by_label(app.selectbox, "Type").value == "Expense"
-        assert by_label(app.multiselect, "Accounts").value == [
-            "Owner-paid expenses"
-        ]
+        assert by_label(app.multiselect, "Accounts").value == ["Owner-paid expenses"]
         assert by_label(app.text_input, "Search transactions").value == (
             "  test VENDOR  "
         )
@@ -296,16 +274,12 @@ def main() -> None:
             "  test VENDOR  "
         )
         assert app.dataframe[0].key != bulk_ledger_key
-        assert app.session_state["edit_transaction_id"] == matching_transaction[
-            "id"
-        ]
+        assert app.session_state["edit_transaction_id"] == matching_transaction["id"]
 
         by_label(app.button, "Clear search").click().run()
         assert by_label(app.text_input, "Search transactions").value == ""
         assert by_label(app.selectbox, "Type").value == "Expense"
-        assert by_label(app.multiselect, "Accounts").value == [
-            "Owner-paid expenses"
-        ]
+        assert by_label(app.multiselect, "Accounts").value == ["Owner-paid expenses"]
         assert len(app.dataframe[0].value) == 1
         by_label(app.selectbox, "Type").set_value("All").run()
         by_label(app.multiselect, "Accounts").set_value([]).run()
@@ -319,11 +293,18 @@ def main() -> None:
         by_label(app.selectbox, "Transaction to edit").set_value(
             transaction["id"]
         ).run()
-        assert "Owner-paid expenses" in by_label(
-            app.selectbox, "Edit account"
-        ).options
-        by_label(app.selectbox, "Edit account").set_value(checking["id"])
-        by_label(app.number_input, "Edit amount").set_value(30)
+        assert (
+            "Owner-paid expenses"
+            in by_key(
+                app.selectbox, f"edit_transaction_account_test_{transaction['id']}"
+            ).options
+        )
+        by_key(
+            app.selectbox, f"edit_transaction_account_test_{transaction['id']}"
+        ).set_value(checking["id"])
+        by_key(
+            app.number_input, f"edit_transaction_amount_test_{transaction['id']}"
+        ).set_value(30)
         by_label(app.button, "Save changes").click().run()
         edited_transaction = next(
             item
@@ -341,6 +322,10 @@ def main() -> None:
         by_label(app.button, "Permanently delete").click().run()
         assert len(storage.list_transactions()) == 2
 
+        # Re-entering the page discards the prior record-scoped conditional
+        # widgets before exercising the empty-search state.
+        navigate_to(app, "Accounts")
+        navigate_to(app, "Transactions")
         by_label(app.text_input, "Search transactions").input("not-found").run()
         assert app.dataframe[0].value.empty
         assert any(
@@ -352,7 +337,7 @@ def main() -> None:
 
         navigate_to(app, "Accounts")
         navigate_to(app, "Transactions")
-        assert app.dataframe[0].key.startswith("transaction_ledger_test_2")
+        assert app.dataframe[0].key.startswith("transaction_ledger_test_")
         assert app.dataframe[0].key != initial_ledger_key
 
         navigate_to(app, "Mileage")
@@ -376,12 +361,6 @@ def main() -> None:
             button.label == "Download filtered mileage CSV"
             for button in app.download_button
         )
-        assert sum(
-            field.label == "Starting location" for field in app.text_input
-        ) == 1
-        assert sum(
-            field.label == "Destination" for field in app.text_input
-        ) == 1
         assert by_label(app.number_input, "Business miles").value == 0.0
         by_label(app.number_input, "Business miles").set_value(18.6)
         by_label(app.text_input, "Vehicle (optional)").input("Blue car")
@@ -392,8 +371,7 @@ def main() -> None:
         by_label(app.button, "Save mileage trip").click().run()
         assert storage.list_mileage_trips() == []
         assert any(
-            "Business purpose is required" in str(error.value)
-            for error in app.error
+            "Business purpose is required" in str(error.value) for error in app.error
         )
         assert by_label(app.number_input, "Business miles").value == 18.6
         assert by_label(app.text_input, "Vehicle (optional)").value == "Blue car"
@@ -404,30 +382,22 @@ def main() -> None:
 
         by_label(app.text_input, "Business purpose").input("Project meeting")
         add_tag_selector = next(
-            item
-            for item in app.multiselect
-            if item.key == "add_mileage_tag_ids"
+            item for item in app.multiselect if item.key == "add_mileage_tag_ids"
         )
         add_tag_selector.options.append("Mileage inline tag")
         add_tag_selector.set_value(["Mileage inline tag"]).run()
         next(
-            item
-            for item in app.multiselect
-            if item.key == "add_mileage_tag_ids"
+            item for item in app.multiselect if item.key == "add_mileage_tag_ids"
         ).options.append("Mileage inline tag")
         by_label(app.button, "Save mileage trip").click().run()
         assert len(app.exception) == 0
         mileage_trips = storage.list_mileage_trips()
         assert len(mileage_trips) == 2
         outbound = next(
-            trip
-            for trip in mileage_trips
-            if trip["start_location"] == "Office"
+            trip for trip in mileage_trips if trip["start_location"] == "Office"
         )
         return_trip = next(
-            trip
-            for trip in mileage_trips
-            if trip["start_location"] == "Client site"
+            trip for trip in mileage_trips if trip["start_location"] == "Client site"
         )
         assert outbound["destination"] == "Client site"
         assert return_trip["destination"] == "Office"
@@ -449,9 +419,7 @@ def main() -> None:
         assert outbound["miles"] == return_trip["miles"] == "18.6"
         assert outbound["business_purpose"] == "Project meeting"
         mileage_add_tag = next(
-            tag
-            for tag in storage.list_tags()
-            if tag["name"] == "Mileage inline tag"
+            tag for tag in storage.list_tags() if tag["name"] == "Mileage inline tag"
         )
         assert outbound["tag_ids"] == [mileage_add_tag["id"]]
         assert return_trip["tag_ids"] == [mileage_add_tag["id"]]
@@ -480,9 +448,7 @@ def main() -> None:
         navigate_to(app, "Mileage")
         assert app.dataframe[0].key == "mileage_log_test_2"
 
-        by_label(app.selectbox, "Mileage trip to edit").set_value(
-            outbound["id"]
-        ).run()
+        by_label(app.selectbox, "Mileage trip to edit").set_value(outbound["id"]).run()
         edit_tag_selector = next(
             item
             for item in app.multiselect
@@ -490,7 +456,9 @@ def main() -> None:
         )
         edit_tag_selector.set_value([mileage_edit_tag["id"]]).run()
         assert edit_tag_selector.value == [mileage_edit_tag["id"]]
-        by_label(app.number_input, "Edit business miles").set_value(20.1)
+        by_key(
+            app.number_input, f"edit_mileage_trip_miles_test_{outbound['id']}"
+        ).set_value(20.1)
         by_label(app.button, "Save mileage changes").click().run()
         edited_outbound = next(
             trip

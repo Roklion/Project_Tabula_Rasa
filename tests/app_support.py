@@ -31,6 +31,22 @@ def by_label(elements: Any, label: str) -> Any:
         raise ValueError(f"Element with label '{label}' not found") from None
 
 
+def by_key(elements: Any, key: str) -> Any:
+    """Return the first Streamlit test element with *key*."""
+    try:
+        return next(element for element in elements if element.key == key)
+    except StopIteration:
+        raise ValueError(f"Element with key '{key}' not found") from None
+
+
+def by_key_prefix(elements: Any, prefix: str) -> Any:
+    """Return the first Streamlit test element whose key starts with *prefix*."""
+    try:
+        return next(element for element in elements if element.key.startswith(prefix))
+    except StopIteration:
+        raise ValueError(f"Element with key prefix '{prefix}' not found") from None
+
+
 def message_values(app: AppTest, message_type: str) -> list[str]:
     """Extract values from one of AppTest's message collections."""
 

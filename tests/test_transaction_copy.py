@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from tests.app_support import (
     authenticated_app,
+    by_key_prefix,
     by_label,
     navigate_to,
     profile_config,
@@ -38,117 +39,160 @@ def _transaction_fixture() -> tuple[GoogleSheetsStorage, dict[str, str]]:
 
 
 def test_copied_transaction_description_adds_current_provenance() -> None:
-    assert copied_transaction_description(
-        {"id": "source-123", "description": "Original memo"}
-    ) == "Original memo. Copy From source-123"
+    assert (
+        copied_transaction_description(
+            {"id": "source-123", "description": "Original memo"}
+        )
+        == "Original memo. Copy From source-123"
+    )
 
 
 def test_copied_transaction_description_does_not_double_period() -> None:
-    assert copied_transaction_description(
-        {"id": "source-123", "description": "Original memo."}
-    ) == "Original memo. Copy From source-123"
+    assert (
+        copied_transaction_description(
+            {"id": "source-123", "description": "Original memo."}
+        )
+        == "Original memo. Copy From source-123"
+    )
 
 
 def test_copied_transaction_description_strips_legacy_provenance() -> None:
-    assert copied_transaction_description(
-        {
-            "id": "source-123",
-            "description": "Copied from transaction old-1: Original memo",
-        }
-    ) == "Original memo. Copy From source-123"
+    assert (
+        copied_transaction_description(
+            {
+                "id": "source-123",
+                "description": "Copied from transaction old-1: Original memo",
+            }
+        )
+        == "Original memo. Copy From source-123"
+    )
 
 
-def test_copied_transaction_description_strips_multiple_stale_provenance_notes() -> None:
-    assert copied_transaction_description(
-        {
-            "id": "source-123",
-            "description": (
-                "Copied from transaction old-2: "
-                "Copied from transaction old-1: Original memo. Copy From old-0"
-            ),
-        }
-    ) == "Original memo. Copy From source-123"
+def test_copied_transaction_description_strips_multiple_stale_provenance_notes() -> (
+    None
+):
+    assert (
+        copied_transaction_description(
+            {
+                "id": "source-123",
+                "description": (
+                    "Copied from transaction old-2: "
+                    "Copied from transaction old-1: Original memo. Copy From old-0"
+                ),
+            }
+        )
+        == "Original memo. Copy From source-123"
+    )
 
 
 def test_copied_transaction_description_preserves_non_provenance_text() -> None:
-    assert copied_transaction_description(
-        {
-            "id": "source-123",
-            "description": "Copied from the vendor: Original memo",
-        }
-    ) == "Copied from the vendor: Original memo. Copy From source-123"
+    assert (
+        copied_transaction_description(
+            {
+                "id": "source-123",
+                "description": "Copied from the vendor: Original memo",
+            }
+        )
+        == "Copied from the vendor: Original memo. Copy From source-123"
+    )
 
 
 def test_copied_transaction_description_preserves_user_copy_text_at_end() -> None:
-    assert copied_transaction_description(
-        {
-            "id": "source-123",
-            "description": "Reminder: Copy From project-123",
-        }
-    ) == "Reminder: Copy From project-123. Copy From source-123"
+    assert (
+        copied_transaction_description(
+            {
+                "id": "source-123",
+                "description": "Reminder: Copy From project-123",
+            }
+        )
+        == "Reminder: Copy From project-123. Copy From source-123"
+    )
 
 
 def test_copied_transaction_description_normalizes_punctuated_source_ids() -> None:
-    assert copied_transaction_description(
-        {
-            "id": "source:1.2",
-            "description": "Memo. Copy From source:1.2",
-        }
-    ) == "Memo. Copy From source:1.2"
+    assert (
+        copied_transaction_description(
+            {
+                "id": "source:1.2",
+                "description": "Memo. Copy From source:1.2",
+            }
+        )
+        == "Memo. Copy From source:1.2"
+    )
 
 
 def test_copied_transaction_description_strips_stale_punctuated_provenance() -> None:
-    assert copied_transaction_description(
-        {
-            "id": "new-source",
-            "description": "Memo. Copy From source:1.2",
-        }
-    ) == "Memo. Copy From new-source"
+    assert (
+        copied_transaction_description(
+            {
+                "id": "new-source",
+                "description": "Memo. Copy From source:1.2",
+            }
+        )
+        == "Memo. Copy From new-source"
+    )
 
 
 def test_copied_transaction_description_strips_stale_punctuated_marker() -> None:
-    assert copied_transaction_description(
-        {
-            "id": "new-source",
-            "description": "Copy From old:id",
-        }
-    ) == "Copy From new-source"
+    assert (
+        copied_transaction_description(
+            {
+                "id": "new-source",
+                "description": "Copy From old:id",
+            }
+        )
+        == "Copy From new-source"
+    )
 
 
 def test_copied_transaction_description_preserves_numeric_multiword_memo() -> None:
-    assert copied_transaction_description(
-        {
-            "id": "source-123",
-            "description": "Quarterly filing. Copy From tax year 2025",
-        }
-    ) == "Quarterly filing. Copy From tax year 2025. Copy From source-123"
+    assert (
+        copied_transaction_description(
+            {
+                "id": "source-123",
+                "description": "Quarterly filing. Copy From tax year 2025",
+            }
+        )
+        == "Quarterly filing. Copy From tax year 2025. Copy From source-123"
+    )
 
 
 def test_copied_transaction_description_normalizes_whitespace_source_ids() -> None:
-    assert copied_transaction_description(
-        {
-            "id": "source 1",
-            "description": "Memo. Copy From source 1",
-        }
-    ) == "Memo. Copy From source 1"
-    assert copied_transaction_description(
-        {
-            "id": "source 1",
-            "description": "Copied from transaction source 1: Memo",
-        }
-    ) == "Memo. Copy From source 1"
+    assert (
+        copied_transaction_description(
+            {
+                "id": "source 1",
+                "description": "Memo. Copy From source 1",
+            }
+        )
+        == "Memo. Copy From source 1"
+    )
+    assert (
+        copied_transaction_description(
+            {
+                "id": "source 1",
+                "description": "Copied from transaction source 1: Memo",
+            }
+        )
+        == "Memo. Copy From source 1"
+    )
 
 
 def test_copied_transaction_description_preserves_multiword_copy_from_memo() -> None:
-    assert copied_transaction_description(
-        {
-            "id": "source-123",
-            "description": "Copy From vendor invoice",
-        }
-    ) == "Copy From vendor invoice. Copy From source-123"
+    assert (
+        copied_transaction_description(
+            {
+                "id": "source-123",
+                "description": "Copy From vendor invoice",
+            }
+        )
+        == "Copy From vendor invoice. Copy From source-123"
+    )
 
 
-def test_copied_transaction_description_preserves_multiword_legacy_prefix_memo() -> None:
+def test_copied_transaction_description_preserves_multiword_legacy_prefix_memo() -> (
+    None
+):
     assert copied_transaction_description(
         {
             "id": "source-123",
@@ -163,33 +207,45 @@ def test_copied_transaction_description_preserves_multiword_legacy_prefix_memo()
 
 
 def test_copied_transaction_description_preserves_delimited_copy_from_memo() -> None:
-    assert copied_transaction_description(
-        {
-            "id": "source-123",
-            "description": "Copy From vendor invoice: awaiting approval",
-        }
-    ) == "Copy From vendor invoice: awaiting approval. Copy From source-123"
+    assert (
+        copied_transaction_description(
+            {
+                "id": "source-123",
+                "description": "Copy From vendor invoice: awaiting approval",
+            }
+        )
+        == "Copy From vendor invoice: awaiting approval. Copy From source-123"
+    )
 
 
 def test_copied_transaction_description_normalizes_blank_whitespace_id_memo() -> None:
-    assert copied_transaction_description(
-        {"id": "source 1", "description": "Copy From source 1"}
-    ) == "Copy From source 1"
+    assert (
+        copied_transaction_description(
+            {"id": "source 1", "description": "Copy From source 1"}
+        )
+        == "Copy From source 1"
+    )
 
 
 def test_copied_transaction_description_preserves_multiword_suffix_memo() -> None:
-    assert copied_transaction_description(
-        {
-            "id": "source-123",
-            "description": "My memo. Copy From vendor invoice",
-        }
-    ) == "My memo. Copy From vendor invoice. Copy From source-123"
+    assert (
+        copied_transaction_description(
+            {
+                "id": "source-123",
+                "description": "My memo. Copy From vendor invoice",
+            }
+        )
+        == "My memo. Copy From vendor invoice. Copy From source-123"
+    )
 
 
 def test_copied_transaction_description_has_no_separator_for_blank_memo() -> None:
-    assert copied_transaction_description(
-        {"id": "source-123", "description": "  Copy From old-1  "}
-    ) == "Copy From source-123"
+    assert (
+        copied_transaction_description(
+            {"id": "source-123", "description": "  Copy From old-1  "}
+        )
+        == "Copy From source-123"
+    )
 
 
 def test_copy_account_choices_exclude_inactive_source_account() -> None:
@@ -198,12 +254,11 @@ def test_copy_account_choices_exclude_inactive_source_account() -> None:
         {"id": "active", "name": "Current account", "active": True},
     ]
 
-    assert _editable_account_ids(
-        accounts, ["inactive"], copy_mode=True
-    ) == ["active"]
-    assert _editable_account_ids(
-        accounts, ["inactive"], copy_mode=False
-    ) == ["active", "inactive"]
+    assert _editable_account_ids(accounts, ["inactive"], copy_mode=True) == ["active"]
+    assert _editable_account_ids(accounts, ["inactive"], copy_mode=False) == [
+        "active",
+        "inactive",
+    ]
 
 
 def test_switching_ledger_mode_preserves_copy_editor_target() -> None:
@@ -247,9 +302,7 @@ def test_copy_form_can_be_canceled_without_creating_or_mutating_transaction() ->
     storage, source = _transaction_fixture()
     storage.create_payee("New vendor")
     original_rows = storage.list_transactions()
-    original_source = next(
-        item for item in original_rows if item["id"] == source["id"]
-    )
+    original_source = next(item for item in original_rows if item["id"] == source["id"])
 
     with authenticated_app(storage) as app:
         navigate_to(app, "Transactions")
@@ -262,12 +315,11 @@ def test_copy_form_can_be_canceled_without_creating_or_mutating_transaction() ->
         assert copy_button.disabled is False
         copy_button.click().run()
         assert any(item.label == "Copy transaction" for item in app.expander)
-        assert by_label(app.date_input, "Edit date").value == date.fromisoformat(
-            source["txn_date"]
-        )
-        assert by_label(app.text_input, "Edit description").value == (
-            "Original memo. "
-            f"Copy From {source['id']}"
+        assert by_key_prefix(
+            app.date_input, "edit_transaction_date_"
+        ).value == date.fromisoformat(source["txn_date"])
+        assert by_key_prefix(app.text_input, "edit_transaction_description_").value == (
+            f"Original memo. Copy From {source['id']}"
         )
         assert by_label(app.date_input, "From").disabled is True
         assert by_label(app.date_input, "To").disabled is True
@@ -283,7 +335,9 @@ def test_copy_form_can_be_canceled_without_creating_or_mutating_transaction() ->
         app.session_state["transaction_bulk_selected_ids_test"] = (source["id"],)
         app.run()
         by_label(app.button, "Copy transaction").click().run()
-        by_label(app.selectbox, "Edit payee / customer").set_value("New vendor").run()
+        by_key_prefix(app.selectbox, "edit_transaction_payee_").set_value(
+            "New vendor"
+        ).run()
         by_label(app.button, "Save copied transaction").click().run()
         copied = next(
             item for item in storage.list_transactions() if item["id"] != source["id"]
@@ -296,10 +350,7 @@ def test_copy_form_can_be_canceled_without_creating_or_mutating_transaction() ->
     copied = next(item for item in transactions if item["id"] != source["id"])
     assert copied["txn_date"] == original_source["txn_date"]
     assert copied["payee"] == "New vendor"
-    assert copied["description"] == (
-        "Original memo. "
-        f"Copy From {source['id']}"
-    )
+    assert copied["description"] == (f"Original memo. Copy From {source['id']}")
     assert copied["receipt_references"] == "[]"
     assert next(item for item in transactions if item["id"] == source["id"]) == (
         original_source
@@ -316,7 +367,7 @@ def test_copy_uses_selected_existing_payee() -> None:
         app.session_state["transaction_bulk_selected_ids_test"] = (source["id"],)
         app.run()
         by_label(app.button, "Copy transaction").click().run()
-        by_label(app.selectbox, "Edit payee / customer").set_value(
+        by_key_prefix(app.selectbox, "edit_transaction_payee_").set_value(
             other_payee["id"]
         ).run()
         by_label(app.button, "Save copied transaction").click().run()
@@ -339,7 +390,7 @@ def test_copy_does_not_preselect_inactive_source_payee() -> None:
         app.run()
         by_label(app.button, "Copy transaction").click().run()
 
-        payee_selector = by_label(app.selectbox, "Edit payee / customer")
+        payee_selector = by_key_prefix(app.selectbox, "edit_transaction_payee_")
         assert source["payee_id"] not in payee_selector.options
         payee_selector.set_value("").run()
         by_label(app.button, "Save copied transaction").click().run()
@@ -388,18 +439,41 @@ def test_copy_with_inactive_source_allows_active_account_replacement() -> None:
         app.run()
         by_label(app.button, "Copy transaction").click().run()
 
-        account_selector = by_label(app.selectbox, "Edit account")
+        account_selector = by_key_prefix(app.selectbox, "edit_transaction_account_")
         assert source["account_id"] not in account_selector.options
         assert "Replacement" in account_selector.options
+        assert account_selector.value is None
         assert by_label(app.button, "Save copied transaction").disabled is False
 
-        account_selector.set_value(replacement["id"]).run()
+        account_selector.set_value("Replacement").run()
         by_label(app.button, "Save copied transaction").click().run()
 
     transactions = storage.list_transactions()
     assert len(transactions) == 2
     copied = next(item for item in transactions if item["id"] != source["id"])
     assert copied["account_id"] == replacement["id"]
+
+
+def test_copy_with_no_active_accounts_stays_blocked() -> None:
+    storage, source = _transaction_fixture()
+    storage.deactivate_account(source["account_id"])
+
+    with authenticated_app(storage) as app:
+        navigate_to(app, "Transactions")
+        by_label(app.segmented_control, "Ledger mode").set_value("Bulk").run()
+        app.session_state["transaction_bulk_selected_ids_test"] = (source["id"],)
+        app.run()
+        by_label(app.button, "Copy transaction").click().run()
+
+        assert any(
+            "Choose active account(s)" in str(item.value)
+            for item in app.warning
+        )
+        by_label(app.button, "Save copied transaction").click().run()
+
+    transactions = storage.list_transactions()
+    assert len(transactions) == 1
+    assert transactions[0]["id"] == source["id"]
 
 
 def test_copy_save_adjusts_filters_to_keep_new_transaction_selected() -> None:
@@ -412,7 +486,7 @@ def test_copy_save_adjusts_filters_to_keep_new_transaction_selected() -> None:
         app.session_state["transaction_bulk_selected_ids_test"] = (source["id"],)
         app.run()
         by_label(app.button, "Copy transaction").click().run()
-        by_label(app.date_input, "Edit date").set_value(created_date)
+        by_key_prefix(app.date_input, "edit_transaction_date_").set_value(created_date)
         by_label(app.button, "Save copied transaction").click().run()
 
         copied = next(
@@ -421,8 +495,7 @@ def test_copy_save_adjusts_filters_to_keep_new_transaction_selected() -> None:
         assert copied["txn_date"] == created_date.isoformat()
         assert app.session_state["edit_transaction_id"] == copied["id"]
         assert copied["id"] in [
-            str(transaction_id)
-            for transaction_id in app.dataframe[0].value["ID"]
+            str(transaction_id) for transaction_id in app.dataframe[0].value["ID"]
         ]
 
 
@@ -435,7 +508,7 @@ def test_copy_save_normalizes_user_edited_description_provenance() -> None:
         app.session_state["transaction_bulk_selected_ids_test"] = (source["id"],)
         app.run()
         by_label(app.button, "Copy transaction").click().run()
-        by_label(app.text_input, "Edit description").set_value(
+        by_key_prefix(app.text_input, "edit_transaction_description_").set_value(
             "Updated memo. Copy From stale-1. Copy From stale-2"
         )
         by_label(app.button, "Save copied transaction").click().run()
@@ -452,9 +525,7 @@ def test_copy_state_is_cleared_when_switching_profiles() -> None:
         "beta-sheet": GoogleSheetsStorage(FakeWorkbook()),
     }
     profiles = {
-        "alpha": profile_config(
-            name="Alpha Business", spreadsheet_id="alpha-sheet"
-        ),
+        "alpha": profile_config(name="Alpha Business", spreadsheet_id="alpha-sheet"),
         "beta": profile_config(name="Beta Business", spreadsheet_id="beta-sheet"),
     }
     alpha = storages["alpha-sheet"]
@@ -494,7 +565,5 @@ def test_copy_state_is_cleared_when_switching_profiles() -> None:
         by_label(app.selectbox, "Business").set_value("beta").run()
 
         assert "transaction_copy_source_alpha" not in app.session_state
-        assert not any(
-            item.label == "Save copied transaction" for item in app.button
-        )
+        assert not any(item.label == "Save copied transaction" for item in app.button)
         assert not any(item.label == "Copy transaction" for item in app.expander)

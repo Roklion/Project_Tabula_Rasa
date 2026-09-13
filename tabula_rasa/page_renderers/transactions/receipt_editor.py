@@ -33,6 +33,29 @@ from .receipt_workflows import (
     receipt_editor_upload_reset_key,
 )
 
+
+def render_receipt_uploader(
+    *,
+    key: str,
+    disabled: bool = False,
+    help_text: str | None = None,
+) -> Sequence[Any] | None:
+    """Render the shared multi-file receipt input for transaction surfaces."""
+    return st.file_uploader(
+        "Receipt (optional)",
+        type=RECEIPT_UPLOAD_TYPES,
+        accept_multiple_files=True,
+        key=key,
+        disabled=disabled,
+        help=help_text
+        or (
+            "Select one or more PDF, PNG, JPG, JPEG, WEBP, or HEIC files. "
+            "Each file must be non-empty and no larger than 20 MB; the "
+            "selected batch must not exceed 200 MB total."
+        ),
+    )
+
+
 def render_editor_receipt_uploader(
     context: TransactionsContext,
     transaction_id: str,
@@ -46,16 +69,8 @@ def render_editor_receipt_uploader(
         receipt_editor_upload_reset_key(context.profile_key, transaction_id),
         keys=(f"receipt-upload-{transaction_id}",),
     )
-    return st.file_uploader(
-        "Upload receipt",
-        type=RECEIPT_UPLOAD_TYPES,
-        accept_multiple_files=True,
+    return render_receipt_uploader(
         key=f"receipt-upload-{transaction_id}",
-        help=(
-            "Select one or more PDF, PNG, JPG, JPEG, WEBP, or HEIC files. "
-            "Each file must be non-empty and no larger than 20 MB; the "
-            "selected batch must not exceed 200 MB total."
-        ),
     )
 
 def process_editor_receipt_uploads(

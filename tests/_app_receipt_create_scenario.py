@@ -4,7 +4,14 @@ from unittest.mock import patch
 
 from tabula_rasa.google_drive import DRIVE_SCOPE, GoogleDriveClient
 from tabula_rasa.storage import GoogleSheetsStorage, StorageUnavailableError
-from tests.app_support import authenticated_app, by_label, navigate_to, profile_config
+from tests.app_support import (
+    authenticated_app,
+    by_key,
+    by_key_prefix,
+    by_label,
+    navigate_to,
+    profile_config,
+)
 from tests.fakes import FakeWorkbook
 
 
@@ -105,7 +112,7 @@ def main() -> None:
         by_label(app.selectbox, "From Account").set_value("Checking")
         by_label(app.selectbox, "Category").set_value("Office")
         by_label(app.selectbox, "Payee / customer").set_value("Receipt vendor one").run()
-        by_label(app.file_uploader, "Receipt (optional)").set_value(
+        by_key(app.file_uploader, "add_transaction_receipts").set_value(
             [
                 ("receipt.pdf", b"first receipt", "application/pdf"),
                 ("receipt.pdf", b"second receipt", "application/pdf"),
@@ -158,15 +165,15 @@ def main() -> None:
         )
 
         fail_next_post_create_link["value"] = True
-        by_label(app.file_uploader, "Upload receipt").set_value(
+        by_key_prefix(app.file_uploader, "receipt-upload-").set_value(
             ("later.pdf", b"later receipt", "application/pdf")
         ).run()
         main_nodes = list(app._tree.main)
         assert main_nodes.index(
-            by_label(app.file_uploader, "Upload receipt")
+            by_key_prefix(app.file_uploader, "receipt-upload-")
         ) < main_nodes.index(by_label(app.button, "Save changes"))
         assert not any(
-            "Upload receipt" in button.label or "Uploading" in button.label
+            "Uploading" in button.label
             for button in app.button
         )
         by_label(app.button, "Save changes").click().run()
@@ -182,14 +189,14 @@ def main() -> None:
             for transaction in storage.list_transactions()
         ) == 3
 
-        by_label(app.file_uploader, "Upload receipt").set_value(
+        by_key_prefix(app.file_uploader, "receipt-upload-").set_value(
             [
                 ("receipt.pdf", b"editor first", "application/pdf"),
                 ("receipt.pdf", b"editor second", "application/pdf"),
             ]
         ).run()
         assert not any(
-            "Upload receipt" in button.label or "Uploading" in button.label
+            "Uploading" in button.label
             for button in app.button
         )
         by_label(app.button, "Save changes").click().run()
@@ -202,7 +209,7 @@ def main() -> None:
 
         fail_second_upload["value"] = False
         by_label(app.number_input, "Amount").set_value(40)
-        by_label(app.file_uploader, "Receipt (optional)").set_value(
+        by_key(app.file_uploader, "add_transaction_receipts").set_value(
             [
                 ("receipt.pdf", b"third receipt", "application/pdf"),
                 ("receipt.pdf", b"fourth receipt", "application/pdf"),
