@@ -169,6 +169,55 @@ def test_transaction_account_choices_follow_accounts_hierarchy_order() -> None:
     ]
 
 
+def test_account_table_and_dropdown_group_classifications_before_hierarchy_names() -> None:
+    all_accounts = [
+        {
+            "id": "equity",
+            "name": "Owner equity",
+            "type": "Equity",
+            "classification": "Equity",
+            "opening_balance": 0.0,
+            "active": True,
+            "parent_id": "",
+        },
+        {
+            "id": "liability",
+            "name": "Payables",
+            "type": "Credit card",
+            "classification": "Liability",
+            "opening_balance": 0.0,
+            "active": True,
+            "parent_id": "",
+        },
+        {
+            "id": "asset-child",
+            "name": "Checking",
+            "type": "Cash",
+            "classification": "Asset",
+            "opening_balance": 0.0,
+            "active": True,
+            "parent_id": "asset-parent",
+        },
+        {
+            "id": "asset-parent",
+            "name": "Operating",
+            "type": "Bank",
+            "classification": "Asset",
+            "opening_balance": 0.0,
+            "active": True,
+            "parent_id": "",
+        },
+    ]
+
+    _, account_ids, _ = accounts._account_frame(all_accounts, [])
+    active_ids = [
+        account["id"] for account in transactions_renderer._ordered_active_accounts(all_accounts)
+    ]
+
+    assert account_ids == ["asset-parent", "asset-child", "liability", "equity"]
+    assert active_ids == account_ids
+
+
 def test_category_page_frame_preserves_columns_paths_and_counts() -> None:
     category_frame, category_ids, category_by_id = categories._category_frame(
         [

@@ -7,6 +7,7 @@ import json
 from typing import Any
 
 import streamlit as st
+from tabula_rasa.hierarchy import ordered_accounts, ordered_categories
 
 
 def _mark_workbook_data_changed(context: Any) -> None:
@@ -35,8 +36,9 @@ def _safe_interval(value: Any) -> int:
 
 
 def _recurring_category_options(categories, selected_category: str) -> list[dict[str, Any]]:
+    ordered_category_items = ordered_categories(categories)
     return [
-        item for item in categories
+        item for item in ordered_category_items
         if (
             item.get("kind") == "Expense"
             and (
@@ -169,7 +171,7 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
                 edit_percentage = edit_rationale = None
             selected_account = str(selected.get("account_id", ""))
             account_options = [
-                item for item in accounts
+                item for item in ordered_accounts(accounts)
                 if str(item.get("active", "")).upper() == "TRUE"
                 or str(item.get("id")) == selected_account
             ]

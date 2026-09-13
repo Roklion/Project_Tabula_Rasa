@@ -8,6 +8,7 @@ from datetime import date
 import streamlit as st
 import pandas as pd
 
+from tabula_rasa.hierarchy import ordered_accounts
 from tabula_rasa.ledger_presentation import balances_frame, ledger_frame, money
 from tabula_rasa.ledger_reporting import profit_and_loss
 from tabula_rasa.presentation import render_global_footer, render_page_header
@@ -50,21 +51,17 @@ def _sorted_dashboard_balances(
 ) -> pd.DataFrame:
     """Order dashboard balances by accounting classification, then account."""
     classification_rank = balances["Classification"].map(_CLASSIFICATION_ORDER)
-    account_names = {
-        str(account.get("id") or ""): str(account.get("name") or "")
-        for account in accounts
+    account_order = {
+        str(account.get("id") or ""): rank
+        for rank, account in enumerate(ordered_accounts(accounts))
     }
     return (
         balances.assign(
             _classification_rank=classification_rank.fillna(
                 len(_CLASSIFICATION_ORDER)
             ),
-            _account_sort_key=(
-                balances["ID"]
-                .map(account_names)
-                .fillna(balances["Account"])
-                .astype(str)
-                .str.casefold()
+            _account_sort_key=balances["ID"].map(account_order).fillna(
+                len(account_order)
             ),
         )
         .sort_values(

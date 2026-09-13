@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from datetime import date
 import re
 import streamlit as st
-from tabula_rasa.hierarchy import ordered_hierarchy
+from tabula_rasa.hierarchy import ordered_accounts
 from tabula_rasa.page_renderers.tag_selector import schedule_tag_selector_reset
 
 def copied_transaction_description(transaction: Mapping[str, object]) -> str:
@@ -67,7 +67,7 @@ def _editable_account_ids(
     current_ids = set(current_account_ids)
     return [
         str(account["id"])
-        for account in ordered_hierarchy(accounts)
+        for account in ordered_accounts(accounts)
         if account["active"]
         or (not copy_mode and str(account["id"]) in current_ids)
     ]

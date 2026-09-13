@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from datetime import date
 import hashlib
 import streamlit as st
-from tabula_rasa.hierarchy import ordered_hierarchy
+from tabula_rasa.hierarchy import ordered_accounts
 from tabula_rasa.ledger_presentation import ledger_frame
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
 from tabula_rasa.page_renderers.transactions.receipts import clear_missing_editor_receipt_recoveries
@@ -92,7 +92,7 @@ def render_ledger(
     )
     ledger_account_map = {
         account_paths[account_id]: account_id
-        for account in ordered_hierarchy(accounts)
+        for account in ordered_accounts(accounts)
         if (account_id := str(account.get("id") or "").strip())
     }
     selected_account_names = st.multiselect(

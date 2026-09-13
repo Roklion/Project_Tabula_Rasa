@@ -12,7 +12,7 @@ from tabula_rasa.hierarchy import (
     eligible_parent_ids,
     has_hierarchy_children,
     hierarchy_paths,
-    ordered_hierarchy,
+    ordered_categories,
 )
 from tabula_rasa.page_renderers.hierarchy_ui import (
     hierarchy_layer_label,
@@ -58,7 +58,7 @@ def _category_frame(
             )
     rows = []
     item_ids = []
-    for category in ordered_hierarchy(categories):
+    for category in ordered_categories(categories):
         category_id = str(category.get("id") or "").strip()
         parent_id = str(category.get("parent_id") or "").strip()
         parent = category_by_id.get(parent_id)

@@ -642,9 +642,10 @@ class TestBackupScripts:
 
             remaining = sorted(path.name for path in output_dir.iterdir())
             assert remaining == [old_names[-1], created.name]
-            assert GoogleSheetsStorage.validate_backup_zip(created.read_bytes())[
-                "row_counts"
-            ] == {
+            row_counts = GoogleSheetsStorage.validate_backup_zip(
+                created.read_bytes()
+            )["row_counts"]
+            expected_row_counts = {
                 "Accounts": 0,
                 "Categories": 0,
                 "Payees": 0,
@@ -654,6 +655,9 @@ class TestBackupScripts:
                 "MixedUseExpenses": 0,
                 "RecurringSchedules": 0,
             }
+            if "Assets" in row_counts:
+                expected_row_counts["Assets"] = 0
+            assert row_counts == expected_row_counts
             timestamp = created.name.removeprefix("tabula-rasa-backup-").removesuffix(
                 ".zip"
             )

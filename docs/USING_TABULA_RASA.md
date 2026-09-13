@@ -77,6 +77,10 @@ transfers. Renaming, promoting, or reparenting preserves the stable account
 ID and existing transaction references. A parent with children cannot itself
 be moved under another parent until its children are promoted or reparented.
 
+The Accounts table and account selectors are ordered Asset, Liability, then
+Equity. Within each classification, parent accounts are sorted by name and
+their children follow immediately, sorted by child name.
+
 The balance sheet combines direct parent activity and direct child activity
 once. A parent with its own activity can show a separate Direct activity row.
 The account page supports adding, editing, activation/deactivation, hierarchy
@@ -92,6 +96,9 @@ Categories are either **Income** or **Expense**. Transfers have no category.
 Categories can also have two layers; a child must use a parent of the same
 kind. Paths are shown in selectors and reports while the stable category ID
 stays on existing transactions after a rename, promotion, or reparenting.
+Category selectors follow the same parent-first order as the Categories table:
+parents are sorted by name and each parent's children follow immediately,
+sorted by category name.
 
 Category summaries retain direct parent activity and child detail without
 double-counting. A category can be permanently deleted only when it has no

@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import streamlit as st
 
-from tabula_rasa.hierarchy import hierarchy_paths, ordered_hierarchy
+from tabula_rasa.hierarchy import (
+    hierarchy_paths,
+    ordered_accounts,
+    ordered_categories,
+)
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
 from tabula_rasa.page_renderers.transactions.creation import render_add_transaction
 from tabula_rasa.page_renderers.transactions.ledger import render_ledger
@@ -21,7 +25,7 @@ from tabula_rasa.storage import StorageError
 def _ordered_active_accounts(accounts: list[dict]) -> list[dict]:
     """Return active accounts in the Accounts table's hierarchy order."""
     return [
-        account for account in ordered_hierarchy(accounts) if account["active"]
+        account for account in ordered_accounts(accounts) if account["active"]
     ]
 
 
@@ -57,9 +61,9 @@ def render_transactions(context: TransactionsContext) -> None:
             "RecurringSchedules",
             "Mileage",
         )
-        accounts = context.storage.list_accounts(active_only=False)
+        accounts = ordered_accounts(context.storage.list_accounts(active_only=False))
         active_accounts = _ordered_active_accounts(accounts)
-        categories = context.storage.list_categories()
+        categories = ordered_categories(context.storage.list_categories())
         payees = context.storage.list_payees()
         tags = context.storage.list_tags()
     except StorageError as error:
