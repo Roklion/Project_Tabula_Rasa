@@ -671,13 +671,13 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             format_func=account_paths.get,
             key=f"mixed_account_{scope}",
         )
-        current_payee = str(defaults.get("payee_id", ""))
+        current_payee = str(defaults.get("payee_id") or "")
         payee_id, new_payee_name = render_payee_selector(
             payees,
             key=f"mixed_payee_{scope}",
             selected_id=current_payee,
             preserve_selected_id=bool(source),
-            selected_label=str(defaults.get("payee", "")) or None,
+            selected_label=str(defaults.get("payee") or "") or None,
         )
         reference = st.text_input(
             "Reference (optional)",
@@ -1015,7 +1015,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             (
                 str(item.get("name") or "")
                 for item in payees
-                if str(item.get("id") or "") == payee_id
+                if payee_id and str(item.get("id") or "") == payee_id
             ),
             new_payee_name,
         )

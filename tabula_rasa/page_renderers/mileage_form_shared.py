@@ -139,7 +139,8 @@ def render_mileage_fields(
             region_code=context.autocomplete_region_code,
         )
 
-    route_state = st.session_state.get(route_key)
+    raw_route_state = st.session_state.get(route_key)
+    route_state = raw_route_state if isinstance(raw_route_state, Mapping) else None
     endpoint_fingerprint = _selection_fingerprint(
         start_selection, destination_selection
     )

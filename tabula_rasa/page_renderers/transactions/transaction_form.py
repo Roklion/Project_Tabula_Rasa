@@ -123,8 +123,8 @@ def render_transaction_fields(
     category_widget_key = field_key("category")
     if kind != "Transfer" and category_widget_key in st.session_state:
         category_ids_by_label = {
-            str(label): str(category_id)
-            for category_id, label in category_paths.items()
+            str(label): str(cat_id)
+            for cat_id, label in category_paths.items()
         }
         current_category = str(st.session_state[category_widget_key])
         resolved_category = category_ids_by_label.get(
@@ -134,8 +134,8 @@ def render_transaction_fields(
             st.session_state.pop(category_widget_key, None)
         else:
             st.session_state[category_widget_key] = resolved_category
-    c1, c2 = st.columns(2)
     if kind != "Transfer":
+        c1, c2 = st.columns(2)
         category_value = c1.selectbox(
             "Category",
             category_ids,
@@ -148,19 +148,28 @@ def render_transaction_fields(
             key=category_widget_key,
         )
         category_id = selected_id(category_value, category_paths)
-    amount = c2.number_input(
-        "Amount",
-        min_value=0.0,
-        step=1.0,
-        value=float(defaults.get("amount") or 0.0),
-        format="%.2f",
-        key=field_key("amount"),
-    )
+        amount = c2.number_input(
+            "Amount",
+            min_value=0.0,
+            step=1.0,
+            value=float(defaults.get("amount") or 0.0),
+            format="%.2f",
+            key=field_key("amount"),
+        )
+    else:
+        amount = st.number_input(
+            "Amount",
+            min_value=0.0,
+            step=1.0,
+            value=float(defaults.get("amount") or 0.0),
+            format="%.2f",
+            key=field_key("amount"),
+        )
     account_ids = list(
         dict.fromkeys(
-            str(account_id).strip()
-            for account_id in account_ids
-            if str(account_id).strip()
+            str(acc_id).strip()
+            for acc_id in account_ids
+            if str(acc_id).strip()
         )
     )
     account_index = (
