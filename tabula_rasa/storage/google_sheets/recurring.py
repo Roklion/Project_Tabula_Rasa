@@ -587,7 +587,12 @@ class RecurringMixin:
         if current.get("status") == "ended":
             raise StorageConflictError("Schedule is already ended")
         return self.edit_recurring_schedule(
-            schedule_id, expected_schedule=expected_schedule, status="ended", end_date=date.today().isoformat(),
+            schedule_id,
+            expected_schedule=expected_schedule,
+            status="ended",
+            end_date=date.today().isoformat(),
+            attention_code="",
+            attention_at="",
         )
 
     def _recurring_occurrence(self, schedule: Mapping[str, str], scheduled: date, *, role: str) -> dict[str, str]:
@@ -793,7 +798,10 @@ class RecurringMixin:
                     payee_lookup=payees,
                     tag_lookup=tags,
                 )
-                if schedule.get("attention_code") == _PENDING_INITIAL_LINK:
+                if (
+                    schedule.get("attention_code") == _PENDING_INITIAL_LINK
+                    and schedule["status"] != "ended"
+                ):
                     linked_transaction_rows = transaction_rows_by_schedule.get(
                         schedule["id"], []
                     )

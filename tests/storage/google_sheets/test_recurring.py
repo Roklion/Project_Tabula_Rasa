@@ -151,6 +151,37 @@ def test_existing_expense_recurring_pending_schedule_is_not_reconciled(
     assert len(default_storage.list_transactions()) == 1
 
 
+def test_ending_pending_expense_conversion_clears_attention(
+    default_storage, monkeypatch,
+) -> None:
+    account_id, category_id = _ids(default_storage)
+    transaction = default_storage.create_transaction(
+        txn_date="2024-01-15", kind="Expense", amount="20",
+        account_id=account_id, category_id=category_id,
+    )
+
+    def mock_replace(*_args, **_kwargs):
+        raise StorageUnavailableError("transaction update failed")
+
+    monkeypatch.setattr(default_storage, "_replace_rows_atomically", mock_replace)
+    with pytest.raises(StorageUnavailableError):
+        default_storage.create_recurring_expense_from_transaction(
+            transaction["id"],
+            schedule_id="pending-end",
+            name="Pending end", recurrence_unit="month", txn_date="2024-01-15",
+            amount="20", account_id=account_id, category_id=category_id,
+        )
+
+    ended = default_storage.end_recurring_schedule("pending-end")
+
+    assert ended["status"] == "ended"
+    assert ended["attention_code"] == ""
+    assert default_storage.reconcile_recurring_schedules(as_of="2024-01-15") == {
+        "generated": [],
+        "attention": {},
+    }
+
+
 def test_existing_expense_recurring_generates_distinct_schedule_id_when_omitted(
     default_storage,
 ) -> None:
