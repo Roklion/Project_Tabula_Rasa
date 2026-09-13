@@ -5,6 +5,7 @@ import pytest
 from tabula_rasa.page_renderers.transactions.mixed_use import (
     _MixedUseReceiptStorage,
     _clear_mixed_use_copy,
+    _editable_mixed_use_account_ids,
     _fresh_mixed_use_copy_source,
     _copyable_tag_ids,
     _editable_account_ids,
@@ -333,6 +334,20 @@ def test_mixed_use_copy_uses_active_only_managed_values() -> None:
     ]
     assert _editable_account_ids(accounts, ["inactive"], copy_mode=True) == ["active"]
     assert _copyable_tag_ids(tags, ["old", "current"]) == ["current"]
+
+
+def test_mixed_use_edit_keeps_inactive_account_in_hierarchy_order() -> None:
+    ordered_accounts = [
+        {"id": "inactive-asset", "active": False},
+        {"id": "active-liability", "active": True},
+        {"id": "active-equity", "active": True},
+    ]
+
+    assert _editable_mixed_use_account_ids(ordered_accounts, "inactive-asset") == [
+        "inactive-asset",
+        "active-liability",
+        "active-equity",
+    ]
 
 
 def test_mixed_use_copy_rejects_missing_projection(default_storage) -> None:

@@ -226,6 +226,18 @@ def _active_ids(items: Sequence[Mapping[str, object]]) -> list[str]:
         if str(item.get("id") or "")
     ]
 
+
+def _editable_mixed_use_account_ids(
+    ordered_items: Sequence[Mapping[str, object]], current_account: str
+) -> list[str]:
+    """Keep a saved inactive account in its existing hierarchy position."""
+    return [
+        str(item["id"])
+        for item in ordered_items
+        if str(item.get("active", "")).upper() == "TRUE"
+        or str(item.get("id") or "") == current_account
+    ]
+
 def _mixed_use_receipt_recovery_active(
     state: Mapping[str, object], profile: str, transaction_id: str
 ) -> bool:
@@ -609,10 +621,10 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
     else:
         current_account = str(defaults.get("account_id") or "")
         current_category = str(defaults.get("category_id") or "")
-        account_ids = list(active_account_ids)
+        account_ids = _editable_mixed_use_account_ids(
+            ordered_account_items, current_account
+        )
         category_ids = list(active_category_ids)
-        if current_account and current_account not in account_ids:
-            account_ids.append(current_account)
         if current_category and current_category not in category_ids:
             category_ids.append(current_category)
     if not account_ids or not category_ids:
