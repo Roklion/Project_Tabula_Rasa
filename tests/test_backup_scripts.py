@@ -646,6 +646,7 @@ class TestBackupScripts:
                 "row_counts"
             ] == {
                 "Accounts": 0,
+                "Assets": 0,
                 "Categories": 0,
                 "Payees": 0,
                 "Tags": 0,
