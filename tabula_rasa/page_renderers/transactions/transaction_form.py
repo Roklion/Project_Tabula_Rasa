@@ -120,7 +120,10 @@ def render_transaction_fields(
         for category in categories_for_kind
         if str(category.get("id") or "").strip()
     ]
-    category_widget_key = field_key(f"category_{kind.casefold()}")
+    category_field_name = (
+        f"category_{kind.casefold()}" if mode == "add" else "category"
+    )
+    category_widget_key = field_key(category_field_name)
     if kind != "Transfer" and category_widget_key in st.session_state:
         category_ids_by_label = {
             str(label): str(cat_id)
@@ -180,12 +183,16 @@ def render_transaction_fields(
     source_label = (
         "From Account" if kind == "Transfer" or kind == "Expense" else "To Account"
     )
+    account_field_name = (
+        f"account_{kind.casefold()}" if mode == "add" else "account"
+    )
+    account_widget_key = field_key(account_field_name)
     source = st.selectbox(
         source_label,
         account_ids,
         index=account_index,
         format_func=lambda value: account_paths.get(value, value),
-        key=field_key("account"),
+        key=account_widget_key,
     )
     source_id = selected_id(source, account_paths)
     if kind == "Transfer":

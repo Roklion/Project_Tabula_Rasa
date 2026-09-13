@@ -153,7 +153,7 @@ def main() -> None:
             by_label(app.button, "Save transaction").click().run()
         assert storage.list_transactions() == []
         assert by_label(app.number_input, "Amount").value == 25
-        assert by_key(app.selectbox, "add_transaction_account").value == owner_equity["id"]
+        assert by_key(app.selectbox, "add_transaction_account_expense").value == owner_equity["id"]
         assert by_key(app.selectbox, "add_transaction_category_expense").value == renamed_categories[0]["id"]
         assert by_key(app.selectbox, "add_transaction_payee").value == next(
             item["id"]

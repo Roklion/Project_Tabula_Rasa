@@ -21,6 +21,9 @@ def test_shared_widget_keys_are_record_scoped() -> None:
     assert transaction_widget_key("add_transaction", "category_expense") != (
         transaction_widget_key("add_transaction", "category_income")
     )
+    assert transaction_widget_key("add_transaction", "account_expense") != (
+        transaction_widget_key("add_transaction", "account_income")
+    )
 
 
 def test_transaction_common_validation_rejects_invalid_transfer() -> None:
