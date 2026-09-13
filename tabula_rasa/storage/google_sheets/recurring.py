@@ -37,6 +37,9 @@ def _as_date(value: Any) -> date:
     return date.fromisoformat(_iso_date(value))
 
 
+_PENDING_INITIAL_LINK = "pending_initial_link"
+
+
 class RecurringMixin:
     """Schedule reads and bounded recurring Expense mutations."""
 
@@ -786,6 +789,11 @@ class RecurringMixin:
                     payee_lookup=payees,
                     tag_lookup=tags,
                 )
+                if schedule.get("attention_code") == _PENDING_INITIAL_LINK:
+                    # A conversion creates the schedule before linking its
+                    # existing occurrence. Keep this temporary schedule out
+                    # of reconciliation until the link is confirmed.
+                    continue
                 if schedule["status"] != "active":
                     self._clear_recurring_attention(schedule["id"])
                     continue
@@ -876,7 +884,18 @@ class RecurringMixin:
                 raise StorageValidationError(
                     "This transaction is already part of a recurring schedule"
                 )
-            merged = {**baseline, **changes, "id": transaction_id, "kind": "Expense"}
+            schedule_id = _clean_text(changes.get("schedule_id"), "Schedule ID") or str(uuid4())
+            if schedule_id == transaction_id:
+                raise StorageValidationError(
+                    "Schedule ID must be distinct from Transaction ID"
+                )
+            merged = {
+                **baseline,
+                **changes,
+                "kind": "Expense",
+                "schedule_id": schedule_id,
+            }
+            merged.pop("id", None)
             preflight = self._prevalidate_recurring_form(
                 {**merged, "receipt_references": ""}
             )
@@ -918,7 +937,12 @@ class RecurringMixin:
                 existing_schedule,
                 schedule,
                 ignored=frozenset(
-                    {"created_at", "updated_at", "attention_code", "attention_at"}
+                    {
+                        "created_at",
+                        "updated_at",
+                        "attention_code",
+                        "attention_at",
+                    }
                 ),
             ):
                 raise StorageConflictError("Recurring schedule ID is already in use")
@@ -928,13 +952,84 @@ class RecurringMixin:
                     "The transaction changed; refresh it before making it recurring."
                 )
             if existing_schedule is None:
-                self._append("RecurringSchedules", schedule)
-            self._replace_row("Transactions", fresh_row, updated)
-            self._clear_recurring_attention(schedule["id"])
+                pending_schedule = {
+                    **schedule,
+                    "attention_code": _PENDING_INITIAL_LINK,
+                    "attention_at": _utc_now(),
+                }
+                self._append("RecurringSchedules", pending_schedule)
+                fresh_schedule = self._find_row("RecurringSchedules", schedule["id"])
+            else:
+                pending_schedule = dict(existing_schedule)
+                fresh_schedule = self._find_row("RecurringSchedules", schedule["id"])
+
+            def write_pair() -> None:
+                self._replace_rows_atomically(
+                    [
+                        ("Transactions", fresh_row, updated),
+                        ("RecurringSchedules", fresh_schedule, schedule),
+                    ]
+                )
+
+            def mutation_state() -> str:
+                actual_transaction = self._find_row(
+                    "Transactions", transaction_id
+                ).values
+                actual_schedule = self._find_row(
+                    "RecurringSchedules", schedule["id"]
+                ).values
+                if (
+                    self._transaction_rows_match(actual_transaction, updated)
+                    and self._logical_record_matches(
+                        actual_schedule,
+                        schedule,
+                        ignored=frozenset(
+                            {"created_at", "updated_at", "attention_code", "attention_at"}
+                        ),
+                    )
+                ):
+                    return "applied"
+                if (
+                    self._transaction_rows_match(actual_transaction, baseline)
+                    and self._logical_record_matches(
+                        actual_schedule,
+                        pending_schedule,
+                        ignored=frozenset(
+                            {"created_at", "updated_at", "attention_code", "attention_at"}
+                        ),
+                    )
+                ):
+                    return "unchanged"
+                return "ambiguous"
+
+            def refresh_pair() -> None:
+                nonlocal fresh_row, fresh_schedule
+                fresh_row = self._find_row("Transactions", transaction_id)
+                fresh_schedule = self._find_row("RecurringSchedules", schedule["id"])
+                if not self._transaction_rows_match(fresh_row.values, baseline):
+                    raise StorageConflictError(
+                        "The transaction changed while the recurring save was retried."
+                    )
+                if not self._logical_record_matches(
+                    fresh_schedule.values,
+                    pending_schedule,
+                    ignored=frozenset(
+                        {"created_at", "updated_at", "attention_code", "attention_at"}
+                    ),
+                ):
+                    raise StorageConflictError(
+                        "The recurring schedule changed while the save was retried."
+                    )
+
+            self._write_with_uncertain_readback(
+                "make expense recurring",
+                write_pair,
+                mutation_state,
+                before_retry=refresh_pair,
+                invalidate=("Transactions", "RecurringSchedules"),
+            )
             return {
-                "schedule": self.get_recurring_schedule(
-                    schedule["id"], _force_refresh=True
-                ),
+                "schedule": schedule,
                 "transaction": updated,
             }
 
@@ -974,7 +1069,18 @@ class RecurringMixin:
                 raise StorageValidationError(
                     "This mixed-use expense is already part of a recurring schedule"
                 )
-            merged = {**current_source, **changes, "source_kind": "mixed_use"}
+            schedule_id = _clean_text(changes.get("schedule_id"), "Schedule ID") or str(uuid4())
+            if schedule_id == source_id:
+                raise StorageValidationError(
+                    "Schedule ID must be distinct from Mixed-use source ID"
+                )
+            merged = {
+                **current_source,
+                **changes,
+                "source_kind": "mixed_use",
+                "schedule_id": schedule_id,
+            }
+            merged.pop("id", None)
             preflight = self._prevalidate_recurring_form(
                 {**merged, "receipt_references": ""}
             )
@@ -1017,7 +1123,12 @@ class RecurringMixin:
                 existing_schedule,
                 schedule,
                 ignored=frozenset(
-                    {"created_at", "updated_at", "attention_code", "attention_at"}
+                    {
+                        "created_at",
+                        "updated_at",
+                        "attention_code",
+                        "attention_at",
+                    }
                 ),
             ):
                 raise StorageConflictError("Recurring schedule ID is already in use")
@@ -1032,20 +1143,31 @@ class RecurringMixin:
                     "The mixed-use expense changed; refresh it before making it recurring."
                 )
             if existing_schedule is None:
-                self._append("RecurringSchedules", schedule)
+                pending_schedule = {
+                    **schedule,
+                    "attention_code": _PENDING_INITIAL_LINK,
+                    "attention_at": _utc_now(),
+                }
+                self._append("RecurringSchedules", pending_schedule)
+                fresh_schedule = self._find_row("RecurringSchedules", schedule["id"])
+            else:
+                pending_schedule = dict(existing_schedule)
+                fresh_schedule = self._find_row("RecurringSchedules", schedule["id"])
 
             def write_pair() -> None:
                 self._replace_rows_atomically(
                     [
                         ("Transactions", fresh_transaction, updated_transaction),
                         ("MixedUseExpenses", fresh_source, updated_source),
+                        ("RecurringSchedules", fresh_schedule, schedule),
                     ]
                 )
 
             def refresh_pair() -> None:
-                nonlocal fresh_source, fresh_transaction
+                nonlocal fresh_source, fresh_transaction, fresh_schedule
                 fresh_source = self._find_row("MixedUseExpenses", source_id)
                 fresh_transaction = self._find_row("Transactions", transaction_id)
+                fresh_schedule = self._find_row("RecurringSchedules", schedule["id"])
                 if not self._mixed_use_record_matches(
                     "MixedUseExpenses", fresh_source.values, current_source
                 ) or not self._mixed_use_record_matches(
@@ -1054,27 +1176,59 @@ class RecurringMixin:
                     raise StorageConflictError(
                         "The mixed-use expense changed while the recurring save was retried."
                     )
+                if not self._logical_record_matches(
+                    fresh_schedule.values,
+                    pending_schedule,
+                    ignored=frozenset(
+                        {"created_at", "updated_at", "attention_code", "attention_at"}
+                    ),
+                ):
+                    raise StorageConflictError(
+                        "The recurring schedule changed while the save was retried."
+                    )
 
-            self._write_with_uncertain_readback(
-                "make mixed-use expense recurring",
-                write_pair,
-                lambda: self._mixed_use_mutation_state(
+            def mutation_state() -> str:
+                pair_state = self._mixed_use_mutation_state(
                     source_id=source_id,
                     transaction_id=transaction_id,
                     expected_source=updated_source,
                     expected_transaction=updated_transaction,
                     original_source=current_source,
                     original_transaction=current_transaction,
-                ),
+                )
+                actual_schedule = self._find_row(
+                    "RecurringSchedules", schedule["id"]
+                ).values
+                schedule_applied = self._logical_record_matches(
+                    actual_schedule,
+                    schedule,
+                    ignored=frozenset(
+                        {"created_at", "updated_at", "attention_code", "attention_at"}
+                    ),
+                )
+                schedule_unchanged = self._logical_record_matches(
+                    actual_schedule,
+                    pending_schedule,
+                    ignored=frozenset(
+                        {"created_at", "updated_at", "attention_code", "attention_at"}
+                    ),
+                )
+                if pair_state == "applied" and schedule_applied:
+                    return "applied"
+                if pair_state == "unchanged" and schedule_unchanged:
+                    return "unchanged"
+                return "ambiguous"
+
+            self._write_with_uncertain_readback(
+                "make mixed-use expense recurring",
+                write_pair,
+                mutation_state,
                 before_retry=refresh_pair,
-                invalidate=("Transactions", "MixedUseExpenses"),
+                invalidate=("Transactions", "MixedUseExpenses", "RecurringSchedules"),
             )
-            self._clear_recurring_attention(schedule["id"])
             return {
-                "schedule": self.get_recurring_schedule(
-                    schedule["id"], _force_refresh=True
-                ),
-                "source": self.get_mixed_use_expense(source_id),
+                "schedule": schedule,
+                "source": updated_source,
                 "transaction": updated_transaction,
             }
 
