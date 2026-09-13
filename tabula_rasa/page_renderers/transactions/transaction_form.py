@@ -10,7 +10,7 @@ import streamlit as st
 
 from tabula_rasa.page_renderers.tag_selector import render_tag_selector
 from tabula_rasa.page_renderers.transactions.payee_selector import (
-    resolve_payee_selection,
+    render_payee_selector,
 )
 
 TransactionFormMode = Literal["add", "edit", "copy"]
@@ -187,31 +187,13 @@ def render_transaction_fields(
         )
         to_account_id = selected_id(to_account_id, account_paths)
 
-    payee_by_id = {str(item["id"]): str(item["name"]) for item in payees}
-    available_payees = [
-        item
-        for item in payees
-        if item.get("active") == "TRUE"
-        or (mode != "copy" and item.get("id") == payee_id)
-    ]
-    payee_options = [""] + [str(item["id"]) for item in available_payees]
     c1, c2 = st.columns(2)
-    payee_value = c1.selectbox(
-        "Payee / customer",
-        payee_options,
-        index=(
-            payee_options.index(payee_id)
-            if payee_id in payee_options
-            else 0
-        ),
-        format_func=lambda value: payee_by_id.get(
-            value, "No payee" if value == "" else value
-        ),
+    payee_id, new_payee_name = render_payee_selector(
+        payees,
         key=field_key("payee"),
-        accept_new_options=True,
-    )
-    payee_id, new_payee_name = resolve_payee_selection(
-        payee_value, available_payees, payee_options
+        selected_id=payee_id,
+        preserve_selected_id=mode != "copy",
+        container=c1,
     )
     reference = c2.text_input(
         "Reference (optional)",

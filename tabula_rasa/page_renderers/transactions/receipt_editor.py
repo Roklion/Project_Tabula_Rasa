@@ -37,6 +37,8 @@ from .receipt_workflows import (
 def render_receipt_uploader(
     *,
     key: str,
+    disabled: bool = False,
+    help_text: str | None = None,
 ) -> Sequence[Any] | None:
     """Render the shared multi-file receipt input for transaction surfaces."""
     return st.file_uploader(
@@ -44,7 +46,9 @@ def render_receipt_uploader(
         type=RECEIPT_UPLOAD_TYPES,
         accept_multiple_files=True,
         key=key,
-        help=(
+        disabled=disabled,
+        help=help_text
+        or (
             "Select one or more PDF, PNG, JPG, JPEG, WEBP, or HEIC files. "
             "Each file must be non-empty and no larger than 20 MB; the "
             "selected batch must not exceed 200 MB total."

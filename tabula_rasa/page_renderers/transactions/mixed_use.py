@@ -11,19 +11,21 @@ from tabula_rasa.page_renderers.tag_selector import (
     render_tag_selector,
     tag_selector_error,
 )
-from tabula_rasa.page_renderers.transactions.payee_selector import resolve_payee_selection
+from tabula_rasa.page_renderers.transactions.payee_selector import (
+    render_payee_selector,
+)
 from tabula_rasa.page_renderers.transactions.transaction_copy import (
     _copyable_tag_ids,
     _editable_account_ids,
     copied_transaction_description,
 )
 from tabula_rasa.page_renderers.transactions.receipts import (
-    RECEIPT_UPLOAD_TYPES,
     clear_receipt_creation_recovery,
     handle_confirmed_transaction_receipts,
     prepare_receipt_uploads,
     prepare_editor_receipt_uploads,
     render_receipt_creation_recovery,
+    render_receipt_uploader,
     render_receipts,
     receipt_creation_workflow_key,
     receipt_editor_workflow_key,
@@ -218,12 +220,6 @@ def _start_mixed_use_copy(
 
 def _active_ids(items: Sequence[Mapping[str, object]]) -> list[str]:
     return [str(item.get("id") or "") for item in items if str(item.get("id") or "")]
-
-def _payee_options(payees: Sequence[Mapping[str, object]]) -> tuple[list[str], dict[str, str]]:
-    by_id = {str(item.get("id") or ""): str(item.get("name") or "") for item in payees}
-    options = [""]
-    options.extend(str(item["id"]) for item in payees if str(item.get("active", "")).upper() == "TRUE")
-    return options, by_id
 
 def _mixed_use_receipt_recovery_active(
     state: Mapping[str, object], profile: str, transaction_id: str
@@ -637,19 +633,6 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             )
         txn_date = st.date_input("Date", date.fromisoformat(str(defaults.get("txn_date", date.today().isoformat()))), key=f"mixed_date_{scope}")
         c1, c2 = st.columns(2)
-        current_account_id = str(defaults.get("account_id") or "")
-        account_index = (
-            account_ids.index(current_account_id)
-            if current_account_id in account_ids
-            else (None if copy_mode else 0)
-        )
-        account_id = c1.selectbox(
-            "Account",
-            account_ids,
-            index=account_index,
-            format_func=account_paths.get,
-            key=f"mixed_account_{scope}",
-        )
         current_category_id = str(defaults.get("category_id") or "")
         category_index = (
             category_ids.index(current_category_id)
@@ -663,20 +646,44 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             format_func=category_paths.get,
             key=f"mixed_category_{scope}",
         )
-        options, payee_by_id = _payee_options(payees)
-        current_payee = str(defaults.get("payee_id", ""))
-        if source and current_payee and current_payee not in options:
-            options.append(current_payee)
-            payee_by_id[current_payee] = str(defaults.get("payee", "")) or (
-                f"{current_payee} (inactive)"
-            )
-        payee_value = st.selectbox("Payee / customer", options, index=options.index(current_payee) if current_payee in options else 0, format_func=lambda value: payee_by_id.get(value, "No payee" if value == "" else value), key=f"mixed_payee_{scope}", accept_new_options=True)
-        payee_id, new_payee_name = resolve_payee_selection(
-            payee_value, payees, options
+        total_expense = c2.text_input(
+            "Total Expense",
+            value=str(defaults.get("total_expense", "0.00") or "0.00"),
+            key=f"mixed_total_{scope}",
+            help="Enter a positive currency amount.",
         )
-        c1, c2 = st.columns(2)
-        reference = c1.text_input("Reference (optional)", value=str(defaults.get("reference", "")), key=f"mixed_reference_{scope}")
-        description = c2.text_input("Description / memo", value=str(defaults.get("description", "")), key=f"mixed_description_{scope}")
+        business_use_percentage = st.text_input(
+            "Business Use %",
+            value=str(defaults.get("business_use_percentage", "0") or "0"),
+            key=f"mixed_percentage_{scope}",
+            help="Greater than 0 and no more than 100; up to five decimal places.",
+        )
+        current_account_id = str(defaults.get("account_id") or "")
+        account_index = (
+            account_ids.index(current_account_id)
+            if current_account_id in account_ids
+            else (None if copy_mode else 0)
+        )
+        account_id = st.selectbox(
+            "Account",
+            account_ids,
+            index=account_index,
+            format_func=account_paths.get,
+            key=f"mixed_account_{scope}",
+        )
+        current_payee = str(defaults.get("payee_id", ""))
+        payee_id, new_payee_name = render_payee_selector(
+            payees,
+            key=f"mixed_payee_{scope}",
+            selected_id=current_payee,
+            preserve_selected_id=bool(source),
+            selected_label=str(defaults.get("payee", "")) or None,
+        )
+        reference = st.text_input(
+            "Reference (optional)",
+            value=str(defaults.get("reference", "")),
+            key=f"mixed_reference_{scope}",
+        )
         source_tag_ids = _copyable_tag_ids(tags, defaults.get("tag_ids", ())) if copy_mode else defaults.get("tag_ids", ())
         tag_ids, new_tag_name = render_tag_selector(
             tags,
@@ -685,9 +692,11 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             selected_ids=source_tag_ids,
             preserve_inactive_ids=defaults.get("tag_ids", ()) if source else (),
         )
-        c1, c2 = st.columns(2)
-        total_expense = c1.text_input("Total Expense", value=str(defaults.get("total_expense", "0.00") or "0.00"), key=f"mixed_total_{scope}", help="Enter a positive currency amount.")
-        business_use_percentage = c2.text_input("Business Use %", value=str(defaults.get("business_use_percentage", "0") or "0"), key=f"mixed_percentage_{scope}", help="Greater than 0 and no more than 100; up to five decimal places.")
+        description = st.text_input(
+            "Description / memo",
+            value=str(defaults.get("description", "")),
+            key=f"mixed_description_{scope}",
+        )
         rationale = st.text_area("Allocation Rationale (required)", value=str(defaults.get("allocation_rationale", "")), key=f"mixed_rationale_{scope}")
         recurring = False
         recurrence_unit = recurrence_interval = recurrence_name = recurrence_end = None
@@ -706,17 +715,14 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                 "receipts from its editor."
             )
         else:
-            receipt_uploads = st.file_uploader(
-                "Receipt (optional)",
-                type=RECEIPT_UPLOAD_TYPES,
-                accept_multiple_files=True,
+            receipt_uploads = render_receipt_uploader(
                 key=f"mixed_receipts_{scope}",
                 disabled=bool(
                     isinstance(recovery, Mapping)
                     and not recovery_source
                     or mixed_use_receipt_recovery
                 ),
-                help=(
+                help_text=(
                     "Resolve the pending receipt recovery in the transaction editor "
                     "before uploading receipts here."
                     if mixed_use_receipt_recovery
@@ -1005,7 +1011,15 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             if copy_mode
             else description
         )
-        _render_preview(mixed_use_preview(txn_date=txn_date, account=account_paths.get(account_id, account_id), payee=payee_by_id.get(payee_id, new_payee_name), category=category_paths.get(category_id, category_id), description=preview_description, total_expense=total_expense, business_use_percentage=business_use_percentage, allocation_rationale=rationale))
+        payee_name = next(
+            (
+                str(item.get("name") or "")
+                for item in payees
+                if str(item.get("id") or "") == payee_id
+            ),
+            new_payee_name,
+        )
+        _render_preview(mixed_use_preview(txn_date=txn_date, account=account_paths.get(account_id, account_id), payee=payee_name, category=category_paths.get(category_id, category_id), description=preview_description, total_expense=total_expense, business_use_percentage=business_use_percentage, allocation_rationale=rationale))
     if source:
         linked_transactions = context.storage.list_transactions()
         linked = next(
