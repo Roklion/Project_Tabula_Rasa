@@ -91,7 +91,7 @@ def render_mileage_fields(
     purpose_default = str(defaults.get("business_purpose") or "")
     notes_default = str(defaults.get("notes") or "")
     miles_default = float(defaults.get("miles") or 0.0)
-    default_tag_ids = defaults.get("tag_ids", ())
+    default_tag_ids = defaults.get("tag_ids") or ()
 
     def key(name: str) -> str:
         return mileage_widget_key(prefix, name, key_scope)
@@ -193,15 +193,6 @@ def render_mileage_fields(
             and _autocomplete_available(start_key, destination_key)
         ),
     )
-    calculate_requested = st.button(
-        "Recalculate mileage" if route_state else "Calculate mileage",
-        disabled=not route_ready,
-        help=disabled_reason if not route_ready else None,
-        key=key("calculate"),
-    )
-    if not route_ready and context.route_mileage is not None:
-        st.caption(disabled_reason)
-
     if allow_round_trip:
         round_trip = st.checkbox(
             "Round trip",
@@ -233,6 +224,14 @@ def render_mileage_fields(
         existing_value=destination_text,
         always_render=bool(context.maps_api_key),
     )
+    calculate_requested = st.button(
+        "Recalculate mileage" if route_state else "Calculate mileage",
+        disabled=not route_ready,
+        help=disabled_reason if not route_ready else None,
+        key=key("calculate"),
+    )
+    if not route_ready and context.route_mileage is not None:
+        st.caption(disabled_reason)
     recorded_changed = (
         bool(
             route_state

@@ -109,7 +109,7 @@ def render_transaction_fields(
     to_account_id = str(defaults.get("to_account_id") or "")
     category_id = str(defaults.get("category_id") or "")
     payee_id = str(defaults.get("payee_id") or "")
-    tag_ids = defaults.get("tag_ids", ())
+    tag_ids = defaults.get("tag_ids") or ()
 
     transaction_date = st.date_input("Date", transaction_date, key=field_key("date"))
     category_widget_key = field_key("category")
