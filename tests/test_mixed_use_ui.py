@@ -6,6 +6,7 @@ from tabula_rasa.page_renderers.transactions.mixed_use import (
     _MixedUseReceiptStorage,
     _clear_mixed_use_copy,
     _editable_mixed_use_account_ids,
+    _editable_mixed_use_category_ids,
     _fresh_mixed_use_copy_source,
     _copyable_tag_ids,
     _editable_account_ids,
@@ -344,10 +345,20 @@ def test_mixed_use_edit_keeps_inactive_account_in_hierarchy_order() -> None:
     ]
 
     assert _editable_mixed_use_account_ids(ordered_accounts, "inactive-asset") == [
-        "inactive-asset",
-        "active-liability",
-        "active-equity",
+        "inactive-asset", "active-liability", "active-equity"
     ]
+
+
+def test_mixed_use_edit_keeps_inactive_category_in_hierarchy_order() -> None:
+    ordered_categories = [
+        {"id": "inactive-category", "kind": "Expense", "active": False},
+        {"id": "active-category", "kind": "Expense", "active": True},
+        {"id": "income-category", "kind": "Income", "active": True},
+    ]
+
+    assert _editable_mixed_use_category_ids(
+        ordered_categories, "inactive-category"
+    ) == ["inactive-category", "active-category"]
 
 
 def test_mixed_use_copy_rejects_missing_projection(default_storage) -> None:
