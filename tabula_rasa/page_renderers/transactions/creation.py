@@ -20,6 +20,9 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     render_receipt_creation_recovery,
     render_receipt_uploader,
 )
+from tabula_rasa.page_renderers.transactions.recurrence_controls import (
+    render_recurrence_controls,
+)
 from tabula_rasa.page_renderers.tag_selector import (
     inline_tag_name_error,
     tag_selector_error,
@@ -126,36 +129,17 @@ def render_add_transaction(
             tags=tags,
             key_prefix="add_transaction",
         )
-        recurring = False
-        recurrence_unit = recurrence_interval = recurrence_name = recurrence_end = None
+        recurrence = None
         if kind == "Expense":
-            recurring = st.checkbox(
-                "Repeat this Expense",
-                key="add_transaction_recurring",
-                help="Create a profile-local schedule and this transaction as its initial occurrence.",
+            recurrence = render_recurrence_controls(
+                label="Repeat this Expense",
+                key_prefix="add_transaction",
+                help_text=(
+                    "Create a profile-local schedule and this transaction "
+                    "as its initial occurrence."
+                ),
             )
-            if recurring:
-                r1, r2 = st.columns(2)
-                recurrence_unit = r1.selectbox(
-                    "Repeat every",
-                    ["day", "week", "month", "year"],
-                    key="add_transaction_recurrence_unit",
-                )
-                recurrence_interval = r2.number_input(
-                    "Interval",
-                    min_value=1,
-                    value=1,
-                    step=1,
-                    key="add_transaction_recurrence_interval",
-                )
-                recurrence_name = st.text_input(
-                    "Schedule name", key="add_transaction_recurrence_name"
-                )
-                recurrence_end = st.date_input(
-                    "End date (optional)",
-                    value=None,
-                    key="add_transaction_recurrence_end",
-                )
+        recurring = bool(recurrence and recurrence.enabled)
         pending_schedule_key = f"recurring_pending_schedule_id_{context.profile_key}"
         pending_transaction_key = (
             f"recurring_pending_transaction_id_{context.profile_key}"
@@ -248,18 +232,14 @@ def render_add_transaction(
                                     ),
                                 )
                             )
-                            payload.update(
-                                {
-                                    "schedule_id": pending_schedule_id,
-                                    "transaction_id": pending_transaction_id,
-                                    "name": recurrence_name
-                                    or draft["description"]
-                                    or "Recurring expense",
-                                    "recurrence_unit": recurrence_unit,
-                                    "recurrence_interval": recurrence_interval,
-                                    "end_date": recurrence_end,
-                                }
-                            )
+                            payload.update({
+                                "schedule_id": pending_schedule_id,
+                                "transaction_id": pending_transaction_id,
+                                **recurrence.schedule_fields(
+                                    description=draft["description"],
+                                    fallback_name="Recurring expense",
+                                ),
+                            })
                             previous_payload = st.session_state.get(pending_payload_key)
                             if isinstance(previous_payload, Mapping):
                                 payload = {

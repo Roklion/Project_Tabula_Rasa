@@ -568,6 +568,41 @@ def test_mixed_use_app_test_recurring_create_creates_source_projection_pair(defa
     assert projections[0]["recurring_schedule_id"] == schedules[0]["id"]
 
 
+def test_mixed_use_edit_can_create_schedule_from_existing_source(default_storage) -> None:
+    account = next(item for item in default_storage.list_accounts() if item["active"])
+    category = next(
+        item for item in default_storage.list_categories()
+        if item["kind"] == "Expense"
+    )
+    source = default_storage.create_mixed_use_expense(
+        txn_date="2026-09-03", total_expense="100",
+        business_use_percentage="25", account_id=account["id"],
+        category_id=category["id"], allocation_rationale="Measured use",
+    )
+
+    with authenticated_app(default_storage) as app:
+        navigate_to(app, "Transactions")
+        app.session_state["mixed_use_selected_source_id_test"] = source["id"]
+        app.run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "checkbox", "Repeat this mixed-use Expense").set_value(True).run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "text_input", "Schedule name").set_value("Monthly workspace").run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "text_input", "Total Expense").set_value("120").run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "button", "Save changes").click().run()
+
+    schedules = default_storage.list_recurring_schedules()
+    sources = default_storage.list_mixed_use_expenses()
+    projections = default_storage.list_transactions()
+    assert len(schedules) == len(sources) == len(projections) == 1
+    assert sources[0]["id"] == source["id"]
+    assert sources[0]["total_expense"] == "120.00"
+    assert sources[0]["recurring_schedule_id"] == schedules[0]["id"]
+    assert projections[0]["recurring_schedule_id"] == schedules[0]["id"]
+
+
 def test_mixed_use_table_target_switch_and_delete_are_source_scoped(default_storage) -> None:
     account = next(item for item in default_storage.list_accounts() if item["active"])
     category = next(

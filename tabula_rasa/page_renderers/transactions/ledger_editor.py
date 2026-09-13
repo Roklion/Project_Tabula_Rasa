@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from collections.abc import Sequence
+from uuid import uuid4
 import streamlit as st
 from tabula_rasa.ledger_presentation import money
 from tabula_rasa.google_drive import GoogleDriveAccessError
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
+from tabula_rasa.page_renderers.transactions.recurrence_controls import (
+    render_recurrence_controls,
+)
 from tabula_rasa.page_renderers.tag_selector import inline_tag_name_error
 from tabula_rasa.page_renderers.tag_selector import schedule_tag_selector_reset
 from tabula_rasa.page_renderers.tag_selector import tag_selector_error
@@ -148,6 +152,21 @@ def render_transaction_editor(
                 key_prefix="edit_transaction",
                 key_scope=edit_widget_scope,
             )
+            recurrence = None
+            if (
+                not copy_mode
+                and selected["kind"] == "Expense"
+                and not selected.get("recurring_schedule_id")
+            ):
+                recurrence = render_recurrence_controls(
+                    label="Repeat this Expense",
+                    key_prefix=f"edit_transaction_{edit_widget_scope}",
+                    help_text=(
+                        "Create a profile-local schedule and use this existing "
+                        "transaction as its initial occurrence."
+                    ),
+                )
+            make_recurring = bool(recurrence and recurrence.enabled)
             receipt_uploads = None
             receipt_folder = None
             edit_error = st.empty()
@@ -330,28 +349,70 @@ def render_transaction_editor(
                             )
                     if not receipt_preparation_failed:
                         edit_payload = dict(payload)
+                        pending_schedule_key = (
+                            "recurring_edit_pending_schedule_id_"
+                            f"{context.profile_key}_{edit_id}"
+                        )
+                        if make_recurring:
+                            schedule_id = str(
+                                st.session_state.get(pending_schedule_key)
+                                or uuid4()
+                            )
+                            st.session_state[pending_schedule_key] = schedule_id
+                            edit_payload.update(
+                                {
+                                    "schedule_id": schedule_id,
+                                    **recurrence.schedule_fields(
+                                        description=draft["description"],
+                                        fallback_name="Recurring expense",
+                                    ),
+                                }
+                            )
                         if prepared_receipts:
                             edit_payload["receipt_upload_keys"] = [
                                 receipt["key"] for receipt in prepared_receipts
                             ]
                         context.confirmed_write(
-                            "edit_transaction",
-                            edit_payload,
-                            lambda: context.storage.edit_transaction(
-                                edit_id,
-                                txn_date=draft["txn_date"],
-                                amount=draft["amount"],
-                                account_id=draft["account_id"],
-                                to_account_id=draft["to_account_id"],
-                                category_id=draft["category_id"],
-                                payee_id=draft["payee_id"],
-                                new_payee_name=draft["new_payee_name"],
-                                tag_ids=draft["tag_ids"],
-                                new_tag_name=draft["new_tag_name"] or "",
-                                reference=draft["reference"],
-                                description=draft["description"],
+                            (
+                                "make_transaction_recurring"
+                                if make_recurring
+                                else "edit_transaction"
                             ),
-                            "Transaction updated.",
+                            edit_payload,
+                            lambda: (
+                                context.storage.create_recurring_expense_from_transaction(
+                                    edit_id,
+                                    expected_transaction=selected,
+                                    **transaction_data,
+                                    **recurrence.schedule_fields(
+                                        description=draft["description"],
+                                        fallback_name="Recurring expense",
+                                    ),
+                                    schedule_id=st.session_state[
+                                        pending_schedule_key
+                                    ],
+                                )["transaction"]
+                                if make_recurring
+                                else context.storage.edit_transaction(
+                                    edit_id,
+                                    txn_date=draft["txn_date"],
+                                    amount=draft["amount"],
+                                    account_id=draft["account_id"],
+                                    to_account_id=draft["to_account_id"],
+                                    category_id=draft["category_id"],
+                                    payee_id=draft["payee_id"],
+                                    new_payee_name=draft["new_payee_name"],
+                                    tag_ids=draft["tag_ids"],
+                                    new_tag_name=draft["new_tag_name"] or "",
+                                    reference=draft["reference"],
+                                    description=draft["description"],
+                                )
+                            ),
+                            (
+                                "Transaction updated and recurring schedule created."
+                                if make_recurring
+                                else "Transaction updated."
+                            ),
                             on_confirmed=(
                                 lambda _result: (
                                     process_editor_receipt_uploads(
@@ -364,8 +425,11 @@ def render_transaction_editor(
                                     else None
                                 )
                             ),
-                            on_success=lambda: schedule_tag_selector_reset(
-                                f"edit_transaction_tags_{edit_widget_scope}"
+                            on_success=lambda: (
+                                st.session_state.pop(pending_schedule_key, None),
+                                schedule_tag_selector_reset(
+                                    f"edit_transaction_tags_{edit_widget_scope}"
+                                ),
                             ),
                             report_error=edit_error.error,
                         )

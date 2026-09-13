@@ -14,6 +14,9 @@ from tabula_rasa.page_renderers.tag_selector import (
 from tabula_rasa.page_renderers.transactions.payee_selector import (
     render_payee_selector,
 )
+from tabula_rasa.page_renderers.transactions.recurrence_controls import (
+    render_recurrence_controls,
+)
 from tabula_rasa.page_renderers.transactions.transaction_copy import (
     _copyable_tag_ids,
     _editable_account_ids,
@@ -699,16 +702,22 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             key=f"mixed_description_{scope}",
         )
         rationale = st.text_area("Allocation Rationale (required)", value=str(defaults.get("allocation_rationale", "")), key=f"mixed_rationale_{scope}")
-        recurring = False
-        recurrence_unit = recurrence_interval = recurrence_name = recurrence_end = None
-        if not source and not copy_mode:
-            recurring = st.checkbox("Repeat this mixed-use Expense", key=f"mixed_recurring_{scope}")
-            if recurring:
-                r1, r2 = st.columns(2)
-                recurrence_unit = r1.selectbox("Repeat every", ["day", "week", "month", "year"], key=f"mixed_recurrence_unit_{scope}")
-                recurrence_interval = r2.number_input("Interval", min_value=1, value=1, step=1, key=f"mixed_recurrence_interval_{scope}")
-                recurrence_name = st.text_input("Schedule name", key=f"mixed_recurrence_name_{scope}")
-                recurrence_end = st.date_input("End date (optional)", value=None, key=f"mixed_recurrence_end_{scope}")
+        recurrence = None
+        if (
+            not copy_mode
+            and not source_incomplete
+            and (not source or not source.get("recurring_schedule_id"))
+        ):
+            recurrence = render_recurrence_controls(
+                label="Repeat this mixed-use Expense",
+                key_prefix="mixed",
+                key_suffix=scope,
+                help_text=(
+                    "Create a profile-local schedule and use this mixed-use "
+                    "expense as its initial occurrence."
+                ),
+            )
+        recurring = bool(recurrence and recurrence.enabled)
         if copy_mode:
             receipt_uploads = None
             st.info(
@@ -879,13 +888,76 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                         _key(profile, "pending_configuration_revision"), None
                     )
 
-                if source and not source_incomplete:
-                    payload["expected_source"] = expected_source
-                    def operation():
-                        return context.storage.edit_mixed_use_expense(
-                            source["id"], **payload
+                edit_pending_schedule_key = (
+                    f"mixed_use_edit_pending_schedule_id_{profile}_{source['id']}"
+                    if source and not source_incomplete
+                    else ""
+                )
+                if recurring:
+                    if source and not source_incomplete:
+                        pending_schedule_id = str(
+                            st.session_state.get(edit_pending_schedule_key)
+                            or uuid4()
                         )
-                    action, success = "edit_mixed_use_expense", "Mixed-use expense updated."
+                        st.session_state[edit_pending_schedule_key] = (
+                            pending_schedule_id
+                        )
+                    else:
+                        pending_schedule_id = _pending_recurring_schedule_id(
+                            st.session_state,
+                            profile,
+                            str(
+                                context.profile_secrets.get("spreadsheet_id")
+                                or context.configuration_revision
+                            ),
+                        )
+                    payload.update(
+                        {
+                            "schedule_id": pending_schedule_id,
+                            **recurrence.schedule_fields(
+                                description=description,
+                                fallback_name="Recurring mixed-use expense",
+                            ),
+                        }
+                    )
+                    if not source:
+                        previous_payload = st.session_state.get(
+                            pending_payload_key
+                        )
+                        if isinstance(previous_payload, Mapping):
+                            payload = {
+                                **previous_payload,
+                                "schedule_id": pending_schedule_id,
+                            }
+                        else:
+                            st.session_state[pending_payload_key] = dict(payload)
+
+                if source and not source_incomplete:
+                    def operation():
+                        return (
+                            context.storage.create_recurring_expense_from_mixed_use(
+                                source["id"],
+                                expected_source=expected_source,
+                                **payload,
+                            )["source"]
+                            if recurring
+                            else context.storage.edit_mixed_use_expense(
+                                source["id"],
+                                expected_source=expected_source,
+                                **payload,
+                            )
+                        )
+                    action, success = (
+                        (
+                            "make_mixed_use_expense_recurring",
+                            "Mixed-use expense updated and recurring schedule created.",
+                        )
+                        if recurring
+                        else (
+                            "edit_mixed_use_expense",
+                            "Mixed-use expense updated.",
+                        )
+                    )
                 else:
                     payload["source_id"] = (
                         str(source["id"])
@@ -948,6 +1020,8 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                         st.session_state.pop(pending_transaction_key, None)
                     if recurring_create:
                         clear_pending_recurring_state()
+                    if edit_pending_schedule_key:
+                        st.session_state.pop(edit_pending_schedule_key, None)
                     if copy_mode:
                         _clear_mixed_use_copy(st.session_state, profile)
                         _clear_mixed_use_selection(st.session_state, profile)
@@ -976,30 +1050,6 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                     )
 
                 if prepared_receipts is not None:
-                    if recurring:
-                        pending_schedule_id = _pending_recurring_schedule_id(
-                            st.session_state,
-                            profile,
-                            str(
-                                context.profile_secrets.get("spreadsheet_id")
-                                or context.configuration_revision
-                            ),
-                        )
-                        payload.update({
-                            "schedule_id": pending_schedule_id,
-                            "name": recurrence_name or description or "Recurring mixed-use expense",
-                            "recurrence_unit": recurrence_unit,
-                            "recurrence_interval": recurrence_interval,
-                            "end_date": recurrence_end,
-                        })
-                        previous_payload = st.session_state.get(pending_payload_key)
-                        if isinstance(previous_payload, Mapping):
-                            payload = {
-                                **previous_payload,
-                                "schedule_id": pending_schedule_id,
-                            }
-                        else:
-                            st.session_state[pending_payload_key] = dict(payload)
                     context.confirmed_write(action, payload, operation, success, on_success=reset_after_success, on_confirmed=process_mixed_receipts, report_error=save_error.error)
         if cancel_copy_requested:
             _clear_mixed_use_copy(st.session_state, profile)

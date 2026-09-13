@@ -79,6 +79,36 @@ def test_add_expense_recurring_flow_creates_initial_occurrence_and_schedule() ->
     assert transactions[0]["receipt_references"] == "[]"
 
 
+def test_edit_expense_can_create_schedule_from_existing_transaction() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    account = storage.create_account("Checking", "Bank")
+    category = storage.create_category("Office", "Expense")
+    transaction = storage.create_transaction(
+        txn_date="2026-09-01", kind="Expense", amount="20",
+        account_id=account["id"], category_id=category["id"],
+        description="Office supplies",
+    )
+
+    with authenticated_app(storage) as app:
+        navigate_to(app, "Transactions")
+        editor = next(item for item in app.expander if item.label == "Edit transaction")
+        by_label(editor.checkbox, "Repeat this Expense").set_value(True).run()
+        editor = next(item for item in app.expander if item.label == "Edit transaction")
+        by_label(editor.text_input, "Schedule name").set_value("Monthly supplies").run()
+        editor = next(item for item in app.expander if item.label == "Edit transaction")
+        by_label(editor.number_input, "Amount").set_value(25).run()
+        editor = next(item for item in app.expander if item.label == "Edit transaction")
+        by_label(editor.button, "Save changes").click().run()
+
+    schedules = storage.list_recurring_schedules()
+    transactions = storage.list_transactions()
+    assert len(schedules) == len(transactions) == 1
+    assert transactions[0]["id"] == transaction["id"]
+    assert transactions[0]["amount"] == "25.00"
+    assert transactions[0]["recurring_schedule_id"] == schedules[0]["id"]
+    assert schedules[0]["name"] == "Monthly supplies"
+
+
 def test_invalid_recurring_submission_does_not_leave_pending_retry_state() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     storage.create_account("Checking", "Bank")

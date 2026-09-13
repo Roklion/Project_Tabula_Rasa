@@ -3,16 +3,187 @@ import json
 
 import pytest
 
+from tabula_rasa.storage import GoogleSheetsStorage
 from tabula_rasa.storage.google_sheets import (
     StorageConflictError,
     StorageUnavailableError,
     StorageValidationError,
 )
+from tests.fakes import FakeWorkbook
 from tests.storage.google_sheets._support import backup_receipt_manifest, rewrite_backup_tables
 
 
 def _ids(storage):
     return storage.list_accounts()[0]["id"], storage.list_categories(kind="Expense")[0]["id"]
+
+
+def test_existing_expense_can_become_recurring_without_creating_a_second_row(
+    default_storage,
+) -> None:
+    account_id, category_id = _ids(default_storage)
+    transaction = default_storage.create_transaction(
+        txn_date="2024-01-15", kind="Expense", amount="20",
+        account_id=account_id, category_id=category_id, description="Original",
+    )
+
+    result = default_storage.create_recurring_expense_from_transaction(
+        transaction["id"], expected_transaction=transaction,
+        schedule_id="existing-expense-schedule", name="Updated monthly expense",
+        recurrence_unit="month", recurrence_interval=1, txn_date="2024-01-20",
+        amount="25", account_id=account_id, category_id=category_id,
+        description="Updated",
+    )
+
+    transactions = default_storage.list_transactions()
+    assert len(transactions) == 1
+    assert result["transaction"]["id"] == transaction["id"]
+    assert transactions[0]["amount"] == "25.00"
+    assert transactions[0]["recurring_schedule_id"] == result["schedule"]["id"]
+    assert transactions[0]["recurring_scheduled_date"] == "2024-01-20"
+    assert result["schedule"]["description"] == "Updated"
+
+
+def test_existing_mixed_use_expense_can_become_recurring_with_pair_parity(
+    default_storage,
+) -> None:
+    account_id, category_id = _ids(default_storage)
+    source = default_storage.create_mixed_use_expense(
+        txn_date="2024-01-15", total_expense="100",
+        business_use_percentage="25", account_id=account_id,
+        category_id=category_id, allocation_rationale="Measured use",
+    )
+
+    result = default_storage.create_recurring_expense_from_mixed_use(
+        source["id"], expected_source=source,
+        schedule_id="existing-mixed-schedule", name="Monthly mixed use",
+        recurrence_unit="month", recurrence_interval=1, txn_date="2024-01-20",
+        total_expense="120", business_use_percentage="50",
+        account_id=account_id, category_id=category_id,
+        allocation_rationale="Updated measured use",
+    )
+
+    updated_source = default_storage.get_mixed_use_expense(source["id"])
+    projection = next(
+        item for item in default_storage.list_transactions()
+        if item["id"] == updated_source["linked_transaction_id"]
+    )
+    assert len(default_storage.list_mixed_use_expenses()) == 1
+    assert len(default_storage.list_transactions()) == 1
+    assert updated_source["allocated_amount"] == "60.00"
+    assert updated_source["recurring_schedule_id"] == result["schedule"]["id"]
+    assert projection["recurring_schedule_id"] == result["schedule"]["id"]
+    assert projection["recurring_scheduled_date"] == "2024-01-20"
+
+
+def test_existing_expense_recurring_retry_reuses_the_pending_schedule(
+    default_storage, monkeypatch,
+) -> None:
+    account_id, category_id = _ids(default_storage)
+    transaction = default_storage.create_transaction(
+        txn_date="2024-01-15", kind="Expense", amount="20",
+        account_id=account_id, category_id=category_id,
+    )
+    original_replace = default_storage._replace_row
+    monkeypatch.setattr(
+        default_storage,
+        "_replace_row",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            StorageUnavailableError("transaction update failed")
+        ),
+    )
+    payload = {
+        "schedule_id": "existing-retry", "name": "Retry",
+        "recurrence_unit": "month", "txn_date": "2024-01-15",
+        "amount": "20", "account_id": account_id, "category_id": category_id,
+    }
+
+    with pytest.raises(StorageUnavailableError, match="transaction update"):
+        default_storage.create_recurring_expense_from_transaction(
+            transaction["id"], expected_transaction=transaction, **payload,
+        )
+
+    monkeypatch.setattr(default_storage, "_replace_row", original_replace)
+    result = default_storage.create_recurring_expense_from_transaction(
+        transaction["id"], expected_transaction=transaction, **payload,
+    )
+    assert result["transaction"]["recurring_schedule_id"] == "existing-retry"
+    assert len(default_storage.list_recurring_schedules()) == 1
+
+
+def test_existing_expense_recurring_conversion_rejects_a_stale_baseline(
+    default_storage,
+) -> None:
+    account_id, category_id = _ids(default_storage)
+    transaction = default_storage.create_transaction(
+        txn_date="2024-01-15", kind="Expense", amount="20",
+        account_id=account_id, category_id=category_id,
+    )
+    default_storage.edit_transaction(transaction["id"], amount="30")
+
+    with pytest.raises(StorageConflictError, match="changed"):
+        default_storage.create_recurring_expense_from_transaction(
+            transaction["id"], expected_transaction=transaction,
+            schedule_id="stale-existing", name="Stale",
+            recurrence_unit="month", txn_date="2024-01-15", amount="20",
+            account_id=account_id, category_id=category_id,
+        )
+
+    assert default_storage.list_recurring_schedules() == []
+
+
+def test_existing_mixed_use_recurring_conversion_rejects_a_stale_baseline(
+    default_storage,
+) -> None:
+    account_id, category_id = _ids(default_storage)
+    source = default_storage.create_mixed_use_expense(
+        txn_date="2024-01-15", total_expense="100",
+        business_use_percentage="25", account_id=account_id,
+        category_id=category_id, allocation_rationale="Measured use",
+    )
+    default_storage.edit_mixed_use_expense(
+        source["id"], total_expense="120", expected_source=source,
+    )
+
+    with pytest.raises(StorageConflictError, match="changed"):
+        default_storage.create_recurring_expense_from_mixed_use(
+            source["id"], expected_source=source,
+            schedule_id="stale-mixed", name="Stale mixed",
+            recurrence_unit="month", txn_date="2024-01-15",
+            total_expense="100", business_use_percentage="25",
+            account_id=account_id, category_id=category_id,
+            allocation_rationale="Measured use",
+        )
+
+    assert default_storage.list_recurring_schedules() == []
+
+
+def test_existing_expense_recurring_conversion_is_profile_isolated() -> None:
+    north = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    south = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    for storage in (north, south):
+        storage.ensure_defaults()
+    north_account, north_category = _ids(north)
+    south_account, south_category = _ids(south)
+    north_transaction = north.create_transaction(
+        txn_date="2024-01-15", kind="Expense", amount="20",
+        account_id=north_account, category_id=north_category,
+    )
+    south_transaction = south.create_transaction(
+        txn_date="2024-01-15", kind="Expense", amount="20",
+        account_id=south_account, category_id=south_category,
+    )
+
+    north.create_recurring_expense_from_transaction(
+        north_transaction["id"], expected_transaction=north_transaction,
+        schedule_id="north-only", name="North only", recurrence_unit="month",
+        txn_date="2024-01-15", amount="20", account_id=north_account,
+        category_id=north_category,
+    )
+
+    assert [item["id"] for item in north.list_recurring_schedules()] == ["north-only"]
+    assert south.list_recurring_schedules() == []
+    assert not south.list_transactions()[0]["recurring_schedule_id"]
+    assert south.list_transactions()[0]["id"] == south_transaction["id"]
 
 
 def test_recurring_create_reconcile_is_idempotent(default_storage) -> None:
