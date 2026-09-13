@@ -132,7 +132,7 @@ def render_transaction_fields(
         )
         if resolved_category not in category_ids:
             st.session_state.pop(category_widget_key, None)
-        else:
+        elif st.session_state[category_widget_key] != resolved_category:
             st.session_state[category_widget_key] = resolved_category
     if kind != "Transfer":
         c1, c2 = st.columns(2)
@@ -200,7 +200,7 @@ def render_transaction_fields(
             if resolved_to_account not in to_account_ids:
                 st.session_state.pop(to_account_widget_key, None)
                 invalid_selected_to_account = True
-            else:
+            elif st.session_state[to_account_widget_key] != resolved_to_account:
                 st.session_state[to_account_widget_key] = resolved_to_account
         invalid_default_to_account = bool(to_account_id) and (
             to_account_id not in to_account_ids
