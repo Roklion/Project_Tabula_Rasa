@@ -314,6 +314,10 @@ class AssetsMixin:
             if full_schedule[sequence - 1].scheduled_date > as_of_date:
                 raise StorageValidationError("Only due or past quarters can be overridden")
             overrides = _decode_overrides(normalized["schedule_overrides"])
+            if overrides and sequence < max(overrides):
+                raise StorageConflictError(
+                    "Earlier quarters are locked by the latest historical override"
+                )
             overrides[sequence] = {
                 "amount": _currency(amount, "Override amount"),
                 "reason": _clean_text(reason, "Override reason", required=True),
@@ -359,8 +363,26 @@ class AssetsMixin:
         with self._workbook_locks.ledger:
             current = self._find_row("Assets", asset_id)
             self._assert_expected_asset(current.values, expected_asset)
+            normalized_current = self._prepare_asset(
+                current.values,
+                asset_id=_clean_text(current.values.get("id"), "Asset ID", required=True),
+                created_at=_clean_text(
+                    current.values.get("created_at"),
+                    "Asset created time",
+                    required=True,
+                ),
+            )
             merged = dict(current.values)
             merged.update(changes)
+            updated = self._prepare_asset(
+                merged,
+                asset_id=_clean_text(current.values.get("id"), "Asset ID", required=True),
+                created_at=_clean_text(
+                    current.values.get("created_at"),
+                    "Asset created time",
+                    required=True,
+                ),
+            )
             if _decode_overrides(current.values.get("schedule_overrides", "")):
                 locked_fields = {
                     "cost_basis",
@@ -371,21 +393,12 @@ class AssetsMixin:
                 }
                 if any(
                     field in changes
-                    and str(changes[field]) != str(current.values.get(field, ""))
+                    and updated[field] != normalized_current[field]
                     for field in locked_fields
                 ):
                     raise StorageConflictError(
                         "Schedule terms are locked after a historical override is saved"
                     )
-            updated = self._prepare_asset(
-                merged,
-                asset_id=_clean_text(current.values.get("id"), "Asset ID", required=True),
-                created_at=_clean_text(
-                    current.values.get("created_at"),
-                    "Asset created time",
-                    required=True,
-                ),
-            )
             self._validate_asset_references(
                 updated,
                 allowed_missing_source_id=_clean_text(
@@ -413,6 +426,10 @@ class AssetsMixin:
                 raise StorageValidationError("Override period is invalid") from None
             if sequence not in overrides:
                 raise StorageNotFoundError("That asset period has no override")
+            if sequence < max(overrides):
+                raise StorageConflictError(
+                    "Earlier quarters are locked by the latest historical override"
+                )
             del overrides[sequence]
             merged = dict(current.values)
             merged["schedule_overrides"] = _normalize_overrides(overrides)

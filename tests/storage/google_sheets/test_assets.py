@@ -11,6 +11,7 @@ from ._support import (
     StorageValidationError,
     backup_receipt_manifest,
     pytest,
+    rewrite_backup_tables,
 )
 
 
@@ -133,12 +134,44 @@ class TestAssetStorage(GoogleSheetsStorageTestCase):
 
         with pytest.raises(StorageConflictError, match="locked"):
             self.storage.edit_asset(asset["id"], cost_basis="1400")
+        unchanged_terms = self.storage.edit_asset(
+            asset["id"], cost_basis=1200.0, notes="Terms remain unchanged"
+        )
+        assert unchanged_terms["notes"] == "Terms remain unchanged"
 
         restored = self.storage.remove_asset_period_override(asset["id"], 2)
         assert restored["schedule_overrides"] == "{}"
         assert self.storage.edit_asset(asset["id"], cost_basis="1400")[
             "cost_basis"
         ] == "1400.00"
+
+    def test_later_override_locks_earlier_override_history(self) -> None:
+        asset = self.storage.create_asset(**_asset_data(useful_life_quarters=4))
+        self.storage.override_asset_period(
+            asset["id"],
+            1,
+            "20.00",
+            "Opening history",
+            as_of_date=date(2026, 1, 1),
+        )
+        self.storage.override_asset_period(
+            asset["id"],
+            3,
+            "30.00",
+            "Later history",
+            as_of_date=date(2026, 1, 1),
+        )
+
+        with pytest.raises(StorageConflictError, match="Earlier quarters"):
+            self.storage.override_asset_period(
+                asset["id"],
+                1,
+                "25.00",
+                "Rewrite old history",
+                as_of_date=date(2026, 1, 1),
+            )
+        with pytest.raises(StorageConflictError, match="Earlier quarters"):
+            self.storage.remove_asset_period_override(asset["id"], 1)
 
     def test_override_rejects_future_period_and_stale_snapshot(self) -> None:
         asset = self.storage.create_asset(
@@ -232,4 +265,21 @@ class TestAssetStorage(GoogleSheetsStorageTestCase):
         assert json.loads(restored_asset["schedule_overrides"])["1"]["amount"] == (
             "40.00"
         )
+
+    def test_backup_rejects_retirement_before_acquisition(self) -> None:
+        self.storage.create_asset(**_asset_data())
+        backup = self.storage.export_backup_zip(
+            backup_receipt_manifest(self.storage)
+        )
+
+        def move_retirement_before_acquisition(rows: list[list[str]]) -> None:
+            rows[1][rows[0].index("status")] = "retired"
+            rows[1][rows[0].index("retired_date")] = "2024-12-31"
+
+        invalid = rewrite_backup_tables(
+            backup, {"Assets": move_retirement_before_acquisition}
+        )
+
+        with pytest.raises(StorageValidationError, match="invalid asset dates"):
+            self.storage.validate_backup_zip(invalid)
     backup_receipt_manifest,

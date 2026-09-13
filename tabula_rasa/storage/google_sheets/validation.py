@@ -738,6 +738,8 @@ def _parse_backup_zip(
         retired = date.fromisoformat(_iso_date(retired_text)) if retired_text else None
         if (asset.get("status") == "retired") != bool(retired):
             raise StorageValidationError("Backup contains inconsistent asset retirement state")
+        if retired is not None and retired < date.fromisoformat(acquisition_date):
+            raise StorageValidationError("Backup contains invalid asset dates")
         payee_id = _clean_text(asset.get("payee_id"), "Payee")
         if payee_id and payee_id not in payee_ids:
             raise StorageValidationError("Backup contains an unknown asset payee")
