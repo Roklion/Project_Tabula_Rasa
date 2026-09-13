@@ -52,8 +52,12 @@ def mileage_widget_key(prefix: str, name: str, scope: str = "") -> str:
 
 def validate_mileage_draft(draft: Mapping[str, object]) -> str | None:
     """Return validation shared by the Add and Edit mileage controllers."""
+    start_selection = draft.get("start_selection")
+    destination_selection = draft.get("destination_selection")
+    if start_selection is None or destination_selection is None:
+        return "Starting location and destination must be selected."
     if _same_selected_place(
-        draft["start_selection"], draft["destination_selection"]
+        start_selection, destination_selection
     ):
         return "Starting location and destination must be different."
     return None

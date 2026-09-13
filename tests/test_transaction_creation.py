@@ -39,7 +39,7 @@ def test_recurring_control_is_expense_only() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     storage.create_account("Checking", "Bank")
     storage.create_category("Services", "Income")
-    storage.create_category("Office", "Expense")
+    expense_category = storage.create_category("Office", "Expense")
 
     with authenticated_app(storage) as app:
         navigate_to(app, "Transactions")
@@ -50,6 +50,10 @@ def test_recurring_control_is_expense_only() -> None:
 
         by_label(app.segmented_control, "Transaction type").set_value("Transfer").run()
         assert not any(item.label == "Repeat this Expense" for item in app.checkbox)
+
+        app.session_state["add_transaction_category"] = "Office"
+        by_label(app.segmented_control, "Transaction type").set_value("Expense").run()
+        assert by_label(app.selectbox, "Category").value == expense_category["id"]
 
 
 def test_add_expense_recurring_flow_creates_initial_occurrence_and_schedule() -> None:

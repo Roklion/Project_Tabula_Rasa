@@ -54,19 +54,6 @@ def render_transaction_editor(
     selected_rows: Sequence[int],
     all_transactions: Sequence[Mapping[str, object]],
 ) -> bool:
-    prior_category_state = {
-        key: st.session_state[key]
-        for key in st.session_state
-        if key.startswith("edit_transaction_category_")
-    }
-    # Reassign before this run instantiates any field widget. This keeps
-    # conditional category nodes readable by Streamlit's runtime/test tree
-    # when the selected record changes, without reusing their values.
-    category_ids_by_label = {label: category_id for category_id, label in category_paths.items()}
-    for key, value in prior_category_state.items():
-        value = str(value)
-        st.session_state[key] = category_ids_by_label.get(value, value)
-
     def transaction_label(transaction_id: str) -> str:
         row = transaction_frame.loc[transaction_frame["ID"] == transaction_id].iloc[0]
         return f"{row['Date']} — {row['Type']} — {money(row['Amount'])} — {transaction_id[:8]}"

@@ -113,6 +113,15 @@ def render_transaction_fields(
 
     transaction_date = st.date_input("Date", transaction_date, key=field_key("date"))
     category_widget_key = field_key("category")
+    if category_widget_key in st.session_state:
+        category_ids_by_label = {
+            str(label): str(category_id)
+            for category_id, label in category_paths.items()
+        }
+        current_category = str(st.session_state[category_widget_key])
+        st.session_state[category_widget_key] = category_ids_by_label.get(
+            current_category, current_category
+        )
     if kind != "Transfer":
         categories_for_kind = [
             category for category in categories if category.get("kind") == kind
@@ -130,7 +139,7 @@ def render_transaction_fields(
             index=(
                 category_ids.index(category_id)
                 if category_id in category_ids
-                else 0
+                else (0 if category_ids else None)
             ),
             format_func=lambda value: category_paths.get(value, value),
             key=category_widget_key,
@@ -154,7 +163,7 @@ def render_transaction_fields(
     account_index = (
         account_ids.index(account_id)
         if account_id in account_ids
-        else 0
+        else (0 if account_ids else None)
     )
     source_label = (
         "From Account" if kind == "Transfer" or kind == "Expense" else "To Account"
@@ -174,7 +183,7 @@ def render_transaction_fields(
         to_index = (
             to_account_ids.index(to_account_id)
             if to_account_id in to_account_ids
-            else 0
+            else (0 if to_account_ids else None)
         )
         to_account_id = (
             st.selectbox(

@@ -76,7 +76,6 @@ def render_add_transaction(
     transaction_form_keys = (
         "add_transaction_date",
         "add_transaction_amount",
-        "add_transaction_kind",
         "add_transaction_category",
         "add_transaction_account",
         "add_transaction_to_account",

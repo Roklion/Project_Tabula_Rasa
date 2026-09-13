@@ -39,3 +39,9 @@ def test_mileage_common_validation_rejects_same_selected_place() -> None:
         validate_mileage_draft(draft)
         == "Starting location and destination must be different."
     )
+
+
+def test_mileage_common_validation_rejects_missing_selections() -> None:
+    assert validate_mileage_draft({}) == (
+        "Starting location and destination must be selected."
+    )
