@@ -12,7 +12,7 @@ from tabula_rasa.hierarchy import (
     eligible_parent_ids,
     has_hierarchy_children,
     hierarchy_paths,
-    ordered_hierarchy,
+    ordered_accounts,
 )
 from tabula_rasa.ledger_presentation import balances_frame
 from tabula_rasa.ledger_reporting import rollup_account_values
@@ -67,7 +67,7 @@ def _account_frame(
         for account in accounts
         if str(account.get("id") or "").strip()
     }
-    ordered = ordered_hierarchy(accounts)
+    ordered = ordered_accounts(accounts)
     direct_balance_by_id = balances.set_index("ID")["Balance"].to_dict()
     balance_by_id = rollup_account_values(accounts, direct_balance_by_id)
     transaction_count_by_id: dict[str, int] = {}

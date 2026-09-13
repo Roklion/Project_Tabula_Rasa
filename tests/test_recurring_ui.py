@@ -53,6 +53,20 @@ def test_recurring_editor_filters_inactive_categories_but_preserves_selection() 
     ] == ["office"]
 
 
+def test_recurring_category_options_follow_category_hierarchy_order() -> None:
+    categories = [
+        {"id": "child", "name": "Child", "kind": "Expense", "parent_id": "parent"},
+        {"id": "other", "name": "Other", "kind": "Expense", "parent_id": ""},
+        {"id": "parent", "name": "Parent", "kind": "Expense", "parent_id": ""},
+    ]
+
+    assert [item["id"] for item in _recurring_category_options(categories, "")] == [
+        "other",
+        "parent",
+        "child",
+    ]
+
+
 def test_recurring_editor_filters_inactive_references_but_preserves_selection() -> None:
     items = [
         {"id": "active", "active": "TRUE"},

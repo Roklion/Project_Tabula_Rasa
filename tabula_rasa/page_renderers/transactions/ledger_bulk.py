@@ -8,6 +8,7 @@ from datetime import date
 import hashlib
 from typing import Any
 import streamlit as st
+from tabula_rasa.hierarchy import ordered_categories
 from tabula_rasa.ledger_presentation import money
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
 from tabula_rasa.storage import StorageError
@@ -214,7 +215,7 @@ def _render_bulk_editor(
         common_kind = next(iter(selected_kinds))
         category_map = {
             str(category.get("id") or "").strip(): category_paths[str(category.get("id") or "").strip()]
-            for category in categories
+            for category in ordered_categories(categories)
             if category.get("kind") == common_kind
             and str(category.get("id") or "").strip() in category_paths
         }

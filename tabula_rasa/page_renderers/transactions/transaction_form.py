@@ -8,6 +8,7 @@ from typing import Literal
 
 import streamlit as st
 
+from tabula_rasa.hierarchy import ordered_categories
 from tabula_rasa.page_renderers.tag_selector import render_tag_selector
 from tabula_rasa.page_renderers.transactions.payee_selector import (
     render_payee_selector,
@@ -113,7 +114,9 @@ def render_transaction_fields(
 
     transaction_date = st.date_input("Date", transaction_date, key=field_key("date"))
     categories_for_kind = [
-        category for category in categories if category.get("kind") == kind
+        category
+        for category in ordered_categories(categories)
+        if category.get("kind") == kind
     ]
     category_ids = [
         str(category.get("id") or "").strip()

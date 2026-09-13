@@ -10,7 +10,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from tabula_rasa.hierarchy import hierarchy_paths, ordered_hierarchy
+from tabula_rasa.hierarchy import hierarchy_paths, ordered_accounts
 from tabula_rasa.ledger_presentation import money
 from tabula_rasa.ledger_reporting import (
     balance_sheet,
@@ -58,7 +58,7 @@ def _statement_frame(
     *,
     current_earnings: float | None = None,
 ) -> pd.DataFrame:
-    ordered_rows = ordered_hierarchy(rows)
+    ordered_rows = ordered_accounts(rows)
     all_ids = {str(row.get("id") or "").strip() for row in ordered_rows}
     child_parent_ids = {
         parent_id

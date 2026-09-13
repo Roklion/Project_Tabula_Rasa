@@ -28,10 +28,14 @@ def render_receipts(
     selected: Mapping[str, object],
     all_transactions: Sequence[Mapping[str, object]],
     edit_id: str,
+    section_title: str = "Receipt",
+    section_caption: str | None = None,
 ) -> None:
     """Render linked receipts and the manual unreferenced-file recovery surface."""
     st.divider()
-    st.subheader("Receipt")
+    st.subheader(section_title)
+    if section_caption:
+        st.caption(section_caption)
     receipt_folder = _receipt_folder(context)
     if receipt_folder is None:
         _render_editor_receipt_recovery(

@@ -6,6 +6,9 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 
+ACCOUNT_CLASSIFICATION_ORDER = ("Asset", "Liability", "Equity")
+
+
 class HierarchyValidationError(ValueError):
     """Raised when a complete account or category hierarchy is invalid."""
 
@@ -35,10 +38,30 @@ def hierarchy_paths(items: Iterable[Mapping[str, Any]]) -> dict[str, str]:
 
 def ordered_hierarchy(
     items: Iterable[Mapping[str, Any]],
+    *,
+    group_field: str | None = None,
+    group_order: Iterable[str] = (),
 ) -> list[dict[str, Any]]:
-    """Order Layer 1 items with their Layer 2 children."""
+    """Order Layer 1 items with their Layer 2 children.
+
+    When ``group_field`` and ``group_order`` are supplied, roots are grouped
+    in the requested order before their names are compared. Children remain
+    directly below their parent, matching the hierarchy table presentation.
+    """
     records = [dict(item) for item in items]
     item_ids = {_item_id(item) for item in records}
+    group_ranks = {
+        str(value).casefold(): rank for rank, value in enumerate(group_order)
+    }
+
+    def sort_key(item: Mapping[str, Any]) -> tuple[int, str]:
+        group_rank = (
+            group_ranks.get(str(item.get(group_field) or "").casefold(), len(group_ranks))
+            if group_field
+            else 0
+        )
+        return group_rank, str(item.get("name") or "").casefold()
+
     children: dict[str, list[dict[str, Any]]] = {}
     roots: list[dict[str, Any]] = []
     for item in records:
@@ -49,12 +72,12 @@ def ordered_hierarchy(
             roots.append(item)
     ordered: list[dict[str, Any]] = []
     visited: set[str] = set()
-    for root in sorted(roots, key=lambda item: str(item.get("name") or "").casefold()):
+    for root in sorted(roots, key=sort_key):
         ordered.append(root)
         visited.add(_item_id(root))
         for child in sorted(
             children.get(_item_id(root), []),
-            key=lambda item: str(item.get("name") or "").casefold(),
+            key=sort_key,
         ):
             ordered.append(child)
             visited.add(_item_id(child))
@@ -65,10 +88,24 @@ def ordered_hierarchy(
                 for item in records
                 if _item_id(item) not in visited
             ),
-            key=lambda item: str(item.get("name") or "").casefold(),
+            key=sort_key,
         )
     )
     return ordered
+
+
+def ordered_accounts(items: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Order accounts by classification, then by parent and account name."""
+    return ordered_hierarchy(
+        items,
+        group_field="classification",
+        group_order=ACCOUNT_CLASSIFICATION_ORDER,
+    )
+
+
+def ordered_categories(items: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Order categories by parent and category name."""
+    return ordered_hierarchy(items)
 
 
 def eligible_parent_ids(

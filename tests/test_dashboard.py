@@ -196,8 +196,8 @@ def test_dashboard_balances_sort_by_classification_then_account() -> None:
         "Equity",
     ]
     assert list(sorted_balances["Account"]) == [
-        "zebra › Apple",
         "zebra",
+        "zebra › Apple",
         "Payable",
         "Capital",
     ]
