@@ -51,7 +51,7 @@ def test_recurring_control_is_expense_only() -> None:
         by_label(app.segmented_control, "Transaction type").set_value("Transfer").run()
         assert not any(item.label == "Repeat this Expense" for item in app.checkbox)
 
-        app.session_state["add_transaction_category"] = "Office"
+        app.session_state["add_transaction_category_expense"] = "Office"
         by_label(app.segmented_control, "Transaction type").set_value("Expense").run()
         assert by_label(app.selectbox, "Category").value == expense_category["id"]
 

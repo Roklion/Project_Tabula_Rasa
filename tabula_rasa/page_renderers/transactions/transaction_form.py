@@ -120,7 +120,7 @@ def render_transaction_fields(
         for category in categories_for_kind
         if str(category.get("id") or "").strip()
     ]
-    category_widget_key = field_key("category")
+    category_widget_key = field_key(f"category_{kind.casefold()}")
     if kind != "Transfer" and category_widget_key in st.session_state:
         category_ids_by_label = {
             str(label): str(cat_id)

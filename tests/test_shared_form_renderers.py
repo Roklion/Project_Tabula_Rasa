@@ -18,6 +18,9 @@ def test_shared_widget_keys_are_record_scoped() -> None:
     assert mileage_widget_key("edit_mileage_trip", "miles", "north-row") != (
         mileage_widget_key("edit_mileage_trip", "miles", "south-row")
     )
+    assert transaction_widget_key("add_transaction", "category_expense") != (
+        transaction_widget_key("add_transaction", "category_income")
+    )
 
 
 def test_transaction_common_validation_rejects_invalid_transfer() -> None:
