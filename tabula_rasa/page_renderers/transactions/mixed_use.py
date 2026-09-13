@@ -646,7 +646,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             format_func=category_paths.get,
             key=f"mixed_category_{scope}",
         )
-        total_expense = c2.text_input(
+        total_expense = c1.text_input(
             "Total Expense",
             value=str(defaults.get("total_expense", "0.00") or "0.00"),
             key=f"mixed_total_{scope}",

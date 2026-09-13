@@ -88,6 +88,8 @@ def render_transaction_fields(
 
     def selected_id(value: object, paths: Mapping[str, str]) -> str:
         """Normalize a widget ID or its formatted display value to an ID."""
+        if value is None:
+            return ""
         value = str(value)
         return next(
             (item_id for item_id, label in paths.items() if item_id == value or label == value),

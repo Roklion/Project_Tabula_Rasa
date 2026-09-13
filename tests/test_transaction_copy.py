@@ -453,6 +453,28 @@ def test_copy_with_inactive_source_allows_active_account_replacement() -> None:
     assert copied["account_id"] == replacement["id"]
 
 
+def test_copy_with_no_active_accounts_stays_blocked() -> None:
+    storage, source = _transaction_fixture()
+    storage.deactivate_account(source["account_id"])
+
+    with authenticated_app(storage) as app:
+        navigate_to(app, "Transactions")
+        by_label(app.segmented_control, "Ledger mode").set_value("Bulk").run()
+        app.session_state["transaction_bulk_selected_ids_test"] = (source["id"],)
+        app.run()
+        by_label(app.button, "Copy transaction").click().run()
+
+        assert any(
+            "Choose active account(s)" in str(item.value)
+            for item in app.warning
+        )
+        by_label(app.button, "Save copied transaction").click().run()
+
+    transactions = storage.list_transactions()
+    assert len(transactions) == 1
+    assert transactions[0]["id"] == source["id"]
+
+
 def test_copy_save_adjusts_filters_to_keep_new_transaction_selected() -> None:
     storage, source = _transaction_fixture()
     created_date = date(date.today().year + 1, 1, 2)
