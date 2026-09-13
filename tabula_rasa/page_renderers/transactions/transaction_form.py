@@ -112,25 +112,28 @@ def render_transaction_fields(
     tag_ids = defaults.get("tag_ids") or ()
 
     transaction_date = st.date_input("Date", transaction_date, key=field_key("date"))
+    categories_for_kind = [
+        category for category in categories if category.get("kind") == kind
+    ]
+    category_ids = [
+        str(category.get("id") or "").strip()
+        for category in categories_for_kind
+        if str(category.get("id") or "").strip()
+    ]
     category_widget_key = field_key("category")
-    if category_widget_key in st.session_state:
+    if kind != "Transfer" and category_widget_key in st.session_state:
         category_ids_by_label = {
             str(label): str(category_id)
             for category_id, label in category_paths.items()
         }
         current_category = str(st.session_state[category_widget_key])
-        st.session_state[category_widget_key] = category_ids_by_label.get(
+        resolved_category = category_ids_by_label.get(
             current_category, current_category
         )
-    if kind != "Transfer":
-        categories_for_kind = [
-            category for category in categories if category.get("kind") == kind
-        ]
-        category_ids = [
-            str(category.get("id") or "").strip()
-            for category in categories_for_kind
-            if str(category.get("id") or "").strip()
-        ]
+        if resolved_category not in category_ids:
+            st.session_state.pop(category_widget_key, None)
+        else:
+            st.session_state[category_widget_key] = resolved_category
     c1, c2 = st.columns(2)
     if kind != "Transfer":
         category_value = c1.selectbox(
@@ -180,10 +183,31 @@ def render_transaction_fields(
         to_account_ids = [
             account_id for account_id in account_ids if account_id != source_id
         ]
+        to_account_widget_key = field_key("to_account")
+        invalid_selected_to_account = False
+        if to_account_widget_key in st.session_state:
+            current_to_account = str(st.session_state[to_account_widget_key])
+            resolved_to_account = selected_id(current_to_account, account_paths)
+            if resolved_to_account not in to_account_ids:
+                st.session_state.pop(to_account_widget_key, None)
+                invalid_selected_to_account = True
+            else:
+                st.session_state[to_account_widget_key] = resolved_to_account
+        invalid_default_to_account = bool(to_account_id) and (
+            to_account_id not in to_account_ids
+        )
         to_index = (
             to_account_ids.index(to_account_id)
             if to_account_id in to_account_ids
-            else (None if mode == "copy" else (0 if to_account_ids else None))
+            else (
+                None
+                if (
+                    mode == "copy"
+                    or invalid_default_to_account
+                    or invalid_selected_to_account
+                )
+                else (0 if to_account_ids else None)
+            )
         )
         to_account_id = (
             st.selectbox(
@@ -191,7 +215,7 @@ def render_transaction_fields(
                 to_account_ids,
                 index=to_index,
                 format_func=lambda value: account_paths.get(value, value),
-                key=field_key("to_account"),
+                key=to_account_widget_key,
             )
             if to_account_ids
             else ""

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import date
+from typing import TYPE_CHECKING
 
 import pandas as pd
 import streamlit as st
@@ -18,6 +19,9 @@ from .mileage_form_shared import (
     render_mileage_fields,
     validate_mileage_draft,
 )
+
+if TYPE_CHECKING:
+    from .mileage import MileageContext
 
 
 def _tag_records_by_id(tags: object) -> dict[str, Mapping[str, object]]:
@@ -150,7 +154,10 @@ def mileage_frame(trips: list[dict], tags: object = None) -> pd.DataFrame:
 
 
 def render_mileage_ledger(
-    context, tags: object, tag_by_id: dict[str, Mapping[str, object]], page_footer
+    context: MileageContext,
+    tags: object,
+    tag_by_id: dict[str, Mapping[str, object]],
+    page_footer,
 ) -> None:
     """Render the mileage table and keep edit/delete persistence in this controller."""
     st.subheader("Mileage log")
