@@ -707,6 +707,10 @@ Reconciliation runs once per
 profile/session, creates due occurrences from stable schedule/date identities,
 and is safe to repeat after an uncertain response. A failed schedule is
 marked for attention without preventing other schedules from reconciling.
+An uncertain link created while converting an existing expense remains out of
+reconciliation until its initial occurrence is confirmed; if no linked
+occurrence is present after restart, the schedule reports attention so the
+user can end it and retry the expense edit.
 Generated mixed-use rows always use the source-authoritative source/projection
 pair and mirror recurring provenance on both rows.
 

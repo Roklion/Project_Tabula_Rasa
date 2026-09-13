@@ -276,6 +276,10 @@ class RecurringMixin:
         attention_messages = {
             "validation": "Invalid template references; edit the schedule.",
             "storage": "Storage unavailable; retry or inspect the workbook.",
+            _PENDING_INITIAL_LINK: (
+                "Initial occurrence link needs confirmation; end this schedule "
+                "and retry the expense edit if it remains pending."
+            ),
         }
         schedule["attention_message"] = attention_messages.get(
             schedule.get("attention_code", ""), ""
@@ -790,9 +794,26 @@ class RecurringMixin:
                     tag_lookup=tags,
                 )
                 if schedule.get("attention_code") == _PENDING_INITIAL_LINK:
-                    # A conversion creates the schedule before linking its
-                    # existing occurrence. Keep this temporary schedule out
-                    # of reconciliation until the link is confirmed.
+                    linked_transaction_rows = transaction_rows_by_schedule.get(
+                        schedule["id"], []
+                    )
+                    linked_mixed_rows = mixed_rows_by_schedule.get(schedule["id"], [])
+                    linked = (
+                        bool(linked_mixed_rows) and bool(linked_transaction_rows)
+                        if schedule.get("source_kind") == "mixed_use"
+                        else bool(linked_transaction_rows)
+                    )
+                    if linked:
+                        # The link may have committed even when the original
+                        # response was uncertain. The validated occurrence
+                        # rows make it safe to clear the temporary marker.
+                        self._clear_recurring_attention(schedule["id"])
+                    else:
+                        # A conversion creates the schedule before linking its
+                        # existing occurrence. Keep this temporary schedule out
+                        # of reconciliation, but leave an actionable marker
+                        # visible after a session or server restart.
+                        attention[schedule["id"]] = _PENDING_INITIAL_LINK
                     continue
                 if schedule["status"] != "active":
                     self._clear_recurring_attention(schedule["id"])
@@ -1070,9 +1091,9 @@ class RecurringMixin:
                     "This mixed-use expense is already part of a recurring schedule"
                 )
             schedule_id = _clean_text(changes.get("schedule_id"), "Schedule ID") or str(uuid4())
-            if schedule_id == source_id:
+            if schedule_id == source_id or schedule_id == transaction_id:
                 raise StorageValidationError(
-                    "Schedule ID must be distinct from Mixed-use source ID"
+                    "Schedule ID must be distinct from Mixed-use source ID and Transaction ID"
                 )
             merged = {
                 **current_source,

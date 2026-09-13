@@ -136,7 +136,12 @@ def test_existing_expense_recurring_pending_schedule_is_not_reconciled(
             transaction["id"], expected_transaction=transaction, **payload,
         )
 
-    assert default_storage.reconcile_recurring_schedules(as_of="2024-01-15")["generated"] == []
+    schedules = default_storage.list_recurring_schedules()
+    assert schedules[0]["attention_code"] == "pending_initial_link"
+    assert "end this schedule" in schedules[0]["attention_message"]
+    outcome = default_storage.reconcile_recurring_schedules(as_of="2024-01-15")
+    assert outcome["generated"] == []
+    assert outcome["attention"] == {"pending-reconcile": "pending_initial_link"}
 
     monkeypatch.setattr(default_storage, "_replace_rows_atomically", original_replace)
     result = default_storage.create_recurring_expense_from_transaction(
@@ -185,6 +190,27 @@ def test_existing_mixed_use_recurring_generates_distinct_schedule_id_when_omitte
     assert result["schedule"]["id"] != source["id"]
 
 
+def test_existing_mixed_use_recurring_rejects_linked_transaction_schedule_id(
+    default_storage,
+) -> None:
+    account_id, category_id = _ids(default_storage)
+    source = default_storage.create_mixed_use_expense(
+        txn_date="2024-01-15", total_expense="100",
+        business_use_percentage="25", account_id=account_id,
+        category_id=category_id, allocation_rationale="Measured use",
+    )
+    with pytest.raises(StorageValidationError, match="Transaction ID"):
+        default_storage.create_recurring_expense_from_mixed_use(
+            source["id"], expected_source=source,
+            schedule_id=source["linked_transaction_id"],
+            name="Collision", recurrence_unit="month", txn_date="2024-01-15",
+            total_expense="100", business_use_percentage="25",
+            account_id=account_id, category_id=category_id,
+            allocation_rationale="Measured use",
+        )
+    assert default_storage.list_recurring_schedules() == []
+
+
 def test_existing_mixed_use_recurring_pending_schedule_is_not_reconciled(
     default_storage, monkeypatch,
 ) -> None:
@@ -212,7 +238,12 @@ def test_existing_mixed_use_recurring_pending_schedule_is_not_reconciled(
             source["id"], expected_source=source, **payload,
         )
 
-    assert default_storage.reconcile_recurring_schedules(as_of="2024-01-15")["generated"] == []
+    schedules = default_storage.list_recurring_schedules()
+    assert schedules[0]["attention_code"] == "pending_initial_link"
+    assert "end this schedule" in schedules[0]["attention_message"]
+    outcome = default_storage.reconcile_recurring_schedules(as_of="2024-01-15")
+    assert outcome["generated"] == []
+    assert outcome["attention"] == {"pending-mixed-reconcile": "pending_initial_link"}
 
     monkeypatch.setattr(default_storage, "_replace_rows_atomically", original_replace)
     result = default_storage.create_recurring_expense_from_mixed_use(
