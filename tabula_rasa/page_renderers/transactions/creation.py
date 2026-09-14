@@ -146,7 +146,8 @@ def render_add_transaction(
             elif tag_error := inline_tag_name_error(draft["new_tag_name"]):
                 save_error.error(tag_error)
             elif (
-                not recurring
+                kind == "Expense"
+                and not recurring
                 and pending_recurrence.has_pending(st.session_state)
             ):
                 save_error.error(

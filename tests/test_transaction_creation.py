@@ -55,6 +55,24 @@ def test_recurring_control_is_expense_only() -> None:
         assert by_label(app.selectbox, "Category").value == expense_category["id"]
 
 
+def test_pending_expense_retry_does_not_block_income_submission() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    storage.create_account("Checking", "Bank")
+    storage.create_category("Salary", "Income")
+    storage.create_category("Office", "Expense")
+
+    with authenticated_app(storage) as app:
+        navigate_to(app, "Transactions")
+        app.session_state["recurring_pending_schedule_id_test"] = "pending"
+        by_label(app.segmented_control, "Transaction type").set_value("Income").run()
+        by_label(app.number_input, "Amount").set_value(100).run()
+        by_label(app.button, "Save transaction").click().run()
+
+    transactions = storage.list_transactions()
+    assert len(transactions) == 1
+    assert transactions[0]["kind"] == "Income"
+
+
 def test_add_expense_recurring_flow_creates_initial_occurrence_and_schedule() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     storage.create_account("Checking", "Bank")
