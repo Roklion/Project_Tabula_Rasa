@@ -17,6 +17,7 @@
 
 - Existing related implementations inspected:
 - Reused or extended:
+- New logic required:
 - New parallel logic introduced:
 - If substantial parallel logic remains, why should it not share an owner?
 
