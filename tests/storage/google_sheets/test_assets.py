@@ -317,4 +317,25 @@ class TestAssetStorage(GoogleSheetsStorageTestCase):
 
         with pytest.raises(StorageValidationError, match="Useful life"):
             self.storage.validate_backup_zip(invalid)
+
+    def test_backup_rejects_colliding_asset_override_periods(self) -> None:
+        self.storage.create_asset(**_asset_data())
+        backup = self.storage.export_backup_zip(
+            backup_receipt_manifest(self.storage)
+        )
+
+        def collide_override_periods(rows: list[list[str]]) -> None:
+            rows[1][rows[0].index("schedule_overrides")] = json.dumps(
+                {
+                    "1": {"amount": "10.00", "reason": "First"},
+                    "01": {"amount": "20.00", "reason": "Second"},
+                }
+            )
+
+        invalid = rewrite_backup_tables(
+            backup, {"Assets": collide_override_periods}
+        )
+
+        with pytest.raises(StorageValidationError, match="must be unique"):
+            self.storage.validate_backup_zip(invalid)
     backup_receipt_manifest,

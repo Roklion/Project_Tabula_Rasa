@@ -767,3 +767,25 @@ def test_migration_preflights_malformed_tabs_before_writing() -> None:
     assert before == {
         title: worksheet.get_all_values() for title, worksheet in workbook.sheets.items()
     }
+
+
+def test_migration_preflights_malformed_recurring_schedules_before_writing() -> None:
+    headers = dict(VERSION_11_WORKSHEET_HEADERS)
+    headers["RecurringSchedules"] = tuple(
+        header
+        for header in headers["RecurringSchedules"]
+        if header != "recurrence_unit"
+    )
+    workbook = FakeWorkbook(headers)
+    before = {
+        title: worksheet.get_all_values()
+        for title, worksheet in workbook.sheets.items()
+    }
+
+    with pytest.raises(ValueError, match="recognized standard layout"):
+        migrate_workbook(workbook)
+
+    assert "Assets" not in workbook.sheets
+    assert before == {
+        title: worksheet.get_all_values() for title, worksheet in workbook.sheets.items()
+    }

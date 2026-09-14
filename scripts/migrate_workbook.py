@@ -40,6 +40,7 @@ from scripts.migration_schemas import (  # noqa: E402
     VERSION_6_WORKSHEET_HEADERS,
     VERSION_7_WORKSHEET_HEADERS,
     VERSION_10_WORKSHEET_HEADERS,
+    VERSION_11_WORKSHEET_HEADERS,
 )
 from scripts.migrate_payees import migrate_workbook as migrate_payees  # noqa: E402
 
@@ -201,6 +202,9 @@ def _preflight(workbook: Any) -> dict[str, list[list[Any]]]:
         },
         "Payees": {frozenset(WORKSHEET_HEADERS["Payees"])},
         "Tags": {frozenset(WORKSHEET_HEADERS["Tags"])},
+        "RecurringSchedules": {
+            frozenset(VERSION_11_WORKSHEET_HEADERS["RecurringSchedules"]),
+        },
         "Assets": {frozenset(WORKSHEET_HEADERS["Assets"])},
         "MixedUseExpenses": {
             frozenset(
@@ -219,7 +223,9 @@ def _preflight(workbook: Any) -> dict[str, list[list[Any]]]:
         },
     }
     for title, rows in values.items():
-        if title not in allowed or not rows:
+        if title not in allowed or not rows or not any(
+            str(value).strip() for row in rows for value in row
+        ):
             continue
         headers = [str(value).strip() for value in rows[0]]
         if not headers or any(not value for value in headers):

@@ -89,6 +89,8 @@ def _decode_overrides(value: Any) -> dict[int, dict[str, str]]:
             sequence = int(key)
         except (TypeError, ValueError):
             raise StorageValidationError("Asset override period is invalid") from None
+        if sequence in result:
+            raise StorageValidationError("Asset override periods must be unique")
         result[sequence] = {
             "amount": _currency(details.get("amount"), "Override amount"),
             "reason": _clean_text(
