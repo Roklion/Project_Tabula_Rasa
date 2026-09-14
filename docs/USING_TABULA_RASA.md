@@ -91,6 +91,10 @@ rebalanced so the complete schedule still ends at salvage value. Schedule terms
 remain locked while any override exists; remove the overrides to return to the
 ordinary editable straight-line schedule.
 
+Permanent deletion is available only before an asset has saved depreciation
+history. Once an override exists, keep the durable history and retire the asset
+instead of deleting it.
+
 Retiring an asset stops schedule rows after the retirement date. It does not
 calculate sale proceeds, disposal gain or loss, recapture, or a write-off of
 remaining book value. This phase does not post depreciation to the ledger;

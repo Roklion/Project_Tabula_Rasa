@@ -860,8 +860,10 @@ while overrides exist, though descriptive metadata remains editable. Removing
 all overrides restores editable schedule terms and the ordinary straight-line
 calculation. Retirement stops occurrences after the retirement date without
 calculating disposal proceeds, gain/loss, recapture, or a remaining-basis
-write-off. Permanent deletion is allowed in this pre-posting phase; future
-posted history will require retirement instead.
+write-off. Permanent deletion is allowed only before the asset has saved
+depreciation history. Once an override exists, the durable history is retained
+and the asset can be retired but not deleted; future posted history will carry
+the same retention boundary.
 
 This phase calculates and stores no ledger transaction. Depreciation is
 non-cash accounting, and journal posting remains deferred until the balanced
