@@ -16,9 +16,6 @@ from tabula_rasa.page_renderers.transactions.mixed_use import (
     _mixed_use_selection_ids,
     _pending_create_ids,
     _preserve_pending_recurring_state,
-    _pending_recurring_schedule_id,
-    _pending_recurring_rationale,
-    _pending_recurring_schedule_exists,
     _start_mixed_use_copy,
     mixed_use_preview,
 )
@@ -58,21 +55,6 @@ def test_pending_create_ids_remain_stable_for_uncertain_retries() -> None:
     assert first != _pending_create_ids(state, "south")
 
 
-def test_pending_recurring_schedule_id_remains_stable_for_uncertain_retries() -> None:
-    state: dict[str, object] = {}
-    first = _pending_recurring_schedule_id(state, "north", "revision")
-    assert first == _pending_recurring_schedule_id(state, "north")
-    assert state["mixed_use_pending_configuration_revision_north"] == "revision"
-    assert first != _pending_recurring_schedule_id(state, "south")
-
-
-def test_pending_recurring_schedule_requires_recurring_retry() -> None:
-    state: dict[str, object] = {"mixed_use_pending_schedule_id_north": "schedule"}
-
-    assert _pending_recurring_schedule_exists(state, "north")
-    assert not _pending_recurring_schedule_exists(state, "south")
-
-
 def test_projection_conflicts_keep_recurring_retry_state() -> None:
     from tabula_rasa.storage import StorageConflictError
 
@@ -84,20 +66,6 @@ def test_projection_conflicts_keep_recurring_retry_state() -> None:
     )
     assert not _preserve_pending_recurring_state(
         StorageConflictError("Recurring schedule ID is already in use")
-    )
-
-
-def test_pending_recurring_rationale_rehydrates_retry_validation() -> None:
-    state: dict[str, object] = {
-        "mixed_use_pending_schedule_id_north": "schedule",
-        "mixed_use_pending_payload_north": {
-            "allocation_rationale": "Saved rationale",
-        },
-    }
-
-    assert _pending_recurring_rationale(state, "north", "") == "Saved rationale"
-    assert _pending_recurring_rationale(state, "south", "Typed rationale") == (
-        "Typed rationale"
     )
 
 
@@ -591,6 +559,41 @@ def test_mixed_use_app_test_recurring_create_creates_source_projection_pair(defa
     assert len(schedules) == len(sources) == len(projections) == 1
     assert sources[0]["recurring_schedule_id"] == schedules[0]["id"]
     assert projections[0]["id"] == sources[0]["linked_transaction_id"]
+    assert projections[0]["recurring_schedule_id"] == schedules[0]["id"]
+
+
+def test_mixed_use_edit_can_create_schedule_from_existing_source(default_storage) -> None:
+    account = next(item for item in default_storage.list_accounts() if item["active"])
+    category = next(
+        item for item in default_storage.list_categories()
+        if item["kind"] == "Expense"
+    )
+    source = default_storage.create_mixed_use_expense(
+        txn_date="2026-09-03", total_expense="100",
+        business_use_percentage="25", account_id=account["id"],
+        category_id=category["id"], allocation_rationale="Measured use",
+    )
+
+    with authenticated_app(default_storage) as app:
+        navigate_to(app, "Transactions")
+        app.session_state["mixed_use_selected_source_id_test"] = source["id"]
+        app.run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "checkbox", "Repeat this mixed-use Expense").set_value(True).run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "text_input", "Schedule name").set_value("Monthly workspace").run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "text_input", "Total Expense").set_value("120").run()
+        tab = _mixed_tab(app)
+        _tab_field(tab, "button", "Save changes").click().run()
+
+    schedules = default_storage.list_recurring_schedules()
+    sources = default_storage.list_mixed_use_expenses()
+    projections = default_storage.list_transactions()
+    assert len(schedules) == len(sources) == len(projections) == 1
+    assert sources[0]["id"] == source["id"]
+    assert sources[0]["total_expense"] == "120.00"
+    assert sources[0]["recurring_schedule_id"] == schedules[0]["id"]
     assert projections[0]["recurring_schedule_id"] == schedules[0]["id"]
 
 

@@ -5,9 +5,8 @@ from unittest.mock import patch
 from tests.app_support import authenticated_app, by_label, navigate_to
 from tests.app_support import profile_config
 from tests.fakes import FakeWorkbook
-from tabula_rasa.page_renderers.transactions.creation import (
-    _pending_recurring_create_exists,
-    _pending_recurring_ids,
+from tabula_rasa.page_renderers.transactions.transaction_form import (
+    transaction_payload_from_draft,
 )
 from tabula_rasa.storage import GoogleSheetsStorage, StorageUnavailableError
 
@@ -56,6 +55,24 @@ def test_recurring_control_is_expense_only() -> None:
         assert by_label(app.selectbox, "Category").value == expense_category["id"]
 
 
+def test_pending_expense_retry_does_not_block_income_submission() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    storage.create_account("Checking", "Bank")
+    storage.create_category("Salary", "Income")
+    storage.create_category("Office", "Expense")
+
+    with authenticated_app(storage) as app:
+        navigate_to(app, "Transactions")
+        app.session_state["recurring_pending_schedule_id_test"] = "pending"
+        by_label(app.segmented_control, "Transaction type").set_value("Income").run()
+        by_label(app.number_input, "Amount").set_value(100).run()
+        by_label(app.button, "Save transaction").click().run()
+
+    transactions = storage.list_transactions()
+    assert len(transactions) == 1
+    assert transactions[0]["kind"] == "Income"
+
+
 def test_add_expense_recurring_flow_creates_initial_occurrence_and_schedule() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     storage.create_account("Checking", "Bank")
@@ -79,6 +96,36 @@ def test_add_expense_recurring_flow_creates_initial_occurrence_and_schedule() ->
     assert transactions[0]["receipt_references"] == "[]"
 
 
+def test_edit_expense_can_create_schedule_from_existing_transaction() -> None:
+    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+    account = storage.create_account("Checking", "Bank")
+    category = storage.create_category("Office", "Expense")
+    transaction = storage.create_transaction(
+        txn_date="2026-09-01", kind="Expense", amount="20",
+        account_id=account["id"], category_id=category["id"],
+        description="Office supplies",
+    )
+
+    with authenticated_app(storage) as app:
+        navigate_to(app, "Transactions")
+        editor = next(item for item in app.expander if item.label == "Edit transaction")
+        by_label(editor.checkbox, "Repeat this Expense").set_value(True).run()
+        editor = next(item for item in app.expander if item.label == "Edit transaction")
+        by_label(editor.text_input, "Schedule name").set_value("Monthly supplies").run()
+        editor = next(item for item in app.expander if item.label == "Edit transaction")
+        by_label(editor.number_input, "Amount").set_value(25).run()
+        editor = next(item for item in app.expander if item.label == "Edit transaction")
+        by_label(editor.button, "Save changes").click().run()
+
+    schedules = storage.list_recurring_schedules()
+    transactions = storage.list_transactions()
+    assert len(schedules) == len(transactions) == 1
+    assert transactions[0]["id"] == transaction["id"]
+    assert transactions[0]["amount"] == "25.00"
+    assert transactions[0]["recurring_schedule_id"] == schedules[0]["id"]
+    assert schedules[0]["name"] == "Monthly supplies"
+
+
 def test_invalid_recurring_submission_does_not_leave_pending_retry_state() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     storage.create_account("Checking", "Bank")
@@ -94,20 +141,32 @@ def test_invalid_recurring_submission_does_not_leave_pending_retry_state() -> No
         assert "recurring_pending_payload_test" not in app.session_state
 
 
-def test_pending_recurring_ids_are_stable_across_retries() -> None:
-    state: dict[str, object] = {}
-    first = _pending_recurring_ids(state, "north", "revision")
-    second = _pending_recurring_ids(state, "north")
-    assert first == second
-    assert state["recurring_pending_configuration_revision_north"] == "revision"
-    assert first != _pending_recurring_ids(state, "south")
+def test_transaction_payload_from_draft_is_canonical() -> None:
+    draft = {
+        "txn_date": "2026-09-14",
+        "kind": "Expense",
+        "amount": 25,
+        "account_id": "checking",
+        "to_account_id": "",
+        "category_id": "office",
+        "payee_id": "vendor",
+        "new_payee_name": "",
+        "tag_ids": ["tax"],
+        "new_tag_name": None,
+        "reference": "INV-25",
+        "description": "Draft description",
+    }
 
+    payload = transaction_payload_from_draft(
+        draft,
+        description="Saved description",
+    )
 
-def test_pending_recurring_create_requires_recurring_retry() -> None:
-    state: dict[str, object] = {"recurring_pending_schedule_id_north": "schedule"}
-
-    assert _pending_recurring_create_exists(state, "north")
-    assert not _pending_recurring_create_exists(state, "south")
+    assert payload == {
+        **draft,
+        "new_tag_name": "",
+        "description": "Saved description",
+    }
 
 
 def test_startup_reconciles_once_per_profile_and_keeps_profiles_isolated() -> None:

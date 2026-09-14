@@ -5,12 +5,17 @@ from unittest.mock import Mock
 
 from tabula_rasa.page_renderers.transactions.recurring import (
     _active_or_selected,
+    _clear_pending_schedule_state,
     _mark_workbook_data_changed,
     _recurring_category_options,
     _recurring_payee_options,
     _safe_date,
     _safe_interval,
     _selected_tag_ids,
+)
+from tabula_rasa.page_renderers.transactions.recurrence_controls import (
+    edit_defaults_with_pending_payload,
+    restore_recurrence_controls,
 )
 
 
@@ -29,6 +34,110 @@ def test_recurring_change_marker_is_optional() -> None:
     _mark_workbook_data_changed(SimpleNamespace(mark_workbook_data_changed=callback))
 
     callback.assert_called_once_with()
+
+
+def test_restore_recurrence_controls_preserves_pending_edit_payload() -> None:
+    state: dict[str, object] = {}
+
+    restore_recurrence_controls(
+        state,
+        {
+            "name": "Monthly rent",
+            "recurrence_unit": "month",
+            "recurrence_interval": 1,
+            "end_date": None,
+        },
+        key_prefix="mixed",
+        key_suffix="north_source",
+    )
+
+    assert state == {
+        "mixed_recurring_north_source": True,
+        "mixed_recurrence_unit_north_source": "month",
+        "mixed_recurrence_interval_north_source": 1,
+        "mixed_recurrence_name_north_source": "Monthly rent",
+        "mixed_recurrence_end_north_source": None,
+    }
+
+
+def test_pending_edit_payload_restores_all_transaction_fields() -> None:
+    defaults = {
+        "txn_date": date(2026, 9, 1),
+        "amount": 20.0,
+        "account_id": "old-account",
+        "description": "Original",
+    }
+    payload = {
+        "txn_date": date(2026, 9, 12),
+        "amount": 42.0,
+        "account_id": "edited-account",
+        "description": "Edited",
+        "reference": "INV-42",
+    }
+
+    assert edit_defaults_with_pending_payload(defaults, payload) == {
+        "txn_date": date(2026, 9, 12),
+        "amount": 42.0,
+        "account_id": "edited-account",
+        "description": "Edited",
+        "reference": "INV-42",
+    }
+
+
+def test_ending_schedule_clears_only_matching_pending_retry_state() -> None:
+    state = {
+        "recurring_edit_pending_schedule_id_expense_profile_4_shop": "ended",
+        "recurring_edit_pending_configuration_revision_expense_profile_4_shop": "sheet",
+        "mixed_use_edit_pending_schedule_id_source_profile_shop_profile_4_shop": "ended",
+        "mixed_use_edit_pending_payload_source_profile_shop_profile_4_shop": {"schedule_id": "ended"},
+        "mixed_use_edit_pending_configuration_revision_source_profile_shop_profile_4_shop": "sheet",
+        "recurring_edit_pending_schedule_id_shop_expense_profile_10_north_shop": "ended",
+        "mixed_use_edit_pending_schedule_id_shop_source_profile_10_north_shop": "ended",
+        "mixed_use_edit_pending_schedule_id_source_profile_north_profile_18_north_profile_shop": "other",
+        "mixed_use_edit_pending_payload_source_profile_north_profile_18_north_profile_shop": {
+            "schedule_id": "ended"
+        },
+        "recurring_pending_schedule_id_shop": "ended",
+        "recurring_pending_transaction_id_shop": "transaction",
+        "recurring_pending_payload_shop": {"amount": "10"},
+        "recurring_pending_schedule_id_north_shop": "other-ended",
+        "recurring_pending_transaction_id_north_shop": "other-transaction",
+        "recurring_pending_payload_north_shop": {"amount": "20"},
+        "mixed_use_pending_schedule_id_shop": "ended",
+        "mixed_use_pending_source_id_shop": "other-source",
+        "mixed_use_pending_payload_shop": {"total_expense": "30"},
+        "mixed_use_pending_schedule_id_north_shop": "other-ended",
+        "mixed_use_pending_source_id_north_shop": "other-source",
+        "mixed_use_pending_payload_north_shop": {"total_expense": "40"},
+        "recurring_edit_pending_schedule_id_other_profile_4_shop": "keep",
+        "unrelated": "ended",
+    }
+
+    _clear_pending_schedule_state(state, "shop", "ended")
+
+    assert "recurring_edit_pending_schedule_id_expense_profile_4_shop" not in state
+    assert "recurring_edit_pending_configuration_revision_expense_profile_4_shop" not in state
+    assert "mixed_use_edit_pending_schedule_id_source_profile_shop_profile_4_shop" not in state
+    assert "mixed_use_edit_pending_payload_source_profile_shop_profile_4_shop" not in state
+    assert "mixed_use_edit_pending_configuration_revision_source_profile_shop_profile_4_shop" not in state
+    assert state["recurring_edit_pending_schedule_id_shop_expense_profile_10_north_shop"] == "ended"
+    assert state["mixed_use_edit_pending_schedule_id_shop_source_profile_10_north_shop"] == "ended"
+    assert state["mixed_use_edit_pending_schedule_id_source_profile_north_profile_18_north_profile_shop"] == "other"
+    assert state["mixed_use_edit_pending_payload_source_profile_north_profile_18_north_profile_shop"]["schedule_id"] == "ended"
+    assert "recurring_pending_schedule_id_shop" not in state
+    assert "recurring_pending_transaction_id_shop" not in state
+    assert "recurring_pending_payload_shop" not in state
+    assert state["recurring_pending_schedule_id_north_shop"] == "other-ended"
+    assert state["recurring_pending_transaction_id_north_shop"] == "other-transaction"
+    assert state["recurring_pending_payload_north_shop"] == {"amount": "20"}
+    assert "mixed_use_pending_schedule_id_shop" not in state
+    assert "mixed_use_pending_source_id_shop" not in state
+    assert "mixed_use_pending_payload_shop" not in state
+    assert state["mixed_use_pending_schedule_id_north_shop"] == "other-ended"
+    assert "mixed_use_pending_source_id_north_shop" in state
+    assert "mixed_use_pending_payload_north_shop" in state
+    assert state["recurring_edit_pending_schedule_id_other_profile_4_shop"] == "keep"
+    assert state["unrelated"] == "ended"
 
 
 def test_recurring_editor_filters_inactive_categories_but_preserves_selection() -> None:

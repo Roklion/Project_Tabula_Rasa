@@ -705,17 +705,24 @@ account, Expense category, optional Payee, Tags, description, and reference.
 Receipt references are occurrence-specific and are never stored in a template.
 
 Creating an ordinary or mixed-use recurring Expense writes the schedule and
-initial occurrence as one logical operation. Reconciliation runs once per
+initial occurrence as one logical operation. An existing ordinary or mixed-use
+Expense that is not already linked to a schedule can also be made recurring
+from its edit surface; the saved edit becomes the schedule's initial occurrence.
+Reconciliation runs once per
 profile/session, creates due occurrences from stable schedule/date identities,
 and is safe to repeat after an uncertain response. A failed schedule is
 marked for attention without preventing other schedules from reconciling.
+An uncertain link created while converting an existing expense remains out of
+reconciliation until its initial occurrence is confirmed; if no linked
+occurrence is present after restart, the schedule reports attention so the
+user can end it and retry the expense edit.
 Generated mixed-use rows always use the source-authoritative source/projection
 pair and mirror recurring provenance on both rows.
 
 Pause stops generation without changing the template or existing occurrences;
 Resume continues from the latest current linked scheduled date. End prevents
 future generation permanently. Editing or deleting an occurrence never edits
-or deletes its schedule. Schedule edits affect future generated occurrences;
+or deletes its existing schedule. Schedule edits affect future generated occurrences;
 existing occurrences remain ordinary editable/deletable records.
 
 #### Payees & Tags management

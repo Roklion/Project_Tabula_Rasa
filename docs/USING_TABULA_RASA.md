@@ -361,15 +361,22 @@ The fourth Transactions tab, **Recurring expenses**, lists profile-local
 Expense schedules with their cadence, next due date, status, and stable ID.
 Recurring templates contain only flat Expense fields; receipt references are
 never copied into a schedule or generated occurrence. Creating a schedule
-also creates its initial occurrence. Startup reconciliation generates due
+also creates its initial occurrence. You can enable **Repeat this Expense**
+while editing an ordinary Expense, or **Repeat this mixed-use Expense** while
+editing a mixed-use Expense, to use that saved edit as a new schedule's initial
+occurrence. The option is hidden when the expense already belongs to a schedule.
+Startup reconciliation generates due
 occurrences using deterministic schedule/date IDs and is safe to repeat.
 
 Schedules can be paused, resumed, or ended. Editing or deleting an occurrence
 does not change its schedule; changing a schedule affects only future
 occurrences. A schedule with a failed or invalid occurrence reports attention
-for that schedule while other schedules remain available. Mixed-use schedules
-retain the source-authoritative source/projection pair and keep receipts
-specific to individual occurrences.
+for that schedule while other schedules remain available. If a recurring edit
+cannot confirm its initial occurrence link, the schedule remains out of
+reconciliation and reports attention; if the link is still pending, end that
+schedule and retry the expense edit. Mixed-use schedules retain the
+source-authoritative source/projection pair and keep receipts specific to
+individual occurrences.
 
 ### Edit and delete
 

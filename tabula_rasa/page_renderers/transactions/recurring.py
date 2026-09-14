@@ -8,12 +8,40 @@ from typing import Any
 
 import streamlit as st
 from tabula_rasa.hierarchy import ordered_accounts, ordered_categories
+from tabula_rasa.recurrence_state import clear_edit_pending_state_for_schedule
 
 
 def _mark_workbook_data_changed(context: Any) -> None:
     callback = getattr(context, "mark_workbook_data_changed", None)
     if callable(callback):
         callback()
+
+
+def _clear_pending_schedule_state(
+    state: Any, profile_key: str, schedule_id: str
+) -> None:
+    """Forget retry IDs that refer to a schedule the user just ended."""
+    schedule_id = str(schedule_id or "")
+    if not schedule_id:
+        return
+    clear_edit_pending_state_for_schedule(
+        state,
+        profile_key=profile_key,
+        schedule_id=schedule_id,
+    )
+
+    for root in ("recurring_pending", "mixed_use_pending"):
+        schedule_key = f"{root}_schedule_id_{profile_key}"
+        if str(state.get(schedule_key) or "") != schedule_id:
+            continue
+        for suffix in (
+            "schedule_id",
+            "transaction_id",
+            "source_id",
+            "payload",
+            "configuration_revision",
+        ):
+            state.pop(f"{root}_{suffix}_{profile_key}", None)
 
 
 def _safe_date(value: Any, fallback: date | None = None) -> date | None:
@@ -265,6 +293,9 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
         if selected["status"] != "ended" and st.button("End schedule", key=f"recurring_end_{selected['id']}"):
             try:
                 context.storage.end_recurring_schedule(selected["id"], expected_schedule=selected)
+                _clear_pending_schedule_state(
+                    st.session_state, context.profile_key, selected["id"]
+                )
                 _mark_workbook_data_changed(context)
                 st.rerun()
             except Exception as error:
