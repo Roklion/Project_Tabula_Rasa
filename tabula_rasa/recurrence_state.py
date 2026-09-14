@@ -7,6 +7,11 @@ from dataclasses import dataclass
 from uuid import uuid4
 
 
+def _profile_key_segment(profile_key: str) -> str:
+    """Encode the selected profile so delimiter-containing keys stay distinct."""
+    return f"profile_{len(profile_key)}_{profile_key}"
+
+
 @dataclass(frozen=True)
 class PendingRecurrenceState:
     """Own the stable identities and original payload for one recurrence."""
@@ -136,16 +141,17 @@ def mixed_use_create_pending_state(profile_key: str) -> PendingRecurrenceState:
 def transaction_edit_pending_state(
     profile_key: str, record_id: str
 ) -> PendingRecurrenceState:
+    profile_segment = _profile_key_segment(profile_key)
     return PendingRecurrenceState(
         schedule_id_key=(
-            f"recurring_edit_pending_schedule_id_{record_id}_profile_{profile_key}"
+            f"recurring_edit_pending_schedule_id_{record_id}_{profile_segment}"
         ),
         payload_key=(
-            f"recurring_edit_pending_payload_{record_id}_profile_{profile_key}"
+            f"recurring_edit_pending_payload_{record_id}_{profile_segment}"
         ),
         configuration_revision_key=(
             "recurring_edit_pending_configuration_revision_"
-            f"{record_id}_profile_{profile_key}"
+            f"{record_id}_{profile_segment}"
         ),
     )
 
@@ -153,16 +159,17 @@ def transaction_edit_pending_state(
 def mixed_use_edit_pending_state(
     profile_key: str, source_id: str
 ) -> PendingRecurrenceState:
+    profile_segment = _profile_key_segment(profile_key)
     return PendingRecurrenceState(
         schedule_id_key=(
-            f"mixed_use_edit_pending_schedule_id_{source_id}_profile_{profile_key}"
+            f"mixed_use_edit_pending_schedule_id_{source_id}_{profile_segment}"
         ),
         payload_key=(
-            f"mixed_use_edit_pending_payload_{source_id}_profile_{profile_key}"
+            f"mixed_use_edit_pending_payload_{source_id}_{profile_segment}"
         ),
         configuration_revision_key=(
             "mixed_use_edit_pending_configuration_revision_"
-            f"{source_id}_profile_{profile_key}"
+            f"{source_id}_{profile_segment}"
         ),
     )
 
@@ -197,13 +204,14 @@ def clear_edit_pending_state_for_schedule(
         ),
     )
     for prefix, pending_state, payload_key in retry_prefixes:
+        profile_suffix = f"_profile_{len(profile_key)}_{profile_key}"
         for key in list(state):
             if not key.startswith(prefix):
                 continue
-            record_id, separator, key_profile = key[len(prefix) :].rpartition(
-                "_profile_"
-            )
-            if separator != "_profile_" or key_profile != profile_key:
+            if not key.endswith(profile_suffix):
+                continue
+            record_id = key[len(prefix) : -len(profile_suffix)]
+            if not record_id:
                 continue
             value = state.get(key)
             pending = pending_state(profile_key, record_id)

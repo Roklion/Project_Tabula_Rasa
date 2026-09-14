@@ -86,15 +86,15 @@ def test_pending_edit_payload_restores_all_transaction_fields() -> None:
 
 def test_ending_schedule_clears_only_matching_pending_retry_state() -> None:
     state = {
-        "recurring_edit_pending_schedule_id_expense_profile_shop": "ended",
-        "recurring_edit_pending_configuration_revision_expense_profile_shop": "sheet",
-        "mixed_use_edit_pending_schedule_id_source_profile_shop": "ended",
-        "mixed_use_edit_pending_payload_source_profile_shop": {"schedule_id": "ended"},
-        "mixed_use_edit_pending_configuration_revision_source_profile_shop": "sheet",
-        "recurring_edit_pending_schedule_id_shop_expense_profile_north_shop": "ended",
-        "mixed_use_edit_pending_schedule_id_shop_source_profile_north_shop": "ended",
-        "mixed_use_edit_pending_schedule_id_source_profile_north_profile_shop": "other",
-        "mixed_use_edit_pending_payload_source_profile_north_profile_shop": {
+        "recurring_edit_pending_schedule_id_expense_profile_4_shop": "ended",
+        "recurring_edit_pending_configuration_revision_expense_profile_4_shop": "sheet",
+        "mixed_use_edit_pending_schedule_id_source_profile_shop_profile_4_shop": "ended",
+        "mixed_use_edit_pending_payload_source_profile_shop_profile_4_shop": {"schedule_id": "ended"},
+        "mixed_use_edit_pending_configuration_revision_source_profile_shop_profile_4_shop": "sheet",
+        "recurring_edit_pending_schedule_id_shop_expense_profile_10_north_shop": "ended",
+        "mixed_use_edit_pending_schedule_id_shop_source_profile_10_north_shop": "ended",
+        "mixed_use_edit_pending_schedule_id_source_profile_north_profile_18_north_profile_shop": "other",
+        "mixed_use_edit_pending_payload_source_profile_north_profile_18_north_profile_shop": {
             "schedule_id": "ended"
         },
         "recurring_pending_schedule_id_shop": "ended",
@@ -109,21 +109,21 @@ def test_ending_schedule_clears_only_matching_pending_retry_state() -> None:
         "mixed_use_pending_schedule_id_north_shop": "other-ended",
         "mixed_use_pending_source_id_north_shop": "other-source",
         "mixed_use_pending_payload_north_shop": {"total_expense": "40"},
-        "recurring_edit_pending_schedule_id_other_profile_shop": "keep",
+        "recurring_edit_pending_schedule_id_other_profile_4_shop": "keep",
         "unrelated": "ended",
     }
 
     _clear_pending_schedule_state(state, "shop", "ended")
 
-    assert "recurring_edit_pending_schedule_id_expense_profile_shop" not in state
-    assert "recurring_edit_pending_configuration_revision_expense_profile_shop" not in state
-    assert "mixed_use_edit_pending_schedule_id_source_profile_shop" not in state
-    assert "mixed_use_edit_pending_payload_source_profile_shop" not in state
-    assert "mixed_use_edit_pending_configuration_revision_source_profile_shop" not in state
-    assert state["recurring_edit_pending_schedule_id_shop_expense_profile_north_shop"] == "ended"
-    assert state["mixed_use_edit_pending_schedule_id_shop_source_profile_north_shop"] == "ended"
-    assert state["mixed_use_edit_pending_schedule_id_source_profile_north_profile_shop"] == "other"
-    assert state["mixed_use_edit_pending_payload_source_profile_north_profile_shop"]["schedule_id"] == "ended"
+    assert "recurring_edit_pending_schedule_id_expense_profile_4_shop" not in state
+    assert "recurring_edit_pending_configuration_revision_expense_profile_4_shop" not in state
+    assert "mixed_use_edit_pending_schedule_id_source_profile_shop_profile_4_shop" not in state
+    assert "mixed_use_edit_pending_payload_source_profile_shop_profile_4_shop" not in state
+    assert "mixed_use_edit_pending_configuration_revision_source_profile_shop_profile_4_shop" not in state
+    assert state["recurring_edit_pending_schedule_id_shop_expense_profile_10_north_shop"] == "ended"
+    assert state["mixed_use_edit_pending_schedule_id_shop_source_profile_10_north_shop"] == "ended"
+    assert state["mixed_use_edit_pending_schedule_id_source_profile_north_profile_18_north_profile_shop"] == "other"
+    assert state["mixed_use_edit_pending_payload_source_profile_north_profile_18_north_profile_shop"]["schedule_id"] == "ended"
     assert "recurring_pending_schedule_id_shop" not in state
     assert "recurring_pending_transaction_id_shop" not in state
     assert "recurring_pending_payload_shop" not in state
@@ -136,7 +136,7 @@ def test_ending_schedule_clears_only_matching_pending_retry_state() -> None:
     assert state["mixed_use_pending_schedule_id_north_shop"] == "other-ended"
     assert "mixed_use_pending_source_id_north_shop" in state
     assert "mixed_use_pending_payload_north_shop" in state
-    assert state["recurring_edit_pending_schedule_id_other_profile_shop"] == "keep"
+    assert state["recurring_edit_pending_schedule_id_other_profile_4_shop"] == "keep"
     assert state["unrelated"] == "ended"
 
 

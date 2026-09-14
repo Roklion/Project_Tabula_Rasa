@@ -43,6 +43,30 @@ def test_existing_expense_can_become_recurring_without_creating_a_second_row(
     assert result["schedule"]["description"] == "Updated"
 
 
+def test_existing_expense_recurring_conversion_preserves_receipts(
+    default_storage,
+) -> None:
+    account_id, category_id = _ids(default_storage)
+    transaction = default_storage.create_transaction(
+        txn_date="2024-01-15", kind="Expense", amount="20",
+        account_id=account_id, category_id=category_id,
+    )
+    transaction = default_storage.set_transaction_receipt_references(
+        transaction["id"], [{"id": "receipt123456", "name": "invoice.pdf"}]
+    )
+
+    result = default_storage.create_recurring_expense_from_transaction(
+        transaction["id"], expected_transaction=transaction,
+        schedule_id="receipt-preserved", name="Receipt preserved",
+        recurrence_unit="month", txn_date="2024-01-20", amount="25",
+        account_id=account_id, category_id=category_id,
+    )
+
+    assert result["transaction"]["receipt_references"] == transaction[
+        "receipt_references"
+    ]
+
+
 def test_existing_mixed_use_expense_can_become_recurring_with_pair_parity(
     default_storage,
 ) -> None:
@@ -73,6 +97,35 @@ def test_existing_mixed_use_expense_can_become_recurring_with_pair_parity(
     assert updated_source["recurring_schedule_id"] == result["schedule"]["id"]
     assert projection["recurring_schedule_id"] == result["schedule"]["id"]
     assert projection["recurring_scheduled_date"] == "2024-01-20"
+
+
+def test_existing_mixed_use_recurring_conversion_preserves_receipts(
+    default_storage,
+) -> None:
+    account_id, category_id = _ids(default_storage)
+    source = default_storage.create_mixed_use_expense(
+        txn_date="2024-01-15", total_expense="100",
+        business_use_percentage="25", account_id=account_id,
+        category_id=category_id, allocation_rationale="Measured use",
+    )
+    default_storage.set_mixed_use_receipt_references(
+        source["id"], [{"id": "receipt123456", "name": "invoice.pdf"}]
+    )
+    source = default_storage.get_mixed_use_expense(source["id"])
+
+    result = default_storage.create_recurring_expense_from_mixed_use(
+        source["id"], expected_source=source,
+        schedule_id="mixed-receipt-preserved", name="Mixed receipt preserved",
+        recurrence_unit="month", txn_date="2024-01-20",
+        total_expense="120", business_use_percentage="50",
+        account_id=account_id, category_id=category_id,
+        allocation_rationale="Updated measured use",
+    )
+
+    assert result["source"]["receipt_references"] == source["receipt_references"]
+    assert result["transaction"]["receipt_references"] == source[
+        "receipt_references"
+    ]
 
 
 def test_existing_mixed_use_recurring_conversion_rejects_stale_projection(

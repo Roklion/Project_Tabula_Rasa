@@ -992,15 +992,23 @@ class RecurringMixin:
         merged = {
             **baseline,
             **changes,
-            "receipt_references": "",
         }
         if source_kind == "transaction":
             merged["kind"] = "Expense"
-        return self._prepare_recurring_schedule(
-            merged,
+        preparation = self._prepare_recurring_schedule(
+            {**merged, "receipt_references": ""},
             source_kind=source_kind,
             disallowed_ids=disallowed_ids,
             disallowed_id_message=disallowed_id_message,
+        )
+        resolved = dict(preparation.resolved)
+        resolved["receipt_references"] = str(
+            merged.get("receipt_references", "") or ""
+        )
+        return _RecurringSchedulePreparation(
+            resolved=resolved,
+            schedule=preparation.schedule,
+            existing_schedule=preparation.existing_schedule,
         )
 
     def _commit_recurring_conversion(

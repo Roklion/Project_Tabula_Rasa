@@ -85,10 +85,10 @@ def test_edit_retry_state_uses_exact_record_and_profile_keys() -> None:
     mixed = mixed_use_edit_pending_state("north_shop", "source_profile_shop")
 
     assert ordinary.schedule_id_key == (
-        "recurring_edit_pending_schedule_id_expense_profile_shop"
+        "recurring_edit_pending_schedule_id_expense_profile_4_shop"
     )
     assert mixed.payload_key == (
-        "mixed_use_edit_pending_payload_source_profile_shop_profile_north_shop"
+        "mixed_use_edit_pending_payload_source_profile_shop_profile_10_north_shop"
     )
 
     state: dict[str, object] = {}
@@ -101,17 +101,22 @@ def test_edit_retry_state_uses_exact_record_and_profile_keys() -> None:
 def test_schedule_cleanup_uses_the_terminal_profile_segment() -> None:
     state: dict[str, object] = {}
     pending = mixed_use_edit_pending_state(
-        "north_shop",
-        "source_profile_shop",
+        "north_profile_shop",
+        "source",
     )
     pending.ensure_ids(state, configuration_revision="sheet")
     pending.remember_payload(state, {"description": "Pending edit"})
 
+    other = mixed_use_edit_pending_state("shop", "source_profile_north")
+    other.ensure_ids(state, configuration_revision="sheet")
+    state[other.schedule_id_key] = state[pending.schedule_id_key]
+
     clear_edit_pending_state_for_schedule(
         state,
-        profile_key="north_shop",
+        profile_key="north_profile_shop",
         schedule_id=str(state[pending.schedule_id_key]),
     )
 
     assert not pending.has_pending(state)
     assert pending.configuration_revision_key not in state
+    assert other.has_pending(state)
