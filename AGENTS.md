@@ -262,11 +262,13 @@ scoped, domain-specific helpers.
 For non-trivial feature or refactor work involving an existing domain, the
 implementation plan should briefly state:
 
-- Existing reusable components: which files, functions, or workflows were
-  inspected and what they already own.
+- Existing related implementations inspected: which files, functions, or
+  workflows were inspected and what they already own.
+- Reused or extended: what was reused or extended from those components.
 - New logic required: what cannot be satisfied by those components.
-- Intentional parallel logic: any substantial similar logic that remains
-  separate and why.
+- New parallel logic introduced: any new parallel logic introduced.
+- If substantial parallel logic remains, why should it not share an owner?: the
+  rationale for separate ownership.
 
 Keep this reuse map short; it is an implementation discipline, not a
 documentation burden.
