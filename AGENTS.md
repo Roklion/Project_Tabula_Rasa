@@ -231,6 +231,46 @@ rationale only when GitHub-write authorization is available. Otherwise, report
   the follow-up needed for the maintainer to create. Do not mark review complete
   while a validated blocking finding is unresolved.
 
+## Reuse before implementation
+
+Before implementing a new workflow, screen, CRUD path, or variation of an
+existing feature, inspect the nearest related implementations first. Identify
+what already owns field rendering, normalization, validation, domain rules,
+workflow/state transitions, persistence, retry/recovery behavior, and payload
+construction.
+
+Before adding substantial logic, determine whether the change should:
+
+1. reuse an existing implementation directly;
+2. extend an existing implementation;
+3. extract a small shared helper or domain workflow; or
+4. remain separate because the semantics genuinely differ.
+
+When two flows follow the same business rule, prefer one shared implementation
+with focused tests and thin adapters over multiple equivalent implementations
+with parity tests intended to keep them synchronized. Do not apply DRY
+mechanically: small controller glue, labels, domain-specific validation, or
+code whose abstraction would be harder to understand may remain duplicated.
+
+Stop and reconsider especially before introducing a second state machine,
+repeated retry/recovery or stale-write/uncertain-write classification, repeated
+payload mapping for the same domain record, or a sibling Add/Edit/Copy/
+Mixed-use flow containing dozens of structurally similar lines. Do not
+introduce generic frameworks solely to remove duplication; prefer narrowly
+scoped, domain-specific helpers.
+
+For non-trivial feature or refactor work involving an existing domain, the
+implementation plan should briefly state:
+
+- Existing reusable components: which files, functions, or workflows were
+  inspected and what they already own.
+- New logic required: what cannot be satisfied by those components.
+- Intentional parallel logic: any substantial similar logic that remains
+  separate and why.
+
+Keep this reuse map short; it is an implementation discipline, not a
+documentation burden.
+
 ## Business-profile isolation
 
 - Every ledger, Google Drive, backup, cache, duplicate-submission, and
