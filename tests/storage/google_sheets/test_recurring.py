@@ -759,6 +759,7 @@ def test_mixed_use_recurring_initial_retry_reuses_schedule_and_pair(default_stor
         schedule_id="retry-schedule", name="Vehicle", txn_date="2024-01-31",
         recurrence_unit="month", total_expense="20.00", business_use_percentage="50",
         account_id=account_id, category_id=category_id, allocation_rationale="Business travel",
+        source_id="retry-source", linked_transaction_id="retry-projection",
     )
     first = default_storage.create_recurring_mixed_use_expense(**payload)
     monkeypatch.setattr(
@@ -766,7 +767,8 @@ def test_mixed_use_recurring_initial_retry_reuses_schedule_and_pair(default_stor
         lambda: "2099-01-01T00:00:00+00:00",
     )
     second = default_storage.create_recurring_mixed_use_expense(**payload)
-    assert first["source"]["id"] == second["source"]["id"]
+    assert first["source"]["id"] == second["source"]["id"] == "retry-source"
+    assert first["transaction"]["id"] == "retry-projection"
     assert len(default_storage.list_recurring_schedules()) == 1
     assert len(default_storage.list_mixed_use_expenses()) == 1
 

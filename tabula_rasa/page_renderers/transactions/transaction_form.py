@@ -15,6 +15,20 @@ from tabula_rasa.page_renderers.transactions.payee_selector import (
 )
 
 TransactionFormMode = Literal["add", "edit", "copy"]
+_TRANSACTION_PAYLOAD_FIELDS = (
+    "txn_date",
+    "kind",
+    "amount",
+    "account_id",
+    "to_account_id",
+    "category_id",
+    "payee_id",
+    "new_payee_name",
+    "tag_ids",
+    "new_tag_name",
+    "reference",
+    "description",
+)
 
 
 def transaction_widget_key(prefix: str, field_name: str, scope: str = "") -> str:
@@ -61,6 +75,19 @@ def validate_transaction_draft(draft: Mapping[str, object]) -> str | None:
     elif not str(draft.get("category_id") or ""):
         return "Choose a category before saving."
     return None
+
+
+def transaction_payload_from_draft(
+    draft: Mapping[str, object],
+    *,
+    description: object | None = None,
+) -> dict[str, object]:
+    """Return the canonical storage payload shared by Add, Edit, and Copy."""
+    payload = {field: draft[field] for field in _TRANSACTION_PAYLOAD_FIELDS}
+    payload["new_tag_name"] = payload["new_tag_name"] or ""
+    if description is not None:
+        payload["description"] = description
+    return payload
 
 
 def render_transaction_fields(

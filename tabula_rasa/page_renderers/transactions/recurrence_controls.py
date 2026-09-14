@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass
 from datetime import date
-from collections.abc import Mapping, MutableMapping
 
 import streamlit as st
+
+from tabula_rasa.recurrence_state import (
+    mixed_use_edit_pending_state,
+    transaction_edit_pending_state,
+)
 
 
 @dataclass(frozen=True)
@@ -33,22 +38,22 @@ class RecurrenceSelection:
 
 def recurring_edit_pending_schedule_key(profile_key: str, record_id: str) -> str:
     """Build an ordinary-edit retry key with an unambiguous profile suffix."""
-    return f"recurring_edit_pending_schedule_id_{record_id}_profile_{profile_key}"
+    return transaction_edit_pending_state(profile_key, record_id).schedule_id_key
 
 
 def mixed_use_edit_pending_schedule_key(profile_key: str, source_id: str) -> str:
     """Build a mixed-use-edit retry key with an unambiguous profile suffix."""
-    return f"mixed_use_edit_pending_schedule_id_{source_id}_profile_{profile_key}"
+    return mixed_use_edit_pending_state(profile_key, source_id).schedule_id_key
 
 
 def recurring_edit_pending_payload_key(profile_key: str, record_id: str) -> str:
     """Build an ordinary-edit retry payload key with an exact profile suffix."""
-    return f"recurring_edit_pending_payload_{record_id}_profile_{profile_key}"
+    return transaction_edit_pending_state(profile_key, record_id).payload_key
 
 
 def mixed_use_edit_pending_payload_key(profile_key: str, source_id: str) -> str:
     """Build a mixed-use-edit retry payload key with an exact profile suffix."""
-    return f"mixed_use_edit_pending_payload_{source_id}_profile_{profile_key}"
+    return mixed_use_edit_pending_state(profile_key, source_id).payload_key
 
 
 def edit_defaults_with_pending_payload(

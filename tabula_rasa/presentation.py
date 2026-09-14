@@ -6,6 +6,11 @@ from collections.abc import Mapping, MutableMapping
 
 import streamlit as st
 
+from tabula_rasa.recurrence_state import (
+    mixed_use_create_pending_state,
+    transaction_create_pending_state,
+)
+
 
 DESIGN_TOKENS: Mapping[str, str] = {
     "canvas": "#F5F4F0",
@@ -676,8 +681,10 @@ def reset_profile_presentation_state(
     preserved_retry_prefixes = (
         "recurring_edit_pending_schedule_id_",
         "recurring_edit_pending_payload_",
+        "recurring_edit_pending_configuration_revision_",
         "mixed_use_edit_pending_schedule_id_",
         "mixed_use_edit_pending_payload_",
+        "mixed_use_edit_pending_configuration_revision_",
     )
     for key in list(session_state):
         if (
@@ -702,33 +709,14 @@ def reset_stale_recurring_pending_state(
     workbook_identity: str,
 ) -> None:
     """Discard retry state that belongs to an older workbook configuration."""
-    pending_groups = (
-        (
-            f"recurring_pending_configuration_revision_{profile_key}",
-            (
-                f"recurring_pending_schedule_id_{profile_key}",
-                f"recurring_pending_transaction_id_{profile_key}",
-                f"recurring_pending_payload_{profile_key}",
-            ),
-        ),
-        (
-            f"mixed_use_pending_configuration_revision_{profile_key}",
-            (
-                f"mixed_use_pending_source_id_{profile_key}",
-                f"mixed_use_pending_transaction_id_{profile_key}",
-                f"mixed_use_pending_schedule_id_{profile_key}",
-                f"mixed_use_pending_payload_{profile_key}",
-            ),
-        ),
-    )
-    for revision_key, pending_keys in pending_groups:
-        recurring_keys = pending_keys[2:] if revision_key.startswith("mixed_use_") else pending_keys
-        if not any(key in session_state for key in recurring_keys):
-            continue
-        if session_state.get(revision_key) == workbook_identity:
-            continue
-        for key in (*pending_keys, revision_key):
-            session_state.pop(key, None)
+    for pending in (
+        transaction_create_pending_state(profile_key),
+        mixed_use_create_pending_state(profile_key),
+    ):
+        pending.discard_if_configuration_changed(
+            session_state,
+            workbook_identity,
+        )
 
 
 def render_page_header(title: str, description: str | None = None) -> None:

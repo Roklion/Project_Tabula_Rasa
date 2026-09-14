@@ -5,9 +5,8 @@ from unittest.mock import patch
 from tests.app_support import authenticated_app, by_label, navigate_to
 from tests.app_support import profile_config
 from tests.fakes import FakeWorkbook
-from tabula_rasa.page_renderers.transactions.creation import (
-    _pending_recurring_create_exists,
-    _pending_recurring_ids,
+from tabula_rasa.page_renderers.transactions.transaction_form import (
+    transaction_payload_from_draft,
 )
 from tabula_rasa.storage import GoogleSheetsStorage, StorageUnavailableError
 
@@ -124,20 +123,32 @@ def test_invalid_recurring_submission_does_not_leave_pending_retry_state() -> No
         assert "recurring_pending_payload_test" not in app.session_state
 
 
-def test_pending_recurring_ids_are_stable_across_retries() -> None:
-    state: dict[str, object] = {}
-    first = _pending_recurring_ids(state, "north", "revision")
-    second = _pending_recurring_ids(state, "north")
-    assert first == second
-    assert state["recurring_pending_configuration_revision_north"] == "revision"
-    assert first != _pending_recurring_ids(state, "south")
+def test_transaction_payload_from_draft_is_canonical() -> None:
+    draft = {
+        "txn_date": "2026-09-14",
+        "kind": "Expense",
+        "amount": 25,
+        "account_id": "checking",
+        "to_account_id": "",
+        "category_id": "office",
+        "payee_id": "vendor",
+        "new_payee_name": "",
+        "tag_ids": ["tax"],
+        "new_tag_name": None,
+        "reference": "INV-25",
+        "description": "Draft description",
+    }
 
+    payload = transaction_payload_from_draft(
+        draft,
+        description="Saved description",
+    )
 
-def test_pending_recurring_create_requires_recurring_retry() -> None:
-    state: dict[str, object] = {"recurring_pending_schedule_id_north": "schedule"}
-
-    assert _pending_recurring_create_exists(state, "north")
-    assert not _pending_recurring_create_exists(state, "south")
+    assert payload == {
+        **draft,
+        "new_tag_name": "",
+        "description": "Saved description",
+    }
 
 
 def test_startup_reconciles_once_per_profile_and_keeps_profiles_isolated() -> None:

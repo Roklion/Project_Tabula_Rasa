@@ -16,9 +16,6 @@ from tabula_rasa.page_renderers.transactions.mixed_use import (
     _mixed_use_selection_ids,
     _pending_create_ids,
     _preserve_pending_recurring_state,
-    _pending_recurring_schedule_id,
-    _pending_recurring_rationale,
-    _pending_recurring_schedule_exists,
     _start_mixed_use_copy,
     mixed_use_preview,
 )
@@ -58,21 +55,6 @@ def test_pending_create_ids_remain_stable_for_uncertain_retries() -> None:
     assert first != _pending_create_ids(state, "south")
 
 
-def test_pending_recurring_schedule_id_remains_stable_for_uncertain_retries() -> None:
-    state: dict[str, object] = {}
-    first = _pending_recurring_schedule_id(state, "north", "revision")
-    assert first == _pending_recurring_schedule_id(state, "north")
-    assert state["mixed_use_pending_configuration_revision_north"] == "revision"
-    assert first != _pending_recurring_schedule_id(state, "south")
-
-
-def test_pending_recurring_schedule_requires_recurring_retry() -> None:
-    state: dict[str, object] = {"mixed_use_pending_schedule_id_north": "schedule"}
-
-    assert _pending_recurring_schedule_exists(state, "north")
-    assert not _pending_recurring_schedule_exists(state, "south")
-
-
 def test_projection_conflicts_keep_recurring_retry_state() -> None:
     from tabula_rasa.storage import StorageConflictError
 
@@ -84,20 +66,6 @@ def test_projection_conflicts_keep_recurring_retry_state() -> None:
     )
     assert not _preserve_pending_recurring_state(
         StorageConflictError("Recurring schedule ID is already in use")
-    )
-
-
-def test_pending_recurring_rationale_rehydrates_retry_validation() -> None:
-    state: dict[str, object] = {
-        "mixed_use_pending_schedule_id_north": "schedule",
-        "mixed_use_pending_payload_north": {
-            "allocation_rationale": "Saved rationale",
-        },
-    }
-
-    assert _pending_recurring_rationale(state, "north", "") == "Saved rationale"
-    assert _pending_recurring_rationale(state, "south", "Typed rationale") == (
-        "Typed rationale"
     )
 
 

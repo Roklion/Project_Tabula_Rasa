@@ -17,10 +17,12 @@ from tabula_rasa.page_renderers.transactions.payee_selector import (
 )
 from tabula_rasa.page_renderers.transactions.recurrence_controls import (
     edit_defaults_with_pending_payload,
-    mixed_use_edit_pending_payload_key,
-    mixed_use_edit_pending_schedule_key,
     render_recurrence_controls,
     restore_recurrence_controls,
+)
+from tabula_rasa.recurrence_state import (
+    mixed_use_create_pending_state,
+    mixed_use_edit_pending_state,
 )
 from tabula_rasa.page_renderers.transactions.transaction_copy import (
     _copyable_tag_ids,
@@ -126,45 +128,9 @@ def _pending_create_ids(
     return source_id, transaction_id
 
 
-def _pending_recurring_schedule_id(
-    state: MutableMapping[str, object],
-    profile: str,
-    configuration_revision: str | None = None,
-) -> str:
-    """Keep a recurring schedule ID stable while its create is retried."""
-    key = _key(profile, "pending_schedule_id")
-    schedule_id = str(state.get(key) or uuid4())
-    state[key] = schedule_id
-    if configuration_revision is not None:
-        state[_key(profile, "pending_configuration_revision")] = (
-            configuration_revision
-        )
-    return schedule_id
-
-
 def _preserve_pending_recurring_state(error: StorageConflictError) -> bool:
     """Keep retry state when a mixed-use projection needs inspection."""
     return "linked projection" in str(error).casefold()
-
-
-def _pending_recurring_schedule_exists(
-    state: MutableMapping[str, object], profile: str
-) -> bool:
-    """Keep an incomplete recurring create on its convergence path."""
-    return bool(state.get(_key(profile, "pending_schedule_id")))
-
-
-def _pending_recurring_rationale(
-    state: Mapping[str, object], profile: str, fallback: str
-) -> str:
-    """Reuse the saved rationale while retrying a pending recurring create."""
-    if not _pending_recurring_schedule_exists(state, profile):
-        return fallback.strip()
-    payload = state.get(_key(profile, "pending_payload"))
-    if not isinstance(payload, Mapping):
-        return fallback.strip()
-    return str(payload.get("allocation_rationale") or "").strip() or fallback.strip()
-
 
 def _mixed_use_copy_keys(profile: str) -> dict[str, str]:
     """Return the profile-local keys used by a mixed-use copy editor."""
@@ -476,8 +442,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
     baseline_id_key = _key(profile, "edit_baseline_source_id")
     pending_source_key = _key(profile, "pending_source_id")
     pending_transaction_key = _key(profile, "pending_transaction_id")
-    pending_schedule_key = _key(profile, "pending_schedule_id")
-    pending_payload_key = _key(profile, "pending_payload")
+    create_pending_recurrence = mixed_use_create_pending_state(profile)
     source_ids = [str(item["id"]) for item in sources]
     selection_scope_key = _key(profile, "selection_scope")
     selection_scope = (
@@ -582,7 +547,6 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         pending_source_id, pending_transaction_id = _pending_create_ids(
             st.session_state, profile
         )
-        pending_schedule_id = ""
 
     def update_receipt_baseline(updated_source):
         if st.session_state.get(baseline_id_key) == selected_id:
@@ -595,24 +559,33 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         if copy_mode
         else f"{profile}_{selected_id or 'new'}"
     )
-    edit_pending_schedule_key = (
-        mixed_use_edit_pending_schedule_key(profile, str(source["id"]))
+    edit_pending_recurrence = (
+        mixed_use_edit_pending_state(profile, str(source["id"]))
         if source and not source_incomplete
-        else ""
+        else None
     )
-    edit_pending_payload_key = (
-        mixed_use_edit_pending_payload_key(profile, str(source["id"]))
-        if source and not source_incomplete
-        else ""
+    pending_configuration_revision = str(
+        context.profile_secrets.get("spreadsheet_id")
+        or context.configuration_revision
     )
+    if edit_pending_recurrence is not None:
+        edit_pending_recurrence.discard_if_configuration_changed(
+            st.session_state,
+            pending_configuration_revision,
+        )
     pending_edit_payload = (
-        st.session_state.get(edit_pending_payload_key)
-        if edit_pending_payload_key
+        edit_pending_recurrence.payload(st.session_state)
+        if edit_pending_recurrence is not None
         else None
     )
     if source and not source_incomplete:
         defaults = edit_defaults_with_pending_payload(
             defaults, pending_edit_payload
+        )
+    elif not copy_mode:
+        defaults = edit_defaults_with_pending_payload(
+            defaults,
+            create_pending_recurrence.payload(st.session_state),
         )
     context.reset_widget_state_if_requested(
         _key(profile, "form_reset"),
@@ -773,7 +746,11 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         ):
             restore_recurrence_controls(
                 st.session_state,
-                pending_edit_payload,
+                (
+                    pending_edit_payload
+                    if source
+                    else create_pending_recurrence.payload(st.session_state)
+                ),
                 key_prefix="mixed",
                 key_suffix=scope,
             )
@@ -852,13 +829,6 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                 key=f"mixed_save_{scope}",
                 disabled=source_incomplete,
             )
-        pending_rationale = (
-            _pending_recurring_rationale(
-                st.session_state, profile, rationale
-            )
-            if not source and not source_incomplete and not copy_mode
-            else ""
-        )
         if save_button:
             tag_error = inline_tag_name_error(new_tag_name)
             if (selector_error := tag_selector_error(f"mixed_tags_{scope}")):
@@ -873,7 +843,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                 save_error.error(
                     "Choose an active Expense category before saving this copied mixed-use expense."
                 )
-            elif not (rationale.strip() or pending_rationale):
+            elif not rationale.strip():
                 save_error.error("Allocation rationale is required.")
             elif isinstance(recovery, Mapping) and not recovery_source and receipt_uploads:
                 save_error.error(
@@ -890,7 +860,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                 and not source
                 and not source_incomplete
                 and not copy_mode
-                and _pending_recurring_schedule_exists(st.session_state, profile)
+                and create_pending_recurrence.has_schedule(st.session_state)
             ):
                 save_error.error(
                     "A previous recurring save is incomplete. Re-enable "
@@ -948,55 +918,53 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                 )
                 payload = {"txn_date": txn_date, "account_id": account_id, "category_id": category_id, "payee_id": payee_id, "new_payee_name": new_payee_name, "tag_ids": tag_ids, "new_tag_name": new_tag_name or "", "reference": reference, "description": saved_description, "total_expense": total_expense, "business_use_percentage": business_use_percentage, "allocation_rationale": rationale}
 
-                def clear_pending_recurring_state() -> None:
-                    st.session_state.pop(pending_source_key, None)
-                    st.session_state.pop(pending_transaction_key, None)
-                    st.session_state.pop(pending_schedule_key, None)
-                    st.session_state.pop(pending_payload_key, None)
-                    st.session_state.pop(
-                        _key(profile, "pending_configuration_revision"), None
+                if not (source and not source_incomplete):
+                    payload["source_id"] = (
+                        str(source["id"])
+                        if source_incomplete
+                        else (
+                            str(st.session_state[copy_keys["new_source_id"]])
+                            if copy_mode
+                            else pending_source_id
+                        )
                     )
+                    payload["linked_transaction_id"] = (
+                        str(source["linked_transaction_id"])
+                        if source_incomplete
+                        else (
+                            str(st.session_state[copy_keys["new_transaction_id"]])
+                            if copy_mode
+                            else pending_transaction_id
+                        )
+                    )
+                    if source_incomplete:
+                        payload["expected_source"] = expected_source
+                        payload["receipt_references"] = source.get(
+                            "receipt_references", ""
+                        )
 
                 if recurring:
-                    if source and not source_incomplete:
-                        pending_schedule_id = str(
-                            st.session_state.get(edit_pending_schedule_key)
-                            or uuid4()
-                        )
-                        st.session_state[edit_pending_schedule_key] = (
-                            pending_schedule_id
-                        )
-                    else:
-                        pending_schedule_id = _pending_recurring_schedule_id(
-                            st.session_state,
-                            profile,
-                            str(
-                                context.profile_secrets.get("spreadsheet_id")
-                                or context.configuration_revision
-                            ),
-                        )
-                    payload.update(
-                        {
-                            "schedule_id": pending_schedule_id,
-                            **recurrence.schedule_fields(
-                                description=description,
-                                fallback_name="Recurring mixed-use expense",
-                            ),
-                        }
+                    active_pending_recurrence = (
+                        edit_pending_recurrence
+                        if source and not source_incomplete
+                        else create_pending_recurrence
                     )
-                    if source and not source_incomplete:
-                        st.session_state[edit_pending_payload_key] = dict(payload)
-                    if not source:
-                        previous_payload = st.session_state.get(
-                            pending_payload_key
+                    pending_ids = active_pending_recurrence.ensure_ids(
+                        st.session_state,
+                        configuration_revision=(
+                            pending_configuration_revision
+                        ),
+                    )
+                    payload.update(
+                        recurrence.schedule_fields(
+                            description=description,
+                            fallback_name="Recurring mixed-use expense",
                         )
-                        if isinstance(previous_payload, Mapping):
-                            payload = {
-                                **previous_payload,
-                                "schedule_id": pending_schedule_id,
-                            }
-                        else:
-                            st.session_state[pending_payload_key] = dict(payload)
+                    )
+                    payload = active_pending_recurrence.remember_payload(
+                        st.session_state,
+                        {**payload, **pending_ids},
+                    )
 
                 if source and not source_incomplete:
                     def operation():
@@ -1025,29 +993,6 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                         )
                     )
                 else:
-                    payload["source_id"] = (
-                        str(source["id"])
-                        if source_incomplete
-                        else (
-                            str(st.session_state[copy_keys["new_source_id"]])
-                            if copy_mode
-                            else pending_source_id
-                        )
-                    )
-                    payload["linked_transaction_id"] = (
-                        str(source["linked_transaction_id"])
-                        if source_incomplete
-                        else (
-                            str(st.session_state[copy_keys["new_transaction_id"]])
-                            if copy_mode
-                            else pending_transaction_id
-                        )
-                    )
-                    if source_incomplete:
-                        payload["expected_source"] = expected_source
-                        payload["receipt_references"] = source.get(
-                            "receipt_references", ""
-                        )
 
                     def operation():
                         try:
@@ -1056,14 +1001,14 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                             return context.storage.create_mixed_use_expense(**payload)
                         except StorageValidationError:
                             if recurring:
-                                clear_pending_recurring_state()
+                                create_pending_recurrence.clear(st.session_state)
                             raise
                         except StorageConflictError as error:
                             if (
                                 recurring
                                 and not _preserve_pending_recurring_state(error)
                             ):
-                                clear_pending_recurring_state()
+                                create_pending_recurrence.clear(st.session_state)
                             raise
                     action, success = (
                         ("copy_mixed_use_expense", "Mixed-use expense copied.")
@@ -1071,8 +1016,8 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                         else ("create_mixed_use_expense", "Mixed-use expense saved.")
                     )
 
-                pending_recurring_before_save = _pending_recurring_schedule_exists(
-                    st.session_state, profile
+                pending_recurring_before_save = (
+                    create_pending_recurrence.has_schedule(st.session_state)
                 )
                 recurring_create = (
                     recurring and not source and not source_incomplete and not copy_mode
@@ -1085,11 +1030,9 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                         st.session_state.pop(pending_source_key, None)
                         st.session_state.pop(pending_transaction_key, None)
                     if recurring_create:
-                        clear_pending_recurring_state()
-                    if edit_pending_schedule_key:
-                        st.session_state.pop(edit_pending_schedule_key, None)
-                    if edit_pending_payload_key:
-                        st.session_state.pop(edit_pending_payload_key, None)
+                        create_pending_recurrence.clear(st.session_state)
+                    if edit_pending_recurrence is not None:
+                        edit_pending_recurrence.clear(st.session_state)
                     if copy_mode:
                         _clear_mixed_use_copy(st.session_state, profile)
                         _clear_mixed_use_selection(st.session_state, profile)

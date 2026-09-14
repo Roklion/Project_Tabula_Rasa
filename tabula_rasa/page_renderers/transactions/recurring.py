@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from datetime import date
 import json
 from typing import Any
 
 import streamlit as st
 from tabula_rasa.hierarchy import ordered_accounts, ordered_categories
+from tabula_rasa.recurrence_state import clear_edit_pending_state_for_schedule
 
 
 def _mark_workbook_data_changed(context: Any) -> None:
@@ -24,28 +24,11 @@ def _clear_pending_schedule_state(
     schedule_id = str(schedule_id or "")
     if not schedule_id:
         return
-    edit_prefixes = (
-        "recurring_edit_pending_schedule_id_",
-        "recurring_edit_pending_payload_",
-        "mixed_use_edit_pending_schedule_id_",
-        "mixed_use_edit_pending_payload_",
+    clear_edit_pending_state_for_schedule(
+        state,
+        profile_key=profile_key,
+        schedule_id=schedule_id,
     )
-    for key in list(state.keys()):
-        prefix = next((item for item in edit_prefixes if key.startswith(item)), None)
-        if prefix is None:
-            continue
-        _, separator, key_profile = key[len(prefix) :].partition("_profile_")
-        if separator != "_profile_" or key_profile != profile_key:
-            continue
-        value = state.get(key)
-        if prefix.endswith("_schedule_id_"):
-            value = str(value or "")
-        elif isinstance(value, Mapping):
-            value = str(value.get("schedule_id") or "")
-        else:
-            value = ""
-        if value == schedule_id:
-            state.pop(key, None)
 
     for root in ("recurring_pending", "mixed_use_pending"):
         schedule_key = f"{root}_schedule_id_{profile_key}"

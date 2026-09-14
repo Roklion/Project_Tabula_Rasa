@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from uuid import uuid4
 
 import streamlit as st
 
@@ -11,6 +10,7 @@ from tabula_rasa.page_renderers.transactions.context import TransactionsContext
 from tabula_rasa.page_renderers.transactions.transaction_form import (
     render_transaction_fields,
     render_transaction_type,
+    transaction_payload_from_draft,
     validate_transaction_draft,
 )
 from tabula_rasa.page_renderers.transactions.receipts import (
@@ -21,40 +21,16 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     render_receipt_uploader,
 )
 from tabula_rasa.page_renderers.transactions.recurrence_controls import (
+    edit_defaults_with_pending_payload,
     render_recurrence_controls,
+    restore_recurrence_controls,
 )
+from tabula_rasa.recurrence_state import transaction_create_pending_state
 from tabula_rasa.page_renderers.tag_selector import (
     inline_tag_name_error,
     tag_selector_error,
 )
 from tabula_rasa.storage import StorageConflictError, StorageValidationError
-
-
-def _pending_recurring_ids(
-    state: dict[str, object],
-    profile: str,
-    configuration_revision: str | None = None,
-) -> tuple[str, str]:
-    """Keep a recurring schedule and initial transaction ID stable on retry."""
-    schedule_key = f"recurring_pending_schedule_id_{profile}"
-    transaction_key = f"recurring_pending_transaction_id_{profile}"
-    schedule_id = str(state.get(schedule_key) or uuid4())
-    transaction_id = str(state.get(transaction_key) or uuid4())
-    state[schedule_key] = schedule_id
-    state[transaction_key] = transaction_id
-    if configuration_revision is not None:
-        state[f"recurring_pending_configuration_revision_{profile}"] = (
-            configuration_revision
-        )
-    return schedule_id, transaction_id
-
-
-def _pending_recurring_create_exists(state: dict[str, object], profile: str) -> bool:
-    """Keep an incomplete recurring create on its convergence path."""
-    return bool(
-        state.get(f"recurring_pending_schedule_id_{profile}")
-        or state.get(f"recurring_pending_transaction_id_{profile}")
-    )
 
 
 def render_add_transaction(
@@ -101,7 +77,15 @@ def render_add_transaction(
         "reset_add_transaction_form",
         keys=transaction_form_keys,
     )
-    kind = render_transaction_type()
+    pending_recurrence = transaction_create_pending_state(context.profile_key)
+    pending_payload = pending_recurrence.payload(st.session_state)
+    kind = render_transaction_type(
+        default=str(
+            pending_payload.get("kind", "Expense")
+            if pending_payload is not None
+            else "Expense"
+        )
+    )
     if not account_map:
         st.warning("Create an active account before recording transactions.")
         return
@@ -120,7 +104,9 @@ def render_add_transaction(
     with st.form("add_transaction", clear_on_submit=False):
         draft = render_transaction_fields(
             mode="add",
-            defaults={"kind": kind},
+            defaults=edit_defaults_with_pending_payload(
+                {"kind": kind}, pending_payload
+            ),
             account_ids=list(account_map.values()),
             categories=categories,
             account_paths=account_paths,
@@ -131,6 +117,11 @@ def render_add_transaction(
         )
         recurrence = None
         if kind == "Expense":
+            restore_recurrence_controls(
+                st.session_state,
+                pending_payload,
+                key_prefix="add_transaction",
+            )
             recurrence = render_recurrence_controls(
                 label="Repeat this Expense",
                 key_prefix="add_transaction",
@@ -140,15 +131,6 @@ def render_add_transaction(
                 ),
             )
         recurring = bool(recurrence and recurrence.enabled)
-        pending_schedule_key = f"recurring_pending_schedule_id_{context.profile_key}"
-        pending_transaction_key = (
-            f"recurring_pending_transaction_id_{context.profile_key}"
-        )
-        pending_payload_key = f"recurring_pending_payload_{context.profile_key}"
-        pending_schedule_id = str(st.session_state.get(pending_schedule_key) or "")
-        pending_transaction_id = str(
-            st.session_state.get(pending_transaction_key) or ""
-        )
         receipt_uploads = render_receipt_uploader(
             key="add_transaction_receipts",
         )
@@ -164,11 +146,8 @@ def render_add_transaction(
             elif tag_error := inline_tag_name_error(draft["new_tag_name"]):
                 save_error.error(tag_error)
             elif (
-                kind == "Expense"
-                and not recurring
-                and _pending_recurring_create_exists(
-                    st.session_state, context.profile_key
-                )
+                not recurring
+                and pending_recurrence.has_pending(st.session_state)
             ):
                 save_error.error(
                     "A previous recurring save is incomplete. Re-enable "
@@ -176,20 +155,7 @@ def render_add_transaction(
                     "different expense."
                 )
             else:
-                payload = {
-                    "txn_date": draft["txn_date"],
-                    "kind": draft["kind"],
-                    "amount": draft["amount"],
-                    "account_id": draft["account_id"],
-                    "to_account_id": draft["to_account_id"],
-                    "category_id": draft["category_id"],
-                    "payee_id": draft["payee_id"],
-                    "new_payee_name": draft["new_payee_name"],
-                    "tag_ids": draft["tag_ids"],
-                    "new_tag_name": draft["new_tag_name"] or "",
-                    "description": draft["description"],
-                    "reference": draft["reference"],
-                }
+                payload = transaction_payload_from_draft(draft)
                 try:
                     prepared_receipts = prepare_receipt_uploads(receipt_uploads or [])
                 except Exception as error:  # noqa: BLE001 - show safe validation
@@ -208,47 +174,28 @@ def render_add_transaction(
                         )
                     else:
 
-                        def clear_pending_recurring_ids() -> None:
-                            st.session_state.pop(pending_schedule_key, None)
-                            st.session_state.pop(pending_transaction_key, None)
-                            st.session_state.pop(pending_payload_key, None)
-                            st.session_state.pop(
-                                f"recurring_pending_configuration_revision_{context.profile_key}",
-                                None,
-                            )
-
                         def clear_pending_recurring_if_active() -> None:
                             if kind == "Expense" and recurring:
-                                clear_pending_recurring_ids()
+                                pending_recurrence.clear(st.session_state)
 
                         if kind == "Expense" and recurring:
-                            pending_schedule_id, pending_transaction_id = (
-                                _pending_recurring_ids(
-                                    st.session_state,
-                                    context.profile_key,
-                                    str(
-                                        context.profile_secrets.get("spreadsheet_id")
-                                        or context.configuration_revision
-                                    ),
-                                )
+                            pending_ids = pending_recurrence.ensure_ids(
+                                st.session_state,
+                                configuration_revision=str(
+                                    context.profile_secrets.get("spreadsheet_id")
+                                    or context.configuration_revision
+                                ),
                             )
-                            payload.update({
-                                "schedule_id": pending_schedule_id,
-                                "transaction_id": pending_transaction_id,
-                                **recurrence.schedule_fields(
+                            payload.update(
+                                recurrence.schedule_fields(
                                     description=draft["description"],
                                     fallback_name="Recurring expense",
-                                ),
-                            })
-                            previous_payload = st.session_state.get(pending_payload_key)
-                            if isinstance(previous_payload, Mapping):
-                                payload = {
-                                    **previous_payload,
-                                    "schedule_id": pending_schedule_id,
-                                    "transaction_id": pending_transaction_id,
-                                }
-                            else:
-                                st.session_state[pending_payload_key] = dict(payload)
+                                )
+                            )
+                            payload = pending_recurrence.remember_payload(
+                                st.session_state,
+                                {**payload, **pending_ids},
+                            )
 
                         def operation():
                             try:
@@ -261,7 +208,7 @@ def render_add_transaction(
                                 )
                             except (StorageConflictError, StorageValidationError):
                                 if kind == "Expense" and recurring:
-                                    clear_pending_recurring_ids()
+                                    pending_recurrence.clear(st.session_state)
                                 raise
 
                         context.confirmed_write(
