@@ -16,7 +16,7 @@ import subprocess
 import sys
 import time
 import urllib.request
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -299,7 +299,6 @@ def check_viewport(page: Page, url: str, viewport: tuple[int, int]) -> None:
         ) from error
     assert_no_page_overflow(page)
 
-
 def capture_failure_screenshot(
     page: Page, screenshots_dir: Path, viewport: tuple[int, int]
 ) -> str | None:
@@ -368,7 +367,12 @@ def _exit_playwright_context(
         raise SmokeCheckFailure(failure) from error
 
 
-def run_smoke_check(screenshots_dir: Path | None, port: int) -> list[str]:
+def run_smoke_check(
+    screenshots_dir: Path | None,
+    port: int,
+    *,
+    page_check: Callable[[Page, str, tuple[int, int]], None] | None = None,
+) -> list[str]:
     if not HAS_PLAYWRIGHT:
         raise SmokeCheckFailure(
             "Playwright is required for the viewport smoke check. Install the "
@@ -376,6 +380,7 @@ def run_smoke_check(screenshots_dir: Path | None, port: int) -> list[str]:
         )
     ensure_port_available(port)
     ensure_fixture_theme_is_current()
+    selected_page_check = page_check or check_viewport
     environment = os.environ.copy()
     environment["TABULA_LOCAL_PROFILE_ADMIN"] = "1"
     process = subprocess.Popen(
@@ -417,7 +422,7 @@ def run_smoke_check(screenshots_dir: Path | None, port: int) -> list[str]:
                         page = browser.new_page(
                             viewport={"width": viewport[0], "height": viewport[1]}
                         )
-                        check_viewport(page, url, viewport)
+                        selected_page_check(page, url, viewport)
                     except Exception as error:  # noqa: BLE001 - report every viewport
                         failure = f"{viewport[0]}x{viewport[1]}: {error}"
                         failures.append(failure)

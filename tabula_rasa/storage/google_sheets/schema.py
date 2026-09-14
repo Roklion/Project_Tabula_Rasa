@@ -86,6 +86,29 @@ WORKSHEET_HEADERS = {
         "attention_code",
         "attention_at",
     ),
+    "Assets": (
+        "id",
+        "name",
+        "asset_type",
+        "notes",
+        "acquisition_date",
+        "depreciation_start_date",
+        "cost_basis",
+        "salvage_value",
+        "useful_life_quarters",
+        "depreciation_method",
+        "depreciation_expense_account_id",
+        "accumulated_depreciation_account_id",
+        "payee_id",
+        "reference",
+        "tag_ids",
+        "source_transaction_id",
+        "retired_date",
+        "status",
+        "schedule_overrides",
+        "created_at",
+        "updated_at",
+    ),
     "Tags": ("id", "name", "active", "created_at"),
     "Mileage": (
         "id",
@@ -124,7 +147,7 @@ CATEGORY_KINDS = {"Income", "Expense"}
 
 TRANSACTION_KINDS = {"Income", "Expense", "Transfer"}
 
-BACKUP_FORMAT_VERSION = 11
+BACKUP_FORMAT_VERSION = 12
 
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 

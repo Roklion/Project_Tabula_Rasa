@@ -53,6 +53,54 @@ with the expanded sidebar, they stack so each table remains readable.
 It uses the latest confirmed Sheets state. When there are no transactions,
 the page explains that the first entry can be added from Transactions.
 
+## Assets
+
+Use **Assets** to keep a separate, durable record for each business-use item
+whose cost is depreciated over time. Assets is a top-level Workspace page, not
+a Transactions tab. Adding an asset does not create, delete, reclassify, or
+otherwise change the transaction used to buy it.
+
+Each asset records its name, pre-enumerated asset type, optional notes,
+acquisition date, depreciation start date, cost basis, salvage value, useful
+life in quarters, and the currently supported **Straight-line** method. You can
+also select an existing managed Payee, Tags, a reference, and an optional source
+acquisition transaction. A linked transaction's existing receipt names appear
+as audit context; receipts are not copied. If the transaction is later missing,
+the asset remains valid and the page identifies the broken link.
+
+The available types cover computers and office equipment; furniture, fixtures,
+and appliances; photography, communication, and video equipment; machinery,
+equipment, and tools; vehicles; construction and farm
+equipment; residential and commercial real property; land and leasehold
+improvements; software and other intangibles; and other depreciable property.
+Land itself is not offered because land is not depreciable. The selected type
+does not automatically choose a tax life or calculate MACRS, Section 179,
+bonus depreciation, or a tax return.
+
+Select an asset and choose **Calculate quarterly schedule** to see its schedule.
+The first row uses the configured depreciation start date and later rows occur
+every three months on the same calendar-day anchor. When that day does not
+exist, the occurrence uses month-end without permanently shifting later dates.
+There is no partial-quarter proration. The last quarter absorbs any rounding
+remainder, so total depreciation always equals cost basis minus salvage value.
+
+To preserve a known historical amount, open **Override a due or past quarter**,
+choose the quarter, enter the amount and a required reason, and save. The saved
+override is part of the asset's backed-up source record. Later quarters are
+rebalanced so the complete schedule still ends at salvage value. Schedule terms
+remain locked while any override exists; remove the overrides to return to the
+ordinary editable straight-line schedule.
+
+Permanent deletion is available only before an asset has saved depreciation
+history. Once an override exists, keep the durable history and retire the asset
+instead of deleting it.
+
+Retiring an asset stops schedule rows after the retirement date. It does not
+calculate sale proceeds, disposal gain or loss, recapture, or a write-off of
+remaining book value. This phase does not post depreciation to the ledger;
+depreciation is non-cash and will require the future balanced journal-entry
+workflow.
+
 ## Accounts
 
 Accounts keep their balance-sheet classification separate from their subtype:
@@ -291,15 +339,17 @@ show active and inactive records and provide **Add**, **Rename**, **Merge**, and
 preserves the stable ID and all references.
 
 Merging requires an explicit target, one or more source values, and an
-acknowledgement. Payee merges update transaction references and both sides of
-each MixedUseExpenses source/projection pair. Tag merges update Transactions,
-Mileage, and MixedUseExpenses and remove duplicate associations when a row
+acknowledgement. Payee merges update transaction and asset references and both
+sides of each MixedUseExpenses source/projection pair. Tag merges update
+Transactions, Mileage, Assets, and MixedUseExpenses and remove duplicate
+associations when a row
 already has both the source and target tag. Other fields and associations are
 preserved.
 
 Removal is permanent and allowed only for an unreferenced value. If a Payee or
 Tag is still used, the page shows the fresh reference count and blocks removal;
-unassign it in the relevant transaction or mileage editor or merge it instead.
+unassign it in the relevant transaction, mileage, or asset editor or merge it
+instead.
 Every operation is scoped to the selected profile and reports success only
 after the Sheets write is confirmed. An uncertain response is read back once;
 only a clearly unchanged operation is retried, while a partial or unreadable

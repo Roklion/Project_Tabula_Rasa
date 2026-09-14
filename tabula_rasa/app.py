@@ -41,6 +41,7 @@ from tabula_rasa.maps_routing import (
 )
 from tabula_rasa.google_maps_quota import render_google_maps_usage_sidebar
 from tabula_rasa.page_renderers.accounts import AccountsContext, render_accounts
+from tabula_rasa.page_renderers.assets import AssetsContext, render_assets
 from tabula_rasa.page_renderers.categories import (
     CategoriesContext,
     render_categories,
@@ -76,7 +77,7 @@ from tabula_rasa.receipt_backfill import (
 )
 
 
-STORAGE_IMPLEMENTATION_VERSION = 15
+STORAGE_IMPLEMENTATION_VERSION = 16
 
 
 def _google_maps_browser_key(secrets: Mapping[str, object]) -> str | None:
@@ -331,6 +332,7 @@ with st.sidebar:
     operational_pages = [
         "Dashboard",
         "Transactions",
+        "Assets",
         "Mileage",
         "Accounts",
         "Categories",
@@ -425,6 +427,7 @@ with st.sidebar:
     if previous_page != page:
         table_generation_by_page = {
             "Transactions": "transaction_ledger_generation",
+            "Assets": "asset_table_generation",
             "Mileage": "mileage_log_generation",
             "Accounts": "account_table_generation",
             "Categories": "category_table_generation",
@@ -543,6 +546,18 @@ try:
                 maps_api_key=_google_maps_browser_key(effective_secrets),
                 route_mileage=_route_mileage_callable(effective_secrets),
                 autocomplete_region_code=_google_maps_region_code(effective_secrets),
+            )
+        )
+
+    elif page == "Assets":
+        render_assets(
+            AssetsContext(
+                profile_key=selected_profile_key,
+                storage=storage,
+                confirmed_write=confirmed_write,
+                report_storage_error=report_storage_error,
+                reset_widget_state_if_requested=reset_widget_state_if_requested,
+                schedule_widget_reset=schedule_widget_reset,
             )
         )
 

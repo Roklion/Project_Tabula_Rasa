@@ -25,8 +25,19 @@ from scripts.migration_schemas import (
     VERSION_3_WORKSHEET_HEADERS,
     VERSION_7_WORKSHEET_HEADERS,
     VERSION_10_WORKSHEET_HEADERS,
+    VERSION_11_WORKSHEET_HEADERS,
 )
 from tests.fakes import FakeWorkbook, FakeWorksheet
+
+
+def test_version_11_workbook_adds_empty_assets_sheet() -> None:
+    workbook = FakeWorkbook(VERSION_11_WORKSHEET_HEADERS)
+
+    migrate_workbook(workbook)
+
+    assert workbook.sheets["Assets"].rows == [list(WORKSHEET_HEADERS["Assets"])]
+    for title, headers in VERSION_11_WORKSHEET_HEADERS.items():
+        assert workbook.sheets[title].rows[0] == list(headers)
 
 
 def _append_record(workbook: FakeWorkbook, title: str, values: dict[str, str]) -> None:
@@ -753,6 +764,28 @@ def test_migration_preflights_malformed_tabs_before_writing() -> None:
     with pytest.raises(ValueError, match="recognized standard layout"):
         migrate_workbook(workbook)
 
+    assert before == {
+        title: worksheet.get_all_values() for title, worksheet in workbook.sheets.items()
+    }
+
+
+def test_migration_preflights_malformed_recurring_schedules_before_writing() -> None:
+    headers = dict(VERSION_11_WORKSHEET_HEADERS)
+    headers["RecurringSchedules"] = tuple(
+        header
+        for header in headers["RecurringSchedules"]
+        if header != "recurrence_unit"
+    )
+    workbook = FakeWorkbook(headers)
+    before = {
+        title: worksheet.get_all_values()
+        for title, worksheet in workbook.sheets.items()
+    }
+
+    with pytest.raises(ValueError, match="recognized standard layout"):
+        migrate_workbook(workbook)
+
+    assert "Assets" not in workbook.sheets
     assert before == {
         title: worksheet.get_all_values() for title, worksheet in workbook.sheets.items()
     }

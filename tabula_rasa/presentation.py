@@ -451,6 +451,7 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
     }}
 
     .st-key-destructive_category_delete [data-testid="stButton"] button,
+    .st-key-destructive_asset_delete [data-testid="stButton"] button,
     .st-key-destructive_mileage_delete [data-testid="stButton"] button,
     .st-key-destructive_managed_payee_remove [data-testid="stButton"] button,
     .st-key-destructive_managed_tag_remove [data-testid="stButton"] button,
@@ -462,6 +463,7 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
     }}
 
     .st-key-destructive_category_delete [data-testid="stButton"] button:hover,
+    .st-key-destructive_asset_delete [data-testid="stButton"] button:hover,
     .st-key-destructive_mileage_delete [data-testid="stButton"] button:hover,
     .st-key-destructive_managed_payee_remove [data-testid="stButton"] button:hover,
     .st-key-destructive_managed_tag_remove [data-testid="stButton"] button:hover,
@@ -581,6 +583,7 @@ def reset_profile_presentation_state(
         "edit_mileage_trip_id",
         "edit_account_id",
         "edit_category_id",
+        "selected_asset_id",
         "write_success_notice",
         "ledger_start",
         "ledger_end",
@@ -633,6 +636,14 @@ def reset_profile_presentation_state(
     prefixes = (
         "add_transaction_",
         "add_mileage_",
+        "add_asset_",
+        "edit_asset_",
+        "asset_",
+        "calculate_asset_",
+        "save_asset_",
+        "retire_asset_",
+        "delete_asset_",
+        "confirm_delete_asset_",
         "edit_transaction_",
         "edit_mileage_",
         "edit_account_",

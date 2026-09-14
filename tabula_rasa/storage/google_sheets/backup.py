@@ -51,6 +51,7 @@ class BackupMixin:
             }
         )
         self._validate_recurring_references()
+        self.list_assets(_force_refresh=True)
         accounts = self._account_lookup(force_refresh=True)
         categories = self._category_lookup(force_refresh=True)
         payees = self._payee_lookup(force_refresh=True)
@@ -90,13 +91,14 @@ class BackupMixin:
             writer.writerow(headers)
             for row in rows:
                 values = dict(row.values)
-                if title in {"Transactions", "Mileage", "MixedUseExpenses"}:
+                if title in {"Transactions", "Mileage", "MixedUseExpenses", "Assets"}:
                     normalized_tag_ids = _normalize_tag_ids(values.get("tag_ids", ""))
                     if any(tag_id not in known_tag_ids for tag_id in normalized_tag_ids):
                         item_label = {
                             "Transactions": "transaction",
                             "Mileage": "mileage",
                             "MixedUseExpenses": "mixed-use source",
+                            "Assets": "asset",
                         }[title]
                         raise StorageValidationError(
                             "Backup contains an unknown "

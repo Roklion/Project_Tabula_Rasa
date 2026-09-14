@@ -112,6 +112,36 @@ VERSION_10_WORKSHEET_HEADERS = {
     }.items()
 }
 
+# v11 added recurring Expense schedules and was the last schema before the
+# fixed-asset register. Keep the exact layout for explicit workbook and backup
+# migration; runtime accepts only the current schema.
+VERSION_11_WORKSHEET_HEADERS = {
+    **VERSION_10_WORKSHEET_HEADERS,
+    "Transactions": (
+        "id", "txn_date", "kind", "amount", "account_id", "to_account_id",
+        "category_id", "payee_id", "description", "reference",
+        "receipt_references", "created_at", "source_type", "source_id", "tag_ids",
+        "recurring_schedule_id", "recurring_scheduled_date",
+        "recurring_source_kind", "recurring_occurrence_type",
+    ),
+    "MixedUseExpenses": (
+        "id", "txn_date", "kind", "total_expense", "business_use_percentage",
+        "allocated_amount", "account_id", "category_id", "payee_id", "description",
+        "reference", "receipt_references", "allocation_rationale",
+        "linked_transaction_id", "tag_ids", "recurring_schedule_id",
+        "recurring_scheduled_date", "recurring_source_kind",
+        "recurring_occurrence_type", "created_at",
+    ),
+    "RecurringSchedules": (
+        "id", "name", "kind", "source_kind", "recurrence_unit",
+        "recurrence_interval", "anchor_date", "start_date", "end_date",
+        "status", "amount", "total_expense", "business_use_percentage",
+        "account_id", "category_id", "payee_id", "description", "reference",
+        "allocation_rationale", "tag_ids", "created_at", "updated_at",
+        "attention_code", "attention_at",
+    ),
+}
+
 
 __all__ = [
     "LEGACY_TAGS_WORKBOOK_HEADERS",
@@ -122,4 +152,5 @@ __all__ = [
     "VERSION_6_WORKSHEET_HEADERS",
     "VERSION_7_WORKSHEET_HEADERS",
     "VERSION_10_WORKSHEET_HEADERS",
+    "VERSION_11_WORKSHEET_HEADERS",
 ]

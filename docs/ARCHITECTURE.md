@@ -368,8 +368,8 @@ local-only recovery metadata.
 | Shared presentation tokens and CSS | tabula_rasa/presentation.py |
 | Profile selection and readiness | tabula_rasa/business_profiles.py and tabula_rasa/profile_readiness.py |
 | Local profile persistence | tabula_rasa/local_profile_store.py |
-| Sheets storage, current v11 backup format, and restore validation | `tabula_rasa/storage/google_sheets/` |
-| Legacy backup conversion (v1–v10 to v11) | scripts/migrate_legacy_backup.py |
+| Sheets storage, current v12 backup format, and restore validation | `tabula_rasa/storage/google_sheets/` |
+| Legacy backup conversion (v1–v11 to v12) | scripts/migrate_legacy_backup.py |
 | Legacy workbook conversion and historical schema definitions | `scripts/migrate_workbook.py`, `scripts/migrate_payees.py`, and `scripts/migration_schemas.py` |
 | Drive OAuth and file operations | tabula_rasa/google_drive/__init__.py, with `oauth.py`, `client.py`, `folders.py`, `receipts.py`, and `backups.py` responsibility modules |
 | Drive administration and Picker | tabula_rasa/google_drive_admin.py and tabula_rasa/google_drive_picker.py |

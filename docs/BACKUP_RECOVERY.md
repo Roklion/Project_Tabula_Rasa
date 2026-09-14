@@ -31,7 +31,7 @@ storage as the active ledger.
 
 ## Archive format and safety
 
-The current backup format is version 11. Each archive contains:
+The current backup format is version 12. Each archive contains:
 
 - Accounts.csv;
 - Categories.csv;
@@ -41,6 +41,7 @@ The current backup format is version 11. Each archive contains:
 - Mileage.csv;
 - MixedUseExpenses.csv;
 - RecurringSchedules.csv;
+- Assets.csv;
 - receipts.json; and
 - manifest.json.
 
@@ -72,11 +73,11 @@ python scripts\migrate_receipt_associations.py --secrets .streamlit\secrets.toml
 The command considers only blank legacy cells; an explicit empty list remains
 intentionally unlinked. It is safe to rerun after an interrupted migration.
 
-The application validator and restore path accept **only format 11**. Older
+The application validator and restore path accept **only format 12**. Older
 archives are not migrated during validation or restore: supplying one directly
 fails before any workbook write and points to the explicit migration command
-below. The migration command supports standard format-1 through format-10
-archives and emits a fresh format-11 archive.
+below. The migration command supports standard format-1 through format-11
+archives and emits a fresh format-12 archive.
 
 MixedUseExpenses.csv is the authoritative source record for each cost-based
 mixed-use expense, including its durable `tag_ids` metadata. Transactions.csv contains one ordinary Expense projection
@@ -85,7 +86,7 @@ source ID; its amount is the allocated business amount only. The source's
 linked_transaction_id must point back to that projection. Current-format
 backup validation rejects missing, orphaned, duplicated, or inconsistent
 source/projection relationships. Legacy formats 2 through 8 contain no
-mixed-use source records or linkage; convert them to v11 before application
+mixed-use source records or linkage; convert them to v12 before application
 restore.
 
 Before upgrading an existing workbook, run the one-time combined workbook
@@ -111,7 +112,7 @@ is converted by the archive migration command above; it is not resolved during
 application restore.
 
 Pre-inventory formats 1–4 may contain legacy receipt-reference cells but do
-not contain the receipt inventory and integrity metadata required by v11. The
+not contain the receipt inventory and integrity metadata required by current backups. The
 offline migration therefore clears those associations in the new archive;
 the original archive is preserved for separate receipt recovery or manual
 inspection through the Unreferenced Receipts workflow.
@@ -230,11 +231,11 @@ Validate every copied or downloaded archive before relying on it:
 python scripts\validate_google_sheets_backup.py "C:\Safe-Recovery\tabula-rasa-backup-YYYYMMDDTHHMMSSZ.zip"
 ```
 
-The current validator accepts only format 11. Successful validation confirms a
-format-11 archive's exact ZIP structure, manifest integrity, headers,
+The current validator accepts only format 12. Successful validation confirms a
+format-12 archive's exact ZIP structure, manifest integrity, headers,
 checksums, row counts, IDs, ledger relationships,
 and the receipt inventory's profile, identities, filenames, sizes, checksums,
-duplicates, and transaction associations. Convert older v1-v10 archives with
+duplicates, and transaction associations. Convert older v1-v11 archives with
 `scripts/migrate_legacy_backup.py` before validating them.
 
 Do not modify a failed archive. Preserve it privately, choose another
@@ -271,12 +272,12 @@ representative relationships, then delete or clearly label the drill workbook.
 ## Recover receipt bytes and remap Drive IDs
 
 Ledger restoration does not restore receipt bytes. After converting a legacy
-format 5 through 10 archive to v11, copy the matching profile Receipts
+format 5 through 11 archive to v12, copy the matching profile Receipts
 directory from the protected Synology recovery set to a safe local path, then
 recover against the new workbook using the converted archive:
 
 ```powershell
-python scripts\recover_synology_receipts.py "C:\Safe-Recovery\tabula-rasa-backup-YYYYMMDDTHHMMSSZ-format11.zip" "C:\Safe-Recovery\Receipts" --profile PROFILE_KEY --target-spreadsheet-id NEW_SPREADSHEET_ID
+python scripts\recover_synology_receipts.py "C:\Safe-Recovery\tabula-rasa-backup-YYYYMMDDTHHMMSSZ-format12.zip" "C:\Safe-Recovery\Receipts" --profile PROFILE_KEY --target-spreadsheet-id NEW_SPREADSHEET_ID
 ```
 
 The command refuses every configured live workbook. Before a Drive change it
@@ -309,13 +310,13 @@ The recovery order is:
 5. Verify unreferenced receipts remain available without automatic attachment.
 
 Formats 2, 3, and pre-inventory format 4 are ledger-only migration sources;
-they must first be converted to v11 before any application restore or receipt
+they must first be converted to v12 before any application restore or receipt
 recovery operation.
 
 ## Convert a legacy archive
 
-Convert a format-1 through format-10 archive offline. The default output is a
-new `-format11.zip` file beside the source; use `--output` for another new
+Convert a format-1 through format-11 archive offline. The default output is a
+new `-format12.zip` file beside the source; use `--output` for another new
 path. For ledger-only archives (formats 1–4), pass the business profile key so
 the generated empty receipt inventory is scoped correctly.
 
@@ -327,7 +328,7 @@ The converter infers missing account classifications, renames the historical
 Loan subtype to Short-term debt, normalizes legacy active values, creates
 managed payees from legacy payee text, carries receipt inventory forward, and
 copies v9 mixed-use projection tags to their authoritative sources. It records
-the source archive hash and validates the result with the normal format-11
+the source archive hash and validates the result with the normal format-12
 validator. It never overwrites the original. A legacy format-1 compatibility
 module remains for Python imports, but it is not an operator-facing command.
 
@@ -498,4 +499,4 @@ retry; identity and checksum rules prevent unnecessary duplicate uploads.
 | Workbook restore | scripts/restore_google_sheets_backup.py |
 | Receipt preparation and manifest | tabula_rasa/receipt_backfill.py and tabula_rasa/receipt_manifest.py |
 | Receipt recovery and Drive-ID remapping | scripts/recover_synology_receipts.py and tabula_rasa/receipt_recovery.py |
-| Legacy archive migration (v1–v10 to v11) | scripts/migrate_legacy_backup.py |
+| Legacy archive migration (v1–v11 to v12) | scripts/migrate_legacy_backup.py |
