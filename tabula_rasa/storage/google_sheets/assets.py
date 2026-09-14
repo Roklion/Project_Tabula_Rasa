@@ -467,6 +467,10 @@ class AssetsMixin:
         with self._workbook_locks.ledger:
             current = self._find_row("Assets", asset_id)
             self._assert_expected_asset(current.values, expected_asset)
+            if _decode_overrides(current.values.get("schedule_overrides", "")):
+                raise StorageConflictError(
+                    "Assets with saved depreciation history cannot be deleted"
+                )
             original = dict(current.values)
             current_row = current
             worksheet = self._worksheet("Assets")

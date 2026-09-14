@@ -47,6 +47,14 @@ def run() -> None:
             "amount": "250.00",
             "reason": "Imported prior quarter",
         }
+        app.run()
+        assert not any(
+            button.key == f"delete_asset_{asset['id']}" for button in app.button
+        )
+        assert any(
+            "saved depreciation history cannot be deleted" in str(message.value)
+            for message in app.info
+        )
 
 
 if __name__ == "__main__":

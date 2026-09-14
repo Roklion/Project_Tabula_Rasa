@@ -499,32 +499,32 @@ def render_assets(context: AssetsContext) -> None:
                     "Asset retired; future quarterly depreciation was stopped.",
                     report_error=edit_error.error,
                 )
-        st.warning(
-            "Permanent deletion removes this asset record and its saved overrides. "
-            "Once journal posting is added, assets with posted history will not be deletable."
-        )
-        confirm_delete = st.checkbox(
-            "I understand this asset will be permanently deleted",
-            key=f"confirm_delete_asset_{selected_id}",
-        )
-        with st.container(key="destructive_asset_delete"):
-            if st.button(
-                "Permanently delete asset",
-                icon=":material/delete_forever:",
-                key=f"delete_asset_{selected_id}",
-            ):
-                if not confirm_delete:
-                    edit_error.error("Confirm permanent deletion. No data changed.")
-                else:
-                    context.confirmed_write(
-                        "delete_asset",
-                        {"asset_id": selected_id},
-                        lambda: context.storage.delete_asset(
-                            selected_id, expected_asset=selected
-                        ),
-                        "Asset deleted.",
-                        report_error=edit_error.error,
-                    )
+        if locked:
+            st.info("Assets with saved depreciation history cannot be deleted.")
+        else:
+            st.warning("Permanent deletion removes this asset record.")
+            confirm_delete = st.checkbox(
+                "I understand this asset will be permanently deleted",
+                key=f"confirm_delete_asset_{selected_id}",
+            )
+            with st.container(key="destructive_asset_delete"):
+                if st.button(
+                    "Permanently delete asset",
+                    icon=":material/delete_forever:",
+                    key=f"delete_asset_{selected_id}",
+                ):
+                    if not confirm_delete:
+                        edit_error.error("Confirm permanent deletion. No data changed.")
+                    else:
+                        context.confirmed_write(
+                            "delete_asset",
+                            {"asset_id": selected_id},
+                            lambda: context.storage.delete_asset(
+                                selected_id, expected_asset=selected
+                            ),
+                            "Asset deleted.",
+                            report_error=edit_error.error,
+                        )
 
     st.subheader(f"Quarterly depreciation schedule · {selected['name']}")
     _show_source_context(

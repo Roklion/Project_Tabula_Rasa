@@ -173,6 +173,22 @@ class TestAssetStorage(GoogleSheetsStorageTestCase):
         with pytest.raises(StorageConflictError, match="Earlier quarters"):
             self.storage.remove_asset_period_override(asset["id"], 1)
 
+    def test_delete_rejects_saved_depreciation_history(self) -> None:
+        asset = self.storage.create_asset(**_asset_data(useful_life_quarters=4))
+        self.storage.override_asset_period(
+            asset["id"],
+            1,
+            "250.00",
+            "Imported prior quarter",
+            as_of_date=date(2026, 1, 1),
+        )
+        current = self.storage.list_assets()[0]
+
+        with pytest.raises(StorageConflictError, match="saved depreciation history"):
+            self.storage.delete_asset(asset["id"], expected_asset=current)
+
+        assert [item["id"] for item in self.storage.list_assets()] == [asset["id"]]
+
     def test_override_rejects_future_period_and_stale_snapshot(self) -> None:
         asset = self.storage.create_asset(
             **_asset_data(depreciation_start_date="2027-01-01")
