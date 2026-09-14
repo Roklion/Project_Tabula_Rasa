@@ -606,7 +606,10 @@ class RecurringMixin:
                                               created_at=current["created_at"], updated_at=_utc_now())
             row = self._find_row("RecurringSchedules", schedule_id)
             self._replace_row("RecurringSchedules", row, updated)
-            return self.get_recurring_schedule(schedule_id, _force_refresh=True)
+            # The successful Sheets response is authoritative.  Returning the
+            # locally validated record avoids turning a confirmed write into an
+            # apparent failure when a post-success refresh is unavailable.
+            return updated
 
     def pause_recurring_schedule(self, schedule_id: str, *, expected_schedule: Mapping[str, Any] | None = None) -> dict[str, str]:
         current = self.get_recurring_schedule(schedule_id, _force_refresh=True)

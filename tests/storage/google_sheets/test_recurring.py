@@ -374,6 +374,38 @@ def test_ending_pending_expense_conversion_clears_attention(
     }
 
 
+def test_ending_schedule_succeeds_without_post_success_refresh(
+    default_storage, monkeypatch,
+) -> None:
+    account_id, category_id = _ids(default_storage)
+    default_storage.create_recurring_schedule(
+        schedule_id="refresh-free-end", name="Refresh-free end",
+        txn_date="2024-01-15", recurrence_unit="month", amount=20,
+        account_id=account_id, category_id=category_id,
+    )
+    wrote = False
+    original_get = default_storage.get_recurring_schedule
+    original_replace = default_storage._replace_row
+
+    def get_schedule(schedule_id, *, _force_refresh=False):
+        if wrote:
+            raise StorageUnavailableError("refresh unavailable")
+        return original_get(schedule_id, _force_refresh=_force_refresh)
+
+    def replace_row(*args, **kwargs):
+        nonlocal wrote
+        result = original_replace(*args, **kwargs)
+        wrote = True
+        return result
+
+    monkeypatch.setattr(default_storage, "get_recurring_schedule", get_schedule)
+    monkeypatch.setattr(default_storage, "_replace_row", replace_row)
+
+    ended = default_storage.end_recurring_schedule("refresh-free-end")
+
+    assert ended["status"] == "ended"
+
+
 def test_existing_expense_recurring_generates_distinct_schedule_id_when_omitted(
     default_storage,
 ) -> None:
