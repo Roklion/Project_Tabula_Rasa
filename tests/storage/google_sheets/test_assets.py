@@ -318,6 +318,29 @@ class TestAssetStorage(GoogleSheetsStorageTestCase):
         with pytest.raises(StorageValidationError, match="Useful life"):
             self.storage.validate_backup_zip(invalid)
 
+    def test_backup_restore_normalizes_asset_fields(self) -> None:
+        asset = self.storage.create_asset(**_asset_data())
+        backup = self.storage.export_backup_zip(
+            backup_receipt_manifest(self.storage)
+        )
+
+        def use_noncanonical_currency(rows: list[list[str]]) -> None:
+            rows[1][rows[0].index("cost_basis")] = "1200"
+            rows[1][rows[0].index("salvage_value")] = "0"
+
+        noncanonical = rewrite_backup_tables(
+            backup, {"Assets": use_noncanonical_currency}
+        )
+        restored = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+
+        assert restored.restore_backup_zip(noncanonical)["Assets"] == 1
+        restored_asset = restored.list_assets()[0]
+        assert restored_asset["cost_basis"] == "1200.00"
+        assert restored_asset["salvage_value"] == "0.00"
+        assert restored.edit_asset(
+            asset["id"], expected_asset=restored_asset, notes="Still editable"
+        )["notes"] == "Still editable"
+
     def test_backup_rejects_colliding_asset_override_periods(self) -> None:
         self.storage.create_asset(**_asset_data())
         backup = self.storage.export_backup_zip(

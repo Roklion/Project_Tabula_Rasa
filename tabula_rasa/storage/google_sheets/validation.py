@@ -720,7 +720,7 @@ def _parse_backup_zip(
                 )
             record["tag_ids"] = _encode_tag_ids(normalized_tag_ids)
     from tabula_rasa.depreciation import DepreciationError, straight_line_schedule
-    from .assets import ASSET_TYPES, _decode_overrides, _whole_quarters
+    from .assets import ASSET_TYPES, AssetsMixin, _decode_overrides, _whole_quarters
 
     for asset in tables["Assets"][1]:
         _clean_text(asset.get("name"), "Asset name", required=True)
@@ -761,6 +761,17 @@ def _parse_backup_zip(
             )
         except (DepreciationError, StorageValidationError, ValueError) as exc:
             raise StorageValidationError(f"Backup contains an invalid asset: {exc}") from exc
+        normalized_asset = AssetsMixin._prepare_asset(
+            asset,
+            asset_id=_clean_text(asset.get("id"), "Asset ID", required=True),
+            created_at=_clean_text(
+                asset.get("created_at"), "Asset created time", required=True
+            ),
+        )
+        normalized_asset["updated_at"] = _clean_text(
+            asset.get("updated_at"), "Asset updated time", required=True
+        )
+        asset.update(normalized_asset)
     for transaction in tables["Transactions"][1]:
         _validate_recurring_provenance(transaction, "Transaction")
         recurring_id = transaction.get("recurring_schedule_id", "")

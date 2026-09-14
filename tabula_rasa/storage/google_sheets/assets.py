@@ -111,8 +111,8 @@ def _normalize_overrides(value: Any) -> str:
 class AssetsMixin:
     """CRUD boundary for individually tracked depreciable assets."""
 
+    @staticmethod
     def _prepare_asset(
-        self,
         data: Mapping[str, Any],
         *,
         asset_id: str | None = None,
