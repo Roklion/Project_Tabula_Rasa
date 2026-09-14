@@ -14,6 +14,7 @@ from tabula_rasa.page_renderers.transactions.recurring import (
     _selected_tag_ids,
 )
 from tabula_rasa.page_renderers.transactions.recurrence_controls import (
+    edit_defaults_with_pending_payload,
     restore_recurrence_controls,
 )
 
@@ -56,6 +57,30 @@ def test_restore_recurrence_controls_preserves_pending_edit_payload() -> None:
         "mixed_recurrence_interval_north_source": 1,
         "mixed_recurrence_name_north_source": "Monthly rent",
         "mixed_recurrence_end_north_source": None,
+    }
+
+
+def test_pending_edit_payload_restores_all_transaction_fields() -> None:
+    defaults = {
+        "txn_date": date(2026, 9, 1),
+        "amount": 20.0,
+        "account_id": "old-account",
+        "description": "Original",
+    }
+    payload = {
+        "txn_date": date(2026, 9, 12),
+        "amount": 42.0,
+        "account_id": "edited-account",
+        "description": "Edited",
+        "reference": "INV-42",
+    }
+
+    assert edit_defaults_with_pending_payload(defaults, payload) == {
+        "txn_date": date(2026, 9, 12),
+        "amount": 42.0,
+        "account_id": "edited-account",
+        "description": "Edited",
+        "reference": "INV-42",
     }
 
 

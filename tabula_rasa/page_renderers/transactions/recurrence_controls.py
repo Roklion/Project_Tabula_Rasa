@@ -51,6 +51,16 @@ def mixed_use_edit_pending_payload_key(profile_key: str, source_id: str) -> str:
     return f"mixed_use_edit_pending_payload_{source_id}_profile_{profile_key}"
 
 
+def edit_defaults_with_pending_payload(
+    defaults: Mapping[str, object], pending_payload: object
+) -> dict[str, object]:
+    """Restore all submitted edit fields before rebuilding a retry form."""
+    restored = dict(defaults)
+    if isinstance(pending_payload, Mapping):
+        restored.update(pending_payload)
+    return restored
+
+
 def restore_recurrence_controls(
     state: MutableMapping[str, object],
     selection: Mapping[str, object] | None,
@@ -123,6 +133,7 @@ __all__ = [
     "RecurrenceSelection",
     "mixed_use_edit_pending_schedule_key",
     "mixed_use_edit_pending_payload_key",
+    "edit_defaults_with_pending_payload",
     "recurring_edit_pending_schedule_key",
     "recurring_edit_pending_payload_key",
     "render_recurrence_controls",

@@ -16,6 +16,7 @@ from tabula_rasa.page_renderers.transactions.payee_selector import (
     render_payee_selector,
 )
 from tabula_rasa.page_renderers.transactions.recurrence_controls import (
+    edit_defaults_with_pending_payload,
     mixed_use_edit_pending_payload_key,
     mixed_use_edit_pending_schedule_key,
     render_recurrence_controls,
@@ -609,6 +610,10 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         if edit_pending_payload_key
         else None
     )
+    if source and not source_incomplete:
+        defaults = edit_defaults_with_pending_payload(
+            defaults, pending_edit_payload
+        )
     context.reset_widget_state_if_requested(
         _key(profile, "form_reset"),
         keys=[

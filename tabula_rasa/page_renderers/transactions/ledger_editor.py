@@ -10,6 +10,7 @@ from tabula_rasa.ledger_presentation import money
 from tabula_rasa.google_drive import GoogleDriveAccessError
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
 from tabula_rasa.page_renderers.transactions.recurrence_controls import (
+    edit_defaults_with_pending_payload,
     recurring_edit_pending_payload_key,
     recurring_edit_pending_schedule_key,
     render_recurrence_controls,
@@ -144,15 +145,18 @@ def render_transaction_editor(
             )
             draft = render_transaction_fields(
                 mode="copy" if copy_mode else "edit",
-                defaults={
-                    **selected,
-                    "description": (
-                        copied_transaction_description(selected)
-                        if copy_mode
-                        else selected.get("description", "")
-                    ),
-                    "tag_ids": source_tag_ids,
-                },
+                defaults=edit_defaults_with_pending_payload(
+                    {
+                        **selected,
+                        "description": (
+                            copied_transaction_description(selected)
+                            if copy_mode
+                            else selected.get("description", "")
+                        ),
+                        "tag_ids": source_tag_ids,
+                    },
+                    pending_payload if not copy_mode else None,
+                ),
                 account_ids=editable_account_ids,
                 categories=categories,
                 account_paths=account_paths,
