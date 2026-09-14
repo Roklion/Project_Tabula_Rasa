@@ -407,26 +407,46 @@ def render_assets(context: AssetsContext) -> None:
         st.info("No assets yet. Add the first depreciable asset above.")
         return
     frame = _asset_frame(assets, today=date.today())
-    event = st.dataframe(
+    asset_ids = frame["ID"].tolist()
+    selected_asset_key = f"selected_asset_id_{context.profile_key}"
+    selection_scope_key = f"asset_selection_scope_{context.profile_key}"
+    selection_scope = (
+        tuple(asset_ids),
+        st.session_state.get("workbook_data_revision", 0),
+    )
+    if st.session_state.get(selection_scope_key) != selection_scope:
+        st.session_state[selection_scope_key] = selection_scope
+        st.session_state.pop(selected_asset_key, None)
+        st.session_state["asset_table_generation"] = (
+            st.session_state.get("asset_table_generation", 0) + 1
+        )
+    table_key = (
+        f"asset_register_{context.profile_key}_"
+        f"{st.session_state.get('asset_table_generation', 0)}"
+    )
+
+    def select_asset() -> None:
+        selected_rows = st.session_state[table_key].selection.rows
+        if selected_rows and 0 <= selected_rows[0] < len(asset_ids):
+            st.session_state[selected_asset_key] = asset_ids[selected_rows[0]]
+
+    st.dataframe(
         frame,
         hide_index=True,
         width="stretch",
-        on_select="rerun",
+        on_select=select_asset,
         selection_mode="single-row",
-        key=f"asset_register_{context.profile_key}_{st.session_state.get('asset_table_generation', 0)}",
+        key=table_key,
         column_config={
             "Cost basis": st.column_config.NumberColumn(format="$%.2f"),
             "Salvage value": st.column_config.NumberColumn(format="$%.2f"),
         },
     )
     asset_by_id = {asset["id"]: asset for asset in assets}
-    selected_id = st.session_state.get("selected_asset_id")
-    if event.selection.rows:
-        selected_id = assets[event.selection.rows[0]]["id"]
-        st.session_state["selected_asset_id"] = selected_id
+    selected_id = st.session_state.get(selected_asset_key)
     if selected_id not in asset_by_id:
         selected_id = assets[0]["id"]
-        st.session_state["selected_asset_id"] = selected_id
+        st.session_state[selected_asset_key] = selected_id
     selected = asset_by_id[selected_id]
     st.caption("Select an asset row to manage its record and quarterly schedule.")
 
