@@ -221,6 +221,11 @@ def test_profile_switch_clears_unscoped_presentation_state() -> None:
         "mixed_use_pending_schedule_id_north": "pending-schedule",
         "mixed_use_pending_payload_north": {"description": "North recurring"},
         "recurring_edit_pending_schedule_id_north-transaction_profile_north": "pending-edit",
+        "mixed_use_edit_pending_schedule_id_north-source_profile_north": "pending-mixed-edit",
+        "mixed_use_edit_pending_payload_north-source_profile_north": {
+            "schedule_id": "pending-mixed-edit",
+            "name": "Mixed recurring",
+        },
         "recurring_pending_schedule_id_north": "pending-schedule",
         "recurring_pending_transaction_id_north": "pending-transaction",
         "recurring_pending_payload_north": {"description": "North recurring"},
@@ -292,6 +297,8 @@ def test_profile_switch_clears_unscoped_presentation_state() -> None:
     assert session_state["mixed_use_pending_schedule_id_north"] == "pending-schedule"
     assert session_state["mixed_use_pending_payload_north"] == {"description": "North recurring"}
     assert session_state["recurring_edit_pending_schedule_id_north-transaction_profile_north"] == "pending-edit"
+    assert session_state["mixed_use_edit_pending_schedule_id_north-source_profile_north"] == "pending-mixed-edit"
+    assert session_state["mixed_use_edit_pending_payload_north-source_profile_north"]["name"] == "Mixed recurring"
     assert session_state["recurring_pending_schedule_id_north"] == "pending-schedule"
     assert session_state["recurring_pending_transaction_id_north"] == "pending-transaction"
     assert session_state["recurring_pending_payload_north"] == {"description": "North recurring"}

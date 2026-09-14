@@ -16,8 +16,10 @@ from tabula_rasa.page_renderers.transactions.payee_selector import (
     render_payee_selector,
 )
 from tabula_rasa.page_renderers.transactions.recurrence_controls import (
+    mixed_use_edit_pending_payload_key,
     mixed_use_edit_pending_schedule_key,
     render_recurrence_controls,
+    restore_recurrence_controls,
 )
 from tabula_rasa.page_renderers.transactions.transaction_copy import (
     _copyable_tag_ids,
@@ -592,6 +594,21 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         if copy_mode
         else f"{profile}_{selected_id or 'new'}"
     )
+    edit_pending_schedule_key = (
+        mixed_use_edit_pending_schedule_key(profile, str(source["id"]))
+        if source and not source_incomplete
+        else ""
+    )
+    edit_pending_payload_key = (
+        mixed_use_edit_pending_payload_key(profile, str(source["id"]))
+        if source and not source_incomplete
+        else ""
+    )
+    pending_edit_payload = (
+        st.session_state.get(edit_pending_payload_key)
+        if edit_pending_payload_key
+        else None
+    )
     context.reset_widget_state_if_requested(
         _key(profile, "form_reset"),
         keys=[
@@ -749,6 +766,12 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             and not source_incomplete
             and (not source or not source.get("recurring_schedule_id"))
         ):
+            restore_recurrence_controls(
+                st.session_state,
+                pending_edit_payload,
+                key_prefix="mixed",
+                key_suffix=scope,
+            )
             recurrence = render_recurrence_controls(
                 label="Repeat this mixed-use Expense",
                 key_prefix="mixed",
@@ -929,11 +952,6 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                         _key(profile, "pending_configuration_revision"), None
                     )
 
-                edit_pending_schedule_key = (
-                    mixed_use_edit_pending_schedule_key(profile, str(source["id"]))
-                    if source and not source_incomplete
-                    else ""
-                )
                 if recurring:
                     if source and not source_incomplete:
                         pending_schedule_id = str(
@@ -961,6 +979,8 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                             ),
                         }
                     )
+                    if source and not source_incomplete:
+                        st.session_state[edit_pending_payload_key] = dict(payload)
                     if not source:
                         previous_payload = st.session_state.get(
                             pending_payload_key
@@ -1063,6 +1083,8 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                         clear_pending_recurring_state()
                     if edit_pending_schedule_key:
                         st.session_state.pop(edit_pending_schedule_key, None)
+                    if edit_pending_payload_key:
+                        st.session_state.pop(edit_pending_payload_key, None)
                     if copy_mode:
                         _clear_mixed_use_copy(st.session_state, profile)
                         _clear_mixed_use_selection(st.session_state, profile)

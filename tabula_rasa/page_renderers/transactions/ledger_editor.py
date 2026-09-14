@@ -10,8 +10,10 @@ from tabula_rasa.ledger_presentation import money
 from tabula_rasa.google_drive import GoogleDriveAccessError
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
 from tabula_rasa.page_renderers.transactions.recurrence_controls import (
+    recurring_edit_pending_payload_key,
     recurring_edit_pending_schedule_key,
     render_recurrence_controls,
+    restore_recurrence_controls,
 )
 from tabula_rasa.page_renderers.tag_selector import inline_tag_name_error
 from tabula_rasa.page_renderers.tag_selector import schedule_tag_selector_reset
@@ -101,6 +103,13 @@ def render_transaction_editor(
             if copy_mode
             else f"{context.profile_key}_{edit_id}"
         )
+        pending_schedule_key = recurring_edit_pending_schedule_key(
+            context.profile_key, edit_id
+        )
+        pending_payload_key = recurring_edit_pending_payload_key(
+            context.profile_key, edit_id
+        )
+        pending_payload = st.session_state.get(pending_payload_key)
         if copy_mode:
             st.info(
                 f"You are editing a new transaction copied from {edit_id}. "
@@ -159,6 +168,11 @@ def render_transaction_editor(
                 and selected["kind"] == "Expense"
                 and not selected.get("recurring_schedule_id")
             ):
+                restore_recurrence_controls(
+                    st.session_state,
+                    pending_payload,
+                    key_prefix=f"edit_transaction_{edit_widget_scope}",
+                )
                 recurrence = render_recurrence_controls(
                     label="Repeat this Expense",
                     key_prefix=f"edit_transaction_{edit_widget_scope}",
@@ -350,9 +364,6 @@ def render_transaction_editor(
                             )
                     if not receipt_preparation_failed:
                         edit_payload = dict(payload)
-                        pending_schedule_key = recurring_edit_pending_schedule_key(
-                            context.profile_key, edit_id
-                        )
                         if make_recurring:
                             schedule_id = str(
                                 st.session_state.get(pending_schedule_key)
@@ -368,6 +379,7 @@ def render_transaction_editor(
                                     ),
                                 }
                             )
+                            st.session_state[pending_payload_key] = dict(edit_payload)
                         if prepared_receipts:
                             edit_payload["receipt_upload_keys"] = [
                                 receipt["key"] for receipt in prepared_receipts
@@ -427,6 +439,7 @@ def render_transaction_editor(
                             ),
                             on_success=lambda: (
                                 st.session_state.pop(pending_schedule_key, None),
+                                st.session_state.pop(pending_payload_key, None),
                                 schedule_tag_selector_reset(
                                     f"edit_transaction_tags_{edit_widget_scope}"
                                 ),

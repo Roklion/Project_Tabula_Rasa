@@ -13,6 +13,9 @@ from tabula_rasa.page_renderers.transactions.recurring import (
     _safe_interval,
     _selected_tag_ids,
 )
+from tabula_rasa.page_renderers.transactions.recurrence_controls import (
+    restore_recurrence_controls,
+)
 
 
 def test_recurring_editor_uses_safe_defaults_for_corrupt_schedule_fields() -> None:
@@ -32,12 +35,41 @@ def test_recurring_change_marker_is_optional() -> None:
     callback.assert_called_once_with()
 
 
+def test_restore_recurrence_controls_preserves_pending_edit_payload() -> None:
+    state: dict[str, object] = {}
+
+    restore_recurrence_controls(
+        state,
+        {
+            "name": "Monthly rent",
+            "recurrence_unit": "month",
+            "recurrence_interval": 1,
+            "end_date": None,
+        },
+        key_prefix="mixed",
+        key_suffix="north_source",
+    )
+
+    assert state == {
+        "mixed_recurring_north_source": True,
+        "mixed_recurrence_unit_north_source": "month",
+        "mixed_recurrence_interval_north_source": 1,
+        "mixed_recurrence_name_north_source": "Monthly rent",
+        "mixed_recurrence_end_north_source": None,
+    }
+
+
 def test_ending_schedule_clears_only_matching_pending_retry_state() -> None:
     state = {
         "recurring_edit_pending_schedule_id_expense_profile_shop": "ended",
         "mixed_use_edit_pending_schedule_id_source_profile_shop": "ended",
+        "mixed_use_edit_pending_payload_source_profile_shop": {"schedule_id": "ended"},
         "recurring_edit_pending_schedule_id_shop_expense_profile_north_shop": "ended",
         "mixed_use_edit_pending_schedule_id_shop_source_profile_north_shop": "ended",
+        "mixed_use_edit_pending_schedule_id_source_profile_north_profile_shop": "other",
+        "mixed_use_edit_pending_payload_source_profile_north_profile_shop": {
+            "schedule_id": "ended"
+        },
         "recurring_pending_schedule_id_shop": "ended",
         "recurring_pending_transaction_id_shop": "transaction",
         "recurring_pending_payload_shop": {"amount": "10"},
@@ -58,8 +90,11 @@ def test_ending_schedule_clears_only_matching_pending_retry_state() -> None:
 
     assert "recurring_edit_pending_schedule_id_expense_profile_shop" not in state
     assert "mixed_use_edit_pending_schedule_id_source_profile_shop" not in state
+    assert "mixed_use_edit_pending_payload_source_profile_shop" not in state
     assert state["recurring_edit_pending_schedule_id_shop_expense_profile_north_shop"] == "ended"
     assert state["mixed_use_edit_pending_schedule_id_shop_source_profile_north_shop"] == "ended"
+    assert state["mixed_use_edit_pending_schedule_id_source_profile_north_profile_shop"] == "other"
+    assert state["mixed_use_edit_pending_payload_source_profile_north_profile_shop"]["schedule_id"] == "ended"
     assert "recurring_pending_schedule_id_shop" not in state
     assert "recurring_pending_transaction_id_shop" not in state
     assert "recurring_pending_payload_shop" not in state
