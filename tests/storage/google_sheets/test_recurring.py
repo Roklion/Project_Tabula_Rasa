@@ -43,6 +43,36 @@ def test_existing_expense_can_become_recurring_without_creating_a_second_row(
     assert result["schedule"]["description"] == "Updated"
 
 
+def test_existing_expense_recurring_retry_accepts_already_applied_conversion(
+    default_storage,
+) -> None:
+    account_id, category_id = _ids(default_storage)
+    transaction = default_storage.create_transaction(
+        txn_date="2024-01-15", kind="Expense", amount="20",
+        account_id=account_id, category_id=category_id,
+    )
+    payload = {
+        "schedule_id": "already-applied",
+        "name": "Already applied",
+        "recurrence_unit": "month",
+        "txn_date": "2024-01-15",
+        "amount": "20",
+        "account_id": account_id,
+        "category_id": category_id,
+    }
+
+    first = default_storage.create_recurring_expense_from_transaction(
+        transaction["id"], expected_transaction=transaction, **payload,
+    )
+    retry = default_storage.create_recurring_expense_from_transaction(
+        transaction["id"], expected_transaction=transaction, **payload,
+    )
+
+    assert retry["schedule"]["id"] == first["schedule"]["id"]
+    assert retry["transaction"]["id"] == first["transaction"]["id"]
+    assert len(default_storage.list_recurring_schedules()) == 1
+
+
 def test_existing_expense_recurring_conversion_preserves_receipts(
     default_storage,
 ) -> None:
@@ -97,6 +127,40 @@ def test_existing_mixed_use_expense_can_become_recurring_with_pair_parity(
     assert updated_source["recurring_schedule_id"] == result["schedule"]["id"]
     assert projection["recurring_schedule_id"] == result["schedule"]["id"]
     assert projection["recurring_scheduled_date"] == "2024-01-20"
+
+
+def test_existing_mixed_use_recurring_retry_accepts_already_applied_conversion(
+    default_storage,
+) -> None:
+    account_id, category_id = _ids(default_storage)
+    source = default_storage.create_mixed_use_expense(
+        txn_date="2024-01-15", total_expense="100",
+        business_use_percentage="25", account_id=account_id,
+        category_id=category_id, allocation_rationale="Measured use",
+    )
+    payload = {
+        "schedule_id": "already-applied-mixed",
+        "name": "Already applied mixed",
+        "recurrence_unit": "month",
+        "txn_date": "2024-01-15",
+        "total_expense": "100",
+        "business_use_percentage": "25",
+        "account_id": account_id,
+        "category_id": category_id,
+        "allocation_rationale": "Measured use",
+    }
+
+    first = default_storage.create_recurring_expense_from_mixed_use(
+        source["id"], expected_source=source, **payload,
+    )
+    retry = default_storage.create_recurring_expense_from_mixed_use(
+        source["id"], expected_source=source, **payload,
+    )
+
+    assert retry["schedule"]["id"] == first["schedule"]["id"]
+    assert retry["source"]["id"] == first["source"]["id"]
+    assert retry["transaction"]["id"] == first["transaction"]["id"]
+    assert len(default_storage.list_recurring_schedules()) == 1
 
 
 def test_existing_mixed_use_recurring_conversion_preserves_receipts(

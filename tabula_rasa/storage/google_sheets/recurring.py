@@ -1135,6 +1135,85 @@ class RecurringMixin:
         )
         return {"schedule": preparation.schedule, **mutation.result}
 
+    def _already_applied_existing_conversion(
+        self,
+        *,
+        baseline: Mapping[str, Any],
+        additional_records: Sequence[Mapping[str, Any]],
+        changes: Mapping[str, Any],
+        source_kind: str,
+        prepare_occurrence: Callable[
+            [Mapping[str, Any], Mapping[str, Any]],
+            _RecurringOccurrenceMutation,
+        ],
+    ) -> dict[str, Any] | None:
+        """Accept a conversion that committed before its response was confirmed."""
+        schedule_id = _clean_text(changes.get("schedule_id"), "Schedule ID")
+        if not schedule_id:
+            return None
+        expected_provenance = {
+            "recurring_schedule_id": schedule_id,
+            "recurring_source_kind": source_kind,
+            "recurring_occurrence_type": "initial",
+        }
+        for record in (baseline, *additional_records):
+            if any(
+                str(record.get(field, "") or "") != value
+                for field, value in expected_provenance.items()
+            ):
+                return None
+
+        existing_schedule = next(
+            (
+                row.values
+                for row in self._rows("RecurringSchedules", force_refresh=True)
+                if str(row.values.get("id", "") or "") == schedule_id
+            ),
+            None,
+        )
+        if existing_schedule is None:
+            return None
+        schedule_data = {
+            **baseline,
+            **changes,
+            "schedule_id": schedule_id,
+            "source_kind": source_kind,
+            "receipt_references": "",
+        }
+        if source_kind == "transaction":
+            schedule_data["kind"] = "Expense"
+        if not self._inline_references_match_existing_schedule(
+            schedule_data, existing_schedule
+        ):
+            return None
+        schedule_data.update(
+            {
+                "payee_id": existing_schedule.get("payee_id", ""),
+                "tag_ids": existing_schedule.get("tag_ids", ""),
+                "new_payee_name": "",
+                "new_tag_name": "",
+            }
+        )
+        schedule = self._schedule_template(
+            schedule_data,
+            schedule_id=schedule_id,
+            created_at=existing_schedule.get("created_at"),
+            updated_at=existing_schedule.get("updated_at"),
+        )
+        if not self._logical_record_matches(
+            existing_schedule, schedule, ignored=_SCHEDULE_MATCH_IGNORED
+        ):
+            return None
+        resolved = dict(schedule_data)
+        resolved["receipt_references"] = str(
+            baseline.get("receipt_references", "") or ""
+        )
+        mutation = prepare_occurrence(resolved, schedule)
+        if mutation.record_state() != "applied":
+            return None
+        self._clear_recurring_attention(schedule_id)
+        return {"schedule": schedule, **mutation.result}
+
     def _prepare_existing_transaction_occurrence(
         self,
         *,
@@ -1268,6 +1347,22 @@ class RecurringMixin:
             )
             current_row = self._find_row("Transactions", transaction_id)
             self._reject_mixed_use_projection(current_row.values)
+            already_applied = self._already_applied_existing_conversion(
+                baseline=current_row.values,
+                additional_records=(),
+                changes=changes,
+                source_kind="transaction",
+                prepare_occurrence=lambda resolved, schedule: (
+                    self._prepare_existing_transaction_occurrence(
+                        transaction_id=transaction_id,
+                        baseline=current_row.values,
+                        resolved=resolved,
+                        schedule=schedule,
+                    )
+                ),
+            )
+            if already_applied is not None:
+                return already_applied
             self._reject_existing_recurring_metadata(
                 current_row.values, "Transaction"
             )
@@ -1332,6 +1427,24 @@ class RecurringMixin:
                 raise StorageValidationError(
                     "Mixed-use source has no linked projection transaction"
                 )
+            already_applied = self._already_applied_existing_conversion(
+                baseline=current_source,
+                additional_records=(current_transaction,),
+                changes=changes,
+                source_kind="mixed_use",
+                prepare_occurrence=lambda resolved, schedule: (
+                    self._prepare_existing_mixed_use_occurrence(
+                        source_id=source_id,
+                        transaction_id=transaction_id,
+                        current_source=current_source,
+                        current_transaction=current_transaction,
+                        resolved=resolved,
+                        schedule=schedule,
+                    )
+                ),
+            )
+            if already_applied is not None:
+                return already_applied
             self._reject_existing_recurring_metadata(
                 current_source, "Mixed-use expense"
             )

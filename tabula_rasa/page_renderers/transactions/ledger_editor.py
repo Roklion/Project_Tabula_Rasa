@@ -17,7 +17,7 @@ from tabula_rasa.recurrence_state import transaction_edit_pending_state
 from tabula_rasa.page_renderers.tag_selector import inline_tag_name_error
 from tabula_rasa.page_renderers.tag_selector import schedule_tag_selector_reset
 from tabula_rasa.page_renderers.tag_selector import tag_selector_error
-from tabula_rasa.storage import StorageError
+from tabula_rasa.storage import StorageConflictError, StorageError, StorageValidationError
 from .receipt_workflows import _receipt_folder
 from .receipt_workflows import clear_receipt_creation_recovery
 from .receipt_editor import (
@@ -383,6 +383,36 @@ def render_transaction_editor(
                             edit_payload["receipt_upload_keys"] = [
                                 receipt["key"] for receipt in prepared_receipts
                             ]
+
+                        def operation():
+                            try:
+                                return (
+                                    context.storage.create_recurring_expense_from_transaction(
+                                        edit_id,
+                                        expected_transaction=selected,
+                                        **edit_payload,
+                                    )["transaction"]
+                                    if make_recurring
+                                    else context.storage.edit_transaction(
+                                        edit_id,
+                                        txn_date=draft["txn_date"],
+                                        amount=draft["amount"],
+                                        account_id=draft["account_id"],
+                                        to_account_id=draft["to_account_id"],
+                                        category_id=draft["category_id"],
+                                        payee_id=draft["payee_id"],
+                                        new_payee_name=draft["new_payee_name"],
+                                        tag_ids=draft["tag_ids"],
+                                        new_tag_name=draft["new_tag_name"] or "",
+                                        reference=draft["reference"],
+                                        description=draft["description"],
+                                    )
+                                )
+                            except (StorageConflictError, StorageValidationError):
+                                if make_recurring:
+                                    pending_recurrence.clear(st.session_state)
+                                raise
+
                         context.confirmed_write(
                             (
                                 "make_transaction_recurring"
@@ -390,28 +420,7 @@ def render_transaction_editor(
                                 else "edit_transaction"
                             ),
                             edit_payload,
-                            lambda: (
-                                context.storage.create_recurring_expense_from_transaction(
-                                    edit_id,
-                                    expected_transaction=selected,
-                                    **edit_payload,
-                                )["transaction"]
-                                if make_recurring
-                                else context.storage.edit_transaction(
-                                    edit_id,
-                                    txn_date=draft["txn_date"],
-                                    amount=draft["amount"],
-                                    account_id=draft["account_id"],
-                                    to_account_id=draft["to_account_id"],
-                                    category_id=draft["category_id"],
-                                    payee_id=draft["payee_id"],
-                                    new_payee_name=draft["new_payee_name"],
-                                    tag_ids=draft["tag_ids"],
-                                    new_tag_name=draft["new_tag_name"] or "",
-                                    reference=draft["reference"],
-                                    description=draft["description"],
-                                )
-                            ),
+                            operation,
                             (
                                 "Transaction updated and recurring schedule created."
                                 if make_recurring

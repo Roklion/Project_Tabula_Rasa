@@ -968,19 +968,24 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
 
                 if source and not source_incomplete:
                     def operation():
-                        return (
-                            context.storage.create_recurring_expense_from_mixed_use(
-                                source["id"],
-                                expected_source=expected_source,
-                                **payload,
-                            )["source"]
-                            if recurring
-                            else context.storage.edit_mixed_use_expense(
-                                source["id"],
-                                expected_source=expected_source,
-                                **payload,
+                        try:
+                            return (
+                                context.storage.create_recurring_expense_from_mixed_use(
+                                    source["id"],
+                                    expected_source=expected_source,
+                                    **payload,
+                                )["source"]
+                                if recurring
+                                else context.storage.edit_mixed_use_expense(
+                                    source["id"],
+                                    expected_source=expected_source,
+                                    **payload,
+                                )
                             )
-                        )
+                        except (StorageConflictError, StorageValidationError):
+                            if recurring and edit_pending_recurrence is not None:
+                                edit_pending_recurrence.clear(st.session_state)
+                            raise
                     action, success = (
                         (
                             "make_mixed_use_expense_recurring",
