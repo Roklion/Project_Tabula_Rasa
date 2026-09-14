@@ -380,6 +380,59 @@ def test_existing_expense_recurring_conversion_rejects_a_stale_baseline(
     assert default_storage.list_recurring_schedules() == []
 
 
+def test_existing_expense_recurring_conversion_rejects_partial_recurring_metadata(
+    default_storage,
+) -> None:
+    account_id, category_id = _ids(default_storage)
+    transaction = default_storage.create_transaction(
+        txn_date="2024-01-15", kind="Expense", amount="20",
+        account_id=account_id, category_id=category_id,
+    )
+    row = default_storage._find_row("Transactions", transaction["id"])
+    broken = dict(row.values)
+    broken["recurring_scheduled_date"] = "2024-01-15"
+    default_storage._replace_row("Transactions", row, broken)
+
+    with pytest.raises(StorageValidationError, match="recurring metadata"):
+        default_storage.create_recurring_expense_from_transaction(
+            transaction["id"], expected_transaction=transaction,
+            schedule_id="partial-recurring", name="Partial recurring",
+            recurrence_unit="month", txn_date="2024-01-15", amount="20",
+            account_id=account_id, category_id=category_id,
+        )
+
+    assert default_storage.list_recurring_schedules() == []
+
+
+def test_existing_mixed_use_recurring_conversion_rejects_partial_projection_metadata(
+    default_storage,
+) -> None:
+    account_id, category_id = _ids(default_storage)
+    source = default_storage.create_mixed_use_expense(
+        txn_date="2024-01-15", total_expense="100",
+        business_use_percentage="25", account_id=account_id,
+        category_id=category_id, allocation_rationale="Measured use",
+    )
+    projection = default_storage._find_row(
+        "Transactions", source["linked_transaction_id"]
+    )
+    broken = dict(projection.values)
+    broken["recurring_occurrence_type"] = "initial"
+    default_storage._replace_row("Transactions", projection, broken)
+
+    with pytest.raises(StorageValidationError, match="recurring metadata"):
+        default_storage.create_recurring_expense_from_mixed_use(
+            source["id"], expected_source=source,
+            schedule_id="partial-mixed-recurring", name="Partial mixed",
+            recurrence_unit="month", txn_date="2024-01-15",
+            total_expense="100", business_use_percentage="25",
+            account_id=account_id, category_id=category_id,
+            allocation_rationale="Measured use",
+        )
+
+    assert default_storage.list_recurring_schedules() == []
+
+
 def test_existing_mixed_use_recurring_conversion_rejects_a_stale_baseline(
     default_storage,
 ) -> None:

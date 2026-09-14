@@ -364,6 +364,24 @@ class RecurringMixin:
                     "Mixed-use source and projection recurring provenance does not match"
                 )
 
+    @staticmethod
+    def _reject_existing_recurring_metadata(
+        record: Mapping[str, Any], label: str
+    ) -> None:
+        """Reject partial recurring provenance before converting an occurrence."""
+        if any(
+            str(record.get(field, "") or "").strip()
+            for field in (
+                "recurring_schedule_id",
+                "recurring_scheduled_date",
+                "recurring_source_kind",
+                "recurring_occurrence_type",
+            )
+        ):
+            raise StorageValidationError(
+                f"{label} already contains recurring metadata"
+            )
+
     def _validate_recurring_references(self) -> None:
         schedules = self._snapshot(("RecurringSchedules",), force_refresh=True)["RecurringSchedules"]
         raw_schedule_ids = [str(row.values.get("id", "") or "") for row in schedules]
@@ -1242,6 +1260,9 @@ class RecurringMixin:
             )
             current_row = self._find_row("Transactions", transaction_id)
             self._reject_mixed_use_projection(current_row.values)
+            self._reject_existing_recurring_metadata(
+                current_row.values, "Transaction"
+            )
             baseline = dict(expected_transaction or current_row.values)
             if expected_transaction is not None and not self._transaction_rows_match(
                 current_row.values, expected_transaction
@@ -1303,6 +1324,12 @@ class RecurringMixin:
                 raise StorageValidationError(
                     "Mixed-use source has no linked projection transaction"
                 )
+            self._reject_existing_recurring_metadata(
+                current_source, "Mixed-use expense"
+            )
+            self._reject_existing_recurring_metadata(
+                current_transaction, "Mixed-use projection"
+            )
             _validate_mixed_use_tables(
                 {
                     "MixedUseExpenses": (
