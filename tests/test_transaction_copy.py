@@ -13,7 +13,6 @@ from tests.app_support import (
 from tests.fakes import FakeWorkbook
 from tabula_rasa.page_renderers.transactions.ledger import (
     _change_ledger_mode,
-    _editable_account_ids,
     _make_created_copy_visible,
     copied_transaction_description,
 )
@@ -246,19 +245,6 @@ def test_copied_transaction_description_has_no_separator_for_blank_memo() -> Non
         )
         == "Copy From source-123"
     )
-
-
-def test_copy_account_choices_exclude_inactive_source_account() -> None:
-    accounts = [
-        {"id": "inactive", "name": "Old account", "active": False},
-        {"id": "active", "name": "Current account", "active": True},
-    ]
-
-    assert _editable_account_ids(accounts, ["inactive"], copy_mode=True) == ["active"]
-    assert _editable_account_ids(accounts, ["inactive"], copy_mode=False) == [
-        "active",
-        "inactive",
-    ]
 
 
 def test_switching_ledger_mode_preserves_copy_editor_target() -> None:

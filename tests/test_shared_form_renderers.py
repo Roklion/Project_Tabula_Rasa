@@ -73,3 +73,44 @@ def test_mileage_common_validation_rejects_missing_recorded_text() -> None:
             "destination": "  ",
         }
     ) == "Enter the destination text to record in the ledger."
+
+
+def test_metadata_references_preserve_only_selected_inactive_values_in_order() -> None:
+    from tabula_rasa.page_renderers.transactions.metadata_fields import (
+        active_or_selected, editable_account_ids, transaction_category_ids,
+    )
+    accounts = [
+        {"id": "old", "name": "A", "active": False},
+        {"id": "current", "name": "B", "active": True},
+        {"id": "other", "name": "C", "active": False},
+    ]
+    assert editable_account_ids(accounts, ["old"], copy_mode=False) == ["old", "current"]
+    assert editable_account_ids(accounts, ["old"], copy_mode=True) == ["current"]
+    categories = [
+        {"id": "old", "name": "A", "kind": "Expense", "active": False},
+        {"id": "current", "name": "B", "kind": "Expense"},
+        {"id": "income", "name": "C", "kind": "Income"},
+    ]
+    assert transaction_category_ids(
+        active_or_selected(categories, ["old"], default_active=True), "Expense",
+    ) == ["old", "current"]
+
+
+def test_metadata_reference_normalizes_category_label_and_requires_copy_replacement() -> None:
+    from unittest.mock import Mock, patch
+    import streamlit as st
+    from tabula_rasa.page_renderers.transactions.metadata_fields import render_metadata_reference
+    widget = Mock()
+    widget.selectbox.return_value = "Office"
+    state = {"category": "Office"}
+    with patch.object(st, "session_state", state):
+        assert render_metadata_reference(
+            "Category", ["office"], {"office": "Office"}, key="category",
+            normalize_state=True, container=widget,
+        ) == "office"
+        assert state["category"] == "office"
+        render_metadata_reference(
+            "Account", ["active"], {"active": "Checking"}, current_id="inactive",
+            require_selection=True, container=widget,
+        )
+    assert widget.selectbox.call_args.kwargs["index"] is None

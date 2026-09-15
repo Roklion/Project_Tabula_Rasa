@@ -8,7 +8,7 @@ from typing import Any
 
 import streamlit as st
 
-from tabula_rasa.hierarchy import ordered_categories
+from tabula_rasa.hierarchy import ordered_accounts, ordered_categories
 from tabula_rasa.page_renderers.tag_selector import render_tag_selector
 from .payee_selector import render_payee_selector
 
@@ -22,6 +22,26 @@ def selected_reference_id(value: object, paths: Mapping[str, str]) -> str:
         (item_id for item_id, label in paths.items() if item_id == value or label == value),
         value,
     )
+
+
+def active_or_selected(
+    items: Sequence[Mapping[str, Any]], selected_ids: Sequence[str], *, default_active: bool = False,
+) -> list[Mapping[str, Any]]:
+    """Retain current historical references alongside active choices."""
+    selected = set(selected_ids)
+    return [
+        item for item in items
+        if str(item.get("active", default_active)).upper() == "TRUE"
+        or str(item.get("id")) in selected
+    ]
+
+
+def editable_account_ids(
+    accounts: Sequence[Mapping[str, object]], current_account_ids: Sequence[str], *, copy_mode: bool,
+) -> list[str]:
+    return [str(item["id"]) for item in active_or_selected(
+        ordered_accounts(accounts), () if copy_mode else current_account_ids,
+    )]
 
 
 def transaction_category_ids(
@@ -75,6 +95,23 @@ def render_metadata_reference(
     return selected_reference_id(selected, paths)
 
 
+def copyable_tag_ids(
+    tags: Sequence[Mapping[str, object]], tag_ids: Sequence[object]
+) -> list[str]:
+    """Keep only active Tag IDs when starting a new copied transaction."""
+    active_ids = {
+        str(tag.get("id") or "").strip()
+        for tag in tags
+        if str(tag.get("id") or "").strip()
+        and str(tag.get("active", True)).strip().casefold() in {"true", "1"}
+    }
+    result: list[str] = []
+    for value in tag_ids:
+        tag_id = str(value).strip()
+        if tag_id in active_ids and tag_id not in result:
+            result.append(tag_id)
+    return result
+
 def render_transaction_associations(
     defaults: Mapping[str, object],
     *,
@@ -98,6 +135,8 @@ def render_transaction_associations(
         "Reference (optional)", str(defaults.get("reference") or ""), key=reference_key,
     )
     selected_tags = defaults.get("tag_ids") or ()
+    if not preserve_current:
+        selected_tags = copyable_tag_ids(tags, selected_tags)
     tag_ids, new_tag_name = render_tag_selector(
         tags, label="Tags", key=tags_key, selected_ids=selected_tags,
         preserve_inactive_ids=selected_tags if preserve_current else (),
