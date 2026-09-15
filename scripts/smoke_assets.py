@@ -42,6 +42,10 @@ def check_assets_viewport(
     require_input(page, "Asset name")
     require_input(page, "Useful life (quarters)")
     require_input(page, "Cost basis")
+    page.get_by_text("Depreciation expense account", exact=True).first.wait_for(state="visible")
+    page.get_by_text("Accumulated depreciation account", exact=True).first.wait_for(state="visible")
+    page.get_by_role("button", name="Post due depreciation", exact=True).wait_for(state="visible")
+    page.get_by_text("Post depreciation through", exact=True).first.wait_for(state="visible")
     page.get_by_role(
         "button", name="Calculate quarterly schedule", exact=True
     ).click()

@@ -395,7 +395,8 @@ class AssetsMixin:
                     required=True,
                 ),
             )
-            if self._asset_postings(asset_id) or _decode_overrides(current.values.get("schedule_overrides", "")):
+            postings = self._asset_postings(asset_id)
+            if postings or _decode_overrides(current.values.get("schedule_overrides", "")):
                 locked_fields = {
                     "cost_basis",
                     "salvage_value",
@@ -404,7 +405,7 @@ class AssetsMixin:
                     "depreciation_method",
                     "schedule_overrides",
                 }
-                if self._asset_postings(asset_id):
+                if postings:
                     locked_fields.update({"depreciation_expense_account_id", "accumulated_depreciation_account_id"})
                 if any(
                     field in changes
@@ -414,7 +415,6 @@ class AssetsMixin:
                     raise StorageConflictError(
                         "Schedule terms are locked after depreciation is posted or a historical override is saved"
                     )
-            postings = self._asset_postings(asset_id)
             if updated["retired_date"] and any(
                 row["txn_date"] > updated["retired_date"] for row in postings
             ):

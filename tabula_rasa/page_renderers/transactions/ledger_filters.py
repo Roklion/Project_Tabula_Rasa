@@ -38,7 +38,7 @@ def _change_ledger_mode(profile_key: str) -> None:
     if not st.session_state.get(_copy_source_key(profile_key)):
         st.session_state.pop("edit_transaction_id", None)
 
-def _mixed_use_transaction_ids(
+def _source_driven_transaction_ids(
     transactions: Sequence[Mapping[str, object]],
 ) -> set[str]:
     """Return protected source-driven IDs from an unfiltered snapshot."""
