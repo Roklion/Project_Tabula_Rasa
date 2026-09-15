@@ -262,8 +262,10 @@ def test_creation_recovery_is_profile_scoped() -> None:
         receipt_folder_id="south-folder",
     )
     state = {
-        receipt_creation_workflow_key("north"): north,
-        receipt_creation_workflow_key("south"): south,
+        receipt_creation_workflow_key("north"): "north-txn",
+        receipt_editor_workflow_key("north", "north-txn"): north,
+        receipt_creation_workflow_key("south"): "south-txn",
+        receipt_editor_workflow_key("south", "south-txn"): south,
     }
     context = _context(
         profile="south",
@@ -282,8 +284,8 @@ def test_creation_recovery_is_profile_scoped() -> None:
         assert render_receipt_creation_recovery(context)
 
     assert "south-txn" in info.call_args.args[0]
-    assert state[receipt_creation_workflow_key("north")] is north
-    assert state[receipt_creation_workflow_key("south")] is south
+    assert state[receipt_editor_workflow_key("north", "north-txn")] is north
+    assert state[receipt_editor_workflow_key("south", "south-txn")] is south
 
 
 def test_creation_recovery_clears_when_saved_transaction_is_gone() -> None:
@@ -294,7 +296,7 @@ def test_creation_recovery_clears_when_saved_transaction_is_gone() -> None:
         receipt_folder_id="north-folder",
     )
     key = receipt_creation_workflow_key("north")
-    state = {key: workflow}
+    state = {key: "txn-1", receipt_editor_workflow_key("north", "txn-1"): workflow}
     storage = Mock()
     storage.list_transactions.return_value = []
     context = _context(storage=storage)
@@ -482,7 +484,8 @@ def test_cancel_and_delete_cleanup_are_profile_and_target_scoped() -> None:
     state = {
         north_key: new_receipt_creation_workflow("txn-1", [_prepared()]),
         south_key: new_receipt_creation_workflow("txn-1", [_prepared()]),
-        receipt_creation_workflow_key("north"): new_receipt_creation_workflow(
+        receipt_creation_workflow_key("north"): "txn-2",
+        receipt_editor_workflow_key("north", "txn-2"): new_receipt_creation_workflow(
             "txn-2", [_prepared()]
         ),
     }
@@ -519,7 +522,10 @@ def test_mixed_use_creation_recovery_is_not_rendered_by_add_transaction() -> Non
         [_prepared()],
         mixed_use_source_id="source-1",
     )
-    state = {receipt_creation_workflow_key("north"): workflow}
+    state = {
+        receipt_creation_workflow_key("north"): "projection-1",
+        receipt_editor_workflow_key("north", "projection-1"): workflow,
+    }
 
     with (
         patch.object(st, "session_state", state),
@@ -537,3 +543,50 @@ def test_mixed_use_creation_recovery_is_not_rendered_by_add_transaction() -> Non
         )
 
     render_recovery.assert_not_called()
+
+
+@pytest.mark.parametrize("created", [False, True])
+def test_shared_recovery_checks_capacity_before_upload_and_preserves_other_profile(created) -> None:
+    from tabula_rasa.page_renderers.transactions.receipt_editor import _render_receipt_recovery
+    workflow = new_receipt_creation_workflow(
+        "txn-1", [_prepared()], spreadsheet_id="north-sheet", receipt_folder_id="north-folder",
+    )
+    workflow["created"] = created
+    key = receipt_editor_workflow_key("north", "txn-1")
+    other_key = receipt_editor_workflow_key("south", "txn-1")
+    state = {key: workflow, other_key: {"untouched": True}}
+    if created:
+        state[receipt_creation_workflow_key("north")] = "txn-1"
+    context = _context()
+    references = [{"id": f"drive{i:010}", "name": "receipt.pdf"} for i in range(100)]
+    with (
+        patch.object(st, "session_state", state),
+        patch.object(st, "info"), patch.object(st, "warning"),
+        patch.object(st, "caption"), patch.object(st, "error"),
+        patch.object(st, "button", side_effect=lambda label, **kwargs: label == "Retry unresolved receipts"),
+        patch.object(st, "rerun"),
+        patch("tabula_rasa.page_renderers.transactions.receipt_editor._fresh_transaction_receipt_references", return_value=references),
+    ):
+        assert _render_receipt_recovery(context, "txn-1", {"id": "north-folder"}, saved=created)
+    assert "no more than 100" in workflow["error"]
+    context.get_drive_client.assert_not_called()
+    assert state[other_key] == {"untouched": True}
+    assert state[key] is workflow
+
+
+def test_created_receipt_recovery_is_owned_by_transaction_and_manual_link_finishes_it() -> None:
+    context = _context()
+    context.storage.link_transaction_receipt.side_effect = RuntimeError("Sheets unavailable")
+    receipt = _prepared()
+    context.get_drive_client.return_value.upload_receipt.return_value = _drive_file(receipt)
+    state = {}
+    with patch.object(st, "session_state", state):
+        handle_confirmed_transaction_receipts(context, {"id": "txn-1"}, [receipt])
+        assert state[receipt_creation_workflow_key("north")] == "txn-1"
+        workflow = state[receipt_editor_workflow_key("north", "txn-1")]
+        assert workflow["receipts"][0]["content"] == b""
+        _record_editor_receipt_linked(context, "txn-1", workflow["receipts"][0]["reference"])
+    assert receipt_editor_workflow_key("north", "txn-1") not in state
+    assert receipt_creation_workflow_key("north") not in state
+    assert "1 receipt(s) linked" in state["write_success_notice"]
+    context.schedule_widget_reset.assert_called_once_with("reset_add_transaction_form")

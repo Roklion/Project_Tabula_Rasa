@@ -877,7 +877,8 @@ def test_mixed_use_app_test_clears_recovery_after_source_deletion(default_storag
 
     with authenticated_app(default_storage) as app:
         navigate_to(app, "Transactions")
-        app.session_state[receipt_creation_workflow_key("test")] = (
+        app.session_state[receipt_creation_workflow_key("test")] = transaction["id"]
+        app.session_state[receipt_editor_workflow_key("test", transaction["id"])] = (
             new_receipt_creation_workflow(
                 transaction["id"],
                 [],
@@ -907,7 +908,8 @@ def test_mixed_use_app_test_ignores_ordinary_receipt_recovery(default_storage) -
 
     with authenticated_app(default_storage) as app:
         navigate_to(app, "Transactions")
-        app.session_state[receipt_creation_workflow_key("test")] = (
+        app.session_state[receipt_creation_workflow_key("test")] = transaction["id"]
+        app.session_state[receipt_editor_workflow_key("test", transaction["id"])] = (
             new_receipt_creation_workflow(
                 transaction["id"],
                 [],

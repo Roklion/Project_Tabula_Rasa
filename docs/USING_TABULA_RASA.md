@@ -416,7 +416,8 @@ receipt (2).pdf. Uploaded files receive stable identity and checksum metadata.
 Partial uploads keep successful links, report unresolved files, and offer
 retry. **Cancel recovery** discards unresolved local file contents without
 deleting files already in Drive; those files remain available in
-**Unreferenced receipt**. Pending work is cleared if the selected profile's
+**Unreferenced receipt**. Add and Edit use the same transaction-specific recovery
+and receipt limits. Pending work is cleared if the selected profile's
 workbook or receipt folder changes, preventing cross-profile or cross-folder
 linking; select any local-only files again after returning to the intended
 configuration.

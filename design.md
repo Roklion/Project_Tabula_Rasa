@@ -342,6 +342,8 @@ confirm an uncertain link, while an unconfirmed uploaded file remains available
 through Unreferenced receipt. The editor retains multi-file upload, retry,
 cancel recovery, unlink, and unreferenced-link behavior.
 
+Add and Edit share receipt recovery keyed by profile and transaction ID. New
+transactions receive their UUID before persistence, without a placeholder row.
 Pending receipt state is scoped to the selected profile and exact workbook and
 receipt folder. A configuration change clears that pending state instead of
 reattaching it elsewhere; uploaded files remain recoverable in Drive.

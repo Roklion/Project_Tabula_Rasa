@@ -37,7 +37,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     render_receipt_creation_recovery,
     render_receipt_uploader,
     render_receipts,
-    receipt_creation_workflow_key,
+    creation_receipt_workflow,
     receipt_editor_workflow_key,
 )
 from tabula_rasa.storage import (
@@ -406,7 +406,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         ):
             _clear_mixed_use_copy(st.session_state, profile)
         copy_snapshot = None
-    recovery = st.session_state.get(receipt_creation_workflow_key(profile))
+    recovery = creation_receipt_workflow(context)
     if isinstance(recovery, Mapping):
         recovery_transaction_id = str(recovery.get("transaction_id") or "")
         recovery_source_id = str(recovery.get("mixed_use_source_id") or "")
