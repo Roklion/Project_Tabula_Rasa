@@ -54,6 +54,11 @@ class BackupMixin:
         self.list_assets(_force_refresh=True)
         accounts = self._account_lookup(force_refresh=True)
         categories = self._category_lookup(force_refresh=True)
+        from .depreciation_posting import validate_depreciation_history
+        validate_depreciation_history(
+            [row.values for row in snapshot["Assets"]],
+            [row.values for row in snapshot["Transactions"]], accounts, categories,
+        )
         payees = self._payee_lookup(force_refresh=True)
         for row in snapshot["MixedUseExpenses"]:
             self._validate_mixed_use_references(

@@ -183,6 +183,8 @@ class TransactionsMixin:
             raise StorageValidationError(
                 "Transaction source type and source ID must be provided together"
             )
+        if source_type == "depreciation":
+            raise StorageValidationError("Depreciation entries are managed from Assets")
         if source_type != MIXED_USE_SOURCE_TYPE:
             raise StorageValidationError("Transaction source type is unsupported")
         raise StorageValidationError(
@@ -503,6 +505,7 @@ class TransactionsMixin:
         tags: Mapping[str, Mapping[str, str]] | None = None,
         original_transaction: Mapping[str, Any] | None = None,
         preserve_existing_payee: bool = False,
+        _allow_zero_amount: bool = False,
     ) -> dict[str, str]:
         payees_force_refresh = True
         tags_force_refresh = True
@@ -571,7 +574,8 @@ class TransactionsMixin:
                 raise StorageValidationError("Category kind does not match transaction kind")
 
         txn_date = _iso_date(data.get("txn_date"))
-        amount = _positive_amount(data.get("amount"))
+        amount = ("0.00" if _allow_zero_amount and Decimal(str(data.get("amount"))) == 0
+                  else _positive_amount(data.get("amount")))
         receipt_references = (
             _encode_receipt_references(data.get("receipt_references", []))
             if transaction_id is None
@@ -730,7 +734,11 @@ class TransactionsMixin:
             ).title()
             if item["kind"] not in TRANSACTION_KINDS:
                 raise StorageValidationError("Unknown transaction kind")
-            item["amount"] = _positive_amount(item.get("amount"))
+            item["amount"] = (
+                "0.00" if item.get("source_type") == "depreciation"
+                and str(item.get("amount")) in {"0", "0.00"}
+                else _positive_amount(item.get("amount"))
+            )
             item["account_id"] = _clean_text(
                 item.get("account_id"), "Account", required=True
             )
@@ -771,7 +779,7 @@ class TransactionsMixin:
                 raise StorageValidationError(
                     "Transaction source type and source ID must be provided together"
                 )
-            if item["source_type"] and item["source_type"] != MIXED_USE_SOURCE_TYPE:
+            if item["source_type"] and item["source_type"] not in {MIXED_USE_SOURCE_TYPE, "depreciation"}:
                 raise StorageValidationError("Transaction source type is unsupported")
             if not item["source_type"]:
                 # Preserve the pre-Phase-A public shape for ordinary rows while
