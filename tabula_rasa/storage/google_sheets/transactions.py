@@ -725,7 +725,14 @@ class TransactionsMixin:
         categories = self._category_lookup(force_refresh=_force_refresh)
         payees = self._payee_lookup(force_refresh=_force_refresh)
         tags = self._tag_lookup(force_refresh=_force_refresh)
-        for row in self._rows("Transactions", force_refresh=_force_refresh):
+        raw_transactions = self._rows("Transactions", force_refresh=_force_refresh)
+        if any(row.values.get("source_type") == "depreciation" for row in raw_transactions):
+            from .depreciation_posting import validate_depreciation_history
+            validate_depreciation_history(
+                [row.values for row in self._rows("Assets", force_refresh=_force_refresh)],
+                [row.values for row in raw_transactions], accounts, categories,
+            )
+        for row in raw_transactions:
             item = dict(row.values)
             item["id"] = _clean_text(item.get("id"), "Transaction ID", required=True)
             item["txn_date"] = _iso_date(item.get("txn_date"))

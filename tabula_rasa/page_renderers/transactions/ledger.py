@@ -27,6 +27,7 @@ from .ledger_filters import (
     _selection_ids,
     transaction_has_receipts,
     transaction_is_mixed_use,
+    transaction_is_source_driven,
     transaction_type_label,
 )
 from .transaction_copy import (
@@ -367,7 +368,7 @@ def render_ledger(
         else _selection_ids(transaction_ids, selected_rows)
     )
     selected_protected = any(
-        transaction_is_mixed_use(transaction_by_id.get(transaction_id, {}))
+        transaction_is_source_driven(transaction_by_id.get(transaction_id, {}))
         for transaction_id in selected_for_copy
     )
     copy_button = st.button(
@@ -382,7 +383,7 @@ def render_ledger(
             f"{context.profile_key}_{st.session_state.get('transaction_ledger_generation', 0)}"
         ),
         help=(
-            "Mixed-use projections are managed from the Mixed-use expenses tab."
+            "Source-driven entries are managed from Mixed-use expenses or Assets."
             if selected_protected
             else "Select exactly one transaction to open a prefilled copy form."
         ),

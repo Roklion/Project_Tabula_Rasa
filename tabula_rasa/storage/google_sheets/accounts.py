@@ -129,6 +129,11 @@ class AccountsMixin:
             required=True,
         ).title()
         _validate_account_classification(account_type, classification)
+        if (account_type != "Other" or classification != "Asset") and any(
+            row.values.get("accumulated_depreciation_account_id") == account_id
+            for row in self._rows("Assets", force_refresh=True)
+        ):
+            raise StorageConflictError("An asset's accumulated depreciation account must remain Other / Asset")
         if any(
             account["id"] != account_id
             and account["name"].casefold() == name.casefold()
@@ -255,6 +260,7 @@ class AccountsMixin:
         if kind not in CATEGORY_KINDS:
             raise StorageValidationError("Category kind must be Income or Expense")
         def reject_mixed_use_kind_change() -> None:
+            self._reject_asset_expense_category_change(normalized_category_id)
             sources, _ = self._raw_mixed_use_snapshot()
             if any(
                 str(source.get("category_id") or "").strip()
@@ -319,11 +325,17 @@ class AccountsMixin:
             self._replace_row("Categories", current, updated)
         return updated
 
+    def _reject_asset_expense_category_change(self, category_id: str) -> None:
+        if any(row.values.get("depreciation_expense_account_id") == category_id
+               for row in self._rows("Assets", force_refresh=True)):
+            raise StorageConflictError("Category is used by an asset depreciation schedule")
+
     def delete_category(self, category_id: str) -> None:
         with self._workbook_locks.ledger:
             self._delete_category(category_id)
 
     def _delete_category(self, category_id: str) -> None:
+        self._reject_asset_expense_category_change(category_id)
         category_id = _clean_text(category_id, "ID", required=True)
         current = self._find_row("Categories", category_id)
         existing_categories = self.list_categories(_force_refresh=True)

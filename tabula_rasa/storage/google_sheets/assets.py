@@ -403,9 +403,9 @@ class AssetsMixin:
                     "useful_life_quarters",
                     "depreciation_method",
                     "schedule_overrides",
-                    "depreciation_expense_account_id",
-                    "accumulated_depreciation_account_id",
                 }
+                if self._asset_postings(asset_id):
+                    locked_fields.update({"depreciation_expense_account_id", "accumulated_depreciation_account_id"})
                 if any(
                     field in changes
                     and updated[field] != normalized_current[field]

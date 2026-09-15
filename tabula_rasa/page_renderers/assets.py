@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from decimal import Decimal
 import json
@@ -11,7 +11,8 @@ import json
 import pandas as pd
 import streamlit as st
 
-from tabula_rasa.depreciation import STRAIGHT_LINE_METHOD, straight_line_schedule
+from tabula_rasa.depreciation import STRAIGHT_LINE_METHOD
+from tabula_rasa.storage.google_sheets.depreciation_posting import asset_schedule, depreciation_entry_id
 from tabula_rasa.presentation import render_global_footer, render_page_header
 from tabula_rasa.storage import (
     ASSET_TYPES,
@@ -39,25 +40,17 @@ def _overrides(asset: dict) -> dict[int, dict[str, str]]:
 
 
 def _schedule(asset: dict):
-    return straight_line_schedule(
-        asset["cost_basis"],
-        asset["salvage_value"],
-        date.fromisoformat(asset["depreciation_start_date"]),
-        int(asset["useful_life_quarters"]),
-        retired_date=(
-            date.fromisoformat(asset["retired_date"])
-            if asset.get("retired_date")
-            else None
-        ),
-        overrides=_overrides(asset),
-    )
+    posted_ids = set(asset.get("posted_entry_ids", []))
+    return [replace(period, posting_status="Posted", journal_entry_id=entry_id)
+            if (entry_id := depreciation_entry_id(asset["id"], period.sequence)) in posted_ids
+            else period for period in asset_schedule(asset)]
 
 
 def _display_status(asset: dict, *, today: date) -> str:
     if asset["status"] == "retired":
         return "Retired"
     schedule = _schedule(asset)
-    if schedule and schedule[-1].scheduled_date <= today:
+    if schedule and all(period.posting_status == "Posted" for period in schedule):
         return "Fully depreciated"
     return "Active"
 
@@ -116,6 +109,8 @@ def _asset_fields(
     payees: list[dict],
     tags: list[dict],
     transactions: list[dict],
+    accounts: list[dict] | None = None,
+    categories: list[dict] | None = None,
     initial: dict | None = None,
     schedule_locked: bool = False,
 ) -> dict:
@@ -192,6 +187,24 @@ def _asset_fields(
         disabled=True,
         key=f"{prefix}_method_{profile_key}",
     )
+    st.caption("Posting accounts: an Expense category is the debit account in Simple Ledger; accumulated depreciation is the non-cash credit account.")
+    posting_accounts = {}
+    c1, c2 = st.columns(2, gap="small")
+    for container, field, label, candidates in (
+        (c1, "depreciation_expense_account_id", "Depreciation expense account",
+         [item for item in (categories or []) if item["kind"] == "Expense"]),
+        (c2, "accumulated_depreciation_account_id", "Accumulated depreciation account",
+         [item for item in (accounts or []) if item["type"] == "Other" and item["classification"] == "Asset"]),
+    ):
+        names = {item["id"]: item["name"] for item in candidates}
+        ids = [""] + list(names)
+        current_id = initial.get(field, "")
+        posting_accounts[field] = container.selectbox(
+            label, ids, index=ids.index(current_id) if current_id in ids else 0,
+            format_func=lambda value, names=names: names.get(value, "Select an account"),
+            disabled=bool(initial.get("posted_entry_ids")),
+            key=f"{prefix}_{field}_{profile_key}",
+        )
     c1, c2 = st.columns(2, gap="small")
     current_payee = initial.get("payee_id", "")
     payee_id = c1.selectbox(
@@ -236,6 +249,7 @@ def _asset_fields(
         key=f"{prefix}_notes_{profile_key}",
     )
     values = {
+        **posting_accounts,
         "name": name,
         "asset_type": asset_type,
         "notes": notes,
@@ -259,6 +273,23 @@ def _asset_fields(
 
 
 def _render_schedule(context: AssetsContext, asset: dict) -> None:
+    with st.container(border=True):
+        through_date = st.date_input(
+            "Post depreciation through", value=date.today(),
+            key=f"asset_post_through_{context.profile_key}_{asset['id']}",
+        )
+        st.caption("Posts each pending quarter through this date. No cash or bank balance changes.")
+        posting_error = st.empty()
+        if st.button("Post due depreciation", type="primary",
+                     key=f"post_depreciation_{context.profile_key}_{asset['id']}"):
+            context.confirmed_write(
+                "post_due_depreciation", {"asset_id": asset["id"], "through_date": through_date},
+                lambda: context.storage.post_due_depreciation(
+                    asset["id"], through_date, expected_asset=asset,
+                ),
+                "Due depreciation posted. Already posted quarters were skipped.",
+                report_error=posting_error.error,
+            )
     state_key = f"asset_schedule_visible_{context.profile_key}_{asset['id']}"
     if st.button(
         "Calculate quarterly schedule",
@@ -281,7 +312,7 @@ def _render_schedule(context: AssetsContext, asset: dict) -> None:
                 "Override": "Yes" if item.is_override else "",
                 "Override reason": item.override_reason,
                 "Posting status": item.posting_status,
-                "Journal entry ID": item.journal_entry_id,
+                "Ledger entry ID": item.journal_entry_id,
             }
             for item in schedule
         ]
@@ -302,6 +333,9 @@ def _render_schedule(context: AssetsContext, asset: dict) -> None:
             "recapture, or remaining-basis write-off is calculated."
         )
 
+    if asset.get("posted_entry_ids"):
+        st.info("Posted depreciation history is read-only. Schedule overrides are locked.")
+        return
     due = [item for item in schedule if item.scheduled_date <= date.today()]
     if not due:
         st.info("No quarterly schedule period is due yet, so nothing can be overridden.")
@@ -366,7 +400,7 @@ def _render_schedule(context: AssetsContext, asset: dict) -> None:
 
 
 def render_assets(context: AssetsContext) -> None:
-    """Render Phase A of the fixed-asset workflow."""
+    """Render the asset register, schedule and explicit depreciation posting."""
     render_page_header(
         "Assets",
         "Track depreciable business assets and calculate quarterly straight-line schedules.",
@@ -379,6 +413,12 @@ def render_assets(context: AssetsContext) -> None:
         payees = context.storage.list_payees()
         tags = context.storage.list_tags()
         transactions = context.storage.list_transactions()
+        accounts = context.storage.list_accounts(active_only=False)
+        categories = context.storage.list_categories()
+        for asset in assets:
+            asset["posted_entry_ids"] = [transaction["id"] for transaction in transactions
+                                         if transaction.get("source_type") == "depreciation"
+                                         and transaction.get("source_id") == asset["id"]]
     except StorageError as error:
         context.report_storage_error(error)
         render_global_footer()
@@ -391,6 +431,8 @@ def render_assets(context: AssetsContext) -> None:
             payees=payees,
             tags=tags,
             transactions=transactions,
+            accounts=accounts,
+            categories=categories,
         )
         add_error = st.empty()
         if st.button("Add asset", type="primary", key="save_new_asset"):
@@ -451,11 +493,11 @@ def render_assets(context: AssetsContext) -> None:
     st.caption("Select an asset row to manage its record and quarterly schedule.")
 
     with st.expander("Edit or retire selected asset"):
-        locked = bool(_overrides(selected))
+        locked = bool(_overrides(selected) or selected.get("posted_entry_ids"))
         if locked:
             st.info(
                 "Schedule terms are locked because this asset has a historical "
-                "override. Descriptive fields remain editable."
+                "override or posted depreciation. Descriptive fields remain editable."
             )
         values = _asset_fields(
             f"edit_asset_{selected_id}",
@@ -463,6 +505,8 @@ def render_assets(context: AssetsContext) -> None:
             payees=payees,
             tags=tags,
             transactions=transactions,
+            accounts=accounts,
+            categories=categories,
             initial=selected,
             schedule_locked=locked,
         )
