@@ -8,7 +8,6 @@ coverage for helper behavior with distinct fallback or edge-case contracts.
 
 from __future__ import annotations
 
-from datetime import date
 
 import pytest
 
@@ -32,7 +31,6 @@ from tabula_rasa.page_renderers.mileage import (
     _same_selected_place,
     _set_widget_default,
     _acknowledge_recorded_location_text,
-    _save_round_trip,
     _tag_names_for_trip,
     _trip_tag_ids,
     mileage_frame,
@@ -523,58 +521,6 @@ def test_round_trip_retry_calls_only_failed_return_route() -> None:
 
     assert (outbound, returned) == (12.4, 13.1)
     assert retry_calls == [("place-client", "place-office")]
-
-
-def test_round_trip_save_passes_independent_return_miles() -> None:
-    class Storage:
-        def __init__(self) -> None:
-            self.kwargs: dict[str, object] = {}
-
-        def create_mileage_round_trip(self, **kwargs: object) -> None:
-            self.kwargs = kwargs
-
-    storage = Storage()
-    _save_round_trip(
-        storage,  # type: ignore[arg-type]
-        trip_date=date(2026, 8, 31),
-        miles=12.4,
-        return_miles=13.1,
-        vehicle="",
-        start_location="Office",
-        destination="Client",
-        business_purpose="Meeting",
-        notes="",
-    )
-
-    assert storage.kwargs["miles"] == 12.4
-    assert storage.kwargs["return_miles"] == 13.1
-
-
-def test_round_trip_save_passes_the_same_tags_to_both_legs() -> None:
-    class Storage:
-        def __init__(self) -> None:
-            self.kwargs: dict[str, object] = {}
-
-        def create_mileage_round_trip(self, **kwargs: object) -> None:
-            self.kwargs = kwargs
-
-    storage = Storage()
-    _save_round_trip(
-        storage,  # type: ignore[arg-type]
-        trip_date=date(2026, 8, 31),
-        miles=12.4,
-        return_miles=13.1,
-        vehicle="",
-        start_location="Office",
-        destination="Client",
-        business_purpose="Meeting",
-        notes="",
-        tag_ids=["project", "tax"],
-        new_tag_name="",
-    )
-
-    assert storage.kwargs["tag_ids"] == ["project", "tax"]
-    assert storage.kwargs["new_tag_name"] == ""
 
 
 def test_mileage_frame_resolves_stable_tag_ids_and_keeps_no_tag_blank() -> None:

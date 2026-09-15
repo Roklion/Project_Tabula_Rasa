@@ -114,3 +114,20 @@ def test_metadata_reference_normalizes_category_label_and_requires_copy_replacem
             require_selection=True, container=widget,
         )
     assert widget.selectbox.call_args.kwargs["index"] is None
+
+
+def test_mileage_payload_excludes_route_state_and_operation_controls() -> None:
+    from datetime import date
+    from tabula_rasa.page_renderers.mileage_form_shared import mileage_payload_from_draft
+    fields = {
+        "trip_date": date(2026, 9, 15), "miles": 12.4, "vehicle": "Car",
+        "start_location": "Office", "destination": "Client", "business_purpose": "Meeting",
+        "notes": "Reviewed", "tag_ids": ["project", "tax"], "new_tag_name": None,
+    }
+    draft = {
+        **fields, "round_trip": True, "return_miles": 13.1,
+        "route_state": {"outbound": 99}, "start_selection": object(),
+        "id": "existing", "fingerprint": "transient", "calculate_requested": False,
+    }
+    assert mileage_payload_from_draft(draft) == {**fields, "new_tag_name": ""}
+    assert draft["new_tag_name"] is None

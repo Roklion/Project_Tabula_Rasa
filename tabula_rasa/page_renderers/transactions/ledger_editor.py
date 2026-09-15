@@ -342,6 +342,9 @@ def render_transaction_editor(
                         report_error=edit_error.error,
                     )
                 else:
+                    # Kind is fixed by the existing row; Edit only changes its fields.
+                    transaction_changes = dict(transaction_data)
+                    transaction_changes.pop("kind")
                     prepared_receipts: list[dict[str, object]] = []
                     receipt_preparation_failed = False
                     if receipt_uploads:
@@ -395,17 +398,7 @@ def render_transaction_editor(
                                     if make_recurring
                                     else context.storage.edit_transaction(
                                         edit_id,
-                                        txn_date=draft["txn_date"],
-                                        amount=draft["amount"],
-                                        account_id=draft["account_id"],
-                                        to_account_id=draft["to_account_id"],
-                                        category_id=draft["category_id"],
-                                        payee_id=draft["payee_id"],
-                                        new_payee_name=draft["new_payee_name"],
-                                        tag_ids=draft["tag_ids"],
-                                        new_tag_name=draft["new_tag_name"] or "",
-                                        reference=draft["reference"],
-                                        description=draft["description"],
+                                        **transaction_changes,
                                     )
                                 )
                             except (StorageConflictError, StorageValidationError):
