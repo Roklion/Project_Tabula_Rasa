@@ -865,19 +865,48 @@ Only due or past schedule quarters can receive a durable amount override, and
 every override requires a reason. An override fixes that quarter and all
 earlier schedule results; the remaining depreciable basis is spread evenly
 over later quarters with a final-cent true-up. Asset schedule terms are locked
-while overrides exist, though descriptive metadata remains editable. Removing
+while overrides exist, though descriptive metadata remains editable. Before posting, removing
 all overrides restores editable schedule terms and the ordinary straight-line
-calculation. Retirement stops occurrences after the retirement date without
+calculation. After posting begins, overrides and schedule terms remain locked. Retirement stops occurrences after the retirement date without
 calculating disposal proceeds, gain/loss, recapture, or a remaining-basis
 write-off. Permanent deletion is allowed only before the asset has saved
 depreciation history. Once an override exists, the durable history is retained
-and the asset can be retired but not deleted; future posted history will carry
-the same retention boundary.
+and the asset can be retired but not deleted. Posted depreciation carries
+the same retention boundary. Retirement cannot precede any posted period.
 
-This phase calculates and stores no ledger transaction. Depreciation is
-non-cash accounting, and journal posting remains deferred until the balanced
-multi-line journal-entry model exists. The reserved depreciation account fields
-remain storage-only and are not exposed as unfinished controls.
+**Current behavior — Simple Ledger depreciation posting.** Each asset may select
+its Depreciation expense account (an Expense category in Simple Ledger) and an
+Accumulated depreciation account (type Other, classification Asset). Both are
+required before posting; the accumulated depreciation account must be active.
+Account selectors remain available for Phase A assets with historical overrides
+until the first posting. Posting accounts are locked after posting begins.
+
+The selected asset has an explicit **Post due depreciation** button and a
+**Post depreciation through** date, defaulting to today. Posting creates one
+Expense row for each pending scheduled quarter on or before that date, including
+zero-amount quarters when rounding or an override produces zero. The category
+is the expense debit and the account is the accumulated depreciation credit.
+P&L includes the expense, the balance sheet reduces asset value and current
+earnings equally, and cash/bank balances do not change. This workflow is fully
+available in Simple Ledger and has no dependency on #169 or a multi-line journal.
+Calculating a schedule or rerunning the application never posts depreciation.
+
+Each generated row stores `source_type=depreciation`, `source_id=<asset ID>`,
+and an entry ID deterministically derived from the asset ID and quarter sequence.
+This is the durable asset-period linkage; posting and provenance share one row.
+The schedule displays Posted/Pending and the linked Ledger entry ID. Fully
+depreciated status requires all schedule quarters to be posted, not merely due.
+Posted rows cannot be independently edited, copied, deleted, made recurring, or
+have receipts managed from the ordinary ledger; selection directs the user to
+Assets. Existing acquisition-transaction receipt context remains unchanged.
+
+The existing per-workbook application lock serializes concurrent sessions.
+Uncertain writes use the existing bounded stable-ID readback/retry mechanism.
+If a later quarter fails, confirmed earlier quarters remain posted; refreshing
+and posting again skips them. Conflicting provenance stops posting with guidance
+to inspect the source. Backup/restore validates the same source relationships.
+No new worksheet or header is needed; the current workbook/backup format retains
+the asset fields and transaction source metadata.
 
 ### Accounts
 

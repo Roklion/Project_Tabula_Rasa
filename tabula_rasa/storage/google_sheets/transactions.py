@@ -42,6 +42,7 @@ from .validation import (
 )
 from .base import _StoredRow, _workbook_mutation_lock
 
+
 class TransactionsMixin:
     """Mixin for the transactions storage boundary."""
 
@@ -183,6 +184,8 @@ class TransactionsMixin:
             raise StorageValidationError(
                 "Transaction source type and source ID must be provided together"
             )
+        if source_type == "depreciation":
+            raise StorageValidationError("Depreciation entries are managed from Assets")
         if source_type != MIXED_USE_SOURCE_TYPE:
             raise StorageValidationError("Transaction source type is unsupported")
         raise StorageValidationError(
@@ -429,7 +432,8 @@ class TransactionsMixin:
                             "range": {
                                 "sheetId": sheet_id,
                                 "dimension": "ROWS",
-                                "startIndex": selected_rows[transaction_id].row_number - 1,
+                                "startIndex": selected_rows[transaction_id].row_number
+                                - 1,
                                 "endIndex": selected_rows[transaction_id].row_number,
                             }
                         }
@@ -444,7 +448,9 @@ class TransactionsMixin:
 
             def state() -> str:
                 current = {
-                    str(row.values["id"]): self._normalized_transaction_values(row.values)
+                    str(row.values["id"]): self._normalized_transaction_values(
+                        row.values
+                    )
                     for row in self._rows("Transactions", force_refresh=True)
                 }
                 if not any(item in current for item in original_by_id):
@@ -470,12 +476,17 @@ class TransactionsMixin:
                     self._reject_mixed_use_projection(transaction)
 
             self._write_with_uncertain_readback(
-                "transaction deletion", write, state,
-                before_retry=refresh, invalidate=("Transactions",),
+                "transaction deletion",
+                write,
+                state,
+                before_retry=refresh,
+                invalidate=("Transactions",),
             )
             return {"status": "fully_applied", "count": str(len(selected_rows))}
 
-    def _account_lookup(self, *, force_refresh: bool = False) -> dict[str, dict[str, Any]]:
+    def _account_lookup(
+        self, *, force_refresh: bool = False
+    ) -> dict[str, dict[str, Any]]:
         return {
             account["id"]: account
             for account in self.list_accounts(
@@ -503,6 +514,7 @@ class TransactionsMixin:
         tags: Mapping[str, Mapping[str, str]] | None = None,
         original_transaction: Mapping[str, Any] | None = None,
         preserve_existing_payee: bool = False,
+        _allow_zero_amount: bool = False,
     ) -> dict[str, str]:
         payees_force_refresh = True
         tags_force_refresh = True
@@ -539,7 +551,10 @@ class TransactionsMixin:
             if original_transaction is not None
             else None
         )
-        if not _as_bool(accounts[account_id]["active"]) and account_id != original_account_id:
+        if (
+            not _as_bool(accounts[account_id]["active"])
+            and account_id != original_account_id
+        ):
             raise StorageValidationError("Source account is inactive")
 
         to_account_id = _clean_text(data.get("to_account_id"), "Destination account")
@@ -555,7 +570,10 @@ class TransactionsMixin:
                 if original_transaction is not None
                 else None
             )
-            if not _as_bool(accounts[to_account_id]["active"]) and to_account_id != original_to_account_id:
+            if (
+                not _as_bool(accounts[to_account_id]["active"])
+                and to_account_id != original_to_account_id
+            ):
                 raise StorageValidationError("Destination account is inactive")
             if to_account_id == account_id:
                 raise StorageValidationError("Transfer accounts must be different")
@@ -568,27 +586,30 @@ class TransactionsMixin:
             if category_id not in categories:
                 raise StorageValidationError("Category does not exist")
             if categories[category_id]["kind"] != kind:
-                raise StorageValidationError("Category kind does not match transaction kind")
+                raise StorageValidationError(
+                    "Category kind does not match transaction kind"
+                )
 
         txn_date = _iso_date(data.get("txn_date"))
-        amount = _positive_amount(data.get("amount"))
+        is_zero_amount = False
+        if _allow_zero_amount:
+            try:
+                is_zero_amount = Decimal(str(data.get("amount"))) == 0
+            except (InvalidOperation, ValueError):
+                is_zero_amount = False
+        amount = "0.00" if is_zero_amount else _positive_amount(data.get("amount"))
         receipt_references = (
             _encode_receipt_references(data.get("receipt_references", []))
-            if transaction_id is None
-            or data.get("receipt_references", "") != ""
+            if transaction_id is None or data.get("receipt_references", "") != ""
             else ""
         )
         payee_id = _clean_text(data.get("payee_id"), "Payee")
         new_payee_name = _clean_text(data.get("new_payee_name"), "New payee")
         legacy_payee = _clean_text(data.get("payee"), "Payee")
         if legacy_payee:
-            raise StorageValidationError(
-                "Transactions must reference a stored payee"
-            )
+            raise StorageValidationError("Transactions must reference a stored payee")
         if payee_id and new_payee_name:
-            raise StorageValidationError(
-                "Choose an existing payee or add a new payee"
-            )
+            raise StorageValidationError("Choose an existing payee or add a new payee")
         tag_ids = _normalize_tag_ids(data.get("tag_ids", ""))
         original_tag_ids = (
             _normalize_tag_ids(original_transaction.get("tag_ids", ""))
@@ -599,7 +620,10 @@ class TransactionsMixin:
             tag = tags.get(tag_id)
             if tag is None:
                 raise StorageValidationError("Tag does not exist")
-            if not _as_bool(tag["active"], "Tag active") and tag_id not in original_tag_ids:
+            if (
+                not _as_bool(tag["active"], "Tag active")
+                and tag_id not in original_tag_ids
+            ):
                 raise StorageValidationError("Tag is inactive")
         original_payee_id = (
             _clean_text(original_transaction.get("payee_id"), "Payee")
@@ -663,8 +687,20 @@ class TransactionsMixin:
         recurring_source_kind = _clean_text(
             data.get("recurring_source_kind"), "Recurring source kind"
         )
-        if any((recurring_schedule_id, recurring_scheduled_date, recurring_source_kind, recurring_occurrence_type)):
-            if not (recurring_schedule_id and recurring_scheduled_date and recurring_source_kind and recurring_occurrence_type):
+        if any(
+            (
+                recurring_schedule_id,
+                recurring_scheduled_date,
+                recurring_source_kind,
+                recurring_occurrence_type,
+            )
+        ):
+            if not (
+                recurring_schedule_id
+                and recurring_scheduled_date
+                and recurring_source_kind
+                and recurring_occurrence_type
+            ):
                 raise StorageValidationError(
                     "Recurring provenance fields must be provided together"
                 )
@@ -691,7 +727,9 @@ class TransactionsMixin:
                 )
             if source_type:
                 if source_type != MIXED_USE_SOURCE_TYPE:
-                    raise StorageValidationError("Transaction source type is unsupported")
+                    raise StorageValidationError(
+                        "Transaction source type is unsupported"
+                    )
                 record["source_type"] = source_type
                 record["source_id"] = source_id
         return record
@@ -721,7 +759,8 @@ class TransactionsMixin:
         categories = self._category_lookup(force_refresh=_force_refresh)
         payees = self._payee_lookup(force_refresh=_force_refresh)
         tags = self._tag_lookup(force_refresh=_force_refresh)
-        for row in self._rows("Transactions", force_refresh=_force_refresh):
+        raw_transactions = self._rows("Transactions", force_refresh=_force_refresh)
+        for row in raw_transactions:
             item = dict(row.values)
             item["id"] = _clean_text(item.get("id"), "Transaction ID", required=True)
             item["txn_date"] = _iso_date(item.get("txn_date"))
@@ -730,7 +769,16 @@ class TransactionsMixin:
             ).title()
             if item["kind"] not in TRANSACTION_KINDS:
                 raise StorageValidationError("Unknown transaction kind")
-            item["amount"] = _positive_amount(item.get("amount"))
+            source_type = str(item.get("source_type") or "").strip().lower()
+            is_zero_depreciation = False
+            if source_type == "depreciation":
+                try:
+                    is_zero_depreciation = Decimal(str(item.get("amount"))) == 0
+                except (InvalidOperation, ValueError):
+                    is_zero_depreciation = False
+            item["amount"] = (
+                "0.00" if is_zero_depreciation else _positive_amount(item.get("amount"))
+            )
             item["account_id"] = _clean_text(
                 item.get("account_id"), "Account", required=True
             )
@@ -761,9 +809,7 @@ class TransactionsMixin:
                         "Category kind does not match transaction kind"
                     )
             item["payee_id"] = _clean_text(item.get("payee_id"), "Payee")
-            item["source_type"] = _clean_text(
-                item.get("source_type"), "Transaction source type"
-            )
+            item["source_type"] = source_type
             item["source_id"] = _clean_text(
                 item.get("source_id"), "Transaction source ID"
             )
@@ -771,7 +817,10 @@ class TransactionsMixin:
                 raise StorageValidationError(
                     "Transaction source type and source ID must be provided together"
                 )
-            if item["source_type"] and item["source_type"] != MIXED_USE_SOURCE_TYPE:
+            if item["source_type"] and item["source_type"] not in {
+                MIXED_USE_SOURCE_TYPE,
+                "depreciation",
+            }:
                 raise StorageValidationError("Transaction source type is unsupported")
             if not item["source_type"]:
                 # Preserve the pre-Phase-A public shape for ordinary rows while
@@ -810,12 +859,15 @@ class TransactionsMixin:
 
     def create_transaction(self, *, transaction_id: str | None = None, **data: Any) -> dict[str, str]:
         with self._workbook_locks.ledger:
-            if any(field in data for field in (
-                "recurring_schedule_id",
-                "recurring_scheduled_date",
-                "recurring_source_kind",
-                "recurring_occurrence_type",
-            )):
+            if any(
+                field in data
+                for field in (
+                    "recurring_schedule_id",
+                    "recurring_scheduled_date",
+                    "recurring_source_kind",
+                    "recurring_occurrence_type",
+                )
+            ):
                 raise StorageValidationError(
                     "Recurring provenance is created only by recurring expense APIs"
                 )
@@ -900,7 +952,10 @@ class TransactionsMixin:
                     )
 
             self._write_with_uncertain_readback(
-                "transaction deletion", write, state, before_retry=refresh,
+                "transaction deletion",
+                write,
+                state,
+                before_retry=refresh,
                 invalidate=("Transactions",),
             )
 
@@ -989,10 +1044,18 @@ class TransactionsMixin:
         )
         if auto_create:
             for name in new_accounts:
-                item = {"id": f"pending-account:{name.casefold()}", "name": name, "active": True}
+                item = {
+                    "id": f"pending-account:{name.casefold()}",
+                    "name": name,
+                    "active": True,
+                }
                 accounts[item["id"]] = item
             for name, kind in new_categories:
-                item = {"id": f"pending-category:{kind}:{name.casefold()}", "name": name, "kind": kind}
+                item = {
+                    "id": f"pending-category:{kind}:{name.casefold()}",
+                    "name": name,
+                    "kind": kind,
+                }
                 categories[item["id"]] = item
         normalized, errors = normalize_rows(
             source_rows, accounts.values(), categories.values()
@@ -1001,19 +1064,14 @@ class TransactionsMixin:
             normalize_payee_name(item["name"]): item["name"]
             for item in self.list_payees()
         }
-        existing = {
-            fingerprint(item)
-            for item in self.list_transactions()
-        }
+        existing = {fingerprint(item) for item in self.list_transactions()}
         seen: set[str] = set()
         ready: list[dict[str, str]] = []
         duplicate_rows: list[int] = []
         for item in normalized:
             payee_key = normalize_payee_name(item.get("payee", ""))
             if payee_key:
-                item["payee"] = payee_names.setdefault(
-                    payee_key, item["payee"]
-                )
+                item["payee"] = payee_names.setdefault(payee_key, item["payee"])
             row_number = int(item.pop("_source_row"))
             identity = fingerprint(item)
             if identity in existing or identity in seen:
@@ -1021,7 +1079,10 @@ class TransactionsMixin:
             else:
                 seen.add(identity)
                 ready.append(item)
-        counts = {kind: sum(item["kind"] == kind for item in ready) for kind in TRANSACTION_KINDS}
+        counts = {
+            kind: sum(item["kind"] == kind for item in ready)
+            for kind in TRANSACTION_KINDS
+        }
         return {
             "rows": ready,
             "errors": errors,
@@ -1037,7 +1098,11 @@ class TransactionsMixin:
                 for name in new_accounts
             },
             "new_categories": new_categories,
-            "summary": {"ready": len(ready), "duplicates": len(duplicate_rows), **counts},
+            "summary": {
+                "ready": len(ready),
+                "duplicates": len(duplicate_rows),
+                **counts,
+            },
         }
 
     @_workbook_mutation_lock
@@ -1060,9 +1125,7 @@ class TransactionsMixin:
                     "id": str(uuid4()),
                     "name": name,
                     "type": preview["new_account_types"][name],
-                    "classification": preview[
-                        "new_account_classifications"
-                    ][name],
+                    "classification": preview["new_account_classifications"][name],
                     "opening_balance": "0.00",
                     "active": "TRUE",
                     "created_at": now,
@@ -1105,8 +1168,7 @@ class TransactionsMixin:
             item.get("payee", "") for item in preview["rows"]
         )
         payee_ids_by_name = {
-            normalize_payee_name(item["name"]): item["id"]
-            for item in payees.values()
+            normalize_payee_name(item["name"]): item["id"] for item in payees.values()
         }
         tags = self._tag_lookup()
         prepared = [
@@ -1128,5 +1190,6 @@ class TransactionsMixin:
         ]
         self._append_many("Transactions", prepared)
         return prepared
+
 
 __all__ = ["TransactionsMixin"]

@@ -14,6 +14,12 @@ from tabula_rasa.depreciation import (
     straight_line_schedule,
 )
 
+from .depreciation_posting import (
+    asset_schedule,
+    depreciation_entry_id,
+    validate_depreciation_accounts,
+    validate_depreciation_history,
+)
 from .errors import (
     StorageConflictError,
     StorageNotFoundError,
@@ -78,7 +84,9 @@ def _decode_overrides(value: Any) -> dict[int, dict[str, str]]:
         try:
             raw = json.loads(str(value))
         except json.JSONDecodeError:
-            raise StorageValidationError("Asset schedule overrides are invalid") from None
+            raise StorageValidationError(
+                "Asset schedule overrides are invalid"
+            ) from None
     if not isinstance(raw, Mapping):
         raise StorageValidationError("Asset schedule overrides are invalid")
     result: dict[int, dict[str, str]] = {}
@@ -128,17 +136,13 @@ class AssetsMixin:
         salvage_value = _currency(data.get("salvage_value", 0), "Salvage value")
         if currency_decimal(cost_basis, "Cost basis") <= 0:
             raise StorageValidationError("Cost basis must be greater than $0.00")
-        if (
-            currency_decimal(salvage_value, "Salvage value") < 0
-            or currency_decimal(salvage_value, "Salvage value")
-            >= currency_decimal(cost_basis, "Cost basis")
-        ):
+        if currency_decimal(salvage_value, "Salvage value") < 0 or currency_decimal(
+            salvage_value, "Salvage value"
+        ) >= currency_decimal(cost_basis, "Cost basis"):
             raise StorageValidationError(
                 "Salvage value must be at least $0.00 and less than cost basis"
             )
-        asset_type = _clean_text(
-            data.get("asset_type"), "Asset type", required=True
-        )
+        asset_type = _clean_text(data.get("asset_type"), "Asset type", required=True)
         if asset_type not in ASSET_TYPES:
             raise StorageValidationError("Unknown asset type")
         method = _clean_text(
@@ -209,7 +213,9 @@ class AssetsMixin:
                 salvage_value,
                 date.fromisoformat(start_date),
                 int(record["useful_life_quarters"]),
-                retired_date=(date.fromisoformat(retired_date) if retired_date else None),
+                retired_date=(
+                    date.fromisoformat(retired_date) if retired_date else None
+                ),
                 overrides=_decode_overrides(record["schedule_overrides"]),
             )
         except DepreciationError as exc:
@@ -222,6 +228,11 @@ class AssetsMixin:
         *,
         allowed_missing_source_id: str = "",
     ) -> None:
+        validate_depreciation_accounts(
+            record,
+            self._account_lookup(force_refresh=True),
+            self._category_lookup(force_refresh=True),
+        )
         payee_id = record.get("payee_id", "")
         if payee_id and payee_id not in self._payee_lookup(force_refresh=True):
             raise StorageValidationError("Payee does not exist")
@@ -296,6 +307,10 @@ class AssetsMixin:
         with self._workbook_locks.ledger:
             current = self._find_row("Assets", asset_id)
             self._assert_expected_asset(current.values, expected_asset)
+            if self._asset_postings(asset_id):
+                raise StorageConflictError(
+                    "Overrides are locked after depreciation is posted"
+                )
             normalized = self._prepare_asset(
                 current.values,
                 asset_id=asset_id,
@@ -312,9 +327,13 @@ class AssetsMixin:
                 int(normalized["useful_life_quarters"]),
             )
             if sequence < 1 or sequence > len(full_schedule):
-                raise StorageValidationError("Override period is outside the asset life")
+                raise StorageValidationError(
+                    "Override period is outside the asset life"
+                )
             if full_schedule[sequence - 1].scheduled_date > as_of_date:
-                raise StorageValidationError("Only due or past quarters can be overridden")
+                raise StorageValidationError(
+                    "Only due or past quarters can be overridden"
+                )
             overrides = _decode_overrides(normalized["schedule_overrides"])
             if overrides and sequence < max(overrides):
                 raise StorageConflictError(
@@ -341,7 +360,7 @@ class AssetsMixin:
         if expected is None:
             return
         for key, value in expected.items():
-            if key in {"tags", "payee"}:
+            if key in {"tags", "payee", "posted_entry_ids"}:
                 continue
             current_value = current.get(key, "")
             if key == "tag_ids":
@@ -367,7 +386,9 @@ class AssetsMixin:
             self._assert_expected_asset(current.values, expected_asset)
             normalized_current = self._prepare_asset(
                 current.values,
-                asset_id=_clean_text(current.values.get("id"), "Asset ID", required=True),
+                asset_id=_clean_text(
+                    current.values.get("id"), "Asset ID", required=True
+                ),
                 created_at=_clean_text(
                     current.values.get("created_at"),
                     "Asset created time",
@@ -378,29 +399,48 @@ class AssetsMixin:
             merged.update(changes)
             updated = self._prepare_asset(
                 merged,
-                asset_id=_clean_text(current.values.get("id"), "Asset ID", required=True),
+                asset_id=_clean_text(
+                    current.values.get("id"), "Asset ID", required=True
+                ),
                 created_at=_clean_text(
                     current.values.get("created_at"),
                     "Asset created time",
                     required=True,
                 ),
             )
-            if _decode_overrides(current.values.get("schedule_overrides", "")):
+            postings = self._asset_postings(asset_id)
+            if postings or _decode_overrides(
+                current.values.get("schedule_overrides", "")
+            ):
                 locked_fields = {
                     "cost_basis",
                     "salvage_value",
                     "depreciation_start_date",
                     "useful_life_quarters",
                     "depreciation_method",
+                    "schedule_overrides",
                 }
+                if postings:
+                    locked_fields.update(
+                        {
+                            "depreciation_expense_account_id",
+                            "accumulated_depreciation_account_id",
+                        }
+                    )
                 if any(
-                    field in changes
-                    and updated[field] != normalized_current[field]
+                    field in changes and updated[field] != normalized_current[field]
                     for field in locked_fields
                 ):
                     raise StorageConflictError(
-                        "Schedule terms are locked after a historical override is saved"
+                        "Schedule terms are locked after depreciation is posted or a historical override is saved"
                     )
+            if updated["retired_date"] and any(
+                _iso_date(row.get("txn_date")) > updated["retired_date"]
+                for row in postings
+            ):
+                raise StorageConflictError(
+                    "Retirement cannot precede posted depreciation"
+                )
             self._validate_asset_references(
                 updated,
                 allowed_missing_source_id=_clean_text(
@@ -421,6 +461,10 @@ class AssetsMixin:
         with self._workbook_locks.ledger:
             current = self._find_row("Assets", asset_id)
             self._assert_expected_asset(current.values, expected_asset)
+            if self._asset_postings(asset_id):
+                raise StorageConflictError(
+                    "Overrides are locked after depreciation is posted"
+                )
             overrides = _decode_overrides(current.values.get("schedule_overrides", ""))
             try:
                 sequence = int(sequence)
@@ -457,17 +501,115 @@ class AssetsMixin:
             retired_date=retired_date,
         )
 
+    def _asset_postings(self, asset_id: str) -> list[dict[str, str]]:
+        asset_id = _clean_text(asset_id, "Asset ID", required=True)
+        return [
+            dict(row.values)
+            for row in self._rows("Transactions", force_refresh=True)
+            if str(row.values.get("source_type") or "").strip().lower()
+            == "depreciation"
+            and str(row.values.get("source_id") or "").strip() == asset_id
+        ]
+
+    def post_due_depreciation(
+        self,
+        asset_id: str,
+        through_date: date | str,
+        *,
+        expected_asset: Mapping[str, Any] | None = None,
+    ) -> list[dict[str, str]]:
+        """Explicitly post each pending quarter using one durable ledger row.
+
+        The workbook ledger lock serializes application sessions. The existing
+        append boundary reconciles uncertain responses by stable entry ID.
+        Each successful row is independently durable if a later period fails.
+        """
+        through = _iso_date(through_date)
+        with self._workbook_locks.ledger:
+            current = self._find_row("Assets", asset_id)
+            asset_id = _clean_text(current.values.get("id"), "Asset ID", required=True)
+            self._assert_expected_asset(current.values, expected_asset)
+            asset = self._prepare_asset(
+                current.values,
+                asset_id=asset_id,
+                created_at=current.values.get("created_at"),
+            )
+            accounts = self._account_lookup(force_refresh=True)
+            categories = self._category_lookup(force_refresh=True)
+            payees = self._payee_lookup(force_refresh=True)
+            tags = self._tag_lookup(force_refresh=True)
+            validate_depreciation_accounts(
+                asset, accounts, categories, required=True, active=True
+            )
+            transactions = [
+                dict(row.values)
+                for row in self._rows("Transactions", force_refresh=True)
+            ]
+            postings = [
+                row
+                for row in transactions
+                if str(row.get("source_type") or "").strip().lower()
+                == "depreciation"
+                and str(row.get("source_id") or "").strip() == asset_id
+            ]
+            validate_depreciation_history([asset], postings, accounts, categories)
+            existing: dict[str, dict[str, str]] = {}
+            for row in transactions:
+                normalized_id = str(row.get("id") or "").strip()
+                if normalized_id in existing:
+                    raise StorageConflictError("Transaction IDs must be unique")
+                existing[normalized_id] = row
+            posted = []
+            for period in asset_schedule(asset):
+                if period.scheduled_date.isoformat() > through:
+                    break
+                entry_id = depreciation_entry_id(asset_id, period.sequence)
+                if entry_id in existing:
+                    existing_entry = existing[entry_id]
+                    if (
+                        str(existing_entry.get("source_type") or "").strip().lower()
+                        != "depreciation"
+                        or str(existing_entry.get("source_id") or "").strip() != asset_id
+                    ):
+                        raise StorageConflictError(
+                            "Depreciation entry ID is already in use"
+                        )
+                    continue
+                record = self._prepare_transaction(
+                    dict(
+                        txn_date=period.scheduled_date,
+                        kind="Expense",
+                        amount=period.depreciation_amount,
+                        account_id=asset["accumulated_depreciation_account_id"],
+                        category_id=asset["depreciation_expense_account_id"],
+                        description=f"Asset depreciation · {asset['name']} · Quarter {period.sequence}",
+                        reference=asset["reference"],
+                    ),
+                    transaction_id=entry_id,
+                    accounts=accounts,
+                    categories=categories,
+                    payees=payees,
+                    tags=tags,
+                    _allow_zero_amount=True,
+                )
+                record.update(source_type="depreciation", source_id=asset_id)
+                posted.append(record)
+            self._append_many("Transactions", posted)
+            return posted
+
     def delete_asset(
         self,
         asset_id: str,
         *,
         expected_asset: Mapping[str, Any] | None = None,
     ) -> None:
-        """Delete a Phase-A asset; posting history does not exist before #169."""
+        """Delete only assets without saved or posted depreciation history."""
         with self._workbook_locks.ledger:
             current = self._find_row("Assets", asset_id)
             self._assert_expected_asset(current.values, expected_asset)
-            if _decode_overrides(current.values.get("schedule_overrides", "")):
+            if self._asset_postings(asset_id) or _decode_overrides(
+                current.values.get("schedule_overrides", "")
+            ):
                 raise StorageConflictError(
                     "Assets with saved depreciation history cannot be deleted"
                 )

@@ -86,6 +86,9 @@ def render_transaction_editor(
         selected = next(
             transaction for transaction in transactions if transaction["id"] == edit_id
         )
+        if str(selected.get("source_type") or "").strip().lower() == "depreciation":
+            st.info("This depreciation entry is managed from Assets. Open Assets to view its schedule and posting history.")
+            return True
         if transaction_is_mixed_use(selected):
             st.info(
                 "This transaction is generated from a mixed-use expense "

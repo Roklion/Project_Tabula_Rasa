@@ -441,7 +441,7 @@ def _validate_mixed_use_tables(
             raise StorageValidationError(
                 "Transaction source type and source ID must be provided together"
             )
-        if not source_type:
+        if not source_type or source_type.lower() == "depreciation":
             continue
         if source_type != MIXED_USE_SOURCE_TYPE:
             raise StorageValidationError("Transaction source type is unsupported")
@@ -772,6 +772,12 @@ def _parse_backup_zip(
             asset.get("updated_at"), "Asset updated time", required=True
         )
         asset.update(normalized_asset)
+    from .depreciation_posting import validate_depreciation_accounts, validate_depreciation_history
+    backup_accounts = {row["id"]: row for row in tables["Accounts"][1]}
+    for asset in tables["Assets"][1]:
+        validate_depreciation_accounts(asset, backup_accounts, category_records)
+    validate_depreciation_history(tables["Assets"][1], tables["Transactions"][1],
+                                  backup_accounts, category_records)
     for transaction in tables["Transactions"][1]:
         _validate_recurring_provenance(transaction, "Transaction")
         recurring_id = transaction.get("recurring_schedule_id", "")

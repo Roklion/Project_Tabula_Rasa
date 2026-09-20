@@ -38,15 +38,21 @@ def _change_ledger_mode(profile_key: str) -> None:
     if not st.session_state.get(_copy_source_key(profile_key)):
         st.session_state.pop("edit_transaction_id", None)
 
-def _mixed_use_transaction_ids(
+def _source_driven_transaction_ids(
     transactions: Sequence[Mapping[str, object]],
 ) -> set[str]:
-    """Return mixed-use projection IDs from an unfiltered transaction snapshot."""
+    """Return protected source-driven IDs from an unfiltered snapshot."""
     return {
         str(transaction.get("id") or "")
         for transaction in transactions
-        if transaction_is_mixed_use(transaction)
+        if transaction_is_source_driven(transaction)
     }
+
+def transaction_is_source_driven(transaction: Mapping[str, object]) -> bool:
+    return transaction_is_mixed_use(transaction) or (
+        str(transaction.get("source_type") or "").strip().lower() == "depreciation"
+    )
+
 
 def transaction_is_mixed_use(transaction: Mapping[str, object]) -> bool:
     """Return whether durable provenance makes this projection read-only."""
@@ -62,7 +68,8 @@ def transaction_type_label(value: object, transaction: Mapping[str, object]) -> 
     recurring = bool(str(transaction.get("recurring_schedule_id") or "").strip())
     suffix = " · ".join(
         label
-        for label, enabled in (("Mixed-use", mixed_use), ("Recurring", recurring))
+        for label, enabled in (("Mixed-use", mixed_use), ("Recurring", recurring),
+                               ("Depreciation", str(transaction.get("source_type") or "").strip().lower() == "depreciation"))
         if enabled
     )
     return f"{value} · {suffix}" if suffix else str(value)

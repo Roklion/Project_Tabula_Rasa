@@ -12,7 +12,7 @@ from tabula_rasa.hierarchy import ordered_categories
 from tabula_rasa.ledger_presentation import money
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
 from tabula_rasa.storage import StorageError
-from .ledger_filters import _bulk_selection_key, transaction_is_mixed_use
+from .ledger_filters import _bulk_selection_key, transaction_is_source_driven
 from .receipt_workflows import clear_receipt_creation_recovery
 
 MIXED_FIELD_VALUE = "__tabula_rasa_mixed__"
@@ -203,8 +203,8 @@ def _render_bulk_editor(
     if selected_protected:
         st.info(
             "Bulk Category, Payee, and Tags changes are disabled because the "
-            "selection includes a mixed-use projection. Manage it from the "
-            "Mixed-use expenses tab."
+            "selection includes a mixed-use projection or depreciation entry. "
+            "Manage it from Mixed-use expenses or Assets."
         )
     if not category_eligible:
         st.info(
@@ -456,11 +456,11 @@ def render_bulk_actions(
             for transaction in transactions
         }
         expected_selected = [selected_by_id[item] for item in selected_ids]
-        if any(transaction_is_mixed_use(item) for item in expected_selected):
+        if any(transaction_is_source_driven(item) for item in expected_selected):
             st.error(
-                "This selection includes a mixed-use projection. Bulk changes "
+                "This selection includes a mixed-use projection or depreciation entry. Bulk changes "
                 "and deletion are disabled; manage it "
-                "from the Mixed-use expenses tab."
+                "from Mixed-use expenses or Assets."
             )
         active_schedule_ids: set[str] = set()
         schedule_status_error: StorageError | None = None
@@ -557,7 +557,7 @@ def render_bulk_actions(
         if delete_requested and selected_protected:
             delete_error.error(
                 "Bulk deletion is disabled because the selection includes "
-                "a mixed-use projection. Manage it from the Mixed-use expenses tab."
+                "a mixed-use projection or depreciation entry. Manage it from Mixed-use expenses or Assets."
             )
         elif delete_requested and schedule_status_error is not None:
             delete_error.error(

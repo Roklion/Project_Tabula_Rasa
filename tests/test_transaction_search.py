@@ -6,7 +6,10 @@ from fractions import Fraction
 import pytest
 
 from tabula_rasa.page_renderers.transactions.search import filter_transaction_rows
-from tabula_rasa.page_renderers.transactions.ledger_filters import transaction_type_label
+from tabula_rasa.page_renderers.transactions.ledger_filters import (
+    transaction_is_source_driven,
+    transaction_type_label,
+)
 
 
 SEARCH_FIELDS = (
@@ -135,3 +138,10 @@ def test_ledger_type_label_shows_both_recurring_indicators() -> None:
     assert transaction_type_label("Expense", transaction) == (
         "Expense · Mixed-use · Recurring"
     )
+
+
+def test_depreciation_source_protection_normalizes_external_source_type() -> None:
+    transaction = {"source_type": "  DEPRECIATION  ", "source_id": "asset-1"}
+
+    assert transaction_is_source_driven(transaction)
+    assert transaction_type_label("Expense", transaction) == "Expense · Depreciation"

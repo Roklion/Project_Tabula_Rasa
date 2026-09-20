@@ -23,10 +23,11 @@ from .ledger_filters import (
     _bulk_selection_key,
     _change_ledger_mode,
     _clear_bulk_selection,
-    _mixed_use_transaction_ids,
+    _source_driven_transaction_ids,
     _selection_ids,
     transaction_has_receipts,
     transaction_is_mixed_use,
+    transaction_is_source_driven,
     transaction_type_label,
 )
 from .transaction_copy import (
@@ -367,7 +368,7 @@ def render_ledger(
         else _selection_ids(transaction_ids, selected_rows)
     )
     selected_protected = any(
-        transaction_is_mixed_use(transaction_by_id.get(transaction_id, {}))
+        transaction_is_source_driven(transaction_by_id.get(transaction_id, {}))
         for transaction_id in selected_for_copy
     )
     copy_button = st.button(
@@ -382,7 +383,7 @@ def render_ledger(
             f"{context.profile_key}_{st.session_state.get('transaction_ledger_generation', 0)}"
         ),
         help=(
-            "Mixed-use projections are managed from the Mixed-use expenses tab."
+            "Source-driven entries are managed from Mixed-use expenses or Assets."
             if selected_protected
             else "Select exactly one transaction to open a prefilled copy form."
         ),
@@ -396,7 +397,7 @@ def render_ledger(
         ) + 1
         st.session_state["edit_transaction_id"] = source_id
         st.rerun()
-    derived_ids = _mixed_use_transaction_ids(all_transactions)
+    derived_ids = _source_driven_transaction_ids(all_transactions)
     filtered_recovery_ids = (
         set(editor_receipt_recovery_transaction_ids(context))
         - set(transaction_ids)
@@ -480,7 +481,7 @@ __all__ = [
     '_editable_account_ids',
     '_finish_copy_save',
     '_make_created_copy_visible',
-    '_mixed_use_transaction_ids',
+    '_source_driven_transaction_ids',
     '_pending_edit_transaction_key',
     '_selection_ids',
     'copied_transaction_description',
