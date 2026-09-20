@@ -110,7 +110,7 @@ class TestDepreciationPosting(GoogleSheetsStorageTestCase):
         ) == Decimal("0.01")
         assert len(self.storage.list_transactions()) == 3
         empty = self.storage.create_asset(**_asset_data())
-        with pytest.raises(StorageValidationError, match="expense"):
+        with pytest.raises(StorageValidationError, match="accounts"):
             self.storage.post_due_depreciation(empty["id"], "2026-01-01")
 
     def test_concurrent_sessions_and_two_profile_isolation(self):
@@ -239,3 +239,60 @@ class TestDepreciationPosting(GoogleSheetsStorageTestCase):
         )
         with pytest.raises(StorageConflictError, match="locked"):
             self.storage.remove_asset_period_override(asset["id"], 1)
+
+    def test_partial_account_configuration_and_inactive_metadata_are_allowed_before_posting(
+        self,
+    ):
+        expense = self.storage.create_category("Depreciation", "Expense")
+        asset = self.storage.create_asset(
+            **_asset_data(depreciation_expense_account_id=expense["id"])
+        )
+        assert asset["depreciation_expense_account_id"] == expense["id"]
+
+        offset = self.storage.create_account(
+            "Accumulated depreciation", "Other", classification="Asset"
+        )
+        payee = self.storage.create_payee("Asset vendor")
+        tag = self.storage.create_tag("Asset tag")
+        configured = self.storage.edit_asset(
+            asset["id"],
+            accumulated_depreciation_account_id=offset["id"],
+            payee_id=payee["id"],
+            tag_ids=[tag["id"]],
+        )
+        self.storage.edit_payee(payee["id"], active=False)
+        self.storage.edit_tag(tag["id"], active=False)
+        self.storage.post_due_depreciation(configured["id"], "2025-01-31")
+        assert len(self.storage.list_transactions()) == 1
+        assert self.storage.list_transactions()[0]["payee_id"] == ""
+        assert self.storage.list_transactions()[0]["tag_ids"] == []
+
+    def test_whitespace_ids_remain_canonical_and_protected(self):
+        asset = self.asset()
+        padded_id = f"  {asset['id']}  "
+        self.storage.post_due_depreciation(padded_id, "2025-01-31")
+        entry = self.storage.list_transactions()[0]
+        assert entry["source_id"] == asset["id"]
+        assert entry["id"] == depreciation_entry_id(asset["id"], 1)
+        with pytest.raises(StorageConflictError):
+            self.storage.edit_asset(padded_id, cost_basis="500")
+        with pytest.raises(StorageConflictError):
+            self.storage.delete_asset(padded_id)
+        with pytest.raises(StorageConflictError):
+            self.storage.delete_category(
+                f"  {asset['depreciation_expense_account_id']}  "
+            )
+
+    def test_invalid_zero_amount_inputs_are_validation_errors(self):
+        asset = self.asset()
+        with pytest.raises(StorageValidationError):
+            self.storage._prepare_transaction(
+                {
+                    "txn_date": "2025-01-31",
+                    "kind": "Expense",
+                    "amount": "not-a-number",
+                    "account_id": asset["accumulated_depreciation_account_id"],
+                    "category_id": asset["depreciation_expense_account_id"],
+                },
+                _allow_zero_amount=True,
+            )

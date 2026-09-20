@@ -23,6 +23,7 @@ from .validation import (
     _validate_hierarchy_records,
 )
 
+
 class AccountsMixin:
     """Mixin for the accounts storage boundary."""
 
@@ -42,9 +43,7 @@ class AccountsMixin:
             record["name"] = _clean_text(
                 record.get("name"), "Account name", required=True
             )
-            record["parent_id"] = _clean_text(
-                record.get("parent_id"), "Account parent"
-            )
+            record["parent_id"] = _clean_text(record.get("parent_id"), "Account parent")
             account_type = _clean_text(
                 record.get("type"), "Account type", required=True
             )
@@ -87,9 +86,7 @@ class AccountsMixin:
             required=True,
         ).title()
         _validate_account_classification(account_type, classification)
-        existing_accounts = self.list_accounts(
-            active_only=False, _force_refresh=True
-        )
+        existing_accounts = self.list_accounts(active_only=False, _force_refresh=True)
         if any(
             account["name"].casefold() == name.casefold()
             for account in existing_accounts
@@ -114,10 +111,16 @@ class AccountsMixin:
         return dict(record)
 
     def edit_account(self, account_id: str, **changes: Any) -> dict[str, Any]:
+        with self._workbook_locks.ledger:
+            return self._edit_account(account_id, **changes)
+
+    def _edit_account(self, account_id: str, **changes: Any) -> dict[str, Any]:
         current = self._find_row("Accounts", account_id)
         updated = dict(current.values)
         existing_accounts = self.list_accounts(active_only=False)
-        name = _clean_text(changes.get("name", updated["name"]), "Account name", required=True)
+        name = _clean_text(
+            changes.get("name", updated["name"]), "Account name", required=True
+        )
         account_type = _clean_text(
             changes.get("type", updated["type"]), "Account type", required=True
         )
@@ -133,7 +136,9 @@ class AccountsMixin:
             row.values.get("accumulated_depreciation_account_id") == account_id
             for row in self._rows("Assets", force_refresh=True)
         ):
-            raise StorageConflictError("An asset's accumulated depreciation account must remain Other / Asset")
+            raise StorageConflictError(
+                "An asset's accumulated depreciation account must remain Other / Asset"
+            )
         if any(
             account["id"] != account_id
             and account["name"].casefold() == name.casefold()
@@ -182,9 +187,7 @@ class AccountsMixin:
         ]
         category_ids: set[str] = set()
         for category in categories:
-            category["id"] = _clean_text(
-                category.get("id"), "ID", required=True
-            )
+            category["id"] = _clean_text(category.get("id"), "ID", required=True)
             if category["id"] in category_ids:
                 raise StorageValidationError(
                     "Category IDs must be unique after normalization"
@@ -200,13 +203,13 @@ class AccountsMixin:
                 category.get("kind"), "Category kind", required=True
             ).title()
             if category_kind not in CATEGORY_KINDS:
-                raise StorageValidationError(
-                    "Category kind must be Income or Expense"
-                )
+                raise StorageValidationError("Category kind must be Income or Expense")
             category["kind"] = category_kind
         if kind is not None:
             categories = [item for item in categories if item["kind"] == kind]
-        return sorted(categories, key=lambda item: (item["kind"], item["name"].casefold()))
+        return sorted(
+            categories, key=lambda item: (item["kind"], item["name"].casefold())
+        )
 
     def create_category(
         self,
@@ -221,8 +224,7 @@ class AccountsMixin:
             raise StorageValidationError("Category kind must be Income or Expense")
         existing_categories = self.list_categories(_force_refresh=True)
         if any(
-            category["name"].casefold() == name.casefold()
-            and category["kind"] == kind
+            category["name"].casefold() == name.casefold() and category["kind"] == kind
             for category in existing_categories
         ):
             raise StorageConflictError("That category already exists")
@@ -259,12 +261,12 @@ class AccountsMixin:
         ).title()
         if kind not in CATEGORY_KINDS:
             raise StorageValidationError("Category kind must be Income or Expense")
+
         def reject_mixed_use_kind_change() -> None:
             self._reject_asset_expense_category_change(normalized_category_id)
             sources, _ = self._raw_mixed_use_snapshot()
             if any(
-                str(source.get("category_id") or "").strip()
-                == normalized_category_id
+                str(source.get("category_id") or "").strip() == normalized_category_id
                 for source in sources.values()
             ):
                 raise StorageConflictError(
@@ -279,6 +281,7 @@ class AccountsMixin:
                 raise StorageConflictError(
                     "Category kind cannot change while used by a recurring schedule"
                 )
+
         if kind != updated["kind"]:
             reject_mixed_use_kind_change()
             current = self._find_row("Categories", normalized_category_id)
@@ -326,9 +329,14 @@ class AccountsMixin:
         return updated
 
     def _reject_asset_expense_category_change(self, category_id: str) -> None:
-        if any(row.values.get("depreciation_expense_account_id") == category_id
-               for row in self._rows("Assets", force_refresh=True)):
-            raise StorageConflictError("Category is used by an asset depreciation schedule")
+        category_id = _clean_text(category_id, "Category ID", required=True)
+        if any(
+            row.values.get("depreciation_expense_account_id") == category_id
+            for row in self._rows("Assets", force_refresh=True)
+        ):
+            raise StorageConflictError(
+                "Category is used by an asset depreciation schedule"
+            )
 
     def delete_category(self, category_id: str) -> None:
         with self._workbook_locks.ledger:
@@ -415,8 +423,12 @@ class AccountsMixin:
         # the first snapshot only discovers the candidate row.
         refresh()
         self._write_with_uncertain_readback(
-            "category deletion", write, state, before_retry=refresh,
+            "category deletion",
+            write,
+            state,
+            before_retry=refresh,
             invalidate=("Categories",),
         )
+
 
 __all__ = ["AccountsMixin"]

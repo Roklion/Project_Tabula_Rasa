@@ -53,19 +53,26 @@ def validate_depreciation_accounts(
 ):
     expense_id = asset.get("depreciation_expense_account_id", "")
     offset_id = asset.get("accumulated_depreciation_account_id", "")
-    if not required and not expense_id and not offset_id:
+    if required and (not expense_id or not offset_id):
+        raise StorageValidationError(
+            "Both depreciation accounts are required before posting"
+        )
+    if not expense_id and not offset_id:
         return
-    if expense_id not in categories or categories[expense_id]["kind"] != "Expense":
+    if expense_id and (
+        expense_id not in categories or categories[expense_id]["kind"] != "Expense"
+    ):
         raise StorageValidationError(
             "Select a Depreciation expense account (Expense category)"
         )
-    offset = accounts.get(offset_id, {})
-    if offset.get("type") != "Other" or offset.get("classification") != "Asset":
-        raise StorageValidationError(
-            "Accumulated depreciation must use an Other account classified as Asset"
-        )
-    if active and str(offset.get("active")).lower() not in {"true", "1"}:
-        raise StorageValidationError("Accumulated depreciation account is inactive")
+    if offset_id:
+        offset = accounts.get(offset_id, {})
+        if offset.get("type") != "Other" or offset.get("classification") != "Asset":
+            raise StorageValidationError(
+                "Accumulated depreciation must use an Other account classified as Asset"
+            )
+        if active and str(offset.get("active")).lower() not in {"true", "1"}:
+            raise StorageValidationError("Accumulated depreciation account is inactive")
 
 
 def validate_depreciation_history(assets, transactions, accounts, categories):
