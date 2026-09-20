@@ -131,3 +131,8 @@ def test_mileage_payload_excludes_route_state_and_operation_controls() -> None:
     }
     assert mileage_payload_from_draft(draft) == {**fields, "new_tag_name": ""}
     assert draft["new_tag_name"] is None
+    assert mileage_payload_from_draft({"trip_date": fields["trip_date"]}) == {
+        **{field: None for field in fields},
+        "trip_date": fields["trip_date"],
+        "new_tag_name": "",
+    }

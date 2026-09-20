@@ -202,7 +202,9 @@ def render_add_transaction(
                             )
 
                         # Keep the existing submission fingerprint independent of the UUID.
-                        transaction_id = str(uuid4())
+                        transaction_id = str(payload.get("transaction_id") or uuid4())
+                        if kind == "Expense" and recurring:
+                            payload["transaction_id"] = transaction_id
 
                         def operation():
                             try:

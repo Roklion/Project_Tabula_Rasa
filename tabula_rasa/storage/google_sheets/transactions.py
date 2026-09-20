@@ -831,7 +831,7 @@ class TransactionsMixin:
                     for row in self._rows("Transactions", force_refresh=True)
                 ):
                     raise StorageConflictError("Transaction ID already exists; refresh the ledger.")
-            if data.get("receipt_references", "") == "":
+            if data.get("receipt_references") in (None, ""):
                 data["receipt_references"] = []
             record = self._prepare_transaction(data, transaction_id=transaction_id)
             self._append("Transactions", record)

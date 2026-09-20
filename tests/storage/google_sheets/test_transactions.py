@@ -11,7 +11,7 @@ from ._support import (
 
 class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
 
-    @pytest.mark.parametrize("receipt_references", ["", []])
+    @pytest.mark.parametrize("receipt_references", [None, "", []])
     def test_preallocated_transaction_identity_is_unique_and_validated(self, receipt_references) -> None:
         account = self.storage.create_account("Checking", "Bank")
         category = self.storage.create_category("Office", "Expense")
