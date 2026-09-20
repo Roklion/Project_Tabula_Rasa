@@ -9,6 +9,7 @@ from tabula_rasa.ledger_reporting import (
     profit_and_loss,
 )
 from tabula_rasa.storage.google_sheets.depreciation_posting import (
+    asset_schedule,
     depreciation_entry_id,
     validate_depreciation_history,
 )
@@ -370,4 +371,21 @@ class TestDepreciationPosting(GoogleSheetsStorageTestCase):
                     "category_id": asset["depreciation_expense_account_id"],
                 },
                 _allow_zero_amount=True,
+            )
+
+    def test_malformed_schedule_overrides_and_receipts_are_rejected(self):
+        asset = self.asset()
+        with pytest.raises(StorageValidationError, match="schedule"):
+            asset_schedule(dict(asset, schedule_overrides="[]"))
+        self.storage.post_due_depreciation(asset["id"], "2025-01-31")
+        transaction = self.storage.list_transactions()[0]
+        with pytest.raises(StorageValidationError, match="conflicts"):
+            validate_depreciation_history(
+                [asset],
+                [dict(transaction, receipt_references='[{"id":"receipt"}]')],
+                {
+                    account["id"]: account
+                    for account in self.storage.list_accounts(active_only=False)
+                },
+                {category["id"]: category for category in self.storage.list_categories()},
             )

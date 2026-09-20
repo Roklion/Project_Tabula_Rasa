@@ -24,6 +24,20 @@ def _normalize_id(value) -> str:
     return str(value or "").strip()
 
 
+def _has_receipt_references(value) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return False
+        try:
+            return bool(json.loads(text))
+        except (TypeError, ValueError):
+            return True
+    return bool(value)
+
+
 def depreciation_entry_id(asset_id: str, sequence: int) -> str:
     """Stable identity for one asset quarter, independent of posting date."""
     return str(uuid5(NAMESPACE_URL, f"tabula-rasa:depreciation:{asset_id}:{sequence}"))
@@ -50,7 +64,7 @@ def asset_schedule(asset):
         raise StorageValidationError(
             f"Asset schedule is invalid: {error}"
         ) from None
-    except (ValueError, KeyError, TypeError, ArithmeticError):
+    except (ValueError, KeyError, TypeError, AttributeError, ArithmeticError):
         raise StorageValidationError(
             "Asset schedule is invalid; inspect Assets before posting"
         ) from None
@@ -132,6 +146,7 @@ def validate_depreciation_history(assets, transactions, accounts, categories):
             != period.scheduled_date.isoformat()
             or amount != period.depreciation_amount
             or transaction.get("recurring_schedule_id")
+            or _has_receipt_references(transaction.get("receipt_references"))
         ):
             raise StorageValidationError(
                 "Depreciation entry conflicts with its asset schedule; inspect it before posting"
