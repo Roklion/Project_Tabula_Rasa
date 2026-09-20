@@ -32,10 +32,10 @@ def _has_receipt_references(value) -> bool:
         if not text:
             return False
         try:
-            return bool(json.loads(text))
+            value = json.loads(text)
         except (TypeError, ValueError):
             return True
-    return bool(value)
+    return value != []
 
 
 def depreciation_entry_id(asset_id: str, sequence: int) -> str:

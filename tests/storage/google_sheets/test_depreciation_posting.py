@@ -389,3 +389,23 @@ class TestDepreciationPosting(GoogleSheetsStorageTestCase):
                 },
                 {category["id"]: category for category in self.storage.list_categories()},
             )
+
+    def test_false_like_receipt_references_are_rejected(self):
+        asset = self.asset()
+        self.storage.post_due_depreciation(asset["id"], "2025-01-31")
+        transaction = self.storage.list_transactions()[0]
+        accounts = {
+            account["id"]: account
+            for account in self.storage.list_accounts(active_only=False)
+        }
+        categories = {
+            category["id"]: category for category in self.storage.list_categories()
+        }
+        for receipt_references in ("{}", "null", "false", "0", {}, False, 0):
+            with pytest.raises(StorageValidationError, match="conflicts"):
+                validate_depreciation_history(
+                    [asset],
+                    [dict(transaction, receipt_references=receipt_references)],
+                    accounts,
+                    categories,
+                )
