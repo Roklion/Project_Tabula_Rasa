@@ -553,7 +553,12 @@ class AssetsMixin:
                 and str(row.get("source_id") or "").strip() == asset_id
             ]
             validate_depreciation_history([asset], postings, accounts, categories)
-            existing = {row["id"]: row for row in transactions}
+            existing: dict[str, dict[str, str]] = {}
+            for row in transactions:
+                normalized_id = str(row.get("id") or "").strip()
+                if normalized_id in existing:
+                    raise StorageConflictError("Transaction IDs must be unique")
+                existing[normalized_id] = row
             posted = []
             for period in asset_schedule(asset):
                 if period.scheduled_date.isoformat() > through:
@@ -562,8 +567,9 @@ class AssetsMixin:
                 if entry_id in existing:
                     existing_entry = existing[entry_id]
                     if (
-                        existing_entry.get("source_type") != "depreciation"
-                        or existing_entry.get("source_id") != asset_id
+                        str(existing_entry.get("source_type") or "").strip().lower()
+                        != "depreciation"
+                        or str(existing_entry.get("source_id") or "").strip() != asset_id
                     ):
                         raise StorageConflictError(
                             "Depreciation entry ID is already in use"

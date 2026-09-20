@@ -134,7 +134,10 @@ class AccountsMixin:
         ).title()
         _validate_account_classification(account_type, classification)
         if (account_type != "Other" or classification != "Asset") and any(
-            row.values.get("accumulated_depreciation_account_id") == account_id
+            _clean_text(
+                row.values.get("accumulated_depreciation_account_id"), "Account ID"
+            )
+            == account_id
             for row in self._rows("Assets", force_refresh=True)
         ):
             raise StorageConflictError(
@@ -332,7 +335,10 @@ class AccountsMixin:
     def _reject_asset_expense_category_change(self, category_id: str) -> None:
         category_id = _clean_text(category_id, "Category ID", required=True)
         if any(
-            row.values.get("depreciation_expense_account_id") == category_id
+                _clean_text(
+                    row.values.get("depreciation_expense_account_id"), "Category ID"
+                )
+                == category_id
             for row in self._rows("Assets", force_refresh=True)
         ):
             raise StorageConflictError(

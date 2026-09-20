@@ -49,7 +49,9 @@ def _source_driven_transaction_ids(
     }
 
 def transaction_is_source_driven(transaction: Mapping[str, object]) -> bool:
-    return transaction_is_mixed_use(transaction) or transaction.get("source_type") == "depreciation"
+    return transaction_is_mixed_use(transaction) or (
+        str(transaction.get("source_type") or "").strip().lower() == "depreciation"
+    )
 
 
 def transaction_is_mixed_use(transaction: Mapping[str, object]) -> bool:
@@ -67,7 +69,7 @@ def transaction_type_label(value: object, transaction: Mapping[str, object]) -> 
     suffix = " · ".join(
         label
         for label, enabled in (("Mixed-use", mixed_use), ("Recurring", recurring),
-                               ("Depreciation", transaction.get("source_type") == "depreciation"))
+                               ("Depreciation", str(transaction.get("source_type") or "").strip().lower() == "depreciation"))
         if enabled
     )
     return f"{value} · {suffix}" if suffix else str(value)

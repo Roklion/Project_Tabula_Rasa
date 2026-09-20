@@ -441,7 +441,7 @@ def _validate_mixed_use_tables(
             raise StorageValidationError(
                 "Transaction source type and source ID must be provided together"
             )
-        if not source_type or source_type == "depreciation":
+        if not source_type or source_type.lower() == "depreciation":
             continue
         if source_type != MIXED_USE_SOURCE_TYPE:
             raise StorageValidationError("Transaction source type is unsupported")

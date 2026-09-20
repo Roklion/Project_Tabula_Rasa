@@ -469,10 +469,10 @@ def render_assets(context: AssetsContext) -> None:
         categories = context.storage.list_categories()
         depreciation_by_asset: dict[str, list[str]] = {}
         for transaction in transactions:
-            if transaction.get("source_type") == "depreciation" and (
-                asset_id := transaction.get("source_id")
-            ):
-                depreciation_by_asset.setdefault(asset_id, []).append(transaction["id"])
+            if str(transaction.get("source_type") or "").strip().lower() == "depreciation":
+                asset_id = str(transaction.get("source_id") or "").strip()
+                if asset_id:
+                    depreciation_by_asset.setdefault(asset_id, []).append(transaction["id"])
         for asset in assets:
             asset["posted_entry_ids"] = depreciation_by_asset.get(asset["id"], [])
     except StorageError as error:
