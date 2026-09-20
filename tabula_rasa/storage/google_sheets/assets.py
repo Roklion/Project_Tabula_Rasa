@@ -593,8 +593,8 @@ class AssetsMixin:
                     _allow_zero_amount=True,
                 )
                 record.update(source_type="depreciation", source_id=asset_id)
-                self._append("Transactions", record)
                 posted.append(record)
+            self._append_many("Transactions", posted)
             return posted
 
     def delete_asset(

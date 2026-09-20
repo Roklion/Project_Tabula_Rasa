@@ -136,7 +136,7 @@ class TestDepreciationPosting(GoogleSheetsStorageTestCase):
     def test_uncertain_committed_append_is_reconciled_and_backup_restores(self):
         asset = self.asset()
         sheet = self.workbook.worksheet("Transactions")
-        original = sheet.append_row
+        original = sheet.append_rows
         calls = []
 
         def uncertain(*args, **kwargs):
@@ -144,7 +144,7 @@ class TestDepreciationPosting(GoogleSheetsStorageTestCase):
             calls.append(1)
             raise TimeoutError("synthetic timeout")
 
-        with patch.object(sheet, "append_row", side_effect=uncertain):
+        with patch.object(sheet, "append_rows", side_effect=uncertain):
             self.storage.post_due_depreciation(asset["id"], "2025-01-31")
         assert len(calls) == 1
         backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
@@ -158,21 +158,19 @@ class TestDepreciationPosting(GoogleSheetsStorageTestCase):
     ):
         asset = self.asset()
         sheet = self.workbook.worksheet("Transactions")
-        original = sheet.append_row
+        original = sheet.append_rows
         calls = []
 
         def fail_second(*args, **kwargs):
             calls.append(1)
-            if len(calls) > 1:
-                raise TimeoutError("synthetic timeout")
-            original(*args, **kwargs)
+            values = args[0]
+            original(values[:1], **kwargs)
+            raise TimeoutError("synthetic timeout")
 
-        with patch.object(sheet, "append_row", side_effect=fail_second):
+        with patch.object(sheet, "append_rows", side_effect=fail_second):
             with pytest.raises(StorageUnavailableError):
                 self.storage.post_due_depreciation(asset["id"], "2025-04-30")
-        assert (
-            len(calls) == 3
-        )  # One successful period, one failed period and its bounded retry.
+        assert len(calls) == 1
         assert len(self.storage.list_transactions()) == 1
         assert len(self.storage.post_due_depreciation(asset["id"], "2025-04-30")) == 1
         assert len(self.storage.list_transactions()) == 2

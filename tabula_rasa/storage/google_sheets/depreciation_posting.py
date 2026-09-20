@@ -12,7 +12,7 @@ from decimal import Decimal, InvalidOperation
 import json
 from uuid import NAMESPACE_URL, uuid5
 
-from tabula_rasa.depreciation import straight_line_schedule
+from tabula_rasa.depreciation import DepreciationError, straight_line_schedule
 
 from .errors import StorageValidationError
 
@@ -46,6 +46,10 @@ def asset_schedule(asset):
                 ).items()
             },
         )
+    except DepreciationError as error:
+        raise StorageValidationError(
+            f"Asset schedule is invalid: {error}"
+        ) from None
     except (ValueError, KeyError, TypeError, ArithmeticError):
         raise StorageValidationError(
             "Asset schedule is invalid; inspect Assets before posting"
@@ -72,6 +76,8 @@ def validate_depreciation_accounts(
             "Select a Depreciation expense account (Expense category)"
         )
     if offset_id:
+        if offset_id not in accounts:
+            raise StorageValidationError("Accumulated depreciation account does not exist")
         offset = accounts.get(offset_id, {})
         if offset.get("type") != "Other" or offset.get("classification") != "Asset":
             raise StorageValidationError(
