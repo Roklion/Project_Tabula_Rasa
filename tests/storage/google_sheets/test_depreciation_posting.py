@@ -267,6 +267,38 @@ class TestDepreciationPosting(GoogleSheetsStorageTestCase):
         assert self.storage.list_transactions()[0]["payee_id"] == ""
         assert self.storage.list_transactions()[0]["tag_ids"] == []
 
+    def test_posting_prefetches_descriptive_lookups_once(self):
+        asset = self.asset(useful_life_quarters=3)
+        with (
+            patch.object(self.storage, "_payee_lookup", wraps=self.storage._payee_lookup) as payees,
+            patch.object(self.storage, "_tag_lookup", wraps=self.storage._tag_lookup) as tags,
+        ):
+            self.storage.post_due_depreciation(asset["id"], "2025-04-30")
+        assert payees.call_count == 1
+        assert tags.call_count == 1
+
+    def test_history_accepts_normalized_source_type(self):
+        asset = self.asset()
+        self.storage.post_due_depreciation(asset["id"], "2025-01-31")
+        backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
+
+        def padded_source_type(rows):
+            rows[1][rows[0].index("source_type")] = " depreciation "
+
+        restored = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
+        restored.restore_backup_zip(
+            rewrite_backup_tables(backup, {"Transactions": padded_source_type})
+        )
+        assert len(restored.list_transactions()) == 1
+
+    def test_padded_account_id_still_protects_asset_reference(self):
+        asset = self.asset()
+        with pytest.raises(StorageConflictError, match="asset"):
+            self.storage.edit_account(
+                f"  {asset['accumulated_depreciation_account_id']}  ",
+                type="Bank",
+            )
+
     def test_whitespace_ids_remain_canonical_and_protected(self):
         asset = self.asset()
         padded_id = f"  {asset['id']}  "

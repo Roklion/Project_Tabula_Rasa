@@ -535,6 +535,8 @@ class AssetsMixin:
             )
             accounts = self._account_lookup(force_refresh=True)
             categories = self._category_lookup(force_refresh=True)
+            payees = self._payee_lookup(force_refresh=True)
+            tags = self._tag_lookup(force_refresh=True)
             validate_depreciation_accounts(
                 asset, accounts, categories, required=True, active=True
             )
@@ -576,6 +578,10 @@ class AssetsMixin:
                         reference=asset["reference"],
                     ),
                     transaction_id=entry_id,
+                    accounts=accounts,
+                    categories=categories,
+                    payees=payees,
+                    tags=tags,
                     _allow_zero_amount=True,
                 )
                 record.update(source_type="depreciation", source_id=asset_id)

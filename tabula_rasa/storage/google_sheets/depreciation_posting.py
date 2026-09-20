@@ -84,7 +84,8 @@ def validate_depreciation_history(assets, transactions, accounts, categories):
     periods = {}
     seen = set()
     for transaction in transactions:
-        if transaction.get("source_type") != DEPRECIATION_SOURCE_TYPE:
+        source_type = str(transaction.get("source_type") or "").strip().lower()
+        if source_type != DEPRECIATION_SOURCE_TYPE:
             continue
         asset_id = transaction.get("source_id")
         asset = by_id.get(asset_id)
@@ -111,9 +112,9 @@ def validate_depreciation_history(assets, transactions, accounts, categories):
             not amount.is_finite()
             or transaction.get("kind") != "Expense"
             or transaction.get("account_id")
-            != asset["accumulated_depreciation_account_id"]
+            != asset.get("accumulated_depreciation_account_id")
             or transaction.get("category_id")
-            != asset["depreciation_expense_account_id"]
+            != asset.get("depreciation_expense_account_id")
             or transaction.get("to_account_id")
             or transaction.get("txn_date") != period.scheduled_date.isoformat()
             or amount != period.depreciation_amount

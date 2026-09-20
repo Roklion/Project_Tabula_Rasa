@@ -116,6 +116,7 @@ class AccountsMixin:
 
     def _edit_account(self, account_id: str, **changes: Any) -> dict[str, Any]:
         current = self._find_row("Accounts", account_id)
+        account_id = _clean_text(current.values.get("id"), "Account ID", required=True)
         updated = dict(current.values)
         existing_accounts = self.list_accounts(active_only=False)
         name = _clean_text(
