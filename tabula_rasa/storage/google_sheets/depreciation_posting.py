@@ -20,6 +20,10 @@ from .errors import StorageValidationError
 DEPRECIATION_SOURCE_TYPE = "depreciation"
 
 
+def _normalize_id(value) -> str:
+    return str(value or "").strip()
+
+
 def depreciation_entry_id(asset_id: str, sequence: int) -> str:
     """Stable identity for one asset quarter, independent of posting date."""
     return str(uuid5(NAMESPACE_URL, f"tabula-rasa:depreciation:{asset_id}:{sequence}"))
@@ -51,8 +55,10 @@ def asset_schedule(asset):
 def validate_depreciation_accounts(
     asset, accounts, categories, *, required=False, active=False
 ):
-    expense_id = asset.get("depreciation_expense_account_id", "")
-    offset_id = asset.get("accumulated_depreciation_account_id", "")
+    expense_id = _normalize_id(asset.get("depreciation_expense_account_id"))
+    offset_id = _normalize_id(asset.get("accumulated_depreciation_account_id"))
+    accounts = {_normalize_id(key): value for key, value in accounts.items()}
+    categories = {_normalize_id(key): value for key, value in categories.items()}
     if required and (not expense_id or not offset_id):
         raise StorageValidationError(
             "Both depreciation accounts are required before posting"
@@ -78,7 +84,7 @@ def validate_depreciation_accounts(
 def validate_depreciation_history(assets, transactions, accounts, categories):
     """Validate links once for live reads and backup/restore alike."""
     assets = list(assets)
-    by_id = {asset["id"]: asset for asset in assets}
+    by_id = {_normalize_id(asset.get("id")): asset for asset in assets}
     for asset in assets:
         validate_depreciation_accounts(asset, accounts, categories)
     periods = {}
@@ -87,7 +93,7 @@ def validate_depreciation_history(assets, transactions, accounts, categories):
         source_type = str(transaction.get("source_type") or "").strip().lower()
         if source_type != DEPRECIATION_SOURCE_TYPE:
             continue
-        asset_id = transaction.get("source_id")
+        asset_id = _normalize_id(transaction.get("source_id"))
         asset = by_id.get(asset_id)
         if asset is None:
             raise StorageValidationError("Depreciation entry has no asset source")
@@ -97,7 +103,7 @@ def validate_depreciation_history(assets, transactions, accounts, categories):
                 depreciation_entry_id(asset_id, period.sequence): period
                 for period in asset_schedule(asset)
             }
-        entry_id = transaction.get("id")
+        entry_id = _normalize_id(transaction.get("id"))
         period = periods[asset_id].get(entry_id)
         if period is None or entry_id in seen:
             raise StorageValidationError(
@@ -111,12 +117,13 @@ def validate_depreciation_history(assets, transactions, accounts, categories):
         if (
             not amount.is_finite()
             or transaction.get("kind") != "Expense"
-            or transaction.get("account_id")
-            != asset.get("accumulated_depreciation_account_id")
-            or transaction.get("category_id")
-            != asset.get("depreciation_expense_account_id")
-            or transaction.get("to_account_id")
-            or transaction.get("txn_date") != period.scheduled_date.isoformat()
+            or _normalize_id(transaction.get("account_id"))
+            != _normalize_id(asset.get("accumulated_depreciation_account_id"))
+            or _normalize_id(transaction.get("category_id"))
+            != _normalize_id(asset.get("depreciation_expense_account_id"))
+            or _normalize_id(transaction.get("to_account_id"))
+            or _normalize_id(transaction.get("txn_date"))
+            != period.scheduled_date.isoformat()
             or amount != period.depreciation_amount
             or transaction.get("recurring_schedule_id")
         ):

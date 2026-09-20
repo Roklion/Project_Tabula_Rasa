@@ -8,7 +8,10 @@ from tabula_rasa.ledger_reporting import (
     balance_sheet,
     profit_and_loss,
 )
-from tabula_rasa.storage.google_sheets.depreciation_posting import depreciation_entry_id
+from tabula_rasa.storage.google_sheets.depreciation_posting import (
+    depreciation_entry_id,
+    validate_depreciation_history,
+)
 from .test_assets import _asset_data
 from ._support import (
     FakeWorkbook,
@@ -278,8 +281,8 @@ class TestDepreciationPosting(GoogleSheetsStorageTestCase):
         assert tags.call_count == 1
 
     def test_history_accepts_normalized_source_type(self):
-        asset = self.asset()
-        self.storage.post_due_depreciation(asset["id"], "2025-01-31")
+        asset = self.asset(cost_basis="0.01", useful_life_quarters=3)
+        self.storage.post_due_depreciation(asset["id"], "2025-04-30")
         backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
 
         def padded_source_type(rows):
@@ -289,7 +292,49 @@ class TestDepreciationPosting(GoogleSheetsStorageTestCase):
         restored.restore_backup_zip(
             rewrite_backup_tables(backup, {"Transactions": padded_source_type})
         )
-        assert len(restored.list_transactions()) == 1
+        rows = restored.list_transactions()
+        assert len(rows) == 2
+        assert rows[0]["amount"] == "0.00"
+        with pytest.raises(StorageConflictError):
+            restored.edit_asset(asset["id"], cost_basis="500")
+
+    def test_history_normalizes_padded_references(self):
+        asset = self.asset()
+        self.storage.post_due_depreciation(asset["id"], "2025-01-31")
+        transaction = self.storage.list_transactions()[0]
+        padded_asset = dict(
+            asset,
+            id=f" {asset['id']} ",
+            depreciation_expense_account_id=f" {asset['depreciation_expense_account_id']} ",
+            accumulated_depreciation_account_id=f" {asset['accumulated_depreciation_account_id']} ",
+        )
+        padded_transaction = dict(
+            transaction,
+            id=f" {transaction['id']} ",
+            source_type=" depreciation ",
+            source_id=f" {asset['id']} ",
+            account_id=f" {transaction['account_id']} ",
+            category_id=f" {transaction['category_id']} ",
+            txn_date=f" {transaction['txn_date']} ",
+        )
+        accounts = {
+            f" {account['id']} ": account
+            for account in self.storage.list_accounts(active_only=False)
+        }
+        categories = {
+            f" {category['id']} ": category
+            for category in self.storage.list_categories()
+        }
+        validate_depreciation_history(
+            [padded_asset], [padded_transaction], accounts, categories
+        )
+
+    def test_listing_depreciation_does_not_reload_assets_for_validation(self):
+        asset = self.asset()
+        self.storage.post_due_depreciation(asset["id"], "2025-01-31")
+        with patch.object(self.storage, "_rows", wraps=self.storage._rows) as rows:
+            self.storage.list_transactions()
+        assert all(call.args[0] != "Assets" for call in rows.call_args_list)
 
     def test_padded_account_id_still_protects_asset_reference(self):
         asset = self.asset()

@@ -760,20 +760,6 @@ class TransactionsMixin:
         payees = self._payee_lookup(force_refresh=_force_refresh)
         tags = self._tag_lookup(force_refresh=_force_refresh)
         raw_transactions = self._rows("Transactions", force_refresh=_force_refresh)
-        if any(
-            row.values.get("source_type") == "depreciation" for row in raw_transactions
-        ):
-            from .depreciation_posting import validate_depreciation_history
-
-            validate_depreciation_history(
-                [
-                    row.values
-                    for row in self._rows("Assets", force_refresh=_force_refresh)
-                ],
-                [row.values for row in raw_transactions],
-                accounts,
-                categories,
-            )
         for row in raw_transactions:
             item = dict(row.values)
             item["id"] = _clean_text(item.get("id"), "Transaction ID", required=True)
@@ -783,8 +769,9 @@ class TransactionsMixin:
             ).title()
             if item["kind"] not in TRANSACTION_KINDS:
                 raise StorageValidationError("Unknown transaction kind")
+            source_type = str(item.get("source_type") or "").strip().lower()
             is_zero_depreciation = False
-            if item.get("source_type") == "depreciation":
+            if source_type == "depreciation":
                 try:
                     is_zero_depreciation = Decimal(str(item.get("amount"))) == 0
                 except (InvalidOperation, ValueError):

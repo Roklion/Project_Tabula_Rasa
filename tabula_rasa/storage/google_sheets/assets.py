@@ -506,8 +506,9 @@ class AssetsMixin:
         return [
             dict(row.values)
             for row in self._rows("Transactions", force_refresh=True)
-            if row.values.get("source_type") == "depreciation"
-            and row.values.get("source_id") == asset_id
+            if str(row.values.get("source_type") or "").strip().lower()
+            == "depreciation"
+            and str(row.values.get("source_id") or "").strip() == asset_id
         ]
 
     def post_due_depreciation(
@@ -547,8 +548,9 @@ class AssetsMixin:
             postings = [
                 row
                 for row in transactions
-                if row.get("source_type") == "depreciation"
-                and row.get("source_id") == asset_id
+                if str(row.get("source_type") or "").strip().lower()
+                == "depreciation"
+                and str(row.get("source_id") or "").strip() == asset_id
             ]
             validate_depreciation_history([asset], postings, accounts, categories)
             existing = {row["id"]: row for row in transactions}
