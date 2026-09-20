@@ -284,7 +284,7 @@ class TestDepreciationPosting(GoogleSheetsStorageTestCase):
         backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
 
         def padded_source_type(rows):
-            rows[1][rows[0].index("source_type")] = " depreciation "
+            rows[1][rows[0].index("source_type")] = " DePreCiAtIoN "
 
         restored = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
         restored.restore_backup_zip(

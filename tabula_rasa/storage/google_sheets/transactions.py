@@ -809,9 +809,7 @@ class TransactionsMixin:
                         "Category kind does not match transaction kind"
                     )
             item["payee_id"] = _clean_text(item.get("payee_id"), "Payee")
-            item["source_type"] = _clean_text(
-                item.get("source_type"), "Transaction source type"
-            )
+            item["source_type"] = source_type
             item["source_id"] = _clean_text(
                 item.get("source_id"), "Transaction source ID"
             )
