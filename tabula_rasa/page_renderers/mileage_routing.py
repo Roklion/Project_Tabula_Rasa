@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from datetime import date
 import math
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import streamlit as st
 
 from tabula_rasa.address_autocomplete import AddressSelection
 from tabula_rasa.maps_routing import GoogleRoutesError
-from tabula_rasa.storage import GoogleSheetsStorage
 
 if TYPE_CHECKING:
     from tabula_rasa.page_renderers.mileage import MileageContext
@@ -289,36 +287,6 @@ def _calculate_routes(
             "Enter return miles manually or try Calculate mileage again.",
         ) from error
     return outbound, returned
-
-
-def _save_round_trip(
-    storage: GoogleSheetsStorage,
-    *,
-    trip_date: date,
-    miles: float,
-    return_miles: float,
-    vehicle: str,
-    start_location: str,
-    destination: str,
-    business_purpose: str,
-    notes: str,
-    tag_ids: list[str] | tuple[str, ...] = (),
-    new_tag_name: str = "",
-) -> Any:
-    """Persist two legs with their independently editable distances."""
-    kwargs = {
-        "trip_date": trip_date,
-        "miles": miles,
-        "return_miles": return_miles,
-        "vehicle": vehicle,
-        "start_location": start_location,
-        "destination": destination,
-        "business_purpose": business_purpose,
-        "notes": notes,
-        "tag_ids": list(tag_ids),
-        "new_tag_name": new_tag_name,
-    }
-    return storage.create_mileage_round_trip(**kwargs)
 
 
 def _safe_route_error(error: Exception) -> str:

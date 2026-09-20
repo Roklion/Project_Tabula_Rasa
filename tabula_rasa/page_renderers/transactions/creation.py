@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
+from uuid import uuid4
+
 import streamlit as st
 
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
@@ -17,6 +19,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     handle_confirmed_transaction_receipts,
     prepare_receipt_uploads,
     receipt_creation_workflow_key,
+    creation_receipt_workflow,
     render_receipt_creation_recovery,
     render_receipt_uploader,
 )
@@ -43,7 +46,7 @@ def render_add_transaction(
     tags: Sequence[Mapping[str, object]],
 ) -> None:
     """Render the existing profile-scoped transaction creation workflow."""
-    recovery = st.session_state.get(receipt_creation_workflow_key(context.profile_key))
+    recovery = creation_receipt_workflow(context)
     if isinstance(recovery, Mapping) and recovery.get("mixed_use_source_id"):
         # Mixed-use recovery is rendered by its source-aware tab; rendering it
         # here as well would register the same retry widget twice.
@@ -198,6 +201,11 @@ def render_add_transaction(
                                 {**payload, **pending_ids},
                             )
 
+                        # Keep the existing submission fingerprint independent of the UUID.
+                        transaction_id = str(payload.get("transaction_id") or uuid4())
+                        if kind == "Expense" and recurring:
+                            payload["transaction_id"] = transaction_id
+
                         def operation():
                             try:
                                 return (
@@ -205,7 +213,9 @@ def render_add_transaction(
                                         "transaction"
                                     ]
                                     if kind == "Expense" and recurring
-                                    else context.storage.create_transaction(**payload)
+                                    else context.storage.create_transaction(
+                                        transaction_id=transaction_id, **payload
+                                    )
                                 )
                             except (StorageConflictError, StorageValidationError):
                                 if kind == "Expense" and recurring:

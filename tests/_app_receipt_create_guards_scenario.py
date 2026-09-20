@@ -28,7 +28,9 @@ def main() -> None:
     ) -> dict[str, str]:
         if write_failure["error"] is not None:
             raise write_failure["error"]
+        assert payload.get("transaction_id"), "UI must allocate identity before persistence"
         transaction = original_create(storage_client, **payload)
+        assert transaction["id"] == payload["transaction_id"]
         created_transaction_ids.append(transaction["id"])
         return transaction
 

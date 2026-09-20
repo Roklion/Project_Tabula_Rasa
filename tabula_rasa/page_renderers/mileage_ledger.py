@@ -16,6 +16,7 @@ from tabula_rasa.presentation import render_global_footer
 from tabula_rasa.storage import StorageError, normalize_tag_name
 
 from .mileage_form_shared import (
+    mileage_payload_from_draft,
     render_mileage_fields,
     validate_mileage_draft,
 )
@@ -281,32 +282,14 @@ def render_mileage_ledger(
             elif tag_error := inline_tag_name_error(draft["new_tag_name"]):
                 edit_error.error(tag_error)
             else:
-                payload = {
-                    "id": edit_id,
-                    "trip_date": draft["trip_date"],
-                    "miles": draft["miles"],
-                    "vehicle": draft["vehicle"],
-                    "start_location": draft["start_location"],
-                    "destination": draft["destination"],
-                    "business_purpose": draft["business_purpose"],
-                    "notes": draft["notes"],
-                    "tag_ids": draft["tag_ids"],
-                    "new_tag_name": draft["new_tag_name"],
-                }
+                trip_data = mileage_payload_from_draft(draft)
+                payload = {"id": edit_id, **trip_data}
                 context.confirmed_write(
                     "edit_mileage_trip",
                     payload,
                     lambda: context.storage.edit_mileage_trip(
                         edit_id,
-                        trip_date=draft["trip_date"],
-                        miles=draft["miles"],
-                        vehicle=draft["vehicle"],
-                        start_location=draft["start_location"],
-                        destination=draft["destination"],
-                        business_purpose=draft["business_purpose"],
-                        notes=draft["notes"],
-                        tag_ids=draft["tag_ids"],
-                        new_tag_name=draft["new_tag_name"],
+                        **trip_data,
                     ),
                     "Mileage trip updated.",
                     on_success=lambda: schedule_tag_selector_reset(

@@ -1,3 +1,6 @@
+from tabula_rasa.storage import StorageConflictError
+from uuid import uuid4
+
 from ._support import (
     GoogleSheetsStorageTestCase,
     Mock,
@@ -7,6 +10,48 @@ from ._support import (
 )
 
 class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
+
+    @pytest.mark.parametrize("receipt_references", [None, "", []])
+    def test_preallocated_transaction_identity_is_unique_and_validated(self, receipt_references) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Office", "Expense")
+        transaction_id = str(uuid4())
+        payload = dict(txn_date="2026-09-01", kind="Expense", amount="10",
+                       account_id=account["id"], category_id=category["id"],
+                       receipt_references=receipt_references)
+        assert self.storage.list_transactions() == []
+        with pytest.raises(StorageValidationError):
+            self.storage.create_transaction(transaction_id=transaction_id, **{**payload, "amount": "-1"})
+        assert self.storage.list_transactions() == []
+        record = self.storage.create_transaction(transaction_id=transaction_id, **payload)
+        assert record["id"] == transaction_id
+        assert record["receipt_references"] == "[]"
+        with pytest.raises(StorageConflictError, match="already exists"):
+            self.storage.create_transaction(transaction_id=transaction_id, **payload)
+        with pytest.raises(StorageValidationError):
+            self.storage.create_transaction(transaction_id=" ", **payload)
+        assert len(self.storage.list_transactions()) == 1
+
+    def test_preallocated_id_confirms_lost_append_response_without_duplicate(self) -> None:
+        account = self.storage.create_account("Checking", "Bank")
+        category = self.storage.create_category("Office", "Expense")
+        transaction_id = str(uuid4())
+        worksheet = self.workbook.sheets["Transactions"]
+        original_append = worksheet.append_row
+
+        def commit_then_timeout(values, **kwargs):
+            original_append(values, **kwargs)
+            raise OSError("response lost after commit")
+
+        worksheet.append_row = Mock(side_effect=commit_then_timeout)
+        record = self.storage.create_transaction(
+            transaction_id=transaction_id, txn_date="2026-09-01",
+            kind="Expense", amount="10", account_id=account["id"],
+            category_id=category["id"],
+        )
+        assert record["id"] == transaction_id
+        assert [row["id"] for row in self.storage.list_transactions()] == [transaction_id]
+        assert worksheet.append_row.call_count == 1
 
     def test_category_and_transaction_crud(self) -> None:
         source = self.storage.create_account("Checking", "Bank")

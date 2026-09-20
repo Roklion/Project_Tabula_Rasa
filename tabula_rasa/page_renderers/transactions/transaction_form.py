@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from datetime import date
 from typing import Literal
 
 import streamlit as st
 
-from tabula_rasa.hierarchy import ordered_categories
-from tabula_rasa.page_renderers.tag_selector import render_tag_selector
-from tabula_rasa.page_renderers.transactions.payee_selector import (
-    render_payee_selector,
+from .metadata_fields import (
+    render_metadata_reference,
+    render_transaction_associations,
+    render_transaction_date,
+    render_transaction_description,
+    selected_reference_id,
+    transaction_category_ids,
 )
 
 TransactionFormMode = Literal["add", "edit", "copy"]
@@ -114,73 +116,22 @@ def render_transaction_fields(
     def field_key(name: str) -> str:
         return transaction_widget_key(key_prefix, name, key_scope)
 
-    def selected_id(value: object, paths: Mapping[str, str]) -> str:
-        """Normalize a widget ID or its formatted display value to an ID."""
-        if value is None:
-            return ""
-        value = str(value)
-        return next(
-            (item_id for item_id, label in paths.items() if item_id == value or label == value),
-            value,
-        )
-
-    raw_date = defaults.get("txn_date")
-    try:
-        transaction_date = (
-            raw_date
-            if isinstance(raw_date, date)
-            else date.fromisoformat(str(raw_date or date.today()))
-        )
-    except ValueError:
-        transaction_date = date.today()
     account_id = str(defaults.get("account_id") or "")
     to_account_id = str(defaults.get("to_account_id") or "")
     category_id = str(defaults.get("category_id") or "")
-    payee_id = str(defaults.get("payee_id") or "")
-    tag_ids = defaults.get("tag_ids") or ()
 
-    transaction_date = st.date_input("Date", transaction_date, key=field_key("date"))
-    categories_for_kind = [
-        category
-        for category in ordered_categories(categories)
-        if category.get("kind") == kind
-    ]
-    category_ids = [
-        str(category.get("id") or "").strip()
-        for category in categories_for_kind
-        if str(category.get("id") or "").strip()
-    ]
+    transaction_date = render_transaction_date(defaults.get("txn_date"), key=field_key("date"))
+    category_ids = transaction_category_ids(categories, kind)
     category_field_name = (
         f"category_{kind.casefold()}" if mode == "add" else "category"
     )
     category_widget_key = field_key(category_field_name)
-    if kind != "Transfer" and category_widget_key in st.session_state:
-        category_ids_by_label = {
-            str(label): str(cat_id)
-            for cat_id, label in category_paths.items()
-        }
-        current_category = str(st.session_state[category_widget_key])
-        resolved_category = category_ids_by_label.get(
-            current_category, current_category
-        )
-        if resolved_category not in category_ids:
-            st.session_state.pop(category_widget_key, None)
-        elif st.session_state[category_widget_key] != resolved_category:
-            st.session_state[category_widget_key] = resolved_category
     if kind != "Transfer":
         c1, c2 = st.columns(2)
-        category_value = c1.selectbox(
-            "Category",
-            category_ids,
-            index=(
-                category_ids.index(category_id)
-                if category_id in category_ids
-                else (0 if category_ids else None)
-            ),
-            format_func=lambda value: category_paths.get(value, value),
-            key=category_widget_key,
+        category_id = render_metadata_reference(
+            "Category", category_ids, category_paths, current_id=category_id,
+            key=category_widget_key, normalize_state=True, container=c1,
         )
-        category_id = selected_id(category_value, category_paths)
         amount = c2.number_input(
             "Amount",
             min_value=0.0,
@@ -198,18 +149,6 @@ def render_transaction_fields(
             format="%.2f",
             key=field_key("amount"),
         )
-    account_ids = list(
-        dict.fromkeys(
-            str(acc_id).strip()
-            for acc_id in account_ids
-            if str(acc_id).strip()
-        )
-    )
-    account_index = (
-        account_ids.index(account_id)
-        if account_id in account_ids
-        else (None if mode == "copy" else (0 if account_ids else None))
-    )
     source_label = (
         "From Account" if kind == "Transfer" or kind == "Expense" else "To Account"
     )
@@ -217,14 +156,10 @@ def render_transaction_fields(
         f"account_{kind.casefold()}" if mode == "add" else "account"
     )
     account_widget_key = field_key(account_field_name)
-    source = st.selectbox(
-        source_label,
-        account_ids,
-        index=account_index,
-        format_func=lambda value: account_paths.get(value, value),
-        key=account_widget_key,
+    source_id = render_metadata_reference(
+        source_label, account_ids, account_paths, current_id=account_id,
+        key=account_widget_key, require_selection=mode == "copy",
     )
-    source_id = selected_id(source, account_paths)
     if kind == "Transfer":
         to_account_ids = [
             account_id for account_id in account_ids if account_id != source_id
@@ -233,7 +168,7 @@ def render_transaction_fields(
         invalid_selected_to_account = False
         if to_account_widget_key in st.session_state:
             current_to_account = str(st.session_state[to_account_widget_key])
-            resolved_to_account = selected_id(current_to_account, account_paths)
+            resolved_to_account = selected_reference_id(current_to_account, account_paths)
             if resolved_to_account not in to_account_ids:
                 st.session_state.pop(to_account_widget_key, None)
                 invalid_selected_to_account = True
@@ -266,32 +201,17 @@ def render_transaction_fields(
             if to_account_ids
             else ""
         )
-        to_account_id = selected_id(to_account_id, account_paths)
+        to_account_id = selected_reference_id(to_account_id, account_paths)
 
     c1, c2 = st.columns(2)
-    payee_id, new_payee_name = render_payee_selector(
-        payees,
-        key=field_key("payee"),
-        selected_id=payee_id,
-        preserve_selected_id=mode != "copy",
-        container=c1,
+    associations = render_transaction_associations(
+        defaults, payees=payees, tags=tags,
+        payee_key=field_key("payee"), reference_key=field_key("reference"),
+        tags_key=field_key("tags"), preserve_current=mode != "copy",
+        payee_container=c1, reference_container=c2,
     )
-    reference = c2.text_input(
-        "Reference (optional)",
-        str(defaults.get("reference") or ""),
-        key=field_key("reference"),
-    )
-    tag_ids, new_tag_name = render_tag_selector(
-        tags,
-        label="Tags",
-        key=field_key("tags"),
-        selected_ids=tag_ids,
-        preserve_inactive_ids=(tag_ids if mode != "copy" else ()),
-    )
-    description = st.text_input(
-        "Description / memo",
-        str(defaults.get("description") or ""),
-        key=field_key("description"),
+    description = render_transaction_description(
+        defaults.get("description"), key=field_key("description"),
     )
     if kind == "Transfer":
         # Keep a conditional category widget's state available to Streamlit's
@@ -307,10 +227,6 @@ def render_transaction_fields(
         "account_id": source_id,
         "to_account_id": to_account_id,
         "category_id": category_id,
-        "payee_id": payee_id,
-        "new_payee_name": new_payee_name,
-        "tag_ids": tag_ids,
-        "new_tag_name": new_tag_name,
-        "reference": reference,
+        **associations,
         "description": description,
     }

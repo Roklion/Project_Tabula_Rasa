@@ -193,20 +193,6 @@ def process_receipt_recovery(
     workflow["linked_count"] = linked_count
     workflow["receipts"] = unresolved
 
-def finish_receipt_creation_if_complete(
-    context: TransactionsContext,
-    workflow: MutableMapping[str, Any],
-) -> bool:
-    if not _workflow_complete(workflow):
-        return False
-    linked, _ = receipt_creation_counts(workflow)
-    st.session_state.pop(receipt_creation_workflow_key(context.profile_key), None)
-    context.schedule_widget_reset("reset_add_transaction_form")
-    st.session_state["write_success_notice"] = (
-        f"Transaction saved and {linked} receipt(s) linked."
-    )
-    return True
-
 def _configuration_changed_message() -> str:
     return (
         "The profile's Google Sheets workbook or Drive receipt folder changed, "
@@ -239,15 +225,8 @@ def clear_receipt_creation_recovery(
     context: TransactionsContext,
     transaction_id: str,
 ) -> None:
-    workflow = st.session_state.get(receipt_creation_workflow_key(context.profile_key))
-    if isinstance(workflow, Mapping) and str(workflow.get("transaction_id", "")) == str(
-        transaction_id
-    ):
-        st.session_state.pop(receipt_creation_workflow_key(context.profile_key), None)
-    st.session_state.pop(
-        receipt_editor_workflow_key(context.profile_key, transaction_id),
-        None,
-    )
+    _cancel_editor_receipt_recovery(context, transaction_id)
+
 
 def _workflow_matches_configuration(
     context: TransactionsContext,
@@ -269,37 +248,37 @@ def handle_confirmed_transaction_receipts(
     *,
     mixed_use_source_id: str = "",
 ) -> None:
-    receipt_folder = _receipt_folder(context)
-    workflow = new_receipt_creation_workflow(
-        str(transaction["id"]),
-        receipts,
-        spreadsheet_id=str(context.profile_secrets.get("spreadsheet_id", "")),
-        receipt_folder_id=str((receipt_folder or {}).get("id", "")),
-        mixed_use_source_id=mixed_use_source_id,
+    transaction_id = str(transaction["id"])
+    # This form pointer holds no recovery data; the transaction key owns it all.
+    st.session_state[receipt_creation_workflow_key(context.profile_key)] = transaction_id
+    workflow = _start_editor_receipt_workflow(
+        context, transaction_id, receipts, _receipt_folder(context),
     )
-    st.session_state[receipt_creation_workflow_key(context.profile_key)] = workflow
-    if receipt_folder is None:
-        workflow["error"] = (
-            "Google Drive receipt storage is not configured for this profile."
-        )
-        return
-    try:
-        _process_context_receipts(context, workflow, receipt_folder)
-    except GoogleDriveError as error:
-        workflow["error"] = str(error)
-    finish_receipt_creation_if_complete(context, workflow)
+    workflow["created"] = True
+    if mixed_use_source_id:
+        workflow["mixed_use_source_id"] = mixed_use_source_id
+    _finish_editor_receipt_workflow(context, transaction_id, workflow)
+
+
+def creation_receipt_workflow(context: TransactionsContext) -> MutableMapping[str, Any] | None:
+    transaction_id = st.session_state.get(receipt_creation_workflow_key(context.profile_key))
+    return _editor_workflow(context, str(transaction_id)) if transaction_id else None
+
 
 def _cancel_editor_receipt_recovery(
     context: TransactionsContext,
     transaction_id: str,
 ) -> None:
-    st.session_state.pop(
-        receipt_editor_workflow_key(context.profile_key, transaction_id),
-        None,
-    )
-    context.schedule_widget_reset(
-        receipt_editor_upload_reset_key(context.profile_key, transaction_id)
-    )
+    st.session_state.pop(receipt_editor_workflow_key(context.profile_key, transaction_id), None)
+    pointer = receipt_creation_workflow_key(context.profile_key)
+    if st.session_state.get(pointer) == transaction_id:
+        st.session_state.pop(pointer, None)
+        context.schedule_widget_reset("reset_add_transaction_form")
+    else:
+        context.schedule_widget_reset(
+            receipt_editor_upload_reset_key(context.profile_key, transaction_id)
+        )
+
 
 def _finish_editor_receipt_workflow(
     context: TransactionsContext,
@@ -308,14 +287,14 @@ def _finish_editor_receipt_workflow(
 ) -> bool:
     if not _workflow_complete(workflow):
         return False
-    st.session_state.pop(
-        receipt_editor_workflow_key(context.profile_key, transaction_id),
-        None,
-    )
-    context.schedule_widget_reset(
-        receipt_editor_upload_reset_key(context.profile_key, transaction_id)
-    )
+    _cancel_editor_receipt_recovery(context, transaction_id)
+    if workflow.get("created"):
+        linked, _ = receipt_creation_counts(workflow)
+        st.session_state["write_success_notice"] = (
+            f"Transaction saved and {linked} receipt(s) linked."
+        )
     return True
+
 
 def receipt_creation_workflow_key(profile_key: str) -> str:
     return f"{RECEIPT_CREATION_WORKFLOW_KEY}:{profile_key}"
@@ -339,6 +318,9 @@ def clear_missing_editor_receipt_recoveries(
         workflow = st.session_state.get(key)
         if not isinstance(workflow, Mapping):
             st.session_state.pop(key, None)
+            continue
+        # The mixed-use tab owns source/projection existence checks and messages.
+        if workflow.get("mixed_use_source_id"):
             continue
         transaction_id = str(workflow.get("transaction_id", ""))
         if not _workflow_matches_configuration(context, workflow, receipt_folder):
@@ -432,18 +414,22 @@ def _start_editor_receipt_workflow(
     context: TransactionsContext,
     transaction_id: str,
     receipts: Sequence[Mapping[str, Any]],
-    receipt_folder: Mapping[str, object],
+    receipt_folder: Mapping[str, object] | None,
 ) -> MutableMapping[str, Any]:
     workflow = new_receipt_creation_workflow(
         transaction_id,
         receipts,
         spreadsheet_id=str(context.profile_secrets.get("spreadsheet_id", "")),
-        receipt_folder_id=str(receipt_folder.get("id", "")),
+        receipt_folder_id=str((receipt_folder or {}).get("id", "")),
     )
     st.session_state[
         receipt_editor_workflow_key(context.profile_key, transaction_id)
     ] = workflow
     try:
+        if receipt_folder is None:
+            raise GoogleDriveAccessError(
+                "Google Drive receipt storage is not configured for this profile."
+            )
         _process_context_receipts(context, workflow, receipt_folder)
     except GoogleDriveError as error:
         workflow["error"] = str(error)

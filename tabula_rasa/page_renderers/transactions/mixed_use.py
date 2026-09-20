@@ -5,15 +5,18 @@ from dataclasses import replace
 from datetime import date
 from uuid import uuid4
 import streamlit as st
-from tabula_rasa.hierarchy import ordered_accounts, ordered_categories
 from tabula_rasa.mixed_use import MixedUseAllocationError, calculate_allocated_amount
 from tabula_rasa.page_renderers.tag_selector import (
     inline_tag_name_error,
-    render_tag_selector,
     tag_selector_error,
 )
-from tabula_rasa.page_renderers.transactions.payee_selector import (
-    render_payee_selector,
+from .metadata_fields import (
+    active_or_selected,
+    render_metadata_reference,
+    render_transaction_associations,
+    render_transaction_date,
+    render_transaction_description,
+    transaction_category_ids,
 )
 from tabula_rasa.page_renderers.transactions.recurrence_controls import (
     edit_defaults_with_pending_payload,
@@ -25,7 +28,6 @@ from tabula_rasa.recurrence_state import (
     mixed_use_edit_pending_state,
 )
 from tabula_rasa.page_renderers.transactions.transaction_copy import (
-    _copyable_tag_ids,
     _editable_account_ids,
     copied_transaction_description,
 )
@@ -37,7 +39,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     render_receipt_creation_recovery,
     render_receipt_uploader,
     render_receipts,
-    receipt_creation_workflow_key,
+    creation_receipt_workflow,
     receipt_editor_workflow_key,
 )
 from tabula_rasa.storage import (
@@ -191,40 +193,6 @@ def _start_mixed_use_copy(
         state.get(_key(profile, "table_generation"), 0)
     ) + 1
     return new_source_id, new_transaction_id
-
-def _active_ids(items: Sequence[Mapping[str, object]]) -> list[str]:
-    return [
-        str(item.get("id") or "")
-        for item in ordered_accounts(items)
-        if str(item.get("id") or "")
-    ]
-
-
-def _editable_mixed_use_account_ids(
-    ordered_items: Sequence[Mapping[str, object]], current_account: str
-) -> list[str]:
-    """Keep a saved inactive account in its existing hierarchy position."""
-    return [
-        str(item["id"])
-        for item in ordered_items
-        if str(item.get("active", "")).upper() == "TRUE"
-        or str(item.get("id") or "") == current_account
-    ]
-
-
-def _editable_mixed_use_category_ids(
-    ordered_items: Sequence[Mapping[str, object]], current_category: str
-) -> list[str]:
-    """Keep a saved inactive Expense category in hierarchy order."""
-    return [
-        str(item["id"])
-        for item in ordered_items
-        if item.get("kind") == "Expense"
-        and (
-            str(item.get("active", "TRUE")).upper() == "TRUE"
-            or str(item.get("id") or "") == current_category
-        )
-    ]
 
 def _mixed_use_receipt_recovery_active(
     state: Mapping[str, object], profile: str, transaction_id: str
@@ -406,7 +374,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         ):
             _clear_mixed_use_copy(st.session_state, profile)
         copy_snapshot = None
-    recovery = st.session_state.get(receipt_creation_workflow_key(profile))
+    recovery = creation_receipt_workflow(context)
     if isinstance(recovery, Mapping):
         recovery_transaction_id = str(recovery.get("transaction_id") or "")
         recovery_source_id = str(recovery.get("mixed_use_source_id") or "")
@@ -604,43 +572,16 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             f"mixed_recurrence_end_{scope}",
         ],
     )
-    ordered_category_items = ordered_categories(categories)
-    category_ids = [
-        str(item["id"])
-        for item in ordered_category_items
-        if item.get("kind") == "Expense"
-    ]
-    ordered_account_items = ordered_accounts(accounts)
-    account_ids = _active_ids(ordered_account_items)
-    active_account_ids = [
-        str(item["id"])
-        for item in ordered_account_items
-        if str(item.get("active", "")).upper() == "TRUE"
-    ]
-    active_category_ids = [
-        str(item["id"])
-        for item in ordered_category_items
-        if item.get("kind") == "Expense"
-        and str(item.get("active", "TRUE")).upper() == "TRUE"
-    ]
-    if copy_mode:
-        account_ids = _editable_account_ids(
-            accounts,
-            [str(defaults.get("account_id") or "")],
-            copy_mode=True,
-        )
-        category_ids = list(active_category_ids)
-    elif not source:
-        account_ids, category_ids = active_account_ids, active_category_ids
-    else:
-        current_account = str(defaults.get("account_id") or "")
-        current_category = str(defaults.get("category_id") or "")
-        account_ids = _editable_mixed_use_account_ids(
-            ordered_account_items, current_account
-        )
-        category_ids = _editable_mixed_use_category_ids(
-            ordered_category_items, current_category
-        )
+    current_ids = [str(defaults.get("account_id") or "")] if source else []
+    account_ids = _editable_account_ids(accounts, current_ids, copy_mode=copy_mode)
+    category_ids = transaction_category_ids(
+        active_or_selected(
+            categories,
+            [str(defaults.get("category_id") or "")] if source else [],
+            default_active=True,
+        ),
+        "Expense",
+    )
     if not account_ids or not category_ids:
         st.warning("Create an active account and an Expense category before recording a mixed-use expense.")
         if copy_mode and st.button(
@@ -670,55 +611,27 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                 "Add mode creates a new source and one linked ledger "
                 "projection."
             )
-        txn_date = st.date_input("Date", date.fromisoformat(str(defaults.get("txn_date", date.today().isoformat()))), key=f"mixed_date_{scope}")
+        txn_date = render_transaction_date(defaults.get("txn_date"), key=f"mixed_date_{scope}")
         c1, c2 = st.columns(2)
-        current_account_id = str(defaults.get("account_id") or "")
-        account_index = (
-            account_ids.index(current_account_id)
-            if current_account_id in account_ids
-            else (None if copy_mode else 0)
+        account_id = render_metadata_reference(
+            "Account", account_ids, account_paths,
+            current_id=str(defaults.get("account_id") or ""),
+            key=f"mixed_account_{scope}", require_selection=copy_mode, container=c1,
         )
-        account_id = c1.selectbox(
-            "Account",
-            account_ids,
-            index=account_index,
-            format_func=account_paths.get,
-            key=f"mixed_account_{scope}",
+        category_id = render_metadata_reference(
+            "Category", category_ids, category_paths,
+            current_id=str(defaults.get("category_id") or ""),
+            key=f"mixed_category_{scope}", require_selection=copy_mode, container=c2,
         )
-        current_category_id = str(defaults.get("category_id") or "")
-        category_index = (
-            category_ids.index(current_category_id)
-            if current_category_id in category_ids
-            else (None if copy_mode else 0)
+        associations = render_transaction_associations(
+            defaults,
+            payees=payees, tags=tags, payee_key=f"mixed_payee_{scope}",
+            reference_key=f"mixed_reference_{scope}", tags_key=f"mixed_tags_{scope}",
+            preserve_current=bool(source),
         )
-        category_id = c2.selectbox(
-            "Category",
-            category_ids,
-            index=category_index,
-            format_func=category_paths.get,
-            key=f"mixed_category_{scope}",
-        )
-        current_payee = str(defaults.get("payee_id") or "")
-        payee_id, new_payee_name = render_payee_selector(
-            payees,
-            key=f"mixed_payee_{scope}",
-            selected_id=current_payee,
-            preserve_selected_id=bool(source),
-            selected_label=str(defaults.get("payee") or "") or None,
-        )
-        reference = st.text_input(
-            "Reference (optional)",
-            value=str(defaults.get("reference", "")),
-            key=f"mixed_reference_{scope}",
-        )
-        source_tag_ids = _copyable_tag_ids(tags, defaults.get("tag_ids", ())) if copy_mode else defaults.get("tag_ids", ())
-        tag_ids, new_tag_name = render_tag_selector(
-            tags,
-            label="Tags",
-            key=f"mixed_tags_{scope}",
-            selected_ids=source_tag_ids,
-            preserve_inactive_ids=defaults.get("tag_ids", ()) if source else (),
-        )
+        payee_id, new_payee_name = associations["payee_id"], associations["new_payee_name"]
+        reference = associations["reference"]
+        tag_ids, new_tag_name = associations["tag_ids"], associations["new_tag_name"]
         c1, c2 = st.columns(2)
         total_expense = c1.text_input(
             "Total Expense",
@@ -732,10 +645,8 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             key=f"mixed_percentage_{scope}",
             help="Greater than 0 and no more than 100; up to five decimal places.",
         )
-        description = st.text_input(
-            "Description / memo",
-            value=str(defaults.get("description", "")),
-            key=f"mixed_description_{scope}",
+        description = render_transaction_description(
+            defaults.get("description"), key=f"mixed_description_{scope}",
         )
         rationale = st.text_area("Allocation Rationale (required)", value=str(defaults.get("allocation_rationale", "")), key=f"mixed_rationale_{scope}")
         recurrence = None

@@ -78,14 +78,19 @@ def test_add_expense_recurring_flow_creates_initial_occurrence_and_schedule() ->
     storage.create_account("Checking", "Bank")
     storage.create_category("Office", "Expense")
 
-    with authenticated_app(storage) as app:
-        navigate_to(app, "Transactions")
-        by_label(app.number_input, "Amount").set_value(42).run()
-        by_label(app.selectbox, "From Account").set_value("Checking").run()
-        by_label(app.selectbox, "Category").set_value("Office").run()
-        by_label(app.checkbox, "Repeat this Expense").set_value(True).run()
-        by_label(app.text_input, "Schedule name").set_value("Monthly office").run()
-        by_label(app.button, "Save transaction").click().run()
+    with patch.object(
+        storage,
+        "create_recurring_expense",
+        wraps=storage.create_recurring_expense,
+    ) as create_recurring:
+        with authenticated_app(storage) as app:
+            navigate_to(app, "Transactions")
+            by_label(app.number_input, "Amount").set_value(42).run()
+            by_label(app.selectbox, "From Account").set_value("Checking").run()
+            by_label(app.selectbox, "Category").set_value("Office").run()
+            by_label(app.checkbox, "Repeat this Expense").set_value(True).run()
+            by_label(app.text_input, "Schedule name").set_value("Monthly office").run()
+            by_label(app.button, "Save transaction").click().run()
 
     schedules = storage.list_recurring_schedules()
     transactions = storage.list_transactions()
@@ -94,6 +99,7 @@ def test_add_expense_recurring_flow_creates_initial_occurrence_and_schedule() ->
     assert len(transactions) == 1
     assert transactions[0]["recurring_schedule_id"] == schedules[0]["id"]
     assert transactions[0]["receipt_references"] == "[]"
+    assert create_recurring.call_args.kwargs["transaction_id"] == transactions[0]["id"]
 
 
 def test_edit_expense_can_create_schedule_from_existing_transaction() -> None:

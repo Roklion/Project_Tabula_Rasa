@@ -808,7 +808,7 @@ class TransactionsMixin:
             reverse=True,
         )
 
-    def create_transaction(self, **data: Any) -> dict[str, str]:
+    def create_transaction(self, *, transaction_id: str | None = None, **data: Any) -> dict[str, str]:
         with self._workbook_locks.ledger:
             if any(field in data for field in (
                 "recurring_schedule_id",
@@ -824,7 +824,16 @@ class TransactionsMixin:
             # result of create_mixed_use_expense.
             if data.get("source_type") or data.get("source_id"):
                 self._reject_mixed_use_projection(data)
-            record = self._prepare_transaction(data)
+            if transaction_id is not None:
+                transaction_id = _clean_text(transaction_id, "Transaction ID", required=True)
+                if any(
+                    row.values.get("id") == transaction_id
+                    for row in self._rows("Transactions", force_refresh=True)
+                ):
+                    raise StorageConflictError("Transaction ID already exists; refresh the ledger.")
+            if data.get("receipt_references") in (None, ""):
+                data["receipt_references"] = []
+            record = self._prepare_transaction(data, transaction_id=transaction_id)
             self._append("Transactions", record)
             return record
 

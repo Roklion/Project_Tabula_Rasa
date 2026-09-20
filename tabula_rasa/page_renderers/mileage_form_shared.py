@@ -69,6 +69,16 @@ def validate_mileage_draft(draft: Mapping[str, object]) -> str | None:
     return None
 
 
+def mileage_payload_from_draft(draft: Mapping[str, object]) -> dict[str, object]:
+    """Map ledger fields only; route state and operation-specific values stay outside."""
+    payload = {field: draft.get(field) for field in (
+        "trip_date", "miles", "vehicle", "start_location", "destination",
+        "business_purpose", "notes", "tag_ids", "new_tag_name",
+    )}
+    payload["new_tag_name"] = payload["new_tag_name"] or ""
+    return payload
+
+
 def render_mileage_fields(
     context: MileageContext,
     tags: Sequence[Mapping[str, object]],

@@ -8,6 +8,7 @@ from typing import Any
 
 import streamlit as st
 from tabula_rasa.hierarchy import ordered_accounts, ordered_categories
+from .metadata_fields import active_or_selected as _active_or_selected, render_metadata_reference
 from tabula_rasa.recurrence_state import clear_edit_pending_state_for_schedule
 
 
@@ -75,15 +76,6 @@ def _recurring_category_options(categories, selected_category: str) -> list[dict
             )
         )
         or str(item.get("id")) == selected_category
-    ]
-
-
-def _active_or_selected(items, selected_ids) -> list[dict[str, Any]]:
-    selected = {str(value) for value in selected_ids if str(value)}
-    return [
-        item for item in items
-        if str(item.get("active", "")).upper() == "TRUE"
-        or str(item.get("id")) in selected
     ]
 
 
@@ -198,21 +190,15 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
                 edit_amount = st.text_input("Amount", value=selected.get("amount", ""))
                 edit_percentage = edit_rationale = None
             selected_account = str(selected.get("account_id", ""))
-            account_options = [
-                item for item in ordered_accounts(accounts)
-                if str(item.get("active", "")).upper() == "TRUE"
-                or str(item.get("id")) == selected_account
-            ]
+            account_options = _active_or_selected(ordered_accounts(accounts), [selected_account])
             if selected_account and selected_account not in {
                 str(item.get("id")) for item in account_options
             }:
                 account_options.append({"id": selected_account, "name": f"Missing ({selected_account})"})
             account_ids = [str(item["id"]) for item in account_options]
             account_names = {str(item["id"]): str(item.get("name", "")) for item in account_options}
-            edit_account = st.selectbox(
-                "Account", account_ids,
-                index=account_ids.index(selected_account) if selected_account in account_ids else 0,
-                format_func=lambda value: account_names.get(value, value),
+            edit_account = render_metadata_reference(
+                "Account", account_ids, account_names, current_id=selected_account,
             )
             selected_category = str(selected.get("category_id", ""))
             category_options = _recurring_category_options(categories, selected_category)
@@ -222,10 +208,8 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
                 category_options.append({"id": selected_category, "name": f"Missing ({selected_category})", "kind": "Expense"})
             category_ids = [str(item["id"]) for item in category_options]
             category_names = {str(item["id"]): str(item.get("name", "")) for item in category_options}
-            edit_category = st.selectbox(
-                "Category", category_ids,
-                index=category_ids.index(selected_category) if selected_category in category_ids else 0,
-                format_func=lambda value: category_names.get(value, value),
+            edit_category = render_metadata_reference(
+                "Category", category_ids, category_names, current_id=selected_category,
             )
             selected_payee = str(selected.get("payee_id", ""))
             available_payees = _recurring_payee_options(payees, selected_payee)

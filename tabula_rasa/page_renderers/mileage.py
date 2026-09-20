@@ -41,7 +41,6 @@ from .mileage_routing import (
     _route_state_is_current,
     _same_selected_place,
     _safe_route_error,
-    _save_round_trip,
     _selection_fingerprint,
     _set_widget_default,
 )
@@ -109,7 +108,6 @@ __all__ = [
     "_route_state_is_current",
     "_safe_route_error",
     "_same_selected_place",
-    "_save_round_trip",
     "_selection_fingerprint",
     "_set_widget_default",
     "_tag_name",

@@ -11,10 +11,11 @@ from tabula_rasa.page_renderers.tag_selector import (
 )
 
 from .mileage_form_shared import (
+    mileage_payload_from_draft,
     render_mileage_fields,
     validate_mileage_draft,
 )
-from .mileage_routing import _route_key, _save_round_trip
+from .mileage_routing import _route_key
 
 if TYPE_CHECKING:
     from .mileage import MileageContext
@@ -70,17 +71,10 @@ def render_add_mileage_form(context: MileageContext, tags: object) -> None:
     elif tag_error := inline_tag_name_error(draft["new_tag_name"]):
         save_error.error(tag_error)
     else:
+        trip_data = mileage_payload_from_draft(draft)
         payload = {
-            "trip_date": draft["trip_date"],
-            "miles": draft["miles"],
+            **trip_data,
             "return_miles": draft["return_miles"],
-            "vehicle": draft["vehicle"],
-            "start_location": draft["start_location"],
-            "destination": draft["destination"],
-            "business_purpose": draft["business_purpose"],
-            "notes": draft["notes"],
-            "tag_ids": draft["tag_ids"],
-            "new_tag_name": draft["new_tag_name"],
             "round_trip": draft["round_trip"],
         }
         context.confirmed_write(
@@ -89,32 +83,12 @@ def render_add_mileage_form(context: MileageContext, tags: object) -> None:
             else "create_mileage_trip",
             payload,
             (
-                lambda: _save_round_trip(
-                    context.storage,
-                    trip_date=draft["trip_date"],
-                    miles=draft["miles"],
-                    return_miles=draft["return_miles"],
-                    vehicle=draft["vehicle"],
-                    start_location=draft["start_location"],
-                    destination=draft["destination"],
-                    business_purpose=draft["business_purpose"],
-                    notes=draft["notes"],
-                    tag_ids=draft["tag_ids"],
-                    new_tag_name=draft["new_tag_name"] or "",
+                lambda: context.storage.create_mileage_round_trip(
+                    **trip_data, return_miles=draft["return_miles"],
                 )
             )
             if draft["round_trip"]
-            else lambda: context.storage.create_mileage_trip(
-                trip_date=draft["trip_date"],
-                miles=draft["miles"],
-                vehicle=draft["vehicle"],
-                start_location=draft["start_location"],
-                destination=draft["destination"],
-                business_purpose=draft["business_purpose"],
-                notes=draft["notes"],
-                tag_ids=draft["tag_ids"],
-                new_tag_name=draft["new_tag_name"],
-            ),
+            else lambda: context.storage.create_mileage_trip(**trip_data),
             "Round trip saved as two mileage entries."
             if draft["round_trip"]
             else "Mileage trip saved.",

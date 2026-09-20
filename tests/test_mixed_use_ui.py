@@ -5,11 +5,7 @@ import pytest
 from tabula_rasa.page_renderers.transactions.mixed_use import (
     _MixedUseReceiptStorage,
     _clear_mixed_use_copy,
-    _editable_mixed_use_account_ids,
-    _editable_mixed_use_category_ids,
     _fresh_mixed_use_copy_source,
-    _copyable_tag_ids,
-    _editable_account_ids,
     _mixed_use_copy_keys,
     _mixed_use_log_rows,
     _mixed_use_receipt_recovery_active,
@@ -290,43 +286,6 @@ def test_mixed_use_copy_snapshot_saves_after_original_edit(default_storage) -> N
     assert copied["total_expense"] == "100.00"
     assert copied["allocated_amount"] == "25.00"
     assert default_storage.get_mixed_use_expense(source["id"])["total_expense"] == "300.00"
-
-
-def test_mixed_use_copy_uses_active_only_managed_values() -> None:
-    accounts = [
-        {"id": "inactive", "active": False},
-        {"id": "active", "active": True},
-    ]
-    tags = [
-        {"id": "old", "active": "FALSE"},
-        {"id": "current", "active": "TRUE"},
-    ]
-    assert _editable_account_ids(accounts, ["inactive"], copy_mode=True) == ["active"]
-    assert _copyable_tag_ids(tags, ["old", "current"]) == ["current"]
-
-
-def test_mixed_use_edit_keeps_inactive_account_in_hierarchy_order() -> None:
-    ordered_accounts = [
-        {"id": "inactive-asset", "active": False},
-        {"id": "active-liability", "active": True},
-        {"id": "active-equity", "active": True},
-    ]
-
-    assert _editable_mixed_use_account_ids(ordered_accounts, "inactive-asset") == [
-        "inactive-asset", "active-liability", "active-equity"
-    ]
-
-
-def test_mixed_use_edit_keeps_inactive_category_in_hierarchy_order() -> None:
-    ordered_categories = [
-        {"id": "inactive-category", "kind": "Expense", "active": False},
-        {"id": "active-category", "kind": "Expense", "active": True},
-        {"id": "income-category", "kind": "Income", "active": True},
-    ]
-
-    assert _editable_mixed_use_category_ids(
-        ordered_categories, "inactive-category"
-    ) == ["inactive-category", "active-category"]
 
 
 def test_mixed_use_copy_rejects_missing_projection(default_storage) -> None:
@@ -877,7 +836,8 @@ def test_mixed_use_app_test_clears_recovery_after_source_deletion(default_storag
 
     with authenticated_app(default_storage) as app:
         navigate_to(app, "Transactions")
-        app.session_state[receipt_creation_workflow_key("test")] = (
+        app.session_state[receipt_creation_workflow_key("test")] = transaction["id"]
+        app.session_state[receipt_editor_workflow_key("test", transaction["id"])] = (
             new_receipt_creation_workflow(
                 transaction["id"],
                 [],
@@ -907,7 +867,8 @@ def test_mixed_use_app_test_ignores_ordinary_receipt_recovery(default_storage) -
 
     with authenticated_app(default_storage) as app:
         navigate_to(app, "Transactions")
-        app.session_state[receipt_creation_workflow_key("test")] = (
+        app.session_state[receipt_creation_workflow_key("test")] = transaction["id"]
+        app.session_state[receipt_editor_workflow_key("test", transaction["id"])] = (
             new_receipt_creation_workflow(
                 transaction["id"],
                 [],
