@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -26,7 +27,8 @@ def _name_map(records: list[dict[str, str]]) -> dict[str, dict[str, str]]:
 
 
 def _payee_reference_counts(
-    transactions: list[dict[str, str]], mixed_sources: list[dict[str, str]],
+    transactions: list[dict[str, str]],
+    mixed_sources: list[dict[str, str]],
     schedules: list[dict[str, str]],
     journals: list[dict[str, Any]] = (),
     assets: list[dict[str, str]] = (),
@@ -78,6 +80,193 @@ def _write(
     )
 
 
+@dataclass(frozen=True)
+class _ManagementSpec:
+    """The domain details needed by the two sibling management sections."""
+
+    singular: str
+    plural: str
+    caption: str
+    merge_warning: str
+    create: Callable[[str], object]
+    rename: Callable[[str, str, dict[str, str]], object]
+    merge: Callable[[str, list[str], list[dict[str, str]]], object]
+    remove: Callable[[str, dict[str, str]], object]
+
+
+def _render_management(
+    context: PayeesTagsContext,
+    spec: _ManagementSpec,
+    records: list[dict[str, str]],
+    counts: dict[str, int],
+) -> None:
+    """Share layout and confirmations; confirmed_write owns feedback and reruns."""
+    singular = spec.singular
+    plural = spec.plural
+    title = singular.capitalize()
+    st.subheader(plural.capitalize())
+    st.caption(spec.caption)
+    frame = pd.DataFrame(
+        [
+            {
+                title: item["name"],
+                "Active": str(item["active"]).upper() == "TRUE",
+                "References": counts.get(item["id"], 0),
+            }
+            for item in records
+        ],
+        columns=[title, "Active", "References"],
+    )
+    if frame.empty:
+        st.info(f"No {plural} yet. Add one below.")
+    else:
+        st.dataframe(frame, hide_index=True, width="stretch")
+
+    with st.expander(f"Add {singular}", expanded=True):
+        add_name = st.text_input(
+            f"New {singular} name", key=f"managed_new_{singular}_{context.profile_key}"
+        )
+        add_error = st.empty()
+        if st.button(
+            f"Add {singular}",
+            type="primary",
+            key=f"managed_add_{singular}_{context.profile_key}",
+        ):
+            _write(
+                context,
+                f"create_{singular}",
+                {"name": add_name},
+                lambda: spec.create(add_name),
+                f"{title} added.",
+                add_error,
+            )
+
+    if not records:
+        return
+    by_id = _name_map(records)
+    ids = list(by_id)
+
+    def labels(value: str) -> str:
+        return by_id[value]["name"]
+
+    with st.expander(f"Rename {singular}"):
+        rename_id = st.selectbox(
+            f"{title} to rename",
+            ids,
+            format_func=labels,
+            key=f"managed_rename_{singular}_id_{context.profile_key}",
+        )
+        rename_name = st.text_input(
+            f"Renamed {singular} name",
+            value=by_id[rename_id]["name"],
+            key=f"managed_rename_{singular}_name_{context.profile_key}_{rename_id}",
+        )
+        rename_error = st.empty()
+        if st.button(
+            f"Rename {singular}",
+            type="primary",
+            key=f"managed_rename_{singular}_{context.profile_key}",
+        ):
+            _write(
+                context,
+                f"edit_{singular}",
+                {"id": rename_id, "name": rename_name},
+                lambda: spec.rename(rename_id, rename_name, by_id[rename_id]),
+                f"{title} renamed.",
+                rename_error,
+            )
+
+    with st.expander(f"Merge {plural}"):
+        target_id = st.selectbox(
+            f"Target {singular}",
+            ids,
+            format_func=labels,
+            key=f"managed_merge_{singular}_target_{context.profile_key}",
+        )
+        source_ids = st.multiselect(
+            f"Source {plural}",
+            [item for item in ids if item != target_id],
+            format_func=labels,
+            key=f"managed_merge_{singular}_sources_{context.profile_key}",
+        )
+        st.warning(spec.merge_warning)
+        source_ids_key = hashlib.sha256(
+            "_".join(sorted(source_ids)).encode()
+        ).hexdigest()
+        acknowledgment_key = (
+            f"managed_merge_{singular}_ack_{context.profile_key}_{target_id}_"
+            f"{source_ids_key}"
+        )
+        acknowledged = st.checkbox(
+            f"I understand the selected source {plural} will be permanently removed",
+            key=acknowledgment_key,
+        )
+        merge_error = st.empty()
+        if st.button(
+            f"Merge {plural}",
+            type="primary",
+            key=f"managed_merge_{plural}_{context.profile_key}",
+        ):
+            if not source_ids:
+                merge_error.error(f"Select one or more source {plural}.")
+            elif not acknowledged:
+                merge_error.error(
+                    "Acknowledge the permanent source removal before merging. No data changed."
+                )
+            else:
+                _write(
+                    context,
+                    f"merge_{plural}",
+                    {"target_id": target_id, "source_ids": source_ids},
+                    lambda: spec.merge(target_id, source_ids, records),
+                    f"{plural.capitalize()} merged.",
+                    merge_error,
+                )
+
+    with st.expander(f"Remove {singular}"):
+        remove_id = st.selectbox(
+            f"{title} to remove",
+            ids,
+            format_func=labels,
+            key=f"managed_remove_{singular}_id_{context.profile_key}",
+        )
+        remove_name = by_id[remove_id]["name"]
+        is_referenced = bool(counts.get(remove_id, 0))
+        if is_referenced:
+            st.info(
+                f"This {singular} has {counts[remove_id]} references. Unassign it from those records or merge it before removal."
+            )
+        st.warning(
+            f"Permanently removing {singular} {remove_name!r} cannot be undone and is available only when it is unreferenced."
+        )
+        remove_ack = st.checkbox(
+            f"I understand {singular} {remove_name!r} will be permanently removed and cannot be restored",
+            key=f"managed_remove_{singular}_ack_{context.profile_key}_{remove_id}",
+            disabled=is_referenced,
+        )
+        remove_error = st.empty()
+        with st.container(key=f"destructive_managed_{singular}_remove"):
+            if st.button(
+                f"Permanently remove {singular}",
+                icon=":material/delete_forever:",
+                key=f"managed_remove_{singular}_{context.profile_key}",
+                disabled=is_referenced,
+            ):
+                if not remove_ack:
+                    remove_error.error(
+                        "Acknowledge permanent removal before continuing. No data changed."
+                    )
+                else:
+                    _write(
+                        context,
+                        f"remove_{singular}",
+                        {"id": remove_id},
+                        lambda: spec.remove(remove_id, by_id[remove_id]),
+                        f"{title} removed.",
+                        remove_error,
+                    )
+
+
 def _render_payees(
     context: PayeesTagsContext,
     payees: list[dict[str, str]],
@@ -87,86 +276,35 @@ def _render_payees(
     journals: list[dict[str, Any]],
     assets: list[dict[str, str]],
 ) -> None:
-    counts = _payee_reference_counts(
-        transactions, mixed_sources, schedules, journals, assets
+    _render_management(
+        context,
+        _ManagementSpec(
+            singular="payee",
+            plural="payees",
+            caption=(
+                "Payees are stored only in the selected business profile. Renaming keeps "
+                "the stable ID and all references."
+            ),
+            merge_warning=(
+                "Merging rewrites every transaction and mixed-use source reference, "
+                "then permanently removes the selected source payees."
+            ),
+            create=context.storage.create_payee,
+            rename=lambda record_id, name, expected: context.storage.edit_payee(
+                record_id, name=name, expected_payee=expected
+            ),
+            merge=lambda target_id, source_ids, expected: context.storage.merge_payees(
+                target_id, source_ids, expected_payees=expected
+            ),
+            remove=lambda record_id, expected: context.storage.remove_payee(
+                record_id, expected_payee=expected
+            ),
+        ),
+        payees,
+        _payee_reference_counts(
+            transactions, mixed_sources, schedules, journals, assets
+        ),
     )
-    st.subheader("Payees")
-    st.caption(
-        "Payees are stored only in the selected business profile. Renaming keeps "
-        "the stable ID and all references."
-    )
-    frame = pd.DataFrame(
-        [
-            {"Payee": item["name"], "Active": str(item["active"]).upper() == "TRUE", "References": counts.get(item["id"], 0)}
-            for item in payees
-        ],
-        columns=["Payee", "Active", "References"],
-    )
-    if frame.empty:
-        st.info("No payees yet. Add one below.")
-    else:
-        st.dataframe(frame, hide_index=True, width="stretch")
-
-    with st.expander("Add payee", expanded=True):
-        add_name = st.text_input("New payee name", key=f"managed_new_payee_{context.profile_key}")
-        add_error = st.empty()
-        if st.button("Add payee", type="primary", key=f"managed_add_payee_{context.profile_key}"):
-            _write(context, "create_payee", {"name": add_name}, lambda: context.storage.create_payee(add_name), "Payee added.", add_error)
-
-    if not payees:
-        return
-    by_id = _name_map(payees)
-    ids = list(by_id)
-
-    def labels(value: str) -> str:
-        return by_id[value]["name"]
-    with st.expander("Rename payee"):
-        rename_id = st.selectbox("Payee to rename", ids, format_func=labels, key=f"managed_rename_payee_id_{context.profile_key}")
-        rename_name = st.text_input("Renamed payee name", value=by_id[rename_id]["name"], key=f"managed_rename_payee_name_{context.profile_key}_{rename_id}")
-        rename_error = st.empty()
-        if st.button("Rename payee", type="primary", key=f"managed_rename_payee_{context.profile_key}"):
-            _write(context, "edit_payee", {"id": rename_id, "name": rename_name}, lambda: context.storage.edit_payee(rename_id, name=rename_name, expected_payee=by_id[rename_id]), "Payee renamed.", rename_error)
-
-    with st.expander("Merge payees"):
-        target_id = st.selectbox("Target payee", ids, format_func=labels, key=f"managed_merge_payee_target_{context.profile_key}")
-        source_ids = st.multiselect("Source payees", [item for item in ids if item != target_id], format_func=labels, key=f"managed_merge_payee_sources_{context.profile_key}")
-        st.warning("Merging rewrites every transaction and mixed-use source reference, then permanently removes the selected source payees.")
-        acknowledgment_key = (
-            f"managed_merge_payee_ack_{context.profile_key}_{target_id}_"
-            f"{'_'.join(sorted(source_ids))}"
-        )
-        acknowledged = st.checkbox(
-            "I understand the selected source payees will be permanently removed",
-            key=acknowledgment_key,
-        )
-        merge_error = st.empty()
-        if st.button("Merge payees", type="primary", key=f"managed_merge_payees_{context.profile_key}"):
-            if not source_ids:
-                merge_error.error("Select one or more source payees.")
-            elif not acknowledged:
-                merge_error.error("Acknowledge the permanent source removal before merging. No data changed.")
-            else:
-                _write(context, "merge_payees", {"target_id": target_id, "source_ids": source_ids}, lambda: context.storage.merge_payees(target_id, source_ids, expected_payees=payees), "Payees merged.", merge_error)
-
-    with st.expander("Remove payee"):
-        remove_id = st.selectbox("Payee to remove", ids, format_func=labels, key=f"managed_remove_payee_id_{context.profile_key}")
-        remove_name = by_id[remove_id]["name"]
-        is_referenced = bool(counts.get(remove_id, 0))
-        if is_referenced:
-            st.info(f"This payee has {counts[remove_id]} references. Unassign it from those records or merge it before removal.")
-        st.warning(f"Permanently removing payee {remove_name!r} cannot be undone and is available only when it is unreferenced.")
-        remove_ack = st.checkbox(
-            f"I understand payee {remove_name!r} will be permanently removed and cannot be restored",
-            key=f"managed_remove_payee_ack_{context.profile_key}_{remove_id}",
-            disabled=is_referenced,
-        )
-        remove_error = st.empty()
-        with st.container(key="destructive_managed_payee_remove"):
-            if st.button("Permanently remove payee", icon=":material/delete_forever:", key=f"managed_remove_payee_{context.profile_key}", disabled=is_referenced):
-                if not remove_ack:
-                    remove_error.error("Acknowledge permanent removal before continuing. No data changed.")
-                else:
-                    _write(context, "remove_payee", {"id": remove_id}, lambda: context.storage.remove_payee(remove_id, expected_payee=by_id[remove_id]), "Payee removed.", remove_error)
 
 
 def _render_tags(
@@ -177,86 +315,40 @@ def _render_tags(
     mixed_sources: list[dict[str, Any]],
     schedules: list[dict[str, Any]],
 ) -> None:
-    counts = _tag_reference_counts(transactions, mileage, mixed_sources, schedules)
-    st.subheader("Tags")
-    st.caption(
-        "Tags are profile-local labels shared by Transactions and Mileage. "
-        "Renaming keeps the stable ID and existing associations."
+    _render_management(
+        context,
+        _ManagementSpec(
+            singular="tag",
+            plural="tags",
+            caption=(
+                "Tags are profile-local labels shared by Transactions and Mileage. "
+                "Renaming keeps the stable ID and existing associations."
+            ),
+            merge_warning=(
+                "Merging rewrites Transactions and Mileage associations, de-duplicates "
+                "the target association, then permanently removes the selected source tags."
+            ),
+            create=context.storage.create_tag,
+            rename=lambda record_id, name, expected: context.storage.edit_tag(
+                record_id, name=name, expected_tag=expected
+            ),
+            merge=lambda target_id, source_ids, expected: context.storage.merge_tags(
+                target_id, source_ids, expected_tags=expected
+            ),
+            remove=lambda record_id, expected: context.storage.remove_tag(
+                record_id, expected_tag=expected
+            ),
+        ),
+        tags,
+        _tag_reference_counts(transactions, mileage, mixed_sources, schedules),
     )
-    frame = pd.DataFrame(
-        [{"Tag": item["name"], "Active": str(item["active"]).upper() == "TRUE", "References": counts.get(item["id"], 0)} for item in tags],
-        columns=["Tag", "Active", "References"],
-    )
-    if frame.empty:
-        st.info("No tags yet. Add one below.")
-    else:
-        st.dataframe(frame, hide_index=True, width="stretch")
-
-    with st.expander("Add tag", expanded=True):
-        add_name = st.text_input("New tag name", key=f"managed_new_tag_{context.profile_key}")
-        add_error = st.empty()
-        if st.button("Add tag", type="primary", key=f"managed_add_tag_{context.profile_key}"):
-            _write(context, "create_tag", {"name": add_name}, lambda: context.storage.create_tag(add_name), "Tag added.", add_error)
-
-    if not tags:
-        return
-    by_id = _name_map(tags)
-    ids = list(by_id)
-
-    def labels(value: str) -> str:
-        return by_id[value]["name"]
-    with st.expander("Rename tag"):
-        rename_id = st.selectbox("Tag to rename", ids, format_func=labels, key=f"managed_rename_tag_id_{context.profile_key}")
-        rename_name = st.text_input("Renamed tag name", value=by_id[rename_id]["name"], key=f"managed_rename_tag_name_{context.profile_key}_{rename_id}")
-        rename_error = st.empty()
-        if st.button("Rename tag", type="primary", key=f"managed_rename_tag_{context.profile_key}"):
-            _write(context, "edit_tag", {"id": rename_id, "name": rename_name}, lambda: context.storage.edit_tag(rename_id, name=rename_name, expected_tag=by_id[rename_id]), "Tag renamed.", rename_error)
-
-    with st.expander("Merge tags"):
-        target_id = st.selectbox("Target tag", ids, format_func=labels, key=f"managed_merge_tag_target_{context.profile_key}")
-        source_ids = st.multiselect("Source tags", [item for item in ids if item != target_id], format_func=labels, key=f"managed_merge_tag_sources_{context.profile_key}")
-        st.warning("Merging rewrites Transactions and Mileage associations, de-duplicates the target association, then permanently removes the selected source tags.")
-        acknowledgment_key = (
-            f"managed_merge_tag_ack_{context.profile_key}_{target_id}_"
-            f"{'_'.join(sorted(source_ids))}"
-        )
-        acknowledged = st.checkbox(
-            "I understand the selected source tags will be permanently removed",
-            key=acknowledgment_key,
-        )
-        merge_error = st.empty()
-        if st.button("Merge tags", type="primary", key=f"managed_merge_tags_{context.profile_key}"):
-            if not source_ids:
-                merge_error.error("Select one or more source tags.")
-            elif not acknowledged:
-                merge_error.error("Acknowledge the permanent source removal before merging. No data changed.")
-            else:
-                _write(context, "merge_tags", {"target_id": target_id, "source_ids": source_ids}, lambda: context.storage.merge_tags(target_id, source_ids, expected_tags=tags), "Tags merged.", merge_error)
-
-    with st.expander("Remove tag"):
-        remove_id = st.selectbox("Tag to remove", ids, format_func=labels, key=f"managed_remove_tag_id_{context.profile_key}")
-        remove_name = by_id[remove_id]["name"]
-        is_referenced = bool(counts.get(remove_id, 0))
-        if is_referenced:
-            st.info(f"This tag has {counts[remove_id]} references. Unassign it from those records or merge it before removal.")
-        st.warning(f"Permanently removing tag {remove_name!r} cannot be undone and is available only when it is unreferenced.")
-        remove_ack = st.checkbox(
-            f"I understand tag {remove_name!r} will be permanently removed and cannot be restored",
-            key=f"managed_remove_tag_ack_{context.profile_key}_{remove_id}",
-            disabled=is_referenced,
-        )
-        remove_error = st.empty()
-        with st.container(key="destructive_managed_tag_remove"):
-            if st.button("Permanently remove tag", icon=":material/delete_forever:", key=f"managed_remove_tag_{context.profile_key}", disabled=is_referenced):
-                if not remove_ack:
-                    remove_error.error("Acknowledge permanent removal before continuing. No data changed.")
-                else:
-                    _write(context, "remove_tag", {"id": remove_id}, lambda: context.storage.remove_tag(remove_id, expected_tag=by_id[remove_id]), "Tag removed.", remove_error)
 
 
 def render_payees_tags(context: PayeesTagsContext) -> None:
     """Render separate Payees and Tags management sections for one profile."""
-    st.caption(f"Business profile: {context.profile_key} (all values below are profile-local)")
+    st.caption(
+        f"Business profile: {context.profile_key} (all values below are profile-local)"
+    )
     try:
         payees = context.storage.list_payees(active_only=False)
         tags = context.storage.list_tags(active_only=False)

@@ -14,6 +14,8 @@ def test_transactions_exposes_profile_local_management_tab() -> None:
         assert "Tags" in labels
         assert "New payee name" in labels
         assert "New tag name" in labels
+        assert any("No payees yet. Add one below." in str(item.value) for item in app.info)
+        assert any("No tags yet. Add one below." in str(item.value) for item in app.info)
         assert any(
             "Business profile:" in str(node.value)
             for node in app.caption
