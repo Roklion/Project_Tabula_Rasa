@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -189,9 +190,12 @@ def _render_management(
             key=f"managed_merge_{singular}_sources_{context.profile_key}",
         )
         st.warning(spec.merge_warning)
+        source_ids_key = hashlib.sha256(
+            "_".join(sorted(source_ids)).encode()
+        ).hexdigest()
         acknowledgment_key = (
             f"managed_merge_{singular}_ack_{context.profile_key}_{target_id}_"
-            f"{'_'.join(sorted(source_ids))}"
+            f"{source_ids_key}"
         )
         acknowledged = st.checkbox(
             f"I understand the selected source {plural} will be permanently removed",
