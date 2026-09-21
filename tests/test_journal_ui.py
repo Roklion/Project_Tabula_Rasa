@@ -16,6 +16,7 @@ from tabula_rasa.page_renderers.transactions.entry_creation import (
 )
 from tabula_rasa.page_renderers.transactions.journal_editor import (
     _journal_edit_baseline,
+    _line_target_options,
     _journal_target_options,
     _remove_line,
     journal_totals,
@@ -183,6 +184,26 @@ def test_journal_totals_and_typed_target_options() -> None:
     )
     assert edit_options == ["account:checking", "account:old"]
     assert edit_labels["account:old"].endswith(" · inactive")
+
+
+def test_journal_line_target_options_do_not_leak_retained_targets() -> None:
+    options = ["account:active"]
+    labels = {"account:active": "Active"}
+
+    first_options, first_labels = _line_target_options(
+        options, labels, "account:old"
+    )
+    second_options, second_labels = _line_target_options(
+        options, labels, "account:other-old"
+    )
+
+    assert first_options == ["account:active", "account:old"]
+    assert first_labels["account:old"] == "account:old · unavailable"
+    assert second_options == ["account:active", "account:other-old"]
+    assert second_labels["account:other-old"] == "account:other-old · unavailable"
+    assert "account:old" not in second_options
+    assert options == ["account:active"]
+    assert labels == {"account:active": "Active"}
 
 
 def test_journal_edit_baseline_survives_external_refresh_and_resets_for_config() -> None:

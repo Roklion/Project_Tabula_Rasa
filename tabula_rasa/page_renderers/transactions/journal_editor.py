@@ -87,6 +87,19 @@ def _journal_target_options(
     return tokens, labels
 
 
+def _line_target_options(
+    target_options: Sequence[str],
+    target_labels: Mapping[str, str],
+    current_target: str,
+) -> tuple[list[str], dict[str, str]]:
+    options = list(target_options)
+    labels = dict(target_labels)
+    if current_target and current_target not in options:
+        options.append(current_target)
+        labels[current_target] = f"{current_target} · unavailable"
+    return options, labels
+
+
 def _target_token(posting: Mapping[str, object]) -> str:
     target_type = str(posting.get("target_type") or "").strip().casefold()
     target_id = str(posting.get("target_id") or "").strip()
@@ -222,13 +235,13 @@ def _render_posting_lines(
             )
             target_key = _line_key(prefix, line_id, "target")
             current_target = str(st.session_state.get(target_key) or "")
-            if current_target and current_target not in target_options:
-                target_options = [*target_options, current_target]
-                target_labels[current_target] = f"{current_target} · unavailable"
+            line_target_options, line_target_labels = _line_target_options(
+                target_options, target_labels, current_target
+            )
             target = account_column.selectbox(
                 "Account",
-                [""] + target_options,
-                format_func=lambda value: target_labels.get(
+                [""] + line_target_options,
+                format_func=lambda value: line_target_labels.get(
                     value, "Choose an account or category" if not value else value
                 ),
                 key=target_key,
