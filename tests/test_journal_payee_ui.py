@@ -73,4 +73,3 @@ def test_journal_only_payee_is_shown_as_referenced_and_cannot_be_removed() -> No
             if "I understand payee" in item.label
             and "permanently removed" in item.label
         ).disabled
-

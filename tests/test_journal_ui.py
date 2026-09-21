@@ -17,6 +17,7 @@ from tabula_rasa.page_renderers.transactions.entry_creation import (
 from tabula_rasa.page_renderers.transactions.journal_editor import (
     _journal_edit_baseline,
     _journal_target_options,
+    _remove_line,
     journal_totals,
 )
 from tabula_rasa.presentation import reset_profile_presentation_state
@@ -242,6 +243,10 @@ def test_profile_switch_clears_journal_creation_and_edit_widgets() -> None:
         _key("active_mode"): JOURNAL_MODE,
         _key("requested_mode"): JOURNAL_MODE,
         _key("journal_dirty"): True,
+        _key("simple_raw_baseline"): (("add_transaction_amount", 0.0),),
+        _key("journal_raw_baseline"): (
+            ("journal_create_north_0_line-1_debit", 0.0),
+        ),
         "journal_create_north_0_line-1_debit": 50,
         "journal_create_generation_north": 2,
         "journal_edit_north_entry-1_line-1_credit": 50,
@@ -370,6 +375,31 @@ def test_journal_rows_add_and_remove_explicitly_with_two_row_minimum() -> None:
         ]
         assert len(journal_remove_buttons) == 2
         assert all(button.disabled for button in journal_remove_buttons)
+
+
+def test_removing_populated_middle_row_preserves_sibling_identity_and_values() -> None:
+    line_ids_key = "journal_create_line_ids_0_north"
+    prefix = "journal_create_north_0"
+    state = {
+        line_ids_key: ["line-1", "line-2", "line-3"],
+        f"{prefix}_line-1_target": "account:checking",
+        f"{prefix}_line-1_debit": 25.0,
+        f"{prefix}_line-2_target": "category:meals",
+        f"{prefix}_line-2_debit": 10.0,
+        f"{prefix}_line-2_description": "Remove me",
+        f"{prefix}_line-3_target": "account:savings",
+        f"{prefix}_line-3_credit": 35.0,
+        f"{prefix}_line-3_description": "Keep me",
+    }
+
+    with patch.object(st, "session_state", state):
+        _remove_line("north", "create", "0", "line-2")
+
+    assert state[line_ids_key] == ["line-1", "line-3"]
+    assert state[f"{prefix}_line-1_debit"] == 25.0
+    assert state[f"{prefix}_line-3_credit"] == 35.0
+    assert state[f"{prefix}_line-3_description"] == "Keep me"
+    assert not any("line-2" in key for key in state if key != line_ids_key)
 
 
 def test_unbalanced_journal_shows_running_totals_and_keeps_save_disabled() -> None:

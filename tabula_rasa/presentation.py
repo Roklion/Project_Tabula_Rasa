@@ -636,9 +636,11 @@ def reset_profile_presentation_state(
             "confirm_switch",
             "cancel_switch",
             "simple_baseline",
+            "simple_raw_baseline",
             "simple_dirty",
             "simple_switch_blocked",
             "journal_baseline",
+            "journal_raw_baseline",
             "journal_dirty",
         )
     }

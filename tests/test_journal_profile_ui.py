@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from tabula_rasa.page_renderers.transactions.entry_creation import JOURNAL_MODE
+from tabula_rasa.page_renderers.transactions.entry_creation import (
+    JOURNAL_MODE,
+    SIMPLE_MODE,
+)
 from tabula_rasa.storage import GoogleSheetsStorage
 from tests.app_support import (
     authenticated_app,
@@ -83,5 +86,18 @@ def test_journal_draft_and_selection_are_isolated_when_switching_profiles() -> N
             for widget in (*app.text_input, *app.number_input, *app.selectbox)
             for key in (widget.key,)
         )
+        assert "entry_creation_simple_raw_baseline_north" not in app.session_state
+        assert "entry_creation_journal_raw_baseline_north" not in app.session_state
+
+        by_label(app.selectbox, "Business").set_value("north").run()
+        entry_type = by_label(app.segmented_control, "Entry Type")
+        assert entry_type.value == SIMPLE_MODE
+        entry_type.set_value(JOURNAL_MODE).run()
+        assert by_label(app.segmented_control, "Entry Type").value == JOURNAL_MODE
+        assert not any(
+            str(button.label).startswith("Discard and switch")
+            for button in app.button
+        )
+
         assert "shared-journal-id" in south.list_journal_entries()[0]["id"]
         assert north.list_journal_entries()[0]["description"] == "North saved journal"

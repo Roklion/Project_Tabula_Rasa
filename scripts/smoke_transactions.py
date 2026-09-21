@@ -252,15 +252,16 @@ def check_viewport(page: Page, url: str, viewport: tuple[int, int]) -> None:
         raise SmokeCheckFailure("Expected the View & edit ledger tab.") from error
     ledger_tab.click()
     require_visible_text(page, "View & edit ledger")
-    edit_expander = page.get_by_text("Edit transaction", exact=True).first
+    ledger_panel = page.locator('[data-testid="stTabPanel"]:visible').last
+    edit_expander = ledger_panel.get_by_text("Edit transaction", exact=True).first
     try:
         edit_expander.wait_for(state="visible", timeout=10000)
     except PlaywrightTimeoutError as error:
         raise SmokeCheckFailure("Expected the Edit transaction expander.") from error
     edit_expander.click()
-    require_input(page, "Transaction to edit")
-    require_input(page, "Upload receipt")
-    receipt_upload = page.locator('input[type="file"]').last
+    require_input(ledger_panel, "Transaction to edit")
+    require_input(ledger_panel, "Receipt (optional)")
+    receipt_upload = ledger_panel.locator('input[type="file"]').last
     try:
         receipt_upload.wait_for(state="attached", timeout=10000)
     except PlaywrightTimeoutError as error:

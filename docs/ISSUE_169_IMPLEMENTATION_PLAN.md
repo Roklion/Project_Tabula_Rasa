@@ -372,3 +372,36 @@ explicit add/remove controls, and canvas-rendered grouped rows under header
 clicks, with no page-level horizontal overflow. AppTest coverage exercises
 creation, logical search, mixed bulk-selection restrictions, whole-entry edit
 with stable posting identity, deletion, and profile isolation.
+
+### Continuation verification — 2026-09-21
+
+Rechecked remote head `1c856fa` against issue #169 and its #120 dependency
+clarification in a clean worktree. The remote branch is spelled
+`codex/issue-169-journal-entries`. Continuation work is on local branch
+`codex/issue-169-completion` in `.worktrees/issue-169`.
+
+The feature was implemented at that head. Focused UI and storage/accounting
+audits found one required correction: profile switching omitted the raw draft
+comparison snapshots from cleanup. Both simple and journal raw baselines now
+clear with the outgoing profile. Regression coverage switches between two
+profiles, returns to a fresh Simple Transaction editor, and confirms switching
+to Journal needs no discard confirmation. A populated middle-row removal test
+also verifies surviving posting identities and values remain attached.
+
+Validation uses the existing development environment at
+`C:/Projects/Candice_Tabula_Rasa/.venv` (Python 3.12.10), without changing its
+dependencies, with `PYTHONUTF8=1`. The initial unrestricted full run passed all
+1,181 tests. Sandbox-only failures creating temporary files were environmental;
+the redundant sandbox run was stopped. The journal browser check passed at
+1440x1000, 1200x900, 900x900, and 390x844. After the profile-reset correction,
+the full suite passed **1,182 tests** in 47.17 seconds; `ruff check .` and
+the uncommitted-change whitespace check also passed.
+
+The ordinary transaction browser smoke initially failed because it expected
+the old `Upload receipt` label. Updated its locator to `Receipt (optional)`
+and scoped it to the visible ledger tab. All four ordinary transaction
+viewports then passed, as did all 18 smoke-runner tests. Removed the extra
+blank line at the end of the journal payee UI test to satisfy the branch
+whitespace gate.
+
+Publication and the broader PR review remain separate, unperformed actions.
