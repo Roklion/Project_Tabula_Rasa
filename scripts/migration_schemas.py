@@ -142,6 +142,35 @@ VERSION_11_WORKSHEET_HEADERS = {
     ),
 }
 
+# v12 is the last schema before multi-line journal entries.  Keep this
+# snapshot independent from the runtime headers: the explicit migration tools
+# must recognize an unmodified v12 workbook/archive after the application has
+# moved to format 13.
+VERSION_12_WORKSHEET_HEADERS = {
+    **VERSION_11_WORKSHEET_HEADERS,
+    "Transactions": VERSION_11_WORKSHEET_HEADERS["Transactions"],
+    "MixedUseExpenses": VERSION_11_WORKSHEET_HEADERS["MixedUseExpenses"],
+    "Assets": (
+        "id", "name", "asset_type", "notes", "acquisition_date",
+        "depreciation_start_date", "cost_basis", "salvage_value",
+        "useful_life_quarters", "depreciation_method",
+        "depreciation_expense_account_id",
+        "accumulated_depreciation_account_id", "payee_id", "reference",
+        "tag_ids", "source_transaction_id", "retired_date", "status",
+        "schedule_overrides", "created_at", "updated_at",
+    ),
+}
+
+JOURNAL_WORKSHEET_HEADERS = {
+    "JournalEntries": (
+        "id", "txn_date", "description", "created_at", "updated_at",
+    ),
+    "JournalPostings": (
+        "id", "parent_entry_id", "position", "target_type", "target_id",
+        "side", "amount", "payee_id", "description",
+    ),
+}
+
 
 __all__ = [
     "LEGACY_TAGS_WORKBOOK_HEADERS",
@@ -153,4 +182,6 @@ __all__ = [
     "VERSION_7_WORKSHEET_HEADERS",
     "VERSION_10_WORKSHEET_HEADERS",
     "VERSION_11_WORKSHEET_HEADERS",
+    "VERSION_12_WORKSHEET_HEADERS",
+    "JOURNAL_WORKSHEET_HEADERS",
 ]

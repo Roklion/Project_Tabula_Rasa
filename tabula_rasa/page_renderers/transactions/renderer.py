@@ -10,7 +10,9 @@ from tabula_rasa.hierarchy import (
     ordered_categories,
 )
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
-from tabula_rasa.page_renderers.transactions.creation import render_add_transaction
+from tabula_rasa.page_renderers.transactions.entry_creation import (
+    render_entry_creation,
+)
 from tabula_rasa.page_renderers.transactions.ledger import render_ledger
 from tabula_rasa.page_renderers.transactions.mixed_use import render_mixed_use_expenses
 from tabula_rasa.page_renderers.transactions.payees_tags import (
@@ -80,8 +82,9 @@ def render_transactions(context: TransactionsContext) -> None:
     }
     with tab_add:
         with st.container(key="transactions_add_surface"):
-            render_add_transaction(
+            render_entry_creation(
                 context,
+                accounts=active_accounts,
                 account_map=account_map,
                 categories=categories,
                 category_paths=category_paths,

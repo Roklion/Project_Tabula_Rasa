@@ -196,14 +196,17 @@ automatic repair would require a distributed transaction simulation.
 
 ### Current formats and explicit migration
 
-Normal runtime primarily understands the current workbook schema and current
+Normal runtime primarily understands the current format-13 workbook schema and
 backup format. A genuinely new/empty workbook may be bootstrapped, but a
 populated historical workbook is validated and rejected with an actionable
 instruction to run the explicit workbook migration tool
 (`scripts/migrate_workbook.py`). Historical backup conversion likewise lives
 in `scripts/migrate_legacy_backup.py`; production
-restore accepts only the current format and validates the converted output
-using the normal current-format validator.
+restore accepts only format 13 and validates the converted output using the
+normal current-format validator. The explicit migration tools recognize
+format-12 workbooks and archives as the previous schema, add empty
+`JournalEntries` and `JournalPostings` tables, and preserve existing simple
+transaction rows.
 
 Migration tools have a narrower trust boundary than production runtime. They
 recognize supported standard application outputs, perform deterministic
@@ -368,8 +371,8 @@ local-only recovery metadata.
 | Shared presentation tokens and CSS | tabula_rasa/presentation.py |
 | Profile selection and readiness | tabula_rasa/business_profiles.py and tabula_rasa/profile_readiness.py |
 | Local profile persistence | tabula_rasa/local_profile_store.py |
-| Sheets storage, current v12 backup format, and restore validation | `tabula_rasa/storage/google_sheets/` |
-| Legacy backup conversion (v1–v11 to v12) | scripts/migrate_legacy_backup.py |
+| Sheets storage, current v13 backup format, and restore validation | `tabula_rasa/storage/google_sheets/` |
+| Legacy backup conversion (v1–v12 to v13) | scripts/migrate_legacy_backup.py |
 | Legacy workbook conversion and historical schema definitions | `scripts/migrate_workbook.py`, `scripts/migrate_payees.py`, and `scripts/migration_schemas.py` |
 | Drive OAuth and file operations | tabula_rasa/google_drive/__init__.py, with `oauth.py`, `client.py`, `folders.py`, `receipts.py`, and `backups.py` responsibility modules |
 | Drive administration and Picker | tabula_rasa/google_drive_admin.py and tabula_rasa/google_drive_picker.py |

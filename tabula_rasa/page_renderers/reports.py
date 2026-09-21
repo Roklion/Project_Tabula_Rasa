@@ -190,6 +190,7 @@ def render_reports(context: ReportsContext) -> None:
             "Transactions",
         )
         transactions = context.storage.list_transactions()
+        journals = context.storage.list_journal_entries()
         categories = context.storage.list_categories()
         accounts = context.storage.list_accounts(active_only=False)
     except StorageError as error:
@@ -197,14 +198,14 @@ def render_reports(context: ReportsContext) -> None:
         render_global_footer()
         st.stop()
     category_paths = hierarchy_paths(categories)
-    summary = profit_and_loss(transactions, start=start, end=end)
+    summary = profit_and_loss(transactions, start=start, end=end, journals=journals, categories=categories)
     with st.container(key="reports_summary_metrics"):
         a, b, c = st.columns(3, gap="small")
         a.metric("Income", money(summary["income"]))
         b.metric("Expenses", money(summary["expenses"]))
         c.metric("Net", money(summary["net"]))
     monthly = pd.DataFrame(
-        monthly_performance(transactions, start=start, end=end)
+        monthly_performance(transactions, start=start, end=end, journals=journals, categories=categories)
     ).rename(columns={"month": "Month", "income": "Income", "expenses": "Expenses"})
     category_detail_rows = category_activity_rollups(
         transactions,
@@ -212,6 +213,7 @@ def render_reports(context: ReportsContext) -> None:
         kind="Expense",
         start=start,
         end=end,
+        journals=journals,
     )
     by_category = pd.DataFrame(
         [
@@ -281,7 +283,7 @@ def render_reports(context: ReportsContext) -> None:
     st.subheader("Balance sheet")
     st.caption("The As of date is independent from the income-and-expense period.")
     as_of = st.date_input("As of", date.today(), key="balance_sheet_date")
-    statement = balance_sheet(accounts, transactions, as_of=as_of)
+    statement = balance_sheet(accounts, transactions, as_of=as_of, journals=journals, categories=categories)
     with st.container(key="reports_statement_metrics"):
         asset_metric, liability_metric, equity_metric = st.columns(3)
         asset_metric.metric("Total assets", money(statement["total_assets"]))

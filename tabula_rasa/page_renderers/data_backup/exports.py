@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import date, datetime, timezone
+import csv
+import io
 
 import streamlit as st
 
@@ -34,6 +36,7 @@ def prepare_csv_exports(storage: GoogleSheetsStorage) -> dict[str, bytes]:
     categories = storage.list_categories()
     tags = storage.list_tags()
     transactions = storage.list_transactions()
+    journals = storage.list_journal_entries()
     mileage_trips = storage.list_mileage_trips()
     transaction_frame = ledger_frame(
         transactions,
@@ -43,8 +46,29 @@ def prepare_csv_exports(storage: GoogleSheetsStorage) -> dict[str, bytes]:
         tags=tags,
     )
     mileage_log = mileage_frame(mileage_trips, tags)
+    journal_output = io.StringIO(newline="")
+    journal_writer = csv.DictWriter(journal_output, fieldnames=[
+        "Entry ID", "Date", "Memo", "Posting ID", "Position", "Account type",
+        "Account ID", "Account", "Debit", "Credit", "Payee", "Description",
+    ])
+    journal_writer.writeheader()
+    account_names = {row["id"]: row["name"] for row in accounts}
+    category_names = {row["id"]: row["name"] for row in categories}
+    for entry in journals:
+        for line in entry["postings"]:
+            names = account_names if line["target_type"] == "account" else category_names
+            journal_writer.writerow({
+                "Entry ID": entry["id"], "Date": entry["txn_date"], "Memo": entry["description"],
+                "Posting ID": line["id"], "Position": line["position"],
+                "Account type": line["target_type"], "Account ID": line["target_id"],
+                "Account": names.get(line["target_id"], ""),
+                "Debit": line["amount"] if line["side"] == "Debit" else "",
+                "Credit": line["amount"] if line["side"] == "Credit" else "",
+                "Payee": line.get("payee", ""), "Description": line["description"],
+            })
     return {
         "transactions": transaction_frame.to_csv(index=False).encode("utf-8"),
+        "journals": journal_output.getvalue().encode("utf-8"),
         "mileage": mileage_log.to_csv(index=False).encode("utf-8"),
     }
 
@@ -141,6 +165,12 @@ def render_exports(context: DataBackupContext) -> None:
             "text/csv",
             width="stretch",
         )
+        if "journals" in prepared_exports:
+            st.download_button(
+                "Download journal postings CSV", prepared_exports["journals"],
+                f"tabula-rasa-journals-{date.today()}.csv", "text/csv", width="stretch",
+            )
+        st.caption("Transactions and journal postings are separate CSVs. The complete workbook backup includes both.")
         backup_export = prepared_exports.get("backup")
         if isinstance(backup_export, bytes):
             st.download_button(

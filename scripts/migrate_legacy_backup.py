@@ -1,7 +1,7 @@
-"""Convert a supported legacy backup archive into the current v12 format.
+"""Convert a supported legacy backup archive into the current v13 format.
 
 This is an explicit, offline migration tool.  The running application accepts
-only v12 archives; conversion always writes a new archive and leaves the
+only v13 archives; conversion always writes a new archive and leaves the
 source untouched.
 """
 
@@ -34,6 +34,7 @@ from scripts._legacy_payees import legacy_payee_id
 from scripts.migration_schemas import (
     VERSION_10_WORKSHEET_HEADERS,
     VERSION_11_WORKSHEET_HEADERS,
+    VERSION_12_WORKSHEET_HEADERS,
 )
 
 
@@ -83,6 +84,7 @@ SOURCE_HEADERS: dict[int, dict[str, tuple[str, ...]]] = {
     9: {"Accounts": _V6_ACCOUNTS, "Categories": _V6_CATEGORIES, "Payees": _PAYEES, "Tags": _TAGS, "Transactions": _TRANSACTIONS_V9, "Mileage": _MILEAGE_V8, "MixedUseExpenses": _MIXED_USE_V9},
     10: _VERSION_10_WORKSHEET_HEADERS,
     11: VERSION_11_WORKSHEET_HEADERS,
+    12: VERSION_12_WORKSHEET_HEADERS,
 }
 
 
@@ -152,7 +154,7 @@ def _read_source(backup: bytes) -> tuple[int, dict[str, Any], dict[str, list[dic
                 raise StorageValidationError("Backup manifest must be a JSON object")
             version = manifest.get("format_version")
             if version not in SOURCE_HEADERS:
-                raise StorageValidationError("Only backup formats 1 through 11 can be migrated")
+                raise StorageValidationError("Only backup formats 1 through 12 can be migrated")
             schemas = SOURCE_HEADERS[version]
             if version >= 10:
                 _validate_version_10_manifest(archive, names, manifest, schemas)
@@ -273,8 +275,12 @@ def _current_tables(version: int, manifest: dict[str, Any], source: dict[str, li
     # empty current-format table without inventing schedule records.
     tables.setdefault("RecurringSchedules", [])
     # Assets are new in v12. A migrated v11 archive starts with an empty
-    # register, while its existing ledger data remains unchanged.
-    tables["Assets"] = []
+    # register, while v12 asset rows must be carried forward unchanged.
+    tables.setdefault("Assets", [])
+    # Journals are new in v13. Historical archives contain no journal rows;
+    # create the explicit empty relationship tables in the v13 output.
+    tables["JournalEntries"] = []
+    tables["JournalPostings"] = []
 
     for row in tables["Transactions"]:
         if version < 5:
@@ -329,7 +335,7 @@ def _encode_csv(headers: list[str], records: list[dict[str, str]]) -> bytes:
 
 
 def migrate_legacy_backup(backup: bytes, *, profile_key: str | None = None) -> bytes:
-    """Return a validated v12 archive converted from a v1-v11 archive."""
+    """Return a validated v13 archive converted from a v1-v12 archive."""
     version, source_manifest, source_tables, source_receipts = _read_source(backup)
     if version < 5 and not profile_key:
         raise StorageValidationError(
@@ -376,12 +382,12 @@ def migrate_legacy_backup(backup: bytes, *, profile_key: str | None = None) -> b
     converted = output.getvalue()
     validated = GoogleSheetsStorage.validate_backup_zip(converted)
     if validated.get("format_version") != BACKUP_FORMAT_VERSION:
-        raise StorageValidationError("Converted backup did not validate as format version 12")
+        raise StorageValidationError("Converted backup did not validate as format version 13")
     return converted
 
 
 def default_output_path(source: Path) -> Path:
-    return source.with_name(f"{source.stem}-format12.zip")
+    return source.with_name(f"{source.stem}-format13.zip")
 
 
 def migrate_backup_file(
@@ -403,8 +409,8 @@ def migrate_backup_file(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("backup", type=Path, help="Legacy v1-v11 backup ZIP")
-    parser.add_argument("--output", type=Path, help="Separate v12 output ZIP (never overwritten)")
+    parser.add_argument("backup", type=Path, help="Legacy v1-v12 backup ZIP")
+    parser.add_argument("--output", type=Path, help="Separate v13 output ZIP (never overwritten)")
     parser.add_argument("--profile", help="Profile key for a ledger-only archive's empty receipt inventory")
     args = parser.parse_args()
     try:
@@ -415,7 +421,7 @@ def main() -> None:
         )
     except (OSError, StorageValidationError) as error:
         raise SystemExit(f"Migration failed: {error}") from error
-    print(f"Validated format-12 backup created: {destination}")
+    print(f"Validated format-13 backup created: {destination}")
 
 
 if __name__ == "__main__":

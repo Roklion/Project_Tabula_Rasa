@@ -63,6 +63,14 @@ invoked developer check rather than a CI gate:
 python scripts\smoke_transactions.py
 ```
 
+The journal browser check uses the same synthetic fixture and four viewports.
+It checks unsaved entry-mode switching, explicit line controls, and grouped
+ledger header behavior:
+
+```powershell
+python scripts\smoke_journals.py
+```
+
 It signs in and checks the Transactions > Add transaction renderer at
 1440x1000, 1200x900, 900x900, and 390x844, including the optional receipt
 control and page-level horizontal overflow. The requested loopback port must

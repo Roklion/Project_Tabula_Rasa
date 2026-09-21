@@ -59,6 +59,24 @@ WORKSHEET_HEADERS = {
         "recurring_source_kind",
         "recurring_occurrence_type",
     ),
+    "JournalEntries": (
+        "id",
+        "txn_date",
+        "description",
+        "created_at",
+        "updated_at",
+    ),
+    "JournalPostings": (
+        "id",
+        "parent_entry_id",
+        "position",
+        "target_type",
+        "target_id",
+        "side",
+        "amount",
+        "payee_id",
+        "description",
+    ),
     "MixedUseExpenses": MIXED_USE_WORKSHEET_HEADERS,
     "RecurringSchedules": (
         "id",
@@ -147,7 +165,7 @@ CATEGORY_KINDS = {"Income", "Expense"}
 
 TRANSACTION_KINDS = {"Income", "Expense", "Transfer"}
 
-BACKUP_FORMAT_VERSION = 12
+BACKUP_FORMAT_VERSION = 13
 
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 

@@ -9,13 +9,16 @@ from datetime import date
 import hashlib
 import streamlit as st
 from tabula_rasa.hierarchy import ordered_accounts
-from tabula_rasa.ledger_presentation import ledger_frame
+from tabula_rasa.ledger_records import (
+    combine_ledger_entries, filter_ledger_entries, flatten_ledger_entries,
+    is_journal, ledger_summary_frame, search_ledger_entries, selected_parent_ids,
+    sort_ledger_entries,
+)
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
 from tabula_rasa.page_renderers.transactions.receipts import clear_missing_editor_receipt_recoveries
 from tabula_rasa.page_renderers.transactions.receipts import editor_receipt_recovery_active
 from tabula_rasa.page_renderers.transactions.receipts import editor_receipt_recovery_transaction_ids
 from tabula_rasa.page_renderers.transactions.receipts import render_filtered_editor_receipt_recovery
-from tabula_rasa.page_renderers.transactions.search import filter_transaction_rows
 from tabula_rasa.storage import StorageError
 from .ledger_bulk import render_bulk_actions
 from .ledger_editor import render_transaction_editor
@@ -85,7 +88,7 @@ def render_ledger(
     )
     filter_type = c3.selectbox(
         "Type",
-        ["All", "Income", "Expense", "Transfer"],
+        ["All", "Income", "Expense", "Transfer", "Journal"],
         key=f"ledger_filter_type_{context.profile_key}",
         disabled=copy_filters_locked,
         on_change=_clear_bulk_selection,
@@ -96,9 +99,13 @@ def render_ledger(
         for account in ordered_accounts(accounts)
         if (account_id := str(account.get("id") or "").strip())
     }
+    ledger_category_map = {
+        f"{category_paths[str(category['id'])]} · {category['kind']} category": str(category["id"])
+        for category in categories
+    }
     selected_account_names = st.multiselect(
         "Accounts",
-        list(ledger_account_map),
+        [*ledger_account_map, *ledger_category_map],
         key=f"ledger_filter_accounts_{context.profile_key}",
         placeholder="All accounts",
         disabled=copy_filters_locked,
@@ -110,7 +117,10 @@ def render_ledger(
         args=(context.profile_key,),
     )
     selected_account_ids = [
-        ledger_account_map[name] for name in selected_account_names
+        ledger_account_map[name] for name in selected_account_names if name in ledger_account_map
+    ]
+    selected_targets = [("account", item) for item in selected_account_ids] + [
+        ("category", ledger_category_map[name]) for name in selected_account_names if name in ledger_category_map
     ]
     ledger_tag_map = {
         str(tag["id"]): str(tag["name"])
@@ -185,11 +195,15 @@ def render_ledger(
         )
         for notice in recovery_notices:
             st.warning(notice)
-        structured_transactions = context.storage.list_transactions(
+        journal_entries = context.storage.list_journal_entries()
+        all_entries = combine_ledger_entries(all_transactions, journal_entries)
+        structured_transactions = filter_ledger_entries(
+            all_entries,
             start=start,
             end=end,
             kind=None if filter_type == "All" else filter_type,
-            account_ids=selected_account_ids or None,
+            targets=selected_targets,
+            tag_ids=selected_tag_ids,
         )
         if selected_tag_ids:
             selected_tag_id_set = set(selected_tag_ids)
@@ -205,7 +219,7 @@ def render_ledger(
         context.report_storage_error(error)
         render_error_footer()
         st.stop()
-    transaction_frame = ledger_frame(
+    transaction_frame = ledger_summary_frame(
         structured_transactions,
         accounts,
         categories,
@@ -250,18 +264,38 @@ def render_ledger(
         ]
     ]
     searchable_rows = transaction_frame.to_dict(orient="records")
-    matched_rows = filter_transaction_rows(searchable_rows, search_query)
-    matched_ids = {str(row["ID"]) for row in matched_rows}
-    transactions = [
-        transaction
-        for transaction in structured_transactions
-        if str(transaction.get("id", "")) in matched_ids
-    ]
+    transactions = search_ledger_entries(
+        structured_transactions, searchable_rows, accounts, categories, search_query,
+    )
+    sort_field, sort_descending = "Date", True
+    if journal_entries:
+        sort_columns = st.columns(2)
+        sort_field = sort_columns[0].selectbox(
+            "Sort entries by", ["Date", "Type", "Account", "Payee", "Amount", "Description", "ID"],
+            key=f"ledger_sort_field_{context.profile_key}", disabled=copy_filters_locked,
+        )
+        sort_descending = sort_columns[1].selectbox(
+            "Entry order", ["Descending", "Ascending"],
+            key=f"ledger_sort_direction_{context.profile_key}", disabled=copy_filters_locked,
+        ) == "Descending"
+        st.caption("Sort controls keep every journal with its postings. Column headers select columns.")
+        transactions = sort_ledger_entries(
+            transactions, searchable_rows, field=sort_field, descending=sort_descending,
+        )
+    matched_ids = {str(entry["id"]) for entry in transactions}
     transaction_frame = transaction_frame[
         transaction_frame["ID"].astype(str).isin(matched_ids)
     ].reset_index(drop=True)
+    if journal_entries:
+        transaction_frame = transaction_frame.set_index("ID").loc[
+            [entry["id"] for entry in transactions]
+        ].reset_index()
     transaction_ids = [str(transaction_id) for transaction_id in transaction_frame["ID"]]
     transaction_ids_set = set(transaction_ids)
+    display_frame, display_parent_ids = flatten_ledger_entries(
+        transactions if journal_entries else [transaction_by_id[item] for item in transaction_ids],
+        transaction_frame.to_dict(orient="records"), accounts, categories,
+    )
     if copy_source_id and copy_source_id not in transaction_ids_set:
         # Do not let a filter change turn the copy form into an editor for a
         # different row while its source is hidden.
@@ -279,6 +313,10 @@ def render_ledger(
         search_query.strip(),
         mode,
         tuple(transaction_ids),
+        tuple(display_parent_ids),
+        sort_field,
+        sort_descending,
+        context.configuration_revision,
     )
     previous_scope = st.session_state.get("transaction_bulk_scope")
     selected_scope_ids = tuple(
@@ -306,7 +344,7 @@ def render_ledger(
             "_bulk_"
             f"{st.session_state.get('transaction_bulk_selection_generation', 0)}"
         )
-    if not all_transactions:
+    if not all_entries:
         st.info("No transactions exist yet. Add a transaction to populate the ledger.")
     elif transaction_frame.empty:
         if search_query.strip():
@@ -318,7 +356,7 @@ def render_ledger(
             st.info(
                 "No transactions match the active date, type, or account filters."
             )
-    st.caption(f"Showing {len(transaction_frame)} transaction(s).")
+    st.caption(f"Showing {len(transaction_frame)} {'entry' if journal_entries else 'transaction'}(s).")
     if transaction_ids:
         if st.session_state.get("edit_transaction_id") not in transaction_ids:
             st.session_state["edit_transaction_id"] = transaction_ids[0]
@@ -330,25 +368,28 @@ def render_ledger(
     def select_ledger_transaction() -> None:
         selected_rows = st.session_state[transaction_ledger_key].selection.rows
         if mode == "Bulk":
-            st.session_state[_bulk_selection_key(context.profile_key)] = _selection_ids(
-                transaction_ids, selected_rows
+            st.session_state[_bulk_selection_key(context.profile_key)] = selected_parent_ids(
+                display_parent_ids, selected_rows
             )
-        elif selected_rows and selected_rows[0] < len(transaction_ids):
-            st.session_state["edit_transaction_id"] = transaction_ids[selected_rows[0]]
+        elif selected_rows and selected_rows[0] < len(display_parent_ids):
+            st.session_state["edit_transaction_id"] = display_parent_ids[selected_rows[0]]
 
     ledger_event = st.dataframe(
-        transaction_frame,
+        display_frame,
         hide_index=True,
         width="stretch",
         key=transaction_ledger_key,
-        on_select=("ignore" if copy_source_id else select_ledger_transaction),
+        on_select=((lambda: None) if copy_source_id and journal_entries else "ignore" if copy_source_id else select_ledger_transaction),
         selection_mode=(
-            []
+            (["single-column"] if journal_entries else [])
             if copy_source_id
-            else ("multi-row" if mode == "Bulk" else "single-row")
+            else (["multi-row" if mode == "Bulk" else "single-row", "single-column"]
+                  if journal_entries else "multi-row" if mode == "Bulk" else "single-row")
         ),
         column_config={
             "Amount": st.column_config.NumberColumn(format="$%.2f"),
+            "Debit": st.column_config.NumberColumn(format="$%.2f"),
+            "Credit": st.column_config.NumberColumn(format="$%.2f"),
             "Receipt": st.column_config.TextColumn(
                 width="small",
                 help="This transaction has linked receipts.",
@@ -365,10 +406,11 @@ def render_ledger(
             if str(transaction_id) in transaction_ids_set
         )
         if mode == "Bulk"
-        else _selection_ids(transaction_ids, selected_rows)
+        else selected_parent_ids(display_parent_ids, selected_rows)
     )
     selected_protected = any(
-        transaction_is_source_driven(transaction_by_id.get(transaction_id, {}))
+        (transaction_is_source_driven(transaction_by_id.get(transaction_id, {}))
+         or is_journal(transaction_by_id.get(transaction_id, {})))
         for transaction_id in selected_for_copy
     )
     copy_button = st.button(
@@ -427,6 +469,15 @@ def render_ledger(
             for transaction in transactions
         }
         expected_selected = [selected_by_id[item] for item in selected_ids]
+        if any(is_journal(entry) for entry in expected_selected):
+            st.caption(f"{len(selected_ids)} entry(s) selected.")
+            st.info("Journal selections can be exported here. Switch to Edit to change or permanently delete one complete journal. Copy and bulk changes are unavailable for journal selections.")
+            export_frame, _ = flatten_ledger_entries(
+                expected_selected, transaction_frame.to_dict(orient="records"), accounts, categories,
+            )
+            st.download_button("Export selected", export_frame.to_csv(index=False).encode("utf-8"),
+                               file_name="selected-ledger.csv", mime="text/csv")
+            return
         selected_snapshot_key = hashlib.sha256(
             repr(
                 tuple(

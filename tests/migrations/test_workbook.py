@@ -26,6 +26,7 @@ from scripts.migration_schemas import (
     VERSION_7_WORKSHEET_HEADERS,
     VERSION_10_WORKSHEET_HEADERS,
     VERSION_11_WORKSHEET_HEADERS,
+    VERSION_12_WORKSHEET_HEADERS,
 )
 from tests.fakes import FakeWorkbook, FakeWorksheet
 
@@ -38,6 +39,25 @@ def test_version_11_workbook_adds_empty_assets_sheet() -> None:
     assert workbook.sheets["Assets"].rows == [list(WORKSHEET_HEADERS["Assets"])]
     for title, headers in VERSION_11_WORKSHEET_HEADERS.items():
         assert workbook.sheets[title].rows[0] == list(headers)
+
+
+def test_version_12_workbook_adds_empty_journal_sheets() -> None:
+    workbook = FakeWorkbook(VERSION_12_WORKSHEET_HEADERS)
+
+    migrate_workbook(workbook)
+
+    for title in ("JournalEntries", "JournalPostings"):
+        assert workbook.sheets[title].rows == [list(WORKSHEET_HEADERS[title])]
+    GoogleSheetsStorage(workbook)
+
+
+def test_populated_version_12_is_recognized_as_historical() -> None:
+    values = {
+        title: [list(headers)] for title, headers in VERSION_12_WORKSHEET_HEADERS.items()
+    }
+    values["Accounts"].append(["account-1"])
+
+    assert _looks_like_historical_workbook(values)
 
 
 def _append_record(workbook: FakeWorkbook, title: str, values: dict[str, str]) -> None:

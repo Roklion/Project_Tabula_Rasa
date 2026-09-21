@@ -107,7 +107,7 @@ def rewrite_backup_tables(
     manifest = json.loads(contents["manifest.json"])
     if format_version is not None:
         manifest["format_version"] = format_version
-        if format_version < BACKUP_FORMAT_VERSION and "Payees.csv" in contents:
+        if format_version < 7 and "Payees.csv" in contents:
             payee_rows = list(
                 csv.reader(io.StringIO(contents["Payees.csv"].decode("utf-8")))
             )
@@ -137,7 +137,7 @@ def rewrite_backup_tables(
             manifest["worksheet_headers"].pop("Payees", None)
             manifest["row_counts"].pop("Payees", None)
             manifest["sha256"].pop("Payees.csv", None)
-        if format_version is not None and format_version < BACKUP_FORMAT_VERSION:
+        if format_version < 8:
             for title in ("Transactions", "Mileage"):
                 filename = f"{title}.csv"
                 rows = list(
@@ -175,11 +175,25 @@ def rewrite_backup_tables(
         manifest["sha256"][filename] = hashlib.sha256(
             contents[filename]
         ).hexdigest()
-    if format_version is not None and format_version < BACKUP_FORMAT_VERSION:
+    if format_version is not None and format_version < 9:
         contents.pop("MixedUseExpenses.csv", None)
         manifest["worksheet_headers"].pop("MixedUseExpenses", None)
         manifest["row_counts"].pop("MixedUseExpenses", None)
         manifest["sha256"].pop("MixedUseExpenses.csv", None)
+    if format_version is not None:
+        introduced = {
+            "RecurringSchedules": 11,
+            "Assets": 12,
+            "JournalEntries": 13,
+            "JournalPostings": 13,
+        }
+        for title, first_version in introduced.items():
+            if format_version >= first_version:
+                continue
+            contents.pop(f"{title}.csv", None)
+            manifest["worksheet_headers"].pop(title, None)
+            manifest["row_counts"].pop(title, None)
+            manifest["sha256"].pop(f"{title}.csv", None)
     contents["manifest.json"] = json.dumps(manifest).encode("utf-8")
     with zipfile.ZipFile(output, "w") as destination:
         for name, content in contents.items():

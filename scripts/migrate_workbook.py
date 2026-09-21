@@ -41,6 +41,8 @@ from scripts.migration_schemas import (  # noqa: E402
     VERSION_7_WORKSHEET_HEADERS,
     VERSION_10_WORKSHEET_HEADERS,
     VERSION_11_WORKSHEET_HEADERS,
+    VERSION_12_WORKSHEET_HEADERS,
+    JOURNAL_WORKSHEET_HEADERS,
 )
 from scripts.migrate_payees import migrate_workbook as migrate_payees  # noqa: E402
 
@@ -177,11 +179,13 @@ def _preflight(workbook: Any) -> dict[str, list[list[Any]]]:
             frozenset(VERSION_5_WORKSHEET_HEADERS["Accounts"]),
             frozenset(VERSION_6_WORKSHEET_HEADERS["Accounts"]),
             frozenset(WORKSHEET_HEADERS["Accounts"]),
+            frozenset(VERSION_12_WORKSHEET_HEADERS["Accounts"]),
         },
         "Categories": {
             frozenset(VERSION_5_WORKSHEET_HEADERS["Categories"]),
             frozenset(VERSION_6_WORKSHEET_HEADERS["Categories"]),
             frozenset(WORKSHEET_HEADERS["Categories"]),
+            frozenset(VERSION_12_WORKSHEET_HEADERS["Categories"]),
         },
         "Transactions": {
             frozenset(VERSION_3_WORKSHEET_HEADERS["Transactions"]),
@@ -192,6 +196,7 @@ def _preflight(workbook: Any) -> dict[str, list[list[Any]]]:
             frozenset(PRE_MIXED_USE_WORKSHEET_HEADERS["Transactions"]),
             frozenset(WORKSHEET_HEADERS["Transactions"]),
             frozenset(VERSION_10_WORKSHEET_HEADERS["Transactions"]),
+            frozenset(VERSION_12_WORKSHEET_HEADERS["Transactions"]),
         },
         "Mileage": {
             frozenset(VERSION_3_WORKSHEET_HEADERS["Mileage"]),
@@ -199,13 +204,29 @@ def _preflight(workbook: Any) -> dict[str, list[list[Any]]]:
             frozenset(LEGACY_TAGS_WORKBOOK_HEADERS["Mileage"]),
             frozenset(WORKSHEET_HEADERS["Mileage"]),
             frozenset(VERSION_10_WORKSHEET_HEADERS["Mileage"]),
+            frozenset(VERSION_12_WORKSHEET_HEADERS["Mileage"]),
         },
-        "Payees": {frozenset(WORKSHEET_HEADERS["Payees"])},
-        "Tags": {frozenset(WORKSHEET_HEADERS["Tags"])},
+        "Payees": {
+            frozenset(WORKSHEET_HEADERS["Payees"]),
+            frozenset(VERSION_12_WORKSHEET_HEADERS["Payees"]),
+        },
+        "Tags": {
+            frozenset(WORKSHEET_HEADERS["Tags"]),
+            frozenset(VERSION_12_WORKSHEET_HEADERS["Tags"]),
+        },
         "RecurringSchedules": {
             frozenset(VERSION_11_WORKSHEET_HEADERS["RecurringSchedules"]),
         },
-        "Assets": {frozenset(WORKSHEET_HEADERS["Assets"])},
+        "Assets": {
+            frozenset(WORKSHEET_HEADERS["Assets"]),
+            frozenset(VERSION_12_WORKSHEET_HEADERS["Assets"]),
+        },
+        "JournalEntries": {
+            frozenset(JOURNAL_WORKSHEET_HEADERS["JournalEntries"]),
+        },
+        "JournalPostings": {
+            frozenset(JOURNAL_WORKSHEET_HEADERS["JournalPostings"]),
+        },
         "MixedUseExpenses": {
             frozenset(
                 header
@@ -415,6 +436,13 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
         rows=initial.get("Assets"),
     )
 
+    # Journals were introduced in v13.  A v12 workbook is upgraded by adding
+    # the two explicit relationship tables, both initially empty; all legacy
+    # transaction rows remain in their original table unchanged.
+    for title, headers in JOURNAL_WORKSHEET_HEADERS.items():
+        worksheet = _ensure_sheet(workbook, title, worksheets, initial)
+        _ensure_headers(worksheet, headers, rows=initial.get(title))
+
     source_tags = _backfill_mixed_use_source_tags(workbook)
     # This read-only validation also checks current relationship, domain, and
     # reference invariants before success is reported.
@@ -439,6 +467,7 @@ def migrate_workbook(workbook: Any) -> dict[str, int]:
     storage.list_mileage_trips()
     storage.list_mixed_use_expenses()
     storage.list_assets()
+    storage.list_journal_entries(_force_refresh=True)
     return {
         "payees": int(payee_result.get("payees", 0)),
         "transactions": int(payee_result.get("transactions", 0)),

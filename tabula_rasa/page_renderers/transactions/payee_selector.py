@@ -16,6 +16,7 @@ def render_payee_selector(
     preserve_selected_id: bool = False,
     selected_label: str | None = None,
     container: Any | None = None,
+    accept_new_options: bool = True,
 ) -> tuple[str, str]:
     """Render the shared managed-Payee selector and return stable values.
 
@@ -68,7 +69,7 @@ def render_payee_selector(
             value, "No payee" if value == "" else value
         ),
         key=key,
-        accept_new_options=True,
+        accept_new_options=accept_new_options,
     )
     return resolve_payee_selection(payee_value, available_payees, payee_options)
 
