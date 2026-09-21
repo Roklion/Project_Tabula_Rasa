@@ -39,6 +39,16 @@ The Assets page has a separate check using the same four viewports and fixture:
 python scripts\smoke_assets.py
 ```
 
+The journal check enables a synthetic three-posting journal and exercises dirty
+entry-type switching, line controls, and grouped ledger header clicks at the
+same four viewports:
+
+```powershell
+python scripts\smoke_journals.py
+```
+
+This opt-in journal fixture does not change the ordinary transaction smoke data.
+
 Install the development dependencies and the local Chromium browser once per
 environment:
 

@@ -86,6 +86,13 @@ def render_transaction_editor(
         selected = next(
             transaction for transaction in transactions if transaction["id"] == edit_id
         )
+        if "_journal" in selected:
+            from .journal_editor import render_journal_entry_editor
+            return render_journal_entry_editor(
+                context, entry=selected["_journal"], accounts=accounts,
+                categories=categories, account_paths=account_paths,
+                category_paths=category_paths, payees=payees,
+            )
         if str(selected.get("source_type") or "").strip().lower() == "depreciation":
             st.info("This depreciation entry is managed from Assets. Open Assets to view its schedule and posting history.")
             return True

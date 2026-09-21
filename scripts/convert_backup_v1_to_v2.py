@@ -2,7 +2,7 @@
 
 Use :mod:`scripts.migrate_legacy_backup` for the single supported migration
 entry point. The function alias remains available to callers that imported
-the old module, but now produces a v12 archive.
+the old module, but now produces a v13 archive.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ def convert_backup_v1_to_v2(
     *,
     profile_key: str | None = None,
 ) -> bytes:
-    """Deprecated alias; migrate the format-1 archive directly to v12."""
+    """Deprecated alias; migrate the format-1 archive directly to v13."""
     return migrate_legacy_backup(backup, profile_key=profile_key)
 
 

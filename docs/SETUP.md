@@ -78,9 +78,13 @@ make the workbook public.
 | Categories | id, name, kind, parent_id |
 | Payees | id, name, active, created_at |
 | Tags | id, name, active, created_at |
-| Transactions | id, txn_date, kind, amount, account_id, to_account_id, category_id, payee_id, description, reference, receipt_references, created_at, source_type, source_id, tag_ids |
+| Transactions | id, txn_date, kind, amount, account_id, to_account_id, category_id, payee_id, description, reference, receipt_references, created_at, source_type, source_id, tag_ids, recurring_schedule_id, recurring_scheduled_date, recurring_source_kind, recurring_occurrence_type |
 | Mileage | id, trip_date, miles, vehicle, start_location, destination, business_purpose, notes, created_at, tag_ids |
-| MixedUseExpenses | id, txn_date, kind, total_expense, business_use_percentage, allocated_amount, account_id, category_id, payee_id, description, reference, receipt_references, allocation_rationale, linked_transaction_id, tag_ids, created_at |
+| MixedUseExpenses | id, txn_date, kind, total_expense, business_use_percentage, allocated_amount, account_id, category_id, payee_id, description, reference, receipt_references, allocation_rationale, linked_transaction_id, tag_ids, recurring_schedule_id, recurring_scheduled_date, recurring_source_kind, recurring_occurrence_type, created_at |
+| RecurringSchedules | id, name, kind, source_kind, recurrence_unit, recurrence_interval, anchor_date, start_date, end_date, status, amount, total_expense, business_use_percentage, account_id, category_id, payee_id, description, reference, allocation_rationale, tag_ids, created_at, updated_at, attention_code, attention_at |
+| Assets | id, name, asset_type, notes, acquisition_date, depreciation_start_date, cost_basis, salvage_value, useful_life_quarters, depreciation_method, depreciation_expense_account_id, accumulated_depreciation_account_id, payee_id, reference, tag_ids, source_transaction_id, retired_date, status, schedule_overrides, created_at, updated_at |
+| JournalEntries | id, txn_date, description, created_at, updated_at |
+| JournalPostings | id, parent_entry_id, position, target_type, target_id, side, amount, payee_id, description |
 
 The default Sheet1 tab may remain or be deleted. Existing compatible tabs are
 preserved. Blank-workbook initialization creates the required tabs and headers;
@@ -121,10 +125,13 @@ python scripts/migrate_workbook.py --secrets .streamlit/secrets.toml --profile P
 ```
 
 The migration command adds the hierarchy, receipt, managed-payee, tag,
-provenance, and mixed-use columns, and backfills v9 mixed-use source tags from
-their linked projection. It validates the complete current schema before
-reporting success and can be rerun after an interrupted migration. Read-only
-validation remains non-mutating and does not perform this conversion.
+provenance, mixed-use, recurring, fixed-asset, and journal tables and columns,
+and backfills v9 mixed-use source tags from their linked projection. When it
+recognizes a format-12 workbook, it adds empty `JournalEntries` and
+`JournalPostings` tables without rewriting simple transaction rows. It validates
+the complete format-13 schema before reporting success and can be rerun after
+an interrupted migration. Read-only validation remains non-mutating and does
+not perform this conversion.
 
 If the historical Drive receipt files predate workbook receipt references, run
 the separate one-time association migration after the workbook migration:

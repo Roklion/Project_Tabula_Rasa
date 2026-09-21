@@ -43,6 +43,7 @@ class CategoriesContext:
 def _category_frame(
     categories: list[dict],
     transactions: list[dict],
+    *, journals=(),
 ) -> tuple[pd.DataFrame, list[str], dict[str, dict]]:
     category_by_id = {
         str(category.get("id") or "").strip(): category
@@ -56,6 +57,12 @@ def _category_frame(
             transaction_count_by_id[category_id] = (
                 transaction_count_by_id.get(category_id, 0) + 1
             )
+    for entry in journals:
+        for category_id in {
+            line["target_id"] for line in entry["postings"]
+            if line["target_type"] == "category"
+        }:
+            transaction_count_by_id[category_id] = transaction_count_by_id.get(category_id, 0) + 1
     rows = []
     item_ids = []
     for category in ordered_categories(categories):
@@ -99,13 +106,14 @@ def render_categories(context: CategoriesContext) -> None:
         context.storage.prefetch_worksheets("Categories", "Transactions")
         categories = context.storage.list_categories()
         transactions = context.storage.list_transactions()
+        journals = context.storage.list_journal_entries()
     except StorageError as error:
         context.report_storage_error(error)
         render_global_footer()
         st.stop()
 
     category_frame, category_ids, category_by_id = _category_frame(
-        categories, transactions
+        categories, transactions, journals=journals
     )
     category_paths = hierarchy_paths(categories)
     category_table_key = (

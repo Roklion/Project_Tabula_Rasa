@@ -99,18 +99,18 @@ def _rewrite_legacy(
     return output.getvalue()
 
 
-def test_all_supported_legacy_versions_migrate_to_v12() -> None:
+def test_all_supported_legacy_versions_migrate_to_v13() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     current = storage.export_backup_zip(
         {"schema_version": 1, "business_profile_key": "test", "receipts": []}
     )
 
-    for version in range(1, 12):
+    for version in range(1, 13):
         converted = migrate_legacy_backup(_downgrade(current, version), profile_key="test")
-        assert GoogleSheetsStorage.validate_backup_zip(converted)["format_version"] == 12
+        assert GoogleSheetsStorage.validate_backup_zip(converted)["format_version"] == 13
 
 
-def test_real_v10_shaped_archive_converts_to_v12_with_empty_recurring_table() -> None:
+def test_real_v10_shaped_archive_converts_to_v13_with_empty_recurring_table() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     account = storage.create_account("Checking", "Bank")
     category = storage.create_category("Office", "Expense")
@@ -132,7 +132,7 @@ def test_real_v10_shaped_archive_converts_to_v12_with_empty_recurring_table() ->
             csv.DictReader(io.StringIO(archive.read("Transactions.csv").decode()))
         )
         assert transactions and transactions[0]["recurring_source_kind"] == ""
-    assert GoogleSheetsStorage.validate_backup_zip(converted)["format_version"] == 12
+    assert GoogleSheetsStorage.validate_backup_zip(converted)["format_version"] == 13
 
 
 def test_v10_migration_rejects_source_checksum_mismatch() -> None:
@@ -238,7 +238,7 @@ def test_v6_payee_text_and_hierarchy_become_current_records() -> None:
     assert target.list_accounts(active_only=False)[1]["parent_id"] == parent["id"]
 
 
-def test_v5_receipt_inventory_is_carried_into_v12() -> None:
+def test_v5_receipt_inventory_is_carried_into_v13() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     account = storage.create_account("Checking", "Bank")
     category = storage.create_category("Office", "Expense")
@@ -428,7 +428,7 @@ def test_migration_accepts_reordered_legacy_headers() -> None:
         migrate_legacy_backup(legacy, profile_key="test")
     )[
         "format_version"
-    ] == 12
+    ] == 13
 
 
 def test_pre_v9_provenance_columns_are_cleared_during_migration() -> None:
@@ -494,7 +494,7 @@ def test_migration_strips_legacy_header_whitespace() -> None:
         _rewrite_legacy(legacy, update_manifest=add_header_whitespace),
         profile_key="test",
     )
-    assert GoogleSheetsStorage.validate_backup_zip(converted)["format_version"] == 12
+    assert GoogleSheetsStorage.validate_backup_zip(converted)["format_version"] == 13
 
 
 def test_cli_requires_profile_for_ledger_only_migrations(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

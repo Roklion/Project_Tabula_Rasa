@@ -20,6 +20,7 @@ from .assets import ASSET_TYPES, AssetsMixin
 from .backup import BackupMixin
 from .mileage import MileageMixin
 from .mixed_use import _MixedUseMixin
+from .journals import JournalsMixin
 from .recurring import RecurringMixin
 from .payees import PayeesMixin
 from .receipts import ReceiptsMixin
@@ -60,6 +61,7 @@ class GoogleSheetsStorage(
     PayeesMixin,
     TagsMixin,
     TransactionsMixin,
+    JournalsMixin,
     _MixedUseMixin,
     RecurringMixin,
     ReceiptsMixin,

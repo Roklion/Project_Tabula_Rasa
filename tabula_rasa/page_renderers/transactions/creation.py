@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from datetime import date
 
 from uuid import uuid4
 
@@ -36,6 +38,42 @@ from tabula_rasa.page_renderers.tag_selector import (
 from tabula_rasa.storage import StorageConflictError, StorageValidationError
 
 
+@dataclass(frozen=True)
+class SimpleCreationState:
+    """Mode-specific values used by the entry-mode discard guard."""
+
+    draft: Mapping[str, object]
+    switch_blocked: bool = False
+
+
+def _receipt_signature(receipts: Sequence[object] | None) -> tuple[tuple[object, ...], ...]:
+    return tuple(
+        (
+            str(getattr(receipt, "file_id", "") or ""),
+            str(getattr(receipt, "name", "") or ""),
+            int(getattr(receipt, "size", 0) or 0),
+        )
+        for receipt in receipts or ()
+    )
+
+
+def _simple_draft_snapshot(
+    draft: Mapping[str, object],
+    *,
+    recurrence: object,
+    receipts: Sequence[object] | None,
+) -> dict[str, object]:
+    """Return comparable mode-specific values, excluding shared date and memo."""
+    return {
+        key: value
+        for key, value in draft.items()
+        if key not in {"txn_date", "description"}
+    } | {
+        "recurrence": recurrence,
+        "receipts": _receipt_signature(receipts),
+    }
+
+
 def render_add_transaction(
     context: TransactionsContext,
     *,
@@ -44,17 +82,23 @@ def render_add_transaction(
     category_paths: Mapping[str, str],
     payees: Sequence[Mapping[str, object]],
     tags: Sequence[Mapping[str, object]],
-) -> None:
+    shared_date: date | None = None,
+    shared_description: str | None = None,
+    show_heading: bool = True,
+    check_recovery: bool = True,
+) -> SimpleCreationState | None:
     """Render the existing profile-scoped transaction creation workflow."""
-    recovery = creation_receipt_workflow(context)
-    if isinstance(recovery, Mapping) and recovery.get("mixed_use_source_id"):
-        # Mixed-use recovery is rendered by its source-aware tab; rendering it
-        # here as well would register the same retry widget twice.
-        return
-    if render_receipt_creation_recovery(context):
-        return
-    st.subheader("Add transaction")
-    st.caption("Record income, expenses, or transfers in the active account set.")
+    if check_recovery:
+        recovery = creation_receipt_workflow(context)
+        if isinstance(recovery, Mapping) and recovery.get("mixed_use_source_id"):
+            # Mixed-use recovery is rendered by its source-aware tab; rendering it
+            # here as well would register the same retry widget twice.
+            return None
+        if render_receipt_creation_recovery(context):
+            return None
+    if show_heading:
+        st.subheader("Add transaction")
+        st.caption("Record income, expenses, or transfers in the active account set.")
     transaction_form_keys = (
         "add_transaction_date",
         "add_transaction_amount",
@@ -91,180 +135,191 @@ def render_add_transaction(
     )
     if not account_map:
         st.warning("Create an active account before recording transactions.")
-        return
+        return SimpleCreationState({"kind": kind})
 
     categories_for_kind = [
         category for category in categories if category["kind"] == kind
     ]
     if kind != "Transfer" and not categories_for_kind:
         st.warning(f"Create a {kind.lower()} category first.")
-        return
+        return SimpleCreationState({"kind": kind})
     account_paths = {
         str(account_id): str(account_path)
         for account_path, account_id in account_map.items()
     }
 
-    with st.form("add_transaction", clear_on_submit=False):
-        draft = render_transaction_fields(
-            mode="add",
-            defaults=edit_defaults_with_pending_payload(
-                {"kind": kind}, pending_payload
-            ),
-            account_ids=list(account_map.values()),
-            categories=categories,
-            account_paths=account_paths,
-            category_paths=category_paths,
-            payees=payees,
-            tags=tags,
+    draft = render_transaction_fields(
+        mode="add",
+        defaults=edit_defaults_with_pending_payload(
+            {"kind": kind}, pending_payload
+        ),
+        account_ids=list(account_map.values()),
+        categories=categories,
+        account_paths=account_paths,
+        category_paths=category_paths,
+        payees=payees,
+        tags=tags,
+        key_prefix="add_transaction",
+        shared_date=shared_date,
+        shared_description=shared_description,
+    )
+    recurrence = None
+    if kind == "Expense":
+        restore_recurrence_controls(
+            st.session_state,
+            pending_payload,
             key_prefix="add_transaction",
         )
-        recurrence = None
-        if kind == "Expense":
-            restore_recurrence_controls(
-                st.session_state,
-                pending_payload,
-                key_prefix="add_transaction",
-            )
-            recurrence = render_recurrence_controls(
-                label="Repeat this Expense",
-                key_prefix="add_transaction",
-                help_text=(
-                    "Create a profile-local schedule and this transaction "
-                    "as its initial occurrence."
-                ),
-            )
-        recurring = bool(recurrence and recurrence.enabled)
-        receipt_uploads = render_receipt_uploader(
-            key="add_transaction_receipts",
+        recurrence = render_recurrence_controls(
+            label="Repeat this Expense",
+            key_prefix="add_transaction",
+            help_text=(
+                "Create a profile-local schedule and this transaction "
+                "as its initial occurrence."
+            ),
         )
-        save_error = st.empty()
-        submitted = st.form_submit_button(
-            "Save transaction", type="primary", width="stretch"
-        )
-        if submitted:
-            if draft_error := validate_transaction_draft(draft):
-                save_error.error(draft_error)
-            elif tag_error := tag_selector_error("add_transaction_tags"):
-                save_error.error(tag_error)
-            elif tag_error := inline_tag_name_error(draft["new_tag_name"]):
-                save_error.error(tag_error)
-            elif (
-                kind == "Expense"
-                and not recurring
-                and pending_recurrence.has_pending(st.session_state)
-            ):
-                save_error.error(
-                    "A previous recurring save is incomplete. Re-enable "
-                    "Repeat this Expense to retry it before recording a "
-                    "different expense."
-                )
+    recurring = bool(recurrence and recurrence.enabled)
+    receipt_uploads = render_receipt_uploader(
+        key="add_transaction_receipts",
+    )
+    save_error = st.empty()
+    submitted = st.button(
+        "Save transaction",
+        type="primary",
+        width="stretch",
+        key="add_transaction_save",
+    )
+    if submitted:
+        if draft_error := validate_transaction_draft(draft):
+            save_error.error(draft_error)
+        elif tag_error := tag_selector_error("add_transaction_tags"):
+            save_error.error(tag_error)
+        elif tag_error := inline_tag_name_error(draft["new_tag_name"]):
+            save_error.error(tag_error)
+        elif (
+            kind == "Expense"
+            and not recurring
+            and pending_recurrence.has_pending(st.session_state)
+        ):
+            save_error.error(
+                "A previous recurring save is incomplete. Re-enable "
+                "Repeat this Expense to retry it before recording a "
+                "different expense."
+            )
+        else:
+            payload = transaction_payload_from_draft(draft)
+            try:
+                prepared_receipts = prepare_receipt_uploads(receipt_uploads or [])
+            except Exception as error:  # noqa: BLE001 - show safe validation
+                save_error.error(f"Receipt validation failed: {error}")
             else:
-                payload = transaction_payload_from_draft(draft)
-                try:
-                    prepared_receipts = prepare_receipt_uploads(receipt_uploads or [])
-                except Exception as error:  # noqa: BLE001 - show safe validation
-                    save_error.error(f"Receipt validation failed: {error}")
+                receipt_folder = None
+                drive_settings = context.profile_secrets.get("google_drive")
+                if isinstance(drive_settings, Mapping):
+                    receipt_folder = drive_settings.get("receipt_folder")
+                if prepared_receipts and not (
+                    isinstance(receipt_folder, Mapping) and receipt_folder.get("id")
+                ):
+                    save_error.error(
+                        "Configure a Google Drive receipt folder for this "
+                        "profile before saving a transaction with receipts."
+                    )
                 else:
-                    receipt_folder = None
-                    drive_settings = context.profile_secrets.get("google_drive")
-                    if isinstance(drive_settings, Mapping):
-                        receipt_folder = drive_settings.get("receipt_folder")
-                    if prepared_receipts and not (
-                        isinstance(receipt_folder, Mapping) and receipt_folder.get("id")
-                    ):
-                        save_error.error(
-                            "Configure a Google Drive receipt folder for this "
-                            "profile before saving a transaction with receipts."
-                        )
-                    else:
+                    def clear_pending_recurring_if_active() -> None:
+                        if kind == "Expense" and recurring:
+                            pending_recurrence.clear(st.session_state)
 
-                        def clear_pending_recurring_if_active() -> None:
+                    if kind == "Expense" and recurring:
+                        pending_ids = pending_recurrence.ensure_ids(
+                            st.session_state,
+                            configuration_revision=str(
+                                context.profile_secrets.get("spreadsheet_id")
+                                or context.configuration_revision
+                            ),
+                        )
+                        payload.update(
+                            recurrence.schedule_fields(
+                                description=draft["description"],
+                                fallback_name="Recurring expense",
+                            )
+                        )
+                        payload = pending_recurrence.remember_payload(
+                            st.session_state,
+                            {**payload, **pending_ids},
+                        )
+
+                    # Keep the existing submission fingerprint independent of the UUID.
+                    transaction_id = str(payload.get("transaction_id") or uuid4())
+                    if kind == "Expense" and recurring:
+                        payload["transaction_id"] = transaction_id
+
+                    def operation():
+                        try:
+                            return (
+                                context.storage.create_recurring_expense(**payload)[
+                                    "transaction"
+                                ]
+                                if kind == "Expense" and recurring
+                                else context.storage.create_transaction(
+                                    transaction_id=transaction_id, **payload
+                                )
+                            )
+                        except (StorageConflictError, StorageValidationError):
                             if kind == "Expense" and recurring:
                                 pending_recurrence.clear(st.session_state)
+                            raise
 
-                        if kind == "Expense" and recurring:
-                            pending_ids = pending_recurrence.ensure_ids(
-                                st.session_state,
-                                configuration_revision=str(
-                                    context.profile_secrets.get("spreadsheet_id")
-                                    or context.configuration_revision
-                                ),
+                    context.confirmed_write(
+                        "create_transaction",
+                        payload,
+                        operation,
+                        lambda _result: (
+                            st.session_state.get("write_success_notice")
+                            or (
+                                "Transaction saved. Receipt processing needs "
+                                "attention; use the recovery controls above."
+                                if prepared_receipts
+                                and st.session_state.get(
+                                    receipt_creation_workflow_key(
+                                        context.profile_key
+                                    )
+                                )
+                                else "Transaction saved."
                             )
-                            payload.update(
-                                recurrence.schedule_fields(
-                                    description=draft["description"],
-                                    fallback_name="Recurring expense",
+                        ),
+                        on_success=(
+                            lambda: (
+                                (
+                                    clear_pending_recurring_if_active(),
+                                    context.schedule_widget_reset(
+                                        "reset_add_transaction_form"
+                                    ),
                                 )
+                                if not prepared_receipts
+                                else None
                             )
-                            payload = pending_recurrence.remember_payload(
-                                st.session_state,
-                                {**payload, **pending_ids},
+                        ),
+                        on_confirmed=(
+                            lambda result: (
+                                (
+                                    clear_pending_recurring_if_active(),
+                                    handle_confirmed_transaction_receipts(
+                                        context,
+                                        result,
+                                        prepared_receipts,
+                                    ),
+                                )
+                                if prepared_receipts
+                                else None
                             )
-
-                        # Keep the existing submission fingerprint independent of the UUID.
-                        transaction_id = str(payload.get("transaction_id") or uuid4())
-                        if kind == "Expense" and recurring:
-                            payload["transaction_id"] = transaction_id
-
-                        def operation():
-                            try:
-                                return (
-                                    context.storage.create_recurring_expense(**payload)[
-                                        "transaction"
-                                    ]
-                                    if kind == "Expense" and recurring
-                                    else context.storage.create_transaction(
-                                        transaction_id=transaction_id, **payload
-                                    )
-                                )
-                            except (StorageConflictError, StorageValidationError):
-                                if kind == "Expense" and recurring:
-                                    pending_recurrence.clear(st.session_state)
-                                raise
-
-                        context.confirmed_write(
-                            "create_transaction",
-                            payload,
-                            operation,
-                            lambda _result: (
-                                st.session_state.get("write_success_notice")
-                                or (
-                                    "Transaction saved. Receipt processing needs "
-                                    "attention; use the recovery controls above."
-                                    if prepared_receipts
-                                    and st.session_state.get(
-                                        receipt_creation_workflow_key(
-                                            context.profile_key
-                                        )
-                                    )
-                                    else "Transaction saved."
-                                )
-                            ),
-                            on_success=(
-                                lambda: (
-                                    (
-                                        clear_pending_recurring_if_active(),
-                                        context.schedule_widget_reset(
-                                            "reset_add_transaction_form"
-                                        ),
-                                    )
-                                    if not prepared_receipts
-                                    else None
-                                )
-                            ),
-                            on_confirmed=(
-                                lambda result: (
-                                    (
-                                        clear_pending_recurring_if_active(),
-                                        handle_confirmed_transaction_receipts(
-                                            context,
-                                            result,
-                                            prepared_receipts,
-                                        ),
-                                    )
-                                    if prepared_receipts
-                                    else None
-                                )
-                            ),
-                            report_error=save_error.error,
-                        )
+                        ),
+                        report_error=save_error.error,
+                    )
+    return SimpleCreationState(
+        _simple_draft_snapshot(
+            draft,
+            recurrence=recurrence,
+            receipts=receipt_uploads,
+        ),
+        switch_blocked=pending_recurrence.has_pending(st.session_state),
+    )

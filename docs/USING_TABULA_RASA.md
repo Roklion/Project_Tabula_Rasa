@@ -205,6 +205,11 @@ not affect income or expenses.
 
 ### Add a transaction
 
+In **Add transaction**, the **Entry Type** selector defaults to **Simple
+Transaction**. Date and Description / memo are shared above the selected editor.
+Changing to **Multi-line Journal** after entering mode-specific values asks you
+to discard those values or keep editing. Shared Date and memo are retained.
+
 Choose **Income**, **Expense**, or **Transfer**, then enter the date, amount,
 account information, and optional payee, Tags, reference, and description. Income
 and Expense require a same-kind category. Transfer requires two different
@@ -242,6 +247,29 @@ uncertain Sheets link is read back once; if it still cannot be confirmed, the
 uploaded file remains available under **Unreferenced receipt**. A completed
 workflow resets the form intentionally; a failed validation or transaction
 write does not upload receipts.
+
+### Add a multi-line journal
+
+Choose **Multi-line Journal** for an advanced balanced entry. Start with two
+blank posting rows, use **+ Add line** for more, and **Remove** to discard a draft
+line. Each row has Account, Debit, Credit, Description, and Payee / customer.
+The Account selector includes managed accounts and Income/Expense categories,
+identified by their labels. Payees are selected from the existing managed list.
+
+Enter a positive amount on exactly one side of every populated row. Completely
+blank rows are ignored; an incomplete populated row must be completed or cleared.
+The editor shows Total Debits, Total Credits, and Difference. Save becomes
+available only when at least two complete lines balance to the cent.
+
+For example, debit Office Expense $100, debit Meals Expense $50, and credit
+Checking $150. This saves one journal with three linked postings. It reduces
+Checking by $150 and records $150 of expenses. A credit to an expense category
+reduces expenses; debit/credit direction is retained exactly, including reversals.
+
+Journals share the normal ledger and affect account balances and reports. They
+do not support receipts, Tags, recurrence, copying, or import in this release.
+Use the ordinary Simple Transaction editor for those supported workflows.
+Depreciation remains available independently through Assets.
 
 ### Mixed-use expenses
 
@@ -304,13 +332,27 @@ The ledger opens latest-date-first. Its controls appear in this order:
 5. **Tags**;
 6. **Search transactions**;
 7. conditional **Clear search**; and
-8. **Edit/Bulk** mode immediately before the table.
+8. **Edit/Bulk** mode; and
+9. **Sort entries by** and **Entry order** when the workbook contains journals.
 
 The table retains these user-facing columns: Date, Type, Account, To account,
 Category, Payee, Amount, Tags, Description, Receipt, Reference, and ID. To
 account is blank for non-transfers, Category is blank for transfers, and Tags
 is blank when no Tags are assigned. The Tags filter includes records containing
 any selected Tag. Receipt shows when one or more receipts are linked.
+
+Ordinary transactions remain one row. A journal shows a parent summary followed
+by all its postings, with Debit and Credit columns when journals are visible.
+Its summary amount is total debits, equal to total credits. Select a parent or
+posting to open the entire journal editor. A saved record always opens in its
+original editor type. Permanent journal deletion removes every linked posting
+after acknowledgement; individual postings cannot be deleted from the ledger.
+
+Type includes **Journal**. The Accounts filter also offers labeled categories.
+If a journal posting matches an account, payee, or description search, the whole
+journal stays visible. Counts represent logical entries. With journals present,
+use the sort controls: header clicks select columns, keeping journal groups
+together. App-level ordering remains selected across Edit/Bulk changes.
 
 Search is a trimmed, case-insensitive substring match over Type, Account, To
 account, Category, Payee, Tags, Description, Reference, and transaction ID. It is
@@ -327,6 +369,8 @@ client-side sorting can persist while the same dataframe widget remains
 mounted. Switching Edit/Bulk recreates the widget, safely clears incompatible
 selection state, and resets ordering to latest-date-first; the application
 does not promise to preserve client-side sorting across that mode change.
+This native sorting behavior applies to workbooks without journals; journals use
+the controlled sort behavior described above.
 
 Edit is the default mode. The table does not begin with a visibly preselected
 row. When the edit section is opened, its selector targets the first visible
@@ -335,6 +379,11 @@ target. If filters or search hide the current target, the target moves to the
 first visible row or is cleared when no rows remain.
 
 ### Bulk actions
+
+If the selection contains a journal, only **Export selected** is available and
+includes the complete selected journals. Use Edit to change or permanently delete
+a journal. Copy and bulk edits/deletion remain available for eligible simple
+transactions; a mixed selection never silently changes only its simple entries.
 
 Choose **Bulk** explicitly to select multiple rows from the visible result
 set. Changing the business, filters, search, mode, or navigation clears the

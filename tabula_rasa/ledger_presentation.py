@@ -112,8 +112,10 @@ def ledger_frame(
     )
 
 
-def balances_frame(accounts: list[dict], transactions: list[dict]) -> pd.DataFrame:
-    rows = account_balances(accounts, transactions)
+def balances_frame(
+    accounts: list[dict], transactions: list[dict], *, journals=(),
+) -> pd.DataFrame:
+    rows = account_balances(accounts, transactions, journals=journals)
     account_paths = hierarchy_paths(accounts)
     return pd.DataFrame(
         [

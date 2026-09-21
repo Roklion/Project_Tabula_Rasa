@@ -20,6 +20,7 @@ from decimal import InvalidOperation
 from typing import Any
 from tabula_rasa.hierarchy import HierarchyValidationError
 from tabula_rasa.hierarchy import validate_two_level_hierarchy
+from tabula_rasa.journal import JournalValidationError, normalize_journal_postings
 from tabula_rasa.mixed_use import MIXED_USE_SOURCE_TYPE
 from tabula_rasa.mixed_use import MixedUseAllocationError
 from tabula_rasa.mixed_use import validate_mixed_use_allocation
@@ -47,6 +48,13 @@ def _looks_like_historical_workbook(
     older workbook to the explicit migration command.
     """
     present_titles = set(values)
+    if "Assets" in present_titles and not {
+        "JournalEntries",
+        "JournalPostings",
+    }.issubset(present_titles):
+        # Format 12 and an interrupted format-13 migration have the fixed-asset
+        # register but not both journal worksheets.
+        return True
     if "Assets" not in present_titles and "RecurringSchedules" in present_titles:
         return True
     if "RecurringSchedules" not in present_titles and (
@@ -359,6 +367,133 @@ def _as_bool(value: Any, field: str = "active") -> bool:
         return False
     raise StorageValidationError(f"{field} must be true or false")
 
+
+def _validate_journal_tables(
+    entries: Iterable[Mapping[str, Any]],
+    postings: Iterable[Mapping[str, Any]],
+    *,
+    account_ids: Iterable[str],
+    category_ids: Iterable[str],
+    payee_ids: Iterable[str],
+) -> list[dict[str, Any]]:
+    """Validate journal structure and references, returning complete entries."""
+    known_accounts = {str(value).strip() for value in account_ids}
+    known_categories = {str(value).strip() for value in category_ids}
+    known_payees = {str(value).strip() for value in payee_ids}
+    entries_by_id: dict[str, dict[str, Any]] = {}
+    for source in entries:
+        entry = dict(source)
+        entry_id = _clean_text(entry.get("id"), "Journal entry ID", required=True)
+        if entry_id in entries_by_id:
+            raise StorageValidationError("Journal entry IDs must be unique")
+        entry["id"] = entry_id
+        entry["txn_date"] = _iso_date(entry.get("txn_date"))
+        entry["description"] = _clean_text(
+            entry.get("description"), "Journal description"
+        )
+        entry["created_at"] = _clean_text(
+            entry.get("created_at"), "Journal created time", required=True
+        )
+        entry["updated_at"] = _clean_text(
+            entry.get("updated_at"), "Journal updated time", required=True
+        )
+        entries_by_id[entry_id] = entry
+
+    posting_ids: set[str] = set()
+    grouped: dict[str, list[dict[str, Any]]] = {
+        entry_id: [] for entry_id in entries_by_id
+    }
+    for source in postings:
+        posting = dict(source)
+        posting_id = _clean_text(
+            posting.get("id"), "Journal posting ID", required=True
+        )
+        if posting_id in posting_ids:
+            raise StorageValidationError("Journal posting IDs must be unique")
+        posting_ids.add(posting_id)
+        parent_id = _clean_text(
+            posting.get("parent_entry_id"),
+            "Journal parent entry ID",
+            required=True,
+        )
+        if parent_id not in entries_by_id:
+            raise StorageValidationError(
+                "Journal posting references an unknown parent entry"
+            )
+        posting["id"] = posting_id
+        posting["parent_entry_id"] = parent_id
+        posting["position"] = _positive_integer(
+            posting.get("position"), "Journal posting position"
+        )
+        grouped[parent_id].append(posting)
+
+    complete: list[dict[str, Any]] = []
+    for entry_id, entry in entries_by_id.items():
+        source_postings = sorted(
+            grouped[entry_id], key=lambda posting: posting["position"]
+        )
+        positions = [posting["position"] for posting in source_postings]
+        if positions != list(range(1, len(source_postings) + 1)):
+            raise StorageValidationError(
+                "Journal posting positions must be unique and contiguous from 1"
+            )
+        try:
+            canonical_postings = normalize_journal_postings(source_postings)
+        except JournalValidationError as exc:
+            raise StorageValidationError(str(exc)) from exc
+        for source_posting, posting in zip(source_postings, canonical_postings):
+            posting["parent_entry_id"] = entry_id
+            target_id = posting["target_id"]
+            if posting["target_type"] == "account":
+                if target_id not in known_accounts:
+                    raise StorageValidationError(
+                        "Journal posting references an unknown account"
+                    )
+            elif target_id not in known_categories:
+                raise StorageValidationError(
+                    "Journal posting references an unknown category"
+                )
+            payee_id = posting["payee_id"]
+            if payee_id and payee_id not in known_payees:
+                raise StorageValidationError(
+                    "Journal posting references an unknown payee"
+                )
+            if any(
+                str(source_posting.get(field, "") or "").strip()
+                != str(posting.get(field, "") or "")
+                for field in (
+                    "id",
+                    "target_type",
+                    "target_id",
+                    "side",
+                    "amount",
+                    "payee_id",
+                    "description",
+                )
+            ):
+                raise StorageValidationError(
+                    "Journal posting values are not in canonical form"
+                )
+        debits = sum(
+            Decimal(posting["amount"])
+            for posting in canonical_postings
+            if posting["side"] == "Debit"
+        )
+        credits = sum(
+            Decimal(posting["amount"])
+            for posting in canonical_postings
+            if posting["side"] == "Credit"
+        )
+        complete.append(
+            {
+                **entry,
+                "postings": canonical_postings,
+                "total_debits": format(debits, "f"),
+                "total_credits": format(credits, "f"),
+            }
+        )
+    return complete
+
 def mixed_use_ledger_description(description: Any, rationale: Any) -> str:
     """Build the deterministic description for a mixed-use projection."""
     original = _clean_text(description, "Description")
@@ -645,6 +780,13 @@ def _parse_backup_zip(
     category_ids = set(category_records)
     payee_ids = {record["id"] for record in tables["Payees"][1]}
     tag_ids = {record["id"] for record in tables["Tags"][1]}
+    _validate_journal_tables(
+        tables["JournalEntries"][1],
+        tables["JournalPostings"][1],
+        account_ids=account_ids,
+        category_ids=category_ids,
+        payee_ids=payee_ids,
+    )
     schedule_records = tables["RecurringSchedules"][1]
     schedule_ids = [record.get("id", "") for record in schedule_records]
     if any(
@@ -922,6 +1064,7 @@ __all__ = [
     "_clean_text",
     "_validate_hierarchy_records",
     "_validate_payee_records",
+    "_validate_journal_tables",
     "_decimal_values_match",
     "_encode_receipt_references",
     "_normalize_tag_ids",

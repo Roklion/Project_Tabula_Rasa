@@ -60,8 +60,9 @@ class AccountsContext:
 def _account_frame(
     accounts: list[dict],
     transactions: list[dict],
+    *, journals=(),
 ) -> tuple[pd.DataFrame, list[str], dict[str, dict]]:
-    balances = balances_frame(accounts, transactions)
+    balances = balances_frame(accounts, transactions, journals=journals)
     account_by_id = {
         str(account.get("id") or "").strip(): account
         for account in accounts
@@ -136,13 +137,14 @@ def render_accounts(context: AccountsContext) -> None:
         context.storage.prefetch_worksheets("Accounts", "Transactions")
         accounts = context.storage.list_accounts(active_only=False)
         transactions = context.storage.list_transactions()
+        journals = context.storage.list_journal_entries()
     except StorageError as error:
         context.report_storage_error(error)
         render_global_footer()
         st.stop()
 
     account_frame, account_ids, account_by_id = _account_frame(
-        accounts, transactions
+        accounts, transactions, journals=journals
     )
     account_paths = hierarchy_paths(accounts)
     table_key = (

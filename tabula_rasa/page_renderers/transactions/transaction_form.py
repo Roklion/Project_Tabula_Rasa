@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from datetime import date
 from typing import Literal
 
 import streamlit as st
@@ -104,6 +105,8 @@ def render_transaction_fields(
     tags: Sequence[Mapping[str, object]],
     key_prefix: str,
     key_scope: str = "",
+    shared_date: date | None = None,
+    shared_description: str | None = None,
 ) -> dict[str, object]:
     """Render the shared transaction fields and return a normalized draft.
 
@@ -120,7 +123,11 @@ def render_transaction_fields(
     to_account_id = str(defaults.get("to_account_id") or "")
     category_id = str(defaults.get("category_id") or "")
 
-    transaction_date = render_transaction_date(defaults.get("txn_date"), key=field_key("date"))
+    transaction_date = (
+        shared_date
+        if shared_date is not None
+        else render_transaction_date(defaults.get("txn_date"), key=field_key("date"))
+    )
     category_ids = transaction_category_ids(categories, kind)
     category_field_name = (
         f"category_{kind.casefold()}" if mode == "add" else "category"
@@ -210,8 +217,12 @@ def render_transaction_fields(
         tags_key=field_key("tags"), preserve_current=mode != "copy",
         payee_container=c1, reference_container=c2,
     )
-    description = render_transaction_description(
-        defaults.get("description"), key=field_key("description"),
+    description = (
+        shared_description
+        if shared_description is not None
+        else render_transaction_description(
+            defaults.get("description"), key=field_key("description")
+        )
     )
     if kind == "Transfer":
         # Keep a conditional category widget's state available to Streamlit's

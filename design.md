@@ -553,10 +553,20 @@ paperclip indicator when one or more receipts are linked.
 
 #### Add transaction contract
 
-The form presents:
+The Add transaction tab is a **New entry** surface with a top-level **Entry
+Type** segmented selector: **Simple Transaction** (default) and **Multi-line
+Journal**. Date and Description / memo are shared above the selected editor.
+Creation uses ordinary keyed widgets so unsaved changes are available to the
+mode-switch guard. Switching a meaningful draft requires **Discard and switch**
+or **Keep editing**; shared Date and memo survive either choice. Receipt recovery
+replaces the creation surface until resolved. Pending recurring saves also
+prevent a mode switch. Saved records have a fixed editor type, with no conversion
+selector.
+
+The Simple Transaction editor preserves the existing fields:
 
 1. Transaction type: Income, Expense, or Transfer
-2. Date
+2. Shared Date above the editor
 3. Category and Amount for Income or Expense
 4. Amount for Transfer
 5. Account: **To Account** for Income, **From Account** for Expense or
@@ -571,7 +581,7 @@ The form presents:
    the selector creates and selects the inline Tag. Only one new Tag name may
    be entered per record; typed existing names select the stored Tag
    case-insensitively.
-9. Description / memo
+9. Shared Description / memo above the editor
 10. Receipt (optional)
 11. Save transaction
 
@@ -586,6 +596,31 @@ confirm the write and intentionally reset the form on the next rerun. On
 receipt save, follow the ordered receipt sequence in the generic receipt
 contract.
 
+#### Multi-line Journal contract
+
+The advanced editor starts with two blank posting rows. Each row contains a
+managed **Account** selector, **Debit**, **Credit**, **Description**, and a managed
+**Payee / customer** selector. The Account selector combines balance-sheet
+accounts and Income/Expense categories with explicit labels; stable typed
+references preserve the distinction. **+ Add line** appends a row, and **Remove**
+removes a draft line while retaining at least two usable editor rows. The compact
+row grid stacks on narrow screens. Line IDs remain stable when other rows change.
+
+Every populated line requires a valid target and exactly one positive,
+cent-normalized Debit or Credit. Completely blank rows are omitted; incomplete
+populated rows block save. **Total Debits**, **Total Credits**, and **Difference**
+remain visible. Save is disabled until at least two valid postings balance
+exactly. Storage repeats validation and saves the parent and all postings in one
+native Sheets batch. A successful API response is authoritative; an uncertain
+response receives one readback, then either confirmed success or inspection
+guidance. Draft identities remain available for a retry.
+
+Journal edit uses the full posting grid and a complete expected-entry snapshot;
+stale edits cannot overwrite a changed entry. Permanent deletion requires the
+normal acknowledgement and removes the parent and all postings together.
+Journals have no receipt, Tag, recurrence, copy, or import workflow in this
+release. Existing simple workflows retain those supported features.
+
 #### Ledger controls and table
 
 Controls appear in this exact order:
@@ -597,13 +632,16 @@ Controls appear in this exact order:
 5. Tags
 6. Search transactions
 7. conditional Clear search
-8. Edit/Bulk mode immediately before the table
+8. Edit/Bulk mode
+9. Sort entries by and Entry order when the workbook contains journals
 
 The table columns, in exact order, are Date, Type, Account, To account,
 Category, Payee, Amount, Tags, Description, Receipt, Reference, and ID. To
 account is blank for non-transfers, Category is blank for transfers, Tags is
 blank when none are assigned, Receipt indicates one or more linked receipts,
-and ID remains accessible for disambiguation. The Tags filter matches a record
+and ID remains accessible for disambiguation. When journals are visible, Debit
+and Credit columns follow Amount. Ordinary entries and journal parents leave
+these columns blank. The Tags filter matches a record
 when it contains any selected Tag.
 
 The ledger defaults to latest-date-first and Edit mode. The table does not
@@ -626,7 +664,24 @@ so the native client-side sort resets to latest-date-first. The design does
 not promise to preserve client-side sort across that recreation. Interactive
 sorting may persist while the same widget remains mounted, including across
 the two Transactions tabs. Navigation away and back resets the table
-generation and latest-date-first ordering.
+generation and latest-date-first ordering for a simple-only workbook. When a
+workbook contains journals, app-level sort controls order complete logical
+entries; column selection disables native dataframe sorting in Edit, Bulk, and
+copy-locked views. Header clicks select a column and never split a journal group.
+
+Each journal renders one parent summary (date, Journal indicator, stable ID,
+memo, Multiple accounts / N postings, amount = total debits), immediately followed
+by all posting rows. Children use a subordinate arrow, blank repeated parent
+fields, target path, one Debit/Credit amount, payee, and description. Summary
+amounts are not repeated on children. Filtering/searching any posting retains
+the parent and every sibling. The Type filter includes Journal; Accounts also
+offers labeled Income/Expense categories. Untagged journals do not match an active
+Tag filter. Counts operate on logical entries, never display rows.
+
+Selecting any journal row targets its parent editor. Multiple selected rows of
+one journal count once. Filter, ordering, mode, profile, and data-revision changes
+invalidate incompatible selection. No posting is independently editable or
+permanently deletable. No pagination is currently used.
 
 In Edit or Bulk mode, **Copy transaction** is enabled only when exactly one
 visible transaction is selected. It opens the existing editor as a clearly
@@ -653,6 +708,11 @@ count and only these actions:
 - **Permanently delete selected:** shows count and aggregate absolute amount,
   requires acknowledgement, removes selected ledger rows, and retains linked
   Drive files as unreferenced files.
+
+When any selected logical record is a journal, **Export selected** includes its
+complete parent/posting group. Copy, bulk changes, and bulk permanent deletion
+are unavailable for that selection; an explanation directs the user to Edit for
+whole-journal edit/delete. The app never silently mutates only the simple subset.
 
 Bulk actions revalidate all selected stable IDs immediately before one batch
 write and never silently partially apply. Transfers and mixed Income/Expense

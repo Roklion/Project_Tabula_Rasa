@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import runpy
+import os
 import sys
 from datetime import date, timedelta
 from pathlib import Path
@@ -41,6 +42,19 @@ fake_storage.create_mixed_use_expense(
     category_id=smoke_category["id"],
     allocation_rationale="Viewport smoke allocation",
 )
+if os.environ.get("TABULA_RASA_SMOKE_JOURNALS") == "1":
+    journal_category = fake_storage.list_categories(kind="Expense")[1]
+    fake_storage.create_journal_entry(
+        entry_id="viewport-journal", txn_date=date.today().isoformat(),
+        description="Viewport journal", postings=[
+            {"id": "viewport-line-1", "target_type": "category", "target_id": smoke_category["id"],
+             "side": "Debit", "amount": "100", "payee_id": smoke_payee["id"], "description": "First posting"},
+            {"id": "viewport-line-2", "target_type": "category", "target_id": journal_category["id"],
+             "side": "Debit", "amount": "50", "description": "Second posting"},
+            {"id": "viewport-line-3", "target_type": "account", "target_id": smoke_account["id"],
+             "side": "Credit", "amount": "150", "description": "Offset posting"},
+        ],
+    )
 fake_storage.create_asset(
     name="Viewport smoke laptop",
     asset_type="Computers & office equipment",

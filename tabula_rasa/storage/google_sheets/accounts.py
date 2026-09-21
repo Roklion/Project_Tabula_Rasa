@@ -268,6 +268,10 @@ class AccountsMixin:
 
         def reject_mixed_use_kind_change() -> None:
             self._reject_asset_expense_category_change(normalized_category_id)
+            self._reject_journal_category_reference(
+                normalized_category_id,
+                "Category kind cannot change while used by a journal entry",
+            )
             sources, _ = self._raw_mixed_use_snapshot()
             if any(
                 str(source.get("category_id") or "").strip() == normalized_category_id
@@ -345,6 +349,19 @@ class AccountsMixin:
                 "Category is used by an asset depreciation schedule"
             )
 
+    def _reject_journal_category_reference(
+        self, category_id: str, message: str
+    ) -> None:
+        category_id = _clean_text(category_id, "Category ID", required=True)
+        if any(
+            _clean_text(row.values.get("target_type"), "Journal target type")
+            == "category"
+            and _clean_text(row.values.get("target_id"), "Journal target")
+            == category_id
+            for row in self._rows("JournalPostings", force_refresh=True)
+        ):
+            raise StorageConflictError(message)
+
     def delete_category(self, category_id: str) -> None:
         with self._workbook_locks.ledger:
             self._delete_category(category_id)
@@ -352,6 +369,9 @@ class AccountsMixin:
     def _delete_category(self, category_id: str) -> None:
         self._reject_asset_expense_category_change(category_id)
         category_id = _clean_text(category_id, "ID", required=True)
+        self._reject_journal_category_reference(
+            category_id, "That category has journal entries and cannot be deleted"
+        )
         current = self._find_row("Categories", category_id)
         existing_categories = self.list_categories(_force_refresh=True)
         if any(
@@ -404,6 +424,9 @@ class AccountsMixin:
 
         def refresh() -> None:
             nonlocal current_row
+            self._reject_journal_category_reference(
+                category_id, "That category has journal entries and cannot be deleted"
+            )
             mixed_use_sources = self._rows("MixedUseExpenses", force_refresh=True)
             if any(
                 _clean_text(row.values.get("category_id"), "Category") == category_id

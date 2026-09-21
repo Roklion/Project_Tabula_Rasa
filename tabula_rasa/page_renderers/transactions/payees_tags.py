@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -28,11 +28,22 @@ def _name_map(records: list[dict[str, str]]) -> dict[str, dict[str, str]]:
 def _payee_reference_counts(
     transactions: list[dict[str, str]], mixed_sources: list[dict[str, str]],
     schedules: list[dict[str, str]],
+    journals: list[dict[str, Any]] = (),
+    assets: list[dict[str, str]] = (),
 ) -> dict[str, int]:
     counts: dict[str, int] = {}
-    for record in (*transactions, *mixed_sources, *schedules):
+    for record in (*transactions, *mixed_sources, *schedules, *assets):
         payee_id = str(record.get("payee_id") or "").strip()
         if payee_id:
+            counts[payee_id] = counts.get(payee_id, 0) + 1
+    for entry in journals:
+        payee_ids = {
+            str(posting.get("payee_id") or "").strip()
+            for posting in entry.get("postings", ())
+            if isinstance(posting, Mapping)
+            and str(posting.get("payee_id") or "").strip()
+        }
+        for payee_id in payee_ids:
             counts[payee_id] = counts.get(payee_id, 0) + 1
     return counts
 
@@ -73,8 +84,12 @@ def _render_payees(
     transactions: list[dict[str, str]],
     mixed_sources: list[dict[str, str]],
     schedules: list[dict[str, str]],
+    journals: list[dict[str, Any]],
+    assets: list[dict[str, str]],
 ) -> None:
-    counts = _payee_reference_counts(transactions, mixed_sources, schedules)
+    counts = _payee_reference_counts(
+        transactions, mixed_sources, schedules, journals, assets
+    )
     st.subheader("Payees")
     st.caption(
         "Payees are stored only in the selected business profile. Renaming keeps "
@@ -248,12 +263,22 @@ def render_payees_tags(context: PayeesTagsContext) -> None:
         transactions = context.storage.list_transactions()
         mixed_sources = context.storage.list_mixed_use_expense_sources()
         schedules = context.storage.list_recurring_schedules()
+        journals = context.storage.list_journal_entries()
+        assets = context.storage.list_assets()
         mileage = context.storage.list_mileage_trips()
     except StorageError as error:
         context.report_storage_error(error)
         return
     payees_tab, tags_tab = st.tabs(["Payees", "Tags"])
     with payees_tab:
-        _render_payees(context, payees, transactions, mixed_sources, schedules)
+        _render_payees(
+            context,
+            payees,
+            transactions,
+            mixed_sources,
+            schedules,
+            journals,
+            assets,
+        )
     with tags_tab:
         _render_tags(context, tags, transactions, mileage, mixed_sources, schedules)

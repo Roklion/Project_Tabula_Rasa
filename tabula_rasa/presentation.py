@@ -537,6 +537,17 @@ def global_styles(tokens: Mapping[str, str] = DESIGN_TOKENS) -> str:
             margin-bottom: 1.25rem;
         }}
 
+        .st-key-journal_create_posting_grid [data-testid="stHorizontalBlock"],
+        .st-key-journal_edit_posting_grid [data-testid="stHorizontalBlock"] {{
+            flex-wrap: wrap;
+        }}
+
+        .st-key-journal_create_posting_grid [data-testid="stColumn"],
+        .st-key-journal_edit_posting_grid [data-testid="stColumn"] {{
+            min-width: min(100%, 12rem);
+            flex: 1 1 12rem;
+        }}
+
         [data-testid="stTabs"] [role="tablist"] {{
             column-gap: 0.2rem;
         }}
@@ -614,6 +625,22 @@ def reset_profile_presentation_state(
         f"mixed_use_copy_new_transaction_id_{previous_profile_key}",
         f"mixed_use_copy_generation_{previous_profile_key}",
         f"mixed_use_copy_button_{previous_profile_key}",
+    }
+    entry_creation_keys = {
+        f"entry_creation_{name}_{previous_profile_key}"
+        for name in (
+            "active_mode",
+            "requested_mode",
+            "pending_mode",
+            "switch_notice",
+            "confirm_switch",
+            "cancel_switch",
+            "simple_baseline",
+            "simple_dirty",
+            "simple_switch_blocked",
+            "journal_baseline",
+            "journal_dirty",
+        )
     }
     mixed_use_prefixes = (
         f"mixed_use_log_{previous_profile_key}_",
@@ -701,6 +728,15 @@ def reset_profile_presentation_state(
         if (
             key in keys
             or key in mixed_use_keys
+            or key in entry_creation_keys
+            or (
+                key.startswith(f"journal_create_{previous_profile_key}_")
+                or key.startswith(f"journal_edit_{previous_profile_key}_")
+                or (
+                    key.startswith(("journal_create_", "journal_edit_"))
+                    and key.endswith(f"_{previous_profile_key}")
+                )
+            )
             or (
                 key.startswith(prefixes)
                 and not key.startswith(preserved_retry_prefixes)

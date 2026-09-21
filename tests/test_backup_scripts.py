@@ -440,7 +440,12 @@ class TestBackupScripts:
             timestamp = north_backup.name.removeprefix(
                 "tabula-rasa-backup-"
             ).removesuffix(".zip")
-            local_date = datetime.strptime(timestamp, "%Y%m%dT%H%M%SZ").date()
+            local_date = (
+                datetime.strptime(timestamp, "%Y%m%dT%H%M%SZ")
+                .replace(tzinfo=timezone.utc)
+                .astimezone()
+                .date()
+            )
             assert verified_backup_for_week(north_dir, local_date=local_date)
             assert verified_backup_for_week(south_dir, local_date=local_date) == south_backup
 
@@ -457,7 +462,12 @@ class TestBackupScripts:
             timestamp = north_backup.name.removeprefix(
                 "tabula-rasa-backup-"
             ).removesuffix(".zip")
-            local_date = datetime.strptime(timestamp, "%Y%m%dT%H%M%SZ").date()
+            local_date = (
+                datetime.strptime(timestamp, "%Y%m%dT%H%M%SZ")
+                .replace(tzinfo=timezone.utc)
+                .astimezone()
+                .date()
+            )
 
             assert (
                 verified_backup_for_week(
@@ -655,6 +665,8 @@ class TestBackupScripts:
                 "Mileage": 0,
                 "MixedUseExpenses": 0,
                 "RecurringSchedules": 0,
+                "JournalEntries": 0,
+                "JournalPostings": 0,
             }
             if "Assets" in row_counts:
                 expected_row_counts["Assets"] = 0

@@ -28,6 +28,7 @@ from .validation import (
     _parse_backup_zip,
     _utc_now,
     _validate_hierarchy_records,
+    _validate_journal_tables,
     _validate_mixed_use_tables,
     _validate_tag_records,
 )
@@ -44,6 +45,15 @@ class BackupMixin:
         csv_files: dict[str, bytes] = {}
         archive_buffer = io.BytesIO()
         snapshot = self._snapshot(WORKSHEET_HEADERS, force_refresh=True)
+        _validate_journal_tables(
+            [dict(row.values) for row in snapshot["JournalEntries"]],
+            [dict(row.values) for row in snapshot["JournalPostings"]],
+            account_ids=(row.values.get("id", "") for row in snapshot["Accounts"]),
+            category_ids=(
+                row.values.get("id", "") for row in snapshot["Categories"]
+            ),
+            payee_ids=(row.values.get("id", "") for row in snapshot["Payees"]),
+        )
         _validate_mixed_use_tables(
             {
                 title: (WORKSHEET_HEADERS[title], [dict(row.values) for row in rows])

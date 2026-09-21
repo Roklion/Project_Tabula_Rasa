@@ -8,6 +8,8 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
+from tabula_rasa.accounting_postings import accounting_postings, category_activity
+
 
 def _decimal(value: Any) -> Decimal:
     return Decimal(str(value))
@@ -34,23 +36,19 @@ def _in_period(
 def account_balances(
     accounts: Iterable[Mapping[str, Any]],
     transactions: Iterable[Mapping[str, Any]],
+    *,
+    journals: Iterable[Mapping[str, Any]] = (),
 ) -> list[dict[str, Any]]:
     """Calculate balances including transfers without affecting P&L."""
     accounts = [dict(account) for account in accounts]
     balances = {
         account["id"]: _decimal(account["opening_balance"]) for account in accounts
     }
-    for transaction in transactions:
-        amount = _decimal(transaction["amount"])
-        kind = transaction["kind"]
-        source = transaction["account_id"]
-        if kind == "Income":
-            balances[source] += amount
-        elif kind == "Expense":
-            balances[source] -= amount
-        elif kind == "Transfer":
-            balances[source] -= amount
-            balances[transaction["to_account_id"]] += amount
+    for posting in accounting_postings(transactions, journals):
+        if posting["target_type"] == "account":
+            balances[posting["target_id"]] += (
+                posting["amount"] if posting["side"] == "Debit" else -posting["amount"]
+            )
 
     return [
         {
@@ -91,6 +89,8 @@ def balance_sheet(
     transactions: Iterable[Mapping[str, Any]],
     *,
     as_of: date | str | None = None,
+    journals: Iterable[Mapping[str, Any]] = (),
+    categories: Iterable[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     """Return classified balances and an accounting-equation check."""
     transaction_rows = [
@@ -99,7 +99,11 @@ def balance_sheet(
         if as_of is None
         or str(transaction["txn_date"]) <= str(_date_text(as_of))
     ]
-    balance_rows = account_balances(accounts, transaction_rows)
+    journal_rows = [
+        entry for entry in journals
+        if as_of is None or str(entry["txn_date"]) <= str(_date_text(as_of))
+    ]
+    balance_rows = account_balances(accounts, transaction_rows, journals=journal_rows)
     sections: dict[str, list[dict[str, Any]]] = {
         "Asset": [],
         "Liability": [],
@@ -136,14 +140,10 @@ def balance_sheet(
             row["rollup_balance"] = float(rollup_balances[row["id"]])
 
     current_earnings = sum(
-        (
-            _decimal(transaction["amount"])
-            if transaction["kind"] == "Income"
-            else -_decimal(transaction["amount"])
-            if transaction["kind"] == "Expense"
-            else Decimal("0")
-        )
-        for transaction in transaction_rows
+        (category_activity(posting) * (1 if posting["category_kind"] == "Income" else -1)
+         for posting in accounting_postings(transaction_rows, journal_rows, categories)
+         if posting["target_type"] == "category"),
+        Decimal("0"),
     )
     total_equity = totals["Equity"] + current_earnings
     difference = totals["Asset"] - totals["Liability"] - total_equity
@@ -164,17 +164,20 @@ def profit_and_loss(
     *,
     start: date | str | None = None,
     end: date | str | None = None,
+    journals: Iterable[Mapping[str, Any]] = (),
+    categories: Iterable[Mapping[str, Any]] = (),
 ) -> dict[str, float]:
     """Return income, expense, and net totals; transfers are excluded."""
     income = Decimal("0")
     expenses = Decimal("0")
-    for transaction in transactions:
-        if not _in_period(transaction, start, end):
+    for posting in accounting_postings(transactions, journals, categories):
+        if posting["target_type"] != "category" or not _in_period(posting, start, end):
             continue
-        if transaction["kind"] == "Income":
-            income += _decimal(transaction["amount"])
-        elif transaction["kind"] == "Expense":
-            expenses += _decimal(transaction["amount"])
+        activity = category_activity(posting)
+        if posting["category_kind"] == "Income":
+            income += activity
+        else:
+            expenses += activity
     return {
         "income": float(income),
         "expenses": float(expenses),
@@ -187,18 +190,19 @@ def monthly_performance(
     *,
     start: date | str | None = None,
     end: date | str | None = None,
+    journals: Iterable[Mapping[str, Any]] = (),
+    categories: Iterable[Mapping[str, Any]] = (),
 ) -> list[dict[str, Any]]:
     totals: dict[str, dict[str, Decimal]] = defaultdict(
         lambda: {"income": Decimal("0"), "expenses": Decimal("0")}
     )
-    for transaction in transactions:
-        if not _in_period(transaction, start, end):
+    for posting in accounting_postings(transactions, journals, categories):
+        if not _in_period(posting, start, end):
             continue
-        month = str(transaction["txn_date"])[:7]
-        if transaction["kind"] == "Income":
-            totals[month]["income"] += _decimal(transaction["amount"])
-        elif transaction["kind"] == "Expense":
-            totals[month]["expenses"] += _decimal(transaction["amount"])
+        month = str(posting["txn_date"])[:7]
+        if posting["target_type"] == "category":
+            key = "income" if posting["category_kind"] == "Income" else "expenses"
+            totals[month][key] += category_activity(posting)
     return [
         {
             "month": month,
@@ -215,6 +219,7 @@ def expenses_by_category(
     *,
     start: date | str | None = None,
     end: date | str | None = None,
+    journals: Iterable[Mapping[str, Any]] = (),
 ) -> list[dict[str, Any]]:
     return [
         {"category": row["category"], "total": row["rollup_total"]}
@@ -227,6 +232,7 @@ def expenses_by_category(
                     kind="Expense",
                     start=start,
                     end=end,
+                    journals=journals,
                 )
                 if row["layer"] == 1
             ),
@@ -245,6 +251,7 @@ def category_activity_rollups(
     kind: str,
     start: date | str | None = None,
     end: date | str | None = None,
+    journals: Iterable[Mapping[str, Any]] = (),
 ) -> list[dict[str, Any]]:
     """Return Layer 1 rollups and Layer 2 direct activity without duplication."""
     category_rows = []
@@ -260,16 +267,15 @@ def category_activity_rollups(
         and category.get("kind") == kind
     }
     totals: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
-    for transaction in transactions:
-        if transaction["kind"] != kind or not _in_period(transaction, start, end):
+    for posting in accounting_postings(transactions, journals, category_rows):
+        if (
+            posting["target_type"] != "category"
+            or posting["category_kind"] != kind
+            or not _in_period(posting, start, end)
+        ):
             continue
-        raw_category_id = transaction.get("category_id")
-        category_id = (
-            str(raw_category_id).strip() if raw_category_id is not None else ""
-        )
-        totals[category_id if category_id in by_id else ""] += _decimal(
-            transaction["amount"]
-        )
+        category_id = posting["target_id"].strip()
+        totals[category_id if category_id in by_id else ""] += category_activity(posting)
 
     children: dict[str, list[dict[str, Any]]] = defaultdict(list)
     roots: list[dict[str, Any]] = []

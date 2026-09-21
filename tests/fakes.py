@@ -112,6 +112,20 @@ class FakeWorkbook:
                     while len(sheet.rows[row]) <= target_column:
                         sheet.rows[row].append("")
                     sheet.rows[row][target_column] = value
+            elif "appendCells" in request:
+                append = request["appendCells"]
+                sheet = next(
+                    sheet
+                    for sheet in self.sheets.values()
+                    if sheet.id == append["sheetId"]
+                )
+                for source_row in append["rows"]:
+                    sheet.rows.append(
+                        [
+                            cell["userEnteredValue"].get("stringValue", "")
+                            for cell in source_row["values"]
+                        ]
+                    )
             elif "deleteDimension" in request:
                 deletion = request["deleteDimension"]["range"]
                 sheet = next(
