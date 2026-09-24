@@ -352,12 +352,13 @@ class TestAppAuthentication:
                 app.text_input[0].input(TEST_PASSWORD)
                 app.button[0].click().run()
 
-                assert any("North Shop" in str(item.value) for item in app.caption)
+                assert "Profile key: north" in [item.value for item in app.caption]
                 assert any("North Ledger" in str(item.value) for item in app.caption)
                 app.selectbox[0].set_value("south").run()
 
                 assert app.session_state["previous_business_profile"] == "south"
-                assert any("South Shop" in str(item.value) for item in app.caption)
+                assert "Profile key: south" in [item.value for item in app.caption]
+                assert "Profile key: north" not in [item.value for item in app.caption]
                 assert any("South Ledger" in str(item.value) for item in app.caption)
                 assert from_secrets.call_args.args[0]["spreadsheet_id"] == "south-sheet-id"
 

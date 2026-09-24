@@ -317,7 +317,7 @@ with st.sidebar:
                 key="business_profile",
                 format_func=lambda key: profile_by_key[key].name,
             )
-            st.caption(profile_by_key[selected_profile_key].name)
+            st.caption(f"Profile key: {selected_profile_key}")
         else:
             selected_profile_key = None
             st.info("Add the first business profile to continue.")

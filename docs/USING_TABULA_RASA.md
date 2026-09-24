@@ -10,6 +10,8 @@ see. Setup is in [Setup](SETUP.md), Drive administration is in
 Enter the application password before any ledger page or workbook data is
 shown. After signing in, select the business in the sidebar. The selected
 business and workbook title remain visible while working.
+The sidebar also shows the selected profile key directly below the Business
+selector. Use that key when identifying a profile in setup or recovery steps.
 
 The global footer makes the [Terms of Use](TERMS_OF_USE.md) and
 [Privacy Policy](PRIVACY_POLICY.md) available before sign-in and on every

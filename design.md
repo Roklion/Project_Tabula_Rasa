@@ -220,6 +220,9 @@ surface, sidebar, and documentation. The authenticated sidebar is ordered:
 9. Account settings, only when local loopback administration is enabled
 10. Log out in the utility area
 
+The Business selector shows each business name and a muted caption immediately
+below it with the selected immutable profile key (`Profile key: <key>`).
+
 Below the workbook metadata and utility controls, the authenticated sidebar
 also contains a compact, read-only **Google Maps API usage** expander after
 authentication. Routes API and Places API (New) are visibly separate. Each
