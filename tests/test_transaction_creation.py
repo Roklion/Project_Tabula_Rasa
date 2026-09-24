@@ -115,6 +115,8 @@ def test_edit_expense_can_create_schedule_from_existing_transaction() -> None:
 
     with authenticated_app(storage) as app:
         navigate_to(app, "Transactions")
+        app.session_state["transactions_tab_test"] = "View & edit ledger"
+        app.run()
         editor = next(item for item in app.expander if item.label == "Edit transaction")
         by_label(editor.checkbox, "Repeat this Expense").set_value(True).run()
         editor = next(item for item in app.expander if item.label == "Edit transaction")
@@ -123,6 +125,10 @@ def test_edit_expense_can_create_schedule_from_existing_transaction() -> None:
         by_label(editor.number_input, "Amount").set_value(25).run()
         editor = next(item for item in app.expander if item.label == "Edit transaction")
         by_label(editor.button, "Save changes").click().run()
+        assert not any(item.label == "Edit schedule template" for item in app.expander)
+        app.session_state["transactions_tab_test"] = "Recurring expenses"
+        app.run()
+        assert any(item.label == "Edit schedule template" for item in app.expander)
 
     schedules = storage.list_recurring_schedules()
     transactions = storage.list_transactions()
