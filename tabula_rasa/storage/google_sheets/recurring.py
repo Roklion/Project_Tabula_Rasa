@@ -1369,13 +1369,13 @@ class RecurringMixin:
             self._reject_existing_recurring_metadata(
                 current_row.values, "Transaction"
             )
-            baseline = dict(expected_transaction or current_row.values)
             if expected_transaction is not None and not self._transaction_rows_match(
                 current_row.values, expected_transaction
             ):
                 raise StorageConflictError(
                     "The transaction changed; refresh it before making it recurring."
                 )
+            baseline = dict(current_row.values)
             if str(current_row.values.get("kind") or "") != "Expense":
                 raise StorageValidationError(
                     "Only an existing Expense can be made recurring"
