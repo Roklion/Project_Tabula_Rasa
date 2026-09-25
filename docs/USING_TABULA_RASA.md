@@ -461,6 +461,8 @@ also creates its initial occurrence. You can enable **Repeat this Expense**
 while editing an ordinary Expense, or **Repeat this mixed-use Expense** while
 editing a mixed-use Expense, to use that saved edit as a new schedule's initial
 occurrence. The option is hidden when the expense already belongs to a schedule.
+The initial Repeat every setting is one month; you can change the cadence before
+saving.
 Startup reconciliation generates due
 occurrences using deterministic schedule/date IDs and is safe to repeat.
 

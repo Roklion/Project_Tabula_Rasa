@@ -92,6 +92,8 @@ def test_add_expense_recurring_flow_creates_initial_occurrence_and_schedule() ->
             by_label(app.selectbox, "From Account").set_value("Checking").run()
             by_label(app.selectbox, "Category").set_value("Office").run()
             by_label(app.checkbox, "Repeat this Expense").set_value(True).run()
+            assert by_label(app.selectbox, "Repeat every").value == "month"
+            assert by_label(app.number_input, "Interval").value == 1
             by_label(app.text_input, "Schedule name").set_value("Monthly office").run()
             by_label(app.button, "Save transaction").click().run()
 
@@ -121,6 +123,8 @@ def test_edit_expense_can_create_schedule_from_existing_transaction() -> None:
         editor = next(item for item in app.expander if item.label == "Edit transaction")
         by_label(editor.checkbox, "Repeat this Expense").set_value(True).run()
         editor = next(item for item in app.expander if item.label == "Edit transaction")
+        assert by_label(editor.selectbox, "Repeat every").value == "month"
+        assert by_label(editor.number_input, "Interval").value == 1
         by_label(editor.text_input, "Schedule name").set_value("Monthly supplies").run()
         editor = next(item for item in app.expander if item.label == "Edit transaction")
         by_label(editor.number_input, "Amount").set_value(25).run()
@@ -165,7 +169,10 @@ def test_invalid_recurring_submission_does_not_leave_pending_retry_state() -> No
     with authenticated_app(storage) as app:
         navigate_to(app, "Transactions")
         by_label(app.checkbox, "Repeat this Expense").set_value(True).run()
+        by_label(app.selectbox, "Repeat every").set_value("day").run()
         by_label(app.button, "Save transaction").click().run()
+
+        assert by_label(app.selectbox, "Repeat every").value == "day"
 
         assert "recurring_pending_schedule_id_test" not in app.session_state
         assert "recurring_pending_transaction_id_test" not in app.session_state

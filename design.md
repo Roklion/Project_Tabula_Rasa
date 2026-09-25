@@ -783,6 +783,8 @@ Creating an ordinary or mixed-use recurring Expense writes the schedule and
 initial occurrence as one logical operation. An existing ordinary or mixed-use
 Expense that is not already linked to a schedule can also be made recurring
 from its edit surface; the saved edit becomes the schedule's initial occurrence.
+When first enabled in any of these creation forms, Repeat every defaults to
+one month; a user's chosen cadence is preserved during correction or retry.
 Reconciliation runs once per
 profile/session, creates due occurrences from stable schedule/date identities,
 and is safe to repeat after an uncertain response. A failed schedule is
