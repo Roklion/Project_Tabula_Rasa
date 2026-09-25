@@ -290,9 +290,17 @@ or raw stack traces.
 Tables use compact rows, clear headers, subtle separators, restrained hover,
 clear selection, and sticky headers where feasible. Dates and descriptions are
 left-aligned; amounts, balances, and counts are right-aligned. Preserve stable
-record-ID mapping and keep a reliable explicit selector inside edit workflows.
+record-ID mapping and keep a reliable explicit selector for edit workflows.
 Do not hide important accounting fields solely to avoid narrow-screen
 scrolling.
+
+For a management table whose visible rows can be changed, select one row with
+the table's native row-selection affordance, then use Edit, Rename, or Remove.
+The selected row's stable record ID, never its displayed position, identifies
+the mutation target. Clear or repair selection when the profile, visible rows,
+or underlying records change. Avoid a second dropdown that only reselects an
+already-visible target; related-value selectors such as merge targets and
+sources may remain separate.
 
 Generic filters use explicit labels, AND semantics, visible scope, and a
 clear path back to the unfiltered state. Changing result scope clears
@@ -765,7 +773,9 @@ scope. Tags remain independent of Categories and do not affect accounting.
 Transactions includes a fourth top-level tab named **Recurring expenses**,
 before Payees & Tags. It lists each profile-local Expense schedule with its
 cadence, next due date, latest current occurrence, status, attention state, and
-stable schedule ID. The schedule template is flat and validated: amount,
+stable schedule ID. Select one schedule row and choose **Edit** to open its
+template editor; the same selection drives Pause, Resume, and End. The schedule
+template is flat and validated: amount,
 account, Expense category, optional Payee, Tags, description, and reference.
 Receipt references are occurrence-specific and are never stored in a template.
 
@@ -796,6 +806,9 @@ Transactions includes a fifth top-level tab named **Payees & Tags**. It has
 visually separate **Payees** and **Tags** subtabs and always identifies the
 selected business profile. Each section lists all stored values, including
 inactive values, and provides add, rename, merge, and remove workflows.
+Select one Payee or Tag directly in its table before opening Rename or Remove;
+both actions use that same selected stable ID. Merge keeps its separate target
+and source controls.
 
 Rename retains the stable ID and every existing reference. A merge requires an
 explicit target, one or more explicit sources, and acknowledgement before one

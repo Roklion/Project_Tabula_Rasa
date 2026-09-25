@@ -139,6 +139,11 @@ def test_edit_expense_can_create_schedule_from_existing_transaction() -> None:
         assert len(cleared_slots) == 1
         editor = next(item for item in app.expander if item.label == "Edit transaction")
         assert not any(item.label == "Repeat this Expense" for item in editor.checkbox)
+        assert not any(item.label == "Edit schedule template" for item in app.expander)
+        schedule_id = storage.list_recurring_schedules()[0]["id"]
+        app.session_state["recurring_schedule_test_selected_id"] = schedule_id
+        app.run()
+        by_label(app.button, "Edit").click().run()
         assert any(item.label == "Edit schedule template" for item in app.expander)
 
     schedules = storage.list_recurring_schedules()

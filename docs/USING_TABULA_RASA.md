@@ -428,6 +428,8 @@ the selected business profile. Its separate **Payees** and **Tags** subtabs
 show active and inactive records and provide **Add**, **Rename**, **Merge**, and
 **Remove** workflows. Names are normalized case-insensitively, while renaming
 preserves the stable ID and all references.
+Select a Payee or Tag row in its table before opening **Rename** or **Remove**.
+Both actions use the selected row; neither requires another record dropdown.
 
 Merging requires an explicit target, one or more source values, and an
 acknowledgement. Payee merges update transaction and asset references and both
@@ -450,6 +452,9 @@ state invalidates caches and gives explicit inspection guidance.
 
 The fourth Transactions tab, **Recurring expenses**, lists profile-local
 Expense schedules with their cadence, next due date, status, and stable ID.
+Select a schedule row and click **Edit** to open its template editor. The
+selected row also controls Pause, Resume, and End. Select a different row to
+work on another schedule.
 Recurring templates contain only flat Expense fields; receipt references are
 never copied into a schedule or generated occurrence. Creating a schedule
 also creates its initial occurrence. You can enable **Repeat this Expense**
