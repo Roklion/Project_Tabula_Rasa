@@ -44,9 +44,7 @@ def render_transactions(context: TransactionsContext) -> None:
             "Mixed-use expenses",
             "Recurring expenses",
             "Payees & Tags",
-        ],
-        key=f"transactions_tab_{context.profile_key}",
-        on_change="rerun",
+        ]
     )
     page_footer = st.empty()
 
@@ -118,16 +116,15 @@ def render_transactions(context: TransactionsContext) -> None:
                 tags=tags,
             )
 
-    if tab_recurring.open:
-        with tab_recurring:
-            with st.container(key="transactions_recurring_surface"):
-                render_recurring_expenses(
-                    context,
-                    accounts=accounts,
-                    categories=categories,
-                    payees=payees,
-                    tags=tags,
-                )
+    with tab_recurring:
+        with st.container(key="transactions_recurring_surface"):
+            render_recurring_expenses(
+                context,
+                accounts=accounts,
+                categories=categories,
+                payees=payees,
+                tags=tags,
+            )
     with tab_payees_tags:
         with st.container(key="transactions_payees_tags_surface"):
             render_payees_tags(
