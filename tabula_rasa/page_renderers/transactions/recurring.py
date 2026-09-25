@@ -141,7 +141,7 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
             ),
             "Schedule ID": item["id"],
         })
-    st.dataframe(rows, hide_index=True, use_container_width=True)
+    st.dataframe(rows, hide_index=True, width="stretch")
     choices = {f"{item['name']} · {item['id']}": item for item in schedules}
     selected_label = st.selectbox("Schedule", list(choices), key=f"recurring_selected_{context.profile_key}")
     selected = choices[selected_label]
