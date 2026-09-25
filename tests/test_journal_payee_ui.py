@@ -63,7 +63,8 @@ def test_journal_only_payee_is_shown_as_referenced_and_cannot_be_removed() -> No
 
     with authenticated_app(storage) as app:
         navigate_to(app, "Transactions")
-        by_label(app.selectbox, "Payee to remove").set_value(payee["id"]).run()
+        app.session_state["managed_payee_test_selected_id"] = payee["id"]
+        app.run()
 
         assert any("1 references" in str(item.value) for item in app.info)
         assert by_label(app.button, "Permanently remove payee").disabled

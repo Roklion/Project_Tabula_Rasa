@@ -4,6 +4,17 @@ from tests.app_support import authenticated_app, by_label, navigate_to, profile_
 from tests.fakes import FakeWorkbook
 from tabula_rasa.storage import GoogleSheetsStorage
 
+
+def select_managed_row(app, kind: str, record_id: str, profile: str = "north") -> None:
+    """AppTest cannot click dataframe rows, so seed the callback's stable ID."""
+    for checkbox in app.checkbox:
+        if checkbox.key and checkbox.key.startswith("managed_"):
+            # AppTest may retain a pre-rerun checkbox after a confirmed mutation.
+            app.session_state[checkbox.key] = False
+    app.session_state[f"managed_{kind}_{profile}_selected_id"] = record_id
+    app.run()
+
+
 def test_transactions_exposes_profile_local_management_tab() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook())
     with authenticated_app(storage=storage) as app:
@@ -77,6 +88,18 @@ def test_management_workflows_are_profile_scoped_and_require_confirmation() -> N
         },
     ) as app:
         navigate_to(app, "Transactions")
+        managed_tables = [
+            frame for frame in app.dataframe
+            if frame.key and frame.key.startswith("managed_")
+        ]
+        assert len(managed_tables) == 2
+        assert all(frame.selection_mode for frame in managed_tables)
+        assert not any(
+            item.label in {
+                "Payee to rename", "Payee to remove", "Tag to rename", "Tag to remove"
+            }
+            for item in app.selectbox
+        )
 
         by_label(app.selectbox, "Target payee").set_value(target_payee["id"]).run()
         by_label(app.multiselect, "Source payees").set_value(
@@ -118,9 +141,7 @@ def test_management_workflows_are_profile_scoped_and_require_confirmation() -> N
         created_payee = next(
             item for item in north.list_payees() if item["name"] == "Created payee"
         )
-        by_label(app.selectbox, "Payee to remove").set_value(
-            created_payee["id"]
-        ).run()
+        select_managed_row(app, "payee", created_payee["id"])
         assert by_label(app.button, "Permanently remove payee").disabled is False
         assert next(
             item
@@ -148,9 +169,7 @@ def test_management_workflows_are_profile_scoped_and_require_confirmation() -> N
         ).check()
         by_label(app.button, "Permanently remove payee").click().run()
         assert not any(item["id"] == created_payee["id"] for item in north.list_payees())
-        by_label(app.selectbox, "Payee to rename").set_value(
-            target_payee["id"]
-        ).run()
+        select_managed_row(app, "payee", target_payee["id"])
         by_label(app.text_input, "Renamed payee name").set_value(
             "Renamed target"
         )
@@ -159,9 +178,7 @@ def test_management_workflows_are_profile_scoped_and_require_confirmation() -> N
             item for item in north.list_payees() if item["id"] == target_payee["id"]
         )["name"] == "Renamed target"
 
-        by_label(app.selectbox, "Payee to remove").set_value(
-            target_payee["id"]
-        ).run()
+        select_managed_row(app, "payee", target_payee["id"])
         assert by_label(app.button, "Permanently remove payee").disabled is True
         assert any("3 references" in str(item.value) for item in app.info)
 
@@ -170,7 +187,7 @@ def test_management_workflows_are_profile_scoped_and_require_confirmation() -> N
         created_tag = next(
             item for item in north.list_tags() if item["name"] == "Created tag"
         )
-        by_label(app.selectbox, "Tag to remove").set_value(created_tag["id"]).run()
+        select_managed_row(app, "tag", created_tag["id"])
         assert by_label(app.button, "Permanently remove tag").disabled is False
         assert next(
             item
@@ -192,7 +209,7 @@ def test_management_workflows_are_profile_scoped_and_require_confirmation() -> N
         ).check()
         by_label(app.button, "Permanently remove tag").click().run()
         assert not any(item["id"] == created_tag["id"] for item in north.list_tags())
-        by_label(app.selectbox, "Tag to rename").set_value(target_tag["id"]).run()
+        select_managed_row(app, "tag", target_tag["id"])
         by_label(app.text_input, "Renamed tag name").set_value("Renamed target tag")
         by_label(app.button, "Rename tag").click().run()
         assert next(
@@ -235,7 +252,7 @@ def test_management_workflows_are_profile_scoped_and_require_confirmation() -> N
 
         navigate_to(app, "Accounts")
         navigate_to(app, "Transactions")
-        by_label(app.selectbox, "Tag to remove").set_value(target_tag["id"]).run()
+        select_managed_row(app, "tag", target_tag["id"])
         assert any("4 references" in str(item.value) for item in app.info)
         assert by_label(app.button, "Permanently remove tag").disabled is True
         assert next(
@@ -248,9 +265,7 @@ def test_management_workflows_are_profile_scoped_and_require_confirmation() -> N
         navigate_to(app, "Transactions")
         by_label(app.selectbox, "Business").set_value("south").run()
         navigate_to(app, "Transactions")
-        assert target_payee["id"] not in by_label(
-            app.selectbox, "Target payee"
-        ).options
-        assert target_tag["id"] not in by_label(
-            app.selectbox, "Target tag"
-        ).options
+        assert not app.session_state["managed_payee_south_selected_id"]
+        assert not app.session_state["managed_tag_south_selected_id"]
+        assert by_label(app.selectbox, "Target payee").options == ["South only"]
+        assert by_label(app.selectbox, "Target tag").options == ["South only tag"]

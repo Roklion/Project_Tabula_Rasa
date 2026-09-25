@@ -10,6 +10,7 @@ import streamlit as st
 from tabula_rasa.hierarchy import ordered_accounts, ordered_categories
 from .metadata_fields import active_or_selected as _active_or_selected, render_metadata_reference
 from tabula_rasa.recurrence_state import clear_edit_pending_state_for_schedule
+from .table_selection import clear_selected_table_record, selected_table_record
 
 
 def _mark_workbook_data_changed(context: Any) -> None:
@@ -101,6 +102,26 @@ def _selected_tag_ids(value: Any) -> list[Any]:
     return selected_tags if isinstance(selected_tags, list) else []
 
 
+def _render_generate_due(context: Any, notice_key: str) -> None:
+    if st.button("Generate due occurrences", key=f"recurring_reconcile_{context.profile_key}"):
+        try:
+            result = context.storage.reconcile_recurring_schedules(as_of=date.today())
+            if result["attention"]:
+                st.session_state[notice_key] = {
+                    "level": "warning",
+                    "message": "Some schedules need attention; other schedules were processed.",
+                }
+            else:
+                st.session_state[notice_key] = {
+                    "level": "success",
+                    "message": f"Generated {len(result['generated'])} occurrence(s).",
+                }
+            _mark_workbook_data_changed(context)
+            st.rerun()
+        except Exception as error:
+            context.report_storage_error(error)
+
+
 def render_recurring_expenses(context: Any, *, accounts, categories, payees, tags) -> None:
     """Render profile-scoped schedule management and bounded controls."""
     st.subheader("Recurring expenses")
@@ -117,6 +138,11 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
         context.report_storage_error(error)
         return
     if not schedules:
+        clear_selected_table_record(
+            profile_key=context.profile_key,
+            surface="recurring_schedule",
+            clear_on_change=(f"recurring_edit_target_{context.profile_key}",),
+        )
         st.info(
             "No recurring expense schedules found. Check 'Repeat this Expense' "
             "when adding a transaction to create one."
@@ -141,10 +167,21 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
             ),
             "Schedule ID": item["id"],
         })
-    st.dataframe(rows, hide_index=True, use_container_width=True)
-    choices = {f"{item['name']} · {item['id']}": item for item in schedules}
-    selected_label = st.selectbox("Schedule", list(choices), key=f"recurring_selected_{context.profile_key}")
-    selected = choices[selected_label]
+    st.caption("Select one schedule row, then choose Edit to change its template.")
+    edit_target_key = f"recurring_edit_target_{context.profile_key}"
+    selected_id = selected_table_record(
+        rows,
+        [str(item["id"]) for item in schedules],
+        profile_key=context.profile_key,
+        surface="recurring_schedule",
+        records=schedules,
+        clear_on_change=(edit_target_key,),
+    )
+    if not selected_id:
+        _render_generate_due(context, notice_key)
+        return
+    selected = next(item for item in schedules if str(item["id"]) == selected_id)
+    st.caption(f"Selected schedule: {selected['name']}")
     if selected.get("status") not in {"active", "paused", "ended"}:
         st.warning("This schedule has an invalid status. Choose a valid status to repair it.")
         repair_status = st.selectbox(
@@ -160,6 +197,38 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
                 st.rerun()
             except Exception as error:
                 context.report_storage_error(error)
+        return
+    if st.button("Edit", key=f"recurring_edit_action_{context.profile_key}"):
+        st.session_state[edit_target_key] = selected_id
+    left, right = st.columns(2)
+    with left:
+        if selected["status"] == "active" and st.button("Pause", key=f"recurring_pause_{selected['id']}"):
+            try:
+                context.storage.pause_recurring_schedule(selected["id"], expected_schedule=selected)
+                _mark_workbook_data_changed(context)
+                st.rerun()
+            except Exception as error:
+                context.report_storage_error(error)
+        elif selected["status"] == "paused" and st.button("Resume", key=f"recurring_resume_{selected['id']}"):
+            try:
+                context.storage.resume_recurring_schedule(selected["id"], expected_schedule=selected)
+                _mark_workbook_data_changed(context)
+                st.rerun()
+            except Exception as error:
+                context.report_storage_error(error)
+    with right:
+        if selected["status"] != "ended" and st.button("End schedule", key=f"recurring_end_{selected['id']}"):
+            try:
+                context.storage.end_recurring_schedule(selected["id"], expected_schedule=selected)
+                _clear_pending_schedule_state(
+                    st.session_state, context.profile_key, selected["id"]
+                )
+                _mark_workbook_data_changed(context)
+                st.rerun()
+            except Exception as error:
+                context.report_storage_error(error)
+    _render_generate_due(context, notice_key)
+    if st.session_state.get(edit_target_key) != selected_id:
         return
     with st.expander("Edit schedule template"):
         with st.form(f"recurring_edit_{context.profile_key}_{selected['id']}"):
@@ -257,50 +326,4 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
                 st.rerun()
             except Exception as error:
                 context.report_storage_error(error)
-    left, right = st.columns(2)
-    with left:
-        if selected["status"] == "active" and st.button("Pause", key=f"recurring_pause_{selected['id']}"):
-            try:
-                context.storage.pause_recurring_schedule(selected["id"], expected_schedule=selected)
-                _mark_workbook_data_changed(context)
-                st.rerun()
-            except Exception as error:
-                context.report_storage_error(error)
-        elif selected["status"] == "paused" and st.button("Resume", key=f"recurring_resume_{selected['id']}"):
-            try:
-                context.storage.resume_recurring_schedule(selected["id"], expected_schedule=selected)
-                _mark_workbook_data_changed(context)
-                st.rerun()
-            except Exception as error:
-                context.report_storage_error(error)
-    with right:
-        if selected["status"] != "ended" and st.button("End schedule", key=f"recurring_end_{selected['id']}"):
-            try:
-                context.storage.end_recurring_schedule(selected["id"], expected_schedule=selected)
-                _clear_pending_schedule_state(
-                    st.session_state, context.profile_key, selected["id"]
-                )
-                _mark_workbook_data_changed(context)
-                st.rerun()
-            except Exception as error:
-                context.report_storage_error(error)
-    if st.button("Generate due occurrences", key=f"recurring_reconcile_{context.profile_key}"):
-        try:
-            result = context.storage.reconcile_recurring_schedules(as_of=date.today())
-            if result["attention"]:
-                st.session_state[notice_key] = {
-                    "level": "warning",
-                    "message": "Some schedules need attention; other schedules were processed.",
-                }
-            else:
-                st.session_state[notice_key] = {
-                    "level": "success",
-                    "message": f"Generated {len(result['generated'])} occurrence(s).",
-                }
-            _mark_workbook_data_changed(context)
-            st.rerun()
-        except Exception as error:
-            context.report_storage_error(error)
-
-
 __all__ = ["render_recurring_expenses"]

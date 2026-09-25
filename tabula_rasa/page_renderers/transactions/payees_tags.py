@@ -12,6 +12,7 @@ import streamlit as st
 
 from tabula_rasa.storage import GoogleSheetsStorage, StorageError
 from tabula_rasa.storage.google_sheets import _normalize_tag_ids
+from .table_selection import clear_selected_table_record, selected_table_record
 
 
 @dataclass(frozen=True)
@@ -118,9 +119,19 @@ def _render_management(
         columns=[title, "Active", "References"],
     )
     if frame.empty:
+        clear_selected_table_record(
+            profile_key=context.profile_key, surface=f"managed_{singular}"
+        )
         st.info(f"No {plural} yet. Add one below.")
     else:
-        st.dataframe(frame, hide_index=True, width="stretch")
+        st.caption(f"Select one {singular} row to rename or remove it.")
+        selected_id = selected_table_record(
+            frame,
+            [str(item["id"]) for item in records],
+            profile_key=context.profile_key,
+            surface=f"managed_{singular}",
+            records=records,
+        )
 
     with st.expander(f"Add {singular}", expanded=True):
         add_name = st.text_input(
@@ -149,31 +160,15 @@ def _render_management(
     def labels(value: str) -> str:
         return by_id[value]["name"]
 
+    if selected_id:
+        st.caption(f"Selected {singular}: {by_id[selected_id]['name']}")
     with st.expander(f"Rename {singular}"):
-        rename_id = st.selectbox(
-            f"{title} to rename",
-            ids,
-            format_func=labels,
-            key=f"managed_rename_{singular}_id_{context.profile_key}",
-        )
-        rename_name = st.text_input(
-            f"Renamed {singular} name",
-            value=by_id[rename_id]["name"],
-            key=f"managed_rename_{singular}_name_{context.profile_key}_{rename_id}",
-        )
-        rename_error = st.empty()
-        if st.button(
-            f"Rename {singular}",
-            type="primary",
-            key=f"managed_rename_{singular}_{context.profile_key}",
-        ):
-            _write(
-                context,
-                f"edit_{singular}",
-                {"id": rename_id, "name": rename_name},
-                lambda: spec.rename(rename_id, rename_name, by_id[rename_id]),
-                f"{title} renamed.",
-                rename_error,
+        if not selected_id:
+            st.info(f"Select a {singular} row above to rename it.")
+        else:
+            rename_id = selected_id
+            _render_rename(
+                context, spec, by_id[rename_id], rename_id, title, singular
             )
 
     with st.expander(f"Merge {plural}"):
@@ -224,47 +219,93 @@ def _render_management(
                 )
 
     with st.expander(f"Remove {singular}"):
-        remove_id = st.selectbox(
-            f"{title} to remove",
-            ids,
-            format_func=labels,
-            key=f"managed_remove_{singular}_id_{context.profile_key}",
-        )
-        remove_name = by_id[remove_id]["name"]
-        is_referenced = bool(counts.get(remove_id, 0))
-        if is_referenced:
-            st.info(
-                f"This {singular} has {counts[remove_id]} references. Unassign it from those records or merge it before removal."
+        if not selected_id:
+            st.info(f"Select a {singular} row above to remove it.")
+        else:
+            _render_remove(
+                context, spec, by_id[selected_id], selected_id, counts, title, singular
             )
-        st.warning(
-            f"Permanently removing {singular} {remove_name!r} cannot be undone and is available only when it is unreferenced."
+
+
+def _render_rename(
+    context: PayeesTagsContext,
+    spec: _ManagementSpec,
+    record: dict[str, str],
+    rename_id: str,
+    title: str,
+    singular: str,
+) -> None:
+    rename_name = st.text_input(
+        f"Renamed {singular} name",
+        value=record["name"],
+        key=f"managed_rename_{singular}_name_{context.profile_key}_{rename_id}",
+    )
+    rename_error = st.empty()
+    if st.button(
+        f"Rename {singular}",
+        type="primary",
+        key=f"managed_rename_{singular}_{context.profile_key}",
+    ):
+        _write(
+            context,
+            f"edit_{singular}",
+            {"id": rename_id, "name": rename_name},
+            lambda: spec.rename(rename_id, rename_name, record),
+            f"{title} renamed.",
+            rename_error,
         )
-        remove_ack = st.checkbox(
-            f"I understand {singular} {remove_name!r} will be permanently removed and cannot be restored",
-            key=f"managed_remove_{singular}_ack_{context.profile_key}_{remove_id}",
+
+
+def _render_remove(
+    context: PayeesTagsContext,
+    spec: _ManagementSpec,
+    record: dict[str, str],
+    remove_id: str,
+    counts: dict[str, int],
+    title: str,
+    singular: str,
+) -> None:
+    remove_name = record["name"]
+    is_referenced = bool(counts.get(remove_id, 0))
+    if is_referenced:
+        st.info(
+            f"This {singular} has {counts[remove_id]} references. Unassign it from those records or merge it before removal."
+        )
+    st.warning(
+        f"Permanently removing {singular} {remove_name!r} cannot be undone and is available only when it is unreferenced."
+    )
+    selection_generation = st.session_state.get(
+        f"managed_{singular}_{context.profile_key}_selection_generation", 0
+    )
+    remove_ack = st.checkbox(
+        f"I understand {singular} {remove_name!r} will be permanently removed and cannot be restored",
+        key=(
+            f"managed_remove_{singular}_ack_{context.profile_key}_"
+            f"{remove_id}_{selection_generation}"
+        ),
+        disabled=is_referenced,
+    )
+    remove_error = st.empty()
+    with st.container(key=f"destructive_managed_{singular}_remove"):
+        if st.button(
+            f"Permanently remove {singular}",
+            icon=":material/delete_forever:",
+            key=f"managed_remove_{singular}_{context.profile_key}",
             disabled=is_referenced,
-        )
-        remove_error = st.empty()
-        with st.container(key=f"destructive_managed_{singular}_remove"):
-            if st.button(
-                f"Permanently remove {singular}",
-                icon=":material/delete_forever:",
-                key=f"managed_remove_{singular}_{context.profile_key}",
-                disabled=is_referenced,
-            ):
-                if not remove_ack:
-                    remove_error.error(
-                        "Acknowledge permanent removal before continuing. No data changed."
-                    )
-                else:
-                    _write(
-                        context,
-                        f"remove_{singular}",
-                        {"id": remove_id},
-                        lambda: spec.remove(remove_id, by_id[remove_id]),
-                        f"{title} removed.",
-                        remove_error,
-                    )
+        ):
+            if not remove_ack:
+                remove_error.error(
+                    "Acknowledge permanent removal before continuing. No data changed."
+                )
+            else:
+                _write(
+                    context,
+                    f"remove_{singular}",
+                    {"id": remove_id},
+                    lambda: spec.remove(remove_id, record),
+                    f"{title} removed.",
+                    remove_error,
+                )
 
 
 def _render_payees(

@@ -113,6 +113,7 @@ def render_recurrence_controls(
     unit = first.selectbox(
         "Repeat every",
         ["day", "week", "month", "year"],
+        index=2,
         key=key("recurrence_unit"),
     )
     interval = second.number_input(
