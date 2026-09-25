@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import streamlit as st
+from streamlit.delta_generator import DeltaGenerator
+
 from tests.app_support import authenticated_app, by_label, navigate_to
 from tests.app_support import profile_config
 from tests.fakes import FakeWorkbook
@@ -122,7 +125,21 @@ def test_edit_expense_can_create_schedule_from_existing_transaction() -> None:
         editor = next(item for item in app.expander if item.label == "Edit transaction")
         by_label(editor.number_input, "Amount").set_value(25).run()
         editor = next(item for item in app.expander if item.label == "Edit transaction")
-        by_label(editor.button, "Save changes").click().run()
+        original_empty = DeltaGenerator.empty
+        root_container = st.empty.__self__
+        cleared_slots = []
+
+        def record_empty(generator):
+            if generator is not root_container:
+                cleared_slots.append(generator)
+            return original_empty(generator)
+
+        with patch.object(DeltaGenerator, "empty", record_empty):
+            by_label(editor.button, "Save changes").click().run()
+        assert len(cleared_slots) == 1
+        editor = next(item for item in app.expander if item.label == "Edit transaction")
+        assert not any(item.label == "Repeat this Expense" for item in editor.checkbox)
+        assert any(item.label == "Edit schedule template" for item in app.expander)
 
     schedules = storage.list_recurring_schedules()
     transactions = storage.list_transactions()

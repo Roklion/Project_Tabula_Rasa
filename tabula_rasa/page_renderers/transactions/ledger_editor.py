@@ -181,24 +181,26 @@ def render_transaction_editor(
                 key_scope=edit_widget_scope,
             )
             recurrence = None
+            recurrence_slot = st.empty()
             if (
                 not copy_mode
                 and selected["kind"] == "Expense"
                 and not selected.get("recurring_schedule_id")
             ):
-                restore_recurrence_controls(
-                    st.session_state,
-                    pending_payload,
-                    key_prefix=f"edit_transaction_{edit_widget_scope}",
-                )
-                recurrence = render_recurrence_controls(
-                    label="Repeat this Expense",
-                    key_prefix=f"edit_transaction_{edit_widget_scope}",
-                    help_text=(
-                        "Create a profile-local schedule and use this existing "
-                        "transaction as its initial occurrence."
-                    ),
-                )
+                with recurrence_slot.container():
+                    restore_recurrence_controls(
+                        st.session_state,
+                        pending_payload,
+                        key_prefix=f"edit_transaction_{edit_widget_scope}",
+                    )
+                    recurrence = render_recurrence_controls(
+                        label="Repeat this Expense",
+                        key_prefix=f"edit_transaction_{edit_widget_scope}",
+                        help_text=(
+                            "Create a profile-local schedule and use this existing "
+                            "transaction as its initial occurrence."
+                        ),
+                    )
             make_recurring = bool(recurrence and recurrence.enabled)
             receipt_uploads = None
             receipt_folder = None
@@ -443,6 +445,7 @@ def render_transaction_editor(
                             ),
                             on_success=lambda: (
                                 pending_recurrence.clear(st.session_state),
+                                recurrence_slot.empty() if make_recurring else None,
                                 schedule_tag_selector_reset(
                                     f"edit_transaction_tags_{edit_widget_scope}"
                                 ),
