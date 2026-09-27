@@ -96,9 +96,9 @@ the trusted project layer is reloaded.
 
 ## Creating pull requests
 
-- When Codex creates a pull request, use
-  `.github/pull_request_template.md` as the pull-request description and
-  complete every applicable section before opening the pull request.
+- When Codex creates a pull request, use the PR body template in the
+  `gh-publish-review-loop` skill and complete every section before opening the
+  pull request.
 - Do not leave template guidance comments or placeholder text as the
   substantive description.
 
