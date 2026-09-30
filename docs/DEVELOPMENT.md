@@ -142,12 +142,14 @@ profile-sensitive changes need a two-profile isolation check.
 
 ## Pull requests and review
 
-Complete [.github/pull_request_template.md](../.github/pull_request_template.md)
-with concise statements of intent, expected success and failure behavior,
+Codex-authored PRs should use the PR body template in the
+`gh-publish-review-loop` skill. Contributors without that skill should include
+the same information directly: intent, expected success and failure behavior,
 invariants that must not change, validation evidence, and known limitations.
-The description is review context, not proof of correctness. Check the
-implementation against the current code, tests, canonical documentation,
-callers, storage paths, retries, and state transitions.
+Concise statements are sufficient. The description is review context, not
+proof of correctness. Check the implementation against the current code,
+tests, canonical documentation, callers, storage paths, retries, and state
+transitions.
 
 Codex is the primary repository/remediation reviewer and Gemini is an
 independent complementary advisory reviewer. The human maintainer retains

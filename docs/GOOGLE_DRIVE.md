@@ -114,7 +114,8 @@ to one business.
    ```
 
 8. Create a Picker API key. Restrict it to the Picker API and the approved
-   HTTP referrers, using /* after each origin.
+   HTTP referrers, using /* after each origin. Also allow
+   `https://docs.google.com/*` because Picker renders in a Google-hosted iframe.
 9. Record the client ID, client secret, Picker key, and numeric Cloud project
    number. The number is under IAM & Admin > Settings; it is not the project ID.
 10. Before real use, publish the app and confirm Audience shows In production.
