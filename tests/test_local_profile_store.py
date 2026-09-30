@@ -28,10 +28,12 @@ from tabula_rasa.local_profile_store import (
 
 
 
-def settings(name: str = "North Shop") -> dict:
+def settings(
+    name: str = "North Shop", *, spreadsheet_id: str = "abcdefghij1234567890"
+) -> dict:
     return build_profile_settings(
         name,
-        "https://docs.google.com/spreadsheets/d/abcdefghij1234567890/edit",
+        f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit",
         r"G:\My Drive\Project Tabula Rasa Backups\north",
         google_drive={"authorized_email": "owner@example.test", "refresh_token": "fake-refresh", "token_uri": "https://oauth2.googleapis.com/token", "scopes": ["https://www.googleapis.com/auth/drive.file"]},
     )
@@ -216,7 +218,7 @@ class TestLocalProfileStore:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "local_business_profiles.json"
             save_local_profile("north", settings(), path=path)
-            save_local_profile("south", settings("South Shop"), path=path)
+            save_local_profile("south", settings("South Shop", spreadsheet_id="south-ledger123"), path=path)
 
             update_local_profile(
                 "north",
@@ -229,7 +231,7 @@ class TestLocalProfileStore:
 
         assert stored["north"]["name"] == "North Shop Updated"
         assert stored["south"]["name"] == "South Shop"
-        assert stored["south"]["backup_folder_path"] == settings("South Shop")[
+        assert stored["south"]["backup_folder_path"] == settings("South Shop", spreadsheet_id="south-ledger123")[
             "backup_folder_path"
         ]
 
@@ -299,7 +301,7 @@ class TestLocalProfileStore:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "local_business_profiles.json"
             save_local_profile("north", settings(), path=path)
-            save_local_profile("south", settings("South Shop"), path=path)
+            save_local_profile("south", settings("South Shop", spreadsheet_id="south-ledger123"), path=path)
             update_local_profile_google_drive("north", north_drive, path=path)
 
             with pytest.raises(LocalProfileStoreError, match="only one"):
@@ -495,7 +497,7 @@ class TestLocalProfileStore:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "local_business_profiles.json"
             save_local_profile("north", settings(), path=path)
-            save_local_profile("south", settings("South Shop"), path=path)
+            save_local_profile("south", settings("South Shop", spreadsheet_id="south-ledger123"), path=path)
             update_local_profile_google_drive("north", drive, path=path)
             update_local_profile_synology_recovery("north", recovery, path=path)
             update_local_profile_google_drive(

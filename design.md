@@ -1121,7 +1121,8 @@ unrelated Drive or Synology controls. Preserve:
 - optional local backup folder and Save profile for the initial setup record;
 - profile-scoped Connect/reconnect Google;
 - ledger spreadsheet selection through Google Picker, with OAuth open and
-  Editor capability validation before saving its ID;
+  Editor capability validation before saving its ID, rejecting a ledger
+  already assigned to another local business profile;
 - Validate ledger: initialize genuinely blank workbooks; populated legacy or
   incompatible workbooks require the explicit migration command;
 - edit of business name and local backup folder; and

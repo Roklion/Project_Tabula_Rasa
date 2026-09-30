@@ -566,7 +566,9 @@ def render_google_drive_admin(
                 select_profile_ledger(
                     app_secrets, profile_key, selected_ledger, store_path=store_path
                 )
-            except (StorageError, GoogleDriveError, LocalProfileStoreError):
+            except LocalProfileStoreError as exc:
+                st.error(str(exc))
+            except (StorageError, GoogleDriveError):
                 st.error("The Google account cannot select this ledger. Confirm Editor access and retry Picker.")
             else:
                 st.cache_resource.clear()

@@ -159,7 +159,8 @@ before configuration changes.
    each profile stores its own grant and resource selections.
 3. Choose the existing ledger with Google Picker. The app confirms Google Sheets
    access and Editor capability before saving the ID. Selection does not create
-   a workbook or alter its rows.
+   a workbook or alter its rows. Each ledger may belong to only one local
+   business profile; selecting another profile's ledger is rejected.
 4. Select Validate ledger. Genuinely blank workbooks receive the existing schema
    and defaults; populated historical workbooks require explicit migration.
 5. For receipts/backups, choose or create a storage root and Provision storage

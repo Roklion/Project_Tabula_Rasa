@@ -210,6 +210,7 @@ def _validate_stored_profiles(profiles: object) -> dict[str, dict[str, Any]]:
     if not isinstance(profiles, dict):
         raise LocalProfileStoreError("Local profile store has an invalid format.")
     normalized: dict[str, dict[str, Any]] = {}
+    ledger_ids: set[str] = set()
     storage_roots: dict[str, str] = {}
     synology_destinations: dict[str, str] = {}
     for raw_key, raw_settings in profiles.items():
@@ -244,6 +245,13 @@ def _validate_stored_profiles(profiles: object) -> dict[str, dict[str, Any]]:
             raise LocalProfileStoreError(
                 f"Local profile '{key}' is incomplete or malformed: {exc}"
             ) from exc
+        ledger_id = settings["spreadsheet_id"]
+        if ledger_id and ledger_id in ledger_ids:
+            raise LocalProfileStoreError(
+                "A ledger spreadsheet can belong to only one business profile."
+            )
+        if ledger_id:
+            ledger_ids.add(ledger_id)
         drive_settings = settings.get("google_drive")
         storage_root = (
             drive_settings.get("storage_root")

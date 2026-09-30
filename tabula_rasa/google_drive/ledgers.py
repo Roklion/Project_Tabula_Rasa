@@ -5,6 +5,7 @@ from __future__ import annotations
 from .client import _escape_query_value
 from .errors import (
     GoogleDriveAccessError,
+    GoogleDriveError,
     GoogleDriveConfigurationError,
     GoogleDriveConflictError,
     PROFILE_KEY_PATTERN,
@@ -58,7 +59,7 @@ class _LedgerOperationsMixin:
                 # One fresh readback; a missing result is not proof that create failed.
                 try:
                     created = existing()
-                except GoogleDriveAccessError:
+                except GoogleDriveError:
                     created = None
                 if created is None:
                     raise GoogleDriveAccessError(

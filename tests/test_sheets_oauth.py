@@ -483,13 +483,16 @@ def test_oauth_open_read_write_keep_two_profiles_isolated(same_account):
 
 
 @pytest.mark.parametrize("operation", ["select", "provision"])
+@pytest.mark.parametrize("explicit_none", [False, True])
 def test_ledger_setup_without_connection_stops_before_remote_or_local_writes(
-    tmp_path, operation
+    tmp_path, operation, explicit_none
 ):
     from tabula_rasa.google_drive_admin import provision_profile_ledger
 
     path = tmp_path / "profiles.json"
     disconnected = {"name": "North", "spreadsheet_id": ""}
+    if explicit_none:
+        disconnected["google_drive"] = None
     save_local_profile("north", disconnected, path=path)
     save_local_profile("south", {**profile(), "name": "South"}, path=path)
     before = path.read_bytes()
@@ -511,3 +514,63 @@ def test_ledger_setup_without_connection_stops_before_remote_or_local_writes(
                 )
     session.assert_not_called()
     assert path.read_bytes() == before
+
+
+def test_picker_rejects_other_profile_ledger_but_allows_candidate_and_reselection(tmp_path):
+    path = tmp_path / "profiles.json"
+    north = {**profile(), "spreadsheet_id": "north-ledger-123"}
+    south = {**profile(), "name": "South", "spreadsheet_id": "south-ledger-123"}
+    save_local_profile("north", north, path=path)
+    save_local_profile("south", south, path=path)
+    before = path.read_bytes()
+    south_before = load_local_profiles(path)["south"]
+    client = Mock()
+    client._request.return_value.json.return_value = {
+        "mimeType": "application/vnd.google-apps.spreadsheet",
+        "capabilities": {"canEdit": True},
+    }
+    with (
+        patch.object(GoogleSheetsStorage, "_open_workbook_from_secrets"),
+        patch("tabula_rasa.google_drive_admin.GoogleDriveClient", return_value=client),
+    ):
+        with pytest.raises(LocalProfileStoreError, match="only one business profile"):
+            select_profile_ledger(
+                {"google_drive_oauth": GOOGLE_OAUTH_CONFIG}, "north",
+                {"id": "south-ledger-123"}, store_path=path,
+            )
+        assert path.read_bytes() == before
+        select_profile_ledger(
+            {"google_drive_oauth": GOOGLE_OAUTH_CONFIG}, "north",
+            {"id": "south-ledger-123"}, store_path=path, persist=False,
+        )
+        assert path.read_bytes() == before
+        select_profile_ledger(
+            {"google_drive_oauth": GOOGLE_OAUTH_CONFIG}, "north",
+            {"id": "north-ledger-123"}, store_path=path,
+        )
+    assert load_local_profiles(path)["south"] == south_before
+    assert load_local_profiles(path)["north"]["spreadsheet_id"] == "north-ledger-123"
+
+
+def test_create_readback_authorization_failure_preserves_uncertainty():
+    from tabula_rasa.google_drive import (
+        GoogleDriveAccessError, GoogleDriveAuthorizationError,
+        GoogleDriveClient, load_oauth_config,
+    )
+
+    client = GoogleDriveClient(
+        load_oauth_config({"google_drive_oauth": GOOGLE_OAUTH_CONFIG}), google_grant()
+    )
+    with (
+        patch.object(client, "_list", side_effect=[
+            [], GoogleDriveAuthorizationError("Reconnect this profile.")
+        ]) as listing,
+        patch.object(client, "_metadata_create", side_effect=GoogleDriveAccessError(
+            "Response lost", upload_attempted=True
+        )) as create,
+    ):
+        with pytest.raises(GoogleDriveAccessError, match="Inspect Google Drive") as raised:
+            client.create_ledger_spreadsheet("north", "North Ledger")
+    assert raised.value.upload_attempted is True
+    assert listing.call_count == 2
+    create.assert_called_once()
