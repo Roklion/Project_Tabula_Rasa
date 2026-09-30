@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.google_auth_fixtures import GOOGLE_OAUTH_CONFIG, google_grant
+
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -76,7 +78,7 @@ def profile_config(
     profile: dict[str, object] = {
         "name": name,
         "spreadsheet_id": spreadsheet_id,
-        "gcp_service_account": {"type": "service_account"},
+        "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
     }
     profile.update(overrides)
     return profile

@@ -45,9 +45,13 @@ def load_business_profiles(secrets: Mapping[str, Any]) -> list[BusinessProfile]:
             raise BusinessProfileConfigurationError(
                 "Every business profile must have a non-empty key and settings table."
             )
-        if "spreadsheet_id" not in raw_settings or "gcp_service_account" not in raw_settings:
+        if "gcp_service_account" in raw_settings:
             raise BusinessProfileConfigurationError(
-                f"Business profile '{key}' needs spreadsheet_id and gcp_service_account."
+                "Service-account profiles must be converted with scripts/migrate_profile_oauth.py."
+            )
+        if "spreadsheet_id" not in raw_settings:
+            raise BusinessProfileConfigurationError(
+                f"Business profile '{key}' needs spreadsheet_id."
             )
         name = str(raw_settings.get("name", key)).strip()
         if not name:
@@ -60,7 +64,11 @@ def load_business_profiles(secrets: Mapping[str, Any]) -> list[BusinessProfile]:
                 "Business profile display names must be unique."
             )
         names.add(folded_name)
-        profiles.append(BusinessProfile(key=key, name=name, secrets=raw_settings))
+        settings = dict(raw_settings)
+        settings.pop("google_drive_oauth", None)
+        if "google_drive_oauth" in secrets:
+            settings["google_drive_oauth"] = secrets["google_drive_oauth"]
+        profiles.append(BusinessProfile(key=key, name=name, secrets=settings))
     return profiles
 
 

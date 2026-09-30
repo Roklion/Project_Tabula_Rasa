@@ -1104,7 +1104,7 @@ credentials, Drive storage, recovery metadata, and hosted Secrets handoff. It
 requires loopback-only availability and application-password reauthentication.
 It is unavailable for writable administration in hosted environments.
 
-Organize the surface as Business profiles, Google Drive storage, Recovery, and
+Organize the surface as Business profiles, Google setup, Recovery, and
 Security & deployment information. The last section is informational except
 for Generate hosted Secrets file, which creates a local handoff but cannot
 write to or verify hosted Streamlit Secrets.
@@ -1115,30 +1115,49 @@ When no local profile exists, lead with profile creation and do not render
 unrelated Drive or Synology controls. Preserve:
 
 - profile summary with key, business, masked spreadsheet ID, local backup
-  folder, service-account email, Drive state/account, Synology state/path,
+  folder, Google connection/account, Synology state/path,
   and configuration source;
 - business name and immutable safe profile key;
-- spreadsheet URL or ID;
-- optional local backup folder;
-- complete service-account JSON upload;
-- Validate and save;
-- validation and initialization for genuinely blank workbooks; populated
-  legacy or incompatible workbooks require the explicit migration command;
-- edit of business name, spreadsheet, and local backup folder; and
-- separate replacement-key upload and Validate and rotate credential action.
+- optional local backup folder and Save profile for the initial setup record;
+- profile-scoped Connect/reconnect Google;
+- ledger spreadsheet selection through Google Picker, with OAuth open and
+  Editor capability validation before saving its ID;
+- Validate ledger: initialize genuinely blank workbooks; populated legacy or
+  incompatible workbooks require the explicit migration command;
+- edit of business name and local backup folder; and
+- candidate workbook Picker authorization for recovery/migration that preserves
+  the active ledger ID.
+
+Sheets and Drive use the same human Google OAuth grant with `drive.file`.
+There are no Sheets service-account upload, private-key, or rotation controls.
 
 Failed validation leaves the prior profile intact. Never display private keys,
 refresh tokens, private ledger data, or receipt contents. Readiness performs
 fresh workbook and configured-destination checks without walking ordinary
 Drive parent folders.
 
-#### Drive storage
+#### Google setup
 
 Preserve profile-scoped Connect or reconnect, disconnect without deleting
-Drive files, existing-root Picker selection or app-managed root creation,
+Drive files or revoking the Google application grant, existing-root Picker selection or app-managed root creation,
 Provision storage folders, and authorized-account/destination summaries.
 Managed Receipts and Ledger Backups children are identified by stored IDs and
 profile metadata rather than names alone.
+
+#### Initial ledger provision
+
+In Account settings > Google setup, a connected profile with no ledger can use
+Create ledger spreadsheet instead of selecting an existing file. The app creates
+`Business name Ledger` in that Google account's My Drive, saves its ID, and
+initializes the existing required worksheets and default accounts/categories.
+This does not require a separate Picker grant because the app creates the file.
+The action is hidden once a ledger is configured and never replaces an existing
+ledger. Drive receipt/backup folders are still configured in the same setup tab.
+
+If creation or initialization is uncertain, no file is deleted or blindly
+recreated. Inspect Drive and select the created file through Picker; if its ID
+was saved, use Validate ledger to finish supported blank-workbook initialization.
+
 
 #### Recovery
 

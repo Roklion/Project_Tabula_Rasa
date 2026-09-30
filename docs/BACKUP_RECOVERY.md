@@ -101,14 +101,15 @@ python scripts/migrate_workbook.py --secrets .streamlit/secrets.toml --profile P
 ```
 
 For a new or reassigned profile that has not been saved yet, use the candidate
-workbook directly with a local service-account JSON file:
+workbook using a saved profile OAuth grant, after authorizing the candidate
+through Google setup > Authorize a recovery or migration workbook:
 
 ```text
-python scripts/migrate_workbook.py --spreadsheet-id WORKBOOK_ID --service-account-file path\to\service-account.json
+python scripts/migrate_workbook.py --profile PROFILE_KEY --spreadsheet-id WORKBOOK_ID
 ```
 
 After it succeeds, return to Account settings to validate and save the profile.
-Keep the credential file outside the repository.
+Keep the profile OAuth grant protected; do not commit exported Secrets.
 
 For a legacy workbook schema, follow the explicit workbook migration procedure
 in the setup and architecture guides. Payee text embedded in a legacy backup
@@ -250,7 +251,9 @@ generation, and validate again.
 ## Restore into a new blank workbook
 
 1. Create a new blank Google spreadsheet.
-2. Share it as Editor with the selected profile's Sheets service-account email.
+2. Give the selected profile's Google account Editor access and authorize the
+   blank target through Google setup > Authorize a recovery or migration workbook.
+   This does not change the active ledger.
 3. Copy its spreadsheet ID.
 4. Validate the archive locally.
 5. Restore it with:
@@ -481,7 +484,7 @@ hosted Secrets, and retry.
 ### Restore refuses the target
 
 Create a new blank workbook, share it with the selected profile's Sheets
-service account, verify the target is not any configured live workbook, and
+Google account and authorize it through the candidate Picker, verify the target is not any configured live workbook, and
 use `--initialize`.
 
 ### An archive fails validation

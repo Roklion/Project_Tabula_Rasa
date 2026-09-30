@@ -1,16 +1,9 @@
 {
-  "version": 1,
+  "version": 2,
   "business_profiles": {
     "smoke-profile": {
       "name": "Smoke Test Business",
       "spreadsheet_id": "smoke-spreadsheet-id-12345",
-      "gcp_service_account": {
-        "type": "service_account",
-        "project_id": "smoke-project",
-        "private_key": "-----BEGIN PRIVATE KEY-----\nsmoke-private-key\n-----END PRIVATE KEY-----\n",
-        "client_email": "smoke@smoke-project.iam.gserviceaccount.com",
-        "token_uri": "https://oauth2.googleapis.com/token"
-      },
       "google_drive": {
         "authorized_email": "smoke@example.test",
         "authorized_name": "Smoke Test User",

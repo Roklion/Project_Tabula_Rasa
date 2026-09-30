@@ -633,7 +633,8 @@ Enter. Existing workbooks must be upgraded once with
 `scripts/migrate_workbook.py --profile PROFILE_KEY` before using the new
 transaction schema. For a new or reassigned profile, run
 `scripts/migrate_workbook.py --spreadsheet-id WORKBOOK_ID
---service-account-file path\to\service-account.json` before saving the profile.
+--profile PROFILE_KEY` after connecting Google and authorizing the candidate
+workbook through Google setup > Authorize a recovery or migration workbook.
 The command upgrades the complete recognized historical layout, including
 managed payees.
 

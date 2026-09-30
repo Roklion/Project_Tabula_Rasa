@@ -11,8 +11,10 @@ from typing import Any
 from typing import Callable
 from uuid import uuid4
 import gspread
+from google.oauth2.credentials import Credentials as Credentials
 from google.auth.exceptions import GoogleAuthError
-from google.oauth2.service_account import Credentials
+from tabula_rasa.google_drive.oauth import profile_google_credentials
+from tabula_rasa.google_drive.errors import GoogleDriveConfigurationError
 from tabula_rasa.quickbooks_import import suggested_account_classification
 from .schema import (
     DEFAULT_ACCOUNTS,
@@ -110,8 +112,8 @@ class _GoogleSheetsStorageClient:
         scopes: Sequence[str],
     ) -> Any:
         """Open a configured workbook without changing its contents."""
+        del scopes  # The shared drive.file grant serves both read and write paths.
         try:
-            credential_info = dict(secrets["gcp_service_account"])
             spreadsheet_id = _configured_spreadsheet_id(secrets)
         except (KeyError, TypeError, ValueError) as exc:
             raise StorageAuthenticationError(
@@ -119,33 +121,32 @@ class _GoogleSheetsStorageClient:
             ) from exc
 
         try:
-            credentials = Credentials.from_service_account_info(
-                credential_info, scopes=list(scopes)
-            )
+            credentials = profile_google_credentials(secrets)
             client = gspread.authorize(credentials)
         except (
             TypeError,
             ValueError,
             GoogleAuthError,
+            GoogleDriveConfigurationError,
             gspread.GSpreadException,
             OSError,
         ) as exc:
             raise StorageAuthenticationError(
-                "Google rejected the uploaded service-account credential"
+                "Google OAuth connection failed. Reconnect this profile's Google account"
             ) from exc
 
         try:
             workbook = client.open_by_key(spreadsheet_id)
         except GoogleAuthError as exc:
             raise StorageAuthenticationError(
-                "Google rejected the uploaded service-account credential"
+                "Google OAuth connection failed. Reconnect this profile's Google account"
             ) from exc
         except (
             gspread.SpreadsheetNotFound,
             PermissionError,
         ) as exc:
             raise StorageWorkbookAccessError(
-                "The spreadsheet could not be opened with this service account"
+                "The authorized Google account cannot open this spreadsheet. Select it through Picker and confirm Editor access"
             ) from exc
         except (gspread.GSpreadException, OSError) as exc:
             raise StorageWorkbookAccessError(
@@ -241,7 +242,7 @@ class _GoogleSheetsStorageClient:
                 raise
         except GoogleAuthError as exc:
             raise StorageAuthenticationError(
-                "Google rejected the uploaded service-account credential"
+                "Google OAuth connection failed. Reconnect this profile's Google account"
             ) from exc
         except (PermissionError, gspread.GSpreadException, OSError) as exc:
             raise StorageInitializationError(
@@ -257,7 +258,11 @@ class _GoogleSheetsStorageClient:
         for attempt in range(attempts):
             try:
                 return operation()
-            except (GoogleAuthError, gspread.GSpreadException, OSError) as exc:
+            except GoogleAuthError as exc:
+                raise StorageAuthenticationError(
+                    "Google OAuth connection failed. Reconnect this profile's Google account"
+                ) from exc
+            except (gspread.GSpreadException, OSError) as exc:
                 response = getattr(exc, "response", None)
                 status_code = getattr(response, "status_code", None)
                 temporary = isinstance(exc, OSError) or status_code in {

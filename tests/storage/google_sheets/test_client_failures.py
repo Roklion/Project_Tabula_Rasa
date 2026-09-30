@@ -1,11 +1,9 @@
+from tests.google_auth_fixtures import GOOGLE_OAUTH_CONFIG, google_grant
 from ._support import (
-    Credentials,
     FakeWorkbook,
     GoogleSheetsStorage,
     GoogleSheetsStorageTestCase,
     Mock,
-    SHEETS_READONLY_SCOPE,
-    SHEETS_SCOPE,
     StorageAuthenticationError,
     StorageInitializationError,
     StorageUnavailableError,
@@ -162,12 +160,9 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         )
         google_client = Mock()
         google_client.open_by_key.return_value = workbook
-        credential_info = {"type": "service_account"}
 
         with (
-            patch.object(
-                Credentials,
-                "from_service_account_info",
+            patch("tabula_rasa.storage.google_sheets.client.profile_google_credentials",
                 return_value=object(),
             ) as from_service_account_info,
             patch.object(gspread, "authorize", return_value=google_client),
@@ -175,16 +170,15 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             storage = GoogleSheetsStorage.from_secrets(
                 {
                     "spreadsheet_id": "given-spreadsheet-id",
-                    "gcp_service_account": credential_info,
+                    "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
                 }
             )
 
         google_client.open_by_key.assert_called_once_with(
             "given-spreadsheet-id"
         )
-        from_service_account_info.assert_called_once_with(
-            credential_info, scopes=[SHEETS_SCOPE]
-        )
+        from_service_account_info.assert_called_once()
+        assert from_service_account_info.call_args.args[0]["google_drive"]["refresh_token"] == "fake-refresh"
         assert storage.workbook_title == workbook.title
         same_spreadsheet_storage = GoogleSheetsStorage(
             FakeWorkbook(), spreadsheet_id="given-spreadsheet-id"
@@ -207,7 +201,7 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             GoogleSheetsStorage.from_secrets(
                 {
                     "spreadsheet_id": None,
-                    "gcp_service_account": {"type": "service_account"},
+                    "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
                 }
             )
 
@@ -224,9 +218,7 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             worksheet.append_rows = Mock()
 
         with (
-            patch.object(
-                Credentials,
-                "from_service_account_info",
+            patch("tabula_rasa.storage.google_sheets.client.profile_google_credentials",
                 return_value=object(),
             ) as from_service_account_info,
             patch.object(gspread, "authorize", return_value=google_client),
@@ -234,14 +226,13 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             storage = GoogleSheetsStorage.from_secrets_read_only(
                 {
                     "spreadsheet_id": "given-spreadsheet-id",
-                    "gcp_service_account": {"type": "service_account"},
+                    "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
                 }
             )
 
         assert storage.workbook_title == workbook.title
-        from_service_account_info.assert_called_once_with(
-            {"type": "service_account"}, scopes=[SHEETS_READONLY_SCOPE]
-        )
+        from_service_account_info.assert_called_once()
+        assert from_service_account_info.call_args.args[0]["google_drive"]["refresh_token"] == "fake-refresh"
         for worksheet in workbook.sheets.values():
             worksheet.update.assert_not_called()
             worksheet.add_cols.assert_not_called()
@@ -259,9 +250,7 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             worksheet.add_cols = Mock()
 
         with (
-            patch.object(
-                Credentials,
-                "from_service_account_info",
+            patch("tabula_rasa.storage.google_sheets.client.profile_google_credentials",
                 return_value=object(),
             ),
             patch.object(gspread, "authorize", return_value=google_client),
@@ -270,7 +259,7 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             GoogleSheetsStorage.from_secrets_read_only(
                 {
                     "spreadsheet_id": "given-spreadsheet-id",
-                    "gcp_service_account": {"type": "service_account"},
+                    "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
                 }
             )
 
@@ -286,9 +275,7 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         google_client.open_by_key.return_value = workbook
 
         with (
-            patch.object(
-                Credentials,
-                "from_service_account_info",
+            patch("tabula_rasa.storage.google_sheets.client.profile_google_credentials",
                 return_value=object(),
             ),
             patch.object(gspread, "authorize", return_value=google_client),
@@ -297,7 +284,7 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             GoogleSheetsStorage.from_secrets(
                 {
                     "spreadsheet_id": "given-spreadsheet-id",
-                    "gcp_service_account": {"type": "service_account"},
+                    "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
                 }
             )
 
@@ -307,9 +294,7 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
 
     def test_profile_storage_reports_invalid_credential_safely(self) -> None:
         with (
-            patch.object(
-                Credentials,
-                "from_service_account_info",
+            patch("tabula_rasa.storage.google_sheets.client.profile_google_credentials",
                 side_effect=ValueError("credential-content-must-not-leak"),
             ),
             pytest.raises(StorageAuthenticationError) as raised,
@@ -317,14 +302,14 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             GoogleSheetsStorage.from_secrets(
                 {
                     "spreadsheet_id": "given-spreadsheet-id",
-                    "gcp_service_account": {"type": "service_account"},
+                    "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
                 }
             )
 
         assert "credential-content-must-not-leak" not in str(raised.value)
         assert (
             str(raised.value)
-            == "Google rejected the uploaded service-account credential"
+            == "Google OAuth connection failed. Reconnect this profile's Google account"
         )
 
     def test_profile_storage_reports_inaccessible_workbook(self) -> None:
@@ -332,18 +317,16 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         google_client.open_by_key.side_effect = gspread.SpreadsheetNotFound()
 
         with (
-            patch.object(
-                Credentials,
-                "from_service_account_info",
+            patch("tabula_rasa.storage.google_sheets.client.profile_google_credentials",
                 return_value=object(),
             ),
             patch.object(gspread, "authorize", return_value=google_client),
-            pytest.raises(StorageWorkbookAccessError, match="could not be opened"),
+            pytest.raises(StorageWorkbookAccessError, match="cannot open"),
         ):
             GoogleSheetsStorage.from_secrets(
                 {
                     "spreadsheet_id": "given-spreadsheet-id",
-                    "gcp_service_account": {"type": "service_account"},
+                    "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
                 }
             )
 
@@ -360,9 +343,7 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         google_client.open_by_key.return_value = workbook
 
         with (
-            patch.object(
-                Credentials,
-                "from_service_account_info",
+            patch("tabula_rasa.storage.google_sheets.client.profile_google_credentials",
                 return_value=object(),
             ),
             patch.object(gspread, "authorize", return_value=google_client),
@@ -374,7 +355,7 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             GoogleSheetsStorage.from_secrets(
                 {
                     "spreadsheet_id": "given-spreadsheet-id",
-                    "gcp_service_account": {"type": "service_account"},
+                    "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
                 }
             )
 

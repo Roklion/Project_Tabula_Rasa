@@ -35,7 +35,11 @@ def profile_configuration_readiness(
     """Return a secret-free readiness report for one validated local profile."""
     missing: list[str] = []
     drive = settings.get("google_drive")
-    if isinstance(drive, Mapping):
+    if not settings.get("spreadsheet_id"):
+        missing.append("Select the ledger spreadsheet through Google Picker.")
+    if not isinstance(drive, Mapping):
+        missing.append("Connect this profile's Google account.")
+    if isinstance(drive, Mapping) and any(field in drive for field in ("storage_root", "receipt_folder", "backup_folder")):
         storage_root = drive.get("storage_root")
         if not isinstance(storage_root, Mapping) or not storage_root.get("id"):
             missing.append("Select or create the Google Drive storage root.")

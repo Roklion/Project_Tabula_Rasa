@@ -17,7 +17,6 @@ from tabula_rasa.local_profile_store import (
     local_profile_admin_available,
     local_profile_admin_enabled,
     merged_profile_secrets,
-    parse_service_account_json,
     project_hosted_profiles,
     save_local_profile,
     suggest_profile_key,
@@ -27,31 +26,14 @@ from tabula_rasa.local_profile_store import (
 )
 
 
-def credential(private_key: str = "test-private-key") -> dict[str, str]:
-    return {
-        "type": "service_account",
-        "project_id": "test-project",
-        "private_key_id": "test-key-id",
-        "private_key": (
-            "-----BEGIN PRIVATE KEY-----\n"
-            f"{private_key}\n"
-            "-----END PRIVATE KEY-----\n"
-        ),
-        "client_email": "ledger@test-project.iam.gserviceaccount.com",
-        "client_id": "123456789",
-        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "auth_provider_x509_cert_url": ("https://www.googleapis.com/oauth2/v1/certs"),
-        "client_x509_cert_url": "https://example.test/certificate",
-    }
 
 
 def settings(name: str = "North Shop") -> dict:
     return build_profile_settings(
         name,
         "https://docs.google.com/spreadsheets/d/abcdefghij1234567890/edit",
-        json.dumps(credential()).encode("utf-8"),
         r"G:\My Drive\Project Tabula Rasa Backups\north",
+        google_drive={"authorized_email": "owner@example.test", "refresh_token": "fake-refresh", "token_uri": "https://oauth2.googleapis.com/token", "scopes": ["https://www.googleapis.com/auth/drive.file"]},
     )
 
 
@@ -61,7 +43,7 @@ class TestLocalProfileStore:
             "north": {
                 "name": "North Shop",
                 "spreadsheet_id": "north-sheet",
-                "gcp_service_account": credential(),
+
                 "google_drive": {},
             }
         }
@@ -108,23 +90,12 @@ class TestLocalProfileStore:
             {LOCAL_PROFILE_ADMIN_ENV: "1"},
         )
 
-    def test_rejects_malformed_credential_without_echoing_secret(self) -> None:
-        secret = "credential-content-must-not-leak"
-        upload = json.dumps({"type": "service_account", "private_key": secret}).encode(
-            "utf-8"
-        )
-
-        with pytest.raises(LocalProfileStoreError) as raised:
-            parse_service_account_json(upload)
-
-        assert secret not in str(raised.value)
 
     def test_blank_backup_path_is_not_stored(self) -> None:
         configured = build_profile_settings(
             "Cloud Shop",
             "abcdefghij1234567890",
-            json.dumps(credential()).encode("utf-8"),
-            "   ",
+                "   ",
         )
 
         assert "backup_folder_path" not in configured
@@ -135,7 +106,7 @@ class TestLocalProfileStore:
             path.write_text(
                 json.dumps(
                     {
-                        "version": 1,
+                        "version": 2,
                         "business_profiles": {
                             "north": {
                                 **settings(),
@@ -160,8 +131,8 @@ class TestLocalProfileStore:
             stored = load_local_profiles(path)
             assert stored["north"]["name"] == "North Shop"
             assert (
-                stored["north"]["gcp_service_account"]["client_email"]
-                == "ledger@test-project.iam.gserviceaccount.com"
+                stored["north"]["google_drive"]["authorized_email"]
+                == "owner@example.test"
             )
             assert "credential-content-must-not-leak" not in path.read_text(
                 encoding="utf-8"
@@ -219,7 +190,7 @@ class TestLocalProfileStore:
         assert after["name"] == "North Shop Renamed"
         assert after["spreadsheet_id"] == "newspreadsheet123456789"
         assert "backup_folder_path" not in after
-        assert after["gcp_service_account"] == before["gcp_service_account"]
+        assert after["google_drive"] == before["google_drive"]
         assert after["google_drive"] == before["google_drive"]
         assert after["synology_recovery"] == before["synology_recovery"]
 
@@ -240,24 +211,6 @@ class TestLocalProfileStore:
 
             assert load_local_profiles(path)["north"] == before
 
-    def test_credential_rotation_requires_explicit_upload_and_replaces_only_key(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "local_business_profiles.json"
-            save_local_profile("north", settings(), path=path)
-            replacement = credential("replacement-key")
-
-            update_local_profile(
-                "north",
-                name="North Shop",
-                spreadsheet="abcdefghij1234567890",
-                backup_folder_path=r"G:\My Drive\Project Tabula Rasa Backups\north",
-                credential_upload=json.dumps(replacement).encode("utf-8"),
-                path=path,
-            )
-
-            stored = load_local_profiles(path)["north"]
-
-        assert stored["gcp_service_account"] == replacement
 
     def test_edit_isolated_to_the_selected_profile(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -357,7 +310,7 @@ class TestLocalProfileStore:
         assert stored["north"]["google_drive"]["storage_root"]["id"] == (
             "rootfolder123"
         )
-        assert "google_drive" not in stored["south"]
+        assert "storage_root" not in stored["south"]["google_drive"]
 
     def test_synology_recovery_is_optional_and_profile_scoped(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

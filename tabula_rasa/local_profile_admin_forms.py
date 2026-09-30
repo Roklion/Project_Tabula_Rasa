@@ -11,9 +11,6 @@ import streamlit as st
 from tabula_rasa.business_profiles import load_business_profiles
 from tabula_rasa.local_profile_admin_support import (
     configured_profiles_or_empty,
-    initialize_candidate_storage,
-    profile_setup_error_message,
-    validate_profile_edit_action,
 )
 from tabula_rasa.local_profile_store import (
     LocalProfileStoreError,
@@ -24,7 +21,6 @@ from tabula_rasa.local_profile_store import (
     update_local_profile,
     validate_profile_key,
 )
-from tabula_rasa.storage import StorageError
 
 
 def sync_profile_key_suggestion() -> None:
@@ -47,9 +43,8 @@ def render_local_profile_edits(
 ) -> None:
     st.subheader("Edit local profile settings")
     st.write(
-        "Change ordinary profile settings without re-uploading the stored Sheets "
-        "credential. Profile keys are immutable. Use the separate rotation button "
-        "only when replacing that credential."
+        "Edit business details here. Connect Google and select the ledger in Google setup. "
+        "Profile keys are immutable."
     )
     profiles = (
         {selected_profile_key: local_profiles[selected_profile_key]}
@@ -66,11 +61,7 @@ def render_local_profile_edits(
                     max_chars=100,
                     key=f"local_profile_edit_name_{profile_key}",
                 )
-                spreadsheet = st.text_input(
-                    "Google Sheets URL or spreadsheet ID",
-                    value=str(existing.get("spreadsheet_id") or ""),
-                    key=f"local_profile_edit_spreadsheet_{profile_key}",
-                )
+                spreadsheet = str(existing.get("spreadsheet_id") or "")
                 backup_folder_path = st.text_input(
                     "Optional local backup folder path",
                     value=str(existing.get("backup_folder_path") or ""),
@@ -80,39 +71,20 @@ def render_local_profile_edits(
                     ),
                     key=f"local_profile_edit_backup_path_{profile_key}",
                 )
-                credential_file = st.file_uploader(
-                    "Replacement Google service-account JSON (rotation only)",
-                    type=["json"],
-                    accept_multiple_files=False,
-                    key=f"local_profile_edit_credential_{profile_key}",
-                )
                 edit_error = st.empty()
                 save_settings = st.form_submit_button(
                     "Validate and save settings",
                     key=f"local_profile_edit_save_{profile_key}",
                 )
-                rotate_credential = st.form_submit_button(
-                    "Validate and rotate credential",
-                    key=f"local_profile_edit_rotate_{profile_key}",
-                )
-
-            if not (save_settings or rotate_credential):
+            if not save_settings:
                 continue
             settings: Mapping[str, Any] = existing
             try:
-                validate_profile_edit_action(
-                    save_settings,
-                    rotate_credential,
-                    credential_file,
-                )
                 settings = build_profile_edit_settings(
                     existing,
                     name,
                     spreadsheet,
                     backup_folder_path,
-                    credential_file.getvalue()
-                    if rotate_credential and credential_file is not None
-                    else None,
                 )
                 folded_name = settings["name"].casefold()
                 if any(
@@ -123,30 +95,19 @@ def render_local_profile_edits(
                     raise LocalProfileStoreError(
                         "Business display names must be unique."
                     )
-                initialize_candidate_storage(settings)
                 update_local_profile(
                     profile_key,
                     name=name,
                     spreadsheet=spreadsheet,
                     backup_folder_path=backup_folder_path,
-                    credential_upload=(
-                        credential_file.getvalue()
-                        if rotate_credential and credential_file is not None
-                        else None
-                    ),
                     path=store_path,
                 )
             except LocalProfileStoreError as error:
                 edit_error.error(str(error))
                 continue
-            except StorageError as error:
-                edit_error.error(profile_setup_error_message(error, settings))
-                continue
-
             st.cache_resource.clear()
-            action = "rotated and saved" if rotate_credential else "saved"
             st.session_state["local_profile_admin_notice"] = (
-                f"Business profile '{profile_key}' was validated and {action}."
+                f"Business profile '{profile_key}' was saved."
             )
             st.rerun()
 
@@ -165,26 +126,19 @@ def render_add_profile_form(
     if prominent:
         st.subheader(heading)
         st.write(
-            "Start with the Sheets ledger. Optional Drive, local backup, and "
-            "Synology steps appear after the profile is saved."
+            "Save the business name first, then connect Google and select its ledger "
+            "in Google setup."
         )
         render_form = st.container()
     else:
         render_form = st.expander(heading, expanded=False)
     with render_form:
-        st.write(
-            "Share the spreadsheet with the uploaded service account as Editor before "
-            "saving. Validation initializes a genuinely blank workbook, but populated "
-            "workbooks with missing or incompatible worksheets must be migrated first "
-            "with the explicit workbook migration command."
-        )
         profile_form_keys = (
             "local_profile_name",
             "local_profile_key",
             "local_profile_key_suggestion",
             "local_profile_spreadsheet",
             "local_profile_backup_path",
-            "local_profile_credential",
         )
         if st.session_state.pop("reset_local_profile_form", False):
             for form_key in profile_form_keys:
@@ -203,10 +157,6 @@ def render_add_profile_form(
             key="local_profile_key",
         )
         with st.form("local_profile_form", clear_on_submit=False):
-            spreadsheet = st.text_input(
-                "Google Sheets URL or spreadsheet ID",
-                key="local_profile_spreadsheet",
-            )
             backup_folder_path = st.text_input(
                 "Optional local backup folder path",
                 help=(
@@ -215,14 +165,8 @@ def render_add_profile_form(
                 ),
                 key="local_profile_backup_path",
             )
-            credential_file = st.file_uploader(
-                "Google service-account JSON",
-                type=["json"],
-                accept_multiple_files=False,
-                key="local_profile_credential",
-            )
             save_error = st.empty()
-            submitted = st.form_submit_button("Validate and save", type="primary")
+            submitted = st.form_submit_button("Save profile", type="primary")
 
         if not submitted:
             return
@@ -233,21 +177,9 @@ def render_add_profile_form(
                 profile.key for profile in configured_profiles_or_empty(effective_secrets)
             }:
                 raise LocalProfileStoreError(
-                    "That profile key already exists. Use its edit or credential "
-                    "rotation controls instead."
+                    "That profile key already exists. Use its edit controls."
                 )
-            if credential_file is None:
-                raise LocalProfileStoreError(
-                    "Upload the Google service-account JSON file."
-                )
-            settings = build_profile_settings(
-                name,
-                spreadsheet,
-                credential_file.getvalue(),
-                backup_folder_path,
-                None,
-                None,
-            )
+            settings = build_profile_settings(name, "", backup_folder_path)
             folded_name = settings["name"].casefold()
             if any(
                 profile.key != key and profile.name.casefold() == folded_name
@@ -256,7 +188,6 @@ def render_add_profile_form(
                 raise LocalProfileStoreError(
                     "Business display names must be unique."
                 )
-            initialize_candidate_storage(settings)
             save_local_profile(
                 key,
                 settings,
@@ -265,13 +196,9 @@ def render_add_profile_form(
         except LocalProfileStoreError as error:
             save_error.error(str(error))
             return
-        except StorageError as error:
-            save_error.error(profile_setup_error_message(error, settings))
-            return
-
         st.cache_resource.clear()
         st.session_state["reset_local_profile_form"] = True
         st.session_state["local_profile_admin_notice"] = (
-            f"Business profile '{key}' was validated and saved locally."
+            f"Business profile '{key}' was saved locally. Connect Google and select its ledger next."
         )
         st.rerun()

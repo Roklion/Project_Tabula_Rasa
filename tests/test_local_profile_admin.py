@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.google_auth_fixtures import GOOGLE_OAUTH_CONFIG, google_grant
+
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -18,7 +20,6 @@ from tabula_rasa.local_profile_admin_security import (
 from tabula_rasa.local_profile_admin_support import (
     initialize_candidate_storage,
     profile_setup_error_message,
-    validate_profile_edit_action,
 )
 from scripts.export_streamlit_secrets import SecretsExportError
 from tabula_rasa.profile_readiness import ProfileReadiness, profile_settings_fingerprint
@@ -32,10 +33,7 @@ from tabula_rasa.storage import (
 )
 SETTINGS = {
     "spreadsheet_id": "abcdefghij1234567890",
-    "gcp_service_account": {
-        "client_email": "ledger@example.test",
-        "private_key": "credential-content-must-not-leak",
-    },
+    "google_drive": google_grant('ledger@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
 }
 
 
@@ -44,7 +42,7 @@ SETTINGS = {
     (
         (
             StorageAuthenticationError("safe"),
-            "Service-account authentication failed",
+            "Google OAuth authentication failed",
         ),
         (
             StorageWorkbookAccessError("safe"),
@@ -68,18 +66,11 @@ def test_profile_setup_error_identifies_stage_without_exposing_secrets(
 
     assert expected.casefold() in message.casefold()
     assert "…34567890" in message
-    assert "ledger@example.test" in message
     assert SETTINGS["spreadsheet_id"] not in message
     assert "credential-content-must-not-leak" not in message
     assert message.endswith("No profile was saved.")
 
 
-def test_profile_edit_rejects_a_credential_upload_on_settings_save() -> None:
-    with pytest.raises(LocalProfileStoreError, match="rotate credential"):
-        validate_profile_edit_action(True, False, object())
-
-    with pytest.raises(LocalProfileStoreError, match="Upload a replacement"):
-        validate_profile_edit_action(False, True, None)
 
 
 def test_profile_rows_use_a_safe_fallback_for_null_backup_paths() -> None:
@@ -161,11 +152,8 @@ def test_fresh_readiness_skips_drive_validation_without_a_storage_root() -> None
             app_secrets={},
         )
 
-    assert report.status == "incomplete"
-    assert report.missing_steps == (
-        "Select or create the Google Drive storage root.",
-        "Provision the Receipts and Ledger Backups folders under the root.",
-    )
+    assert report.status == "ready-local"
+    assert report.missing_steps == ()
     assert report.validation_errors == ()
     validate_drive.assert_not_called()
 

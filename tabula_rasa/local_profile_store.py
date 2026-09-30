@@ -41,25 +41,16 @@ LOCAL_PROFILE_STORE_PATH = (
     / ".streamlit"
     / "business_profiles.json"
 )
-STORE_VERSION = 1
-MAX_CREDENTIAL_BYTES = 64 * 1024
+STORE_VERSION = 2
 HOSTED_PROFILE_FIELDS = (
     "name",
     "spreadsheet_id",
-    "gcp_service_account",
 )
 PROFILE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,47}$")
 SPREADSHEET_URL_PATTERN = re.compile(
     r"https://docs\.google\.com/spreadsheets/d/([A-Za-z0-9_-]+)"
 )
 SPREADSHEET_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{10,}$")
-REQUIRED_CREDENTIAL_FIELDS = {
-    "type",
-    "project_id",
-    "private_key",
-    "client_email",
-    "token_uri",
-}
 _STORE_LOCK = threading.Lock()
 
 
@@ -163,6 +154,8 @@ def project_hosted_profiles(
             if key in settings
         }
         hosted["name"] = profile.name
+        if not settings.get("spreadsheet_id") or "google_drive" not in settings:
+            raise LocalProfileStoreError("Connect Google and select a ledger for every profile before exporting.")
         if "google_drive" in settings:
             try:
                 hosted["google_drive"] = validate_drive_profile_settings(
@@ -177,46 +170,9 @@ def project_hosted_profiles(
     return projected
 
 
-def parse_service_account_json(upload: bytes) -> dict[str, str]:
-    """Parse and validate an uploaded Google service-account JSON document."""
-    if not upload or len(upload) > MAX_CREDENTIAL_BYTES:
-        raise LocalProfileStoreError(
-            "Credential JSON must be a non-empty file smaller than 64 KB."
-        )
-    try:
-        parsed = json.loads(upload.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise LocalProfileStoreError(
-            "Credential file is not valid UTF-8 JSON."
-        ) from exc
-    if not isinstance(parsed, dict):
-        raise LocalProfileStoreError(
-            "Credential JSON must contain one service-account object."
-        )
-    if any(not isinstance(key, str) or not isinstance(value, str) for key, value in parsed.items()):
-        raise LocalProfileStoreError(
-            "Credential JSON contains an unsupported value."
-        )
-    missing = sorted(REQUIRED_CREDENTIAL_FIELDS - parsed.keys())
-    if missing or parsed.get("type") != "service_account":
-        raise LocalProfileStoreError(
-            "Credential JSON is not a complete Google service-account key."
-        )
-    private_key = parsed.get("private_key", "")
-    if (
-        "-----BEGIN PRIVATE KEY-----" not in private_key
-        or "-----END PRIVATE KEY-----" not in private_key
-    ):
-        raise LocalProfileStoreError(
-            "Credential JSON does not contain a valid private-key field."
-        )
-    return dict(parsed)
-
-
 def build_profile_settings(
     name: str,
     spreadsheet: str,
-    credential_upload: bytes,
     backup_folder_path: str | None = None,
     google_drive: Mapping[str, Any] | None = None,
     synology_recovery: Mapping[str, Any] | None = None,
@@ -229,8 +185,7 @@ def build_profile_settings(
         )
     settings = {
         "name": display_name,
-        "spreadsheet_id": parse_spreadsheet_id(spreadsheet),
-        "gcp_service_account": parse_service_account_json(credential_upload),
+        "spreadsheet_id": parse_spreadsheet_id(spreadsheet) if spreadsheet.strip() else "",
     }
     if backup_folder_path is not None and backup_folder_path.strip():
         settings["backup_folder_path"] = validate_backup_folder_path(
@@ -261,11 +216,14 @@ def _validate_stored_profiles(profiles: object) -> dict[str, dict[str, Any]]:
         key = validate_profile_key(str(raw_key))
         if not isinstance(raw_settings, dict):
             raise LocalProfileStoreError("Local profile store has an invalid format.")
+        if "gcp_service_account" in raw_settings:
+            raise LocalProfileStoreError(
+                "Run scripts/migrate_profile_oauth.py before loading service-account profiles."
+            )
         try:
             settings = build_profile_settings(
                 str(raw_settings.get("name", "")),
                 str(raw_settings.get("spreadsheet_id", "")),
-                json.dumps(raw_settings.get("gcp_service_account", {})).encode("utf-8"),
                 (
                     str(raw_settings["backup_folder_path"])
                     if "backup_folder_path" in raw_settings
@@ -423,25 +381,11 @@ def build_profile_edit_settings(
     name: str,
     spreadsheet: str,
     backup_folder_path: str | None,
-    credential_upload: bytes | None = None,
 ) -> dict[str, Any]:
     """Build validated settings while preserving omitted profile-scoped values."""
-    if credential_upload is None:
-        credential = existing.get("gcp_service_account")
-        if not isinstance(credential, Mapping):
-            raise LocalProfileStoreError(
-                "The existing profile does not contain a valid service-account key."
-            )
-        try:
-            credential_upload = json.dumps(dict(credential)).encode("utf-8")
-        except (TypeError, ValueError) as exc:
-            raise LocalProfileStoreError(
-                "The existing profile credential could not be validated safely."
-            ) from exc
     return build_profile_settings(
         name,
         spreadsheet,
-        credential_upload,
         backup_folder_path,
         existing.get("google_drive"),
         existing.get("synology_recovery"),
@@ -454,7 +398,6 @@ def update_local_profile(
     name: str,
     spreadsheet: str,
     backup_folder_path: str | None,
-    credential_upload: bytes | None = None,
     path: Path = LOCAL_PROFILE_STORE_PATH,
 ) -> None:
     """Atomically edit profile settings without changing the immutable key."""
@@ -471,7 +414,6 @@ def update_local_profile(
             name,
             spreadsheet,
             backup_folder_path,
-            credential_upload,
         )
         folded_name = candidate["name"].casefold()
         if any(

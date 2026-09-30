@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.google_auth_fixtures import GOOGLE_OAUTH_CONFIG, google_grant
+
 import tempfile
 import tomllib
 from pathlib import Path
@@ -40,14 +42,7 @@ class TestExportStreamlitSecrets:
                 "name": "North Shop",
                 "spreadsheet_id": "north-sheet-id",
                 "backup_folder_path": r"G:\My Drive\North",
-                "gcp_service_account": {
-                    "type": "service_account",
-                    "private_key": (
-                        "-----BEGIN PRIVATE KEY-----\nsecret\n"
-                        "-----END PRIVATE KEY-----\n"
-                    ),
-                    "client_email": "north@example.test",
-                },
+
                 "google_drive": {
                     "authorized_email": "north-owner@example.test",
                     "authorized_name": "North Owner",
@@ -78,14 +73,7 @@ class TestExportStreamlitSecrets:
             "south_shop": {
                 "name": "South Shop",
                 "spreadsheet_id": "south-sheet-id",
-                "gcp_service_account": {
-                    "type": "service_account",
-                    "private_key": (
-                        "-----BEGIN PRIVATE KEY-----\nsecret\n"
-                        "-----END PRIVATE KEY-----\n"
-                    ),
-                    "client_email": "south@example.test",
-                },
+                "google_drive": google_grant('south@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
             },
         }
 
@@ -94,7 +82,7 @@ class TestExportStreamlitSecrets:
                 "app_password_hash": "scrypt$hash",
                 "business_name": "Legacy Name",
                 "spreadsheet_id": "legacy-sheet",
-                "gcp_service_account": {"private_key": "legacy-secret"},
+                "google_drive": google_grant('owner@example.test'),
                 "google_drive_oauth": {
                     "client_id": "client.apps.googleusercontent.com",
                     "client_secret": "oauth-secret",
@@ -138,15 +126,9 @@ class TestExportStreamlitSecrets:
         assert set(hosted_north) == {
             "name",
             "spreadsheet_id",
-            "gcp_service_account",
             "google_drive",
         }
-        assert (
-            "\nsecret\n"
-            in parsed["business_profiles"]["north-shop"]["gcp_service_account"][
-                "private_key"
-            ]
-        )
+        assert "gcp_service_account" not in hosted_north
         assert (
             parsed["google_drive_oauth"]["client_secret"] == "oauth-secret"
         )
@@ -187,6 +169,7 @@ class TestExportStreamlitSecrets:
     def test_local_only_edits_leave_hosted_export_unchanged(self) -> None:
         app_secrets = {
             "app_password_hash": "scrypt$hash",
+            "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
             "synology_recovery_defaults": {
                 "base_path": "/volume1/Recovery",
                 "schedule": "Continuous",
@@ -196,7 +179,7 @@ class TestExportStreamlitSecrets:
         profile = {
             "name": "North Shop",
             "spreadsheet_id": "north-sheet-id",
-            "gcp_service_account": {"type": "service_account"},
+            "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
             "backup_folder_path": r"G:\Backups\North",
             "synology_recovery": {
                 "layout": "profile-root",
@@ -252,3 +235,11 @@ class TestExportStreamlitSecrets:
             assert output.name.startswith(EXPORT_PREFIX)
         finally:
             output.unlink(missing_ok=True)
+
+
+def test_export_requires_shared_oauth_configuration():
+    with pytest.raises(SecretsExportError, match="shared Google OAuth client"):
+        build_streamlit_secrets_toml({"app_password_hash": "fake"}, {
+            "north": {"name": "North", "spreadsheet_id": "ledger123456",
+                      "google_drive": google_grant()}
+        })

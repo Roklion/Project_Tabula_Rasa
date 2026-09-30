@@ -2,19 +2,19 @@
 
 This guide creates a Google Sheets-backed business profile and prepares a
 local or hosted deployment. Repeat the profile steps for each business.
-Google Drive authorization is optional for ledger-only use; when receipts or
-cloud backups are needed, follow [Google Drive](GOOGLE_DRIVE.md). Recovery
+Google OAuth authorization is required for every ledger. Drive folder setup
+is optional for ledger-only use; for receipts or cloud backups, follow [Google Drive](GOOGLE_DRIVE.md). Recovery
 procedures belong in [Backup and recovery](BACKUP_RECOVERY.md).
 
 ## Prerequisites and configuration
 
 Use Python 3.12 or newer, a supported Google account, and a Google Cloud
-project for each Sheets service account. The application uses:
+shared project and OAuth client for the deployment. The application uses:
 
 | File | Contents |
 | --- | --- |
 | .streamlit/secrets.toml | Application password hash and app-wide Drive OAuth/Picker configuration |
-| .streamlit/business_profiles.json | Profile names, workbook IDs, Sheets credentials, Drive grants/folders, and local recovery metadata |
+| .streamlit/business_profiles.json | Profile names, workbook IDs, Google OAuth grants/folders, and local recovery metadata |
 
 Both files are ignored. The profile file is plaintext and must stay on a
 protected, non-synchronized filesystem. Never commit, email, upload, log, or
@@ -39,8 +39,7 @@ python scripts\set_app_password.py
 ```
 
 At minimum, the file contains an app-wide password hash. Add the shared Drive
-OAuth settings described in [Google Drive](GOOGLE_DRIVE.md) when that feature
-is required. Start the application with:
+OAuth settings described in [Google Drive](GOOGLE_DRIVE.md). Start the application with:
 
 ```powershell
 streamlit run tabula_rasa/app.py
@@ -48,27 +47,18 @@ streamlit run tabula_rasa/app.py
 
 ## Create the Google Sheets profile
 
-### Google Cloud and service account
+### Shared Google Cloud / OAuth application
 
-1. Sign in to the [Google Cloud console](https://console.cloud.google.com/)
-   and create or select a project dedicated to the business's Sheets
-   integration.
-2. Enable the Google Sheets API.
-3. Under IAM & Admin > Service Accounts, create a recognizable service
-   account. Do not grant project-wide Owner or Editor access.
-4. Create and download a JSON key and record its client_email.
-5. Treat the JSON as a password. Keep it in protected credential storage,
-   outside the repository and ordinary download folders.
-
-An organization policy may block service-account key creation. Ask the
-administrator for the approved authentication path; do not weaken sharing or
-make the workbook public.
+Use the existing shared OAuth project and web client; do not create a project
+per business. Enable the Sheets, Drive, and Picker APIs. Configure the narrow
+`drive.file` scope, registered local/hosted origins and redirect URIs, and the
+restricted Picker key as described in [Google Drive](GOOGLE_DRIVE.md).
 
 ### Blank workbook and required worksheets
 
 1. Create a restricted folder and a blank spreadsheet for the business.
-2. Share only the spreadsheet with the service account client_email as
-   Editor. Copy the spreadsheet ID from the URL between /d/ and /edit.
+2. Ensure the profile's human Google account has Editor access. Select the
+   workbook through Picker in Account settings > Google setup.
 3. Leave the workbook blank; the application creates or validates these tabs
    and headers:
 
@@ -99,17 +89,15 @@ with the one-time combined workbook migration before using the managed
 python scripts/migrate_workbook.py --secrets .streamlit/secrets.toml --profile PROFILE_KEY
 ```
 
-For a new profile, or a profile being changed to a different legacy workbook,
-run the migration with the candidate workbook and a local service-account JSON
-file before saving the profile:
+For a candidate historical workbook, connect a saved profile first, use
+Google setup > Authorize a recovery or migration workbook, then run:
 
 ```text
-python scripts/migrate_workbook.py --spreadsheet-id WORKBOOK_ID --service-account-file path\to\service-account.json
+python scripts/migrate_workbook.py --profile PROFILE_KEY --spreadsheet-id WORKBOOK_ID
 ```
 
-Return to Account settings and validate/save the profile after the command
-completes. The credential file is read locally; do not place it in the
-repository.
+Return to Google setup, select the migrated workbook as the ledger, and
+validate it. Merely pasting a workbook ID does not grant `drive.file` access.
 
 See [Backup and recovery](BACKUP_RECOVERY.md) for migration behavior and
 legacy-backup compatibility details.
@@ -118,7 +106,7 @@ Normal startup validates populated workbooks against the current headers only;
 it never upgrades historical worksheet schemas or creates migration markers.
 An outdated workbook fails with an actionable error and remains unchanged.
 Upgrade a standard historical workbook explicitly, using the selected profile's
-service-account access:
+Google OAuth access:
 
 ```text
 python scripts/migrate_workbook.py --secrets .streamlit/secrets.toml --profile PROFILE_KEY
@@ -162,31 +150,27 @@ The launcher sets the flag only for its process and binds Streamlit to the
 loopback interface. In Account settings, re-enter the application password
 before configuration changes.
 
-### Add a profile
+### Add or edit a profile
 
-1. Enter the business name and review the derived safe profile key. The key
-   is editable before the first save and immutable afterward.
-2. Enter the Google spreadsheet URL or ID.
-3. Optionally enter an absolute local backup directory.
-4. Upload the complete Sheets service-account JSON.
-5. Select Validate and save.
+1. Enter the business name, review its safe immutable profile key, and optionally
+   set an absolute local backup directory. Select Save profile.
+2. Open Google setup for that profile and Connect Google. Authorize the human
+   account that can edit the ledger. One account may serve several profiles;
+   each profile stores its own grant and resource selections.
+3. Choose the existing ledger with Google Picker. The app confirms Google Sheets
+   access and Editor capability before saving the ID. Selection does not create
+   a workbook or alter its rows.
+4. Select Validate ledger. Genuinely blank workbooks receive the existing schema
+   and defaults; populated historical workbooks require explicit migration.
+5. For receipts/backups, choose or create a storage root and Provision storage
+   folders. Run readiness under Recovery.
 
-Validation authenticates with the uploaded credential, opens the workbook,
-checks or initializes required worksheets, and seeds defaults before storing
-the profile. After saving, Profile readiness rereads the selected workbook and
-configured Drive destinations, reports missing optional setup, and never
-displays credentials, tokens, private ledger data, or receipt contents.
-
-### Edit or rotate a profile
-
-Edit local profile settings to change the business name, spreadsheet, or
-optional local backup path without replacing the stored credential. Existing
-Drive, storage-root, child-folder, Synology, and other profile settings remain
-unless their dedicated controls change them.
-
-Use Validate and rotate credential only for an intentional new service-account
-key. A failed validation leaves the complete prior profile unchanged. Private
-keys are never returned to the browser or displayed in the profile table.
+Ordinary edits change only the name and local backup path. Change the ledger
+through Google setup; reconnect there to replace OAuth authorization. Failed
+ledger selection preserves the previous ID. Tokens and private ledger contents
+are never displayed by setup. Disconnect removes only the selected profile's
+local authorization; it disables both Sheets and Drive for that profile. It does
+not revoke the shared account's Google application grant or delete files.
 
 All storage clients, workbook initialization, caches, prepared exports, and
 duplicate-submission protection are scoped to the selected profile.
@@ -195,8 +179,7 @@ duplicate-submission protection are scoped to the selected profile.
 
 For receipts and cloud-native backups, connect the selected profile to a human
 Google account and provision its Drive storage root, Receipts child, and
-Ledger Backups child. The Sheets service account and human Drive grant remain
-separate. Follow [Google Drive](GOOGLE_DRIVE.md) for the complete OAuth and
+Ledger Backups child. Sheets and Drive use the same profile OAuth grant. Follow [Google Drive](GOOGLE_DRIVE.md) for the complete OAuth and
 Picker procedure.
 
 Google address suggestions and automatic route mileage require paid,
@@ -204,7 +187,7 @@ app-wide Maps Platform configuration, two separately restricted API keys,
 quotas, budget alerts, attribution, and deployment policy surfaces. Complete
 the operator checklist in [Google Maps mileage setup](GOOGLE_MAPS.md) before
 making a live request. Maps is not profile-scoped and must not reuse the Sheets
-service account or Drive OAuth identity.
+profile Google OAuth identity.
 
 For an optional Synology recovery copy, Account settings records a profile-root
 Cloud Sync destination, schedule, and retention policy. The application does
@@ -219,7 +202,7 @@ combined Secrets document containing:
 - app-wide `app_password_hash`, shared `google_drive_oauth`, and optional
   `google_maps` configuration; and
 - one `business_profiles` entry per profile containing its name, spreadsheet ID,
-  Sheets service-account credential, and validated Drive authorization with its
+  validated Google OAuth authorization with its
   storage root and Receipts and Ledger Backups children.
 
 Local backup paths, Synology metadata, and unknown local-only fields are
@@ -240,7 +223,7 @@ save it, delete the generated local file, and confirm the deployed application.
 The local administrator cannot inspect the hosted Secrets store or claim that
 Streamlit accepted the replacement.
 
-Repeat the export after a profile, spreadsheet, Sheets credential, Drive grant,
+Repeat the export after a profile, spreadsheet, Google OAuth grant,
 storage root, receipt folder, backup folder, or Drive connection changes.
 Changes only to a local backup path, Synology destination, schedule, retention
 policy, or app-wide Synology defaults do not require a hosted export.
@@ -272,21 +255,12 @@ application, sign in, select the business, and confirm its workbook title.
 
 ## Troubleshooting
 
-### Service-account or workbook access failed
+### Google OAuth or workbook access failed
 
-Confirm the spreadsheet ID, Sheets API, service-account project, and exact
-Editor sharing address. Do not share the workbook publicly.
-
-### Workbook initialization or structure validation failed
-
-Confirm the service account has Editor access and the required tabs and
-first-row headers match the table above. The application refuses to overwrite
-populated incompatible worksheets.
-
-### Service-account key creation is disabled
-
-Consult the Google Workspace or Cloud administrator for the approved policy
-exception or alternate deployment authentication.
+Reconnect the selected profile's Google account. Confirm Sheets API is enabled
+in the shared OAuth project, Editor access to the workbook, and explicit Picker
+selection. Do not make the workbook public. Confirm required tabs and headers;
+the app refuses to overwrite populated incompatible worksheets.
 
 ### Hosted settings are stale
 
@@ -295,10 +269,8 @@ hosted-runtime field changes. Local readiness cannot verify hosted acceptance.
 
 ## Credential rotation
 
-To rotate a Sheets key, create its replacement, validate and rotate it in
-Account settings, export and replace hosted Secrets, confirm the deployed
-application, then disable and delete the old key. To replace the application
-password, run:
+Reconnect Google locally to replace a grant, then export and replace hosted
+Secrets and validate the deployed profile. To replace the application password:
 
 ```powershell
 python scripts\set_app_password.py
@@ -311,12 +283,32 @@ the generated local file, and confirm that the deployed application accepts the
 new password. If the hosted document is edited manually, replace only
 `app_password_hash` with the new hash and never copy the plaintext password.
 
-Keep any retained service-account JSON in protected storage outside the
-repository. Never place credentials in backups, issues, logs, screenshots, or
+Keep OAuth configuration and refresh tokens in protected storage. Never place credentials in backups, issues, logs, screenshots, or
 documentation.
 
 ## References
 
 - [Google Sheets API concepts](https://developers.google.com/workspace/sheets/api/guides/concepts)
-- [Create and delete service-account keys](https://cloud.google.com/iam/docs/keys-create-delete)
+- [Google Sheets authorization scopes](https://developers.google.com/workspace/sheets/api/scopes)
 - [Google Drive sharing permissions](https://support.google.com/drive/answer/2494822)
+
+## Existing deployment: single-step OAuth cutover
+
+There is no ledger data/schema migration for this authentication change. Normal
+runtime accepts only version 2 local profiles and OAuth-only hosted profiles.
+Follow [the migration runbook](OAUTH_MIGRATION.md) for preparation, downtime,
+coordinated code/Secrets replacement, validation, and key retirement.
+
+### Initial ledger provision
+
+In Account settings > Google setup, a connected profile with no ledger can use
+Create ledger spreadsheet instead of selecting an existing file. The app creates
+`Business name Ledger` in that Google account's My Drive, saves its ID, and
+initializes the existing required worksheets and default accounts/categories.
+This does not require a separate Picker grant because the app creates the file.
+The action is hidden once a ledger is configured and never replaces an existing
+ledger. Drive receipt/backup folders are still configured in the same setup tab.
+
+If creation or initialization is uncertain, no file is deleted or blindly
+recreated. Inspect Drive and select the created file through Picker; if its ID
+was saved, use Validate ledger to finish supported blank-workbook initialization.

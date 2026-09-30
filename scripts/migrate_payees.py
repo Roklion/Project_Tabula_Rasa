@@ -8,14 +8,12 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
-import gspread
-from google.oauth2.service_account import Credentials
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from tabula_rasa.storage.google_sheets import (  # noqa: E402
-    SHEETS_SCOPE,
     WORKSHEET_HEADERS,
     _utc_now,
     _validate_payee_records,
@@ -199,16 +197,15 @@ def main() -> None:
     parser.add_argument("--secrets", type=Path, default=Path(".streamlit/secrets.toml"))
     parser.add_argument("--profile", required=True)
     args = parser.parse_args()
+    from tabula_rasa.storage import GoogleSheetsStorage
     from tabula_rasa.business_profiles import select_profile_secrets
     from tabula_rasa.local_profile_store import load_business_profile_document
 
     document = load_business_profile_document(args.secrets)
     secrets = select_profile_secrets(document, args.profile)
-    credentials = Credentials.from_service_account_info(
-        secrets["gcp_service_account"],
-        scopes=[SHEETS_SCOPE],
+    workbook = GoogleSheetsStorage._open_workbook_from_secrets(
+        secrets, scopes=[]
     )
-    workbook = gspread.authorize(credentials).open_by_key(str(secrets["spreadsheet_id"]).strip())
     result = migrate_workbook(workbook)
     print(f"Payee migration complete: created={result['payees']}, transactions={result['transactions']}")
 

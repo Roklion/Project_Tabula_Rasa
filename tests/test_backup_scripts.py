@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.google_auth_fixtures import GOOGLE_OAUTH_CONFIG, google_grant
+
 import io
 import json
 import sys
@@ -64,7 +66,7 @@ class TestBackupScripts:
     ) -> None:
         north_secrets = {
             "spreadsheet_id": "northspreadsheet123456789",
-            "gcp_service_account": {"client_email": "north-secret@example.test"},
+
             "google_drive": {
                 "backup_folder": {"id": "north-backup"},
                 "receipt_folder": {"id": "north-receipts"},
@@ -72,7 +74,7 @@ class TestBackupScripts:
         }
         south_secrets = {
             "spreadsheet_id": "southspreadsheet123456789",
-            "gcp_service_account": {"client_email": "south-secret@example.test"},
+
             "google_drive": {
                 "backup_folder": {"id": "south-backup"},
                 "receipt_folder": {"id": "south-receipts"},
@@ -111,7 +113,7 @@ class TestBackupScripts:
     def test_all_profiles_skips_unconfigured_profile_and_returns_success(self) -> None:
         configured = {
             "spreadsheet_id": "northspreadsheet123456789",
-            "gcp_service_account": {},
+
             "google_drive": {
                 "backup_folder": {"id": "north-backup"},
                 "receipt_folder": {"id": "north-receipts"},
@@ -119,7 +121,7 @@ class TestBackupScripts:
         }
         unconfigured = {
             "spreadsheet_id": "southspreadsheet123456789",
-            "gcp_service_account": {},
+            "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
         }
         profiles = [
             type("Profile", (), {"key": "north", "secrets": configured})(),
@@ -144,7 +146,7 @@ class TestBackupScripts:
                 "key": "north",
                 "secrets": {
                     "spreadsheet_id": "northspreadsheet123456789",
-                    "gcp_service_account": {},
+
                     "google_drive": {
                         "backup_folder": {"id": None},
                         "receipt_folder": {"id": "north-receipts"},
@@ -175,7 +177,7 @@ class TestBackupScripts:
                 "key": "north",
                 "secrets": {
                     "spreadsheet_id": "northspreadsheet123456789",
-                    "gcp_service_account": {},
+
                     "google_drive": {"backup_folder": {"id": "north-backup"}},
                 },
             },
@@ -198,7 +200,7 @@ class TestBackupScripts:
     def test_all_profiles_weekly_suppression_is_independent(self) -> None:
         north = {
             "spreadsheet_id": "northspreadsheet123456789",
-            "gcp_service_account": {},
+
             "google_drive": {
                 "backup_folder": {"id": "north-backup"},
                 "receipt_folder": {"id": "north-receipts"},
@@ -206,7 +208,7 @@ class TestBackupScripts:
         }
         south = {
             "spreadsheet_id": "southspreadsheet123456789",
-            "gcp_service_account": {},
+
             "google_drive": {
                 "backup_folder": {"id": "south-backup"},
                 "receipt_folder": {"id": "south-receipts"},
@@ -236,12 +238,12 @@ class TestBackupScripts:
     def test_all_profile_local_mode_uses_profile_scoped_destinations(self) -> None:
         north = {
             "spreadsheet_id": "northspreadsheet123456789",
-            "gcp_service_account": {},
+
             "google_drive": {"receipt_folder": {"id": "north-receipts"}},
         }
         south = {
             "spreadsheet_id": "southspreadsheet123456789",
-            "gcp_service_account": {},
+
             "google_drive": {"receipt_folder": {"id": "south-receipts"}},
         }
         profiles = [
@@ -362,11 +364,11 @@ class TestBackupScripts:
                 "business_profiles": {
                     "north": {
                         "spreadsheet_id": "north-live-sheet",
-                        "gcp_service_account": {},
+                        "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
                     },
                     "south": {
                         "spreadsheet_id": "south-live-sheet",
-                        "gcp_service_account": {},
+                        "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
                     },
                 }
             }
@@ -525,7 +527,7 @@ class TestBackupScripts:
             "business_profiles": {
                 "north": {
                     "spreadsheet_id": "northspreadsheet123456789",
-                    "gcp_service_account": {},
+
                     "google_drive": {
                         "authorized_email": "north@example.test",
                         "authorized_name": "North Owner",
@@ -580,7 +582,7 @@ class TestBackupScripts:
             "business_profiles": {
                 "north": {
                     "spreadsheet_id": "northspreadsheet123456789",
-                    "gcp_service_account": {},
+                    "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
                     "backup_folder_path": r"G:\Backups\North",
                 }
             }

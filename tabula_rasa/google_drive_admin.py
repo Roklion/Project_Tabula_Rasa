@@ -22,7 +22,10 @@ from tabula_rasa.google_drive import (
     select_redirect_uri,
     verify_oauth_state,
 )
-from tabula_rasa.google_drive_picker import folder_picker
+from tabula_rasa.google_drive_picker import folder_picker, spreadsheet_picker
+from tabula_rasa.storage import GoogleSheetsStorage, StorageError
+from tabula_rasa.local_profile_admin_support import initialize_candidate_storage
+from tabula_rasa.local_profile_store import update_local_profile, parse_spreadsheet_id
 from tabula_rasa.local_profile_store import (
     LOCAL_PROFILE_STORE_PATH,
     LocalProfileStoreError,
@@ -367,6 +370,63 @@ def _provision_storage_children(
     return True
 
 
+def select_profile_ledger(
+    app_secrets: Mapping[str, Any],
+    profile_key: str,
+    selected: Mapping[str, Any],
+    *,
+    store_path: Path = LOCAL_PROFILE_STORE_PATH,
+    persist: bool = True,
+) -> None:
+    """Validate the selected file with fresh profile OAuth before saving its ID.
+
+    Opening alone allows historical workbooks to be selected for the explicit
+    migration command. Validation/blank initialization is a separate action.
+    """
+    profiles = load_local_profiles(store_path)
+    profile = profiles[profile_key]
+    spreadsheet_id = parse_spreadsheet_id(str(selected.get("id") or ""))
+    candidate = {**profile, "spreadsheet_id": spreadsheet_id,
+                 "google_drive_oauth": app_secrets.get("google_drive_oauth")}
+    GoogleSheetsStorage._open_workbook_from_secrets(candidate, scopes=[])
+    # Sheets opening confirms read access; Drive capabilities confirms Editor access.
+    client = GoogleDriveClient(load_oauth_config(app_secrets), profile["google_drive"])
+    from tabula_rasa.google_drive.errors import DRIVE_API_ROOT, _json_response
+
+    metadata = _json_response(client._request("GET", f"{DRIVE_API_ROOT}/files/{spreadsheet_id}", params={
+        "fields": "id,mimeType,capabilities(canEdit)", "supportsAllDrives": "true"
+    }))
+    capabilities = metadata.get("capabilities")
+    if (metadata.get("mimeType") != "application/vnd.google-apps.spreadsheet"
+            or not isinstance(capabilities, Mapping) or not capabilities.get("canEdit")):
+        raise GoogleDriveAccessError("Select a Google Sheets workbook with Editor access.")
+    if not persist:
+        return
+    update_local_profile(profile_key, name=str(profile["name"]),
+                         spreadsheet=spreadsheet_id,
+                         backup_folder_path=profile.get("backup_folder_path"), path=store_path)
+
+
+def provision_profile_ledger(
+    app_secrets: Mapping[str, Any], profile_key: str, *,
+    store_path: Path = LOCAL_PROFILE_STORE_PATH,
+) -> None:
+    """Provision an initial ledger, saving its ID before recoverable initialization.
+
+    A partial workbook is retained in Drive and can be repaired with Validate
+    ledger. A configured ledger is never replaced by this initial setup action.
+    """
+    profile = load_local_profiles(store_path)[profile_key]
+    if profile.get("spreadsheet_id"):
+        raise LocalProfileStoreError("This profile already has a ledger. Use Picker to change it.")
+    client = GoogleDriveClient(load_oauth_config(app_secrets), profile["google_drive"])
+    created = client.create_ledger_spreadsheet(profile_key, f"{profile['name']} Ledger")
+    update_local_profile(profile_key, name=str(profile["name"]), spreadsheet=created["id"],
+                         backup_folder_path=profile.get("backup_folder_path"), path=store_path)
+    initialize_candidate_storage({**profile, "spreadsheet_id": created["id"],
+                                  "google_drive_oauth": app_secrets.get("google_drive_oauth")})
+
+
 def render_google_drive_admin(
     app_secrets: Mapping[str, Any],
     local_profiles: Mapping[str, Mapping[str, Any]],
@@ -377,9 +437,9 @@ def render_google_drive_admin(
 ) -> None:
     """Render connection, folder selection, test, and disconnect controls."""
     st.divider()
-    st.subheader("Google Drive OAuth")
+    st.subheader("Google setup: Sheets and Drive")
     st.write(
-        "Connect the human Google account that owns each business's Drive files. "
+        "Connect the human Google account with Editor access to the ledger and Drive files. "
         "The OAuth client is shared, while refresh tokens, storage roots, and "
         "child folders remain isolated by business profile."
     )
@@ -436,7 +496,7 @@ def render_google_drive_admin(
             redirect_uri,
         )
         st.link_button(
-            "Connect Google Drive",
+            "Connect Google",
             connect_url,
             type="primary",
             help=(
@@ -467,7 +527,7 @@ def render_google_drive_admin(
             redirect_uri,
             login_hint=authorized_email,
         )
-        st.link_button("Reconnect Google Drive", reconnect_url, type="primary")
+        st.link_button("Reconnect Google", reconnect_url, type="primary")
         remove_invalid = st.checkbox(
             "Remove the saved invalid Google Drive connection",
             key=f"remove-invalid-google-drive-{profile_key}",
@@ -489,6 +549,72 @@ def render_google_drive_admin(
                 )
                 st.rerun()
         return
+
+    st.markdown("**Ledger spreadsheet**")
+    st.caption("Select the existing ledger with Google Picker to grant this application file access.")
+    if profile.get("spreadsheet_id"):
+        st.caption("Configured ledger: …" + str(profile["spreadsheet_id"])[-8:])
+    if config.picker_ready:
+        selected_ledger = spreadsheet_picker(
+            access_token=access_token,
+            api_key=config.picker_api_key,
+            project_number=config.project_number,
+            key=f"ledger-picker-{profile_key}",
+        )
+        if selected_ledger:
+            try:
+                select_profile_ledger(
+                    app_secrets, profile_key, selected_ledger, store_path=store_path
+                )
+            except (StorageError, GoogleDriveError, LocalProfileStoreError):
+                st.error("The Google account cannot select this ledger. Confirm Editor access and retry Picker.")
+            else:
+                st.cache_resource.clear()
+                st.session_state["google_drive_admin_notice"] = "Ledger selected. Validate the ledger next."
+                st.rerun()
+    if not profile.get("spreadsheet_id"):
+        st.caption("For a new business, create a ledger in this Google account's My Drive with the required worksheets and default accounts/categories.")
+        provision_blocked = f"ledger-create-uncertain:{profile_key}"
+        if st.session_state.get(provision_blocked):
+            st.warning("Creation is paused after an uncertain response. Inspect Google Drive and use Picker to select any created ledger.")
+        if st.button("Create ledger spreadsheet", key=f"create-ledger-{profile_key}",
+                     disabled=bool(st.session_state.get(provision_blocked))):
+            try:
+                provision_profile_ledger(app_secrets, profile_key, store_path=store_path)
+            except (StorageError, GoogleDriveError, LocalProfileStoreError) as exc:
+                if isinstance(exc, GoogleDriveAccessError) and exc.upload_attempted:
+                    st.session_state[provision_blocked] = True
+                st.cache_resource.clear()
+                st.session_state["google_drive_admin_error"] = (
+                    "Ledger setup did not finish. Inspect Google Drive and select any created ledger through Picker; if already selected, use Validate ledger. No files were deleted."
+                )
+                st.rerun()
+            else:
+                st.cache_resource.clear()
+                st.session_state["google_drive_admin_notice"] = "Ledger spreadsheet created and initialized. Configure storage folders or run readiness next."
+                st.rerun()
+    with st.expander("Authorize a recovery or migration workbook"):
+        st.caption("Use Picker to grant access to a candidate workbook without changing the active ledger. Use its ID in the recovery or migration command.")
+        if config.picker_ready:
+            candidate_selection = spreadsheet_picker(
+                access_token=access_token, api_key=config.picker_api_key,
+                project_number=config.project_number, key=f"candidate-picker-{profile_key}",
+            )
+            if candidate_selection:
+                try:
+                    select_profile_ledger(app_secrets, profile_key, candidate_selection,
+                                          store_path=store_path, persist=False)
+                except (StorageError, GoogleDriveError, LocalProfileStoreError):
+                    st.error("Candidate access failed. Confirm Google account Editor access and retry Picker.")
+                else:
+                    st.success("Candidate workbook authorized; active ledger unchanged.")
+    if st.button("Validate ledger", key=f"validate-ledger-{profile_key}", disabled=not profile.get("spreadsheet_id")):
+        try:
+            initialize_candidate_storage({**profile, "google_drive_oauth": app_secrets.get("google_drive_oauth")})
+        except StorageError as exc:
+            st.error(str(exc))
+        else:
+            st.success("Ledger schema and defaults validated.")
 
     if not config.picker_ready:
         st.warning(
@@ -577,20 +703,21 @@ def render_google_drive_admin(
         redirect_uri,
         login_hint=authorized_email,
     )
-    st.link_button("Reconnect Google Drive", reconnect_url)
+    st.link_button("Reconnect Google", reconnect_url)
     confirm_disconnect = st.checkbox(
-        "Remove this profile's Google Drive authorization and folder selections",
+        "Disconnect this profile from Sheets and Drive and remove folder selections",
         key=f"disconnect-google-drive-{profile_key}",
     )
     disconnect_error = st.empty()
     if st.button(
-        "Disconnect Google Drive",
+        "Disconnect Google",
         disabled=not confirm_disconnect,
         key=f"disconnect-google-drive-button-{profile_key}",
     ):
         try:
             ensure_google_drive_disconnect_allowed(profile)
-            client.revoke()
+            # Google revocation can invalidate other grants for the same account/client.
+            # Local disconnection must remain scoped to this profile.
             update_local_profile_google_drive(profile_key, None, path=store_path)
         except (GoogleDriveError, LocalProfileStoreError) as exc:
             disconnect_error.error(str(exc))

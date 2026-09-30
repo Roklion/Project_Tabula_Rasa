@@ -109,8 +109,8 @@ Paste the generated document into Streamlit App settings > Secrets, save it,
 delete the generated file, and validate the deployed app. Local Secrets do not
 automatically update the hosted store.
 
-The quota reader is a separate service account from every profile's Sheets
-service account and from the human Drive OAuth account. Grant it only the
+The quota reader is an app-wide service account, separate from every profile's
+human Google OAuth grant used by Sheets and Drive. Grant it only the
 read-only **Service Usage Viewer** role
 (`roles/serviceusage.serviceUsageViewer`) and **Monitoring Viewer** role
 (`roles/monitoring.viewer`) in the Maps project. These grant the documented

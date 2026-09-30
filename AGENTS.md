@@ -279,7 +279,7 @@ documentation burden.
   profile-specific credential operation must remain scoped to the selected
   business profile.
 - Flag global or fallback state that could reuse one profile's spreadsheet,
-  service-account credential, refresh token, folder, cached data, or submission
+  OAuth grant, refresh token, folder, cached data, or submission
   guard for another profile.
 - The application password and shared OAuth client are intentionally
   deployment-wide. Do not require per-profile handling for them or imply that
@@ -347,8 +347,8 @@ documentation burden.
 - Private ledger data, receipts, and backup contents may be displayed only in
   authorized application views; never log, commit, include them in errors, or
   expose them elsewhere.
-- Preserve the separation between the Sheets service account and the human
-  Google Drive authorization.
+- Sheets and Drive share the selected profile's human Google OAuth grant.
+  Preserve the separation from app-wide Maps quota-monitoring credentials.
 - Preserve narrow OAuth scopes and the local administrator's reauthentication
   and loopback-only restrictions.
 

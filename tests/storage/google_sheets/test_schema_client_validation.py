@@ -1,3 +1,4 @@
+from tests.google_auth_fixtures import GOOGLE_OAUTH_CONFIG, google_grant
 from ._support import (
     GoogleSheetsStorageTestCase,
     Credentials,
@@ -101,7 +102,7 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             storage = GoogleSheetsStorage.from_secrets(
                 {
                     "spreadsheet_id": "given-spreadsheet-id",
-                    "gcp_service_account": {"type": "service_account"},
+                    "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
                 }
             )
             storage.list_mixed_use_expenses()
