@@ -480,3 +480,34 @@ def test_oauth_open_read_write_keep_two_profiles_isolated(same_account):
     assert authorized_tokens == ["north-token", "south-token"]
     assert len(north_storage.list_accounts()) == 1
     assert south_storage.list_accounts() == []
+
+
+@pytest.mark.parametrize("operation", ["select", "provision"])
+def test_ledger_setup_without_connection_stops_before_remote_or_local_writes(
+    tmp_path, operation
+):
+    from tabula_rasa.google_drive_admin import provision_profile_ledger
+
+    path = tmp_path / "profiles.json"
+    disconnected = {"name": "North", "spreadsheet_id": ""}
+    save_local_profile("north", disconnected, path=path)
+    save_local_profile("south", {**profile(), "name": "South"}, path=path)
+    before = path.read_bytes()
+    expected_error = (
+        StorageAuthenticationError if operation == "select"
+        else GoogleDriveConfigurationError
+    )
+    with patch("requests.Session") as session:
+        with pytest.raises(expected_error):
+            if operation == "select":
+                select_profile_ledger(
+                    {"google_drive_oauth": GOOGLE_OAUTH_CONFIG}, "north",
+                    {"id": "chosen-ledger-123"}, store_path=path,
+                )
+            else:
+                provision_profile_ledger(
+                    {"google_drive_oauth": GOOGLE_OAUTH_CONFIG}, "north",
+                    store_path=path,
+                )
+    session.assert_not_called()
+    assert path.read_bytes() == before

@@ -419,7 +419,7 @@ def provision_profile_ledger(
     profile = load_local_profiles(store_path)[profile_key]
     if profile.get("spreadsheet_id"):
         raise LocalProfileStoreError("This profile already has a ledger. Use Picker to change it.")
-    client = GoogleDriveClient(load_oauth_config(app_secrets), profile["google_drive"])
+    client = GoogleDriveClient(load_oauth_config(app_secrets), profile.get("google_drive", {}))
     created = client.create_ledger_spreadsheet(profile_key, f"{profile['name']} Ledger")
     update_local_profile(profile_key, name=str(profile["name"]), spreadsheet=created["id"],
                          backup_folder_path=profile.get("backup_folder_path"), path=store_path)
