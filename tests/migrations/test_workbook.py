@@ -769,3 +769,34 @@ def test_migration_preflights_malformed_recurring_schedules_before_writing() -> 
     assert before == {
         title: worksheet.get_all_values() for title, worksheet in workbook.sheets.items()
     }
+
+
+@pytest.mark.parametrize("target", ["north-ledger-123", "south-ledger-123", "candidate-ledger-123"])
+def test_cli_override_refuses_all_live_ledgers_and_preserves_profile_grant(target):
+    document = {
+        "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
+        "business_profiles": {
+            "north": {"name": "North", "spreadsheet_id": "north-ledger-123",
+                      "google_drive": google_grant("same@example.test", "north-token")},
+            "south": {"name": "South", "spreadsheet_id": "south-ledger-123",
+                      "google_drive": google_grant("same@example.test", "south-token")},
+        },
+    }
+    with (
+        patch.object(migration_script, "load_business_profile_document", return_value=document),
+        patch.object(GoogleSheetsStorage, "_open_workbook_from_secrets") as open_workbook,
+        patch.object(migration_script, "migrate_workbook", return_value={}) as migrate,
+        patch.object(sys, "argv", ["migrate_workbook.py", "--profile", "north",
+                                   "--spreadsheet-id", target]),
+    ):
+        if target != "candidate-ledger-123":
+            with pytest.raises(SystemExit) as error:
+                migration_script.main()
+            assert error.value.code == 2
+            open_workbook.assert_not_called()
+            migrate.assert_not_called()
+        else:
+            migration_script.main()
+            assert open_workbook.call_args.args[0]["spreadsheet_id"] == target
+            assert open_workbook.call_args.args[0]["google_drive"]["refresh_token"] == "north-token"
+            migrate.assert_called_once_with(open_workbook.return_value)

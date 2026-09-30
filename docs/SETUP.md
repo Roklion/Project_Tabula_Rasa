@@ -96,6 +96,10 @@ Google setup > Authorize a recovery or migration workbook, then run:
 python scripts/migrate_workbook.py --profile PROFILE_KEY --spreadsheet-id WORKBOOK_ID
 ```
 
+An override must target an unconfigured candidate workbook. To migrate the
+selected profile's configured ledger, use `--profile` alone; an override naming
+any configured live ledger is rejected before Google access.
+
 Return to Google setup, select the migrated workbook as the ledger, and
 validate it. Merely pasting a workbook ID does not grant `drive.file` access.
 

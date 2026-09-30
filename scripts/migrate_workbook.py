@@ -19,7 +19,9 @@ import gspread
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from tabula_rasa.business_profiles import select_profile_secrets  # noqa: E402
+from tabula_rasa.business_profiles import (  # noqa: E402
+    configured_spreadsheet_ids, load_business_profiles, select_profile_secrets,
+)
 from tabula_rasa.local_profile_store import load_business_profile_document
 from tabula_rasa.storage.google_sheets import (  # noqa: E402
     MIXED_USE_WORKSHEET_HEADERS,
@@ -487,7 +489,10 @@ def main() -> None:
     document = load_business_profile_document(args.secrets)
     secrets = dict(select_profile_secrets(document, args.profile))
     if args.spreadsheet_id:
-        secrets["spreadsheet_id"] = args.spreadsheet_id.strip()
+        target = args.spreadsheet_id.strip()
+        if target in configured_spreadsheet_ids(load_business_profiles(document)):
+            parser.error("A migration override must not target any configured live workbook; use --profile alone to migrate that profile's ledger.")
+        secrets["spreadsheet_id"] = target
 
     try:
         workbook = GoogleSheetsStorage._open_workbook_from_secrets(
