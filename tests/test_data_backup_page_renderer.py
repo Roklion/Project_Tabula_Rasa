@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.google_auth_fixtures import GOOGLE_OAUTH_CONFIG, google_grant
+
 import ast
 import csv
 from dataclasses import fields
@@ -162,7 +164,7 @@ def test_unconfigured_drive_and_missing_local_synology_states_are_explicit() -> 
         {
             "name": "Test Business",
             "spreadsheet_id": "test-sheet",
-            "gcp_service_account": {"type": "service_account"},
+            "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
         }
     )
 
@@ -178,7 +180,7 @@ def test_synology_status_keeps_profile_root_children_and_operational_guidance() 
         {
             "name": "Test Business",
             "spreadsheet_id": "test-sheet",
-            "gcp_service_account": {"type": "service_account"},
+            "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
             "synology_recovery": {
                 "layout": "profile-root",
                 "destination_path": "/volume1/Tabula_Rasa_Backups/test",

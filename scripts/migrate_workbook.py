@@ -9,22 +9,22 @@ current-schema validator before the command reports success.
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 from typing import Any
 
 import gspread
-from google.oauth2.service_account import Credentials
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from tabula_rasa.business_profiles import select_profile_secrets  # noqa: E402
-from tabula_rasa.local_profile_store import load_business_profile_document  # noqa: E402
+from tabula_rasa.business_profiles import (  # noqa: E402
+    configured_spreadsheet_ids, load_business_profiles, select_profile_secrets,
+)
+from tabula_rasa.local_profile_store import load_business_profile_document
 from tabula_rasa.storage.google_sheets import (  # noqa: E402
     MIXED_USE_WORKSHEET_HEADERS,
-    SHEETS_SCOPE,
     WORKSHEET_HEADERS,
     GoogleSheetsStorage,
     StorageError,
@@ -481,56 +481,26 @@ def main() -> None:
     parser.add_argument("--profile", help="Saved business-profile key from --secrets")
     parser.add_argument(
         "--spreadsheet-id",
-        help="Candidate workbook ID for a profile that has not been saved yet",
-    )
-    parser.add_argument(
-        "--service-account-file",
-        type=Path,
-        help="Local service-account JSON file for --spreadsheet-id",
+        help="Candidate workbook ID authorized through Picker using --profile",
     )
     args = parser.parse_args()
-    candidate_mode = (
-        args.spreadsheet_id is not None or args.service_account_file is not None
-    )
-    if args.profile and candidate_mode:
-        parser.error("--profile cannot be combined with candidate workbook options")
-    if not args.profile and not candidate_mode:
-        parser.error(
-            "pass --profile, or pass both --spreadsheet-id and --service-account-file"
-        )
-
-    if args.profile:
-        document = load_business_profile_document(args.secrets)
-        secrets = select_profile_secrets(document, args.profile)
-    else:
-        if not args.spreadsheet_id or args.service_account_file is None:
-            parser.error(
-                "candidate mode requires both --spreadsheet-id and "
-                "--service-account-file"
-            )
-        try:
-            credential_info = json.loads(
-                args.service_account_file.read_text(encoding="utf-8")
-            )
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-            parser.error(f"could not read --service-account-file: {exc}")
-        if not isinstance(credential_info, dict):
-            parser.error("--service-account-file must contain a JSON object")
-        secrets = {
-            "spreadsheet_id": args.spreadsheet_id,
-            "gcp_service_account": credential_info,
-        }
+    if not args.profile:
+        parser.error("pass --profile PROFILE_KEY; select candidate workbooks through Picker first")
+    document = load_business_profile_document(args.secrets)
+    secrets = dict(select_profile_secrets(document, args.profile))
+    if args.spreadsheet_id:
+        target = args.spreadsheet_id.strip()
+        if target in configured_spreadsheet_ids(load_business_profiles(document)):
+            parser.error("A migration override must not target any configured live workbook; use --profile alone to migrate that profile's ledger.")
+        secrets["spreadsheet_id"] = target
 
     try:
-        credentials = Credentials.from_service_account_info(
-            secrets["gcp_service_account"], scopes=[SHEETS_SCOPE]
-        )
-        workbook = gspread.authorize(credentials).open_by_key(
-            str(secrets["spreadsheet_id"]).strip()
+        workbook = GoogleSheetsStorage._open_workbook_from_secrets(
+            secrets, scopes=[]
         )
         result = migrate_workbook(workbook)
     except (gspread.exceptions.GSpreadException, OSError, StorageError, ValueError) as exc:
-        raise SystemExit(f"Workbook migration failed: {exc}") from exc
+        raise SystemExit("Workbook migration failed. Confirm Google OAuth access and the workbook schema.") from exc
     print(
         "Workbook migration complete: "
         + ", ".join(f"{key}={value}" for key, value in result.items())

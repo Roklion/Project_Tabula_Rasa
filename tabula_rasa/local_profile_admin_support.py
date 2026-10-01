@@ -14,7 +14,6 @@ from tabula_rasa.storage import (
     StorageWorkbookAccessError,
 )
 from tabula_rasa.business_profiles import load_business_profiles
-from tabula_rasa.local_profile_store import LocalProfileStoreError
 
 
 def masked_spreadsheet_id(spreadsheet_id: object) -> str:
@@ -27,24 +26,22 @@ def profile_setup_error_message(
     settings: Mapping[str, Any],
 ) -> str:
     spreadsheet = masked_spreadsheet_id(settings.get("spreadsheet_id", ""))
-    credential = settings.get("gcp_service_account", {})
-    service_account = str(credential.get("client_email", "unknown"))
 
     if isinstance(error, StorageAuthenticationError):
         detail = (
-            "Service-account authentication failed. The uploaded key may be "
+            "Google OAuth authentication failed. Reconnect this profile; its grant may be "
             "invalid, disabled, revoked, or no longer active."
         )
     elif isinstance(error, StorageWorkbookAccessError):
         detail = (
             "Workbook access failed. Verify the spreadsheet ID, enable the "
-            "Google Sheets API in the service-account project, and share the "
-            "spreadsheet with this service account."
+            "Google Sheets API in the shared OAuth project, select the "
+            "spreadsheet through Picker, and confirm Google account Editor access."
         )
     elif isinstance(error, StorageInitializationError):
         detail = (
             "The workbook opened, but initialization failed. Confirm the "
-            "service account has Editor access and the ledger tabs are not "
+            "authorized Google account has Editor access and the ledger tabs are not "
             "protected."
         )
     elif isinstance(error, StorageValidationError):
@@ -54,23 +51,8 @@ def profile_setup_error_message(
 
     return (
         f"{detail} Spreadsheet: {spreadsheet}. "
-        f"Service account: {service_account}. No profile was saved."
+        "No profile was saved."
     )
-
-
-def validate_profile_edit_action(
-    save_settings: bool,
-    rotate_credential: bool,
-    credential_file: Any,
-) -> None:
-    if save_settings and credential_file is not None:
-        raise LocalProfileStoreError(
-            "To replace the credential, use the 'Validate and rotate credential' button."
-        )
-    if rotate_credential and credential_file is None:
-        raise LocalProfileStoreError(
-            "Upload a replacement Google service-account JSON for rotation."
-        )
 
 
 def initialize_candidate_storage(

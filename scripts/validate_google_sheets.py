@@ -7,8 +7,7 @@ import sys
 from pathlib import Path
 from uuid import uuid4
 
-import gspread
-from google.oauth2.service_account import Credentials
+
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -41,16 +40,9 @@ def validate(
     if not target_spreadsheet_id:
         raise ValueError("Spreadsheet ID cannot be empty")
 
-    credentials = Credentials.from_service_account_info(
-        secrets["gcp_service_account"],
-        scopes=[
-            "https://www.googleapis.com/auth/spreadsheets"
-            if write_test
-            else "https://www.googleapis.com/auth/spreadsheets.readonly"
-        ],
+    workbook = GoogleSheetsStorage._open_workbook_from_secrets(
+        {**secrets, "spreadsheet_id": target_spreadsheet_id}, scopes=[]
     )
-    client = gspread.authorize(credentials)
-    workbook = client.open_by_key(target_spreadsheet_id)
     # Readiness must match strict application startup. Legacy hierarchy
     # workbooks need the explicit migration command before they can be ready.
     storage = GoogleSheetsStorage(workbook)
@@ -108,7 +100,7 @@ def main() -> None:
         "--spreadsheet-id",
         help=(
             "Read-only workbook ID override; uses the selected profile's "
-            "service-account credential without changing the profile"
+            "Google OAuth grant without changing the profile"
         ),
     )
     args = parser.parse_args()

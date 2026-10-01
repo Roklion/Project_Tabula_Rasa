@@ -28,7 +28,7 @@ from tabula_rasa.storage import (
 def safe_readiness_error(stage: str, error: Exception) -> str:
     """Return an actionable readiness message without echoing secrets."""
     if stage == "Sheets" and isinstance(error, StorageAuthenticationError):
-        return "Sheets credential validation failed. Confirm the service-account key."
+        return "Google OAuth validation failed. Reconnect this profile's Google account."
     if stage == "Sheets" and isinstance(error, StorageWorkbookAccessError):
         return "Sheets workbook validation failed. Confirm sharing and the workbook ID."
     if stage == "Sheets" and isinstance(error, StorageInitializationError):
@@ -51,7 +51,9 @@ def fresh_profile_readiness(
     validation_errors: list[str] = []
     profiles_for_isolation = local_profiles or {profile_key: settings}
     try:
-        GoogleSheetsStorage.from_secrets_read_only(settings)
+        GoogleSheetsStorage.from_secrets_read_only(
+            {**settings, "google_drive_oauth": app_secrets.get("google_drive_oauth")}
+        )
     except StorageError as error:
         validation_errors.append(safe_readiness_error("Sheets", error))
 

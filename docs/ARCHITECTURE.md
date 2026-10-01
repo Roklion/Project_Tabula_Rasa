@@ -2,7 +2,7 @@
 
 Project Tabula Rasa is one Streamlit application serving one or more isolated
 business profiles. A profile selects its own Google Sheets workbook,
-service-account credential, optional Google Drive authorization, and recovery
+Google OAuth grant for Sheets and Drive, and recovery
 destinations. The application password and OAuth client are intentionally
 deployment-wide. The optional Google Maps browser and Routes credentials are
 also app-wide; the separate quota-monitoring identity is app-wide as well.
@@ -25,7 +25,7 @@ flowchart LR
 
     subgraph Config["Configuration boundary"]
         AppSecrets["App-wide secrets<br/>password hash, OAuth client,<br/>Maps keys, quota reader"]
-        ProfileSecrets["Per-profile secrets<br/>spreadsheet, service account,<br/>refresh token, root and child IDs"]
+        ProfileSecrets["Per-profile secrets<br/>spreadsheet,<br/>refresh token, root and child IDs"]
     end
 
     subgraph Google["Google services"]
@@ -43,17 +43,18 @@ flowchart LR
     Profile --> DriveClient
     AppSecrets --> Auth
     AppSecrets --> DriveClient
+    AppSecrets --> Ledger
     AppSecrets --> MapsClient
     AppSecrets --> QuotaClient
     ProfileSecrets --> Profile
-    Ledger -->|"Profile service account"| Sheets
+    Ledger -->|"Profile Google OAuth"| Sheets
     DriveClient -->|"Profile OAuth grant"| Drive
     MapsClient -->|"Restricted app-wide keys"| Maps
     QuotaClient -->|"Dedicated read-only identity"| Usage
     Drive -->|"Cloud Sync download only"| NAS
 ```
 
-The selected profile determines which workbook, service account, refresh token,
+The selected profile determines which workbook, Google OAuth grant, refresh token,
 Drive folders, recovery settings, caches, and duplicate-submission guards are
 used for the operation. The application currently grants an authenticated user
 access to every configured profile; it does not provide per-profile user
@@ -64,7 +65,7 @@ authorization.
 | Concern | Credential or identity | Data location | Scope |
 | --- | --- | --- | --- |
 | Application sign-in | Application password hash | App-wide secrets | Entire deployment |
-| Ledger reads and writes | Profile Sheets service account | Profile Google workbook | One profile |
+| Ledger reads and writes | Profile Google OAuth grant | Profile Google workbook | One profile |
 | Receipts and cloud backups | Shared OAuth client plus profile refresh token | Profile Drive root and managed children | One profile |
 | Address suggestions and route mileage | Restricted browser and server Maps keys | Google Places and Routes APIs | Entire deployment |
 | Maps quota and usage monitoring | Dedicated Maps quota service account with read-only scope | Service Usage and Cloud Monitoring in the explicit Maps project number | Entire deployment |
@@ -72,15 +73,18 @@ authorization.
 | Hosted configuration | Streamlit Secrets | Hosted deployment | Hosted projection of each profile |
 | NAS recovery copy | DSM account and separate Cloud Sync authorization | Profile-specific NAS root | One profile |
 
-The Sheets service account edits the ledger workbook. A human Google account
-authorizes the Drive files used for receipts and cloud backups. Neither
-credential automatically grants the permissions of the other. Google Drive
-folders do not need to be shared with the Sheets service account.
+Sheets and Drive authenticate as the same profile-scoped human Google account
+through the shared OAuth client and narrow `drive.file` scope. Picker grants
+access to the selected workbook; Google account Editor permission is required.
+Profiles may use the same account or different accounts, with separate resource
+selections, caches, and grants. Read-only utilities use the same grant but perform
+only reads. Local profile format version 2 rejects obsolete Sheets keys; the
+one-time profile conversion lives in `scripts/migrate_profile_oauth.py`.
 
 The browser Maps key is sent only to the autocomplete component and depends on
 website plus API restrictions. The Routes key remains server-side and is sent
 only to the Routes API. Neither key is sourced from or grants access to a
-business profile, workbook, service account, or Drive authorization. Quota
+business profile, workbook, or Google OAuth authorization. Quota
 monitoring uses a separate app-wide service-account JSON mapping and the
 `cloud-platform.read-only` and `monitoring.read` scopes; it never reuses profile
 Sheets credentials or human Drive OAuth. The
@@ -89,7 +93,7 @@ it does not retain complete Google responses or polylines.
 
 Local profile configuration is plaintext and must remain on a protected,
 non-synchronized filesystem. The hosted representation is an explicit allowlist
-containing the profile name, spreadsheet ID, Sheets service-account credential,
+containing the profile name, spreadsheet ID, Google OAuth grant,
 and validated Drive authorization plus its storage root and managed children.
 Local backup paths and Synology metadata are intentionally excluded.
 
@@ -125,7 +129,7 @@ sequenceDiagram
     participant Sheets as Google Sheets
 
     User->>App: Submit a ledger operation
-    App->>Profile: Resolve workbook and service account
+    App->>Profile: Resolve workbook and Google OAuth grant
     App->>Sheets: Fresh validation and requested write
     Sheets-->>App: Confirmed result or bounded uncertain-write readback
     App->>App: Invalidate affected caches before later reads
@@ -256,7 +260,7 @@ The current decomposition uses these seams:
 | Receipt page workflow | `tabula_rasa/page_renderers/transactions/receipt_workflows.py` owns reusable upload/recovery state; `tabula_rasa/page_renderers/transactions/receipt_editor.py` owns editor rendering; `tabula_rasa/page_renderers/transactions/receipt_display.py` owns listing/unlink UI. `tabula_rasa/page_renderers/transactions/receipts.py` may remain a thin compatibility facade. |
 | Mileage page | `tabula_rasa/page_renderers/mileage_form_shared.py` owns shared Add/Edit address, route, and trip-field rendering, keyed widgets, and common validation; `mileage_form.py` and `mileage_ledger.py` keep create/update/delete controllers separate; `mileage_routing.py` and `mileage_locations.py` own route state and location helpers; `mileage.py` remains orchestration-focused. |
 | Transaction ledger page | `tabula_rasa/page_renderers/transactions/transaction_form.py` owns shared Add/Edit/Copy field rendering, keyed widgets, normalized drafts, and common validation; `creation.py` and `ledger_editor.py` keep create/update/delete and receipt controllers separate; `ledger_filters.py`, `ledger_bulk.py`, and `transaction_copy.py` own the remaining ledger seams; `ledger.py` composes them. |
-| Drive integration | `tabula_rasa/google_drive/__init__.py` preserves `GoogleDriveClient`; `tabula_rasa/google_drive/oauth.py`, `tabula_rasa/google_drive/client.py`, `tabula_rasa/google_drive/folders.py`, `tabula_rasa/google_drive/receipts.py`, and `tabula_rasa/google_drive/backups.py` separate identity/auth, generic requests, managed folders, receipts, and backups. |
+| Drive integration | `tabula_rasa/google_drive/__init__.py` preserves `GoogleDriveClient`; `tabula_rasa/google_drive/oauth.py`, `tabula_rasa/google_drive/client.py`, `tabula_rasa/google_drive/folders.py`, `tabula_rasa/google_drive/ledgers.py`, `tabula_rasa/google_drive/receipts.py`, and `tabula_rasa/google_drive/backups.py` separate identity/auth, generic requests, managed folders, initial ledger provision, receipts, and backups. |
 | Local profile administration | `local_profile_admin.py` remains the page entry point and profile-summary composer; `local_profile_admin_forms.py`, `local_profile_admin_readiness.py`, `local_profile_admin_security.py`, `local_profile_admin_support.py`, and `local_profile_admin_synology.py` own the distinct form, readiness, deployment-security, shared setup, and Synology responsibilities. |
 | Tests | `tests/storage/google_sheets/`, `tests/google_drive/`, `tests/mixed_use_storage/`, and `tests/receipt_recovery/` follow the production/workflow seams and keep shared fixtures in local support modules rather than duplicating them per domain. |
 

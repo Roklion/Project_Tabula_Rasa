@@ -1,9 +1,9 @@
 # Google Drive
 
 This guide configures Google Cloud, OAuth, Google Picker, and the per-profile
-Drive connection used for receipts and cloud backups. Google Sheets access is
-separate: each profile continues to use its own Sheets service account. See
-[Architecture](ARCHITECTURE.md) for the boundary between these credentials and
+Google connection used for Sheets ledgers, receipts, and cloud backups. The
+same profile OAuth grant authorizes both APIs. See
+[Architecture](ARCHITECTURE.md) for the credential boundaries and
 [Setup](SETUP.md) for initial profile creation.
 
 ## Configuration model
@@ -40,7 +40,7 @@ sequenceDiagram
     participant Google as Google OAuth
     participant Store as Profile store
 
-    Admin->>App: Select profile and Connect Google Drive
+    Admin->>App: Select profile and Connect Google
     App->>App: Create signed state for profile and redirect URI
     App-->>Admin: Redirect with shared client and drive.file scope
     Admin->>Google: Authenticate and approve
@@ -83,15 +83,14 @@ profile determines the token and folder used by every subsequent Drive call.
 ## Google Cloud project
 
 Use a project such as tabula-rasa-oauth-client rather than a project dedicated
-to one business's Sheets service account.
+to one business.
 
-1. Enable the Google Drive API and Google Picker API.
+1. Enable the Google Sheets API, Google Drive API, and Google Picker API.
 2. In Google Auth Platform, configure Branding with the application name
    Project Tabula Rasa.
 3. Choose External audience when profiles may use personal accounts or
    accounts outside one Workspace organization.
-4. During Testing, add each human Drive-owning account as a test user. Do not
-   add service-account client_email addresses.
+4. During Testing, add each human Drive-owning account as a test user. Add only human Google accounts.
 5. Under Data Access, request only:
 
    ```text
@@ -115,7 +114,8 @@ to one business's Sheets service account.
    ```
 
 8. Create a Picker API key. Restrict it to the Picker API and the approved
-   HTTP referrers, using /* after each origin.
+   HTTP referrers, using /* after each origin. Also allow
+   `https://docs.google.com/*` because Picker renders in a Google-hosted iframe.
 9. Record the client ID, client secret, Picker key, and numeric Cloud project
    number. The number is under IAM & Admin > Settings; it is not the project ID.
 10. Before real use, publish the app and confirm Audience shows In production.
@@ -142,8 +142,7 @@ picker_api_key = "PICKER_API_KEY"
 project_number = "NUMERIC_CLOUD_PROJECT_NUMBER"
 ```
 
-Never commit or display this file, its values, OAuth tokens, or service-account
-JSON. Do not put tokens in a ledger workbook.
+Never commit or display this file, its values, OAuth tokens, or private credentials. Do not put tokens in a ledger workbook.
 
 ## Connect a profile
 
@@ -156,10 +155,11 @@ powershell -ExecutionPolicy Bypass -File scripts\run_local_profile_admin.ps1
 
 1. Sign in and open Account settings.
 2. Re-enter the application password.
-3. Select the intended profile and open its Google Drive OAuth step.
-4. Select Connect Google Drive.
+3. Select the intended profile and open its Google setup tab.
+4. Select Connect Google.
 5. Sign in with the human account that should own that profile's Drive files.
-6. Select an existing storage root in Picker or create an app-managed root.
+6. Select the existing ledger spreadsheet in Picker and Validate ledger. Then
+   select a storage root or create an app-managed root.
 7. Select Provision storage folders. The app creates or reuses the Receipts
    and Ledger Backups children.
 8. Repeat for each profile.
@@ -171,9 +171,11 @@ powershell -ExecutionPolicy Bypass -File scripts\run_local_profile_admin.ps1
 
 The hosted app cannot safely write profile changes back to Streamlit Secrets.
 Perform connection, reconnection, folder selection, and disconnection locally,
-then export the complete hosted projection. Disconnection revokes the saved
-grant and removes local Drive settings without deleting Drive files or changing
-the Sheets service account.
+then export the complete hosted projection. Disconnection removes only this
+profile's local grant and folder settings, disabling Sheets and Drive. It does
+not delete files or revoke Google's shared account/application grant, which
+could invalidate other profiles using the same account. To revoke the whole
+application, use Google Account permissions and reconnect every affected profile.
 
 ## Testing and production publishing
 
@@ -211,8 +213,8 @@ application branding.
 
 ### Grant revoked or refresh fails
 
-Reconnect that profile in local Account settings. Its Sheets service-account
-access is unaffected.
+Reconnect that profile in local Account settings. Both Sheets and Drive depend
+on this connection. Validate its ledger and configured folders, then export.
 
 ### Drive-owning account changes
 
@@ -301,3 +303,30 @@ document. Hosted Streamlit cannot update these values itself.
 - [Google Drive API scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-auth)
 - [Google Picker web guide](https://developers.google.com/workspace/drive/picker/guides/web-picker)
 - [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy)
+
+## Ledger file access
+
+The `drive.file` scope is accepted by the Sheets API. Use Picker's spreadsheet
+view to grant access to the existing workbook; the same human account must have
+Editor access. A pasted spreadsheet ID alone is insufficient. Read-only
+validation uses the same OAuth grant but performs no write operations. Recovery
+and explicit schema-migration candidates can be authorized with the separate
+candidate Picker without switching the active ledger.
+
+See [Google Sheets scopes](https://developers.google.com/workspace/sheets/api/scopes)
+and [Drive file scopes with Picker](https://developers.google.com/workspace/drive/api/guides/api-specific-auth).
+Existing deployments follow [the OAuth migration runbook](OAUTH_MIGRATION.md).
+
+### Initial ledger provision
+
+In Account settings > Google setup, a connected profile with no ledger can use
+Create ledger spreadsheet instead of selecting an existing file. The app creates
+`Business name Ledger` in that Google account's My Drive, saves its ID, and
+initializes the existing required worksheets and default accounts/categories.
+This does not require a separate Picker grant because the app creates the file.
+The action is hidden once a ledger is configured and never replaces an existing
+ledger. Drive receipt/backup folders are still configured in the same setup tab.
+
+If creation or initialization is uncertain, no file is deleted or blindly
+recreated. Inspect Drive and select the created file through Picker; if its ID
+was saved, use Validate ledger to finish supported blank-workbook initialization.

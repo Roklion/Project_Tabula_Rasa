@@ -76,7 +76,7 @@ The documentation index is this section of the root README. Go directly to:
 ## Security
 
 Never commit `.streamlit/secrets.toml`,
-`.streamlit/business_profiles.json`, service-account JSON, OAuth refresh
+`.streamlit/business_profiles.json`, OAuth client secrets, OAuth refresh
 tokens, exported Streamlit Secrets, backups, receipts, or private ledger data.
 The ignored local profile file is plaintext and must remain on a protected,
 non-synchronized filesystem.

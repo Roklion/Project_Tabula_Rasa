@@ -8,8 +8,7 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
-import gspread
-from google.oauth2.service_account import Credentials
+
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -25,7 +24,6 @@ from tabula_rasa.google_drive import GoogleDriveClient, load_oauth_config
 from tabula_rasa.local_profile_store import load_business_profile_document
 from tabula_rasa.receipt_recovery import recover_receipts_from_synology
 from tabula_rasa.storage import GoogleSheetsStorage
-from tabula_rasa.storage.google_sheets import SHEETS_SCOPE
 
 
 def _drive_destination(profile_secrets: Mapping[str, Any]) -> tuple[Mapping[str, Any], str]:
@@ -92,11 +90,9 @@ def main() -> None:
         backup = args.backup.read_bytes()
     except OSError as exc:
         raise SystemExit("The ledger backup could not be read.") from exc
-    credentials = Credentials.from_service_account_info(
-        dict(profile_secrets["gcp_service_account"]),
-        scopes=[SHEETS_SCOPE],
+    workbook = GoogleSheetsStorage._open_workbook_from_secrets(
+        {**profile_secrets, "spreadsheet_id": target_spreadsheet_id}, scopes=[]
     )
-    workbook = gspread.authorize(credentials).open_by_key(target_spreadsheet_id)
     storage = GoogleSheetsStorage(workbook)
     drive = GoogleDriveClient(load_oauth_config(all_secrets), drive_settings)
     try:

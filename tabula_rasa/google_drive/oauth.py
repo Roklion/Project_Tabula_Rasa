@@ -393,3 +393,23 @@ def validate_drive_profile_settings(value: object) -> dict[str, Any]:
             )
         normalized[field] = {"id": folder_id, "name": folder_name}
     return normalized
+
+
+def profile_google_credentials(settings: Mapping[str, Any]):
+    """Build refreshable credentials from one profile and the shared OAuth client.
+
+    drive.file authorizes both Sheets and Drive for explicitly selected files.
+    Read-only utilities enforce read-only operations, not a second OAuth grant.
+    """
+    from google.oauth2.credentials import Credentials
+
+    config = load_oauth_config(settings)
+    grant = validate_drive_profile_settings(settings.get("google_drive"))
+    return Credentials(
+        token=None,
+        refresh_token=grant["refresh_token"],
+        token_uri=TOKEN_ENDPOINT,
+        client_id=config.client_id,
+        client_secret=config.client_secret,
+        scopes=[DRIVE_SCOPE],
+    )

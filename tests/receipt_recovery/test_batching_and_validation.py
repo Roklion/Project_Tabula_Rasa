@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.google_auth_fixtures import GOOGLE_OAUTH_CONFIG, google_grant
+
 import csv
 import hashlib
 import io
@@ -405,11 +407,11 @@ def test_recovery_command_refuses_every_profiles_live_workbook() -> None:
             "business_profiles": {
                 "north": {
                     "spreadsheet_id": "north-live-sheet",
-                    "gcp_service_account": {},
+                    "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
                 },
                 "south": {
                     "spreadsheet_id": "south-live-sheet",
-                    "gcp_service_account": {},
+                    "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
                 },
             }
         }

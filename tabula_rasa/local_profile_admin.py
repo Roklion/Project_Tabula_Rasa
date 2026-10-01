@@ -35,7 +35,6 @@ def _profile_rows(
 ) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for profile in configured_profiles_or_empty(effective_secrets):
-        credential = profile.secrets.get("gcp_service_account", {})
         synology_recovery = profile.secrets.get("synology_recovery")
         source = (
             "Business profiles JSON"
@@ -52,8 +51,7 @@ def _profile_rows(
                 "Local backup folder": str(
                     profile.secrets.get("backup_folder_path") or "Not configured"
                 ),
-                "Service account": str(credential.get("client_email", "")),
-                "Drive OAuth": (
+                "Google account": (
                     str(
                         profile.secrets.get("google_drive", {}).get(
                             "authorized_email",
@@ -85,7 +83,7 @@ def render_local_profile_admin(
     render_page_header(
         "Account settings",
         "Manage isolated business profiles, storage, recovery, and deployment "
-        "settings locally. Private keys are never displayed after upload.",
+        "settings locally. OAuth tokens are never displayed.",
     )
 
     if not st.session_state.get("local_profile_admin_unlocked"):
@@ -148,7 +146,7 @@ def render_local_profile_admin(
     ) = st.tabs(
         [
             "Business profiles",
-            "Google Drive storage",
+            "Google setup",
             "Recovery",
             "Security & deployment information",
         ]

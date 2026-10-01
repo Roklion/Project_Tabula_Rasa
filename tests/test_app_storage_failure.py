@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.google_auth_fixtures import GOOGLE_OAUTH_CONFIG, google_grant
+
 import hashlib
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -75,7 +77,7 @@ class TestAppStorageFailure:
             "test": {
                 "name": "Test Business",
                 "spreadsheet_id": "test-sheet",
-                "gcp_service_account": {"type": "service_account"},
+
                 "google_drive": {
                     "refresh_token": "refresh-token",
                     "token_uri": "https://oauth2.googleapis.com/token",
@@ -134,7 +136,7 @@ class TestAppStorageFailure:
             "test": {
                 "name": "Test Business",
                 "spreadsheet_id": "test-sheet",
-                "gcp_service_account": {"type": "service_account"},
+                "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
             }
         }
 
@@ -184,7 +186,7 @@ class TestAppStorageFailure:
             "test": {
                 "name": "Test Business",
                 "spreadsheet_id": "test-sheet",
-                "gcp_service_account": {"type": "service_account"},
+                "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
             }
         }
 
@@ -237,7 +239,7 @@ class TestAppStorageFailure:
             "test": {
                 "name": "Test Business",
                 "spreadsheet_id": "test-sheet",
-                "gcp_service_account": {"type": "service_account"},
+
                 "google_drive": {
                     "refresh_token": "refresh-token",
                     "token_uri": "https://oauth2.googleapis.com/token",

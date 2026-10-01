@@ -20,7 +20,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from tabula_rasa.business_profiles import load_business_profiles
-from tabula_rasa.google_drive import GoogleDriveConfigurationError
+from tabula_rasa.google_drive import GoogleDriveConfigurationError, load_oauth_config
 from tabula_rasa.local_profile_store import (
     LOCAL_PROFILE_STORE_PATH,
     LocalProfileStoreError,
@@ -113,6 +113,10 @@ def build_streamlit_secrets_toml(
     """Combine app-level secrets and canonical business profiles as TOML."""
     if not profiles:
         raise SecretsExportError("No business profiles are configured.")
+    try:
+        load_oauth_config(app_secrets)
+    except GoogleDriveConfigurationError as exc:
+        raise SecretsExportError("Configure the shared Google OAuth client before exporting.") from exc
     combined: dict[str, Any] = {
         str(key): value
         for key, value in app_secrets.items()

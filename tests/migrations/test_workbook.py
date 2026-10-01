@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from tests.google_auth_fixtures import GOOGLE_OAUTH_CONFIG, google_grant
+
 import json
 import sys
-from pathlib import Path
 from unittest.mock import Mock, call, patch
 
 import gspread
@@ -469,7 +470,7 @@ def test_populated_legacy_startup_is_read_only_and_actionable() -> None:
     client.open_by_key.return_value = workbook
 
     with (
-        patch("tabula_rasa.storage.google_sheets.Credentials.from_service_account_info", return_value=object()),
+        patch("tabula_rasa.storage.google_sheets.client.profile_google_credentials", return_value=object()),
         patch.object(gspread, "authorize", return_value=client),
         pytest.raises(
             StorageInitializationError,
@@ -477,7 +478,7 @@ def test_populated_legacy_startup_is_read_only_and_actionable() -> None:
         ),
     ):
         GoogleSheetsStorage.from_secrets(
-            {"spreadsheet_id": "sheet-1", "gcp_service_account": {"type": "service_account"}}
+            {"spreadsheet_id": "sheet-1", "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG}
         )
 
     assert before == {
@@ -519,7 +520,7 @@ def test_populated_v9_startup_is_read_only_and_actionable() -> None:
     client.open_by_key.return_value = workbook
 
     with (
-        patch("tabula_rasa.storage.google_sheets.Credentials.from_service_account_info", return_value=object()),
+        patch("tabula_rasa.storage.google_sheets.client.profile_google_credentials", return_value=object()),
         patch.object(gspread, "authorize", return_value=client),
         pytest.raises(
             StorageInitializationError,
@@ -527,7 +528,7 @@ def test_populated_v9_startup_is_read_only_and_actionable() -> None:
         ),
     ):
         GoogleSheetsStorage.from_secrets(
-            {"spreadsheet_id": "sheet-1", "gcp_service_account": {"type": "service_account"}}
+            {"spreadsheet_id": "sheet-1", "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG}
         )
 
     assert before == {
@@ -549,7 +550,7 @@ def test_partial_blank_startup_resumes_current_headers() -> None:
 
     with (
         patch(
-            "tabula_rasa.storage.google_sheets.Credentials.from_service_account_info",
+            "tabula_rasa.storage.google_sheets.client.profile_google_credentials",
             return_value=object(),
         ),
         patch("tabula_rasa.storage.google_sheets.gspread.authorize", return_value=client),
@@ -557,7 +558,7 @@ def test_partial_blank_startup_resumes_current_headers() -> None:
         GoogleSheetsStorage.from_secrets(
             {
                 "spreadsheet_id": "sheet-1",
-                "gcp_service_account": {"type": "service_account"},
+                "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
             }
         )
 
@@ -668,7 +669,7 @@ def test_cli_profile_selection_isolated_to_selected_workbook() -> None:
     document = {"business_profiles": {"north": {}, "south": {}}}
     south_secrets = {
         "spreadsheet_id": "south-sheet",
-        "gcp_service_account": {"client_email": "south@example.invalid"},
+        "google_drive": google_grant('south@example.invalid'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
     }
     client = Mock()
     workbook = FakeWorkbook()
@@ -685,7 +686,7 @@ def test_cli_profile_selection_isolated_to_selected_workbook() -> None:
                 else AssertionError(f"unexpected profile: {profile}")
             ),
         ) as select_profile,
-        patch.object(migration_script.Credentials, "from_service_account_info", return_value=object()) as credentials,
+        patch("tabula_rasa.storage.google_sheets.client.profile_google_credentials", return_value=object()) as credentials,
         patch.object(gspread, "authorize", return_value=client),
         patch.object(migration_script, "migrate_workbook", return_value={}),
         patch.object(
@@ -698,51 +699,11 @@ def test_cli_profile_selection_isolated_to_selected_workbook() -> None:
 
     select_profile.assert_called_once_with(document, "south")
     credentials.assert_called_once_with(
-        south_secrets["gcp_service_account"], scopes=[migration_script.SHEETS_SCOPE]
+        south_secrets
     )
     client.open_by_key.assert_called_once_with("south-sheet")
 
 
-def test_cli_candidate_workbook_uses_explicit_service_account_file() -> None:
-    credential_file = Path("service-account.json")
-    credential_info = {"client_email": "candidate@example.invalid"}
-    client = Mock()
-    workbook = FakeWorkbook()
-    client.open_by_key.return_value = workbook
-
-    with (
-        patch.object(
-            migration_script.Credentials,
-            "from_service_account_info",
-            return_value=object(),
-        ) as credentials,
-        patch.object(gspread, "authorize", return_value=client),
-        patch.object(migration_script, "migrate_workbook", return_value={}) as migrate,
-        patch.object(
-            Path,
-            "read_text",
-            return_value=json.dumps(credential_info),
-        ) as read_text,
-        patch.object(
-            sys,
-            "argv",
-            [
-                "migrate_workbook.py",
-                "--spreadsheet-id",
-                "candidate-sheet",
-                "--service-account-file",
-                str(credential_file),
-            ],
-        ),
-    ):
-        migration_script.main()
-
-    credentials.assert_called_once_with(
-        credential_info, scopes=[migration_script.SHEETS_SCOPE]
-    )
-    read_text.assert_called_once_with(encoding="utf-8")
-    client.open_by_key.assert_called_once_with("candidate-sheet")
-    migrate.assert_called_once_with(workbook)
 
 
 def test_cli_reports_expected_migration_errors() -> None:
@@ -757,12 +718,11 @@ def test_cli_reports_expected_migration_errors() -> None:
             "select_profile_secrets",
             return_value={
                 "spreadsheet_id": "sheet-1",
-                "gcp_service_account": {"client_email": "test@example.invalid"},
+                "google_drive": google_grant('test@example.invalid'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
             },
         ),
-        patch.object(
-            migration_script.Credentials,
-            "from_service_account_info",
+        patch(
+            "tabula_rasa.storage.google_sheets.client.profile_google_credentials",
             side_effect=ValueError("invalid credential"),
         ),
         patch.object(
@@ -770,7 +730,7 @@ def test_cli_reports_expected_migration_errors() -> None:
             "argv",
             ["migrate_workbook.py", "--profile", "test"],
         ),
-        pytest.raises(SystemExit, match="Workbook migration failed: invalid credential"),
+        pytest.raises(SystemExit, match="Workbook migration failed. Confirm Google OAuth access"),
     ):
         migration_script.main()
 
@@ -809,3 +769,34 @@ def test_migration_preflights_malformed_recurring_schedules_before_writing() -> 
     assert before == {
         title: worksheet.get_all_values() for title, worksheet in workbook.sheets.items()
     }
+
+
+@pytest.mark.parametrize("target", ["north-ledger-123", "south-ledger-123", "candidate-ledger-123"])
+def test_cli_override_refuses_all_live_ledgers_and_preserves_profile_grant(target):
+    document = {
+        "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
+        "business_profiles": {
+            "north": {"name": "North", "spreadsheet_id": "north-ledger-123",
+                      "google_drive": google_grant("same@example.test", "north-token")},
+            "south": {"name": "South", "spreadsheet_id": "south-ledger-123",
+                      "google_drive": google_grant("same@example.test", "south-token")},
+        },
+    }
+    with (
+        patch.object(migration_script, "load_business_profile_document", return_value=document),
+        patch.object(GoogleSheetsStorage, "_open_workbook_from_secrets") as open_workbook,
+        patch.object(migration_script, "migrate_workbook", return_value={}) as migrate,
+        patch.object(sys, "argv", ["migrate_workbook.py", "--profile", "north",
+                                   "--spreadsheet-id", target]),
+    ):
+        if target != "candidate-ledger-123":
+            with pytest.raises(SystemExit) as error:
+                migration_script.main()
+            assert error.value.code == 2
+            open_workbook.assert_not_called()
+            migrate.assert_not_called()
+        else:
+            migration_script.main()
+            assert open_workbook.call_args.args[0]["spreadsheet_id"] == target
+            assert open_workbook.call_args.args[0]["google_drive"]["refresh_token"] == "north-token"
+            migrate.assert_called_once_with(open_workbook.return_value)

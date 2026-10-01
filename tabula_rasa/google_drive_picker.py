@@ -1,4 +1,4 @@
-"""Google Picker component for explicit per-folder Drive authorization."""
+"""Google Picker component for explicit folder and spreadsheet authorization."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import streamlit as st
 
 
 _PICKER_HTML = """
-<button id="drive-folder-picker" type="button">Choose Google Drive folder</button>
+<button id="drive-folder-picker" type="button">Choose Google file</button>
 <span id="drive-folder-status" role="status"></span>
 """
 
@@ -33,6 +33,8 @@ export default function(component) {
     const {data, parentElement, setTriggerValue} = component;
     const button = parentElement.querySelector('#drive-folder-picker');
     const status = parentElement.querySelector('#drive-folder-status');
+    button.textContent = data.kind === 'spreadsheet'
+        ? 'Choose ledger spreadsheet' : 'Choose Google Drive folder';
 
     function loadPickerLibrary() {
         if (window.google && window.google.picker) return Promise.resolve();
@@ -67,10 +69,13 @@ export default function(component) {
         status.textContent = 'Opening Google Drive…';
         try {
             await loadPickerLibrary();
-            const view = new google.picker.DocsView(google.picker.ViewId.FOLDERS);
-            view.setIncludeFolders(true);
-            view.setSelectFolderEnabled(true);
-            view.setMimeTypes('application/vnd.google-apps.folder');
+            const isSpreadsheet = data.kind === 'spreadsheet';
+            const view = new google.picker.DocsView(isSpreadsheet
+                ? google.picker.ViewId.SPREADSHEETS : google.picker.ViewId.FOLDERS);
+            view.setIncludeFolders(!isSpreadsheet);
+            view.setSelectFolderEnabled(!isSpreadsheet);
+            view.setMimeTypes(isSpreadsheet ? 'application/vnd.google-apps.spreadsheet'
+                : 'application/vnd.google-apps.folder');
             const picker = new google.picker.PickerBuilder()
                 .setOAuthToken(data.accessToken)
                 .setDeveloperKey(data.apiKey)
@@ -88,7 +93,7 @@ export default function(component) {
                         status.textContent =
                             `Selected: ${folder[google.picker.Document.NAME]}`;
                     } else if (result.action === google.picker.Action.CANCEL) {
-                        status.textContent = 'No folder selected.';
+                        status.textContent = 'No file selected.';
                     }
                     button.disabled = false;
                 })
@@ -113,19 +118,21 @@ _folder_picker_component = st.components.v2.component(
 )
 
 
-def folder_picker(
+def _file_picker(
     *,
     access_token: str,
     api_key: str,
     project_number: str,
     key: str,
+    kind: str,
 ) -> Mapping[str, Any] | None:
-    """Render Google Picker and return a newly selected folder."""
+    """Render Google Picker and return a newly selected file."""
     result = _folder_picker_component(
         data={
             "accessToken": access_token,
             "apiKey": api_key,
             "appId": project_number,
+            "kind": kind,
         },
         key=key,
         on_selected_change=lambda: None,
@@ -133,3 +140,13 @@ def folder_picker(
     )
     selected = getattr(result, "selected", None)
     return selected if isinstance(selected, Mapping) else None
+
+
+def folder_picker(**kwargs) -> Mapping[str, Any] | None:
+    """Select a Drive storage folder."""
+    return _file_picker(kind="folder", **kwargs)
+
+
+def spreadsheet_picker(**kwargs) -> Mapping[str, Any] | None:
+    """Grant drive.file access by explicitly selecting a Google spreadsheet."""
+    return _file_picker(kind="spreadsheet", **kwargs)

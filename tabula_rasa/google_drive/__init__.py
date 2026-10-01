@@ -7,6 +7,7 @@ from .errors import (
     GoogleDriveConfigurationError, GoogleDriveConflictError, GoogleDriveError,
 )
 from .folders import _FolderOperationsMixin
+from .ledgers import _LedgerOperationsMixin
 from .oauth import (
     GoogleDriveOAuthConfig, authorization_url, create_oauth_state,
     exchange_authorization_code, load_oauth_config, select_redirect_uri,
@@ -21,6 +22,7 @@ from .receipts import (
 class GoogleDriveClient(
     _DriveClientCore,
     _FolderOperationsMixin,
+    _LedgerOperationsMixin,
     _ReceiptOperationsMixin,
     _BackupOperationsMixin,
 ):

@@ -7,8 +7,7 @@ import sys
 from collections.abc import Iterable
 from pathlib import Path
 
-import gspread
-from google.oauth2.service_account import Credentials
+
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -22,7 +21,7 @@ from tabula_rasa.business_profiles import (
 )
 from tabula_rasa.local_profile_store import load_business_profile_document
 from tabula_rasa.storage import GoogleSheetsStorage, StorageValidationError
-from tabula_rasa.storage.google_sheets import SHEETS_SCOPE, WORKSHEET_HEADERS
+from tabula_rasa.storage.google_sheets import WORKSHEET_HEADERS
 
 
 def validate_restore_target(
@@ -80,7 +79,7 @@ def main() -> None:
     parser.add_argument(
         "--target-spreadsheet-id",
         required=True,
-        help="ID of a blank workbook shared with the service account",
+        help="ID of a blank workbook selected through Google Picker with the profile Google account",
     )
     parser.add_argument(
         "--secrets",
@@ -116,10 +115,9 @@ def main() -> None:
     except (OSError, StorageValidationError, ValueError) as error:
         raise SystemExit(str(error)) from error
 
-    credentials = Credentials.from_service_account_info(
-        dict(secrets["gcp_service_account"]), scopes=[SHEETS_SCOPE]
+    workbook = GoogleSheetsStorage._open_workbook_from_secrets(
+        {**secrets, "spreadsheet_id": target_spreadsheet_id}, scopes=[]
     )
-    workbook = gspread.authorize(credentials).open_by_key(target_spreadsheet_id)
     if args.initialize:
         initialize_blank_ledger_sheets(workbook)
     storage = GoogleSheetsStorage(workbook)

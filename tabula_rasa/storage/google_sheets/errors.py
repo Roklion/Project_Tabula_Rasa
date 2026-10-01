@@ -45,7 +45,7 @@ def _mutation_guidance(operation: str) -> str:
     )
 
 class StorageAuthenticationError(StorageUnavailableError):
-    """Raised when Google rejects a service-account credential."""
+    """Raised when Google rejects the profile Google OAuth authorization."""
 
 class StorageWorkbookAccessError(StorageUnavailableError):
     """Raised when the configured spreadsheet cannot be opened."""

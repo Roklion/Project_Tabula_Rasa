@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import json
+from tests.google_auth_fixtures import GOOGLE_OAUTH_CONFIG, google_grant
+
 import os
 import tempfile
 from pathlib import Path
@@ -33,21 +34,9 @@ def select_account_settings(app: AppTest) -> None:
 
 
 def profile_settings(name: str, spreadsheet_id: str) -> dict:
-    credential = {
-        "type": "service_account",
-        "project_id": "test-project",
-        "private_key": (
-            "-----BEGIN PRIVATE KEY-----\n"
-            "test-private-key\n"
-            "-----END PRIVATE KEY-----\n"
-        ),
-        "client_email": "ledger@test-project.iam.gserviceaccount.com",
-        "token_uri": "https://oauth2.googleapis.com/token",
-    }
     return build_profile_settings(
         name,
         spreadsheet_id,
-        json.dumps(credential).encode("utf-8"),
     )
 
 
@@ -74,7 +63,7 @@ class TestAppAuthentication:
                     "test": {
                         "name": "Test Business",
                         "spreadsheet_id": "test-sheet",
-                        "gcp_service_account": {"type": "service_account"},
+                        "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
                     }
                 }
                 app.session_state["active_page"] = "Transactions"
@@ -114,7 +103,7 @@ class TestAppAuthentication:
                     "hosted": {
                         "name": "Hosted Business",
                         "spreadsheet_id": "hosted-sheet-id",
-                        "gcp_service_account": {"type": "service_account"},
+                        "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
                     }
                 }
 
@@ -219,7 +208,7 @@ class TestAppAuthentication:
                 assert any(
                     item.value == "Account settings" for item in app.title
                 )
-                assert app.file_uploader[0].label == "Google service-account JSON"
+                assert len(app.file_uploader) == 0
                 assert not app.tabs
                 assert not any(
                     checkbox.label
@@ -267,7 +256,7 @@ class TestAppAuthentication:
                     "hosted": {
                         "name": "Hosted Business",
                         "spreadsheet_id": "hosted-sheet-id",
-                        "gcp_service_account": {"type": "service_account"},
+                        "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
                     }
                 }
 
@@ -452,7 +441,7 @@ class TestAppAuthentication:
                     "test": {
                         "name": "Test Business",
                         "spreadsheet_id": "test-sheet",
-                        "gcp_service_account": {"type": "service_account"},
+                        "google_drive": google_grant('owner@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
                     }
                 }
 
@@ -513,86 +502,15 @@ class TestAppAuthentication:
                 assert any(
                     item.value == "Account settings" for item in app.title
                 )
-                assert app.file_uploader[0].label == "Google service-account JSON"
+                assert len(app.file_uploader) == 0
 
-                next(
-                    field for field in app.text_input if field.label == "Business name"
-                ).input("North Shop")
-                next(
-                    field for field in app.text_input if field.label == "Profile key"
-                ).input("north")
-                next(
-                    field
-                    for field in app.text_input
-                    if field.label == "Google Sheets URL or spreadsheet ID"
-                ).input("abcdefghij1234567890")
-                next(
-                    field
-                    for field in app.text_input
-                    if field.label == "Optional local backup folder path"
-                ).input(r"G:\My Drive\Project Tabula Rasa Backups\north")
-                next(
-                    button
-                    for button in app.button
-                    if button.label == "Validate and save"
-                ).click().run()
-                assert any(
-                    "Upload the Google service-account JSON" in str(item.value)
-                    for item in app.error
-                )
-                assert (
-                    next(
-                        field
-                        for field in app.text_input
-                        if field.label == "Business name"
-                    ).value
-                    == "North Shop"
-                )
-                assert (
-                    next(
-                        field
-                        for field in app.text_input
-                        if field.label == "Profile key"
-                    ).value
-                    == "north"
-                )
-                assert (
-                    next(
-                        field
-                        for field in app.text_input
-                        if field.label == "Google Sheets URL or spreadsheet ID"
-                    ).value
-                    == "abcdefghij1234567890"
-                )
-                credential = {
-                    "type": "service_account",
-                    "project_id": "test-project",
-                    "private_key": (
-                        "-----BEGIN PRIVATE KEY-----\n"
-                        "credential-content-must-not-leak\n"
-                        "-----END PRIVATE KEY-----\n"
-                    ),
-                    "client_email": "ledger@test-project.iam.gserviceaccount.com",
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                }
-                app.file_uploader[0].set_value(
-                    (
-                        "service-account.json",
-                        json.dumps(credential).encode("utf-8"),
-                        "application/json",
-                    )
-                )
-                next(
-                    button
-                    for button in app.button
-                    if button.label == "Validate and save"
-                ).click().run()
-
+                next(field for field in app.text_input if field.label == "Business name").input("North Shop")
+                next(field for field in app.text_input if field.label == "Profile key").input("north")
+                next(button for button in app.button if button.label == "Save profile").click().run()
                 assert load_local_profiles(local_store)["north"]["name"] == "North Shop"
-                assert any(
-                    "validated and saved locally" in str(item.value)
-                    for item in app.success
-                )
+                assert load_local_profiles(local_store)["north"]["spreadsheet_id"] == ""
+                assert "gcp_service_account" not in load_local_profiles(local_store)["north"]
+                assert len(app.exception) == 0
 
     def test_local_admin_edit_forms_are_unique_per_profile(self) -> None:
         st.cache_resource.clear()
@@ -686,7 +604,7 @@ class TestAppAuthentication:
 
                 assert [tab.label for tab in app.tabs] == [
                     "Business profiles",
-                    "Google Drive storage",
+                    "Google setup",
                     "Recovery",
                     "Security & deployment information",
                 ]

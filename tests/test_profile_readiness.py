@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.google_auth_fixtures import GOOGLE_OAUTH_CONFIG, google_grant
+
 import pytest
 
 from tabula_rasa.profile_readiness import (
@@ -12,11 +14,7 @@ def _settings(**overrides: object) -> dict[str, object]:
     settings: dict[str, object] = {
         "name": "North Shop",
         "spreadsheet_id": "north-sheet",
-        "gcp_service_account": {
-            "type": "service_account",
-            "client_email": "ledger@example.test",
-            "private_key": "never-rendered",
-        },
+        "google_drive": google_grant('ledger@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
     }
     settings.update(overrides)
     return settings
@@ -44,7 +42,7 @@ def test_sheets_only_profile_is_ready_locally_without_optional_destinations() ->
 def test_partial_drive_configuration_is_incomplete() -> None:
     report = profile_configuration_readiness(
         "north",
-        _settings(google_drive={"refresh_token": "present"}),
+        _settings(google_drive={"refresh_token": "present", "storage_root": {}}),
     )
 
     assert report.status == "incomplete"

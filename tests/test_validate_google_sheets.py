@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.google_auth_fixtures import GOOGLE_OAUTH_CONFIG, google_grant
+
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -15,7 +17,7 @@ PROFILE_DOCUMENT = {
         "test-business": {
             "name": "Test Business",
             "spreadsheet_id": "configured-live-workbook",
-            "gcp_service_account": {"client_email": "test@example.invalid"},
+            "google_drive": google_grant('test@example.invalid'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
         }
     }
 }
@@ -62,8 +64,8 @@ def legacy_hierarchy_workbook() -> FakeWorkbook:
     "scripts.validate_google_sheets.load_business_profile_document",
     return_value=PROFILE_DOCUMENT,
 )
-@patch("scripts.validate_google_sheets.Credentials.from_service_account_info")
-@patch("scripts.validate_google_sheets.gspread.authorize")
+@patch("tabula_rasa.storage.google_sheets.client.profile_google_credentials")
+@patch("tabula_rasa.storage.google_sheets.client.gspread.authorize")
 def test_explicit_workbook_override_is_read_only_and_reports_counts(
     authorize: Mock,
     from_service_account_info: Mock,
@@ -81,8 +83,7 @@ def test_explicit_workbook_override_is_read_only_and_reports_counts(
     )
 
     client.open_by_key.assert_called_once_with("recovery-workbook")
-    scopes = from_service_account_info.call_args.kwargs["scopes"]
-    assert scopes == ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+    assert from_service_account_info.call_args.args[0]["google_drive"]["refresh_token"] == "fake-refresh"
     output = capsys.readouterr().out
     assert "Ledger rows readable: Accounts=1, Categories=1" in output
     assert "Payees=1" in output
@@ -109,8 +110,8 @@ def test_explicit_workbook_override_rejects_write_test() -> None:
     "scripts.validate_google_sheets.load_business_profile_document",
     return_value=PROFILE_DOCUMENT,
 )
-@patch("scripts.validate_google_sheets.Credentials.from_service_account_info")
-@patch("scripts.validate_google_sheets.gspread.authorize")
+@patch("tabula_rasa.storage.google_sheets.client.profile_google_credentials")
+@patch("tabula_rasa.storage.google_sheets.client.gspread.authorize")
 def test_configured_profile_still_uses_configured_workbook(
     authorize: Mock,
     _from_service_account_info: Mock,
@@ -133,8 +134,8 @@ def test_configured_profile_still_uses_configured_workbook(
     "scripts.validate_google_sheets.load_business_profile_document",
     return_value=PROFILE_DOCUMENT,
 )
-@patch("scripts.validate_google_sheets.Credentials.from_service_account_info")
-@patch("scripts.validate_google_sheets.gspread.authorize")
+@patch("tabula_rasa.storage.google_sheets.client.profile_google_credentials")
+@patch("tabula_rasa.storage.google_sheets.client.gspread.authorize")
 def test_read_only_validation_rejects_legacy_hierarchy_headers_until_migrated(
     authorize: Mock,
     _from_service_account_info: Mock,
@@ -157,8 +158,8 @@ def test_read_only_validation_rejects_legacy_hierarchy_headers_until_migrated(
     "scripts.validate_google_sheets.load_business_profile_document",
     return_value=PROFILE_DOCUMENT,
 )
-@patch("scripts.validate_google_sheets.Credentials.from_service_account_info")
-@patch("scripts.validate_google_sheets.gspread.authorize")
+@patch("tabula_rasa.storage.google_sheets.client.profile_google_credentials")
+@patch("tabula_rasa.storage.google_sheets.client.gspread.authorize")
 def test_validation_rejects_invalid_payee_records(
     authorize: Mock,
     _from_service_account_info: Mock,
