@@ -164,7 +164,7 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         with (
             patch("tabula_rasa.storage.google_sheets.client.profile_google_credentials",
                 return_value=object(),
-            ) as from_service_account_info,
+            ) as build_profile_credentials,
             patch.object(gspread, "authorize", return_value=google_client),
         ):
             storage = GoogleSheetsStorage.from_secrets(
@@ -177,8 +177,8 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         google_client.open_by_key.assert_called_once_with(
             "given-spreadsheet-id"
         )
-        from_service_account_info.assert_called_once()
-        assert from_service_account_info.call_args.args[0]["google_drive"]["refresh_token"] == "fake-refresh"
+        build_profile_credentials.assert_called_once()
+        assert build_profile_credentials.call_args.args[0]["google_drive"]["refresh_token"] == "fake-refresh"
         assert storage.workbook_title == workbook.title
         same_spreadsheet_storage = GoogleSheetsStorage(
             FakeWorkbook(), spreadsheet_id="given-spreadsheet-id"
@@ -220,7 +220,7 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         with (
             patch("tabula_rasa.storage.google_sheets.client.profile_google_credentials",
                 return_value=object(),
-            ) as from_service_account_info,
+            ) as build_profile_credentials,
             patch.object(gspread, "authorize", return_value=google_client),
         ):
             storage = GoogleSheetsStorage.from_secrets_read_only(
@@ -231,8 +231,8 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             )
 
         assert storage.workbook_title == workbook.title
-        from_service_account_info.assert_called_once()
-        assert from_service_account_info.call_args.args[0]["google_drive"]["refresh_token"] == "fake-refresh"
+        build_profile_credentials.assert_called_once()
+        assert build_profile_credentials.call_args.args[0]["google_drive"]["refresh_token"] == "fake-refresh"
         for worksheet in workbook.sheets.values():
             worksheet.update.assert_not_called()
             worksheet.add_cols.assert_not_called()

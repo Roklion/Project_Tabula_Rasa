@@ -1,7 +1,6 @@
 from tests.google_auth_fixtures import GOOGLE_OAUTH_CONFIG, google_grant
 from ._support import (
     GoogleSheetsStorageTestCase,
-    Credentials,
     FakeWorkbook,
     GoogleSheetsStorage,
     Mock,
@@ -91,9 +90,8 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         google_client.open_by_key.return_value = workbook
 
         with (
-            patch.object(
-                Credentials,
-                "from_service_account_info",
+            patch(
+                "tabula_rasa.storage.google_sheets.client.profile_google_credentials",
                 return_value=object(),
             ),
             patch.object(gspread, "authorize", return_value=google_client),
