@@ -68,7 +68,7 @@ def legacy_hierarchy_workbook() -> FakeWorkbook:
 @patch("tabula_rasa.storage.google_sheets.client.gspread.authorize")
 def test_explicit_workbook_override_is_read_only_and_reports_counts(
     authorize: Mock,
-    from_service_account_info: Mock,
+    build_profile_credentials: Mock,
     _load_document: Mock,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -83,7 +83,7 @@ def test_explicit_workbook_override_is_read_only_and_reports_counts(
     )
 
     client.open_by_key.assert_called_once_with("recovery-workbook")
-    assert from_service_account_info.call_args.args[0]["google_drive"]["refresh_token"] == "fake-refresh"
+    assert build_profile_credentials.call_args.args[0]["google_drive"]["refresh_token"] == "fake-refresh"
     output = capsys.readouterr().out
     assert "Ledger rows readable: Accounts=1, Categories=1" in output
     assert "Payees=1" in output
@@ -114,7 +114,7 @@ def test_explicit_workbook_override_rejects_write_test() -> None:
 @patch("tabula_rasa.storage.google_sheets.client.gspread.authorize")
 def test_configured_profile_still_uses_configured_workbook(
     authorize: Mock,
-    _from_service_account_info: Mock,
+    _build_profile_credentials: Mock,
     _load_document: Mock,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -138,7 +138,7 @@ def test_configured_profile_still_uses_configured_workbook(
 @patch("tabula_rasa.storage.google_sheets.client.gspread.authorize")
 def test_read_only_validation_rejects_legacy_hierarchy_headers_until_migrated(
     authorize: Mock,
-    _from_service_account_info: Mock,
+    _build_profile_credentials: Mock,
     _load_document: Mock,
 ) -> None:
     workbook = legacy_hierarchy_workbook()
@@ -162,7 +162,7 @@ def test_read_only_validation_rejects_legacy_hierarchy_headers_until_migrated(
 @patch("tabula_rasa.storage.google_sheets.client.gspread.authorize")
 def test_validation_rejects_invalid_payee_records(
     authorize: Mock,
-    _from_service_account_info: Mock,
+    _build_profile_credentials: Mock,
     _load_document: Mock,
 ) -> None:
     workbook = populated_workbook()

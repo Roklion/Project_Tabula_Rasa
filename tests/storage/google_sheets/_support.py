@@ -18,8 +18,6 @@ import gspread
 
 import pytest
 
-from google.oauth2.service_account import Credentials
-
 from tabula_rasa.storage.google_sheets import (
     BACKUP_FORMAT_VERSION,
     decode_receipt_references,
@@ -211,7 +209,6 @@ class GoogleSheetsStorageTestCase:
 __all__ = [
     'BACKUP_FORMAT_VERSION',
     'Callable',
-    'Credentials',
     'FakeWorkbook',
     'GoogleSheetsStorage',
     'GoogleSheetsStorageTestCase',

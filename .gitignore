@@ -9,13 +9,15 @@ __pycache__/
 !.env.example
 .streamlit/secrets*.toml
 .streamlit/*.json
-.streamlit/business_profiles.json
-.streamlit/local_business_profiles.json
 tabula-rasa-streamlit-secrets-*.toml
 *service-account*.json
 *service_account*.json
 google-credentials*.json
 tabula-rasa-heathcote-advisory-*.json
+*.pem
+*.key
+*.p12
+*.pfx
 
 # Ledger data and exports
 ledger.db
@@ -26,6 +28,7 @@ data/*.db-*
 /backups/
 
 # Python/tool caches
+/.worktrees/
 *.py[cod]
 .pytest_cache/
 .mypy_cache/
