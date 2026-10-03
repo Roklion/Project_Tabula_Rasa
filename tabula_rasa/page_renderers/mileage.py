@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from tabula_rasa.application.services import ApplicationServices
 from tabula_rasa.storage import GoogleSheetsStorage, StorageError
 
 from .mileage_form import render_add_mileage_form
@@ -59,6 +60,7 @@ class MileageContext:
     maps_api_key: str | None = None
     route_mileage: Callable[[str, str], float] | None = None
     autocomplete_region_code: str | None = None
+    services: ApplicationServices | None = None
 
 
 def render_mileage(context: MileageContext) -> None:

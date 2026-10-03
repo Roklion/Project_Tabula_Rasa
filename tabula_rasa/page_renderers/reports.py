@@ -10,6 +10,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from tabula_rasa.application.services import ApplicationServices
 from tabula_rasa.hierarchy import hierarchy_paths, ordered_accounts
 from tabula_rasa.ledger_presentation import money
 from tabula_rasa.ledger_reporting import (
@@ -51,6 +52,7 @@ class ReportsContext:
     profile_key: str
     storage: GoogleSheetsStorage
     report_storage_error: Callable[[StorageError], None]
+    services: ApplicationServices | None = None
 
 
 def _statement_frame(

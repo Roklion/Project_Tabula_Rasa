@@ -117,7 +117,7 @@ def authenticated_app(
     site.
     """
 
-    # ``get_storage`` is a global Streamlit resource. AppTest scenarios reuse
+    # ``get_application`` is a global Streamlit resource. AppTest scenarios reuse
     # the same profile key, so isolate the cache before constructing a fresh
     # fake storage boundary and again when the scenario exits.
     st.cache_resource.clear()

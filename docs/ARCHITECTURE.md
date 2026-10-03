@@ -254,6 +254,9 @@ The current decomposition uses these seams:
 
 | Responsibility | Current boundary |
 | --- | --- |
+| Application composition | `tabula_rasa/composition.py` selects one profile, constructs the Sheets adapter, and returns `SheetsApplication` with neutral services and the explicit transitional storage facade. |
+| Application services and contracts | `tabula_rasa/application/services.py` assembles `ApplicationServices`; `ledger_setup.py` owns the initial setup service and its result DTO; `contracts.py` declares the repository capabilities that service needs. |
+| Infrastructure adapter | `tabula_rasa/infrastructure/google_sheets.py` adapts the existing storage facade to `LedgerSetupRepository` without duplicating storage behavior. |
 | Sheets storage facade | `tabula_rasa/storage/google_sheets/__init__.py` keeps `GoogleSheetsStorage` and re-exports intentionally public names. |
 | Sheets primitives | `tabula_rasa/storage/google_sheets/errors.py`, `tabula_rasa/storage/google_sheets/schema.py`, `tabula_rasa/storage/google_sheets/validation.py`, `tabula_rasa/storage/google_sheets/client.py`, and a small `tabula_rasa/storage/google_sheets/base.py` own errors, current schema, API access, validation, and shared row/cache/read/write helpers. |
 | Sheets domains | `tabula_rasa/storage/google_sheets/accounts.py` owns account and category hierarchies; `tabula_rasa/storage/google_sheets/payees.py`, `tags.py`, `transactions.py`, `recurring.py`, `mileage.py`, `mixed_use.py`, `receipts.py`, and `backup.py` own the other cohesive domain operations. Historical migration code stays in scripts. |
@@ -277,6 +280,97 @@ while private helpers are imported and tested from their owning modules rather
 than re-exported as permanent compatibility aliases. These boundaries are
 architectural ownership guidance, not a demand that every row of code become a
 separate class or file.
+
+### Application services and persistence contracts
+
+[Issue #225](https://github.com/Roklion/Project_Tabula_Rasa/issues/225) establishes
+the composition foundation for the semantic extraction in
+[epic #219](https://github.com/Roklion/Project_Tabula_Rasa/issues/219), within
+[initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124).
+The existing responsibility-based decomposition remains useful: extraction
+proceeds through cohesive workflows, preserving their behavior and public
+facades while moving business ownership out of the persistence implementation.
+
+The first service is deliberately narrow. `LedgerSetupRepository` declares a
+`ledger_name` property and `ensure_defaults() -> dict[str, int]`.
+`LedgerSetupService` consumes that contract, returns a frozen `LedgerInfo(name)`
+from `get_info()`, and delegates default initialization. The application shell
+uses this service for the workbook caption and its existing once-per-session
+default initialization. Default selection, fresh reads, current-format checks,
+and remote write behavior remain in the existing Sheets implementation.
+
+```mermaid
+flowchart TD
+    Shell["app.py and page contexts"]
+    Composition["composition.py<br/>create_sheets_application"]
+    Services["application/services.py<br/>ApplicationServices"]
+    Setup["application/ledger_setup.py<br/>LedgerSetupService and LedgerInfo"]
+    Contract["application/contracts.py<br/>LedgerSetupRepository"]
+    Adapter["infrastructure/google_sheets.py<br/>GoogleSheetsLedgerSetupRepository"]
+    Storage["storage/google_sheets/<br/>GoogleSheetsStorage"]
+
+    Shell --> Composition
+    Shell --> Services
+    Composition --> Services
+    Composition --> Adapter
+    Services --> Setup
+    Setup --> Contract
+    Adapter --> Contract
+    Adapter --> Storage
+    Shell -->|"transitional storage calls"| Storage
+```
+
+Arrows show dependencies. Application services and contracts do not import
+Sheets, gspread, Streamlit, or infrastructure. An adapter implements the
+contract and depends on the existing backend; the composition root is the
+place where those implementations are selected and connected.
+
+`assemble_application_services(profile_key, *, ledger_repository)` builds a
+frozen `ApplicationServices(profile_key, ledger)` from an explicitly supplied
+repository. `create_sheets_application(profile_key, secrets)` requires a
+nonempty selected profile key, selects that profile's settings from the
+deployment configuration, constructs one `GoogleSheetsStorage`, and wraps it
+with `GoogleSheetsLedgerSetupRepository`. Its frozen `SheetsApplication` result
+contains the neutral `services` and the same exact `legacy_storage` instance.
+The shell caches this composition using the selected profile, implementation
+version, and local configuration revision, preserving the existing cache and
+Google authorization boundaries.
+
+Renderer contexts accept the selected profile's services alongside their
+existing storage dependency. Their optional services field supports the
+transition of existing callers; the shell supplies services explicitly.
+Existing page operations and recurring reconciliation continue through the
+transitional facade until their owning workflows are extracted. The container
+does not create a second ledger, credential identity, cache, or retry mechanism.
+
+The ownership conventions for subsequent slices are:
+
+| Concern | Owner and convention |
+| --- | --- |
+| Application workflows | `tabula_rasa/application/` owns orchestration against explicit repository capabilities. Services return application results and leave widget state and presentation to renderers. |
+| Domain rules | Reuse the existing pure modules, including `hierarchy.py`, `journal.py`, `mixed_use.py`, `recurrence.py`, `depreciation.py`, and the accounting/reporting modules. Extract remaining rules into cohesive domain owners as their workflows move; a new package is unnecessary merely to relocate already independent code. |
+| Repository contracts | `application/contracts.py` declares only capabilities needed by implemented services. Contracts describe domain/application operations and results, rather than worksheet names, row positions, Google requests, or a repository for every record type. |
+| Infrastructure | `tabula_rasa/infrastructure/` implements contracts by adapting the supported backend. Sheets serialization, API batching, locks, caches, bounded uncertain-write readback, and safe retry policy remain with the existing storage implementation. |
+| DTOs | Small result types such as `LedgerInfo` live with the application service that owns them. Use explicit fields for the service's result without exposing workbook objects, credentials, worksheet rows, or backend request payloads. Existing dictionary records remain transitional where their domain has not been extracted. |
+| Composition and transition | `composition.py` owns concrete backend construction and the typed `SheetsApplication` bridge. Neutral services do not accept or forward arbitrary legacy-storage methods. |
+
+The setup adapter currently propagates the existing safe `StorageError`
+hierarchy unchanged. The shell retains its established error handling. This is
+an interim exception contract: although the new service has no backend imports,
+its production setup failures still use legacy storage error types. A later
+slice that needs application-specific failure semantics should define them at
+that boundary while preserving safe user messages and supported recovery;
+the foundation does not introduce a competing error hierarchy.
+
+For each later extraction, inspect the existing rule, workflow, persistence,
+and renderer owners first. Define the smallest contract for that workflow,
+reuse its pure domain rules, adapt the existing Sheets behavior, and move the
+affected renderer calls to the service. Keep success, relevant failure,
+profile isolation, and recovery coverage while removing duplicate ownership.
+Reference data (#226), reporting (#229), mileage (#234), and transaction/journal
+work are subsequent slices, rather than additional responsibilities of the
+setup service. Google Sheets remains the supported active ledger throughout
+this transition.
 
 ## Receipt boundary
 
@@ -372,6 +466,9 @@ local-only recovery metadata.
 | Area | Primary implementation |
 | --- | --- |
 | Streamlit shell and routing | tabula_rasa/app.py |
+| Application services, repository contracts, and setup DTO | `tabula_rasa/application/` |
+| Selected-profile service composition and transitional storage bridge | `tabula_rasa/composition.py` |
+| Sheets adapter for application contracts | `tabula_rasa/infrastructure/google_sheets.py` |
 | Shared presentation tokens and CSS | tabula_rasa/presentation.py |
 | Profile selection and readiness | tabula_rasa/business_profiles.py and tabula_rasa/profile_readiness.py |
 | Local profile persistence | tabula_rasa/local_profile_store.py |

@@ -18,6 +18,7 @@ from tabula_rasa.business_profiles import (
     load_business_profiles,
     select_profile_secrets,
 )
+from tabula_rasa.composition import SheetsApplication, create_sheets_application
 from tabula_rasa.ledger_auth import logout, require_authentication
 from tabula_rasa.google_drive import (
     GoogleDriveClient,
@@ -77,7 +78,7 @@ from tabula_rasa.receipt_backfill import (
 )
 
 
-STORAGE_IMPLEMENTATION_VERSION = 17
+APPLICATION_IMPLEMENTATION_VERSION = 1
 
 
 def _google_maps_browser_key(secrets: Mapping[str, object]) -> str | None:
@@ -116,22 +117,21 @@ def alert_list(title: str, messages: list[str]) -> str:
 
 
 @st.cache_resource
-def get_storage(
+def get_application(
     profile_key: str,
     implementation_version: int,
     configuration_revision: str,
-) -> GoogleSheetsStorage:
+) -> SheetsApplication:
     # Include the implementation version in Streamlit's cache key. Otherwise a
-    # storage instance created before a deployment can survive with an older
-    # class definition that does not contain newly added methods.
+    # service graph created before a deployment can survive with older class
+    # definitions. Profile and configuration revision scope the whole graph,
+    # including the transitional facade, to the selected business.
     del implementation_version, configuration_revision
     secrets = merged_profile_secrets(
         st.secrets,
         path=LOCAL_PROFILE_STORE_PATH,
     )
-    return GoogleSheetsStorage.from_secrets(
-        select_profile_secrets(secrets, profile_key)
-    )
+    return create_sheets_application(profile_key, secrets)
 
 
 def report_storage_error(error: StorageError) -> None:
@@ -456,11 +456,13 @@ else:
             profile_by_key[selected_profile_key].secrets.get("spreadsheet_id")
             or revision
         )
-        storage = get_storage(
+        application = get_application(
             selected_profile_key,
-            STORAGE_IMPLEMENTATION_VERSION,
+            APPLICATION_IMPLEMENTATION_VERSION,
             revision,
         )
+        services = application.services
+        storage = application.legacy_storage
         reset_stale_recurring_pending_state(
             st.session_state,
             profile_key=selected_profile_key,
@@ -470,7 +472,7 @@ else:
             "defaults_initialized_profiles", set()
         )
         if selected_profile_key not in initialized_profiles:
-            storage.ensure_defaults()
+            services.ledger.ensure_defaults()
             initialized_profiles.add(selected_profile_key)
         reconciled_profiles = st.session_state.setdefault(
             "recurring_reconciled_profiles", set()
@@ -500,7 +502,7 @@ else:
 
     with st.sidebar:
         with st.container(key="sidebar_workbook_context"):
-            st.caption(f"Workbook: {storage.workbook_title}")
+            st.caption(f"Workbook: {services.ledger.get_info().name}")
 
 if page != "Account settings":
     notice = st.session_state.pop("write_success_notice", None)
@@ -516,13 +518,16 @@ with st.sidebar:
 st.session_state[GLOBAL_FOOTER_RENDERED_KEY] = False
 try:
     if page == "Dashboard":
-        render_dashboard(DashboardContext(selected_profile_key, storage))
+        render_dashboard(
+            DashboardContext(selected_profile_key, storage, services=services)
+        )
 
     elif page == "Transactions":
         render_transactions(
             TransactionsContext(
                 profile_key=selected_profile_key,
                 storage=storage,
+                services=services,
                 profile_secrets=profile_by_key[selected_profile_key].secrets,
                 configuration_revision=revision,
                 get_drive_client=get_drive_client,
@@ -539,6 +544,7 @@ try:
             MileageContext(
                 profile_key=selected_profile_key,
                 storage=storage,
+                services=services,
                 confirmed_write=confirmed_write,
                 report_storage_error=report_storage_error,
                 reset_widget_state_if_requested=reset_widget_state_if_requested,
@@ -554,6 +560,7 @@ try:
             AssetsContext(
                 profile_key=selected_profile_key,
                 storage=storage,
+                services=services,
                 confirmed_write=confirmed_write,
                 report_storage_error=report_storage_error,
                 reset_widget_state_if_requested=reset_widget_state_if_requested,
@@ -566,6 +573,7 @@ try:
             AccountsContext(
                 profile_key=selected_profile_key,
                 storage=storage,
+                services=services,
                 confirmed_write=confirmed_write,
                 report_storage_error=report_storage_error,
                 reset_widget_state_if_requested=reset_widget_state_if_requested,
@@ -578,6 +586,7 @@ try:
             CategoriesContext(
                 profile_key=selected_profile_key,
                 storage=storage,
+                services=services,
                 confirmed_write=confirmed_write,
                 report_storage_error=report_storage_error,
                 reset_widget_state_if_requested=reset_widget_state_if_requested,
@@ -589,6 +598,7 @@ try:
             ReportsContext(
                 profile_key=selected_profile_key,
                 storage=storage,
+                services=services,
                 report_storage_error=report_storage_error,
             )
         )
@@ -600,6 +610,7 @@ try:
             DataBackupContext(
                 profile_key=selected_profile_key,
                 storage=storage,
+                services=services,
                 drive_settings=(
                     drive_settings_value
                     if isinstance(
