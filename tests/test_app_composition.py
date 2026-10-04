@@ -3,9 +3,12 @@ from __future__ import annotations
 from contextlib import ExitStack
 from unittest.mock import patch
 
+import pytest
+import streamlit as st
+
 from tabula_rasa.application.services import ApplicationServices
+from tabula_rasa.business_profiles import BusinessProfileConfigurationError
 from tabula_rasa.composition import create_sheets_application
-from tabula_rasa.local_profile_store import merged_profile_secrets
 from tabula_rasa.storage import GoogleSheetsStorage, StorageUnavailableError
 from tests.app_support import (
     authenticated_app,
@@ -146,59 +149,75 @@ def test_unauthenticated_app_does_not_assemble_profile_services() -> None:
     compose.assert_not_called()
 
 
-def test_service_assembly_failure_stops_before_page_rendering() -> None:
+@pytest.mark.parametrize("failure", [StorageUnavailableError, BusinessProfileConfigurationError])
+def test_service_assembly_failure_stops_before_page_rendering(failure) -> None:
     storage = GoogleSheetsStorage(FakeWorkbook())
     safe_message = "The selected ledger is temporarily unavailable."
     with (
         patch("tabula_rasa.page_renderers.dashboard.render_dashboard") as render,
         patch(
             "tabula_rasa.composition.create_sheets_application",
-            side_effect=StorageUnavailableError(safe_message),
+            side_effect=failure(safe_message),
         ),
         authenticated_app(storage) as app,
     ):
         assert not app.exception
-        assert safe_message in {str(error.value) for error in app.error}
+        expected = (
+            safe_message if failure is StorageUnavailableError
+            else "The business-profile configuration is invalid or changed. "
+            "Reload the app and check the selected profile settings."
+        )
+        assert expected in {str(error.value) for error in app.error}
         render.assert_not_called()
 
 
-def test_profile_removed_between_selection_and_assembly_stops_without_fallback() -> None:
+def test_assembly_and_renderers_share_one_snapshot_and_cache_rebuilds_on_change() -> None:
     storages = {
         f"{key}-sheet": GoogleSheetsStorage(FakeWorkbook())
-        for key in ("north", "south")
+        for key in ("north", "south", "replacement")
     }
     profiles = {
         key: profile_config(name=key.title(), spreadsheet_id=f"{key}-sheet")
         for key in ("north", "south")
     }
-    reads = 0
-
-    def reloaded_secrets(secrets, *, path):
-        nonlocal reads
-        reads += 1
-        current = merged_profile_secrets(secrets, path=path)
-        if reads == 2:
-            # The local configuration is reloaded when the graph is built.
-            # Simulate an operator removing the selected profile in between.
-            return {**current, "business_profiles": {"south": profiles["south"]}}
-        return current
-
+    original = {"business_profiles": profiles}
+    replacement = profile_config(name="North", spreadsheet_id="replacement-sheet")
+    replacement["google_drive"] = {**profiles["north"]["google_drive"], "receipt_folder": {"id": "new-folder"}}
+    updated = {"business_profiles": {"north": replacement, "south": profiles["south"]}}
     with (
-        patch("tabula_rasa.page_renderers.dashboard.render_dashboard") as render,
+        patch("tabula_rasa.page_renderers.transactions.render_transactions") as render,
         patch(
             "tabula_rasa.local_profile_store.merged_profile_secrets",
-            side_effect=reloaded_secrets,
-        ),
-        patch.object(GoogleSheetsStorage, "ensure_defaults") as initialize,
+            return_value=original,
+        ) as configuration,
+        patch("tabula_rasa.local_profile_store.local_profile_revision", return_value="same-revision"),
+        patch("tabula_rasa.composition.create_sheets_application", wraps=create_sheets_application) as compose,
         authenticated_app(storages=storages, profiles=profiles) as app,
     ):
-        assert reads == 2
+        def change_during_assembly(key, snapshot):
+            configuration.return_value = updated
+            return create_sheets_application(key, snapshot)
+
+        # Rebuild the graph while simulating a settings replacement after the
+        # shell has loaded its snapshot. Assembly must not read it again.
+        st.cache_resource.clear()
+        compose.side_effect = change_during_assembly
+        reads = configuration.call_count
+        navigate_to(app, "Transactions")
         assert not app.exception
-        assert any(
-            "Reload the app and check the selected profile settings." in error.value
-            for error in app.error
-        )
-        render.assert_not_called()
-        initialize.assert_not_called()
-        assert "defaults_initialized_profiles" not in app.session_state
-        assert not storages["south-sheet"].list_accounts()
+        assert configuration.call_count == reads + 1
+        context = render.call_args.args[0]
+        assert context.storage is storages["north-sheet"]
+        assert context.services.profile_key == "north"
+        assert context.profile_secrets["spreadsheet_id"] == "north-sheet"
+        assert context.profile_secrets["google_drive"] == profiles["north"]["google_drive"]
+        before = context.services
+        calls = compose.call_count
+        app.run()
+        assert not app.exception
+        changed = render.call_args.args[0]
+        assert changed.storage is storages["replacement-sheet"]
+        assert changed.profile_secrets["google_drive"] == replacement["google_drive"]
+        assert changed.services is not before
+        assert compose.call_count == calls + 1
+        assert storages["south-sheet"].list_accounts() == []

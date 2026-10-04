@@ -333,8 +333,10 @@ deployment configuration, constructs one `GoogleSheetsStorage`, and wraps it
 with `GoogleSheetsLedgerSetupRepository`. Its frozen `SheetsApplication` result
 contains the neutral `services` and the same exact `legacy_storage` instance.
 The shell caches this composition using the selected profile, implementation
-version, and local configuration revision, preserving the existing cache and
-Google authorization boundaries.
+version, local configuration revision, and the supplied configuration snapshot.
+Assembly consumes the same snapshot as the shell's workbook identity and page
+settings, rather than reloading configuration during construction. A changed
+snapshot rebuilds the graph even if the local revision is unchanged.
 
 Renderer contexts accept the selected profile's services alongside their
 existing storage dependency. Their optional services field supports the

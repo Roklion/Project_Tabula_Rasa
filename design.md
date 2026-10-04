@@ -261,10 +261,11 @@ or rebuild page-local filters, selections, edit targets, widget generations,
 and pending notices. Never initialize or access another profile's storage
 under the new selection.
 
-If profile configuration is invalid or changes during ledger initialization,
-stop before rendering a ledger page and show a safe error directing the user
-to reload and check the selected profile settings. Never substitute another
-profile's workbook or expose a raw traceback for this configuration failure.
+Use one configuration snapshot for ledger initialization and page settings;
+apply configuration changes together on the next rerun. If the selected
+profile cannot be resolved, stop before rendering a ledger page and show a
+safe reload/settings error. Never substitute another profile's workbook or
+expose a raw traceback for this configuration failure.
 
 ## Page headers, workflow groups, and messages
 
