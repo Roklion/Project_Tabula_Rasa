@@ -3,7 +3,12 @@
 from dataclasses import dataclass
 
 from .contracts import LedgerSetupRepository
+from .documents import DocumentStore, ReceiptRepository, ReceiptService
 from .ledger_setup import LedgerSetupService
+from .mileage import MileageService
+from .mileage_contracts import MileageRepository
+from .reporting import ReportingService
+from .reporting_contracts import LedgerQueryRepository
 
 
 @dataclass(frozen=True)
@@ -17,17 +22,38 @@ class ApplicationServices:
 
     profile_key: str
     ledger: LedgerSetupService
+    reporting: ReportingService | None = None
+    receipts: ReceiptService | None = None
+    mileage: MileageService | None = None
 
 
 def assemble_application_services(
     profile_key: str,
     *,
     ledger_repository: LedgerSetupRepository,
+    reporting_repository: LedgerQueryRepository | None = None,
+    receipt_repository: ReceiptRepository | None = None,
+    document_store: DocumentStore | None = None,
+    mileage_repository: MileageRepository | None = None,
 ) -> ApplicationServices:
     """Compose the service graph without constructing infrastructure clients."""
     if not isinstance(profile_key, str) or not profile_key.strip():
         raise ValueError("Application services require a selected business profile.")
+    if (receipt_repository is None) != (document_store is None):
+        raise ValueError("Receipt services require both metadata and document storage.")
     return ApplicationServices(
         profile_key=profile_key,
         ledger=LedgerSetupService(ledger_repository),
+        reporting=(
+            ReportingService(reporting_repository)
+            if reporting_repository is not None else None
+        ),
+        receipts=(
+            ReceiptService(profile_key, receipt_repository, document_store)
+            if receipt_repository is not None and document_store is not None else None
+        ),
+        mileage=(
+            MileageService(mileage_repository)
+            if mileage_repository is not None else None
+        ),
     )

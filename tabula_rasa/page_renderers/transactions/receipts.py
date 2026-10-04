@@ -3,6 +3,11 @@
 from collections.abc import Sequence
 from typing import Any
 
+from tabula_rasa.infrastructure.receipt_compatibility import (
+    prepare_legacy_receipt_uploads,
+    process_receipt_recovery,
+)
+
 from .receipt_display import render_receipts
 from .receipt_editor import (
     prepare_editor_receipt_uploads,
@@ -31,7 +36,6 @@ from .receipt_workflows import (
     handle_confirmed_transaction_receipts,
     new_receipt_creation_workflow,
     prepare_receipt_uploads as _prepare_receipt_uploads,
-    process_receipt_recovery,
     receipt_creation_counts,
     receipt_creation_workflow_key,
     receipt_editor_upload_reset_key,
@@ -46,10 +50,11 @@ def prepare_receipt_uploads(
     existing_reference_count: int = 0,
 ) -> list[dict[str, Any]]:
     """Preserve the facade's historical patchable upload-limit attribute."""
-    return _prepare_receipt_uploads(
+    return prepare_legacy_receipt_uploads(
+        _prepare_receipt_uploads,
         uploaded_files,
         existing_reference_count=existing_reference_count,
-        _max_upload_total_bytes=MAX_RECEIPT_UPLOAD_TOTAL_BYTES,
+        max_upload_total_bytes=MAX_RECEIPT_UPLOAD_TOTAL_BYTES,
     )
 
 __all__ = [

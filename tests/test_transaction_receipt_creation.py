@@ -175,7 +175,7 @@ def test_uploaded_but_unlinked_receipt_retries_reference_without_reupload() -> N
 
 def test_uploaded_reference_retries_link_without_drive_access() -> None:
     pending = _prepared()
-    pending["reference"] = _drive_file(pending)
+    pending["reference"] = receipt_reference_from_drive_file(_drive_file(pending))
     pending["content"] = b""
     workflow = new_receipt_creation_workflow(
         "txn-1",
@@ -415,6 +415,7 @@ def test_manual_unreferenced_link_reports_success_when_recovery_finishes() -> No
     notice_key = "receipt-notice-north-txn-1"
     state = {workflow_key: workflow}
     storage = Mock()
+    storage.list_transactions.return_value = [{"id": "txn-1", "receipt_references": ""}]
     drive = Mock()
     drive.list_profile_receipts.return_value = [drive_file]
     context = _context(storage=storage, drive=drive)
@@ -453,6 +454,7 @@ def test_manual_unreferenced_link_reports_success_when_recovery_finishes() -> No
 
 def test_render_receipts_accepts_one_custom_mixed_use_section_heading() -> None:
     context = _context(storage=Mock(), drive=Mock())
+    context.storage.list_transactions.return_value = [{"id": "source-1", "receipt_references": ""}]
     context.get_drive_client.return_value.list_profile_receipts.return_value = []
     with (
         patch.object(st, "session_state", {}),

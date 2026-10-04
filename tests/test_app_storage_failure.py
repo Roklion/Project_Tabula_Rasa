@@ -12,6 +12,7 @@ from streamlit.testing.v1 import AppTest
 
 from tabula_rasa.ledger_auth import hash_password
 from tabula_rasa.google_drive import GoogleDriveClient
+from tabula_rasa.infrastructure.google_sheets_mileage import GoogleSheetsMileageRepository
 from tabula_rasa.receipt_manifest import build_receipt_manifest
 from tabula_rasa.storage import GoogleSheetsStorage, StorageUnavailableError
 from tests.app_support import authenticated_app, navigate_to
@@ -33,7 +34,7 @@ class TestAppStorageFailure:
     @pytest.mark.parametrize(
         ("page", "failing_method"),
         [
-            ("Mileage", "list_mileage_trips"),
+            ("Mileage", "list_trips"),
             ("Transactions", "list_transactions"),
         ],
     )
@@ -45,12 +46,13 @@ class TestAppStorageFailure:
         storage = GoogleSheetsStorage(FakeWorkbook())
 
         with authenticated_app(storage) as app:
-            setattr(
-                storage,
+            target = GoogleSheetsMileageRepository if page == "Mileage" else storage
+            with patch.object(
+                target,
                 failing_method,
-                Mock(side_effect=StorageUnavailableError(SAFE_MESSAGE)),
-            )
-            navigate_to(app, page)
+                side_effect=StorageUnavailableError(SAFE_MESSAGE),
+            ):
+                navigate_to(app, page)
 
         markdown = [str(item.value) for item in app.markdown]
         footer = (

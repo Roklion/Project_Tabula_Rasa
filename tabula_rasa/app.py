@@ -78,7 +78,7 @@ from tabula_rasa.receipt_backfill import (
 )
 
 
-APPLICATION_IMPLEMENTATION_VERSION = 1
+APPLICATION_IMPLEMENTATION_VERSION = 2
 
 
 def _google_maps_browser_key(secrets: Mapping[str, object]) -> str | None:
@@ -126,12 +126,16 @@ def get_application(
     # service graph created before a deployment can survive with older class
     # definitions. Profile and configuration revision scope the whole graph,
     # including the transitional facade, to the selected business.
-    del implementation_version, configuration_revision
+    del implementation_version
     secrets = merged_profile_secrets(
         st.secrets,
         path=LOCAL_PROFILE_STORE_PATH,
     )
-    return create_sheets_application(profile_key, secrets)
+    return create_sheets_application(
+        profile_key,
+        secrets,
+        drive_client_factory=lambda: get_drive_client(profile_key, configuration_revision),
+    )
 
 
 def report_storage_error(error: StorageError) -> None:

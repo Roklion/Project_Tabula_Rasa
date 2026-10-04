@@ -6,8 +6,7 @@ from collections.abc import Mapping
 from collections.abc import Sequence
 from typing import Any
 import streamlit as st
-from tabula_rasa.google_drive import GoogleDriveAccessError
-from tabula_rasa.google_drive import GoogleDriveError
+from tabula_rasa.application.documents import DocumentError, DocumentValidationError
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
 from tabula_rasa.receipt_manifest import MAX_RECEIPT_REFERENCES
 from tabula_rasa.storage import StorageError
@@ -23,6 +22,7 @@ from .receipt_workflows import (
     _new_unresolved_receipt_count,
     _process_context_receipts,
     _receipt_folder,
+    _reference_storage_key,
     _start_editor_receipt_workflow,
     _workflow_matches_configuration,
     creation_receipt_workflow,
@@ -139,18 +139,18 @@ def _render_receipt_recovery(
                 context,
                 transaction_id,
             )
-            existing_ids = {str(reference["id"]) for reference in fresh_references}
+            existing_ids = {_reference_storage_key(reference) for reference in fresh_references}
             if (
                 len(fresh_references)
                 + _new_unresolved_receipt_count(workflow["receipts"], existing_ids)
                 > MAX_RECEIPT_REFERENCES
             ):
-                raise GoogleDriveAccessError(
+                raise DocumentValidationError(
                     "A transaction can reference no more than 100 receipts. "
                     "Remove an existing receipt reference before retrying."
                 )
             if receipt_folder is None:
-                raise GoogleDriveAccessError(
+                raise DocumentValidationError(
                     "Connect Google Drive and configure this profile's receipt folder."
                 )
             _process_context_receipts(context, workflow, receipt_folder)
@@ -163,7 +163,7 @@ def _render_receipt_recovery(
                 "unreferenced receipts."
             )
             return False
-        except (GoogleDriveError, StorageError) as error:
+        except (DocumentError, StorageError) as error:
             workflow["error"] = str(error)
         st.rerun()
     if not saved and workflow.get("receipts") and st.button(

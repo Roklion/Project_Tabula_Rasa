@@ -80,3 +80,26 @@ def test_journal_edit_saves_whole_entry_and_preserves_posting_identity():
     assert updated["description"] == "Updated split purchase"
     assert updated["postings"] == entry["postings"]
     assert [row["id"] for row in storage.list_transactions()] == [simple["id"]]
+
+
+def test_deleted_entries_between_query_and_edit_snapshot_are_not_offered(monkeypatch):
+    from tabula_rasa.application.reporting import ReportingService
+
+    storage, journal, simple = journal_storage()
+    original_query = ReportingService.query_ledger
+
+    def query_then_delete(service, *args, **kwargs):
+        result = original_query(service, *args, **kwargs)
+        # Model another session deleting entries and invalidating the shared
+        # cache after a query returns but before mutation baselines are read.
+        storage.delete_transaction(simple["id"])
+        storage.delete_journal_entry(journal["id"], expected_entry=journal)
+        return result
+
+    with authenticated_app(storage) as app:
+        monkeypatch.setattr(ReportingService, "query_ledger", query_then_delete)
+        navigate_to(app, "Transactions")
+        assert not app.exception
+        assert not any(item.label == "Transaction to edit" for item in app.selectbox)
+    assert storage.list_transactions() == []
+    assert storage.list_journal_entries() == []

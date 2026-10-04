@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from collections.abc import Sequence
 import streamlit as st
 from tabula_rasa.ledger_presentation import money
-from tabula_rasa.google_drive import GoogleDriveAccessError
+from tabula_rasa.application.documents import DocumentError
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
 from tabula_rasa.page_renderers.transactions.recurrence_controls import (
     edit_defaults_with_pending_payload,
@@ -366,7 +366,7 @@ def render_transaction_editor(
                                 edit_id,
                                 receipt_uploads,
                             )
-                        except (ValueError, GoogleDriveAccessError) as error:
+                        except (ValueError, DocumentError) as error:
                             receipt_preparation_failed = True
                             edit_error.error(f"Receipt validation failed: {error}")
                         except StorageError as error:
