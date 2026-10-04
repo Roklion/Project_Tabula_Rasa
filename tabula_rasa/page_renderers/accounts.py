@@ -25,6 +25,7 @@ from tabula_rasa.page_renderers.hierarchy_ui import (
     render_hierarchy_responsive_css,
 )
 from tabula_rasa.presentation import render_global_footer, render_page_header
+from tabula_rasa.reference_data import FIXED_TYPE_CLASSIFICATIONS
 from tabula_rasa.storage import GoogleSheetsStorage, StorageError
 
 
@@ -37,13 +38,6 @@ ACCOUNT_TYPES = [
     "Other",
 ]
 ACCOUNT_CLASSIFICATIONS = ["Asset", "Liability", "Equity"]
-FIXED_TYPE_CLASSIFICATIONS = {
-    "Bank": "Asset",
-    "Cash": "Asset",
-    "Credit card": "Liability",
-    "Short-term debt": "Liability",
-    "Equity": "Equity",
-}
 
 
 @dataclass(frozen=True)
@@ -137,7 +131,7 @@ def render_accounts(context: AccountsContext) -> None:
     )
     try:
         context.storage.prefetch_worksheets("Accounts", "Transactions")
-        accounts = context.storage.list_accounts(active_only=False)
+        accounts = context.services.accounts.list(active_only=False)
         transactions = context.storage.list_transactions()
         journals = context.storage.list_journal_entries()
     except StorageError as error:
@@ -243,7 +237,7 @@ def render_accounts(context: AccountsContext) -> None:
                 context.confirmed_write(
                     "create_account",
                     payload,
-                    lambda: context.storage.create_account(
+                    lambda: context.services.accounts.create(
                         name,
                         account_type,
                         opening,
@@ -379,7 +373,7 @@ def render_accounts(context: AccountsContext) -> None:
                     context.confirmed_write(
                         "edit_account",
                         payload,
-                        lambda: context.storage.edit_account(
+                        lambda: context.services.accounts.update(
                             account_id,
                             name=edited_name,
                             type=edited_type,

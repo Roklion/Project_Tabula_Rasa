@@ -13,6 +13,11 @@ from tabula_rasa.infrastructure.google_drive_documents import GoogleDriveDocumen
 from tabula_rasa.infrastructure.google_sheets_mileage import GoogleSheetsMileageRepository
 from tabula_rasa.infrastructure.google_sheets_receipts import GoogleSheetsReceiptRepository
 from tabula_rasa.infrastructure.google_sheets_reporting import GoogleSheetsLedgerQueryRepository
+from tabula_rasa.infrastructure.google_sheets import (
+    GoogleSheetsAccountRepository,
+    GoogleSheetsPayeeRepository,
+    GoogleSheetsTagRepository,
+)
 from tabula_rasa.storage import GoogleSheetsStorage
 
 
@@ -74,5 +79,8 @@ def create_sheets_application(
             drive_client_factory if drive_client_factory is not None else create_drive_client,
         ),
         mileage_repository=GoogleSheetsMileageRepository(storage),
+        account_repository=GoogleSheetsAccountRepository(storage),
+        payee_repository=GoogleSheetsPayeeRepository(storage),
+        tag_repository=GoogleSheetsTagRepository(storage),
     )
     return SheetsApplication(services=services, legacy_storage=storage)

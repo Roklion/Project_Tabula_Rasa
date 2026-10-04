@@ -9,6 +9,12 @@ from .mileage import MileageService
 from .mileage_contracts import MileageRepository
 from .reporting import ReportingService
 from .reporting_contracts import LedgerQueryRepository
+from .contracts import (
+    AccountRepository,
+    PayeeRepository,
+    TagRepository,
+)
+from .reference_data import AccountService, PayeeService, TagService
 
 
 @dataclass(frozen=True)
@@ -22,6 +28,9 @@ class ApplicationServices:
 
     profile_key: str
     ledger: LedgerSetupService
+    accounts: AccountService | None = None
+    payees: PayeeService | None = None
+    tags: TagService | None = None
     reporting: ReportingService | None = None
     receipts: ReceiptService | None = None
     mileage: MileageService | None = None
@@ -35,6 +44,9 @@ def assemble_application_services(
     receipt_repository: ReceiptRepository | None = None,
     document_store: DocumentStore | None = None,
     mileage_repository: MileageRepository | None = None,
+    account_repository: AccountRepository | None = None,
+    payee_repository: PayeeRepository | None = None,
+    tag_repository: TagRepository | None = None,
 ) -> ApplicationServices:
     """Compose the service graph without constructing infrastructure clients."""
     if not isinstance(profile_key, str) or not profile_key.strip():
@@ -56,4 +68,9 @@ def assemble_application_services(
             MileageService(mileage_repository)
             if mileage_repository is not None else None
         ),
+        accounts=AccountService(account_repository)
+        if account_repository is not None
+        else None,
+        payees=PayeeService(payee_repository) if payee_repository is not None else None,
+        tags=TagService(tag_repository) if tag_repository is not None else None,
     )

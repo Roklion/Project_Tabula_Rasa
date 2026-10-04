@@ -464,10 +464,10 @@ def render_assets(context: AssetsContext) -> None:
     try:
         context.storage.prefetch_worksheets("Assets", "Payees", "Tags", "Transactions")
         assets = context.storage.list_assets()
-        payees = context.storage.list_payees()
-        tags = context.storage.list_tags()
+        payees = context.services.payees.list()
+        tags = context.services.tags.list()
         transactions = context.storage.list_transactions()
-        accounts = context.storage.list_accounts(active_only=False)
+        accounts = context.services.accounts.list(active_only=False)
         categories = context.storage.list_categories()
         depreciation_by_asset: dict[str, list[str]] = {}
         for transaction in transactions:

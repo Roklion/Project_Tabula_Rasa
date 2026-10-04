@@ -9,7 +9,6 @@ from tabula_rasa.application.services import ApplicationServices
 from tabula_rasa.storage import GoogleSheetsStorage, StorageError
 
 from .mileage_form import render_add_mileage_form
-from .mileage_service import mileage_action, mileage_service
 from .mileage_ledger import (
     _render_tag_selector,
     _tag_names_for_trip,
@@ -74,11 +73,7 @@ def render_mileage(context: MileageContext) -> None:
         "Keep a dated business-mileage log with the route, purpose, and vehicle.",
     )
     try:
-        tags = [
-            {"id": tag.id, "name": tag.name, "active": "TRUE" if tag.active else "FALSE",
-             "created_at": tag.created_at}
-            for tag in mileage_action(lambda: mileage_service(context).list_tags())
-        ]
+        tags = context.services.tags.list()
     except StorageError as error:
         context.report_storage_error(error)
         st.stop()

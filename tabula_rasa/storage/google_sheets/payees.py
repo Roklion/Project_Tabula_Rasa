@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from collections.abc import Sequence
 from typing import Any
 from uuid import uuid4
+from tabula_rasa.reference_data import normalize_merge_ids
 from .schema import WORKSHEET_HEADERS
 from .errors import StorageConflictError
 from .errors import StorageNotFoundError
@@ -158,14 +159,9 @@ class PayeesMixin(_ManagedMixin):
         | None = None,
     ) -> dict[str, str]:
         """Merge source payees into one target while preserving all references."""
-        target_id = _clean_text(target_payee_id, "Target payee", required=True)
-        source_ids = list(dict.fromkeys(
-            _clean_text(item, "Source payee", required=True) for item in source_payee_ids
-        ))
-        if not source_ids:
-            raise StorageValidationError("Select at least one source payee")
-        if target_id in source_ids:
-            raise StorageValidationError("The target payee cannot also be a source")
+        target_id, source_ids = normalize_merge_ids(
+            target_payee_id, source_payee_ids, "payee"
+        )
         with self._workbook_locks.ledger, self._workbook_locks.payee:
             snapshot = self._snapshot(
                 ["Payees", "Transactions", "MixedUseExpenses", "RecurringSchedules", "Assets", "JournalPostings"], force_refresh=True
