@@ -53,6 +53,7 @@ def render_transactions(context: TransactionsContext) -> None:
             render_global_footer()
 
     try:
+        context.services.transactions.prepare_workspace()
         accounts = ordered_accounts(context.services.accounts.list(active_only=False))
         active_accounts = _ordered_active_accounts(accounts)
         categories = ordered_categories(context.services.categories.list())

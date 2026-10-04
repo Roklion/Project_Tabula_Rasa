@@ -200,6 +200,12 @@ class GoogleSheetsTransactionRepository:
     def __init__(self, storage: GoogleSheetsStorage) -> None:
         self._storage = storage
 
+    def prepare_workspace(self) -> None:
+        self._storage.prefetch_worksheets(
+            "Accounts", "Categories", "Payees", "Transactions", "Tags",
+            "MixedUseExpenses", "RecurringSchedules", "Mileage",
+        )
+
     def list(
         self, *, start=None, end=None, kind=None, account_ids=None, fresh=False
     ) -> list[TransactionRecord]:

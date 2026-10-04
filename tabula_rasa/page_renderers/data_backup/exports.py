@@ -13,6 +13,7 @@ from tabula_rasa.google_drive import GoogleDriveError
 from tabula_rasa.ledger_presentation import ledger_frame
 from tabula_rasa.page_renderers.data_backup.context import DataBackupContext
 from tabula_rasa.page_renderers.mileage import mileage_frame
+from tabula_rasa.page_renderers.mileage_service import mileage_action
 from tabula_rasa.receipt_backfill import ReceiptPreparationError
 from tabula_rasa.receipt_manifest import ReceiptManifestError
 from tabula_rasa.application.services import ApplicationServices
@@ -41,7 +42,7 @@ def prepare_csv_exports(
     categories = services.categories.list()
     transactions = services.transactions.list()
     journals = services.journals.list()
-    mileage_trips = [trip.as_record() for trip in services.mileage.list_trips()]
+    mileage_trips = [trip.as_record() for trip in mileage_action(services.mileage.list_trips)]
     transaction_frame = ledger_frame(
         transactions,
         accounts,

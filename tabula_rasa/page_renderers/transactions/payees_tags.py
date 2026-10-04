@@ -11,6 +11,7 @@ import pandas as pd
 import streamlit as st
 
 from tabula_rasa.application.services import ApplicationServices
+from tabula_rasa.page_renderers.mileage_service import mileage_action
 from tabula_rasa.reference_data import normalize_tag_ids as _normalize_tag_ids
 from tabula_rasa.errors import StorageError
 from .table_selection import clear_selected_table_record, selected_table_record
@@ -399,7 +400,7 @@ def render_payees_tags(context: PayeesTagsContext) -> None:
         schedules = context.services.recurring.list()
         journals = context.services.journals.list()
         assets = context.services.assets.list()
-        mileage = [trip.as_record() for trip in context.services.mileage.list_trips()]
+        mileage = [trip.as_record() for trip in mileage_action(context.services.mileage.list_trips)]
     except StorageError as error:
         context.report_storage_error(error)
         return
