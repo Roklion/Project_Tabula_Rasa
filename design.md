@@ -627,10 +627,15 @@ Every populated line requires a valid target and exactly one positive,
 cent-normalized Debit or Credit. Completely blank rows are omitted; incomplete
 populated rows block save. **Total Debits**, **Total Credits**, and **Difference**
 remain visible. Save is disabled until at least two valid postings balance
-exactly. Storage repeats validation and saves the parent and all postings in one
-native Sheets batch. A successful API response is authoritative; an uncertain
+exactly. The journal application service validates input, and its adapter repeats shared
+domain validation against fresh references before saving the parent and all
+postings in one native Sheets batch. A successful API response is authoritative; an uncertain
 response receives one readback, then either confirmed success or inspection
 guidance. Draft identities remain available for a retry.
+
+Transaction and journal mutations use the selected profile's application services.
+The single transaction editor supplies its visible record as the expected
+snapshot; a changed record must be refreshed before editing or deleting.
 
 Journal edit uses the full posting grid and a complete expected-entry snapshot;
 stale edits cannot overwrite a changed entry. Permanent deletion requires the

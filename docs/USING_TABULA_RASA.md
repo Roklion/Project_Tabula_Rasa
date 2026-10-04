@@ -210,6 +210,9 @@ Income and expense entries affect account balances and income-and-expense
 reporting. Transfers move value between two accounts, affect balances, and do
 not affect income or expenses.
 
+Single transaction edits and deletion recheck the visible record against the
+current ledger. If it changed, refresh and review it before trying again.
+
 ### Add a transaction
 
 In **Add transaction**, the **Entry Type** selector defaults to **Simple

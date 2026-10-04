@@ -185,9 +185,9 @@ def render_ledger(
     mode = mode or "Edit"
     try:
         all_transactions = (
-            context.storage.list_transactions(_force_refresh=True)
+            context.services.transactions.list(fresh=True)
             if editor_receipt_recovery_active(context)
-            else context.storage.list_transactions()
+            else context.services.transactions.list()
         )
         recovery_notices = clear_missing_editor_receipt_recoveries(
             context,
@@ -195,7 +195,7 @@ def render_ledger(
         )
         for notice in recovery_notices:
             st.warning(notice)
-        journal_entries = context.storage.list_journal_entries()
+        journal_entries = context.services.journals.list()
         all_entries = combine_ledger_entries(all_transactions, journal_entries)
         structured_transactions = filter_ledger_entries(
             all_entries,

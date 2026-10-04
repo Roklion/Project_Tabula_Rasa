@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from decimal import Decimal, InvalidOperation
 from typing import Any
+from tabula_rasa.errors import StorageValidationError
+from tabula_rasa.reference_data import as_bool as _as_bool, clean_text as _clean_text
 
 
 _CENT = Decimal("0.01")
@@ -184,4 +186,67 @@ __all__ = [
     "JOURNAL_TARGET_TYPES",
     "JournalValidationError",
     "normalize_journal_postings",
+    "normalize_journal_input",
+    "prepare_journal_postings",
 ]
+
+
+def prepare_journal_postings(
+    entry_id: str,
+    postings: Iterable[Mapping[str, Any]],
+    *,
+    accounts: Mapping[str, Mapping[str, Any]],
+    categories: Mapping[str, Mapping[str, Any]],
+    payees: Mapping[str, Mapping[str, Any]],
+    original_entry: Mapping[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    source_postings = list(postings)
+    normalized = normalize_journal_input(entry_id, source_postings)
+    original_postings = {
+        str(posting.get("id", "")): posting
+        for posting in (original_entry or {}).get("postings", ())
+    }
+    prepared: list[dict[str, Any]] = []
+    for posting in normalized:
+        posting_id = posting["id"]
+        original = original_postings.get(posting_id, {})
+        target_type = posting["target_type"]
+        target_id = posting["target_id"]
+        if target_type == "account":
+            account = accounts.get(target_id)
+            if account is None:
+                raise StorageValidationError("Journal account does not exist")
+            same_historical_target = (
+                original.get("target_type") == "account"
+                and original.get("target_id") == target_id
+            )
+            if not _as_bool(account.get("active"), "Account active") and not same_historical_target:
+                raise StorageValidationError("Journal account is inactive")
+        elif target_id not in categories:
+            raise StorageValidationError("Journal category does not exist")
+
+        payee_id = posting["payee_id"]
+        if payee_id:
+            payee = payees.get(payee_id)
+            if payee is None:
+                raise StorageValidationError("Journal payee does not exist")
+            same_historical_payee = original.get("payee_id") == payee_id
+            if not _as_bool(payee.get("active"), "Payee active") and not same_historical_payee:
+                raise StorageValidationError("Journal payee is inactive")
+        prepared.append({**posting, "parent_entry_id": entry_id})
+    return prepared
+
+
+
+def normalize_journal_input(entry_id: str, postings: Iterable[Mapping[str, Any]]):
+    postings = list(postings)
+    try:
+        normalized = normalize_journal_postings(postings)
+    except JournalValidationError as error:
+        raise StorageValidationError(str(error)) from error
+    if any(
+        _clean_text(posting.get("parent_entry_id"), "Journal parent entry ID") not in {"", entry_id}
+        for posting in postings
+    ):
+        raise StorageValidationError("Journal posting belongs to a different parent entry")
+    return normalized

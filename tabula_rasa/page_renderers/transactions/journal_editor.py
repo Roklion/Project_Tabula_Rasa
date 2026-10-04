@@ -451,7 +451,7 @@ def render_new_journal_entry(
         context.confirmed_write(
             "create_journal_entry",
             payload,
-            lambda: context.storage.create_journal_entry(
+            lambda: context.services.journals.create(
                 entry_id=entry_id,
                 txn_date=shared_date,
                 description=shared_description,
@@ -609,9 +609,9 @@ def render_journal_entry_editor(
             context.confirmed_write(
                 "edit_journal_entry",
                 payload,
-                lambda: context.storage.edit_journal_entry(
+                lambda: context.services.journals.update(
                     entry_id,
-                    expected_entry=baseline_entry,
+                    expected=baseline_entry,
                     txn_date=transaction_date,
                     description=description,
                     postings=normalized,
@@ -629,9 +629,9 @@ def render_journal_entry_editor(
                 context.confirmed_write(
                     "delete_journal_entry",
                     {"id": entry_id, "expected_entry": baseline_entry},
-                    lambda: context.storage.delete_journal_entry(
+                    lambda: context.services.journals.delete(
                         entry_id,
-                        expected_entry=baseline_entry,
+                        expected=baseline_entry,
                     ),
                     "Journal entry deleted.",
                     on_success=lambda: _clear_edit_state(

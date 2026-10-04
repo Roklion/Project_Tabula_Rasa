@@ -413,9 +413,9 @@ def _render_bulk_editor(
                     "expected": expected_selected,
                     "changes": changes,
                 },
-                lambda: context.storage.bulk_edit_transactions(
+                lambda: context.services.transactions.bulk_update(
                     selected_ids,
-                    expected_transactions=expected_selected,
+                    expected=expected_selected,
                     changes=changes,
                 ),
                 lambda result: (
@@ -576,9 +576,9 @@ def render_bulk_actions(
                 context.confirmed_write(
                     "bulk_delete_transactions",
                     {"ids": list(selected_ids), "expected": expected_selected},
-                    lambda: context.storage.bulk_delete_transactions(
+                    lambda: context.services.transactions.bulk_delete(
                         selected_ids,
-                        expected_transactions=expected_selected,
+                        expected=expected_selected,
                     ),
                     lambda result: (
                         f"Permanently deleted {result['count']} transactions; "

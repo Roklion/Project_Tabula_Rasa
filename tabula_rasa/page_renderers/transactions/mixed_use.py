@@ -319,7 +319,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             raw_sources = context.storage.list_mixed_use_expense_sources(
                 _force_refresh=True
             )
-            transactions = context.storage.list_transactions(_force_refresh=True)
+            transactions = context.services.transactions.list(fresh=True)
         except StorageError:
             context.report_storage_error(error)
             return
@@ -382,7 +382,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             linked = next(
                 (
                     item
-                    for item in context.storage.list_transactions(_force_refresh=True)
+                    for item in context.services.transactions.list(fresh=True)
                     if str(item.get("id") or "") == recovery_transaction_id
                 ),
                 None,
@@ -999,7 +999,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         )
         _render_preview(mixed_use_preview(txn_date=txn_date, account=account_paths.get(account_id, account_id), payee=payee_name, category=category_paths.get(category_id, category_id), description=preview_description, total_expense=total_expense, business_use_percentage=business_use_percentage, allocation_rationale=rationale))
     if source:
-        linked_transactions = context.storage.list_transactions()
+        linked_transactions = context.services.transactions.list()
         linked = next(
             (
                 item for item in linked_transactions

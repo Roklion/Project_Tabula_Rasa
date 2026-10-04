@@ -14,6 +14,12 @@ from tabula_rasa.application.contracts import (
 )
 from tabula_rasa.storage import GoogleSheetsStorage
 
+from tabula_rasa.application.accounting_contracts import (
+    BuildTransaction,
+    TransactionRecord,
+    JournalEntry,
+)
+
 
 class GoogleSheetsLedgerSetupRepository:
     """Ledger setup port backed by the same facade used by transitional pages."""
@@ -162,3 +168,106 @@ class GoogleSheetsTagRepository:
             ManagedMutationResult,
             self._storage.remove_tag(tag_id, expected_tag=expected),
         )
+
+
+class GoogleSheetsTransactionRepository:
+    """Run service preparation within the existing fresh mutation boundary."""
+
+    def __init__(self, storage: GoogleSheetsStorage) -> None:
+        self._storage = storage
+
+    def list(
+        self, *, start=None, end=None, kind=None, account_ids=None, fresh=False
+    ) -> list[TransactionRecord]:
+        return cast(
+            list[TransactionRecord],
+            self._storage.list_transactions(
+                start=start,
+                end=end,
+                kind=kind,
+                account_ids=account_ids,
+                _force_refresh=fresh,
+            ),
+        )
+
+    def create(
+        self, transaction_id: str, *, build: BuildTransaction
+    ) -> TransactionRecord:
+        return cast(
+            TransactionRecord,
+            self._storage.create_transaction(
+                transaction_id=transaction_id, _build=build
+            ),
+        )
+
+    def update(
+        self, transaction_id: str, *, build: BuildTransaction, expected=None
+    ) -> TransactionRecord:
+        return cast(
+            TransactionRecord,
+            self._storage.edit_transaction(
+                transaction_id, expected_transaction=expected, _build=build
+            ),
+        )
+
+    def delete(self, transaction_id: str, *, expected=None) -> None:
+        self._storage.delete_transaction(transaction_id, expected_transaction=expected)
+
+    def bulk_update(self, transaction_ids, *, expected, changes):
+        return self._storage.bulk_edit_transactions(
+            transaction_ids, expected_transactions=expected, changes=changes
+        )
+
+    def bulk_delete(self, transaction_ids, *, expected):
+        return self._storage.bulk_delete_transactions(
+            transaction_ids, expected_transactions=expected
+        )
+
+
+class GoogleSheetsJournalRepository:
+    """Persist complete entries with the current batch and readback behavior."""
+
+    def __init__(self, storage: GoogleSheetsStorage) -> None:
+        self._storage = storage
+
+    def list(self, *, start=None, end=None, fresh=False) -> list[JournalEntry]:
+        return cast(
+            list[JournalEntry],
+            self._storage.list_journal_entries(
+                start=start, end=end, _force_refresh=fresh
+            ),
+        )
+
+    def get(self, entry_id: str, *, fresh=False) -> JournalEntry:
+        return cast(
+            JournalEntry,
+            self._storage.get_journal_entry(entry_id, _force_refresh=fresh),
+        )
+
+    def create(self, *, entry_id, txn_date, description, postings) -> JournalEntry:
+        return cast(
+            JournalEntry,
+            self._storage.create_journal_entry(
+                entry_id=entry_id,
+                txn_date=txn_date,
+                description=description,
+                postings=postings,
+            ),
+        )
+
+    def update(
+        self, entry_id, *, expected, txn_date=None, description=None, postings=None
+    ) -> JournalEntry:
+        return cast(
+            JournalEntry,
+            self._storage.edit_journal_entry(
+                entry_id,
+                expected_entry=expected,
+                txn_date=txn_date,
+                description=description,
+                postings=postings,
+            ),
+        )
+
+    def delete(self, entry_id, *, expected) -> None:
+        self._storage.delete_journal_entry(entry_id, expected_entry=expected)

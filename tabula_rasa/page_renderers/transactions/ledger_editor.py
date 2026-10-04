@@ -339,7 +339,7 @@ def render_transaction_editor(
                     context.confirmed_write(
                         "copy_transaction",
                         payload,
-                        lambda: context.storage.create_transaction(
+                        lambda: context.services.transactions.create(
                             **transaction_data,
                         ),
                         "Transaction copied.",
@@ -408,8 +408,9 @@ def render_transaction_editor(
                                         **edit_payload,
                                     )["transaction"]
                                     if make_recurring
-                                    else context.storage.edit_transaction(
+                                    else context.services.transactions.update(
                                         edit_id,
+                                        expected=selected,
                                         **transaction_changes,
                                     )
                                 )
@@ -469,7 +470,7 @@ def render_transaction_editor(
                     context.confirmed_write(
                         "delete_transaction",
                         payload,
-                        lambda: context.storage.delete_transaction(edit_id),
+                        lambda: context.services.transactions.delete(edit_id, expected=selected),
                         "Transaction deleted.",
                         on_success=lambda: clear_receipt_creation_recovery(
                             context,

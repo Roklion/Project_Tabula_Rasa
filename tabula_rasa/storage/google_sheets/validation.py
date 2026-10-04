@@ -16,12 +16,14 @@ from datetime import timezone
 from decimal import Decimal
 from decimal import InvalidOperation
 from typing import Any
+from tabula_rasa.ledger_validation import (
+    iso_date as _iso_date, positive_amount as _positive_amount, decode_receipt_references,
+)
 from tabula_rasa.journal import JournalValidationError, normalize_journal_postings
 from tabula_rasa.mixed_use import MIXED_USE_SOURCE_TYPE
 from tabula_rasa.mixed_use import MixedUseAllocationError
 from tabula_rasa.mixed_use import validate_mixed_use_allocation
 from tabula_rasa.receipt_manifest import ReceiptManifestError
-from tabula_rasa.receipt_manifest import decode_receipt_reference_list
 from tabula_rasa.receipt_manifest import validate_receipt_manifest
 from tabula_rasa.reference_data import (
     as_bool as _as_bool,
@@ -148,18 +150,6 @@ def _decimal_values_match(actual: Any, expected: str) -> bool:
     except (InvalidOperation, ValueError):
         return False
 
-def decode_receipt_references(value: Any) -> list[dict[str, Any]]:
-    """Return validated Drive receipt references from one transaction cell."""
-    try:
-        return decode_receipt_reference_list(value)
-    except ReceiptManifestError as exc:
-        message = (
-            "Transaction receipt references are unreadable"
-            if "unreadable" in str(exc).casefold()
-            else "Transaction receipt references are invalid"
-        )
-        raise StorageValidationError(message) from exc
-
 def _encode_receipt_references(value: Any) -> str:
     references = decode_receipt_references(value)
     return json.dumps(references, separators=(",", ":"), ensure_ascii=False)
@@ -195,16 +185,6 @@ def _validate_tag_records(records: Iterable[Mapping[str, Any]]) -> None:
             raise StorageValidationError("Tag IDs and names must be unique")
         seen_ids.add(tag_id)
         seen_names.add(name_key)
-
-def _positive_amount(value: Any) -> str:
-    try:
-        amount = Decimal(str(value))
-    except (InvalidOperation, ValueError):
-        raise StorageValidationError("Amount must be numeric") from None
-    if not amount.is_finite() or amount <= 0:
-        raise StorageValidationError("Amount must be greater than zero")
-    return format(amount.quantize(Decimal("0.01")), "f")
-
 
 def _positive_integer(value: Any, label: str = "Value") -> int:
     """Return a strict positive integer, rejecting bools and fractions."""
@@ -267,17 +247,6 @@ def _positive_miles(value: Any) -> str:
     if not miles.is_finite() or miles <= 0:
         raise StorageValidationError("Miles must be greater than zero")
     return format(miles.quantize(Decimal("0.1")), "f")
-
-def _iso_date(value: Any) -> str:
-    if isinstance(value, datetime):
-        value = value.date()
-    if isinstance(value, date):
-        return value.isoformat()
-    text = _clean_text(value, "Date", required=True)
-    try:
-        return date.fromisoformat(text).isoformat()
-    except ValueError:
-        raise StorageValidationError("Date must use YYYY-MM-DD format") from None
 
 def _validate_journal_tables(
     entries: Iterable[Mapping[str, Any]],

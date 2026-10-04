@@ -69,6 +69,7 @@ def _context(
     spreadsheet: str = "north-sheet",
     folder: str = "north-folder",
     storage: object | None = None,
+    transactions: object | None = None,
     drive: object | None = None,
 ) -> SimpleNamespace:
     return SimpleNamespace(
@@ -79,6 +80,7 @@ def _context(
         },
         configuration_revision="revision",
         storage=storage or Mock(),
+        services=SimpleNamespace(transactions=transactions or Mock()),
         get_drive_client=Mock(return_value=drive or Mock()),
         schedule_widget_reset=Mock(),
         reset_widget_state_if_requested=Mock(),
@@ -297,9 +299,9 @@ def test_creation_recovery_clears_when_saved_transaction_is_gone() -> None:
     )
     key = receipt_creation_workflow_key("north")
     state = {key: "txn-1", receipt_editor_workflow_key("north", "txn-1"): workflow}
-    storage = Mock()
-    storage.list_transactions.return_value = []
-    context = _context(storage=storage)
+    transactions = Mock()
+    transactions.list.return_value = []
+    context = _context(transactions=transactions)
 
     with (
         patch.object(st, "session_state", state),
@@ -500,9 +502,9 @@ def test_cancel_and_delete_cleanup_are_profile_and_target_scoped() -> None:
     assert receipt_creation_workflow_key("north") in state
 
 
-def test_fresh_receipt_count_uses_forced_sheets_read() -> None:
-    storage = Mock()
-    storage.list_transactions.return_value = [
+def test_fresh_receipt_count_requests_fresh_service_records() -> None:
+    transactions = Mock()
+    transactions.list.return_value = [
         {
             "id": "txn-1",
             "receipt_references": '[{"id":"drive123456","name":"one.pdf"}]',
@@ -510,10 +512,10 @@ def test_fresh_receipt_count_uses_forced_sheets_read() -> None:
     ]
 
     assert _fresh_transaction_receipt_count(
-        _context(storage=storage),
+        _context(transactions=transactions),
         "txn-1",
     ) == 1
-    storage.list_transactions.assert_called_once_with(_force_refresh=True)
+    transactions.list.assert_called_once_with(fresh=True)
 
 
 def test_mixed_use_creation_recovery_is_not_rendered_by_add_transaction() -> None:

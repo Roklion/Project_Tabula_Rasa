@@ -78,7 +78,7 @@ def _fresh_transaction_receipt_references(
     context: TransactionsContext,
     transaction_id: str,
 ) -> list[dict[str, Any]]:
-    for transaction in context.storage.list_transactions(_force_refresh=True):
+    for transaction in context.services.transactions.list(fresh=True):
         if str(transaction.get("id", "")) == transaction_id:
             return decode_receipt_references(
                 transaction.get("receipt_references", "")

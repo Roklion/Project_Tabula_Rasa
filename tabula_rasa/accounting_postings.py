@@ -14,7 +14,7 @@ def accounting_postings(
 ) -> Iterable[dict[str, Any]]:
     """Expand simple entries without persisting a second accounting ledger.
 
-    Storage owns reference/balance validation. This adapter preserves journal
+    Shared domain rules own reference/balance validation. This adapter preserves journal
     direction, and retains simple category kind even without a category lookup.
     """
     category_kinds = {str(row["id"]): str(row["kind"]) for row in categories}

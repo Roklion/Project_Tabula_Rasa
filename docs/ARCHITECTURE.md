@@ -326,14 +326,17 @@ contract and depends on the existing backend; the composition root is the
 place where those implementations are selected and connected.
 
 `assemble_application_services(profile_key, *, ledger_repository,
-account_repository, payee_repository, tag_repository)` builds a frozen
+account_repository, payee_repository, tag_repository, transaction_repository,
+journal_repository)` builds a frozen
 `ApplicationServices` from explicitly supplied repositories. Reference
 repositories may be omitted for a partial graph in tools or tests; the
-production composition always supplies all three.
+production composition supplies setup, reference, transaction and journal
+repositories. Transaction assembly requires the payee and tag repositories
+used for inline managed references.
 `create_sheets_application(profile_key, secrets)` requires a
 nonempty selected profile key, selects that profile's settings from the
 deployment configuration, constructs one `GoogleSheetsStorage`, and wraps it
-with the setup and reference-data repository adapters. Its frozen
+with the setup, reference-data, transaction and journal repository adapters. Its frozen
 `SheetsApplication` result
 contains the neutral `services` and the same exact `legacy_storage` instance.
 The shell caches this composition using the selected profile, implementation
@@ -416,10 +419,42 @@ and renderer owners first. Define the smallest contract for that workflow,
 reuse its pure domain rules, adapt the existing Sheets behavior, and move the
 affected renderer calls to the service. Keep success, relevant failure,
 profile isolation, and recovery coverage while removing duplicate ownership.
-Reporting (#229), mileage (#234), and transaction/journal work are subsequent
+Reporting (#229), document/receipt (#233), and mileage (#234) are subsequent
 slices, rather than additional responsibilities of the setup or reference-data
 services. Google Sheets remains the supported active ledger throughout this
 transition.
+
+### Transaction and journal services (#227 / #228)
+
+The selected profile's composition root supplies `TransactionService` and
+`JournalService`. The New entry surface, single and bulk transaction editors,
+journal editor, and their ledger reads use these services. Existing Add/Edit
+forms, receipt recovery, and Simple Ledger presentation remain shared.
+
+`TransactionRepository` models stable transaction identities, expected-record
+snapshots, semantic filters, and bulk metadata changes. Its narrow `build`
+callback lets the application apply `transaction.prepare_transaction` after
+the repository checks identity/staleness and obtains fresh managed references
+inside its mutation boundary. Inline payees/tags use the same profile's
+reference services. Services add no separate reference read, retry, or
+post-success verification. Adapters retain storage serialization and recovery.
+Optional expected snapshots preserve compatibility for existing non-UI callers;
+the single transaction editor supplies its visible baseline on update/delete.
+
+`JournalRepository` models a complete entry and its typed account/category
+postings, with stable line identities and a required expected entry for edits
+and deletion. Balancing/input rules and fresh reference rules share the existing
+`journal.py` owner. `accounting_postings.py` remains the sole Simple Ledger to
+posting translation; `TransactionService.postings` exposes that translation
+without persisting a second ledger. No new reversal workflow is introduced.
+
+Sheets retains batch construction, worksheet mapping, locking, fresh mutation
+reads, posting-ID uniqueness, cache invalidation and bounded uncertain-write
+readback. Its compatibility facade invokes the same extracted domain rules for
+recurring, mixed-use and asset workflows that will migrate in later #219 slices.
+Document/receipt mutations and the remaining reporting callers retain their
+separate migration scope. Contracts define behavior for a future relational
+adapter without specifying PostgreSQL tables or an HTTP API.
 
 ## Receipt boundary
 

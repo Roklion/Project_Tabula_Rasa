@@ -13,6 +13,8 @@ from tabula_rasa.infrastructure.google_sheets import (
     GoogleSheetsLedgerSetupRepository,
     GoogleSheetsPayeeRepository,
     GoogleSheetsTagRepository,
+    GoogleSheetsTransactionRepository,
+    GoogleSheetsJournalRepository,
 )
 from tabula_rasa.storage import GoogleSheetsStorage
 
@@ -48,5 +50,7 @@ def create_sheets_application(
         account_repository=GoogleSheetsAccountRepository(storage),
         payee_repository=GoogleSheetsPayeeRepository(storage),
         tag_repository=GoogleSheetsTagRepository(storage),
+        transaction_repository=GoogleSheetsTransactionRepository(storage),
+        journal_repository=GoogleSheetsJournalRepository(storage),
     )
     return SheetsApplication(services=services, legacy_storage=storage)
