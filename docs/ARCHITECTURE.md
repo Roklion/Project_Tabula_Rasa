@@ -340,7 +340,7 @@ The shell caches this composition using the selected profile, implementation
 version, local configuration revision, and the supplied configuration snapshot.
 Assembly consumes the same snapshot as the shell's workbook identity and page
 settings, rather than reloading configuration during construction. A changed
-snapshot rebuilds the graph even if the local revision is unchanged.
+snapshot rebuilds both Sheets and lazy Drive clients even if the local revision is unchanged. Drive callbacks consume the same snapshot as page folder settings. Default initialization is scoped to profile and workbook identity; downstream export revisions also include the workbook identity.
 
 Renderer contexts accept the selected profile's services alongside their
 existing storage dependency. Their optional services field supports the

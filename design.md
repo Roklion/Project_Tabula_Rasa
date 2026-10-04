@@ -1089,8 +1089,8 @@ An absent hosted/local record is reported as unavailable, not as healthy.
 Exports retain one Prepare/Refresh workflow, preparation timestamp,
 transactions CSV, mileage CSV, and a complete backup when receipt preparation
 succeeds. CSV downloads remain available when the complete backup fails.
-Prepared data is scoped to profile, configuration revision, and confirmed
-workbook data revision.
+Prepared data is scoped to profile, configuration revision, workbook identity,
+and confirmed workbook data revision.
 
 Imports retain the three distinct workflows and all previews, diagnostics,
 duplicate summaries, and explicit actions in the import contract above.
