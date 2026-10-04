@@ -8,7 +8,7 @@ from collections.abc import Iterable, Mapping
 from datetime import datetime
 from typing import Any
 
-from tabula_rasa.application.documents import MAX_RECEIPT_REFERENCES
+from tabula_rasa.document_limits import MAX_RECEIPT_REFERENCES
 
 
 RECEIPT_MANIFEST_SCHEMA_VERSION = 1

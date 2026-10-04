@@ -5,10 +5,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from collections.abc import Mapping
 from typing import Any
-from uuid import uuid4
-from tabula_rasa.mixed_use import MIXED_USE_SOURCE_TYPE
-from tabula_rasa.mixed_use import MixedUseAllocationError
-from tabula_rasa.mixed_use import validate_mixed_use_allocation
+from tabula_rasa.mixed_use_records import prepare_mixed_use_expense, validate_mixed_use_changes
+from tabula_rasa.transaction import TransactionReferences
 from .schema import (
     MIXED_USE_WORKSHEET_HEADERS,
     WORKSHEET_HEADERS,
@@ -25,10 +23,8 @@ from .validation import (
     _clean_text,
     _iso_date,
     _normalize_tag_ids,
-    _utc_now,
     _validate_mixed_use_tables,
     decode_receipt_references,
-    mixed_use_ledger_description,
 )
 
 _RECURRING_PROVENANCE_FIELDS = (
@@ -205,90 +201,15 @@ class _MixedUseMixin:
             return "unchanged"
         return "ambiguous"
 
-    def _prepare_mixed_use_expense(
-        self,
-        data: Mapping[str, Any],
-        *,
-        source_id: str | None = None,
-        linked_transaction_id: str | None = None,
-        created_at: str | None = None,
-        original_transaction: Mapping[str, Any] | None = None,
-        preserve_existing_payee: bool = False,
-    ) -> tuple[dict[str, str], dict[str, str]]:
-        try:
-            allocation = validate_mixed_use_allocation(
-                data.get("total_expense"),
-                data.get("business_use_percentage"),
-            )
-        except MixedUseAllocationError as exc:
-            raise StorageValidationError(str(exc)) from exc
-        rationale = _clean_text(
-            data.get("allocation_rationale"),
-            "Allocation rationale",
-            required=True,
-        )
-        source_id = _clean_text(
-            source_id if source_id is not None else data.get("source_id", data.get("id")),
-            "Mixed-use source ID",
-        ) or str(uuid4())
-        linked_transaction_id = _clean_text(
-            linked_transaction_id
-            if linked_transaction_id is not None
-            else data.get("linked_transaction_id"),
-            "Linked transaction ID",
-        ) or str(uuid4())
-        original_description = _clean_text(data.get("description"), "Description")
-        transaction = self._prepare_transaction(
-            {
-                **data,
-                "kind": "Expense",
-                "amount": allocation.allocated_amount,
-                "description": original_description,
-            },
-            created_at=(
-                original_transaction.get("created_at")
-                if original_transaction is not None
-                else None
-            ),
-            original_transaction=original_transaction,
-            preserve_existing_payee=preserve_existing_payee,
-        )
-        source = {
-            "id": source_id,
-            "txn_date": transaction["txn_date"],
-            "kind": "Expense",
-            "total_expense": allocation.total_expense,
-            "business_use_percentage": allocation.business_use_percentage,
-            "allocated_amount": allocation.allocated_amount,
-            "account_id": transaction["account_id"],
-            "category_id": transaction["category_id"],
-            "payee_id": transaction["payee_id"],
-            "description": original_description,
-            "reference": transaction["reference"],
-            "receipt_references": transaction["receipt_references"],
-            "allocation_rationale": rationale,
-            "linked_transaction_id": linked_transaction_id,
-            "tag_ids": transaction["tag_ids"],
-            "created_at": created_at or _utc_now(),
-        }
-        for field in (
-            "recurring_schedule_id",
-            "recurring_scheduled_date",
-            "recurring_source_kind",
-            "recurring_occurrence_type",
-        ):
-            value = _clean_text(transaction.get(field), field.replace("_", " ").title())
-            if value:
-                source[field] = value
-        projection = {
-            **transaction,
-            "id": linked_transaction_id,
-            "description": mixed_use_ledger_description(
-                original_description, rationale
-            ),
-            "source_type": MIXED_USE_SOURCE_TYPE,
-            "source_id": source_id,
-        }
+    def _prepare_mixed_use_expense(self, data, **options):
+        build = data.get("_build")
+        if build is None:
+            return prepare_mixed_use_expense(self._prepare_transaction, data, **options)
+        self._snapshot(["Accounts", "Categories", "Payees", "Tags"], force_refresh=True)
+        references = TransactionReferences(self._account_lookup(), self._category_lookup(), self._payee_lookup(), self._tag_lookup())
+        source, projection = build({key: value for key, value in data.items() if key != "_build"}, references, **options)
+        projection = self._serialize_transaction(projection)
+        source = {**source, "tag_ids": projection["tag_ids"], "receipt_references": projection["receipt_references"]}
         return source, projection
 
     def list_mixed_use_expenses(
@@ -640,16 +561,7 @@ class _MixedUseMixin:
                 ),
             }
         )
-        if "id" in changes or "source_id" in changes or "linked_transaction_id" in changes:
-            raise StorageValidationError("Mixed-use source IDs cannot be edited")
-        for field in (
-            "recurring_schedule_id",
-            "recurring_scheduled_date",
-            "recurring_source_kind",
-            "recurring_occurrence_type",
-        ):
-            if field in changes and str(changes[field] or "") != str(current_source.get(field, "") or ""):
-                raise StorageValidationError("Recurring provenance cannot be changed")
+        validate_mixed_use_changes(current_source, changes)
         merged = {**current_source, **changes}
         if "tag_ids" not in changes:
             merged["tag_ids"] = current_transaction.get("tag_ids", "")

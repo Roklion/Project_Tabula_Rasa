@@ -13,13 +13,14 @@ import streamlit as st
 
 from tabula_rasa.application.services import ApplicationServices
 from tabula_rasa.depreciation import STRAIGHT_LINE_METHOD
-from tabula_rasa.storage.google_sheets.depreciation_posting import (
+from tabula_rasa.asset import ASSET_TYPES
+from tabula_rasa.page_renderers.workflow_services import asset_service
+from tabula_rasa.depreciation_posting import (
     asset_schedule,
     depreciation_entry_id,
 )
 from tabula_rasa.presentation import render_global_footer, render_page_header
 from tabula_rasa.storage import (
-    ASSET_TYPES,
     GoogleSheetsStorage,
     StorageError,
     decode_receipt_references,
@@ -327,10 +328,10 @@ def _render_schedule(context: AssetsContext, asset: dict) -> None:
             context.confirmed_write(
                 "post_due_depreciation",
                 {"asset_id": asset["id"], "through_date": through_date},
-                lambda: context.storage.post_due_depreciation(
+                lambda: asset_service(context).post_due(
                     asset["id"],
                     through_date,
-                    expected_asset=asset,
+                    expected=asset,
                 ),
                 "Due depreciation posted. Already posted quarters were skipped.",
                 report_error=posting_error.error,
@@ -429,13 +430,13 @@ def _render_schedule(context: AssetsContext, asset: dict) -> None:
                     "amount": amount,
                     "reason": reason,
                 },
-                lambda: context.storage.override_asset_period(
+                lambda: asset_service(context).override(
                     asset["id"],
                     sequence,
                     amount,
                     reason,
                     as_of_date=date.today(),
-                    expected_asset=asset,
+                    expected=asset,
                 ),
                 "Quarterly depreciation override saved; later quarters were rebalanced.",
                 report_error=override_error.error,
@@ -447,8 +448,8 @@ def _render_schedule(context: AssetsContext, asset: dict) -> None:
             context.confirmed_write(
                 "remove_asset_period_override",
                 {"asset_id": asset["id"], "sequence": sequence},
-                lambda: context.storage.remove_asset_period_override(
-                    asset["id"], sequence, expected_asset=asset
+                lambda: asset_service(context).remove_override(
+                    asset["id"], sequence, expected=asset
                 ),
                 "Quarterly depreciation override removed; the schedule was recalculated.",
                 report_error=override_error.error,
@@ -462,11 +463,10 @@ def render_assets(context: AssetsContext) -> None:
         "Track depreciable business assets and calculate quarterly straight-line schedules.",
     )
     try:
-        context.storage.prefetch_worksheets("Assets", "Payees", "Tags", "Transactions")
-        assets = context.storage.list_assets()
+        assets = asset_service(context).list()
         payees = context.services.payees.list()
         tags = context.services.tags.list()
-        transactions = context.storage.list_transactions()
+        transactions = context.services.transactions.list()
         accounts = context.services.accounts.list(active_only=False)
         categories = context.storage.list_categories()
         depreciation_by_asset: dict[str, list[str]] = {}
@@ -497,7 +497,7 @@ def render_assets(context: AssetsContext) -> None:
             context.confirmed_write(
                 "create_asset",
                 values,
-                lambda: context.storage.create_asset(**values),
+                lambda: asset_service(context).create(**values),
                 "Asset added.",
                 report_error=add_error.error,
             )
@@ -577,8 +577,8 @@ def render_assets(context: AssetsContext) -> None:
             context.confirmed_write(
                 "edit_asset",
                 {"asset_id": selected_id, **values},
-                lambda: context.storage.edit_asset(
-                    selected_id, expected_asset=selected, **values
+                lambda: asset_service(context).update(
+                    selected_id, expected=selected, **values
                 ),
                 "Asset updated.",
                 report_error=edit_error.error,
@@ -593,10 +593,10 @@ def render_assets(context: AssetsContext) -> None:
                 context.confirmed_write(
                     "retire_asset",
                     {"asset_id": selected_id, "retired_date": retired_date},
-                    lambda: context.storage.retire_asset(
+                    lambda: asset_service(context).retire(
                         selected_id,
                         retired_date,
-                        expected_asset=selected,
+                        expected=selected,
                     ),
                     "Asset retired; future quarterly depreciation was stopped.",
                     report_error=edit_error.error,
@@ -621,8 +621,8 @@ def render_assets(context: AssetsContext) -> None:
                         context.confirmed_write(
                             "delete_asset",
                             {"asset_id": selected_id},
-                            lambda: context.storage.delete_asset(
-                                selected_id, expected_asset=selected
+                            lambda: asset_service(context).delete(
+                                selected_id, expected=selected
                             ),
                             "Asset deleted.",
                             report_error=edit_error.error,

@@ -79,7 +79,7 @@ from tabula_rasa.receipt_backfill import (
 )
 
 
-APPLICATION_IMPLEMENTATION_VERSION = 2
+APPLICATION_IMPLEMENTATION_VERSION = 3
 
 
 def _google_maps_browser_key(secrets: Mapping[str, object]) -> str | None:
@@ -499,9 +499,9 @@ else:
         if reconciliation_key not in reconciled_profiles:
             # Reconciliation is deliberately one bounded pass per profile and
             # session. Schedule-level failures are persisted as attention by
-            # storage; they must not block unrelated schedules or trigger reruns.
+            # the service; they must not block unrelated schedules or trigger reruns.
             try:
-                storage.reconcile_recurring_schedules()
+                services.recurring.reconcile()
             except StorageError as error:
                 st.warning(
                     "Automatic recurring schedule reconciliation failed; "

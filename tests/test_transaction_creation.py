@@ -217,15 +217,16 @@ def test_startup_reconciles_once_per_profile_and_keeps_profiles_isolated() -> No
         "beta": profile_config(name="Beta", spreadsheet_id="beta-sheet"),
     }
     calls: list[GoogleSheetsStorage] = []
-    original = GoogleSheetsStorage.reconcile_recurring_schedules
+    from tabula_rasa.application import RecurringService
+    original = RecurringService.reconcile
 
-    def record_reconcile(storage, *args, **kwargs):
-        calls.append(storage)
-        return original(storage, *args, **kwargs)
+    def record_reconcile(service, *args, **kwargs):
+        calls.append(service._repository._storage)
+        return original(service, *args, **kwargs)
 
     with patch.object(
-        GoogleSheetsStorage,
-        "reconcile_recurring_schedules",
+        RecurringService,
+        "reconcile",
         autospec=True,
         side_effect=record_reconcile,
     ):
@@ -240,13 +241,15 @@ def test_startup_reconciles_once_per_profile_and_keeps_profiles_isolated() -> No
 
 
 def test_startup_reconciliation_failure_does_not_block_transactions_page() -> None:
+    from tabula_rasa.application import RecurringService
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     with patch.object(
-        GoogleSheetsStorage,
-        "reconcile_recurring_schedules",
+        RecurringService,
+        "reconcile",
         side_effect=StorageUnavailableError("temporary Sheets outage"),
     ):
         with authenticated_app(storage) as app:
+            assert any("Automatic recurring schedule reconciliation failed" in item.value for item in app.warning)
             navigate_to(app, "Transactions")
 
             assert any(item.label == "Save transaction" for item in app.button)

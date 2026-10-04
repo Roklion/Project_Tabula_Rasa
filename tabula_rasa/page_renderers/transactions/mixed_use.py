@@ -1,5 +1,7 @@
 """Mixed-use source workflow for the Transactions page."""
 from __future__ import annotations
+from tabula_rasa.infrastructure.mixed_use_receipts import MixedUseReceiptStorage as _MixedUseReceiptStorage
+from tabula_rasa.page_renderers.workflow_services import recurring_service, mixed_use_service
 from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import replace
 from datetime import date
@@ -49,52 +51,10 @@ from tabula_rasa.storage import (
     StorageValidationError,
     decode_receipt_references,
 )
-from tabula_rasa.storage.google_sheets import (
-    _normalize_tag_ids,
-    mixed_use_ledger_description,
-)
+from tabula_rasa.reference_data import normalize_tag_ids as _normalize_tag_ids
+from tabula_rasa.mixed_use_records import mixed_use_ledger_description
 
 
-class _MixedUseReceiptStorage:
-    """Narrow receipt-storage capability scoped to one source record."""
-
-    def __init__(
-        self,
-        storage,
-        source_id: str,
-        expected_source: Mapping[str, object],
-        on_source_changed=None,
-    ):
-        self._storage = storage
-        self._source_id = source_id
-        self._expected_source = expected_source
-        self._on_source_changed = on_source_changed
-
-    def _refresh_expected_source(self) -> None:
-        refreshed_source = self._storage.get_mixed_use_expense(self._source_id)
-        self._expected_source = {
-            **self._expected_source,
-            "receipt_references": refreshed_source.get("receipt_references", ""),
-        }
-        if self._on_source_changed is not None:
-            self._on_source_changed(self._expected_source)
-
-    def __getattr__(self, name):
-        return getattr(self._storage, name)
-
-    def link_transaction_receipt(self, transaction_id, *, reference):
-        result = self._storage.link_mixed_use_receipt(
-            self._source_id, reference=reference, expected_source=self._expected_source
-        )
-        self._refresh_expected_source()
-        return result
-
-    def unlink_transaction_receipt(self, transaction_id, *, file_id):
-        result = self._storage.unlink_mixed_use_receipt(
-            self._source_id, file_id=file_id, expected_source=self._expected_source
-        )
-        self._refresh_expected_source()
-        return result
 
 def mixed_use_preview(*, txn_date, account, payee, category, description, total_expense, business_use_percentage, allocation_rationale):
     """Build a side-effect-free ledger preview using the canonical calculator."""
@@ -154,13 +114,13 @@ def _clear_mixed_use_copy(
         state.pop(keys[name], None)
 
 
-def _fresh_mixed_use_copy_source(storage, source_id: str) -> dict[str, str]:
+def _fresh_mixed_use_copy_source(service, source_id: str) -> dict[str, str]:
     """Re-read and validate a complete source/projection pair before copying."""
     source_id = str(source_id or "").strip()
     if not source_id:
         raise StorageError("Select a mixed-use expense before copying it.")
     try:
-        return dict(storage.get_mixed_use_expense(source_id, _force_refresh=True))
+        return dict(service.get(source_id, fresh=True))
     except StorageNotFoundError as error:
         raise StorageError("The selected mixed-use expense no longer exists.") from error
 
@@ -313,11 +273,11 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
     st.caption("Save the full expense and business-use allocation; only the allocated amount enters the ledger.")
     incomplete_source_ids: set[str] = set()
     try:
-        sources = context.storage.list_mixed_use_expenses()
+        sources = mixed_use_service(context).list()
     except StorageError as error:
         try:
-            raw_sources = context.storage.list_mixed_use_expense_sources(
-                _force_refresh=True
+            raw_sources = mixed_use_service(context).sources(
+                fresh=True
             )
             transactions = context.services.transactions.list(fresh=True)
         except StorageError:
@@ -393,7 +353,8 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             recovery_context = replace(
                 context,
                 storage=_MixedUseReceiptStorage(
-                    context.storage, recovery_source_id, recovery_source
+                    context.storage, recovery_source_id, recovery_source,
+                    source_service=mixed_use_service(context),
                 ),
             )
             render_receipt_creation_recovery(recovery_context)
@@ -472,7 +433,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         if copy_button and selected_id:
             try:
                 fresh_source = _fresh_mixed_use_copy_source(
-                    context.storage, selected_id
+                    mixed_use_service(context), selected_id
                 )
                 _start_mixed_use_copy(st.session_state, profile, fresh_source)
             except StorageError as error:
@@ -881,13 +842,13 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                     def operation():
                         try:
                             return (
-                                context.storage.create_recurring_expense_from_mixed_use(
+                                recurring_service(context).from_mixed_use(
                                     source["id"],
                                     expected_source=expected_source,
                                     **payload,
                                 )["source"]
                                 if recurring
-                                else context.storage.edit_mixed_use_expense(
+                                else mixed_use_service(context).update(
                                     source["id"],
                                     expected_source=expected_source,
                                     **payload,
@@ -913,8 +874,8 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                     def operation():
                         try:
                             if recurring:
-                                return context.storage.create_recurring_mixed_use_expense(**payload)["source"]
-                            return context.storage.create_mixed_use_expense(**payload)
+                                return recurring_service(context).create_mixed_expense(**payload)["source"]
+                            return mixed_use_service(context).create(**payload)
                         except StorageValidationError:
                             if recurring:
                                 create_pending_recurrence.clear(st.session_state)
@@ -967,6 +928,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                             result["id"],
                             result,
                             on_source_changed=update_receipt_baseline,
+                            source_service=mixed_use_service(context),
                         ),
                     )
                     handle_confirmed_transaction_receipts(
@@ -1016,6 +978,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                         source["id"],
                         expected_source,
                         on_source_changed=update_receipt_baseline,
+                        source_service=mixed_use_service(context),
                     ),
                 ),
                 selected=linked,
@@ -1038,8 +1001,8 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             schedule_status_error = False
             if recurring_id:
                 try:
-                    schedule = context.storage.get_recurring_schedule(recurring_id, _force_refresh=True)
-                    current_sources = context.storage.list_mixed_use_expenses()
+                    schedule = recurring_service(context).get(recurring_id, fresh=True)
+                    current_sources = mixed_use_service(context).list()
                     latest = max(
                         (str(item.get("recurring_scheduled_date") or "") for item in current_sources
                          if item.get("recurring_schedule_id") == recurring_id
@@ -1067,4 +1030,4 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                 elif not confirmed:
                     delete_error.error("Confirm the permanent deletion before continuing.")
                 else:
-                    context.confirmed_write("delete_mixed_use_expense", {"id": source["id"], "expected_source": expected_source}, lambda: context.storage.delete_mixed_use_expense(source["id"], expected_source=expected_source), "Mixed-use expense deleted.", on_success=lambda: st.session_state.pop(selected_key, None), report_error=delete_error.error)
+                    context.confirmed_write("delete_mixed_use_expense", {"id": source["id"], "expected_source": expected_source}, lambda: mixed_use_service(context).delete(source["id"], expected_source=expected_source), "Mixed-use expense deleted.", on_success=lambda: st.session_state.pop(selected_key, None), report_error=delete_error.error)

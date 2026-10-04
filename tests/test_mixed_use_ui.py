@@ -1,4 +1,5 @@
 from datetime import date
+from tabula_rasa.infrastructure.google_sheets_mixed_use import mixed_use_service_for_storage
 
 import pytest
 
@@ -214,7 +215,7 @@ def test_mixed_use_copy_re_reads_pair_and_keeps_independent_snapshot(default_sto
         allocation_rationale="Measured use",
     )
 
-    fresh = _fresh_mixed_use_copy_source(default_storage, source["id"])
+    fresh = _fresh_mixed_use_copy_source(mixed_use_service_for_storage(default_storage), source["id"])
     state = {}
     new_source_id, new_transaction_id = _start_mixed_use_copy(
         state, "north", fresh
@@ -257,7 +258,7 @@ def test_mixed_use_copy_snapshot_saves_after_original_edit(default_storage) -> N
     _start_mixed_use_copy(
         snapshot_state,
         "north",
-        _fresh_mixed_use_copy_source(default_storage, source["id"]),
+        _fresh_mixed_use_copy_source(mixed_use_service_for_storage(default_storage), source["id"]),
     )
     keys = _mixed_use_copy_keys("north")
     snapshot = snapshot_state[keys["snapshot"]]
@@ -307,7 +308,7 @@ def test_mixed_use_copy_rejects_missing_projection(default_storage) -> None:
     default_storage._invalidate("Transactions")
 
     with pytest.raises(StorageValidationError, match="missing projection"):
-        _fresh_mixed_use_copy_source(default_storage, source["id"])
+        _fresh_mixed_use_copy_source(mixed_use_service_for_storage(default_storage), source["id"])
 
 
 def test_mixed_use_copy_fresh_lookup_allows_valid_pair_with_unrelated_orphan(
@@ -344,7 +345,7 @@ def test_mixed_use_copy_fresh_lookup_allows_valid_pair_with_unrelated_orphan(
     ]
     default_storage._invalidate("Transactions")
 
-    fresh = _fresh_mixed_use_copy_source(default_storage, valid["id"])
+    fresh = _fresh_mixed_use_copy_source(mixed_use_service_for_storage(default_storage), valid["id"])
 
     assert fresh["id"] == valid["id"]
     assert fresh["linked_transaction_id"] == valid["linked_transaction_id"]
@@ -399,7 +400,7 @@ def test_source_receipt_adapter_refreshes_only_receipt_baseline(
     monkeypatch.setattr(
         default_storage,
         "get_mixed_use_expense",
-        lambda _source_id: refreshed_source,
+        lambda _source_id, **kwargs: refreshed_source,
     )
     updated_sources = []
     adapter = _MixedUseReceiptStorage(

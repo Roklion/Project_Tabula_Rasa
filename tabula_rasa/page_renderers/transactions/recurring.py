@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from tabula_rasa.page_renderers.workflow_services import recurring_service
 from datetime import date
 import json
 from typing import Any
@@ -105,7 +106,7 @@ def _selected_tag_ids(value: Any) -> list[Any]:
 def _render_generate_due(context: Any, notice_key: str) -> None:
     if st.button("Generate due occurrences", key=f"recurring_reconcile_{context.profile_key}"):
         try:
-            result = context.storage.reconcile_recurring_schedules(as_of=date.today())
+            result = recurring_service(context).reconcile(as_of=date.today())
             if result["attention"]:
                 st.session_state[notice_key] = {
                     "level": "warning",
@@ -133,7 +134,7 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
         else:
             st.success(notice["message"])
     try:
-        schedules = context.storage.list_recurring_schedules()
+        schedules = recurring_service(context).list()
     except Exception as error:
         context.report_storage_error(error)
         return
@@ -190,7 +191,7 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
         )
         if st.button("Repair schedule status", key=f"recurring_repair_status_button_{selected['id']}"):
             try:
-                context.storage.edit_recurring_schedule(
+                recurring_service(context).update(
                     selected["id"], expected_schedule=selected, status=repair_status,
                 )
                 _mark_workbook_data_changed(context)
@@ -204,14 +205,14 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
     with left:
         if selected["status"] == "active" and st.button("Pause", key=f"recurring_pause_{selected['id']}"):
             try:
-                context.storage.pause_recurring_schedule(selected["id"], expected_schedule=selected)
+                recurring_service(context).pause(selected["id"], expected_schedule=selected)
                 _mark_workbook_data_changed(context)
                 st.rerun()
             except Exception as error:
                 context.report_storage_error(error)
         elif selected["status"] == "paused" and st.button("Resume", key=f"recurring_resume_{selected['id']}"):
             try:
-                context.storage.resume_recurring_schedule(selected["id"], expected_schedule=selected)
+                recurring_service(context).resume(selected["id"], expected_schedule=selected)
                 _mark_workbook_data_changed(context)
                 st.rerun()
             except Exception as error:
@@ -219,7 +220,7 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
     with right:
         if selected["status"] != "ended" and st.button("End schedule", key=f"recurring_end_{selected['id']}"):
             try:
-                context.storage.end_recurring_schedule(selected["id"], expected_schedule=selected)
+                recurring_service(context).end(selected["id"], expected_schedule=selected)
                 _clear_pending_schedule_state(
                     st.session_state, context.profile_key, selected["id"]
                 )
@@ -307,7 +308,7 @@ def render_recurring_expenses(context: Any, *, accounts, categories, payees, tag
             save_template = st.form_submit_button("Save schedule template")
         if save_template:
             try:
-                context.storage.edit_recurring_schedule(
+                recurring_service(context).update(
                     selected["id"], expected_schedule=selected, name=edit_name,
                     recurrence_unit=edit_unit, recurrence_interval=edit_interval,
                     start_date=edit_start, anchor_date=edit_start, end_date=edit_end,
