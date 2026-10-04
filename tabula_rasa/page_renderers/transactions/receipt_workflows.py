@@ -2,36 +2,26 @@
 
 from __future__ import annotations
 
-import hashlib
-import secrets
-from collections.abc import Callable
 from collections.abc import Mapping
 from collections.abc import Sequence
 from typing import Any
 from typing import MutableMapping
+from typing import overload
 import streamlit as st
-from tabula_rasa.google_drive import GoogleDriveAccessError
-from tabula_rasa.google_drive import GoogleDriveError
-from tabula_rasa.google_drive import validate_receipt_upload
+from tabula_rasa.application.documents import (
+    DocumentError, DocumentReference, DocumentUpload, DocumentValidationError,
+    MAX_RECEIPT_UPLOAD_TOTAL_BYTES,
+    RECEIPT_UPLOAD_TYPES as RECEIPT_UPLOAD_TYPES,
+    UPLOADED_NOT_LINKED_MESSAGE as UPLOADED_NOT_LINKED_MESSAGE,
+    prepare_receipt_uploads as prepare_document_uploads,
+)
+from tabula_rasa.infrastructure.receipt_context import process_context_receipts, receipt_service_for_context
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
-from tabula_rasa.receipt_manifest import MAX_RECEIPT_REFERENCES
-from tabula_rasa.receipt_manifest import receipt_reference_from_drive_file
-from tabula_rasa.storage import decode_receipt_references
-from tabula_rasa.storage import StorageNotFoundError
-
-RECEIPT_UPLOAD_TYPES = ["pdf", "png", "jpg", "jpeg", "webp", "heic"]
 
 RECEIPT_CREATION_WORKFLOW_KEY = "transaction_receipt_creation_workflow"
 
 RECEIPT_EDITOR_WORKFLOW_KEY = "transaction_receipt_editor_workflow"
 
-MAX_RECEIPT_UPLOAD_TOTAL_BYTES = 200 * 1024 * 1024
-
-UPLOADED_NOT_LINKED_MESSAGE = (
-    "The receipt is uploaded in Google Drive but could not be linked in Google "
-    "Sheets. If it is not already linked, the file remains available from "
-    "Unreferenced receipts."
-)
 
 def _workflow_complete(workflow: Mapping[str, Any]) -> bool:
     return not workflow.get("receipts")
@@ -42,34 +32,7 @@ def _process_context_receipts(
     receipt_folder: Mapping[str, object],
 ) -> None:
     linked_before, _ = receipt_creation_counts(workflow)
-    receipt_drive = None
-    transaction_id = str(workflow["transaction_id"])
-    folder_id = str(receipt_folder["id"])
-
-    def upload_receipt(receipt: Mapping[str, Any]) -> Mapping[str, Any]:
-        nonlocal receipt_drive
-        if receipt_drive is None:
-            receipt_drive = context.get_drive_client(
-                context.profile_key,
-                context.configuration_revision,
-            )
-        return receipt_drive.upload_receipt(
-            profile_key=context.profile_key,
-            folder_id=folder_id,
-            original_name=str(receipt["original_name"]),
-            content=bytes(receipt["content"]),
-            mime_type=str(receipt["mime_type"]),
-            receipt_id=str(receipt["receipt_id"]),
-        )
-
-    process_receipt_recovery(
-        workflow,
-        upload_receipt=upload_receipt,
-        link_receipt=lambda reference: context.storage.link_transaction_receipt(
-            transaction_id,
-            reference=reference,
-        ),
-    )
+    process_context_receipts(context, workflow)
     linked_after, _ = receipt_creation_counts(workflow)
     if linked_after > linked_before:
         _mark_workbook_data_changed(context)
@@ -77,24 +40,23 @@ def _process_context_receipts(
 def _fresh_transaction_receipt_references(
     context: TransactionsContext,
     transaction_id: str,
-) -> list[dict[str, Any]]:
-    for transaction in context.storage.list_transactions(_force_refresh=True):
-        if str(transaction.get("id", "")) == transaction_id:
-            return decode_receipt_references(
-                transaction.get("receipt_references", "")
-            )
-    raise StorageNotFoundError(
-        "The selected transaction no longer exists. Refresh the ledger before "
-        "uploading receipts."
-    )
+) -> list[DocumentReference]:
+    return list(receipt_service_for_context(context).references(transaction_id, fresh=True))
+
+
+def _reference_storage_key(reference: object) -> str:
+    if isinstance(reference, DocumentReference):
+        return reference.storage_key
+    # Recovery state prepared before this extraction remains resumable.
+    return str(reference.get("id", "")) if isinstance(reference, Mapping) else ""
 
 def _new_unresolved_receipt_count(
     unresolved_receipts: Sequence[Mapping[str, Any]],
     existing_receipt_ids: set[str],
 ) -> int:
     return sum(
-        not isinstance(receipt.get("reference"), Mapping)
-        or str(receipt["reference"].get("id", "")) not in existing_receipt_ids
+        not _reference_storage_key(receipt.get("reference"))
+        or _reference_storage_key(receipt["reference"]) not in existing_receipt_ids
         for receipt in unresolved_receipts
     )
 
@@ -113,8 +75,7 @@ def _remove_editor_receipt_from_recovery(
         for receipt in workflow.get("receipts", [])
         if not (
             isinstance(receipt, Mapping)
-            and isinstance(receipt.get("reference"), Mapping)
-            and str(receipt["reference"].get("id", "")) == file_id
+            and _reference_storage_key(receipt.get("reference")) == file_id
         )
     ]
     if len(remaining) == len(workflow.get("receipts", [])):
@@ -147,51 +108,17 @@ def _editor_workflow(
 def _record_editor_receipt_linked(
     context: TransactionsContext,
     transaction_id: str,
-    reference: Mapping[str, Any],
+    reference: DocumentReference | Mapping[str, Any],
 ) -> None:
     _remove_editor_receipt_from_recovery(
         context,
         transaction_id,
-        str(reference.get("id", "")),
+        _reference_storage_key(reference),
         record_linked=True,
     )
 
 def receipt_editor_workflow_key_prefix(profile_key: str) -> str:
     return f"{RECEIPT_EDITOR_WORKFLOW_KEY}:{len(profile_key)}:{profile_key}:"
-
-def process_receipt_recovery(
-    workflow: MutableMapping[str, Any],
-    *,
-    upload_receipt: Callable[[Mapping[str, Any]], Mapping[str, Any]],
-    link_receipt: Callable[[Mapping[str, Any]], object],
-) -> None:
-    """Process each pending receipt once and retain only unresolved work."""
-    unresolved: list[dict[str, Any]] = []
-    linked_count = int(workflow.get("linked_count", 0))
-    for pending in workflow.get("receipts", []):
-        if not isinstance(pending, Mapping):
-            continue
-        receipt = dict(pending)
-        reference = receipt.get("reference")
-        if not isinstance(reference, Mapping):
-            try:
-                drive_file = upload_receipt(receipt)
-                reference = receipt_reference_from_drive_file(drive_file)
-            except Exception as error:  # noqa: BLE001 - retain resumable input
-                receipt["error"] = str(error)
-                unresolved.append(receipt)
-                continue
-            receipt["reference"] = dict(reference)
-            receipt["content"] = b""
-        try:
-            link_receipt(reference)
-        except Exception as error:  # noqa: BLE001 - Drive file remains recoverable
-            receipt["error"] = f"{UPLOADED_NOT_LINKED_MESSAGE} {error}"
-            unresolved.append(receipt)
-        else:
-            linked_count += 1
-    workflow["linked_count"] = linked_count
-    workflow["receipts"] = unresolved
 
 def _configuration_changed_message() -> str:
     return (
@@ -352,14 +279,40 @@ def receipt_editor_workflow_key(profile_key: str, transaction_id: str) -> str:
     return f"{RECEIPT_EDITOR_WORKFLOW_KEY}:{len(profile_key)}:{profile_key}:{transaction_id}"
 
 def _receipt_folder(context: TransactionsContext) -> Mapping[str, object] | None:
-    drive_settings = context.profile_secrets.get("google_drive")
-    if not isinstance(drive_settings, Mapping):
-        return None
-    receipt_folder = drive_settings.get("receipt_folder")
-    return receipt_folder if isinstance(receipt_folder, Mapping) else None
+    scope = receipt_service_for_context(context).document_scope
+    return {"id": scope} if scope else None
 
 def receipt_editor_upload_reset_key(profile_key: str, transaction_id: str) -> str:
     return f"reset-receipt-editor:{profile_key}:{transaction_id}"
+
+
+class _ReceiptUploadSequence(Sequence[DocumentUpload]):
+    """Copy UI file content only as the receipt service validates each file."""
+
+    def __init__(self, files: Sequence[Any]) -> None:
+        self._files = files
+
+    def __len__(self) -> int:
+        return len(self._files)
+
+    @overload
+    def __getitem__(self, index: int) -> DocumentUpload: ...
+
+    @overload
+    def __getitem__(self, index: slice) -> Sequence[DocumentUpload]: ...
+
+    def __getitem__(self, index: int | slice) -> DocumentUpload | Sequence[DocumentUpload]:
+        if isinstance(index, slice):
+            return _ReceiptUploadSequence(self._files[index])
+        file = self._files[index]
+        return DocumentUpload(
+            "",
+            str(getattr(file, "name", "") or ""),
+            str(getattr(file, "type", "") or "application/octet-stream"),
+            "",
+            file.getvalue(),
+        )
+
 
 def prepare_receipt_uploads(
     uploaded_files: Sequence[Any],
@@ -368,47 +321,16 @@ def prepare_receipt_uploads(
     _max_upload_total_bytes: int | None = None,
 ) -> list[dict[str, Any]]:
     """Copy and validate every selected file before the Sheets write."""
-    if existing_reference_count < 0:
-        raise ValueError("Existing receipt reference count cannot be negative")
-    if existing_reference_count + len(uploaded_files) > MAX_RECEIPT_REFERENCES:
-        raise GoogleDriveAccessError(
-            "A transaction can reference no more than 100 receipts. "
-            "Remove an existing receipt reference or select fewer files."
-        )
-    prepared: list[dict[str, Any]] = []
     max_upload_total_bytes = (
         MAX_RECEIPT_UPLOAD_TOTAL_BYTES
         if _max_upload_total_bytes is None
         else _max_upload_total_bytes
     )
-    total_bytes = 0
-    for index, uploaded_file in enumerate(uploaded_files):
-        name = str(getattr(uploaded_file, "name", "") or "")
-        content = uploaded_file.getvalue()
-        total_bytes += len(content)
-        if total_bytes > max_upload_total_bytes:
-            raise GoogleDriveAccessError(
-                "Selected receipt files cannot exceed 200 MB total. "
-                "Select fewer or smaller files."
-            )
-        validate_receipt_upload(name, content)
-        content_sha256 = hashlib.sha256(content).hexdigest()
-        prepared.append(
-            {
-                "key": f"{index}:{content_sha256}",
-                "receipt_id": secrets.token_hex(16),
-                "sha256": content_sha256,
-                "original_name": name,
-                "mime_type": str(
-                    getattr(uploaded_file, "type", "")
-                    or "application/octet-stream"
-                ),
-                "content": content,
-                "reference": None,
-                "error": "",
-            }
-        )
-    return prepared
+    return prepare_document_uploads(
+        _ReceiptUploadSequence(uploaded_files),
+        existing_reference_count=existing_reference_count,
+        max_upload_total_bytes=max_upload_total_bytes,
+    )
 
 def _start_editor_receipt_workflow(
     context: TransactionsContext,
@@ -427,11 +349,11 @@ def _start_editor_receipt_workflow(
     ] = workflow
     try:
         if receipt_folder is None:
-            raise GoogleDriveAccessError(
+            raise DocumentValidationError(
                 "Google Drive receipt storage is not configured for this profile."
             )
         _process_context_receipts(context, workflow, receipt_folder)
-    except GoogleDriveError as error:
+    except DocumentError as error:
         workflow["error"] = str(error)
     return workflow
 

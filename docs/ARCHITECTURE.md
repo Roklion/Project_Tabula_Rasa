@@ -304,10 +304,11 @@ flowchart TD
     Shell["app.py and page contexts"]
     Composition["composition.py<br/>create_sheets_application"]
     Services["application/services.py<br/>ApplicationServices"]
-    Setup["application/ledger_setup.py<br/>LedgerSetupService and LedgerInfo"]
-    Contract["application/contracts.py<br/>LedgerSetupRepository"]
-    Adapter["infrastructure/google_sheets.py<br/>GoogleSheetsLedgerSetupRepository"]
+    Setup["Setup, reporting, mileage,<br/>and receipt services"]
+    Contract["Capability-specific repository<br/>and DocumentStore contracts"]
+    Adapter["infrastructure/<br/>Sheets and Drive adapters"]
     Storage["storage/google_sheets/<br/>GoogleSheetsStorage"]
+    Drive["google_drive/<br/>GoogleDriveClient"]
 
     Shell --> Composition
     Shell --> Services
@@ -317,6 +318,7 @@ flowchart TD
     Setup --> Contract
     Adapter --> Contract
     Adapter --> Storage
+    Adapter --> Drive
     Shell -->|"transitional storage calls"| Storage
 ```
 
@@ -325,22 +327,27 @@ Sheets, gspread, Streamlit, or infrastructure. An adapter implements the
 contract and depends on the existing backend; the composition root is the
 place where those implementations are selected and connected.
 
-`assemble_application_services(profile_key, *, ledger_repository,
-account_repository, payee_repository, tag_repository)` builds a frozen
-`ApplicationServices` from explicitly supplied repositories. Reference
-repositories may be omitted for a partial graph in tools or tests; the
-production composition always supplies all three.
+`assemble_application_services` builds a frozen `ApplicationServices` from
+explicitly supplied repositories and a document store. Its setup repository is
+required; extracted capabilities are optional for incremental composition and
+setup-only callers. Receipt metadata and byte storage must be supplied together.
 `create_sheets_application(profile_key, secrets)` requires a
 nonempty selected profile key, selects that profile's settings from the
 deployment configuration, constructs one `GoogleSheetsStorage`, and wraps it
-with the setup and reference-data repository adapters. Its frozen
-`SheetsApplication` result
+with capability-specific adapters for setup, reference data, reporting, mileage, and receipt
+relationships. Its frozen `SheetsApplication` result
 contains the neutral `services` and the same exact `legacy_storage` instance.
 The shell caches this composition using the selected profile, implementation
 version, local configuration revision, and the supplied configuration snapshot.
 Assembly consumes the same snapshot as the shell's workbook identity and page
 settings, rather than reloading configuration during construction. A changed
-snapshot rebuilds both Sheets and lazy Drive clients even if the local revision is unchanged. Drive callbacks consume the same snapshot as page folder settings. Default initialization is scoped to profile and workbook identity; downstream export revisions also include the workbook identity.
+snapshot rebuilds both Sheets and lazy Drive clients even if the local revision
+is unchanged. Drive callbacks consume the same snapshot as page folder settings.
+Default initialization is scoped to profile and workbook identity; downstream
+export revisions also include the workbook identity. The receipt byte adapter
+is bound to the selected profile and receipt folder and uses the same cached
+Drive client as page callbacks. Assembling services never performs OAuth or a
+document request.
 
 Renderer contexts accept the selected profile's services alongside their
 existing storage dependency. Their optional services field supports the
@@ -355,7 +362,7 @@ The ownership conventions for subsequent slices are:
 | --- | --- |
 | Application workflows | `tabula_rasa/application/` owns orchestration against explicit repository capabilities. Services return application results and leave widget state and presentation to renderers. |
 | Domain rules | Reuse the existing pure modules, including `hierarchy.py`, `journal.py`, `mixed_use.py`, `recurrence.py`, `depreciation.py`, and the accounting/reporting modules. Extract remaining rules into cohesive domain owners as their workflows move; a new package is unnecessary merely to relocate already independent code. |
-| Repository contracts | `application/contracts.py` declares only capabilities needed by implemented services. Contracts describe domain/application operations and results, rather than worksheet names, row positions, Google requests, or a repository for every record type. |
+| Repository contracts | `application/contracts.py` and capability-specific contract modules declare only capabilities needed by implemented services. Contracts describe domain/application operations and results, rather than worksheet names, row positions, Google requests, or a repository for every record type. |
 | Infrastructure | `tabula_rasa/infrastructure/` implements contracts by adapting the supported backend. Sheets serialization, API batching, locks, caches, bounded uncertain-write readback, and safe retry policy remain with the existing storage implementation. |
 | DTOs | Small result types such as `LedgerInfo` live with the application service that owns them. Use explicit fields for the service's result without exposing workbook objects, credentials, worksheet rows, or backend request payloads. Existing dictionary records remain transitional where their domain has not been extracted. |
 | Composition and transition | `composition.py` owns concrete backend construction and the typed `SheetsApplication` bridge. Neutral services do not accept or forward arbitrary legacy-storage methods. |
@@ -416,17 +423,65 @@ and renderer owners first. Define the smallest contract for that workflow,
 reuse its pure domain rules, adapt the existing Sheets behavior, and move the
 affected renderer calls to the service. Keep success, relevant failure,
 profile isolation, and recovery coverage while removing duplicate ownership.
-Reporting (#229), mileage (#234), and transaction/journal work are subsequent
-slices, rather than additional responsibilities of the setup or reference-data
-services. Google Sheets remains the supported active ledger throughout this
-transition.
+Reference data (#226) has its own service owners. Transaction/journal work remains
+a separate slice rather than an additional responsibility of the setup service. Google Sheets
+remains the supported active ledger throughout this transition.
+
+#### Reporting, documents, and mileage slices
+
+Issues [#229](https://github.com/Roklion/Project_Tabula_Rasa/issues/229),
+[#233](https://github.com/Roklion/Project_Tabula_Rasa/issues/233), and
+[#234](https://github.com/Roklion/Project_Tabula_Rasa/issues/234) extend the
+foundation with three independent capabilities:
+
+| Capability | Application owner | Current infrastructure adapter |
+| --- | --- | --- |
+| Ledger/report queries | `ReportingService`, native date/Decimal read models, and `LedgerFilter` in `application/reporting.py` and `reporting_contracts.py` | `GoogleSheetsLedgerQueryRepository` decodes validated records and owns worksheet prefetch and cache access. |
+| Receipt relationships and document bytes | `ReceiptService`, portable metadata/references, `ReceiptRepository`, and `DocumentStore` in `application/documents.py` | `GoogleSheetsReceiptRepository` maps the current receipt cells; `GoogleDriveDocumentStore` owns opaque file locators, folder access, and provider metadata conversion. |
+| Mileage CRUD and import rules | `MileageService` and its trip/tag models in `application/mileage.py`, with the port in `mileage_contracts.py` | `GoogleSheetsMileageRepository` owns fresh mutation inputs, workbook coordination, serialization, batching, and bounded readback. |
+
+Reporting reuses `ledger_reporting.py` and `accounting_postings.py` for
+bookkeeping totals. `ledger_queries.py` owns the pure mixed ledger identity,
+date/target/tag filtering, and initial ordering; `ledger_records.py` retains
+display rows, dataframes, search, and visual sorting. Dashboard and Reports
+consume native query results. Transaction ledger reads/filtering consume the
+query service while existing mutation controllers retain their exact legacy
+expected-record snapshots until the transaction/journal slices migrate them.
+This preserves stale-write checks without re-encoding a receipt baseline.
+
+Mileage field normalization, tag rules, round-trip preparation, and QuickBooks
+classification/duplicate selection have one service owner. The public Sheets
+mileage facade delegates to that same service through its adapter. Explicit
+mileage preparation callbacks receive fresh inputs within the adapter's existing
+workbook lock; they are not a general transaction API. Maps suggestions remain
+an independent UI integration and only the reviewed mileage/text are persisted.
+
+Receipt upload preparation and the shared Add/Edit unresolved-work loop reuse
+one application owner. Session keys, widget reset, and selected-configuration
+recovery guards remain presentation concerns. Source-aware mixed-use receipt
+callers select a metadata adapter for their existing source workflow while
+sharing the same byte store. The Drive adapter delegates to the existing
+stable-identity reconciliation, filename, and integrity implementation;
+the extraction introduces no additional retries, rollback, or schema changes.
+
+The services can be exercised with small repository/document-store fakes
+without importing Streamlit, pandas, Sheets, or Drive. A future HTTP caller
+supplies application inputs, and a future datastore/object store implements the
+ports; neither requires moving bookkeeping rules into endpoint handlers.
+PostgreSQL, commercial authorization, object-storage vendor selection, and
+new UI/report behavior are outside these slices. Remaining concrete page
+coupling closes incrementally under #219, with #235 as its final boundary gate.
 
 ## Receipt boundary
 
 Receipt bytes live in the selected profile's Google Drive Receipts folder.
 Transactions store stable receipt references in the profile's Transactions
-worksheet. A reference contains the Drive identity and integrity metadata
-needed for display, retry, backup inventory, and recovery.
+worksheet. The application reference separates portable document identity and
+integrity metadata from an opaque storage locator and optional display URL.
+The current Sheets adapter encodes those values into the existing Drive-aware
+receipt cell format for backup/recovery compatibility; those cells do not
+define the application contract. Historical integrity backfill and Synology
+restore retain their existing explicit recovery owners.
 
 The transaction-creation workflow validates every selected file, saves the
 transaction first, then uploads and links receipts. If receipt work is partial,
@@ -515,9 +570,9 @@ local-only recovery metadata.
 | Area | Primary implementation |
 | --- | --- |
 | Streamlit shell and routing | tabula_rasa/app.py |
-| Application services, repository contracts, and setup DTO | `tabula_rasa/application/` |
+| Setup, reporting, document/receipt, and mileage services and contracts | `tabula_rasa/application/` |
 | Selected-profile service composition and transitional storage bridge | `tabula_rasa/composition.py` |
-| Sheets adapter for application contracts | `tabula_rasa/infrastructure/google_sheets.py` |
+| Sheets and Drive adapters for application contracts | `tabula_rasa/infrastructure/` |
 | Shared presentation tokens and CSS | tabula_rasa/presentation.py |
 | Profile selection and readiness | tabula_rasa/business_profiles.py and tabula_rasa/profile_readiness.py |
 | Local profile persistence | tabula_rasa/local_profile_store.py |

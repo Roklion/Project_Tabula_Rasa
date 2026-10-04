@@ -4,13 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from collections.abc import Sequence
-from typing import Any
 import streamlit as st
-from tabula_rasa.google_drive import GoogleDriveError
+from tabula_rasa.application.documents import DocumentError
+from tabula_rasa.infrastructure.receipt_context import receipt_service_for_context
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
-from tabula_rasa.receipt_manifest import ReceiptManifestError
-from tabula_rasa.receipt_manifest import receipt_reference_from_drive_file
-from tabula_rasa.storage import decode_receipt_references
 from tabula_rasa.storage import StorageError
 from .receipt_workflows import (
     _mark_workbook_data_changed,
@@ -48,19 +45,7 @@ def render_receipts(
             "Account settings page."
         )
         return
-    try:
-        receipt_drive = context.get_drive_client(
-            context.profile_key,
-            context.configuration_revision,
-        )
-    except GoogleDriveError as error:
-        _render_editor_receipt_recovery(
-            context,
-            edit_id,
-            receipt_folder,
-        )
-        st.error(str(error))
-        return
+    receipts = receipt_service_for_context(context)
 
     scope = f"{context.profile_key}-{edit_id}"
     candidate_key = f"receipt-unlink-candidate-{scope}"
@@ -70,22 +55,20 @@ def render_receipts(
         st.success(str(notice))
 
     try:
-        receipt_references = decode_receipt_references(
-            selected.get("receipt_references", "")
-        )
+        receipt_references = receipts.references(edit_id)
     except StorageError as error:
         st.error(str(error))
         return
 
-    receipt_ids = {str(reference["id"]) for reference in receipt_references}
+    receipt_ids = {reference.storage_key for reference in receipt_references}
     if st.session_state.get(candidate_key) not in receipt_ids:
         st.session_state.pop(candidate_key, None)
     for reference in receipt_references:
-        receipt_id = str(reference["id"])
-        name = str(reference["name"])
+        receipt_id = reference.storage_key
+        name = reference.metadata.stored_filename
         receipt_column, delete_column = st.columns([4, 1])
         with receipt_column:
-            st.link_button(name, f"https://drive.google.com/open?id={receipt_id}")
+            st.link_button(name, reference.open_url)
         with delete_column:
             if st.button(
                 "Remove receipt",
@@ -115,10 +98,7 @@ def render_receipts(
             width="stretch",
         ):
             try:
-                context.storage.unlink_transaction_receipt(
-                    edit_id,
-                    file_id=receipt_id,
-                )
+                receipts.unlink(edit_id, receipt_id)
             except StorageError as error:
                 unlink_error.error(f"Receipt reference was not removed. {error}")
             else:
@@ -134,38 +114,13 @@ def render_receipts(
                 )
                 st.rerun()
 
-    referenced_receipt_ids: set[str] = set()
     try:
-        for transaction in all_transactions:
-            referenced_receipt_ids.update(
-                str(reference["id"])
-                for reference in decode_receipt_references(
-                    transaction.get("receipt_references", "")
-                )
-            )
-    except StorageError as error:
-        st.error(f"Receipt references could not be read. {error}")
-        return
-
-    try:
-        profile_receipts = receipt_drive.list_profile_receipts(
-            profile_key=context.profile_key,
-            folder_id=str(receipt_folder["id"]),
-        )
-    except GoogleDriveError as error:
+        inventory = receipts.unreferenced()
+    except (DocumentError, StorageError) as error:
         st.error(f"Unreferenced Google Drive receipts could not be listed. {error}")
         return
-
-    unreferenced_receipts: list[dict[str, Any]] = []
-    receipts_needing_integrity = 0
-    for receipt in profile_receipts:
-        receipt_id = str(receipt.get("id", ""))
-        if not receipt_id or receipt_id in referenced_receipt_ids:
-            continue
-        try:
-            unreferenced_receipts.append(receipt_reference_from_drive_file(receipt))
-        except ReceiptManifestError:
-            receipts_needing_integrity += 1
+    unreferenced_receipts = inventory.documents
+    receipts_needing_integrity = inventory.needing_integrity
     if receipts_needing_integrity:
         st.warning(
             f"{receipts_needing_integrity} receipt(s) need integrity metadata "
@@ -176,12 +131,12 @@ def render_receipts(
         return
 
     unreferenced_by_id = {
-        str(receipt["id"]): receipt for receipt in unreferenced_receipts
+        receipt.storage_key: receipt for receipt in unreferenced_receipts
     }
     existing_receipt_id = st.selectbox(
         "Unreferenced receipt",
         list(unreferenced_by_id),
-        format_func=lambda file_id: unreferenced_by_id[file_id]["name"],
+        format_func=lambda file_id: unreferenced_by_id[file_id].metadata.stored_filename,
         key=f"receipt-existing-select-{scope}",
         help=(
             "App-managed files in this profile's receipt folder that are not "
@@ -192,11 +147,8 @@ def render_receipts(
     if st.button("Link selected receipt", key=f"receipt-existing-link-{scope}"):
         existing_receipt = unreferenced_by_id[existing_receipt_id]
         try:
-            context.storage.link_transaction_receipt(
-                edit_id,
-                reference=existing_receipt,
-            )
-        except StorageError as error:
+            receipts.link(edit_id, existing_receipt)
+        except (DocumentError, StorageError) as error:
             link_error.error(f"The receipt could not be linked. {error}")
         else:
             _mark_workbook_data_changed(context)
@@ -206,6 +158,6 @@ def render_receipts(
                 existing_receipt,
             )
             st.session_state[notice_key] = (
-                f"Receipt linked: {existing_receipt['name']}"
+                f"Receipt linked: {existing_receipt.metadata.stored_filename}"
             )
             st.rerun()

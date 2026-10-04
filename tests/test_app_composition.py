@@ -65,8 +65,8 @@ def test_account_renderer_uses_the_selected_profile_service_for_create_and_edit(
 
     repository = AccountRepository()
 
-    def compose(profile_key, secrets):
-        application = create_sheets_application(profile_key, secrets)
+    def compose(profile_key, secrets, **kwargs):
+        application = create_sheets_application(profile_key, secrets, **kwargs)
         return replace(application, services=replace(
             application.services, accounts=AccountService(repository)
         ))
@@ -262,9 +262,9 @@ def test_assembly_and_renderers_share_one_snapshot_and_cache_rebuilds_on_change(
         patch("tabula_rasa.composition.create_sheets_application", wraps=create_sheets_application) as compose,
         authenticated_app(storages=storages, profiles=profiles) as app,
     ):
-        def change_during_assembly(key, snapshot):
+        def change_during_assembly(key, snapshot, **composition_options):
             configuration.return_value = updated
-            return create_sheets_application(key, snapshot)
+            return create_sheets_application(key, snapshot, **composition_options)
 
         # Rebuild the graph while simulating a settings replacement after the
         # shell has loaded its snapshot. Assembly must not read it again.
@@ -279,6 +279,7 @@ def test_assembly_and_renderers_share_one_snapshot_and_cache_rebuilds_on_change(
         assert context.services.profile_key == "north"
         assert context.profile_secrets["spreadsheet_id"] == "north-sheet"
         assert context.profile_secrets["google_drive"] == profiles["north"]["google_drive"]
+        assert context.services.receipts.document_scope == ""
         # Lazy Drive creation must retain the original snapshot even though
         # the next configuration read would now return replacement settings.
         original_drive = context.get_drive_client("north", context.configuration_revision)
@@ -295,6 +296,7 @@ def test_assembly_and_renderers_share_one_snapshot_and_cache_rebuilds_on_change(
         changed = render.call_args.args[0]
         assert changed.storage is storages["replacement-sheet"]
         assert changed.profile_secrets["google_drive"] == replacement["google_drive"]
+        assert changed.services.receipts.document_scope == "new-folder"
         assert changed.services is not before
         assert compose.call_count == calls + 1
         assert changed.configuration_revision != old_revision

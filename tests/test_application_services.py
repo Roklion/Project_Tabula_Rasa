@@ -48,6 +48,17 @@ def test_services_use_only_the_supplied_repository() -> None:
     assert repository.calls == 2  # The service introduces no retries.
 
 
+@pytest.mark.parametrize("missing", ["metadata", "documents"])
+def test_receipt_capability_requires_both_ports(missing: str) -> None:
+    with pytest.raises(ValueError, match="both metadata and document storage"):
+        assemble_application_services(
+            "north",
+            ledger_repository=FakeLedgerSetupRepository("North ledger"),
+            receipt_repository=None if missing == "metadata" else object(),
+            document_store=None if missing == "documents" else object(),
+        )
+
+
 def test_sheets_composition_selects_profiles_and_shares_the_legacy_facade() -> None:
     north_workbook, south_workbook = FakeWorkbook(), FakeWorkbook()
     north_workbook.title = "North ledger"
@@ -134,22 +145,59 @@ class RejectInfrastructure(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
         blocked = (
             'tabula_rasa.storage', 'tabula_rasa.infrastructure',
-            'tabula_rasa.composition', 'gspread', 'google', 'streamlit', 'pandas',
+            'tabula_rasa.composition', 'tabula_rasa.google_drive',
+            'tabula_rasa.page_renderers', 'gspread', 'google', 'streamlit', 'pandas',
         )
         if any(fullname == name or fullname.startswith(name + '.') for name in blocked):
             raise AssertionError('Application imported infrastructure: ' + fullname)
 
 sys.meta_path.insert(0, RejectInfrastructure())
 from tabula_rasa.application import LedgerInfo, assemble_application_services
+from tabula_rasa.application.documents import ReceiptInventory
+from tabula_rasa.application.reporting_contracts import LedgerSnapshot
 
 class Repository:
     ledger_name = 'Synthetic ledger'
     def ensure_defaults(self):
         return {'accounts': 0, 'categories': 0}
 
-services = assemble_application_services('test', ledger_repository=Repository())
+class Queries:
+    def read_ledger(self, *, force_refresh=False):
+        return LedgerSnapshot()
+
+class Mileage:
+    def list_trips(self, *, fresh=False):
+        return ()
+    def list_tags(self, *, fresh=False):
+        return ()
+
+class Receipts:
+    def associations(self, profile_key, *, fresh=False):
+        assert profile_key == 'test'
+        return ()
+    def references(self, profile_key, transaction_id, *, fresh=False):
+        assert profile_key == 'test'
+        return ()
+
+class Documents:
+    def inventory(self, profile_key, *, fresh=False):
+        assert profile_key == 'test'
+        return ReceiptInventory(())
+
+services = assemble_application_services(
+    'test', ledger_repository=Repository(), reporting_repository=Queries(),
+    mileage_repository=Mileage(), receipt_repository=Receipts(),
+    document_store=Documents(),
+)
 assert services.ledger.get_info() == LedgerInfo(name='Synthetic ledger')
 assert services.ledger.ensure_defaults() == {'accounts': 0, 'categories': 0}
+assert services.reporting.query_ledger().entries == ()
+assert services.reporting.period_report(services.reporting.read_ledger()).totals == {
+    'income': 0.0, 'expenses': 0.0, 'net': 0.0,
+}
+assert services.mileage.list_trips() == ()
+assert services.receipts.references('transaction') == ()
+assert services.receipts.unreferenced().documents == ()
 """
     result = subprocess.run(
         [sys.executable, "-c", code],

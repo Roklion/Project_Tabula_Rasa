@@ -9,6 +9,7 @@ import pandas as pd
 import streamlit as st
 
 from tabula_rasa.page_renderers.data_backup.context import DataBackupContext
+from tabula_rasa.page_renderers.mileage_service import mileage_action, mileage_service
 from tabula_rasa.quickbooks_import import (
     REQUIRED_COLUMNS as QUICKBOOKS_REQUIRED_COLUMNS,
     general_ledger_rows,
@@ -227,9 +228,9 @@ def render_imports(context: DataBackupContext) -> None:
                 )
             else:
                 mileage_records = mileage_incoming.to_dict(orient="records")
-                mileage_preview = context.storage.preview_quickbooks_mileage(
-                    mileage_records
-                )
+                mileage_preview = mileage_action(
+                    lambda: mileage_service(context).preview_quickbooks_mileage(mileage_records)
+                ).as_record()
                 mileage_summary = mileage_preview["summary"]
                 c1, c2, c3, c4 = st.columns(4)
                 c1.metric("Mileage ready", mileage_summary["ready"])
@@ -280,9 +281,9 @@ def render_imports(context: DataBackupContext) -> None:
                         context.confirmed_write(
                             "import_quickbooks_mileage",
                             {"rows": mileage_records},
-                            lambda: context.storage.import_quickbooks_mileage(
+                            lambda: mileage_action(lambda: mileage_service(context).import_quickbooks_mileage(
                                 mileage_records
-                            ),
+                            )),
                             lambda imported: f"Imported {len(imported)} mileage trips.",
                             report_error=import_error.error,
                         )
