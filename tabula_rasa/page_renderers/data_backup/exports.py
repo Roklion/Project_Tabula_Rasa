@@ -30,11 +30,14 @@ def prepared_exports_key(
     )
 
 
-def prepare_csv_exports(storage: GoogleSheetsStorage) -> dict[str, bytes]:
+def prepare_csv_exports(
+    storage: GoogleSheetsStorage,
+    *,
+    accounts: list[dict],
+    tags: list[dict],
+) -> dict[str, bytes]:
     """Build profile-local transaction and mileage CSV snapshots with Tags."""
-    accounts = storage.list_accounts(active_only=False)
     categories = storage.list_categories()
-    tags = storage.list_tags()
     transactions = storage.list_transactions()
     journals = storage.list_journal_entries()
     mileage_trips = storage.list_mileage_trips()
@@ -108,7 +111,11 @@ def render_exports(context: DataBackupContext) -> None:
                 backup_error = str(error)
                 receipt_manifest = None
             try:
-                csv_exports = prepare_csv_exports(context.storage)
+                csv_exports = prepare_csv_exports(
+                    context.storage,
+                    accounts=context.services.accounts.list(active_only=False),
+                    tags=context.services.tags.list(),
+                )
             except StorageError as error:
                 prepare_error.error(str(error))
                 prepared_exports = None

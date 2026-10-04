@@ -8,7 +8,12 @@ from tabula_rasa.business_profiles import (
     BusinessProfileConfigurationError,
     select_profile_secrets,
 )
-from tabula_rasa.infrastructure.google_sheets import GoogleSheetsLedgerSetupRepository
+from tabula_rasa.infrastructure.google_sheets import (
+    GoogleSheetsAccountRepository,
+    GoogleSheetsLedgerSetupRepository,
+    GoogleSheetsPayeeRepository,
+    GoogleSheetsTagRepository,
+)
 from tabula_rasa.storage import GoogleSheetsStorage
 
 
@@ -40,5 +45,8 @@ def create_sheets_application(
     services = assemble_application_services(
         profile_key,
         ledger_repository=GoogleSheetsLedgerSetupRepository(storage),
+        account_repository=GoogleSheetsAccountRepository(storage),
+        payee_repository=GoogleSheetsPayeeRepository(storage),
+        tag_repository=GoogleSheetsTagRepository(storage),
     )
     return SheetsApplication(services=services, legacy_storage=storage)

@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from collections.abc import Sequence
 from typing import Any
 from uuid import uuid4
+from tabula_rasa.reference_data import normalize_merge_ids
 from .errors import StorageConflictError
 from .errors import StorageNotFoundError
 from .errors import StorageValidationError
@@ -119,14 +120,9 @@ class TagsMixin(_ManagedMixin):
         | None = None,
     ) -> dict[str, str]:
         """Merge source tags into a target across tagged worksheet rows."""
-        target_id = _clean_text(target_tag_id, "Target tag", required=True)
-        source_ids = list(dict.fromkeys(
-            _clean_text(item, "Source tag", required=True) for item in source_tag_ids
-        ))
-        if not source_ids:
-            raise StorageValidationError("Select at least one source tag")
-        if target_id in source_ids:
-            raise StorageValidationError("The target tag cannot also be a source")
+        target_id, source_ids = normalize_merge_ids(
+            target_tag_id, source_tag_ids, "tag"
+        )
         with self._workbook_locks.ledger, self._workbook_locks.tag:
             snapshot = self._snapshot(
                 ["Tags", "Transactions", "Mileage", "MixedUseExpenses", "RecurringSchedules", "Assets"],

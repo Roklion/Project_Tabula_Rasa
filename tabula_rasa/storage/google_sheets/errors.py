@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
-class StorageError(RuntimeError):
-    """Base class for safe, user-displayable storage errors."""
+from tabula_rasa.errors import (
+    StorageConflictError,
+    StorageError,
+    StorageNotFoundError,
+    StorageValidationError,
+)
 
 class StorageUnavailableError(StorageError):
     """Raised when Google Sheets cannot complete an API operation."""
@@ -52,15 +56,6 @@ class StorageWorkbookAccessError(StorageUnavailableError):
 
 class StorageInitializationError(StorageUnavailableError):
     """Raised when an accessible workbook cannot be initialized."""
-
-class StorageValidationError(StorageError):
-    """Raised when domain data is invalid."""
-
-class StorageConflictError(StorageError):
-    """Raised when a uniqueness constraint would be violated."""
-
-class StorageNotFoundError(StorageError):
-    """Raised when an ID no longer exists."""
 
 __all__ = [
     "StorageError",

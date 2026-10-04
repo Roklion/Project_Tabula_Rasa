@@ -86,7 +86,7 @@ def _storage_with_journal(*, target_name: str) -> GoogleSheetsStorage:
 def test_prepare_csv_exports_preserves_transaction_contract_and_exports_every_journal_line() -> None:
     storage = _storage_with_journal(target_name="Clearing")
 
-    exports = prepare_csv_exports(storage)
+    exports = prepare_csv_exports(storage, accounts=storage.list_accounts(active_only=False), tags=storage.list_tags())
     transaction_columns, transactions = _csv_rows(exports["transactions"])
     journal_columns, postings = _csv_rows(exports["journals"])
 
@@ -122,8 +122,8 @@ def test_prepare_csv_exports_isolates_profiles_with_equal_journal_ids() -> None:
     north = _storage_with_journal(target_name="North Clearing")
     south = _storage_with_journal(target_name="South Clearing")
 
-    north_rows = _csv_rows(prepare_csv_exports(north)["journals"])[1]
-    south_rows = _csv_rows(prepare_csv_exports(south)["journals"])[1]
+    north_rows = _csv_rows(prepare_csv_exports(north, accounts=north.list_accounts(active_only=False), tags=north.list_tags())["journals"])[1]
+    south_rows = _csv_rows(prepare_csv_exports(south, accounts=south.list_accounts(active_only=False), tags=south.list_tags())["journals"])[1]
 
     assert [row["Entry ID"] for row in north_rows] == [
         "shared-entry-id",

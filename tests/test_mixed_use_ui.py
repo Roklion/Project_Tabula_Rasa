@@ -1040,7 +1040,7 @@ def test_mixed_use_projection_is_counted_once_across_read_paths(default_storage)
     assert len(matched) == 1
     assert matched[0]["ID"] == source["linked_transaction_id"]
 
-    exports = prepare_csv_exports(default_storage)
+    exports = prepare_csv_exports(default_storage, accounts=default_storage.list_accounts(active_only=False), tags=default_storage.list_tags())
     csv_text = exports["transactions"].decode("utf-8")
     assert csv_text.count(source["linked_transaction_id"]) == 1
     assert source["id"] not in csv_text

@@ -194,7 +194,7 @@ def render_reports(context: ReportsContext) -> None:
         transactions = context.storage.list_transactions()
         journals = context.storage.list_journal_entries()
         categories = context.storage.list_categories()
-        accounts = context.storage.list_accounts(active_only=False)
+        accounts = context.services.accounts.list(active_only=False)
     except StorageError as error:
         context.report_storage_error(error)
         render_global_footer()
