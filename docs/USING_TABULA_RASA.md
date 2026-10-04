@@ -440,17 +440,16 @@ Select a Payee or Tag row in its table before opening **Rename** or **Remove**.
 Both actions use the selected row; neither requires another record dropdown.
 
 Merging requires an explicit target, one or more source values, and an
-acknowledgement. Payee merges update transaction and asset references and both
-sides of each MixedUseExpenses source/projection pair. Tag merges update
-Transactions, Mileage, Assets, and MixedUseExpenses and remove duplicate
-associations when a row
-already has both the source and target tag. Other fields and associations are
-preserved.
+acknowledgement. Payee merges update transaction, recurring-schedule, and asset
+references and both sides of each MixedUseExpenses source/projection pair. Tag
+merges update Transactions, Mileage, recurring schedules, Assets, and
+MixedUseExpenses and remove duplicate associations when a row already has both
+the source and target tag. Other fields and associations are preserved.
 
 Removal is permanent and allowed only for an unreferenced value. If a Payee or
 Tag is still used, the page shows the fresh reference count and blocks removal;
-unassign it in the relevant transaction, mileage, or asset editor or merge it
-instead.
+unassign it in the relevant transaction, mileage, recurring, or asset editor or
+merge it instead.
 Every operation is scoped to the selected profile and reports success only
 after the Sheets write is confirmed. An uncertain response is read back once;
 only a clearly unchanged operation is retried, while a partial or unreadable
