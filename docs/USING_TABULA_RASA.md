@@ -23,6 +23,11 @@ report, receipt operation, and backup uses the selected profile. Changing
 business clears or rebuilds page-local selections and pending notices; it does
 not reuse another business's workbook state.
 
+If the profile configuration becomes invalid or changes while the selected
+ledger is being opened, the app stops before rendering a ledger page and asks
+you to reload and check the selected profile settings. It does not substitute
+another business's workbook.
+
 The current application password grants access to every configured profile. It
 does not provide per-profile user permissions. Select **Log out** to clear the
 authenticated session.

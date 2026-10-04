@@ -492,9 +492,18 @@ else:
             finally:
                 reconciled_profiles.add(reconciliation_key)
 
-    except (LocalProfileStoreError, StorageError) as error:
+    except (
+        LocalProfileStoreError,
+        BusinessProfileConfigurationError,
+        StorageError,
+    ) as error:
         if isinstance(error, StorageError):
             report_storage_error(error)
+        elif isinstance(error, BusinessProfileConfigurationError):
+            st.error(
+                "The business-profile configuration is invalid or changed. "
+                "Reload the app and check the selected profile settings."
+            )
         else:
             st.error("The local business-profile file could not be read safely.")
         render_global_footer()
