@@ -2,13 +2,18 @@
 
 from dataclasses import dataclass
 
+from .contracts import LedgerSetupRepository
+from .documents import DocumentStore, ReceiptRepository, ReceiptService
+from .ledger_setup import LedgerSetupService
+from .mileage import MileageService
+from .mileage_contracts import MileageRepository
+from .reporting import ReportingService
+from .reporting_contracts import LedgerQueryRepository
 from .contracts import (
     AccountRepository,
-    LedgerSetupRepository,
     PayeeRepository,
     TagRepository,
 )
-from .ledger_setup import LedgerSetupService
 from .reference_data import AccountService, PayeeService, TagService
 from .accounting_contracts import TransactionRepository, JournalRepository
 from .transactions import TransactionService
@@ -31,12 +36,19 @@ class ApplicationServices:
     tags: TagService | None = None
     transactions: TransactionService | None = None
     journals: JournalService | None = None
+    reporting: ReportingService | None = None
+    receipts: ReceiptService | None = None
+    mileage: MileageService | None = None
 
 
 def assemble_application_services(
     profile_key: str,
     *,
     ledger_repository: LedgerSetupRepository,
+    reporting_repository: LedgerQueryRepository | None = None,
+    receipt_repository: ReceiptRepository | None = None,
+    document_store: DocumentStore | None = None,
+    mileage_repository: MileageRepository | None = None,
     account_repository: AccountRepository | None = None,
     payee_repository: PayeeRepository | None = None,
     tag_repository: TagRepository | None = None,
@@ -50,9 +62,23 @@ def assemble_application_services(
     tags = TagService(tag_repository) if tag_repository is not None else None
     if transaction_repository is not None and (payees is None or tags is None):
         raise ValueError("Transaction services require payee and tag repositories.")
+    if (receipt_repository is None) != (document_store is None):
+        raise ValueError("Receipt services require both metadata and document storage.")
     return ApplicationServices(
         profile_key=profile_key,
         ledger=LedgerSetupService(ledger_repository),
+        reporting=(
+            ReportingService(reporting_repository)
+            if reporting_repository is not None else None
+        ),
+        receipts=(
+            ReceiptService(profile_key, receipt_repository, document_store)
+            if receipt_repository is not None and document_store is not None else None
+        ),
+        mileage=(
+            MileageService(mileage_repository)
+            if mileage_repository is not None else None
+        ),
         accounts=AccountService(account_repository)
         if account_repository is not None
         else None,

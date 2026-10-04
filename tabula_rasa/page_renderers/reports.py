@@ -19,7 +19,9 @@ from tabula_rasa.ledger_reporting import (
     monthly_performance,
     profit_and_loss,
 )
+from tabula_rasa.page_renderers.reporting_service import reporting_service
 from tabula_rasa.presentation import render_global_footer, render_page_header
+from tabula_rasa.reporting_presentation import snapshot_display_records
 from tabula_rasa.storage import GoogleSheetsStorage, StorageError
 
 
@@ -186,37 +188,43 @@ def render_reports(context: ReportsContext) -> None:
             "No transactions are included for this period."
         )
     try:
-        context.storage.prefetch_worksheets(
-            "Accounts",
-            "Categories",
-            "Transactions",
-        )
-        transactions = context.storage.list_transactions()
-        journals = context.storage.list_journal_entries()
-        categories = context.storage.list_categories()
-        accounts = context.services.accounts.list(active_only=False)
+        reporting = reporting_service(context)
+        if reporting is not None:
+            snapshot = reporting.read_ledger()
+            accounts, categories, transactions, journals = snapshot_display_records(snapshot)
+            period = reporting.period_report(snapshot, start=start, end=end)
+            summary = period.totals
+            monthly_rows = period.monthly
+            category_detail_rows = period.expense_categories
+        else:
+            # Compatibility for standalone callers; production supplies services.
+            context.storage.prefetch_worksheets("Accounts", "Categories", "Transactions")
+            transactions = context.storage.list_transactions()
+            journals = context.storage.list_journal_entries()
+            categories = context.storage.list_categories()
+            accounts = context.storage.list_accounts(active_only=False)
+            summary = profit_and_loss(
+                transactions, start=start, end=end, journals=journals, categories=categories,
+            )
+            monthly_rows = monthly_performance(
+                transactions, start=start, end=end, journals=journals, categories=categories,
+            )
+            category_detail_rows = category_activity_rollups(
+                transactions, categories, kind="Expense", start=start, end=end, journals=journals,
+            )
     except StorageError as error:
         context.report_storage_error(error)
         render_global_footer()
         st.stop()
     category_paths = hierarchy_paths(categories)
-    summary = profit_and_loss(transactions, start=start, end=end, journals=journals, categories=categories)
     with st.container(key="reports_summary_metrics"):
         a, b, c = st.columns(3, gap="small")
         a.metric("Income", money(summary["income"]))
         b.metric("Expenses", money(summary["expenses"]))
         c.metric("Net", money(summary["net"]))
     monthly = pd.DataFrame(
-        monthly_performance(transactions, start=start, end=end, journals=journals, categories=categories)
+        monthly_rows
     ).rename(columns={"month": "Month", "income": "Income", "expenses": "Expenses"})
-    category_detail_rows = category_activity_rollups(
-        transactions,
-        categories,
-        kind="Expense",
-        start=start,
-        end=end,
-        journals=journals,
-    )
     by_category = pd.DataFrame(
         [
             {"Category": row["category"], "Total": row["rollup_total"]}
@@ -285,7 +293,12 @@ def render_reports(context: ReportsContext) -> None:
     st.subheader("Balance sheet")
     st.caption("The As of date is independent from the income-and-expense period.")
     as_of = st.date_input("As of", date.today(), key="balance_sheet_date")
-    statement = balance_sheet(accounts, transactions, as_of=as_of, journals=journals, categories=categories)
+    statement = (
+        reporting.balance_sheet(snapshot, as_of=as_of)
+        if reporting is not None else balance_sheet(
+            accounts, transactions, as_of=as_of, journals=journals, categories=categories,
+        )
+    )
     with st.container(key="reports_statement_metrics"):
         asset_metric, liability_metric, equity_metric = st.columns(3)
         asset_metric.metric("Total assets", money(statement["total_assets"]))

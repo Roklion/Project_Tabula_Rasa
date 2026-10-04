@@ -7,6 +7,8 @@ from typing import Any
 
 import requests
 
+from tabula_rasa.application.documents import MAX_RECEIPT_BYTES as MAX_RECEIPT_BYTES, RECEIPT_UPLOAD_TYPES
+
 
 def _clean_text(value: object, *, maximum: int = 4096) -> str:
     text = str(value or "").strip()
@@ -44,8 +46,7 @@ DRIVE_UPLOAD_ROOT = "https://www.googleapis.com/upload/drive/v3"
 FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 STATE_MAX_AGE_SECONDS = 10 * 60
 HTTP_TIMEOUT_SECONDS = 30
-MAX_RECEIPT_BYTES = 20 * 1024 * 1024
-RECEIPT_FILE_EXTENSIONS = (".pdf", ".png", ".jpg", ".jpeg", ".webp", ".heic")
+RECEIPT_FILE_EXTENSIONS = tuple(f".{extension}" for extension in RECEIPT_UPLOAD_TYPES)
 PROFILE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,47}$")
 DRIVE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{10,}$")
 SAFE_RECEIPT_NAME_PATTERN = re.compile(r"[^A-Za-z0-9._() -]+")

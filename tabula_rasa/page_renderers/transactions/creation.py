@@ -19,12 +19,12 @@ from tabula_rasa.page_renderers.transactions.transaction_form import (
 )
 from tabula_rasa.page_renderers.transactions.receipts import (
     handle_confirmed_transaction_receipts,
-    prepare_receipt_uploads,
     receipt_creation_workflow_key,
     creation_receipt_workflow,
     render_receipt_creation_recovery,
     render_receipt_uploader,
 )
+from .receipt_workflows import prepare_receipt_uploads
 from tabula_rasa.page_renderers.transactions.recurrence_controls import (
     edit_defaults_with_pending_payload,
     render_recurrence_controls,

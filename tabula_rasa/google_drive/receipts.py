@@ -6,6 +6,11 @@ import json
 import secrets
 from typing import Any
 
+from tabula_rasa.application.documents import (
+    DocumentValidationError,
+    validate_receipt_upload as validate_document_upload,
+)
+
 from tabula_rasa.receipt_manifest import (
     DRIVE_ID_PATTERN as RECEIPT_DRIVE_ID_PATTERN,
     RECEIPT_ID_PATTERN,
@@ -17,7 +22,7 @@ from tabula_rasa.receipt_manifest import (
 
 from .client import PathName, _escape_query_value
 from .errors import (
-    DRIVE_API_ROOT, MAX_RECEIPT_BYTES, RECEIPT_FILE_EXTENSIONS,
+    DRIVE_API_ROOT, MAX_RECEIPT_BYTES,
     SAFE_RECEIPT_NAME_PATTERN, GoogleDriveAccessError, GoogleDriveConflictError,
     GoogleDriveError, _json_response,
 )
@@ -42,15 +47,10 @@ def validate_receipt_upload(
     content: bytes,
 ) -> None:
     """Validate the shared receipt upload contract before any write."""
-    filename = str(original_name or "").strip()
-    if not filename or not filename.casefold().endswith(RECEIPT_FILE_EXTENSIONS):
-        raise GoogleDriveAccessError(
-            "Receipt files must be PDF, PNG, JPG, JPEG, WEBP, or HEIC."
-        )
-    if not content or len(content) > MAX_RECEIPT_BYTES:
-        raise GoogleDriveAccessError(
-            "Receipt files must be non-empty and no larger than 20 MB."
-        )
+    try:
+        validate_document_upload(original_name, content)
+    except DocumentValidationError as error:
+        raise GoogleDriveAccessError(str(error)) from error
 
 
 def suffixed_receipt_filename(filename: str, occurrence: int) -> str:

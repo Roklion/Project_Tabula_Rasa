@@ -379,7 +379,8 @@ def test_create_transaction_cannot_interleave_management_remove(default_storage)
     assert tag["id"] in {item["id"] for item in default_storage.list_tags(active_only=False)}
 
 
-def test_mileage_edit_cannot_interleave_tag_merge(default_storage) -> None:
+def test_mileage_edit_cannot_interleave_tag_merge(default_storage, monkeypatch) -> None:
+    from tabula_rasa.application import mileage
     tag = default_storage.create_tag("In-flight")
     trip = default_storage.create_mileage_trip(
         trip_date="2026-01-01", miles="2", start_location="A", destination="B",
@@ -387,14 +388,14 @@ def test_mileage_edit_cannot_interleave_tag_merge(default_storage) -> None:
     )
     entered = Event()
     release = Event()
-    original = default_storage._prepare_mileage_trip
+    original = mileage.prepare_mileage_trip
 
     def blocked_prepare(*args, **kwargs):
         entered.set()
         release.wait(timeout=5)
         return original(*args, **kwargs)
 
-    default_storage._prepare_mileage_trip = blocked_prepare
+    monkeypatch.setattr(mileage, "prepare_mileage_trip", blocked_prepare)
     writer = Thread(
         target=lambda: default_storage.edit_mileage_trip(
             trip["id"], notes="edited", tag_ids=[tag["id"]]
@@ -415,18 +416,19 @@ def test_mileage_edit_cannot_interleave_tag_merge(default_storage) -> None:
     assert done.is_set()
 
 
-def test_mileage_import_cannot_interleave_management_remove(default_storage) -> None:
+def test_mileage_import_cannot_interleave_management_remove(default_storage, monkeypatch) -> None:
+    from tabula_rasa.application import mileage
     tag = default_storage.create_tag("Import lock")
     entered = Event()
     release = Event()
-    original = default_storage._prepare_mileage_trip
+    original = mileage.prepare_mileage_trip
 
     def blocked_prepare(*args, **kwargs):
         entered.set()
         release.wait(timeout=5)
         return original(*args, **kwargs)
 
-    default_storage._prepare_mileage_trip = blocked_prepare
+    monkeypatch.setattr(mileage, "prepare_mileage_trip", blocked_prepare)
     rows = [
         {
             "Trip Date": "07/20/2026",

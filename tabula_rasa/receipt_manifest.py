@@ -8,10 +8,11 @@ from collections.abc import Iterable, Mapping
 from datetime import datetime
 from typing import Any
 
+from tabula_rasa.application.documents import MAX_RECEIPT_REFERENCES
+
 
 RECEIPT_MANIFEST_SCHEMA_VERSION = 1
 MAX_RECEIPT_MANIFEST_BYTES = 20 * 1024 * 1024
-MAX_RECEIPT_REFERENCES = 100
 PROFILE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,47}$")
 DRIVE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{10,}$")
 RECEIPT_ID_PATTERN = re.compile(r"^[a-f0-9]{32}$")

@@ -8,12 +8,14 @@ from collections.abc import Sequence
 from datetime import date
 import hashlib
 import streamlit as st
+from tabula_rasa.application.reporting_contracts import LedgerFilter
 from tabula_rasa.hierarchy import ordered_accounts
 from tabula_rasa.ledger_records import (
     combine_ledger_entries, filter_ledger_entries, flatten_ledger_entries,
     is_journal, ledger_summary_frame, search_ledger_entries, selected_parent_ids,
     sort_ledger_entries,
 )
+from tabula_rasa.page_renderers.reporting_service import reporting_service
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
 from tabula_rasa.page_renderers.transactions.receipts import clear_missing_editor_receipt_recoveries
 from tabula_rasa.page_renderers.transactions.receipts import editor_receipt_recovery_active
@@ -184,10 +186,26 @@ def render_ledger(
     )
     mode = mode or "Edit"
     try:
-        all_transactions = (
-            context.services.transactions.list(fresh=True)
-            if editor_receipt_recovery_active(context)
-            else context.services.transactions.list()
+        reporting = reporting_service(context)
+        refresh = editor_receipt_recovery_active(context)
+        query = (
+            reporting.query_ledger(
+                LedgerFilter(
+                    start=start, end=end,
+                    kind=None if filter_type == "All" else filter_type,
+                    account_ids=tuple(selected_account_ids),
+                    category_ids=tuple(value for kind, value in selected_targets if kind == "category"),
+                    tag_ids=tuple(selected_tag_ids),
+                ),
+                force_refresh=refresh,
+            )
+            if reporting is not None else None
+        )
+        # Edit/copy/bulk still require exact transaction mutation baselines.
+        # Reuse the adapter-populated cache; do not reencode receipt cells or
+        # introduce another remote read after the query has refreshed them.
+        all_transactions = context.services.transactions.list(
+            fresh=refresh and query is None,
         )
         recovery_notices = clear_missing_editor_receipt_recoveries(
             context,
@@ -197,24 +215,19 @@ def render_ledger(
             st.warning(notice)
         journal_entries = context.services.journals.list()
         all_entries = combine_ledger_entries(all_transactions, journal_entries)
-        structured_transactions = filter_ledger_entries(
-            all_entries,
-            start=start,
-            end=end,
-            kind=None if filter_type == "All" else filter_type,
-            targets=selected_targets,
-            tag_ids=selected_tag_ids,
-        )
-        if selected_tag_ids:
-            selected_tag_id_set = set(selected_tag_ids)
+        if query is not None:
+            all_by_id = {entry["id"]: entry for entry in all_entries}
+            # Another session may have invalidated the shared cache after the
+            # query read. A deleted entry has no current mutation baseline.
             structured_transactions = [
-                transaction
-                for transaction in structured_transactions
-                if selected_tag_id_set.intersection(
-                    str(tag_id)
-                    for tag_id in transaction.get("tag_ids", [])
-                )
+                all_by_id[entry.id] for entry in query.entries if entry.id in all_by_id
             ]
+        else:
+            structured_transactions = filter_ledger_entries(
+                all_entries, start=start, end=end,
+                kind=None if filter_type == "All" else filter_type,
+                targets=selected_targets, tag_ids=selected_tag_ids,
+            )
     except StorageError as error:
         context.report_storage_error(error)
         render_error_footer()

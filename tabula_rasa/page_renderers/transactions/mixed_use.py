@@ -34,7 +34,6 @@ from tabula_rasa.page_renderers.transactions.transaction_copy import (
 from tabula_rasa.page_renderers.transactions.receipts import (
     clear_receipt_creation_recovery,
     handle_confirmed_transaction_receipts,
-    prepare_receipt_uploads,
     prepare_editor_receipt_uploads,
     render_receipt_creation_recovery,
     render_receipt_uploader,
@@ -42,6 +41,7 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     creation_receipt_workflow,
     receipt_editor_workflow_key,
 )
+from .receipt_workflows import prepare_receipt_uploads
 from tabula_rasa.storage import (
     StorageConflictError,
     StorageError,

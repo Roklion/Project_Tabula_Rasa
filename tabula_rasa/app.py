@@ -130,8 +130,14 @@ def get_application(
     # including the transitional facade, to the selected business. Hash the
     # supplied snapshot too so a cache hit cannot pair a different graph with
     # the shell's profile/workbook/receipt settings.
-    del implementation_version, configuration_revision
-    return create_sheets_application(profile_key, configuration)
+    del implementation_version
+    return create_sheets_application(
+        profile_key,
+        configuration,
+        drive_client_factory=lambda: get_drive_client(
+            profile_key, configuration_revision, configuration=configuration,
+        ),
+    )
 
 
 def report_storage_error(error: StorageError) -> None:

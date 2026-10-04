@@ -16,6 +16,7 @@ from .mileage_form_shared import (
     validate_mileage_draft,
 )
 from .mileage_routing import _route_key
+from .mileage_service import mileage_action, mileage_service
 
 if TYPE_CHECKING:
     from .mileage import MileageContext
@@ -83,12 +84,12 @@ def render_add_mileage_form(context: MileageContext, tags: object) -> None:
             else "create_mileage_trip",
             payload,
             (
-                lambda: context.storage.create_mileage_round_trip(
+                lambda: mileage_action(lambda: mileage_service(context).create_round_trip(
                     **trip_data, return_miles=draft["return_miles"],
-                )
+                ))
             )
             if draft["round_trip"]
-            else lambda: context.storage.create_mileage_trip(**trip_data),
+            else lambda: mileage_action(lambda: mileage_service(context).create_trip(**trip_data)),
             "Round trip saved as two mileage entries."
             if draft["round_trip"]
             else "Mileage trip saved.",

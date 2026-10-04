@@ -20,6 +20,7 @@ from .mileage_form_shared import (
     render_mileage_fields,
     validate_mileage_draft,
 )
+from .mileage_service import mileage_action, mileage_service
 
 if TYPE_CHECKING:
     from .mileage import MileageContext
@@ -179,7 +180,9 @@ def render_mileage_ledger(
     )
     selected_tag_ids = set(selected_tag_names)
     try:
-        trips = context.storage.list_mileage_trips(start=start, end=end)
+        trips = [trip.as_record() for trip in mileage_action(
+            lambda: mileage_service(context).list_trips(start=start, end=end)
+        )]
         if selected_tag_ids:
             trips = [
                 trip
@@ -287,10 +290,10 @@ def render_mileage_ledger(
                 context.confirmed_write(
                     "edit_mileage_trip",
                     payload,
-                    lambda: context.storage.edit_mileage_trip(
+                    lambda: mileage_action(lambda: mileage_service(context).edit_trip(
                         edit_id,
                         **trip_data,
-                    ),
+                    )),
                     "Mileage trip updated.",
                     on_success=lambda: schedule_tag_selector_reset(
                         f"edit_mileage_trip_tag_ids_{edit_widget_scope}"
@@ -304,7 +307,7 @@ def render_mileage_ledger(
                 context.confirmed_write(
                     "delete_mileage_trip",
                     {"id": edit_id},
-                    lambda: context.storage.delete_mileage_trip(edit_id),
+                    lambda: mileage_action(lambda: mileage_service(context).delete_trip(edit_id)),
                     "Mileage trip deleted.",
                     report_error=edit_error.error,
                 )
