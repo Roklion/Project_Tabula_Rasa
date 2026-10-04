@@ -23,6 +23,11 @@ report, receipt operation, and backup uses the selected profile. Changing
 business clears or rebuilds page-local selections and pending notices; it does
 not reuse another business's workbook state.
 
+Ledger initialization, lazy Drive clients, and page settings use one configuration snapshot. Switching workbooks initializes its defaults and scopes prepared exports to the new workbook.
+Configuration changes take effect together on the next rerun. If the selected
+profile cannot be resolved during initialization, the app stops and asks you
+to reload and check its settings; it does not substitute another workbook.
+
 The current application password grants access to every configured profile. It
 does not provide per-profile user permissions. Select **Log out** to clear the
 authenticated session.

@@ -8,6 +8,7 @@ from datetime import date
 import streamlit as st
 import pandas as pd
 
+from tabula_rasa.application.services import ApplicationServices
 from tabula_rasa.hierarchy import ordered_accounts
 from tabula_rasa.ledger_presentation import balances_frame, money
 from tabula_rasa.ledger_records import combine_ledger_entries, ledger_summary_frame
@@ -45,6 +46,7 @@ class DashboardContext:
 
     profile_key: str
     storage: GoogleSheetsStorage
+    services: ApplicationServices | None = None
 
 
 def _sorted_dashboard_balances(

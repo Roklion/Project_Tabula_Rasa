@@ -10,6 +10,7 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from tabula_rasa.application.services import ApplicationServices
 from tabula_rasa.storage import GoogleSheetsStorage, StorageError
 from tabula_rasa.storage.google_sheets import _normalize_tag_ids
 from .table_selection import clear_selected_table_record, selected_table_record
@@ -21,6 +22,7 @@ class PayeesTagsContext:
     storage: GoogleSheetsStorage
     confirmed_write: Callable[..., None]
     report_storage_error: Callable[[StorageError], None]
+    services: ApplicationServices | None = None
 
 
 def _name_map(records: list[dict[str, str]]) -> dict[str, dict[str, str]]:

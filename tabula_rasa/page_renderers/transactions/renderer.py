@@ -133,5 +133,6 @@ def render_transactions(context: TransactionsContext) -> None:
                     storage=context.storage,
                     confirmed_write=context.confirmed_write,
                     report_storage_error=context.report_storage_error,
+                    services=context.services,
                 )
             )

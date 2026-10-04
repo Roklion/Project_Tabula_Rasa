@@ -27,6 +27,24 @@ from tests.fakes import FakeWorkbook
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
+def _imports_app_bootstrap(tree: ast.AST) -> bool:
+    """Match the executable app module without rejecting application services."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import) and any(
+            alias.name == "tabula_rasa.app" for alias in node.names
+        ):
+            return True
+        if isinstance(node, ast.ImportFrom) and (
+            node.module == "tabula_rasa.app"
+            or (
+                node.module == "tabula_rasa"
+                and any(alias.name == "app" for alias in node.names)
+            )
+        ):
+            return True
+    return False
+
+
 @pytest.fixture(autouse=True)
 def isolate_local_profiles(
     profile_store_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -57,8 +75,8 @@ def test_data_backup_import_is_side_effect_free_and_uses_explicit_context() -> N
     )
     for path in package_path.glob("*.py"):
         source = path.read_text(encoding="utf-8")
-        assert "tabula_rasa.app" not in source
         tree = ast.parse(source)
+        assert not _imports_app_bootstrap(tree)
         assert not any(
             isinstance(node, ast.Expr)
             and isinstance(node.value, ast.Call)
@@ -99,8 +117,8 @@ def test_extracted_page_imports_are_bootstrap_free_and_one_way() -> None:
         module_name = ".".join(relative.parts)
         module_names.append(module_name)
         source = path.read_text(encoding="utf-8")
-        assert "tabula_rasa.app" not in source
         tree = ast.parse(source)
+        assert not _imports_app_bootstrap(tree)
         assert not any(
             isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)
             for node in tree.body

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
+from tabula_rasa.application.services import ApplicationServices
 from tabula_rasa.storage import GoogleSheetsStorage, StorageError
 
 
@@ -22,3 +23,4 @@ class TransactionsContext:
     reset_widget_state_if_requested: Callable[..., None]
     schedule_widget_reset: Callable[[str], None]
     mark_workbook_data_changed: Callable[[], None] | None = None
+    services: ApplicationServices | None = None

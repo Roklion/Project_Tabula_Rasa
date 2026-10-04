@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import pandas as pd
 import streamlit as st
 
+from tabula_rasa.application.services import ApplicationServices
 from tabula_rasa.hierarchy import (
     eligible_parent_ids,
     has_hierarchy_children,
@@ -55,6 +56,7 @@ class AccountsContext:
     report_storage_error: Callable[[StorageError], None]
     reset_widget_state_if_requested: Callable[..., None]
     schedule_widget_reset: Callable[[str], None]
+    services: ApplicationServices | None = None
 
 
 def _account_frame(

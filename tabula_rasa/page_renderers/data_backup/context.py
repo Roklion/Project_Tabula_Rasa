@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from tabula_rasa.application.services import ApplicationServices
 from tabula_rasa.google_drive import GoogleDriveClient
 from tabula_rasa.storage import GoogleSheetsStorage, StorageError
 
@@ -21,3 +22,4 @@ class DataBackupContext:
     receipt_manifest_for_backup: Callable[..., dict[str, object]]
     confirmed_write: Callable[..., None]
     report_storage_error: Callable[[StorageError], None]
+    services: ApplicationServices | None = None

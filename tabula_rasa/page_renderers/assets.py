@@ -11,6 +11,7 @@ import json
 import pandas as pd
 import streamlit as st
 
+from tabula_rasa.application.services import ApplicationServices
 from tabula_rasa.depreciation import STRAIGHT_LINE_METHOD
 from tabula_rasa.storage.google_sheets.depreciation_posting import (
     asset_schedule,
@@ -35,6 +36,7 @@ class AssetsContext:
     report_storage_error: Callable[[StorageError], None]
     reset_widget_state_if_requested: Callable[..., None]
     schedule_widget_reset: Callable[[str], None]
+    services: ApplicationServices | None = None
 
 
 def _overrides(asset: dict) -> dict[int, dict[str, str]]:

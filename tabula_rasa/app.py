@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from functools import partial
 from pathlib import Path
 import sys
 
@@ -18,6 +19,7 @@ from tabula_rasa.business_profiles import (
     load_business_profiles,
     select_profile_secrets,
 )
+from tabula_rasa.composition import SheetsApplication, create_sheets_application
 from tabula_rasa.ledger_auth import logout, require_authentication
 from tabula_rasa.google_drive import (
     GoogleDriveClient,
@@ -77,7 +79,7 @@ from tabula_rasa.receipt_backfill import (
 )
 
 
-STORAGE_IMPLEMENTATION_VERSION = 17
+APPLICATION_IMPLEMENTATION_VERSION = 1
 
 
 def _google_maps_browser_key(secrets: Mapping[str, object]) -> str | None:
@@ -116,22 +118,20 @@ def alert_list(title: str, messages: list[str]) -> str:
 
 
 @st.cache_resource
-def get_storage(
+def get_application(
     profile_key: str,
     implementation_version: int,
     configuration_revision: str,
-) -> GoogleSheetsStorage:
+    configuration: dict[str, object],
+) -> SheetsApplication:
     # Include the implementation version in Streamlit's cache key. Otherwise a
-    # storage instance created before a deployment can survive with an older
-    # class definition that does not contain newly added methods.
+    # service graph created before a deployment can survive with older class
+    # definitions. Profile and configuration revision scope the whole graph,
+    # including the transitional facade, to the selected business. Hash the
+    # supplied snapshot too so a cache hit cannot pair a different graph with
+    # the shell's profile/workbook/receipt settings.
     del implementation_version, configuration_revision
-    secrets = merged_profile_secrets(
-        st.secrets,
-        path=LOCAL_PROFILE_STORE_PATH,
-    )
-    return GoogleSheetsStorage.from_secrets(
-        select_profile_secrets(secrets, profile_key)
-    )
+    return create_sheets_application(profile_key, configuration)
 
 
 def report_storage_error(error: StorageError) -> None:
@@ -148,13 +148,12 @@ def current_app_url() -> str:
 def get_drive_client(
     profile_key: str,
     configuration_revision: str,
+    *,
+    configuration: dict[str, object],
 ) -> GoogleDriveClient:
     """Build a Drive client only when the selected profile is connected."""
     del configuration_revision
-    app_secrets = merged_profile_secrets(
-        st.secrets,
-        path=LOCAL_PROFILE_STORE_PATH,
-    )
+    app_secrets = configuration
     profile_secrets = select_profile_secrets(app_secrets, profile_key)
     config = load_oauth_config(app_secrets)
     drive_settings = profile_secrets.get("google_drive")
@@ -171,6 +170,7 @@ def receipt_manifest_for_backup(
     profile_key: str,
     drive_settings: Mapping[str, object] | None,
     configuration_revision: str,
+    configuration: dict[str, object],
 ) -> dict[str, object]:
     """Build a fresh profile-scoped receipt inventory for one ledger backup."""
     receipt_folder = (
@@ -183,7 +183,9 @@ def receipt_manifest_for_backup(
             "A current-format backup requires a selected Google Drive receipt "
             "folder so its receipt inventory is complete."
         )
-    drive = get_drive_client(profile_key, configuration_revision)
+    drive = get_drive_client(
+        profile_key, configuration_revision, configuration=configuration
+    )
     return prepare_backup_receipt_manifest(
         storage,
         drive,
@@ -277,7 +279,7 @@ profile_admin_enabled = local_profile_admin_available(
 )
 try:
     effective_secrets = merged_profile_secrets(
-        st.secrets,
+        st.secrets.to_dict(),
         path=LOCAL_PROFILE_STORE_PATH,
     )
     profiles = load_business_profiles(effective_secrets)
@@ -456,11 +458,22 @@ else:
             profile_by_key[selected_profile_key].secrets.get("spreadsheet_id")
             or revision
         )
-        storage = get_storage(
-            selected_profile_key,
-            STORAGE_IMPLEMENTATION_VERSION,
-            revision,
+        revision = f"{revision}:{workbook_identity}"
+        configuration_snapshot = dict(effective_secrets)
+        snapshot_drive_client = partial(
+            get_drive_client, configuration=configuration_snapshot
         )
+        snapshot_receipt_manifest = partial(
+            receipt_manifest_for_backup, configuration=configuration_snapshot
+        )
+        application = get_application(
+            selected_profile_key,
+            APPLICATION_IMPLEMENTATION_VERSION,
+            revision,
+            configuration_snapshot,
+        )
+        services = application.services
+        storage = application.legacy_storage
         reset_stale_recurring_pending_state(
             st.session_state,
             profile_key=selected_profile_key,
@@ -469,9 +482,10 @@ else:
         initialized_profiles = st.session_state.setdefault(
             "defaults_initialized_profiles", set()
         )
-        if selected_profile_key not in initialized_profiles:
-            storage.ensure_defaults()
-            initialized_profiles.add(selected_profile_key)
+        initialization_key = (selected_profile_key, workbook_identity)
+        if initialization_key not in initialized_profiles:
+            services.ledger.ensure_defaults()
+            initialized_profiles.add(initialization_key)
         reconciled_profiles = st.session_state.setdefault(
             "recurring_reconciled_profiles", set()
         )
@@ -490,9 +504,18 @@ else:
             finally:
                 reconciled_profiles.add(reconciliation_key)
 
-    except (LocalProfileStoreError, StorageError) as error:
+    except (
+        LocalProfileStoreError,
+        BusinessProfileConfigurationError,
+        StorageError,
+    ) as error:
         if isinstance(error, StorageError):
             report_storage_error(error)
+        elif isinstance(error, BusinessProfileConfigurationError):
+            st.error(
+                "The business-profile configuration is invalid or changed. "
+                "Reload the app and check the selected profile settings."
+            )
         else:
             st.error("The local business-profile file could not be read safely.")
         render_global_footer()
@@ -500,7 +523,7 @@ else:
 
     with st.sidebar:
         with st.container(key="sidebar_workbook_context"):
-            st.caption(f"Workbook: {storage.workbook_title}")
+            st.caption(f"Workbook: {services.ledger.get_info().name}")
 
 if page != "Account settings":
     notice = st.session_state.pop("write_success_notice", None)
@@ -516,16 +539,19 @@ with st.sidebar:
 st.session_state[GLOBAL_FOOTER_RENDERED_KEY] = False
 try:
     if page == "Dashboard":
-        render_dashboard(DashboardContext(selected_profile_key, storage))
+        render_dashboard(
+            DashboardContext(selected_profile_key, storage, services=services)
+        )
 
     elif page == "Transactions":
         render_transactions(
             TransactionsContext(
                 profile_key=selected_profile_key,
                 storage=storage,
+                services=services,
                 profile_secrets=profile_by_key[selected_profile_key].secrets,
                 configuration_revision=revision,
-                get_drive_client=get_drive_client,
+                get_drive_client=snapshot_drive_client,
                 confirmed_write=confirmed_write,
                 report_storage_error=report_storage_error,
                 reset_widget_state_if_requested=reset_widget_state_if_requested,
@@ -539,6 +565,7 @@ try:
             MileageContext(
                 profile_key=selected_profile_key,
                 storage=storage,
+                services=services,
                 confirmed_write=confirmed_write,
                 report_storage_error=report_storage_error,
                 reset_widget_state_if_requested=reset_widget_state_if_requested,
@@ -554,6 +581,7 @@ try:
             AssetsContext(
                 profile_key=selected_profile_key,
                 storage=storage,
+                services=services,
                 confirmed_write=confirmed_write,
                 report_storage_error=report_storage_error,
                 reset_widget_state_if_requested=reset_widget_state_if_requested,
@@ -566,6 +594,7 @@ try:
             AccountsContext(
                 profile_key=selected_profile_key,
                 storage=storage,
+                services=services,
                 confirmed_write=confirmed_write,
                 report_storage_error=report_storage_error,
                 reset_widget_state_if_requested=reset_widget_state_if_requested,
@@ -578,6 +607,7 @@ try:
             CategoriesContext(
                 profile_key=selected_profile_key,
                 storage=storage,
+                services=services,
                 confirmed_write=confirmed_write,
                 report_storage_error=report_storage_error,
                 reset_widget_state_if_requested=reset_widget_state_if_requested,
@@ -589,6 +619,7 @@ try:
             ReportsContext(
                 profile_key=selected_profile_key,
                 storage=storage,
+                services=services,
                 report_storage_error=report_storage_error,
             )
         )
@@ -600,6 +631,7 @@ try:
             DataBackupContext(
                 profile_key=selected_profile_key,
                 storage=storage,
+                services=services,
                 drive_settings=(
                     drive_settings_value
                     if isinstance(
@@ -612,8 +644,8 @@ try:
                     "synology_recovery"
                 ),
                 configuration_revision=revision,
-                get_drive_client=get_drive_client,
-                receipt_manifest_for_backup=receipt_manifest_for_backup,
+                get_drive_client=snapshot_drive_client,
+                receipt_manifest_for_backup=snapshot_receipt_manifest,
                 confirmed_write=confirmed_write,
                 report_storage_error=report_storage_error,
             )
