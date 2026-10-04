@@ -14,7 +14,7 @@ class DataBackupContext:
     """Dependencies supplied by the application shell for one profile."""
 
     profile_key: str
-    storage: GoogleSheetsStorage
+    workbook_admin: GoogleSheetsStorage
     drive_settings: Mapping[str, object] | None
     synology_recovery_settings: object
     configuration_revision: str
@@ -22,4 +22,4 @@ class DataBackupContext:
     receipt_manifest_for_backup: Callable[..., dict[str, object]]
     confirmed_write: Callable[..., None]
     report_storage_error: Callable[[StorageError], None]
-    services: ApplicationServices | None = None
+    services: ApplicationServices

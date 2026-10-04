@@ -12,17 +12,16 @@ import streamlit as st
 
 from tabula_rasa.application.services import ApplicationServices
 from tabula_rasa.reference_data import normalize_tag_ids as _normalize_tag_ids
-from tabula_rasa.storage import GoogleSheetsStorage, StorageError
+from tabula_rasa.errors import StorageError
 from .table_selection import clear_selected_table_record, selected_table_record
 
 
 @dataclass(frozen=True)
 class PayeesTagsContext:
     profile_key: str
-    storage: GoogleSheetsStorage
+    services: ApplicationServices
     confirmed_write: Callable[..., None]
     report_storage_error: Callable[[StorageError], None]
-    services: ApplicationServices | None = None
 
 
 def _name_map(records: list[dict[str, str]]) -> dict[str, dict[str, str]]:
@@ -396,11 +395,11 @@ def render_payees_tags(context: PayeesTagsContext) -> None:
         payees = context.services.payees.list(active_only=False)
         tags = context.services.tags.list(active_only=False)
         transactions = context.services.transactions.list()
-        mixed_sources = context.storage.list_mixed_use_expense_sources()
-        schedules = context.storage.list_recurring_schedules()
+        mixed_sources = context.services.mixed_use.sources()
+        schedules = context.services.recurring.list()
         journals = context.services.journals.list()
-        assets = context.storage.list_assets()
-        mileage = context.storage.list_mileage_trips()
+        assets = context.services.assets.list()
+        mileage = [trip.as_record() for trip in context.services.mileage.list_trips()]
     except StorageError as error:
         context.report_storage_error(error)
         return

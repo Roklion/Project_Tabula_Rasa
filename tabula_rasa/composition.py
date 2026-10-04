@@ -15,6 +15,7 @@ from tabula_rasa.infrastructure.google_sheets_receipts import GoogleSheetsReceip
 from tabula_rasa.infrastructure.google_sheets_reporting import GoogleSheetsLedgerQueryRepository
 from tabula_rasa.infrastructure.google_sheets import (
     GoogleSheetsAccountRepository,
+    GoogleSheetsCategoryRepository,
     GoogleSheetsPayeeRepository,
     GoogleSheetsTagRepository,
     GoogleSheetsTransactionRepository,
@@ -23,19 +24,20 @@ from tabula_rasa.infrastructure.google_sheets import (
 from tabula_rasa.infrastructure.google_sheets_assets import GoogleSheetsAssetRepository
 from tabula_rasa.infrastructure.google_sheets_mixed_use import GoogleSheetsMixedUseRepository
 from tabula_rasa.infrastructure.google_sheets_recurring import GoogleSheetsRecurringRepository
+from tabula_rasa.infrastructure.google_sheets_imports import GoogleSheetsTransactionImportRepository
 from tabula_rasa.storage import GoogleSheetsStorage
 
 
 @dataclass(frozen=True)
 class SheetsApplication:
-    """Neutral services plus the explicitly transitional legacy facade.
+    """Bookkeeping services and explicit Sheets workbook administration.
 
-    Keep the provider-specific bridge outside ApplicationServices. Remove it
-    when callers have migrated to their domain services under issue #219.
+    Only backup/operator workflows receive workbook_admin. Ordinary pages
+    receive services, so provider-specific methods are not an application API.
     """
 
     services: ApplicationServices
-    legacy_storage: GoogleSheetsStorage = field(repr=False)
+    workbook_admin: GoogleSheetsStorage = field(repr=False)
 
 
 def create_sheets_application(
@@ -85,6 +87,8 @@ def create_sheets_application(
         ),
         mileage_repository=GoogleSheetsMileageRepository(storage),
         account_repository=GoogleSheetsAccountRepository(storage),
+        category_repository=GoogleSheetsCategoryRepository(storage),
+        import_repository=GoogleSheetsTransactionImportRepository(storage),
         payee_repository=GoogleSheetsPayeeRepository(storage),
         tag_repository=GoogleSheetsTagRepository(storage),
         transaction_repository=GoogleSheetsTransactionRepository(storage),
@@ -93,4 +97,4 @@ def create_sheets_application(
         mixed_use_repository=GoogleSheetsMixedUseRepository(storage),
         recurring_repository=GoogleSheetsRecurringRepository(storage),
     )
-    return SheetsApplication(services=services, legacy_storage=storage)
+    return SheetsApplication(services=services, workbook_admin=storage)

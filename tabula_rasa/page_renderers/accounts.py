@@ -26,7 +26,7 @@ from tabula_rasa.page_renderers.hierarchy_ui import (
 )
 from tabula_rasa.presentation import render_global_footer, render_page_header
 from tabula_rasa.reference_data import FIXED_TYPE_CLASSIFICATIONS
-from tabula_rasa.storage import GoogleSheetsStorage, StorageError
+from tabula_rasa.errors import StorageError
 
 
 ACCOUNT_TYPES = [
@@ -45,12 +45,11 @@ class AccountsContext:
     """Dependencies supplied by the application shell for one profile."""
 
     profile_key: str
-    storage: GoogleSheetsStorage
+    services: ApplicationServices
     confirmed_write: Callable[..., None]
     report_storage_error: Callable[[StorageError], None]
     reset_widget_state_if_requested: Callable[..., None]
     schedule_widget_reset: Callable[[str], None]
-    services: ApplicationServices | None = None
 
 
 def _account_frame(
@@ -130,10 +129,9 @@ def render_accounts(context: AccountsContext) -> None:
         "Accounts", "Track bank, cash, credit card, and other manual balances."
     )
     try:
-        context.storage.prefetch_worksheets("Accounts", "Transactions")
         accounts = context.services.accounts.list(active_only=False)
-        transactions = context.storage.list_transactions()
-        journals = context.storage.list_journal_entries()
+        transactions = context.services.transactions.list()
+        journals = context.services.journals.list()
     except StorageError as error:
         context.report_storage_error(error)
         render_global_footer()

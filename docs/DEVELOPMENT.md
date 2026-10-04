@@ -140,6 +140,13 @@ Do not duplicate shared scenario setup in individual test documentation.
 Behavior-sensitive changes need success and relevant failure coverage, and
 profile-sensitive changes need a two-profile isolation check.
 
+`tests/test_application_boundaries.py` enforces the service boundary: ordinary
+page contexts require services, and UI/application modules cannot import the
+Sheets facade or infrastructure adapters. Provider-specific exceptions and
+remaining migration boundaries are listed in [Architecture](ARCHITECTURE.md).
+Add a new service/repository capability for bookkeeping behavior rather than
+passing workbook administration into a normal page.
+
 ## Pull requests and review
 
 Codex-authored PRs should use the PR body template in the

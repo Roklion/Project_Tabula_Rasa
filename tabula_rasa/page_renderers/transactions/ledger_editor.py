@@ -18,7 +18,7 @@ from tabula_rasa.recurrence_state import transaction_edit_pending_state
 from tabula_rasa.page_renderers.tag_selector import inline_tag_name_error
 from tabula_rasa.page_renderers.tag_selector import schedule_tag_selector_reset
 from tabula_rasa.page_renderers.tag_selector import tag_selector_error
-from tabula_rasa.storage import StorageConflictError, StorageError, StorageValidationError
+from tabula_rasa.errors import StorageConflictError, StorageError, StorageValidationError
 from .receipt_workflows import _receipt_folder
 from .receipt_workflows import clear_receipt_creation_recovery
 from .receipt_editor import (

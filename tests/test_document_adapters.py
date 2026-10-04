@@ -11,7 +11,7 @@ from tabula_rasa.infrastructure.google_drive_documents import (
     GoogleDriveDocumentStore, document_from_receipt_reference, document_to_receipt_reference,
 )
 from tabula_rasa.infrastructure.google_sheets_receipts import GoogleSheetsReceiptRepository
-from tabula_rasa.infrastructure.receipt_context import receipt_service_for_context
+from tabula_rasa.application.receipt_context import MixedUseReceiptRepository, receipt_service_for_context
 from tabula_rasa.receipt_manifest import receipt_reference_from_drive_file
 from tabula_rasa.storage import GoogleSheetsStorage, StorageValidationError
 from tests.drive_fixtures import receipt_drive_file
@@ -97,26 +97,40 @@ def test_sheets_adapter_roundtrips_current_integrity_format_and_unlink_preserves
     assert repository.references("north", transaction["id"]) == ()
 
 
-def test_context_bridge_preserves_non_google_adapters_and_rejects_mismatched_profile_before_io():
+def test_context_service_preserves_non_google_adapters_and_rejects_mismatched_profile_before_io():
     store, repository = FakeDocumentStore(), FakeReceiptRepository()
     services = SimpleNamespace(receipts=ReceiptService("north", repository, store))
-    context = SimpleNamespace(profile_key="north", services=services, storage=Mock())
+    context = SimpleNamespace(profile_key="north", services=services)
     assert receipt_service_for_context(context) is services.receipts
     context.profile_key = "south"
     with pytest.raises(DocumentError, match="different business profile"):
         receipt_service_for_context(context)
     assert store.upload_calls == 0
-    context.storage.link_transaction_receipt.assert_not_called()
+    assert repository.records[("north", "txn")] == []
 
 
-def test_context_bridge_rebinds_mixed_use_repository_but_keeps_profile_document_store():
-    ordinary_storage, source_storage = Mock(), Mock()
+def test_mixed_use_receipt_repository_keeps_document_store_and_source_expected_record():
+    ordinary_repository, source_service = FakeReceiptRepository(), Mock()
     store = FakeDocumentStore()
-    service = ReceiptService("north", GoogleSheetsReceiptRepository("north", ordinary_storage), store)
-    context = SimpleNamespace(profile_key="north", services=SimpleNamespace(receipts=service), storage=source_storage)
-    rebound = receipt_service_for_context(context)
+    expected = {"id": "source", "receipt_references": ""}
+    refreshed_references = '[{"id":"object/a","name":"original.pdf"}]'
+    source_service.get.return_value = {"id": "source", "receipt_references": refreshed_references}
+    on_source_changed = Mock()
+    service = ReceiptService("north", ordinary_repository, store)
+    rebound = service.with_repository(MixedUseReceiptRepository(
+        ordinary_repository, source_service, "source", expected, on_source_changed,
+    ))
     assert rebound.documents is store
     document = store.upload("north", DocumentUpload("a" * 32, "original.pdf", "application/pdf", hashlib.sha256(b"receipt").hexdigest(), b"receipt"))
     rebound.link("txn", document)
-    source_storage.link_transaction_receipt.assert_called_once()
-    ordinary_storage.link_transaction_receipt.assert_not_called()
+    source_service.link_receipt.assert_called_once_with(
+        "source", reference=document_to_receipt_reference(document), expected_source=expected,
+    )
+    updated_expected = {**expected, "receipt_references": refreshed_references}
+    on_source_changed.assert_called_once_with(updated_expected)
+    assert ordinary_repository.records[("north", "txn")] == []
+    rebound.unlink("txn", document.storage_key)
+    source_service.unlink_receipt.assert_called_once_with(
+        "source", file_id=document.storage_key, expected_source=updated_expected,
+    )
+    assert store.delete_calls == 0

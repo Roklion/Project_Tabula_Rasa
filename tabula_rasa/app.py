@@ -69,17 +69,14 @@ from tabula_rasa.presentation import (
     reset_profile_presentation_state,
     reset_stale_recurring_pending_state,
 )
-from tabula_rasa.storage import (
-    GoogleSheetsStorage,
-    StorageError,
-)
+from tabula_rasa.errors import StorageError
 from tabula_rasa.submission_guard import is_recent_duplicate, mark_completed
 from tabula_rasa.receipt_backfill import (
     prepare_backup_receipt_manifest,
 )
 
 
-APPLICATION_IMPLEMENTATION_VERSION = 3
+APPLICATION_IMPLEMENTATION_VERSION = 4
 
 
 def _google_maps_browser_key(secrets: Mapping[str, object]) -> str | None:
@@ -127,7 +124,7 @@ def get_application(
     # Include the implementation version in Streamlit's cache key. Otherwise a
     # service graph created before a deployment can survive with older class
     # definitions. Profile and configuration revision scope the whole graph,
-    # including the transitional facade, to the selected business. Hash the
+    # including workbook administration, to the selected business. Hash the
     # supplied snapshot too so a cache hit cannot pair a different graph with
     # the shell's profile/workbook/receipt settings.
     del implementation_version
@@ -171,7 +168,7 @@ def get_drive_client(
 
 
 def receipt_manifest_for_backup(
-    storage: GoogleSheetsStorage,
+    workbook_admin,
     *,
     profile_key: str,
     drive_settings: Mapping[str, object] | None,
@@ -193,7 +190,7 @@ def receipt_manifest_for_backup(
         profile_key, configuration_revision, configuration=configuration
     )
     return prepare_backup_receipt_manifest(
-        storage,
+        workbook_admin,
         drive,
         profile_key=profile_key,
         folder_id=str(receipt_folder["id"]),
@@ -479,7 +476,6 @@ else:
             configuration_snapshot,
         )
         services = application.services
-        storage = application.legacy_storage
         reset_stale_recurring_pending_state(
             st.session_state,
             profile_key=selected_profile_key,
@@ -546,18 +542,16 @@ st.session_state[GLOBAL_FOOTER_RENDERED_KEY] = False
 try:
     if page == "Dashboard":
         render_dashboard(
-            DashboardContext(selected_profile_key, storage, services=services)
+            DashboardContext(selected_profile_key, services=services)
         )
 
     elif page == "Transactions":
         render_transactions(
             TransactionsContext(
                 profile_key=selected_profile_key,
-                storage=storage,
                 services=services,
                 profile_secrets=profile_by_key[selected_profile_key].secrets,
                 configuration_revision=revision,
-                get_drive_client=snapshot_drive_client,
                 confirmed_write=confirmed_write,
                 report_storage_error=report_storage_error,
                 reset_widget_state_if_requested=reset_widget_state_if_requested,
@@ -570,7 +564,6 @@ try:
         render_mileage(
             MileageContext(
                 profile_key=selected_profile_key,
-                storage=storage,
                 services=services,
                 confirmed_write=confirmed_write,
                 report_storage_error=report_storage_error,
@@ -586,7 +579,6 @@ try:
         render_assets(
             AssetsContext(
                 profile_key=selected_profile_key,
-                storage=storage,
                 services=services,
                 confirmed_write=confirmed_write,
                 report_storage_error=report_storage_error,
@@ -599,7 +591,6 @@ try:
         render_accounts(
             AccountsContext(
                 profile_key=selected_profile_key,
-                storage=storage,
                 services=services,
                 confirmed_write=confirmed_write,
                 report_storage_error=report_storage_error,
@@ -612,7 +603,6 @@ try:
         render_categories(
             CategoriesContext(
                 profile_key=selected_profile_key,
-                storage=storage,
                 services=services,
                 confirmed_write=confirmed_write,
                 report_storage_error=report_storage_error,
@@ -624,7 +614,6 @@ try:
         render_reports(
             ReportsContext(
                 profile_key=selected_profile_key,
-                storage=storage,
                 services=services,
                 report_storage_error=report_storage_error,
             )
@@ -636,7 +625,7 @@ try:
         render_data_backup(
             DataBackupContext(
                 profile_key=selected_profile_key,
-                storage=storage,
+                workbook_admin=application.workbook_admin,
                 services=services,
                 drive_settings=(
                     drive_settings_value

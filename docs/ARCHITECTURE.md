@@ -254,7 +254,7 @@ The current decomposition uses these seams:
 
 | Responsibility | Current boundary |
 | --- | --- |
-| Application composition | `tabula_rasa/composition.py` selects one profile, constructs the Sheets adapter, and returns `SheetsApplication` with neutral services and the explicit transitional storage facade. |
+| Application composition | `tabula_rasa/composition.py` selects one profile, constructs the adapters, and returns `SheetsApplication` with neutral services and explicit workbook administration for backup/operator workflows. |
 | Application services and contracts | `tabula_rasa/application/services.py` assembles `ApplicationServices`; `ledger_setup.py` owns the initial setup service and its result DTO; `contracts.py` declares the repository capabilities that service needs. |
 | Infrastructure adapter | `tabula_rasa/infrastructure/google_sheets.py` adapts the existing storage facade to `LedgerSetupRepository` without duplicating storage behavior. |
 | Sheets storage facade | `tabula_rasa/storage/google_sheets/__init__.py` keeps `GoogleSheetsStorage` and re-exports intentionally public names. |
@@ -304,11 +304,12 @@ flowchart TD
     Shell["app.py and page contexts"]
     Composition["composition.py<br/>create_sheets_application"]
     Services["application/services.py<br/>ApplicationServices"]
-    Setup["Setup, reporting, mileage,<br/>and receipt services"]
+    Setup["Bookkeeping, reference data,<br/>reporting, imports, and receipts"]
     Contract["Capability-specific repository<br/>and DocumentStore contracts"]
     Adapter["infrastructure/<br/>Sheets and Drive adapters"]
     Storage["storage/google_sheets/<br/>GoogleSheetsStorage"]
     Drive["google_drive/<br/>GoogleDriveClient"]
+    Admin["Explicit backup/operator workflows"]
 
     Shell --> Composition
     Shell --> Services
@@ -319,7 +320,8 @@ flowchart TD
     Adapter --> Contract
     Adapter --> Storage
     Adapter --> Drive
-    Shell -->|"transitional storage calls"| Storage
+    Shell --> Admin
+    Admin -->|"Workbook format and recovery operations"| Storage
 ```
 
 Arrows show dependencies. Application services and contracts do not import
@@ -335,10 +337,12 @@ assembly requires the payee and tag repositories used for inline references.
 `create_sheets_application(profile_key, secrets)` requires a
 nonempty selected profile key, selects that profile's settings from the
 deployment configuration, constructs one `GoogleSheetsStorage`, and wraps it
-with capability-specific adapters for setup, reference data, transactions,
+with capability-specific adapters for setup, reference data, imports, transactions,
 journals, reporting, mileage, receipts, recurring schedules, assets, and mixed-use
 relationships. Its frozen `SheetsApplication` result
-contains the neutral `services` and the same exact `legacy_storage` instance.
+contains neutral `services` and an explicit `workbook_admin` instance for
+provider-specific backup and operator operations. Ordinary page contexts never
+receive this instance.
 The shell caches this composition using the selected profile, implementation
 version, local configuration revision, and the supplied configuration snapshot.
 Assembly consumes the same snapshot as the shell's workbook identity and page
@@ -351,12 +355,11 @@ is bound to the selected profile and receipt folder and uses the same cached
 Drive client as page callbacks. Assembling services never performs OAuth or a
 document request.
 
-Renderer contexts accept the selected profile's services alongside their
-existing storage dependency. Their optional services field supports the
-transition of existing callers; the shell supplies services explicitly.
-Unmigrated page operations and recurring reconciliation continue through the
-transitional facade until their owning workflows are extracted. The container
-does not create a second ledger, credential identity, cache, or retry mechanism.
+Ordinary renderer contexts require the selected profile's services and expose
+no storage field. Compatibility fallback factories no longer assemble Sheets
+adapters inside page code. Recurring reconciliation uses the same supplied
+service graph. The container does not create a second ledger, credential
+identity, cache, or retry mechanism.
 
 The ownership conventions for subsequent slices are:
 
@@ -366,8 +369,8 @@ The ownership conventions for subsequent slices are:
 | Domain rules | Reuse the existing pure modules, including `hierarchy.py`, `journal.py`, `mixed_use.py`, `recurrence.py`, `depreciation.py`, and the accounting/reporting modules. Extract remaining rules into cohesive domain owners as their workflows move; a new package is unnecessary merely to relocate already independent code. |
 | Repository contracts | `application/contracts.py` and capability-specific contract modules declare only capabilities needed by implemented services. Contracts describe domain/application operations and results, rather than worksheet names, row positions, Google requests, or a repository for every record type. |
 | Infrastructure | `tabula_rasa/infrastructure/` implements contracts by adapting the supported backend. Sheets serialization, API batching, locks, caches, bounded uncertain-write readback, and safe retry policy remain with the existing storage implementation. |
-| DTOs | Small result types such as `LedgerInfo` live with the application service that owns them. Use explicit fields for the service's result without exposing workbook objects, credentials, worksheet rows, or backend request payloads. Existing dictionary records remain transitional where their domain has not been extracted. |
-| Composition and transition | `composition.py` owns concrete backend construction and the typed `SheetsApplication` bridge. Neutral services do not accept or forward arbitrary legacy-storage methods. |
+| DTOs | Small result types such as `LedgerInfo` live with the application service that owns them. Use explicit fields for the service's result without exposing workbook objects, credentials, worksheet rows, or backend request payloads. Existing dictionary records preserve compatibility with current domain and presentation owners. |
+| Composition and provider administration | `composition.py` owns concrete backend construction and the typed `SheetsApplication` result. Neutral services do not accept or forward arbitrary storage methods. Only explicitly provider-specific backup/operator workflows receive workbook administration. |
 
 The shared safe `StorageError`, validation, conflict, and not-found errors live
 in the provider-independent `tabula_rasa/errors.py` module. The storage facade
@@ -381,7 +384,7 @@ not catch failures to retry or report success.
 [Issue #226](https://github.com/Roklion/Project_Tabula_Rasa/issues/226) extends
 the foundation with separate account, payee, and tag repository contracts and
 application services. The composition root constructs their Sheets adapters
-around the same selected-profile facade used by setup and transitional callers.
+around the same selected-profile facade used by setup and provider administration.
 There is no second workbook, cache, or credential selection.
 
 `AccountService` supports listing, creation, updates, rename, and deactivation;
@@ -416,9 +419,9 @@ confirmed-write feedback retain their renderer owners. Domain dictionary
 records preserve the existing application representation during this slice:
 account lists expose boolean active state and numeric opening balances, while
 managed payee/tag records retain their current text-backed active state.
-Unmigrated accounting mutations, reporting queries, defaults, documents, and
-backup operations continue through the explicit legacy bridge until their
-own vertical slices land.
+The subsequent slices below supply accounting mutations, reporting, and
+documents through their application services. Backup format operations retain
+their explicit provider administration boundary.
 
 For each later extraction, inspect the existing rule, workflow, persistence,
 and renderer owners first. Define the smallest contract for that workflow,
@@ -447,8 +450,8 @@ bookkeeping totals. `ledger_queries.py` owns the pure mixed ledger identity,
 date/target/tag filtering, and initial ordering; `ledger_records.py` retains
 display rows, dataframes, search, and visual sorting. Dashboard and Reports
 consume native query results. Transaction ledger reads/filtering consume the
-query service while existing mutation controllers retain their exact legacy
-expected-record snapshots until the transaction/journal slices migrate them.
+query service while mutation controllers retain their exact compatibility
+expected-record snapshots through the transaction/journal services.
 This preserves stale-write checks without re-encoding a receipt baseline.
 
 Mileage field normalization, tag rules, round-trip preparation, and QuickBooks
@@ -461,8 +464,8 @@ an independent UI integration and only the reviewed mileage/text are persisted.
 Receipt upload preparation and the shared Add/Edit unresolved-work loop reuse
 one application owner. Session keys, widget reset, and selected-configuration
 recovery guards remain presentation concerns. Source-aware mixed-use receipt
-callers select a metadata adapter for their existing source workflow while
-sharing the same byte store. The Drive adapter delegates to the existing
+callers bind `application/receipt_context.py`'s neutral metadata repository to
+their existing source workflow while sharing the same byte store. The Drive adapter delegates to the existing
 stable-identity reconciliation, filename, and integrity implementation;
 the extraction introduces no additional retries, rollback, or schema changes.
 
@@ -536,8 +539,58 @@ representation. The service graph implementation version changes so cached
 pre-extraction graphs are rebuilt. Pure fake-repository workflows run with
 Sheets, Drive, Streamlit, pandas, and infrastructure imports blocked; existing
 adapter tests cover stable identities, stale writes, partial results, and recovery,
-with two-profile service/composition coverage. Remaining ordinary page/storage
-coupling and transitional contexts close under #235.
+with two-profile service/composition coverage. Issue #235 closes the remaining
+ordinary page/storage coupling and removes transitional contexts.
+
+### Completed UI/application boundary (#235)
+
+Core bookkeeping pages, reference-use summaries, transaction/mileage imports,
+and CSV exports consume `ApplicationServices`. `CategoryService` completes the
+remaining hierarchy capability with list/create/update/delete operations;
+fresh uniqueness, hierarchy, and reference checks remain at the repository
+mutation boundary. `TransactionImportService` owns the shared pure QuickBooks
+preview and duplicate classification. Its repository provides domain records
+and the current batch import commands. The Sheets adapter retains reference
+creation, final fresh validation, worksheet serialization, batch persistence,
+and bounded uncertain-write recovery. Preview never writes.
+
+Source-aware receipt contexts bind `ReceiptService` to a neutral receipt
+repository using the graph's `MixedUseService`; page code no longer constructs
+a Sheets facade or adapter to access a source's documents. The existing
+profile checks, expected-source baselines, and uploaded-but-unlinked recovery
+behavior remain unchanged.
+
+`tests/test_application_boundaries.py` checks all package imports, including
+relative imports and the `tabula_rasa.storage` re-export facade, and verifies
+that ordinary page contexts contain services without storage. It also prevents
+application/page modules from importing infrastructure adapters. Direct Sheets
+imports are sanctioned only in these ownership seams:
+
+| Exception | Reason |
+| --- | --- |
+| `storage/` and `infrastructure/` | Current Google Sheets implementation and explicit repository adapters. |
+| `composition.py` | Select and construct the current provider implementations. |
+| `google_drive_admin.py`, `local_profile_admin_readiness.py`, `local_profile_admin_support.py` | Explicit Google setup, workbook provisioning, and operator readiness checks. |
+| `page_renderers/data_backup/context.py`, `page_renderers/data_backup/cloud_recovery.py` | Current workbook-format backup and validation controls; imports and CSV exports use services. |
+| `receipt_backfill.py`, `receipt_recovery.py` | Current-format backup inventory preparation and explicit recovery tooling. |
+| `scripts/` and provider/adapter tests | Explicit migration, validation, restore utilities, and infrastructure verification outside ordinary application/UI code. |
+
+`GoogleSheetsStorage` remains an infrastructure compatibility facade. Existing
+dictionary records and current import commit orchestration are deliberate
+migration boundaries, not an API shaped around worksheet rows or ranges.
+PostgreSQL work (#220) implements the capability contracts and owns relational
+transactions/constraints; HTTP work (#221) invokes services and supplies
+authenticated entity context without copying bookkeeping rules into handlers.
+Commercial authorization (#222), durable scheduling (#223), historical
+conversion, and current Sheets/Drive backup formats remain separate work.
+The internal profile key continues to select configuration; it does not confer
+commercial user authorization.
+
+The closing EPIC audit traces the existing fresh/expected-record validation,
+stable identities, source-owned projections, bounded retries, cache invalidation,
+profile isolation, receipt partial outcomes, and accounting invariants through
+the service graph. This integration adds no runtime retry, snapshot, rollback,
+or other defensive mechanism.
 
 ## Receipt boundary
 
@@ -638,7 +691,7 @@ local-only recovery metadata.
 | --- | --- |
 | Streamlit shell and routing | tabula_rasa/app.py |
 | Setup, reporting, document/receipt, and mileage services and contracts | `tabula_rasa/application/` |
-| Selected-profile service composition and transitional storage bridge | `tabula_rasa/composition.py` |
+| Selected-profile service composition and explicit workbook administration | `tabula_rasa/composition.py` |
 | Sheets and Drive adapters for application contracts | `tabula_rasa/infrastructure/` |
 | Shared presentation tokens and CSS | tabula_rasa/presentation.py |
 | Profile selection and readiness | tabula_rasa/business_profiles.py and tabula_rasa/profile_readiness.py |

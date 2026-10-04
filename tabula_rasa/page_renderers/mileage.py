@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from tabula_rasa.application.services import ApplicationServices
-from tabula_rasa.storage import GoogleSheetsStorage, StorageError
+from tabula_rasa.errors import StorageError
 
 from .mileage_form import render_add_mileage_form
 from .mileage_ledger import (
@@ -52,7 +52,7 @@ class MileageContext:
     """Dependencies supplied by the application shell for one profile."""
 
     profile_key: str
-    storage: GoogleSheetsStorage
+    services: ApplicationServices
     confirmed_write: Callable[..., None]
     report_storage_error: Callable[[StorageError], None]
     reset_widget_state_if_requested: Callable[..., None]
@@ -60,7 +60,6 @@ class MileageContext:
     maps_api_key: str | None = None
     route_mileage: Callable[[str, str], float] | None = None
     autocomplete_region_code: str | None = None
-    services: ApplicationServices | None = None
 
 
 def render_mileage(context: MileageContext) -> None:

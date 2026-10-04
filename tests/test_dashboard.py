@@ -23,13 +23,14 @@ def test_dashboard_module_import_does_not_render_or_bootstrap() -> None:
     secrets.assert_not_called()
 
 
-def test_dashboard_context_requires_selected_profile_and_storage() -> None:
-    storage = object()
+def test_dashboard_context_requires_selected_profile_and_services() -> None:
+    services = object()
 
-    context = dashboard.DashboardContext("north", storage)  # type: ignore[arg-type]
+    context = dashboard.DashboardContext("north", services)  # type: ignore[arg-type]
 
     assert context.profile_key == "north"
-    assert context.storage is storage
+    assert context.services is services
+    assert not hasattr(context, "storage")
 
 
 def test_dashboard_frames_preserve_visible_table_fields() -> None:

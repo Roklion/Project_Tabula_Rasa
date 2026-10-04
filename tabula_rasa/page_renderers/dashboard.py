@@ -10,9 +10,8 @@ import pandas as pd
 
 from tabula_rasa.application.services import ApplicationServices
 from tabula_rasa.hierarchy import ordered_accounts
-from tabula_rasa.ledger_presentation import balances_frame, money
-from tabula_rasa.ledger_records import combine_ledger_entries, ledger_summary_frame
-from tabula_rasa.ledger_reporting import profit_and_loss
+from tabula_rasa.ledger_presentation import money
+from tabula_rasa.ledger_records import ledger_summary_frame
 from tabula_rasa.page_renderers.reporting_service import reporting_service
 from tabula_rasa.presentation import render_global_footer, render_page_header
 from tabula_rasa.reporting_presentation import (
@@ -20,7 +19,7 @@ from tabula_rasa.reporting_presentation import (
     ledger_entry_display_records,
     snapshot_display_records,
 )
-from tabula_rasa.storage import GoogleSheetsStorage, StorageError
+from tabula_rasa.errors import StorageError
 
 
 _CLASSIFICATION_ORDER = {"Asset": 0, "Liability": 1, "Equity": 2}
@@ -51,8 +50,7 @@ class DashboardContext:
     """Dependencies explicitly provided by the application shell."""
 
     profile_key: str
-    storage: GoogleSheetsStorage
-    services: ApplicationServices | None = None
+    services: ApplicationServices
 
 
 def _sorted_dashboard_balances(
@@ -92,30 +90,17 @@ def render_dashboard(context: DashboardContext) -> None:
         today = date.today()
         month_start = today.replace(day=1)
         reporting = reporting_service(context)
-        if reporting is not None:
-            snapshot = reporting.read_ledger()
-            accounts, categories, transactions, journals = snapshot_display_records(snapshot)
-            monthly_totals = reporting.period_report(
-                snapshot, start=month_start, end=today,
-            ).totals
-            balances = account_balance_display_frame(
-                reporting.account_balances(snapshot), accounts,
-            )
-            recent_entries = ledger_entry_display_records(
-                reporting.query_ledger(snapshot=snapshot).entries[:8],
-            )
-        else:
-            # Compatibility for standalone callers; production supplies services.
-            context.storage.prefetch_worksheets("Accounts", "Categories", "Transactions")
-            accounts = context.storage.list_accounts(active_only=False)
-            categories = context.storage.list_categories()
-            transactions = context.storage.list_transactions()
-            journals = context.storage.list_journal_entries()
-            monthly_totals = profit_and_loss(
-                transactions, start=month_start, end=today, journals=journals, categories=categories
-            )
-            balances = balances_frame(accounts, transactions, journals=journals)
-            recent_entries = combine_ledger_entries(transactions, journals)[:8]
+        snapshot = reporting.read_ledger()
+        accounts, categories, transactions, journals = snapshot_display_records(snapshot)
+        monthly_totals = reporting.period_report(
+            snapshot, start=month_start, end=today,
+        ).totals
+        balances = account_balance_display_frame(
+            reporting.account_balances(snapshot), accounts,
+        )
+        recent_entries = ledger_entry_display_records(
+            reporting.query_ledger(snapshot=snapshot).entries[:8],
+        )
     except StorageError as error:
         st.error(str(error))
         render_global_footer()

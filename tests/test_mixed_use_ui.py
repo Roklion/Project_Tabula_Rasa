@@ -1,10 +1,12 @@
 from datetime import date
 from tabula_rasa.infrastructure.google_sheets_mixed_use import mixed_use_service_for_storage
+from tabula_rasa.infrastructure.google_sheets_receipts import GoogleSheetsReceiptRepository
+from tabula_rasa.application.receipt_context import MixedUseReceiptRepository
+from tabula_rasa.receipt_records import document_from_receipt_reference
 
 import pytest
 
 from tabula_rasa.page_renderers.transactions.mixed_use import (
-    _MixedUseReceiptStorage,
     _clear_mixed_use_copy,
     _fresh_mixed_use_copy_source,
     _mixed_use_copy_keys,
@@ -365,19 +367,20 @@ def test_source_receipt_adapter_refreshes_snapshot_for_multiple_receipts(
         allocation_rationale="Measured use",
     )
     updated_sources = []
-    adapter = _MixedUseReceiptStorage(
-        default_storage,
+    adapter = MixedUseReceiptRepository(
+        GoogleSheetsReceiptRepository("north", default_storage),
+        mixed_use_service_for_storage(default_storage),
         source["id"],
         source,
         on_source_changed=updated_sources.append,
     )
-    adapter.link_transaction_receipt(
-        source["linked_transaction_id"],
-        reference={"id": "c" * 32, "name": "one.pdf"},
+    adapter.link(
+        "north", source["linked_transaction_id"],
+        document_from_receipt_reference("north", {"id": "c" * 32, "name": "one.pdf"}),
     )
-    adapter.link_transaction_receipt(
-        source["linked_transaction_id"],
-        reference={"id": "d" * 32, "name": "two.pdf"},
+    adapter.link(
+        "north", source["linked_transaction_id"],
+        document_from_receipt_reference("north", {"id": "d" * 32, "name": "two.pdf"}),
     )
     refreshed = default_storage.get_mixed_use_expense(source["id"])
     assert len(decode_receipt_references(refreshed["receipt_references"])) == 2
@@ -403,8 +406,9 @@ def test_source_receipt_adapter_refreshes_only_receipt_baseline(
         lambda _source_id, **kwargs: refreshed_source,
     )
     updated_sources = []
-    adapter = _MixedUseReceiptStorage(
-        default_storage,
+    adapter = MixedUseReceiptRepository(
+        GoogleSheetsReceiptRepository("north", default_storage),
+        mixed_use_service_for_storage(default_storage),
         source["id"],
         source,
         on_source_changed=updated_sources.append,
@@ -1041,7 +1045,17 @@ def test_mixed_use_projection_is_counted_once_across_read_paths(default_storage)
     assert len(matched) == 1
     assert matched[0]["ID"] == source["linked_transaction_id"]
 
-    exports = prepare_csv_exports(default_storage, accounts=default_storage.list_accounts(active_only=False), tags=default_storage.list_tags())
+    from tabula_rasa.composition import create_sheets_application
+    from tests.app_support import profile_config
+
+    from unittest.mock import patch
+    from tabula_rasa.storage import GoogleSheetsStorage
+
+    with patch.object(GoogleSheetsStorage, "from_secrets", return_value=default_storage):
+        services = create_sheets_application(
+            "test", {"business_profiles": {"test": profile_config()}}
+        ).services
+    exports = prepare_csv_exports(services, accounts=services.accounts.list(active_only=False), tags=services.tags.list())
     csv_text = exports["transactions"].decode("utf-8")
     assert csv_text.count(source["linked_transaction_id"]) == 1
     assert source["id"] not in csv_text

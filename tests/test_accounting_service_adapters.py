@@ -23,7 +23,7 @@ def application(storage, key="test"):
 
 def seed(application):
     account = application.services.accounts.create("Checking", "Bank")
-    category = application.legacy_storage.create_category("Office", "Expense")
+    category = application.workbook_admin.create_category("Office", "Expense")
     return dict(
         txn_date="2026-10-04",
         kind="Expense",

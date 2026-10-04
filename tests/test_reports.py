@@ -23,18 +23,19 @@ def test_reports_module_import_does_not_render_or_bootstrap() -> None:
     secrets.assert_not_called()
 
 
-def test_reports_context_requires_selected_profile_and_storage() -> None:
-    storage = object()
+def test_reports_context_requires_selected_profile_and_services() -> None:
+    services = object()
 
     def report_storage_error(error: object) -> None:
         del error
 
     context = reports.ReportsContext(
-        "north", storage, report_storage_error  # type: ignore[arg-type]
+        "north", services, report_storage_error  # type: ignore[arg-type]
     )
 
     assert context.profile_key == "north"
-    assert context.storage is storage
+    assert context.services is services
+    assert not hasattr(context, "storage")
     assert context.report_storage_error is report_storage_error
 
 

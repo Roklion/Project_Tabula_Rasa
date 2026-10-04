@@ -13,16 +13,10 @@ import streamlit as st
 from tabula_rasa.application.services import ApplicationServices
 from tabula_rasa.hierarchy import hierarchy_paths, ordered_accounts
 from tabula_rasa.ledger_presentation import money
-from tabula_rasa.ledger_reporting import (
-    balance_sheet,
-    category_activity_rollups,
-    monthly_performance,
-    profit_and_loss,
-)
 from tabula_rasa.page_renderers.reporting_service import reporting_service
 from tabula_rasa.presentation import render_global_footer, render_page_header
 from tabula_rasa.reporting_presentation import snapshot_display_records
-from tabula_rasa.storage import GoogleSheetsStorage, StorageError
+from tabula_rasa.errors import StorageError
 
 
 _REPORTS_RESPONSIVE_CSS = """
@@ -52,9 +46,8 @@ class ReportsContext:
     """Dependencies supplied by the application shell for one profile."""
 
     profile_key: str
-    storage: GoogleSheetsStorage
+    services: ApplicationServices
     report_storage_error: Callable[[StorageError], None]
-    services: ApplicationServices | None = None
 
 
 def _statement_frame(
@@ -189,29 +182,12 @@ def render_reports(context: ReportsContext) -> None:
         )
     try:
         reporting = reporting_service(context)
-        if reporting is not None:
-            snapshot = reporting.read_ledger()
-            accounts, categories, transactions, journals = snapshot_display_records(snapshot)
-            period = reporting.period_report(snapshot, start=start, end=end)
-            summary = period.totals
-            monthly_rows = period.monthly
-            category_detail_rows = period.expense_categories
-        else:
-            # Compatibility for standalone callers; production supplies services.
-            context.storage.prefetch_worksheets("Accounts", "Categories", "Transactions")
-            transactions = context.storage.list_transactions()
-            journals = context.storage.list_journal_entries()
-            categories = context.storage.list_categories()
-            accounts = context.storage.list_accounts(active_only=False)
-            summary = profit_and_loss(
-                transactions, start=start, end=end, journals=journals, categories=categories,
-            )
-            monthly_rows = monthly_performance(
-                transactions, start=start, end=end, journals=journals, categories=categories,
-            )
-            category_detail_rows = category_activity_rollups(
-                transactions, categories, kind="Expense", start=start, end=end, journals=journals,
-            )
+        snapshot = reporting.read_ledger()
+        accounts, categories, transactions, journals = snapshot_display_records(snapshot)
+        period = reporting.period_report(snapshot, start=start, end=end)
+        summary = period.totals
+        monthly_rows = period.monthly
+        category_detail_rows = period.expense_categories
     except StorageError as error:
         context.report_storage_error(error)
         render_global_footer()
@@ -293,12 +269,7 @@ def render_reports(context: ReportsContext) -> None:
     st.subheader("Balance sheet")
     st.caption("The As of date is independent from the income-and-expense period.")
     as_of = st.date_input("As of", date.today(), key="balance_sheet_date")
-    statement = (
-        reporting.balance_sheet(snapshot, as_of=as_of)
-        if reporting is not None else balance_sheet(
-            accounts, transactions, as_of=as_of, journals=journals, categories=categories,
-        )
-    )
+    statement = reporting.balance_sheet(snapshot, as_of=as_of)
     with st.container(key="reports_statement_metrics"):
         asset_metric, liability_metric, equity_metric = st.columns(3)
         asset_metric.metric("Total assets", money(statement["total_assets"]))

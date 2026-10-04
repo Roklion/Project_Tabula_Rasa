@@ -17,7 +17,7 @@ from tabula_rasa.quickbooks_import import (
 from tabula_rasa.quickbooks_mileage_import import (
     missing_required_columns as missing_quickbooks_mileage_columns,
 )
-from tabula_rasa.storage import StorageValidationError
+from tabula_rasa.errors import StorageValidationError
 
 
 def alert_list(title: str, messages: list[str]) -> str:
@@ -57,7 +57,7 @@ def render_imports(context: DataBackupContext) -> None:
                             context.confirmed_write(
                                 "import_csv_transactions",
                                 {"rows": plain_records},
-                                lambda: context.storage.import_csv_transactions(
+                                lambda: context.services.imports.import_csv(
                                     plain_records
                                 ),
                                 lambda imported: f"Imported {len(imported)} transactions.",
@@ -126,7 +126,7 @@ def render_imports(context: DataBackupContext) -> None:
                     "Automatically create missing accounts and categories",
                     help="New accounts use an inferred type and zero opening balance. Category type is inferred from the amount.",
                 )
-                preview = context.storage.preview_quickbooks_transactions(
+                preview = context.services.imports.preview_quickbooks(
                     records,
                     auto_create=auto_create,
                 )
@@ -182,7 +182,7 @@ def render_imports(context: DataBackupContext) -> None:
                         context.confirmed_write(
                             "import_quickbooks_transactions",
                             {"rows": records, "auto_create": auto_create},
-                            lambda: context.storage.import_quickbooks_transactions(
+                            lambda: context.services.imports.import_quickbooks(
                                 records,
                                 auto_create=auto_create,
                             ),

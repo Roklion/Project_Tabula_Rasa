@@ -338,7 +338,7 @@ def test_profile_composition_scopes_reference_mutations_and_preserves_merge_fiel
         south = create_sheets_application("south", secrets)
     created = {}
     for key, application in (("north", north), ("south", south)):
-        services, storage = application.services, application.legacy_storage
+        services, storage = application.services, application.workbook_admin
         account = services.accounts.create("Checking", "Bank", "100")
         category = storage.create_category("Office", "Expense")
         source_payee, target_payee = (
@@ -381,7 +381,7 @@ def test_profile_composition_scopes_reference_mutations_and_preserves_merge_fiel
         title: deepcopy(sheet.rows)
         for title, sheet in storages["south-sheet"]._workbook.sheets.items()
     }
-    transaction_sheet = north.legacy_storage._workbook.sheets["Transactions"]
+    transaction_sheet = north.workbook_admin._workbook.sheets["Transactions"]
     transaction_before = dict(
         zip(transaction_sheet.rows[0], transaction_sheet.rows[1], strict=True)
     )
@@ -408,7 +408,7 @@ def test_profile_composition_scopes_reference_mutations_and_preserves_merge_fiel
         [source_tag["id"]],
         expected=[source_tag, target_tag],
     ) == {"status": "fully_applied", "count": "1"}
-    fresh_transaction = north.legacy_storage.list_transactions()[0]
+    fresh_transaction = north.workbook_admin.list_transactions()[0]
     transaction_after = dict(
         zip(transaction_sheet.rows[0], transaction_sheet.rows[1], strict=True)
     )
@@ -417,7 +417,7 @@ def test_profile_composition_scopes_reference_mutations_and_preserves_merge_fiel
             assert transaction_after[field] == value
     assert fresh_transaction["payee_id"] == target_payee["id"]
     assert fresh_transaction["tag_ids"] == [target_tag["id"]]
-    fresh_trip = north.legacy_storage.list_mileage_trips()[0]
+    fresh_trip = north.workbook_admin.list_mileage_trips()[0]
     assert fresh_trip["id"] == trip["id"] and fresh_trip["miles"] == trip["miles"]
     assert fresh_trip["tag_ids"] == [target_tag["id"]]
     assert {

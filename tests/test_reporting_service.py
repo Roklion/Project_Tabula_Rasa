@@ -221,10 +221,6 @@ def test_adapter_normalizes_values_without_leaking_worksheet_metadata() -> None:
 def test_report_pages_use_application_queries_without_legacy_reads(ledger, monkeypatch, page) -> None:
     from tabula_rasa.page_renderers import dashboard, reports
 
-    class UnavailableLegacyStorage:
-        def __getattr__(self, name):
-            raise AssertionError(f"Report page used legacy storage: {name}")
-
     module = dashboard if page == "dashboard" else reports
     ui = MagicMock()
 
@@ -242,13 +238,13 @@ def test_report_pages_use_application_queries_without_legacy_reads(ledger, monke
     repository = FakeLedgerQueryRepository(ledger)
     services = SimpleNamespace(profile_key="north", reporting=ReportingService(repository))
     if page == "dashboard":
-        context = dashboard.DashboardContext("north", UnavailableLegacyStorage(), services)
+        context = dashboard.DashboardContext("north", services)
         dashboard.render_dashboard(context)
         activity = ui.dataframe.call_args_list[0].args[0]
         assert list(activity["Type"]) == ["Journal", "Transfer", "Expense", "Income"]
         assert list(activity["Amount"]) == [15.0, 30.0, -20.0, 50.0]
     else:
-        context = reports.ReportsContext("north", UnavailableLegacyStorage(), Mock(), services)
+        context = reports.ReportsContext("north", services, Mock())
         reports.render_reports(context)
         assert ui.dataframe.call_count >= 3
         assert ui.warning.call_count == 0

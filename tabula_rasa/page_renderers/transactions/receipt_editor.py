@@ -9,8 +9,8 @@ import streamlit as st
 from tabula_rasa.application.documents import DocumentError, DocumentValidationError
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
 from tabula_rasa.receipt_manifest import MAX_RECEIPT_REFERENCES
-from tabula_rasa.storage import StorageError
-from tabula_rasa.storage import StorageNotFoundError
+from tabula_rasa.errors import StorageError
+from tabula_rasa.errors import StorageNotFoundError
 from .receipt_workflows import (
     RECEIPT_UPLOAD_TYPES,
     _cancel_editor_receipt_recovery,

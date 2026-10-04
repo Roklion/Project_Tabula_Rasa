@@ -9,6 +9,12 @@ import pytest
 import streamlit as st
 
 from tabula_rasa.google_drive import GoogleDriveAccessError
+from tabula_rasa.application.documents import (
+    DocumentValidationError, ReceiptService,
+    process_pending_receipts as process_receipt_recovery,
+)
+from tabula_rasa.infrastructure.google_drive_documents import GoogleDriveDocumentStore
+from tabula_rasa.infrastructure.google_sheets_receipts import GoogleSheetsReceiptRepository
 from tabula_rasa.page_renderers.transactions.creation import render_add_transaction
 from tabula_rasa.page_renderers.transactions.receipts import (
     UPLOADED_NOT_LINKED_MESSAGE,
@@ -21,7 +27,6 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     handle_confirmed_transaction_receipts,
     new_receipt_creation_workflow,
     prepare_receipt_uploads,
-    process_receipt_recovery,
     receipt_creation_counts,
     receipt_creation_workflow_key,
     receipt_editor_upload_reset_key,
@@ -71,7 +76,7 @@ def _context(
     storage: object | None = None,
     drive: object | None = None,
 ) -> SimpleNamespace:
-    return SimpleNamespace(
+    context = SimpleNamespace(
         profile_key=profile,
         profile_secrets={
             "spreadsheet_id": spreadsheet,
@@ -84,6 +89,15 @@ def _context(
         reset_widget_state_if_requested=Mock(),
         mark_workbook_data_changed=Mock(),
     )
+    context.services = SimpleNamespace(receipts=ReceiptService(
+        profile,
+        GoogleSheetsReceiptRepository(profile, context.storage),
+        GoogleDriveDocumentStore(
+            profile, folder,
+            lambda: context.get_drive_client(profile, context.configuration_revision),
+        ),
+    ))
+    return context
 
 
 def test_prepare_receipts_keeps_stable_identity_and_content_hash() -> None:
@@ -112,7 +126,7 @@ def test_prepare_receipts_rejects_invalid_files_before_sheets_write(
     content: bytes,
     message: str,
 ) -> None:
-    with pytest.raises(GoogleDriveAccessError, match=message):
+    with pytest.raises(DocumentValidationError, match=message):
         prepare_receipt_uploads(
             [UploadedFile(name, content, "application/octet-stream")]
         )
@@ -120,20 +134,20 @@ def test_prepare_receipts_rejects_invalid_files_before_sheets_write(
 
 def test_prepare_receipts_rejects_count_and_batch_size_limits() -> None:
     upload = UploadedFile("receipt.pdf", b"123", "application/pdf")
-    with pytest.raises(GoogleDriveAccessError, match="no more than 100"):
+    with pytest.raises(DocumentValidationError, match="no more than 100"):
         prepare_receipt_uploads([upload, upload], existing_reference_count=99)
     with patch(
         "tabula_rasa.page_renderers.transactions.receipts.MAX_RECEIPT_UPLOAD_TOTAL_BYTES",
         5,
     ):
-        with pytest.raises(GoogleDriveAccessError, match="200 MB total"):
+        with pytest.raises(DocumentValidationError, match="200 MB total"):
             prepare_receipt_uploads([upload, upload])
 
 
 def test_prepare_receipts_rejects_reference_count_before_reading_files() -> None:
     upload = UploadedFile("receipt.pdf", b"receipt", "application/pdf")
     upload.getvalue = Mock(side_effect=AssertionError("Receipt content was read"))
-    with pytest.raises(GoogleDriveAccessError, match="no more than 100"):
+    with pytest.raises(DocumentValidationError, match="no more than 100"):
         prepare_receipt_uploads([upload, upload], existing_reference_count=99)
     upload.getvalue.assert_not_called()
 
@@ -142,7 +156,7 @@ def test_prepare_receipts_stops_reading_after_an_invalid_file() -> None:
     invalid = UploadedFile("receipt.txt", b"receipt", "text/plain")
     later = UploadedFile("later.pdf", b"receipt", "application/pdf")
     later.getvalue = Mock(side_effect=AssertionError("Later receipt was read"))
-    with pytest.raises(GoogleDriveAccessError, match="must be PDF"):
+    with pytest.raises(DocumentValidationError, match="must be PDF"):
         prepare_receipt_uploads([invalid, later])
     later.getvalue.assert_not_called()
 
@@ -156,7 +170,7 @@ def test_prepare_receipts_stops_reading_after_aggregate_limit() -> None:
         "tabula_rasa.page_renderers.transactions.receipts.MAX_RECEIPT_UPLOAD_TOTAL_BYTES",
         5,
     ):
-        with pytest.raises(GoogleDriveAccessError, match="200 MB total"):
+        with pytest.raises(DocumentValidationError, match="200 MB total"):
             prepare_receipt_uploads([first, second, later])
     later.getvalue.assert_not_called()
 
@@ -167,7 +181,7 @@ def test_normal_upload_and_link_clears_pending_work() -> None:
 
     process_receipt_recovery(
         workflow,
-        upload_receipt=_drive_file,
+        upload_receipt=lambda receipt: receipt_reference_from_drive_file(_drive_file(receipt)),
         link_receipt=linked,
     )
 
@@ -178,7 +192,7 @@ def test_normal_upload_and_link_clears_pending_work() -> None:
 
 def test_uploaded_but_unlinked_receipt_retries_reference_without_reupload() -> None:
     workflow = new_receipt_creation_workflow("txn-1", [_prepared()])
-    upload = Mock(side_effect=_drive_file)
+    upload = Mock(side_effect=lambda receipt: receipt_reference_from_drive_file(_drive_file(receipt)))
     link = Mock(side_effect=RuntimeError("Sheets unavailable"))
 
     process_receipt_recovery(
@@ -236,7 +250,7 @@ def test_one_upload_failure_does_not_stop_later_receipts() -> None:
     def upload(receipt: Mapping[str, object]) -> Mapping[str, object]:
         if receipt["original_name"] == "first.pdf":
             raise GoogleDriveAccessError("Drive unavailable", retryable=True)
-        return _drive_file(receipt)
+        return receipt_reference_from_drive_file(_drive_file(receipt))
 
     process_receipt_recovery(
         workflow,

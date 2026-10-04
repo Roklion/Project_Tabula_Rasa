@@ -15,11 +15,7 @@ from tabula_rasa.transaction import (
     prepare_bulk_transaction_changes, validate_transaction_create, validate_transaction_update,
 )
 from tabula_rasa.mixed_use import MIXED_USE_SOURCE_TYPE
-from tabula_rasa.quickbooks_import import fingerprint
-from tabula_rasa.quickbooks_import import missing_references
-from tabula_rasa.quickbooks_import import normalize_rows
-from tabula_rasa.quickbooks_import import suggested_account_classification
-from tabula_rasa.quickbooks_import import suggested_account_type
+from tabula_rasa.application.imports import TransactionImportContext, preview_quickbooks
 from .schema import (
     CATEGORY_KINDS,
     TRANSACTION_KINDS,
@@ -796,73 +792,16 @@ class TransactionsMixin:
             ["Accounts", "Categories", "Transactions", "Payees", "Tags"],
             force_refresh=_force_refresh,
         )
-        accounts = self._account_lookup()
-        categories = self._category_lookup()
-        new_accounts, new_categories = missing_references(
-            source_rows, accounts.values(), categories.values()
+        return preview_quickbooks(
+            source_rows,
+            TransactionImportContext(
+                accounts=list(self._account_lookup().values()),
+                categories=list(self._category_lookup().values()),
+                payees=self.list_payees(),
+                transactions=self.list_transactions(),
+            ),
+            auto_create=auto_create,
         )
-        if auto_create:
-            for name in new_accounts:
-                item = {
-                    "id": f"pending-account:{name.casefold()}",
-                    "name": name,
-                    "active": True,
-                }
-                accounts[item["id"]] = item
-            for name, kind in new_categories:
-                item = {
-                    "id": f"pending-category:{kind}:{name.casefold()}",
-                    "name": name,
-                    "kind": kind,
-                }
-                categories[item["id"]] = item
-        normalized, errors = normalize_rows(
-            source_rows, accounts.values(), categories.values()
-        )
-        payee_names = {
-            normalize_payee_name(item["name"]): item["name"]
-            for item in self.list_payees()
-        }
-        existing = {fingerprint(item) for item in self.list_transactions()}
-        seen: set[str] = set()
-        ready: list[dict[str, str]] = []
-        duplicate_rows: list[int] = []
-        for item in normalized:
-            payee_key = normalize_payee_name(item.get("payee", ""))
-            if payee_key:
-                item["payee"] = payee_names.setdefault(payee_key, item["payee"])
-            row_number = int(item.pop("_source_row"))
-            identity = fingerprint(item)
-            if identity in existing or identity in seen:
-                duplicate_rows.append(row_number)
-            else:
-                seen.add(identity)
-                ready.append(item)
-        counts = {
-            kind: sum(item["kind"] == kind for item in ready)
-            for kind in TRANSACTION_KINDS
-        }
-        return {
-            "rows": ready,
-            "errors": errors,
-            "duplicate_rows": duplicate_rows,
-            "new_accounts": new_accounts,
-            "new_account_types": {
-                name: suggested_account_type(name) for name in new_accounts
-            },
-            "new_account_classifications": {
-                name: suggested_account_classification(
-                    name, suggested_account_type(name)
-                )
-                for name in new_accounts
-            },
-            "new_categories": new_categories,
-            "summary": {
-                "ready": len(ready),
-                "duplicates": len(duplicate_rows),
-                **counts,
-            },
-        }
 
     @_workbook_mutation_lock
     def import_quickbooks_transactions(

@@ -23,7 +23,7 @@ from tabula_rasa.page_renderers.hierarchy_ui import (
     render_hierarchy_responsive_css,
 )
 from tabula_rasa.presentation import render_global_footer, render_page_header
-from tabula_rasa.storage import GoogleSheetsStorage, StorageError
+from tabula_rasa.errors import StorageError
 
 
 CATEGORY_KINDS = ["Expense", "Income"]
@@ -34,12 +34,11 @@ class CategoriesContext:
     """Dependencies supplied by the application shell for one profile."""
 
     profile_key: str
-    storage: GoogleSheetsStorage
+    services: ApplicationServices
     confirmed_write: Callable[..., None]
     report_storage_error: Callable[[StorageError], None]
     reset_widget_state_if_requested: Callable[..., None]
     schedule_widget_reset: Callable[[str], None]
-    services: ApplicationServices | None = None
 
 
 def _category_frame(
@@ -105,10 +104,9 @@ def render_categories(context: CategoriesContext) -> None:
         "Organize income and expense activity with compatible two-level paths.",
     )
     try:
-        context.storage.prefetch_worksheets("Categories", "Transactions")
-        categories = context.storage.list_categories()
-        transactions = context.storage.list_transactions()
-        journals = context.storage.list_journal_entries()
+        categories = context.services.categories.list()
+        transactions = context.services.transactions.list()
+        journals = context.services.journals.list()
     except StorageError as error:
         context.report_storage_error(error)
         render_global_footer()
@@ -173,7 +171,7 @@ def render_categories(context: CategoriesContext) -> None:
                 context.confirmed_write(
                     "create_category",
                     payload,
-                    lambda: context.storage.create_category(
+                    lambda: context.services.categories.create(
                         name, kind, parent_id=parent_id
                     ),
                     "Category added.",
@@ -258,7 +256,7 @@ def render_categories(context: CategoriesContext) -> None:
                     context.confirmed_write(
                         "edit_category",
                         payload,
-                        lambda: context.storage.edit_category(
+                        lambda: context.services.categories.update(
                             category_id,
                             name=edited_name,
                             kind=edited_kind,
@@ -291,7 +289,7 @@ def render_categories(context: CategoriesContext) -> None:
                             context.confirmed_write(
                                 "delete_category",
                                 {"id": category_id},
-                                lambda: context.storage.delete_category(category_id),
+                                lambda: context.services.categories.delete(category_id),
                                 "Category deleted.",
                                 report_error=delete_error.error,
                             )
