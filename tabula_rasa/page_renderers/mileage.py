@@ -73,7 +73,7 @@ def render_mileage(context: MileageContext) -> None:
         "Keep a dated business-mileage log with the route, purpose, and vehicle.",
     )
     try:
-        tags = context.storage.list_tags()
+        tags = context.services.tags.list()
     except StorageError as error:
         context.report_storage_error(error)
         st.stop()

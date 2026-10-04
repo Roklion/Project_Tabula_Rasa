@@ -90,7 +90,7 @@ def render_dashboard(context: DashboardContext) -> None:
             "Categories",
             "Transactions",
         )
-        accounts = context.storage.list_accounts(active_only=False)
+        accounts = context.services.accounts.list(active_only=False)
         categories = context.storage.list_categories()
         transactions = context.storage.list_transactions()
         journals = context.storage.list_journal_entries()

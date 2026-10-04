@@ -6,8 +6,6 @@ import csv
 import hashlib
 import io
 import json
-import math
-import unicodedata
 import zipfile
 from collections.abc import Iterable
 from collections.abc import Mapping
@@ -18,8 +16,6 @@ from datetime import timezone
 from decimal import Decimal
 from decimal import InvalidOperation
 from typing import Any
-from tabula_rasa.hierarchy import HierarchyValidationError
-from tabula_rasa.hierarchy import validate_two_level_hierarchy
 from tabula_rasa.journal import JournalValidationError, normalize_journal_postings
 from tabula_rasa.mixed_use import MIXED_USE_SOURCE_TYPE
 from tabula_rasa.mixed_use import MixedUseAllocationError
@@ -27,10 +23,18 @@ from tabula_rasa.mixed_use import validate_mixed_use_allocation
 from tabula_rasa.receipt_manifest import ReceiptManifestError
 from tabula_rasa.receipt_manifest import decode_receipt_reference_list
 from tabula_rasa.receipt_manifest import validate_receipt_manifest
+from tabula_rasa.reference_data import (
+    as_bool as _as_bool,
+    balance_amount as _balance_amount,
+    clean_text as _clean_text,
+    normalize_payee_name,
+    normalize_tag_ids as _normalize_tag_ids,
+    normalize_tag_name,
+    validate_account_classification as _validate_account_classification,
+    validate_hierarchy_records as _validate_hierarchy_records,
+)
 from .schema import (
-    ACCOUNT_CLASSIFICATIONS,
     BACKUP_FORMAT_VERSION,
-    FIXED_TYPE_CLASSIFICATIONS,
     MIXED_USE_WORKSHEET_HEADERS,
     WORKSHEET_HEADERS,
 )
@@ -125,42 +129,6 @@ def _looks_like_partial_blank_workbook(
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
-def _clean_text(value: Any, field: str, *, required: bool = False) -> str:
-    if value is None or (isinstance(value, float) and math.isnan(value)):
-        text = ""
-    else:
-        text = str(value).strip()
-    if required and not text:
-        raise StorageValidationError(f"{field} is required")
-    return text
-
-def normalize_payee_name(value: Any) -> str:
-    """Normalize payee names for deduplication and reference resolution."""
-    return " ".join(
-        unicodedata.normalize("NFKC", _clean_text(value, "Payee")).split()
-    ).casefold()
-
-def normalize_tag_name(value: Any) -> str:
-    """Normalize tag names for profile-local deduplication."""
-    return " ".join(
-        unicodedata.normalize("NFKC", _clean_text(value, "Tag name")).split()
-    ).casefold()
-
-def _validate_hierarchy_records(
-    records: Iterable[Mapping[str, Any]],
-    *,
-    compatibility_field: str,
-    item_label: str,
-) -> None:
-    try:
-        validate_two_level_hierarchy(
-            records,
-            compatibility_field=compatibility_field,
-            item_label=item_label,
-        )
-    except HierarchyValidationError as exc:
-        raise StorageValidationError(str(exc)) from exc
-
 def _validate_payee_records(records: Iterable[Mapping[str, Any]]) -> None:
     seen_ids: set[str] = set()
     seen_names: set[str] = set()
@@ -195,32 +163,6 @@ def decode_receipt_references(value: Any) -> list[dict[str, Any]]:
 def _encode_receipt_references(value: Any) -> str:
     references = decode_receipt_references(value)
     return json.dumps(references, separators=(",", ":"), ensure_ascii=False)
-
-def _normalize_tag_ids(value: Any) -> list[str]:
-    """Return sorted, unique tag IDs from a JSON cell or write payload."""
-    if value is None:
-        return []
-    if isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return []
-        try:
-            value = json.loads(text)
-        except (TypeError, json.JSONDecodeError) as exc:
-            raise StorageValidationError("Tag IDs are not valid JSON") from exc
-    if not isinstance(value, (list, tuple, set)):
-        raise StorageValidationError("Tag IDs must be a JSON array")
-    normalized: list[str] = []
-    for tag_id in value:
-        if not isinstance(tag_id, str):
-            raise StorageValidationError("Tag IDs must be strings")
-        clean_id = tag_id.strip()
-        if not clean_id:
-            raise StorageValidationError("Tag IDs cannot be blank")
-        if clean_id in normalized:
-            raise StorageValidationError("Tag IDs must be unique")
-        normalized.append(clean_id)
-    return sorted(normalized)
 
 def _raw_tag_ids_may_contain(value: Any, candidates: Iterable[str]) -> bool:
     """Use a cheap substring check before parsing a stored tag-ID JSON cell."""
@@ -326,26 +268,6 @@ def _positive_miles(value: Any) -> str:
         raise StorageValidationError("Miles must be greater than zero")
     return format(miles.quantize(Decimal("0.1")), "f")
 
-def _balance_amount(value: Any) -> str:
-    try:
-        amount = Decimal(str(value))
-    except (InvalidOperation, ValueError):
-        raise StorageValidationError("Opening balance must be numeric") from None
-    if not amount.is_finite():
-        raise StorageValidationError("Opening balance must be finite")
-    return format(amount.quantize(Decimal("0.01")), "f")
-
-def _validate_account_classification(
-    account_type: str, classification: str
-) -> None:
-    if classification not in ACCOUNT_CLASSIFICATIONS:
-        raise StorageValidationError("Unknown account classification")
-    expected = FIXED_TYPE_CLASSIFICATIONS.get(account_type)
-    if expected is not None and classification != expected:
-        raise StorageValidationError(
-            f"{account_type} accounts must be classified as {expected}"
-        )
-
 def _iso_date(value: Any) -> str:
     if isinstance(value, datetime):
         value = value.date()
@@ -356,17 +278,6 @@ def _iso_date(value: Any) -> str:
         return date.fromisoformat(text).isoformat()
     except ValueError:
         raise StorageValidationError("Date must use YYYY-MM-DD format") from None
-
-def _as_bool(value: Any, field: str = "active") -> bool:
-    if isinstance(value, bool):
-        return value
-    text = str(value).strip().casefold()
-    if text == "true":
-        return True
-    if text == "false":
-        return False
-    raise StorageValidationError(f"{field} must be true or false")
-
 
 def _validate_journal_tables(
     entries: Iterable[Mapping[str, Any]],

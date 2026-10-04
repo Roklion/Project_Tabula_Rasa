@@ -165,7 +165,7 @@ def test_csv_exports_include_resolved_transaction_and_mileage_tags() -> None:
         tag_ids=[tag["id"]],
     )
 
-    exports = prepare_csv_exports(storage)
+    exports = prepare_csv_exports(storage, accounts=storage.list_accounts(active_only=False), tags=storage.list_tags())
     transaction = next(
         csv.DictReader(io.StringIO(exports["transactions"].decode("utf-8")))
     )

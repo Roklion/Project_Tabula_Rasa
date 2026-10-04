@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+from tabula_rasa.reference_data import (
+    ACCOUNT_CLASSIFICATIONS,
+    ACCOUNT_TYPES,
+    FIXED_TYPE_CLASSIFICATIONS,
+)
+
 MIXED_USE_WORKSHEET_HEADERS = (
     "id",
     "txn_date",
@@ -140,25 +146,6 @@ WORKSHEET_HEADERS = {
         "created_at",
         "tag_ids",
     ),
-}
-
-ACCOUNT_TYPES = {
-    "Bank",
-    "Cash",
-    "Credit card",
-    "Short-term debt",
-    "Equity",
-    "Other",
-}
-
-ACCOUNT_CLASSIFICATIONS = {"Asset", "Liability", "Equity"}
-
-FIXED_TYPE_CLASSIFICATIONS = {
-    "Bank": "Asset",
-    "Cash": "Asset",
-    "Credit card": "Liability",
-    "Short-term debt": "Liability",
-    "Equity": "Equity",
 }
 
 CATEGORY_KINDS = {"Income", "Expense"}

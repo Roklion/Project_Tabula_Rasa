@@ -79,7 +79,7 @@ from tabula_rasa.receipt_backfill import (
 )
 
 
-APPLICATION_IMPLEMENTATION_VERSION = 1
+APPLICATION_IMPLEMENTATION_VERSION = 2
 
 
 def _google_maps_browser_key(secrets: Mapping[str, object]) -> str | None:

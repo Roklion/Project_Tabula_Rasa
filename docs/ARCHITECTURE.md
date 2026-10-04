@@ -325,12 +325,16 @@ Sheets, gspread, Streamlit, or infrastructure. An adapter implements the
 contract and depends on the existing backend; the composition root is the
 place where those implementations are selected and connected.
 
-`assemble_application_services(profile_key, *, ledger_repository)` builds a
-frozen `ApplicationServices(profile_key, ledger)` from an explicitly supplied
-repository. `create_sheets_application(profile_key, secrets)` requires a
+`assemble_application_services(profile_key, *, ledger_repository,
+account_repository, payee_repository, tag_repository)` builds a frozen
+`ApplicationServices` from explicitly supplied repositories. Reference
+repositories may be omitted for a partial graph in tools or tests; the
+production composition always supplies all three.
+`create_sheets_application(profile_key, secrets)` requires a
 nonempty selected profile key, selects that profile's settings from the
 deployment configuration, constructs one `GoogleSheetsStorage`, and wraps it
-with `GoogleSheetsLedgerSetupRepository`. Its frozen `SheetsApplication` result
+with the setup and reference-data repository adapters. Its frozen
+`SheetsApplication` result
 contains the neutral `services` and the same exact `legacy_storage` instance.
 The shell caches this composition using the selected profile, implementation
 version, local configuration revision, and the supplied configuration snapshot.
@@ -341,7 +345,7 @@ snapshot rebuilds both Sheets and lazy Drive clients even if the local revision 
 Renderer contexts accept the selected profile's services alongside their
 existing storage dependency. Their optional services field supports the
 transition of existing callers; the shell supplies services explicitly.
-Existing page operations and recurring reconciliation continue through the
+Unmigrated page operations and recurring reconciliation continue through the
 transitional facade until their owning workflows are extracted. The container
 does not create a second ledger, credential identity, cache, or retry mechanism.
 
@@ -356,23 +360,66 @@ The ownership conventions for subsequent slices are:
 | DTOs | Small result types such as `LedgerInfo` live with the application service that owns them. Use explicit fields for the service's result without exposing workbook objects, credentials, worksheet rows, or backend request payloads. Existing dictionary records remain transitional where their domain has not been extracted. |
 | Composition and transition | `composition.py` owns concrete backend construction and the typed `SheetsApplication` bridge. Neutral services do not accept or forward arbitrary legacy-storage methods. |
 
-The setup adapter currently propagates the existing safe `StorageError`
-hierarchy unchanged. The shell retains its established error handling. This is
-an interim exception contract: although the new service has no backend imports,
-its production setup failures still use legacy storage error types. A later
-slice that needs application-specific failure semantics should define them at
-that boundary while preserving safe user messages and supported recovery;
-the foundation does not introduce a competing error hierarchy.
+The shared safe `StorageError`, validation, conflict, and not-found errors live
+in the provider-independent `tabula_rasa/errors.py` module. The storage facade
+re-exports the same classes, preserving existing catches and user messages.
+Sheets availability, authentication, workbook-access, initialization, and
+uncertain-mutation guidance retain their infrastructure owner. Services do
+not catch failures to retry or report success.
+
+#### Reference-data slice
+
+[Issue #226](https://github.com/Roklion/Project_Tabula_Rasa/issues/226) extends
+the foundation with separate account, payee, and tag repository contracts and
+application services. The composition root constructs their Sheets adapters
+around the same selected-profile facade used by setup and transitional callers.
+There is no second workbook, cache, or credential selection.
+
+`AccountService` supports listing, creation, updates, rename, and deactivation;
+permanent account removal is outside the supported product contract.
+`PayeeService` and `TagService` support listing, create/reactivate, updates,
+rename, merge, and removal. Expected-record snapshots pass through the managed
+record services to the adapter for fresh stale-record checks. The application
+contracts contain domain records and operations, with no worksheet names,
+range coordinates, workbook objects, or Google API arguments.
+
+`reference_data.py` owns the existing pure text/name normalization, opening
+balance, active-state, account classification, hierarchy, and tag-ID rules.
+Services validate supplied inputs through these helpers without backend reads.
+The Sheets validation module retains import aliases so existing transaction,
+import, backup, and reference-data operations use the same rule implementation.
+Account name uniqueness continues to use trimmed case-insensitive names;
+payee/tag matching additionally normalizes Unicode and collapses whitespace.
+
+The repository mutation remains responsible for enforcing uniqueness,
+hierarchy, expected-record, and reference-integrity invariants with fresh data
+at its write boundary. The adapter delegates to the existing account/payee/tag
+mixins, which retain locking, stable IDs, batch writes, cache invalidation,
+one uncertain-write readback, and at most one safe retry. Services add no
+reconciliation or post-success verification. Pure fake-repository tests cover
+input validation, delegation, and failure propagation; adapter and existing
+storage tests cover the supported persistence and reference behavior.
+
+Account and Payees & Tags management, plus reference lists used by the other
+pages and CSV exports, now use the selected profile's services. Widget state,
+table selection, dataframe formatting, reference-count presentation, and
+confirmed-write feedback retain their renderer owners. Domain dictionary
+records preserve the existing application representation during this slice:
+account lists expose boolean active state and numeric opening balances, while
+managed payee/tag records retain their current text-backed active state.
+Unmigrated accounting mutations, reporting queries, defaults, documents, and
+backup operations continue through the explicit legacy bridge until their
+own vertical slices land.
 
 For each later extraction, inspect the existing rule, workflow, persistence,
 and renderer owners first. Define the smallest contract for that workflow,
 reuse its pure domain rules, adapt the existing Sheets behavior, and move the
 affected renderer calls to the service. Keep success, relevant failure,
 profile isolation, and recovery coverage while removing duplicate ownership.
-Reference data (#226), reporting (#229), mileage (#234), and transaction/journal
-work are subsequent slices, rather than additional responsibilities of the
-setup service. Google Sheets remains the supported active ledger throughout
-this transition.
+Reporting (#229), mileage (#234), and transaction/journal work are subsequent
+slices, rather than additional responsibilities of the setup or reference-data
+services. Google Sheets remains the supported active ledger throughout this
+transition.
 
 ## Receipt boundary
 

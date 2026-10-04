@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from contextlib import ExitStack
+from dataclasses import replace
 from unittest.mock import Mock, patch
 
 import pytest
 import streamlit as st
 
+from tabula_rasa.application import AccountService
 from tabula_rasa.application.services import ApplicationServices
 from tabula_rasa.business_profiles import BusinessProfileConfigurationError
 from tabula_rasa.composition import create_sheets_application
@@ -31,6 +33,68 @@ PAGE_RENDERERS = {
     "Reports": "reports.render_reports",
     "Data & backup": "data_backup.render_data_backup",
 }
+
+
+def test_account_renderer_uses_the_selected_profile_service_for_create_and_edit() -> None:
+    """The management page can operate on reference data supplied by a port."""
+    class AccountRepository:
+        def __init__(self) -> None:
+            self.records = []
+
+        def list(self, *, active_only=True):
+            return [dict(record) for record in self.records if not active_only or record["active"]]
+
+        def create(self, name, account_type, opening_balance, *, classification, parent_id):
+            record = {
+                "id": "service-account",
+                "name": name,
+                "type": account_type,
+                "classification": classification,
+                "opening_balance": float(opening_balance),
+                "active": True,
+                "created_at": "2026-10-03T00:00:00Z",
+                "parent_id": parent_id,
+            }
+            self.records.append(record)
+            return dict(record)
+
+        def update(self, account_id, *, changes):
+            record = next(item for item in self.records if item["id"] == account_id)
+            record.update(changes)
+            return dict(record)
+
+    repository = AccountRepository()
+
+    def compose(profile_key, secrets):
+        application = create_sheets_application(profile_key, secrets)
+        return replace(application, services=replace(
+            application.services, accounts=AccountService(repository)
+        ))
+
+    storage = GoogleSheetsStorage(FakeWorkbook())
+    with (
+        patch("tabula_rasa.composition.create_sheets_application", side_effect=compose),
+        authenticated_app(storage) as app,
+        patch.object(storage, "list_accounts", side_effect=AssertionError("Reference read bypassed service")),
+        patch.object(storage, "create_account", side_effect=AssertionError("Reference create bypassed service")),
+        patch.object(storage, "edit_account", side_effect=AssertionError("Reference update bypassed service")),
+        patch.object(storage, "list_transactions", return_value=[]),
+        patch.object(storage, "list_journal_entries", return_value=[]),
+    ):
+        navigate_to(app, "Accounts")
+        by_label(app.text_input, "Account name").set_value("Service checking")
+        by_label(app.button, "Add account").click().run()
+        assert not app.exception
+        assert any(str(item.value) == "Account added." for item in app.success)
+        assert repository.records[0]["name"] == "Service checking"
+
+        by_label(app.text_input, "Edit account name").set_value("Renamed through service")
+        by_label(app.checkbox, "Active").uncheck()
+        by_label(app.button, "Save account changes").click().run()
+        assert not app.exception
+        assert any(str(item.value) == "Account updated." for item in app.success)
+        assert repository.records[0]["name"] == "Renamed through service"
+        assert repository.records[0]["active"] is False
 
 
 def test_every_page_receives_selected_profile_services_and_shared_legacy_storage() -> None:

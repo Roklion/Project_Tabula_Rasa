@@ -11,8 +11,8 @@ import pandas as pd
 import streamlit as st
 
 from tabula_rasa.application.services import ApplicationServices
+from tabula_rasa.reference_data import normalize_tag_ids as _normalize_tag_ids
 from tabula_rasa.storage import GoogleSheetsStorage, StorageError
-from tabula_rasa.storage.google_sheets import _normalize_tag_ids
 from .table_selection import clear_selected_table_record, selected_table_record
 
 
@@ -332,15 +332,15 @@ def _render_payees(
                 "Merging rewrites every transaction and mixed-use source reference, "
                 "then permanently removes the selected source payees."
             ),
-            create=context.storage.create_payee,
-            rename=lambda record_id, name, expected: context.storage.edit_payee(
-                record_id, name=name, expected_payee=expected
+            create=context.services.payees.create,
+            rename=lambda record_id, name, expected: context.services.payees.rename(
+                record_id, name, expected=expected
             ),
-            merge=lambda target_id, source_ids, expected: context.storage.merge_payees(
-                target_id, source_ids, expected_payees=expected
+            merge=lambda target_id, source_ids, expected: context.services.payees.merge(
+                target_id, source_ids, expected=expected
             ),
-            remove=lambda record_id, expected: context.storage.remove_payee(
-                record_id, expected_payee=expected
+            remove=lambda record_id, expected: context.services.payees.remove(
+                record_id, expected=expected
             ),
         ),
         payees,
@@ -371,15 +371,15 @@ def _render_tags(
                 "Merging rewrites Transactions and Mileage associations, de-duplicates "
                 "the target association, then permanently removes the selected source tags."
             ),
-            create=context.storage.create_tag,
-            rename=lambda record_id, name, expected: context.storage.edit_tag(
-                record_id, name=name, expected_tag=expected
+            create=context.services.tags.create,
+            rename=lambda record_id, name, expected: context.services.tags.rename(
+                record_id, name, expected=expected
             ),
-            merge=lambda target_id, source_ids, expected: context.storage.merge_tags(
-                target_id, source_ids, expected_tags=expected
+            merge=lambda target_id, source_ids, expected: context.services.tags.merge(
+                target_id, source_ids, expected=expected
             ),
-            remove=lambda record_id, expected: context.storage.remove_tag(
-                record_id, expected_tag=expected
+            remove=lambda record_id, expected: context.services.tags.remove(
+                record_id, expected=expected
             ),
         ),
         tags,
@@ -393,8 +393,8 @@ def render_payees_tags(context: PayeesTagsContext) -> None:
         f"Business profile: {context.profile_key} (all values below are profile-local)"
     )
     try:
-        payees = context.storage.list_payees(active_only=False)
-        tags = context.storage.list_tags(active_only=False)
+        payees = context.services.payees.list(active_only=False)
+        tags = context.services.tags.list(active_only=False)
         transactions = context.storage.list_transactions()
         mixed_sources = context.storage.list_mixed_use_expense_sources()
         schedules = context.storage.list_recurring_schedules()

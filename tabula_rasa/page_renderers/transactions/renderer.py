@@ -63,11 +63,11 @@ def render_transactions(context: TransactionsContext) -> None:
             "RecurringSchedules",
             "Mileage",
         )
-        accounts = ordered_accounts(context.storage.list_accounts(active_only=False))
+        accounts = ordered_accounts(context.services.accounts.list(active_only=False))
         active_accounts = _ordered_active_accounts(accounts)
         categories = ordered_categories(context.storage.list_categories())
-        payees = context.storage.list_payees()
-        tags = context.storage.list_tags()
+        payees = context.services.payees.list()
+        tags = context.services.tags.list()
     except StorageError as error:
         context.report_storage_error(error)
         render_error_footer()
