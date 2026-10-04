@@ -330,11 +330,12 @@ place where those implementations are selected and connected.
 `assemble_application_services` builds a frozen `ApplicationServices` from
 explicitly supplied repositories and a document store. Its setup repository is
 required; extracted capabilities are optional for incremental composition and
-setup-only callers. Receipt metadata and byte storage must be supplied together.
+setup-only callers. Receipt metadata and byte storage must be supplied together. Transaction
+assembly requires the payee and tag repositories used for inline references.
 `create_sheets_application(profile_key, secrets)` requires a
 nonempty selected profile key, selects that profile's settings from the
 deployment configuration, constructs one `GoogleSheetsStorage`, and wraps it
-with capability-specific adapters for setup, reference data, reporting, mileage, and receipt
+with capability-specific adapters for setup, reference data, transactions, journals, reporting, mileage, and receipt
 relationships. Its frozen `SheetsApplication` result
 contains the neutral `services` and the same exact `legacy_storage` instance.
 The shell caches this composition using the selected profile, implementation
@@ -423,9 +424,9 @@ and renderer owners first. Define the smallest contract for that workflow,
 reuse its pure domain rules, adapt the existing Sheets behavior, and move the
 affected renderer calls to the service. Keep success, relevant failure,
 profile isolation, and recovery coverage while removing duplicate ownership.
-Reference data (#226) has its own service owners. Transaction/journal work remains
-a separate slice rather than an additional responsibility of the setup service. Google Sheets
-remains the supported active ledger throughout this transition.
+Reference data (#226), transactions (#227), and journals (#228) have their own
+service owners. Google Sheets remains the supported active ledger throughout
+this transition.
 
 #### Reporting, documents, and mileage slices
 
@@ -471,6 +472,38 @@ ports; neither requires moving bookkeeping rules into endpoint handlers.
 PostgreSQL, commercial authorization, object-storage vendor selection, and
 new UI/report behavior are outside these slices. Remaining concrete page
 coupling closes incrementally under #219, with #235 as its final boundary gate.
+
+### Transaction and journal services (#227 / #228)
+
+The selected profile's composition root supplies `TransactionService` and
+`JournalService`. The New entry surface, single and bulk transaction editors,
+journal editor, and their ledger reads use these services. Existing Add/Edit
+forms, receipt recovery, and Simple Ledger presentation remain shared.
+
+`TransactionRepository` models stable transaction identities, expected-record
+snapshots, semantic filters, and bulk metadata changes. Its narrow `build`
+callback lets the application apply `transaction.prepare_transaction` after
+the repository checks identity/staleness and obtains fresh managed references
+inside its mutation boundary. Inline payees/tags use the same profile's
+reference services. Services add no separate reference read, retry, or
+post-success verification. Adapters retain storage serialization and recovery.
+Optional expected snapshots preserve compatibility for existing non-UI callers;
+the single transaction editor supplies its visible baseline on update/delete.
+
+`JournalRepository` models a complete entry and its typed account/category
+postings, with stable line identities and a required expected entry for edits
+and deletion. Balancing/input rules and fresh reference rules share the existing
+`journal.py` owner. `accounting_postings.py` remains the sole Simple Ledger to
+posting translation; `TransactionService.postings` exposes that translation
+without persisting a second ledger. No new reversal workflow is introduced.
+
+Sheets retains batch construction, worksheet mapping, locking, fresh mutation
+reads, posting-ID uniqueness, cache invalidation and bounded uncertain-write
+readback. Its compatibility facade invokes the same extracted domain rules for
+recurring, mixed-use and asset workflows that will migrate in later #219 slices.
+Document/receipt mutations and reporting queries retain their separate
+service owners. Contracts define behavior for a future relational
+adapter without specifying PostgreSQL tables or an HTTP API.
 
 ## Receipt boundary
 

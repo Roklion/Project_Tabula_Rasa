@@ -260,7 +260,7 @@ def render_add_transaction(
                                     "transaction"
                                 ]
                                 if kind == "Expense" and recurring
-                                else context.storage.create_transaction(
+                                else context.services.transactions.create(
                                     transaction_id=transaction_id, **payload
                                 )
                             )

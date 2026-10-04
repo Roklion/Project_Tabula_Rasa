@@ -201,11 +201,11 @@ def render_ledger(
             )
             if reporting is not None else None
         )
-        # Edit/copy/bulk still require exact legacy mutation baselines (#227).
+        # Edit/copy/bulk still require exact transaction mutation baselines.
         # Reuse the adapter-populated cache; do not reencode receipt cells or
         # introduce another remote read after the query has refreshed them.
-        all_transactions = context.storage.list_transactions(
-            _force_refresh=refresh and query is None,
+        all_transactions = context.services.transactions.list(
+            fresh=refresh and query is None,
         )
         recovery_notices = clear_missing_editor_receipt_recoveries(
             context,
@@ -213,7 +213,7 @@ def render_ledger(
         )
         for notice in recovery_notices:
             st.warning(notice)
-        journal_entries = context.storage.list_journal_entries()
+        journal_entries = context.services.journals.list()
         all_entries = combine_ledger_entries(all_transactions, journal_entries)
         if query is not None:
             all_by_id = {entry["id"]: entry for entry in all_entries}

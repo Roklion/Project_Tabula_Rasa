@@ -395,10 +395,10 @@ def render_payees_tags(context: PayeesTagsContext) -> None:
     try:
         payees = context.services.payees.list(active_only=False)
         tags = context.services.tags.list(active_only=False)
-        transactions = context.storage.list_transactions()
+        transactions = context.services.transactions.list()
         mixed_sources = context.storage.list_mixed_use_expense_sources()
         schedules = context.storage.list_recurring_schedules()
-        journals = context.storage.list_journal_entries()
+        journals = context.services.journals.list()
         assets = context.storage.list_assets()
         mileage = context.storage.list_mileage_trips()
     except StorageError as error:
