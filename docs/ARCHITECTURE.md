@@ -335,7 +335,8 @@ assembly requires the payee and tag repositories used for inline references.
 `create_sheets_application(profile_key, secrets)` requires a
 nonempty selected profile key, selects that profile's settings from the
 deployment configuration, constructs one `GoogleSheetsStorage`, and wraps it
-with capability-specific adapters for setup, reference data, transactions, journals, reporting, mileage, and receipt
+with capability-specific adapters for setup, reference data, transactions,
+journals, reporting, mileage, receipts, recurring schedules, assets, and mixed-use
 relationships. Its frozen `SheetsApplication` result
 contains the neutral `services` and the same exact `legacy_storage` instance.
 The shell caches this composition using the selected profile, implementation
@@ -500,10 +501,43 @@ without persisting a second ledger. No new reversal workflow is introduced.
 Sheets retains batch construction, worksheet mapping, locking, fresh mutation
 reads, posting-ID uniqueness, cache invalidation and bounded uncertain-write
 readback. Its compatibility facade invokes the same extracted domain rules for
-recurring, mixed-use and asset workflows that will migrate in later #219 slices.
+source-owned recurring, mixed-use and asset workflows.
 Document/receipt mutations and reporting queries retain their separate
 service owners. Contracts define behavior for a future relational
 adapter without specifying PostgreSQL tables or an HTTP API.
+
+### Recurring, assets, and mixed-use services (#230–#232)
+
+The production composition supplies `RecurringService`, `AssetService`, and
+`MixedUseService` alongside the same profile's transaction and journal services.
+Their repository contracts describe schedules/occurrences, asset records and
+posting history, and authoritative mixed-use source/projection relationships.
+They expose no worksheet rows, ranges, provider clients, or workbook locks.
+
+| Workflow | Application/domain owner | Sheets adapter responsibilities |
+| --- | --- | --- |
+| Recurring expenses | `RecurringService.reconcile(as_of=...)` owns due-occurrence selection, attention isolation, and generation through transaction/mixed-use services. `recurring.py` reuses `recurrence.py` for template validation, cadence, current-occurrence state, provenance, and stable identities. | `GoogleSheetsRecurringRepository` supplies fresh reconciliation records inside workbook coordination, checks expected schedule records, and writes attention. Initial creation/conversion keeps its current paired mutation and bounded recovery adapter; occurrence preparation uses the accounting application services. |
+| Fixed assets/depreciation | `AssetService` owns asset CRUD, overrides, retirement, schedule/history locks, and posting orchestration. `asset.py` and `depreciation_posting.py` reuse `depreciation.py`; `JournalService.prepare_depreciation` prepares the existing non-cash Simple Ledger posting records. | `GoogleSheetsAssetRepository` performs fresh asset/history/reference reads, expected-record checks, reference-integrity checks, record mapping, append batching, deletion, cache invalidation, and bounded recovery. |
+| Mixed-use allocations | `MixedUseService` reuses `mixed_use.py` and `mixed_use_records.py` for allocation and source/projection rules. Bookkeeping preparation goes through `TransactionService.prepare_source_projection` using fresh references supplied at the source mutation boundary. | `GoogleSheetsMixedUseRepository` retains source/projection persistence, fresh relationships and expected baselines, serialization, paired writes, and uncertain-response readback. Source-aware receipts share the selected graph's mixed-use service and document store. |
+
+The current Streamlit entry points use these services. Recurring reconciliation
+still runs once per selected profile/workbook/session, and also has a callable
+scheduler-neutral entry point; a durable scheduler remains #223's scope.
+Depreciation remains an explicit action with the same Expense records, stable
+asset-period IDs (including zero amounts), schedule semantics, and posted-record
+locks. Mixed-use selection, edit/delete/copy, receipt recovery, and source
+relationships retain their current behavior. No mixed-use asset depreciation,
+PostgreSQL, HTTP API, or commercial authorization is introduced.
+
+Compatibility facade methods reuse the same neutral rules and services rather
+than maintaining parallel bookkeeping implementations. Current dictionary
+record shapes remain supported while adapter serialization owns their Sheet
+representation. The service graph implementation version changes so cached
+pre-extraction graphs are rebuilt. Pure fake-repository workflows run with
+Sheets, Drive, Streamlit, pandas, and infrastructure imports blocked; existing
+adapter tests cover stable identities, stale writes, partial results, and recovery,
+with two-profile service/composition coverage. Remaining ordinary page/storage
+coupling and transitional contexts close under #235.
 
 ## Receipt boundary
 

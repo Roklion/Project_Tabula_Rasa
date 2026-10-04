@@ -98,6 +98,45 @@ class TransactionService:
             original_transaction=original,
         )
 
+    def prepare_source_projection(self, data, references, **options):
+        """Apply transaction rules inside a source repository's fresh mutation.
+
+        Source workflows own provenance and persist paired records; their
+        bookkeeping projection still uses this service and the shared rules.
+        """
+        return prepare_transaction(
+            data,
+            accounts=references.accounts,
+            categories=references.categories,
+            payees=references.payees,
+            tags=references.tags,
+            create_payee=self._payees.create,
+            create_tag=self._tags.create,
+            **options,
+        )
+
+    def create_occurrence(self, *, transaction_id, **data):
+        """Create a source-owned recurring occurrence with a stable identity."""
+        from tabula_rasa.ledger_validation import validate_recurring_provenance
+
+        validate_recurring_provenance(data, "Recurring occurrence")
+        if (
+            data.get("kind") != "Expense"
+            or data.get("recurring_source_kind") != "transaction"
+            or data.get("recurring_occurrence_type") not in {"initial", "generated"}
+            or not data.get("recurring_schedule_id")
+        ):
+            raise StorageValidationError("Recurring occurrence provenance is invalid")
+        identity = clean_text(transaction_id, "Transaction ID", required=True)
+        data = {**data, "receipt_references": []}
+        created_at = utc_now()
+        return self._repository.create(
+            identity,
+            build=lambda references, current: self._prepare(
+                data, references, identity, created_at=created_at
+            ),
+        )
+
     def update(
         self,
         transaction_id: str,

@@ -20,6 +20,9 @@ from tabula_rasa.infrastructure.google_sheets import (
     GoogleSheetsTransactionRepository,
     GoogleSheetsJournalRepository,
 )
+from tabula_rasa.infrastructure.google_sheets_assets import GoogleSheetsAssetRepository
+from tabula_rasa.infrastructure.google_sheets_mixed_use import GoogleSheetsMixedUseRepository
+from tabula_rasa.infrastructure.google_sheets_recurring import GoogleSheetsRecurringRepository
 from tabula_rasa.storage import GoogleSheetsStorage
 
 
@@ -86,5 +89,8 @@ def create_sheets_application(
         tag_repository=GoogleSheetsTagRepository(storage),
         transaction_repository=GoogleSheetsTransactionRepository(storage),
         journal_repository=GoogleSheetsJournalRepository(storage),
+        asset_repository=GoogleSheetsAssetRepository(storage),
+        mixed_use_repository=GoogleSheetsMixedUseRepository(storage),
+        recurring_repository=GoogleSheetsRecurringRepository(storage),
     )
     return SheetsApplication(services=services, legacy_storage=storage)

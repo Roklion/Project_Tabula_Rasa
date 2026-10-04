@@ -224,6 +224,13 @@ class GoogleSheetsTransactionRepository:
         )
 
 
+def transaction_service_for_storage(storage):
+    from tabula_rasa.application import TransactionService, PayeeService, TagService
+    return TransactionService(GoogleSheetsTransactionRepository(storage),
+                              payees=PayeeService(GoogleSheetsPayeeRepository(storage)),
+                              tags=TagService(GoogleSheetsTagRepository(storage)))
+
+
 class GoogleSheetsJournalRepository:
     """Persist complete entries with the current batch and readback behavior."""
 

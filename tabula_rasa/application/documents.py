@@ -8,9 +8,11 @@ from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol, TypeVar
 
-MAX_RECEIPT_REFERENCES = 100
-MAX_RECEIPT_BYTES = 20 * 1024 * 1024
-MAX_RECEIPT_UPLOAD_TOTAL_BYTES = 200 * 1024 * 1024
+from tabula_rasa.document_limits import (
+    MAX_RECEIPT_REFERENCES as MAX_RECEIPT_REFERENCES,
+    MAX_RECEIPT_BYTES as MAX_RECEIPT_BYTES,
+    MAX_RECEIPT_UPLOAD_TOTAL_BYTES as MAX_RECEIPT_UPLOAD_TOTAL_BYTES,
+)
 RECEIPT_UPLOAD_TYPES = ("pdf", "png", "jpg", "jpeg", "webp", "heic")
 UPLOADED_NOT_LINKED_MESSAGE = (
     "The receipt is uploaded but could not be linked to the ledger. "

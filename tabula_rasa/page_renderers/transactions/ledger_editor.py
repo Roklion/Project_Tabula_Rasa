@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from tabula_rasa.page_renderers.workflow_services import recurring_service
 from collections.abc import Mapping
 from collections.abc import Sequence
 import streamlit as st
@@ -238,8 +239,8 @@ def render_transaction_editor(
                 if recurring_id:
                     try:
                         recurring_active = (
-                            context.storage.get_recurring_schedule(
-                                recurring_id, _force_refresh=True
+                            recurring_service(context).get(
+                                recurring_id, fresh=True
                             ).get("status")
                             == "active"
                         )
@@ -402,7 +403,7 @@ def render_transaction_editor(
                         def operation():
                             try:
                                 return (
-                                    context.storage.create_recurring_expense_from_transaction(
+                                    recurring_service(context).from_transaction(
                                         edit_id,
                                         expected_transaction=selected,
                                         **edit_payload,

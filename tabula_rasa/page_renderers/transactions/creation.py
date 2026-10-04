@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from tabula_rasa.page_renderers.workflow_services import recurring_service
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
@@ -256,7 +257,7 @@ def render_add_transaction(
                     def operation():
                         try:
                             return (
-                                context.storage.create_recurring_expense(**payload)[
+                                recurring_service(context).create_expense(**payload)[
                                     "transaction"
                                 ]
                                 if kind == "Expense" and recurring
