@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from tabula_rasa.application.services import ApplicationServices
 from tabula_rasa.composition import create_sheets_application
+from tabula_rasa.local_profile_store import merged_profile_secrets
 from tabula_rasa.storage import GoogleSheetsStorage, StorageUnavailableError
 from tests.app_support import (
     authenticated_app,
@@ -159,3 +160,45 @@ def test_service_assembly_failure_stops_before_page_rendering() -> None:
         assert not app.exception
         assert safe_message in {str(error.value) for error in app.error}
         render.assert_not_called()
+
+
+def test_profile_removed_between_selection_and_assembly_stops_without_fallback() -> None:
+    storages = {
+        f"{key}-sheet": GoogleSheetsStorage(FakeWorkbook())
+        for key in ("north", "south")
+    }
+    profiles = {
+        key: profile_config(name=key.title(), spreadsheet_id=f"{key}-sheet")
+        for key in ("north", "south")
+    }
+    reads = 0
+
+    def reloaded_secrets(secrets, *, path):
+        nonlocal reads
+        reads += 1
+        current = merged_profile_secrets(secrets, path=path)
+        if reads == 2:
+            # The local configuration is reloaded when the graph is built.
+            # Simulate an operator removing the selected profile in between.
+            return {**current, "business_profiles": {"south": profiles["south"]}}
+        return current
+
+    with (
+        patch("tabula_rasa.page_renderers.dashboard.render_dashboard") as render,
+        patch(
+            "tabula_rasa.local_profile_store.merged_profile_secrets",
+            side_effect=reloaded_secrets,
+        ),
+        patch.object(GoogleSheetsStorage, "ensure_defaults") as initialize,
+        authenticated_app(storages=storages, profiles=profiles) as app,
+    ):
+        assert reads == 2
+        assert not app.exception
+        assert any(
+            "Reload the app and check the selected profile settings." in error.value
+            for error in app.error
+        )
+        render.assert_not_called()
+        initialize.assert_not_called()
+        assert "defaults_initialized_profiles" not in app.session_state
+        assert not storages["south-sheet"].list_accounts()
