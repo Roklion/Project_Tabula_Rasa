@@ -121,17 +121,16 @@ def get_application(
     profile_key: str,
     implementation_version: int,
     configuration_revision: str,
+    configuration: dict[str, object],
 ) -> SheetsApplication:
     # Include the implementation version in Streamlit's cache key. Otherwise a
     # service graph created before a deployment can survive with older class
     # definitions. Profile and configuration revision scope the whole graph,
-    # including the transitional facade, to the selected business.
+    # including the transitional facade, to the selected business. Hash the
+    # supplied snapshot too so a cache hit cannot pair a different graph with
+    # the shell's profile/workbook/receipt settings.
     del implementation_version, configuration_revision
-    secrets = merged_profile_secrets(
-        st.secrets,
-        path=LOCAL_PROFILE_STORE_PATH,
-    )
-    return create_sheets_application(profile_key, secrets)
+    return create_sheets_application(profile_key, configuration)
 
 
 def report_storage_error(error: StorageError) -> None:
@@ -277,7 +276,7 @@ profile_admin_enabled = local_profile_admin_available(
 )
 try:
     effective_secrets = merged_profile_secrets(
-        st.secrets,
+        st.secrets.to_dict(),
         path=LOCAL_PROFILE_STORE_PATH,
     )
     profiles = load_business_profiles(effective_secrets)
@@ -460,6 +459,7 @@ else:
             selected_profile_key,
             APPLICATION_IMPLEMENTATION_VERSION,
             revision,
+            dict(effective_secrets),
         )
         services = application.services
         storage = application.legacy_storage
