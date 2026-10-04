@@ -75,6 +75,10 @@ class TransactionRepository(Protocol):
     workflows retain ownership. Recurring provenance is immutable.
     """
 
+    def prepare_workspace(self) -> None:
+        """Prepare aggregate reads used by the transaction workspace."""
+        ...
+
     def list(
         self,
         *,

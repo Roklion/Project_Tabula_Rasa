@@ -13,7 +13,8 @@ from tabula_rasa.page_renderers.tag_selector import (
     tag_selector_error,
 )
 from tabula_rasa.presentation import render_global_footer
-from tabula_rasa.storage import StorageError, normalize_tag_name
+from tabula_rasa.errors import StorageError
+from tabula_rasa.reference_data import normalize_tag_name
 
 from .mileage_form_shared import (
     mileage_payload_from_draft,

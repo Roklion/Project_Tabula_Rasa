@@ -97,7 +97,7 @@ def test_account_renderer_uses_the_selected_profile_service_for_create_and_edit(
         assert repository.records[0]["active"] is False
 
 
-def test_every_page_receives_selected_profile_services_and_shared_legacy_storage() -> None:
+def test_every_page_receives_selected_profile_services_and_only_backup_receives_workbook_admin() -> None:
     north_storage = GoogleSheetsStorage(FakeWorkbook())
     north_storage._workbook.title = "North Ledger"
     south_storage = GoogleSheetsStorage(FakeWorkbook())
@@ -136,7 +136,11 @@ def test_every_page_receives_selected_profile_services_and_shared_legacy_storage
                 assert not app.exception
                 context = rendered[page].call_args.args[0]
                 assert context.profile_key == profile_key
-                assert context.storage is expected_storage
+                if page == "Data & backup":
+                    assert context.workbook_admin is expected_storage
+                else:
+                    assert not hasattr(context, "storage")
+                    assert not hasattr(context, "workbook_admin")
                 assert context.services.profile_key == profile_key
                 assert context.services.ledger.get_info().name == expected_name
                 if profile_key in services_by_profile:
@@ -176,7 +180,7 @@ def test_configuration_revision_rebuilds_selected_profile_services() -> None:
         refreshed_context = render.call_args.args[0]
         assert refreshed_context.services is not original_services
         assert refreshed_context.services.profile_key == "test"
-        assert refreshed_context.storage is storage
+        assert not hasattr(refreshed_context, "storage")
         assert compose.call_count == 2
 
 
@@ -202,7 +206,7 @@ def test_nested_transaction_context_receives_selected_profile_services() -> None
             context = render.call_args.args[0]
             assert context.profile_key == profile_key
             assert context.services.profile_key == profile_key
-            assert context.storage is storages[f"{profile_key}-sheet"]
+            assert not hasattr(context, "storage")
 
 
 def test_unauthenticated_app_does_not_assemble_profile_services() -> None:
@@ -275,16 +279,16 @@ def test_assembly_and_renderers_share_one_snapshot_and_cache_rebuilds_on_change(
         assert not app.exception
         assert configuration.call_count == reads + 1
         context = render.call_args.args[0]
-        assert context.storage is storages["north-sheet"]
+        assert context.services.ledger.get_info().name == storages["north-sheet"].workbook_title
         assert context.services.profile_key == "north"
         assert context.profile_secrets["spreadsheet_id"] == "north-sheet"
         assert context.profile_secrets["google_drive"] == profiles["north"]["google_drive"]
         assert context.services.receipts.document_scope == ""
         # Lazy Drive creation must retain the original snapshot even though
         # the next configuration read would now return replacement settings.
-        original_drive = context.get_drive_client("north", context.configuration_revision)
+        original_drive = context.services.receipts.documents._client_factory()
         assert original_drive == profiles["north"]["google_drive"]
-        assert context.get_drive_client("north", context.configuration_revision) is original_drive
+        assert context.services.receipts.documents._client_factory() is original_drive
         assert configuration.call_count == reads + 1
         old_revision = context.configuration_revision
         old_exports = prepared_exports_key("north", old_revision, 0)
@@ -294,13 +298,13 @@ def test_assembly_and_renderers_share_one_snapshot_and_cache_rebuilds_on_change(
         app.run()
         assert not app.exception
         changed = render.call_args.args[0]
-        assert changed.storage is storages["replacement-sheet"]
+        assert changed.services.ledger.get_info().name == storages["replacement-sheet"].workbook_title
         assert changed.profile_secrets["google_drive"] == replacement["google_drive"]
         assert changed.services.receipts.document_scope == "new-folder"
         assert changed.services is not before
         assert compose.call_count == calls + 1
         assert changed.configuration_revision != old_revision
-        changed_drive = changed.get_drive_client("north", changed.configuration_revision)
+        changed_drive = changed.services.receipts.documents._client_factory()
         assert changed_drive == replacement["google_drive"]
         assert changed_drive is not original_drive
         assert drive_factory.call_count == 2
@@ -308,7 +312,7 @@ def test_assembly_and_renderers_share_one_snapshot_and_cache_rebuilds_on_change(
         assert storages["replacement-sheet"].list_categories()
         navigate_to(app, "Data & backup")
         backup = backup_render.call_args.args[0]
-        assert backup.storage is storages["replacement-sheet"]
+        assert backup.workbook_admin is storages["replacement-sheet"]
         new_exports = prepared_exports_key("north", backup.configuration_revision, 0)
         assert new_exports != old_exports
         assert new_exports not in app.session_state
@@ -316,10 +320,10 @@ def test_assembly_and_renderers_share_one_snapshot_and_cache_rebuilds_on_change(
         manifest = Mock(return_value={"synthetic": "manifest"})
         with patch.dict(backup.receipt_manifest_for_backup.func.__globals__, prepare_backup_receipt_manifest=manifest):
             result = backup.receipt_manifest_for_backup(
-                backup.storage, profile_key="north", drive_settings=backup.drive_settings,
+                backup.workbook_admin, profile_key="north", drive_settings=backup.drive_settings,
                 configuration_revision=backup.configuration_revision,
             )
         assert result == {"synthetic": "manifest"}
-        assert manifest.call_args.args == (backup.storage, changed_drive)
+        assert manifest.call_args.args == (backup.workbook_admin, changed_drive)
         assert manifest.call_args.kwargs["folder_id"] == "new-folder"
         assert storages["south-sheet"].list_accounts() == []

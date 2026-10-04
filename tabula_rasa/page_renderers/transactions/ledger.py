@@ -21,7 +21,7 @@ from tabula_rasa.page_renderers.transactions.receipts import clear_missing_edito
 from tabula_rasa.page_renderers.transactions.receipts import editor_receipt_recovery_active
 from tabula_rasa.page_renderers.transactions.receipts import editor_receipt_recovery_transaction_ids
 from tabula_rasa.page_renderers.transactions.receipts import render_filtered_editor_receipt_recovery
-from tabula_rasa.storage import StorageError
+from tabula_rasa.errors import StorageError
 from .ledger_bulk import render_bulk_actions
 from .ledger_editor import render_transaction_editor
 from .ledger_filters import (

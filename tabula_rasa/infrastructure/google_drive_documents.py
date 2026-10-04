@@ -7,36 +7,21 @@ from collections.abc import Callable, Mapping
 from typing import Any
 
 from tabula_rasa.application.documents import (
-    DocumentError, DocumentMetadata, DocumentReference, DocumentUpload, ReceiptInventory,
+    DocumentError, DocumentReference, DocumentUpload, ReceiptInventory,
 )
 from tabula_rasa.google_drive import GoogleDriveError
 from tabula_rasa.receipt_manifest import ReceiptManifestError, receipt_reference_from_drive_file
+from tabula_rasa.receipt_records import (
+    document_from_receipt_reference as _document_from_receipt_reference,
+    document_to_receipt_reference as document_to_receipt_reference,
+)
 
 
 def document_from_receipt_reference(profile_key: str, reference: Mapping[str, Any]) -> DocumentReference:
     """Translate the current workbook format; legacy names remain readable."""
-    return DocumentReference(
-        profile_key,
-        DocumentMetadata(
-            str(reference.get("receipt_id", "")), str(reference["name"]),
-            str(reference.get("original_filename", "")), str(reference.get("mime_type", "")),
-            reference.get("byte_size"), str(reference.get("sha256", "")),
-        ),
-        str(reference["id"]),
-        f"https://drive.google.com/open?id={reference['id']}",
+    return _document_from_receipt_reference(
+        profile_key, reference, open_url=f"https://drive.google.com/open?id={reference['id']}",
     )
-
-
-def document_to_receipt_reference(document: DocumentReference) -> dict[str, Any]:
-    """Provider locator stays in this compatibility format adapter."""
-    metadata = document.metadata
-    reference: dict[str, Any] = {"id": document.storage_key, "name": metadata.stored_filename}
-    if metadata.document_id:
-        reference.update({
-            "receipt_id": metadata.document_id, "original_filename": metadata.original_filename,
-            "mime_type": metadata.mime_type, "byte_size": metadata.byte_size, "sha256": metadata.sha256,
-        })
-    return reference
 
 
 class GoogleDriveDocumentStore:

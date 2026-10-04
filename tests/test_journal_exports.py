@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import csv
 import io
+from unittest.mock import patch
 
+from tabula_rasa.composition import create_sheets_application
 from tabula_rasa.page_renderers.data_backup.exports import prepare_csv_exports
 from tabula_rasa.storage import GoogleSheetsStorage
+from tests.app_support import profile_config
 from tests.fakes import FakeWorkbook
 
 
@@ -41,6 +44,16 @@ JOURNAL_COLUMNS = [
 def _csv_rows(content: bytes) -> tuple[list[str], list[dict[str, str]]]:
     reader = csv.DictReader(io.StringIO(content.decode("utf-8")))
     return reader.fieldnames or [], list(reader)
+
+
+def _exports(storage: GoogleSheetsStorage, profile_key: str) -> dict[str, bytes]:
+    with patch.object(GoogleSheetsStorage, "from_secrets", return_value=storage):
+        services = create_sheets_application(
+            profile_key, {"business_profiles": {profile_key: profile_config()}}
+        ).services
+    return prepare_csv_exports(
+        services, accounts=services.accounts.list(active_only=False), tags=services.tags.list()
+    )
 
 
 def _storage_with_journal(*, target_name: str) -> GoogleSheetsStorage:
@@ -86,7 +99,7 @@ def _storage_with_journal(*, target_name: str) -> GoogleSheetsStorage:
 def test_prepare_csv_exports_preserves_transaction_contract_and_exports_every_journal_line() -> None:
     storage = _storage_with_journal(target_name="Clearing")
 
-    exports = prepare_csv_exports(storage, accounts=storage.list_accounts(active_only=False), tags=storage.list_tags())
+    exports = _exports(storage, "test")
     transaction_columns, transactions = _csv_rows(exports["transactions"])
     journal_columns, postings = _csv_rows(exports["journals"])
 
@@ -122,8 +135,8 @@ def test_prepare_csv_exports_isolates_profiles_with_equal_journal_ids() -> None:
     north = _storage_with_journal(target_name="North Clearing")
     south = _storage_with_journal(target_name="South Clearing")
 
-    north_rows = _csv_rows(prepare_csv_exports(north, accounts=north.list_accounts(active_only=False), tags=north.list_tags())["journals"])[1]
-    south_rows = _csv_rows(prepare_csv_exports(south, accounts=south.list_accounts(active_only=False), tags=south.list_tags())["journals"])[1]
+    north_rows = _csv_rows(_exports(north, "north")["journals"])[1]
+    south_rows = _csv_rows(_exports(south, "south")["journals"])[1]
 
     assert [row["Entry ID"] for row in north_rows] == [
         "shared-entry-id",

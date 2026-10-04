@@ -20,11 +20,8 @@ from tabula_rasa.depreciation_posting import (
     depreciation_entry_id,
 )
 from tabula_rasa.presentation import render_global_footer, render_page_header
-from tabula_rasa.storage import (
-    GoogleSheetsStorage,
-    StorageError,
-    decode_receipt_references,
-)
+from tabula_rasa.errors import StorageError
+from tabula_rasa.ledger_validation import decode_receipt_references
 
 
 @dataclass(frozen=True)
@@ -32,12 +29,11 @@ class AssetsContext:
     """Dependencies supplied by the application shell for one profile."""
 
     profile_key: str
-    storage: GoogleSheetsStorage
+    services: ApplicationServices
     confirmed_write: Callable[..., None]
     report_storage_error: Callable[[StorageError], None]
     reset_widget_state_if_requested: Callable[..., None]
     schedule_widget_reset: Callable[[str], None]
-    services: ApplicationServices | None = None
 
 
 def _overrides(asset: dict) -> dict[int, dict[str, str]]:
@@ -468,7 +464,7 @@ def render_assets(context: AssetsContext) -> None:
         tags = context.services.tags.list()
         transactions = context.services.transactions.list()
         accounts = context.services.accounts.list(active_only=False)
-        categories = context.storage.list_categories()
+        categories = context.services.categories.list()
         depreciation_by_asset: dict[str, list[str]] = {}
         for transaction in transactions:
             if str(transaction.get("source_type") or "").strip().lower() == "depreciation":

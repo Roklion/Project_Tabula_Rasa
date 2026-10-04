@@ -11,7 +11,7 @@ import streamlit as st
 from tabula_rasa.hierarchy import ordered_categories
 from tabula_rasa.ledger_presentation import money
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
-from tabula_rasa.storage import StorageError
+from tabula_rasa.errors import StorageError
 from .ledger_filters import _bulk_selection_key, transaction_is_source_driven
 from .receipt_workflows import clear_receipt_creation_recovery
 
@@ -471,9 +471,7 @@ def render_bulk_actions(
             try:
                 active_schedule_ids = {
                     str(schedule.get("id") or "").strip()
-                    for schedule in context.storage.list_recurring_schedules(
-                        _force_refresh=True
-                    )
+                    for schedule in context.services.recurring.list(fresh=True)
                     if schedule.get("status") == "active"
                 }
             except StorageError as error:

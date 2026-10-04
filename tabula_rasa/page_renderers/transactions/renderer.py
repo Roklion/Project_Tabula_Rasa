@@ -21,7 +21,7 @@ from tabula_rasa.page_renderers.transactions.payees_tags import (
 )
 from tabula_rasa.page_renderers.transactions.recurring import render_recurring_expenses
 from tabula_rasa.presentation import render_global_footer, render_page_header
-from tabula_rasa.storage import StorageError
+from tabula_rasa.errors import StorageError
 
 
 def _ordered_active_accounts(accounts: list[dict]) -> list[dict]:
@@ -53,19 +53,10 @@ def render_transactions(context: TransactionsContext) -> None:
             render_global_footer()
 
     try:
-        context.storage.prefetch_worksheets(
-            "Accounts",
-            "Categories",
-            "Payees",
-            "Transactions",
-            "Tags",
-            "MixedUseExpenses",
-            "RecurringSchedules",
-            "Mileage",
-        )
+        context.services.transactions.prepare_workspace()
         accounts = ordered_accounts(context.services.accounts.list(active_only=False))
         active_accounts = _ordered_active_accounts(accounts)
-        categories = ordered_categories(context.storage.list_categories())
+        categories = ordered_categories(context.services.categories.list())
         payees = context.services.payees.list()
         tags = context.services.tags.list()
     except StorageError as error:
@@ -130,7 +121,6 @@ def render_transactions(context: TransactionsContext) -> None:
             render_payees_tags(
                 PayeesTagsContext(
                     profile_key=context.profile_key,
-                    storage=context.storage,
                     confirmed_write=context.confirmed_write,
                     report_storage_error=context.report_storage_error,
                     services=context.services,

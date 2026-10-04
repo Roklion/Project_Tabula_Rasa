@@ -96,17 +96,17 @@ def test_sheets_composition_selects_profiles_and_shares_the_legacy_facade() -> N
     ] == ["north@example.test", "south@example.test"]
     for key, application in (("north", north), ("south", south)):
         assert application.services.profile_key == key
-        assert application.legacy_storage is storages[f"{key}-sheet"]
+        assert application.workbook_admin is storages[f"{key}-sheet"]
         assert application.services.ledger.get_info().name == f"{key.title()} ledger"
 
     result = north.services.ledger.ensure_defaults()
     assert result["accounts"] > 0 and result["categories"] > 0
-    assert north.legacy_storage.list_accounts()
-    assert south.legacy_storage.list_accounts() == []
+    assert north.workbook_admin.list_accounts()
+    assert south.workbook_admin.list_accounts() == []
     assert north.services.ledger.ensure_defaults() == {"accounts": 0, "categories": 0}
 
     failure = StorageUnavailableError("Synthetic backend unavailable")
-    with patch.object(south.legacy_storage, "ensure_defaults", side_effect=failure):
+    with patch.object(south.workbook_admin, "ensure_defaults", side_effect=failure):
         with pytest.raises(StorageUnavailableError) as raised:
             south.services.ledger.ensure_defaults()
     assert raised.value is failure

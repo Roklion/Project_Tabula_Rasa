@@ -1,6 +1,6 @@
 """Mixed-use source workflow for the Transactions page."""
 from __future__ import annotations
-from tabula_rasa.infrastructure.mixed_use_receipts import MixedUseReceiptStorage as _MixedUseReceiptStorage
+from tabula_rasa.application.receipt_context import MixedUseReceiptRepository
 from tabula_rasa.page_renderers.workflow_services import recurring_service, mixed_use_service
 from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import replace
@@ -44,15 +44,27 @@ from tabula_rasa.page_renderers.transactions.receipts import (
     receipt_editor_workflow_key,
 )
 from .receipt_workflows import prepare_receipt_uploads
-from tabula_rasa.storage import (
+from tabula_rasa.errors import (
     StorageConflictError,
     StorageError,
     StorageNotFoundError,
     StorageValidationError,
-    decode_receipt_references,
 )
+from tabula_rasa.ledger_validation import decode_receipt_references
 from tabula_rasa.reference_data import normalize_tag_ids as _normalize_tag_ids
 from tabula_rasa.mixed_use_records import mixed_use_ledger_description
+
+
+def _receipt_context(context, source_id, expected_source, on_source_changed=None):
+    receipts = context.services.receipts
+    repository = MixedUseReceiptRepository(
+        receipts.repository, mixed_use_service(context), source_id, expected_source,
+        on_source_changed=on_source_changed,
+    )
+    return replace(
+        context,
+        services=replace(context.services, receipts=receipts.with_repository(repository)),
+    )
 
 
 
@@ -350,13 +362,7 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
             recovery_source_id = str(linked.get("source_id") or "") if linked else ""
         recovery_source = source_by_id.get(recovery_source_id)
         if recovery_source:
-            recovery_context = replace(
-                context,
-                storage=_MixedUseReceiptStorage(
-                    context.storage, recovery_source_id, recovery_source,
-                    source_service=mixed_use_service(context),
-                ),
-            )
+            recovery_context = _receipt_context(context, recovery_source_id, recovery_source)
             render_receipt_creation_recovery(recovery_context)
             return
         if recovery.get("mixed_use_source_id"):
@@ -921,15 +927,8 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
                         **result,
                         "id": result["linked_transaction_id"],
                     }
-                    receipt_context = replace(
-                        context,
-                        storage=_MixedUseReceiptStorage(
-                            context.storage,
-                            result["id"],
-                            result,
-                            on_source_changed=update_receipt_baseline,
-                            source_service=mixed_use_service(context),
-                        ),
+                    receipt_context = _receipt_context(
+                        context, result["id"], result, update_receipt_baseline,
                     )
                     handle_confirmed_transaction_receipts(
                         receipt_context,
@@ -971,15 +970,8 @@ def render_mixed_use_expenses(context, *, accounts, categories, account_paths, c
         )
         if linked is not None:
             render_receipts(
-                replace(
-                    context,
-                    storage=_MixedUseReceiptStorage(
-                        context.storage,
-                        source["id"],
-                        expected_source,
-                        on_source_changed=update_receipt_baseline,
-                        source_service=mixed_use_service(context),
-                    ),
+                _receipt_context(
+                    context, source["id"], expected_source, update_receipt_baseline,
                 ),
                 selected=linked,
                 all_transactions=linked_transactions,

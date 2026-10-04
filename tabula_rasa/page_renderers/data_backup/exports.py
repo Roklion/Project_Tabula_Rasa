@@ -13,9 +13,11 @@ from tabula_rasa.google_drive import GoogleDriveError
 from tabula_rasa.ledger_presentation import ledger_frame
 from tabula_rasa.page_renderers.data_backup.context import DataBackupContext
 from tabula_rasa.page_renderers.mileage import mileage_frame
+from tabula_rasa.page_renderers.mileage_service import mileage_action
 from tabula_rasa.receipt_backfill import ReceiptPreparationError
 from tabula_rasa.receipt_manifest import ReceiptManifestError
-from tabula_rasa.storage import GoogleSheetsStorage, StorageError
+from tabula_rasa.application.services import ApplicationServices
+from tabula_rasa.errors import StorageError
 
 
 def prepared_exports_key(
@@ -31,16 +33,16 @@ def prepared_exports_key(
 
 
 def prepare_csv_exports(
-    storage: GoogleSheetsStorage,
+    services: ApplicationServices,
     *,
     accounts: list[dict],
     tags: list[dict],
 ) -> dict[str, bytes]:
     """Build profile-local transaction and mileage CSV snapshots with Tags."""
-    categories = storage.list_categories()
-    transactions = storage.list_transactions()
-    journals = storage.list_journal_entries()
-    mileage_trips = storage.list_mileage_trips()
+    categories = services.categories.list()
+    transactions = services.transactions.list()
+    journals = services.journals.list()
+    mileage_trips = [trip.as_record() for trip in mileage_action(services.mileage.list_trips)]
     transaction_frame = ledger_frame(
         transactions,
         accounts,
@@ -97,7 +99,7 @@ def render_exports(context: DataBackupContext) -> None:
             backup_error = None
             try:
                 receipt_manifest = context.receipt_manifest_for_backup(
-                    context.storage,
+                    context.workbook_admin,
                     profile_key=context.profile_key,
                     drive_settings=context.drive_settings,
                     configuration_revision=context.configuration_revision,
@@ -112,7 +114,7 @@ def render_exports(context: DataBackupContext) -> None:
                 receipt_manifest = None
             try:
                 csv_exports = prepare_csv_exports(
-                    context.storage,
+                    context.services,
                     accounts=context.services.accounts.list(active_only=False),
                     tags=context.services.tags.list(),
                 )
@@ -128,8 +130,8 @@ def render_exports(context: DataBackupContext) -> None:
                     prepared_exports["backup_error"] = backup_error
                 else:
                     try:
-                        backup_zip = context.storage.export_backup_zip(receipt_manifest)
-                        manifest = context.storage.validate_backup_zip(backup_zip)
+                        backup_zip = context.workbook_admin.export_backup_zip(receipt_manifest)
+                        manifest = context.workbook_admin.validate_backup_zip(backup_zip)
                     except (
                         StorageError,
                         GoogleDriveError,

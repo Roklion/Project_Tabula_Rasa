@@ -36,7 +36,7 @@ from tabula_rasa.page_renderers.tag_selector import (
     inline_tag_name_error,
     tag_selector_error,
 )
-from tabula_rasa.storage import StorageConflictError, StorageValidationError
+from tabula_rasa.errors import StorageConflictError, StorageValidationError
 
 
 @dataclass(frozen=True)

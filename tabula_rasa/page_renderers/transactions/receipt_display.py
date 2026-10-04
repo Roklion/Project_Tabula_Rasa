@@ -6,9 +6,9 @@ from collections.abc import Mapping
 from collections.abc import Sequence
 import streamlit as st
 from tabula_rasa.application.documents import DocumentError
-from tabula_rasa.infrastructure.receipt_context import receipt_service_for_context
+from tabula_rasa.application.receipt_context import receipt_service_for_context
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
-from tabula_rasa.storage import StorageError
+from tabula_rasa.errors import StorageError
 from .receipt_workflows import (
     _mark_workbook_data_changed,
     _receipt_folder,

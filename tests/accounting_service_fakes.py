@@ -32,6 +32,9 @@ class References:
 
 
 class Transactions:
+    def prepare_workspace(self):
+        """In-memory references are already available for workspace reads."""
+
     def __init__(self):
         self.accounts = {
             "cash": {"id": "cash", "active": True},

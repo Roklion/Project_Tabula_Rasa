@@ -11,10 +11,12 @@ from .reporting import ReportingService
 from .reporting_contracts import LedgerQueryRepository
 from .contracts import (
     AccountRepository,
+    CategoryRepository,
     PayeeRepository,
     TagRepository,
 )
-from .reference_data import AccountService, PayeeService, TagService
+from .reference_data import AccountService, CategoryService, PayeeService, TagService
+from .imports import TransactionImportRepository, TransactionImportService
 from .accounting_contracts import TransactionRepository, JournalRepository
 from .transactions import TransactionService
 from .journals import JournalService
@@ -39,6 +41,8 @@ class ApplicationServices:
     profile_key: str
     ledger: LedgerSetupService
     accounts: AccountService | None = None
+    categories: CategoryService | None = None
+    imports: TransactionImportService | None = None
     payees: PayeeService | None = None
     tags: TagService | None = None
     transactions: TransactionService | None = None
@@ -60,6 +64,8 @@ def assemble_application_services(
     document_store: DocumentStore | None = None,
     mileage_repository: MileageRepository | None = None,
     account_repository: AccountRepository | None = None,
+    category_repository: CategoryRepository | None = None,
+    import_repository: TransactionImportRepository | None = None,
     payee_repository: PayeeRepository | None = None,
     tag_repository: TagRepository | None = None,
     transaction_repository: TransactionRepository | None = None,
@@ -118,6 +124,12 @@ def assemble_application_services(
         ),
         accounts=AccountService(account_repository)
         if account_repository is not None
+        else None,
+        categories=CategoryService(category_repository)
+        if category_repository is not None
+        else None,
+        imports=TransactionImportService(import_repository)
+        if import_repository is not None
         else None,
         payees=payees,
         tags=tags,

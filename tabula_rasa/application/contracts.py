@@ -26,6 +26,21 @@ class AccountChanges(TypedDict, total=False):
     parent_id: str | None
 
 
+class CategoryRecord(TypedDict):
+    """A stable category identity and its existing two-level hierarchy."""
+
+    id: str
+    name: str
+    kind: str
+    parent_id: str
+
+
+class CategoryChanges(TypedDict, total=False):
+    name: str
+    kind: str
+    parent_id: str | None
+
+
 class ManagedReferenceRecord(TypedDict):
     """Payee and tag records retain stable identities and display names."""
 
@@ -70,6 +85,22 @@ class AccountRepository(Protocol):
     ) -> AccountRecord: ...
 
     def update(self, account_id: str, *, changes: AccountChanges) -> AccountRecord: ...
+
+
+class CategoryRepository(Protocol):
+    """One profile's categories and final fresh hierarchy/reference checks.
+
+    Persistence owns uniqueness, current relationships, cache invalidation,
+    and uncertain-write recovery. Services add no independent reads or retries.
+    """
+
+    def list(self, kind: str | None = None) -> list[CategoryRecord]: ...
+
+    def create(self, name: str, kind: str, *, parent_id: str) -> CategoryRecord: ...
+
+    def update(self, category_id: str, *, changes: CategoryChanges) -> CategoryRecord: ...
+
+    def delete(self, category_id: str) -> None: ...
 
 
 class PayeeRepository(Protocol):

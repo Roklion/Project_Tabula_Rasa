@@ -6,6 +6,8 @@ from typing import cast
 from tabula_rasa.application.contracts import (
     AccountChanges,
     AccountRecord,
+    CategoryChanges,
+    CategoryRecord,
     ExpectedRecord,
     ExpectedRecords,
     ManagedMutationResult,
@@ -68,6 +70,28 @@ class GoogleSheetsAccountRepository:
 
     def update(self, account_id: str, *, changes: AccountChanges) -> AccountRecord:
         return cast(AccountRecord, self._storage.edit_account(account_id, **changes))
+
+
+class GoogleSheetsCategoryRepository:
+    """Reuse category hierarchy, uniqueness, and fresh reference protection."""
+
+    def __init__(self, storage: GoogleSheetsStorage) -> None:
+        self._storage = storage
+
+    def list(self, kind: str | None = None) -> list[CategoryRecord]:
+        return cast(list[CategoryRecord], self._storage.list_categories(kind))
+
+    def create(self, name: str, kind: str, *, parent_id: str) -> CategoryRecord:
+        return cast(
+            CategoryRecord,
+            self._storage.create_category(name, kind, parent_id=parent_id),
+        )
+
+    def update(self, category_id: str, *, changes: CategoryChanges) -> CategoryRecord:
+        return cast(CategoryRecord, self._storage.edit_category(category_id, **changes))
+
+    def delete(self, category_id: str) -> None:
+        self._storage.delete_category(category_id)
 
 
 class GoogleSheetsPayeeRepository:
@@ -175,6 +199,12 @@ class GoogleSheetsTransactionRepository:
 
     def __init__(self, storage: GoogleSheetsStorage) -> None:
         self._storage = storage
+
+    def prepare_workspace(self) -> None:
+        self._storage.prefetch_worksheets(
+            "Accounts", "Categories", "Payees", "Transactions", "Tags",
+            "MixedUseExpenses", "RecurringSchedules", "Mileage",
+        )
 
     def list(
         self, *, start=None, end=None, kind=None, account_ids=None, fresh=False

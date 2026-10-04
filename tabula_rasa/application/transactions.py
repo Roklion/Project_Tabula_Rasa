@@ -42,6 +42,10 @@ class TransactionService:
         self._payees = payees
         self._tags = tags
 
+    def prepare_workspace(self) -> None:
+        """Let the backend batch related reads without exposing its schema."""
+        self._repository.prepare_workspace()
+
     def list(
         self,
         *,

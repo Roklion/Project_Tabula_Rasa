@@ -15,7 +15,7 @@ from tabula_rasa.application.documents import (
     UPLOADED_NOT_LINKED_MESSAGE as UPLOADED_NOT_LINKED_MESSAGE,
     prepare_receipt_uploads as prepare_document_uploads,
 )
-from tabula_rasa.infrastructure.receipt_context import process_context_receipts, receipt_service_for_context
+from tabula_rasa.application.receipt_context import process_context_receipts, receipt_service_for_context
 from tabula_rasa.page_renderers.transactions.context import TransactionsContext
 
 RECEIPT_CREATION_WORKFLOW_KEY = "transaction_receipt_creation_workflow"

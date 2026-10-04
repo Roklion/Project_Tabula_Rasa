@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from collections.abc import Sequence
 import streamlit as st
-from tabula_rasa.storage import StorageError
-from tabula_rasa.storage import decode_receipt_references
-from tabula_rasa.storage import MIXED_USE_SOURCE_TYPE
+from tabula_rasa.errors import StorageError
+from tabula_rasa.ledger_validation import decode_receipt_references
+from tabula_rasa.mixed_use import MIXED_USE_SOURCE_TYPE
 from .transaction_copy import _copy_source_key
 
 def _bulk_selection_key(profile_key: str) -> str:

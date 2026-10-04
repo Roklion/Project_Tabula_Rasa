@@ -82,13 +82,13 @@ def render_cloud_backup(context: DataBackupContext) -> None:
         try:
             with st.spinner("Preparing and uploading fresh backup..."):
                 receipt_manifest = context.receipt_manifest_for_backup(
-                    context.storage,
+                    context.workbook_admin,
                     profile_key=context.profile_key,
                     drive_settings=context.drive_settings,
                     configuration_revision=context.configuration_revision,
                 )
-                backup_zip = context.storage.export_backup_zip(receipt_manifest)
-                manifest = context.storage.validate_backup_zip(backup_zip)
+                backup_zip = context.workbook_admin.export_backup_zip(receipt_manifest)
+                manifest = context.workbook_admin.validate_backup_zip(backup_zip)
                 cloud_filename, cloud_sha256 = backup_filename_and_hash(
                     backup_zip,
                     manifest,

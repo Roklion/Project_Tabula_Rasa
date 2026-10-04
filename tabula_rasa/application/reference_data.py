@@ -20,6 +20,9 @@ from .contracts import (
     AccountChanges,
     AccountRecord,
     AccountRepository,
+    CategoryChanges,
+    CategoryRecord,
+    CategoryRepository,
     ExpectedRecord,
     ExpectedRecords,
     ManagedMutationResult,
@@ -131,6 +134,52 @@ class AccountService:
 
     def deactivate(self, account_id: str) -> AccountRecord:
         return self.update(account_id, active=False)
+
+
+class CategoryService:
+    """Normalize categories without repeating fresh persistence invariants."""
+
+    def __init__(self, repository: CategoryRepository) -> None:
+        self._repository = repository
+
+    @staticmethod
+    def _kind(value: str) -> str:
+        kind = clean_text(value, "Category kind", required=True).title()
+        if kind not in {"Income", "Expense"}:
+            raise StorageValidationError("Category kind must be Income or Expense")
+        return kind
+
+    def list(self, kind: str | None = None) -> list[CategoryRecord]:
+        return self._repository.list(None if kind is None else self._kind(kind))
+
+    def create(
+        self, name: str, kind: str, *, parent_id: str | None = None
+    ) -> CategoryRecord:
+        return self._repository.create(
+            clean_text(name, "Category name", required=True),
+            self._kind(kind),
+            parent_id=clean_text(parent_id, "Category parent"),
+        )
+
+    def update(
+        self, category_id: str, **changes: Unpack[CategoryChanges]
+    ) -> CategoryRecord:
+        normalized = dict(changes)
+        if "name" in changes:
+            normalized["name"] = clean_text(
+                changes["name"], "Category name", required=True
+            )
+        if "kind" in changes:
+            normalized["kind"] = self._kind(changes["kind"])
+        if "parent_id" in changes:
+            normalized["parent_id"] = clean_text(changes["parent_id"], "Category parent")
+        return self._repository.update(
+            clean_text(category_id, "Category ID", required=True),
+            changes=cast(CategoryChanges, normalized),
+        )
+
+    def delete(self, category_id: str) -> None:
+        self._repository.delete(clean_text(category_id, "Category ID", required=True))
 
 
 class PayeeService:

@@ -96,7 +96,8 @@ def test_data_backup_import_is_side_effect_free_and_uses_explicit_context() -> N
     context_fields = {field.name for field in fields(DataBackupContext)}
     assert context_fields >= {
         "profile_key",
-        "storage",
+        "workbook_admin",
+        "services",
         "drive_settings",
         "synology_recovery_settings",
         "configuration_revision",
@@ -165,7 +166,14 @@ def test_csv_exports_include_resolved_transaction_and_mileage_tags() -> None:
         tag_ids=[tag["id"]],
     )
 
-    exports = prepare_csv_exports(storage, accounts=storage.list_accounts(active_only=False), tags=storage.list_tags())
+    from tabula_rasa.composition import create_sheets_application
+    from tests.app_support import profile_config
+
+    with patch.object(GoogleSheetsStorage, "from_secrets", return_value=storage):
+        services = create_sheets_application(
+            "test", {"business_profiles": {"test": profile_config()}}
+        ).services
+    exports = prepare_csv_exports(services, accounts=services.accounts.list(active_only=False), tags=services.tags.list())
     transaction = next(
         csv.DictReader(io.StringIO(exports["transactions"].decode("utf-8")))
     )
@@ -236,7 +244,7 @@ def test_import_workflows_keep_separate_profile_keys_and_explicit_writes() -> No
     assert 'key=f"transaction_csv_upload_{context.profile_key}"' in source
     assert 'key=f"quickbooks_transaction_upload_{context.profile_key}"' in source
     assert 'key=f"quickbooks_mileage_upload_{context.profile_key}"' in source
-    assert "preview_quickbooks_transactions" in source
+    assert "context.services.imports.preview_quickbooks" in source
     assert "preview_quickbooks_mileage" in source
     assert source.count('encoding="utf-8-sig"') == 3
     assert source.count('.fillna("")') == 3

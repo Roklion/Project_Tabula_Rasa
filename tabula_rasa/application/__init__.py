@@ -7,7 +7,8 @@ from .ledger_setup import LedgerInfo, LedgerSetupService
 from .documents import DocumentStore, ReceiptService
 from .mileage import MileageService
 from .reporting import ReportingService
-from .reference_data import AccountService, PayeeService, TagService
+from .reference_data import AccountService, CategoryService, PayeeService, TagService
+from .imports import TransactionImportService
 from .transactions import TransactionService
 from .journals import JournalService
 from .services import ApplicationServices, assemble_application_services
@@ -24,6 +25,8 @@ __all__ = [
     "ReceiptService",
     "ReportingService",
     "AccountService",
+    "CategoryService",
+    "TransactionImportService",
     "PayeeService",
     "TagService",
     "TransactionService",
