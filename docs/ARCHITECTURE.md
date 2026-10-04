@@ -338,11 +338,16 @@ with capability-specific adapters for setup, reporting, mileage, and receipt
 relationships. Its frozen `SheetsApplication` result
 contains the neutral `services` and the same exact `legacy_storage` instance.
 The shell caches this composition using the selected profile, implementation
-version, and local configuration revision, preserving the existing cache and
-Google authorization boundaries. The receipt byte adapter is constructed with
-the selected profile and receipt folder, but its Drive client is lazy. In the
-Streamlit runtime it uses the existing profile/revision-scoped client cache;
-assembling services never performs OAuth or a document request.
+version, local configuration revision, and the supplied configuration snapshot.
+Assembly consumes the same snapshot as the shell's workbook identity and page
+settings, rather than reloading configuration during construction. A changed
+snapshot rebuilds both Sheets and lazy Drive clients even if the local revision
+is unchanged. Drive callbacks consume the same snapshot as page folder settings.
+Default initialization is scoped to profile and workbook identity; downstream
+export revisions also include the workbook identity. The receipt byte adapter
+is bound to the selected profile and receipt folder and uses the same cached
+Drive client as page callbacks. Assembling services never performs OAuth or a
+document request.
 
 Renderer contexts accept the selected profile's services alongside their
 existing storage dependency. Their optional services field supports the

@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from contextlib import ExitStack
-from unittest.mock import patch
+from unittest.mock import Mock, patch
+
+import pytest
+import streamlit as st
 
 from tabula_rasa.application.services import ApplicationServices
+from tabula_rasa.business_profiles import BusinessProfileConfigurationError
 from tabula_rasa.composition import create_sheets_application
-from tabula_rasa.local_profile_store import merged_profile_secrets
 from tabula_rasa.storage import GoogleSheetsStorage, StorageUnavailableError
+from tabula_rasa.page_renderers.data_backup.exports import prepared_exports_key
 from tests.app_support import (
     authenticated_app,
     build_app_test,
@@ -146,59 +150,112 @@ def test_unauthenticated_app_does_not_assemble_profile_services() -> None:
     compose.assert_not_called()
 
 
-def test_service_assembly_failure_stops_before_page_rendering() -> None:
+@pytest.mark.parametrize("failure", [StorageUnavailableError, BusinessProfileConfigurationError])
+def test_service_assembly_failure_stops_before_page_rendering(failure) -> None:
     storage = GoogleSheetsStorage(FakeWorkbook())
     safe_message = "The selected ledger is temporarily unavailable."
     with (
         patch("tabula_rasa.page_renderers.dashboard.render_dashboard") as render,
         patch(
             "tabula_rasa.composition.create_sheets_application",
-            side_effect=StorageUnavailableError(safe_message),
+            side_effect=failure(safe_message),
         ),
         authenticated_app(storage) as app,
     ):
         assert not app.exception
-        assert safe_message in {str(error.value) for error in app.error}
+        expected = (
+            safe_message if failure is StorageUnavailableError
+            else "The business-profile configuration is invalid or changed. "
+            "Reload the app and check the selected profile settings."
+        )
+        assert expected in {str(error.value) for error in app.error}
         render.assert_not_called()
 
 
-def test_profile_removed_between_selection_and_assembly_stops_without_fallback() -> None:
+def test_assembly_and_renderers_share_one_snapshot_and_cache_rebuilds_on_change() -> None:
     storages = {
         f"{key}-sheet": GoogleSheetsStorage(FakeWorkbook())
-        for key in ("north", "south")
+        for key in ("north", "south", "replacement")
     }
     profiles = {
         key: profile_config(name=key.title(), spreadsheet_id=f"{key}-sheet")
         for key in ("north", "south")
     }
-    reads = 0
-
-    def reloaded_secrets(secrets, *, path):
-        nonlocal reads
-        reads += 1
-        current = merged_profile_secrets(secrets, path=path)
-        if reads == 2:
-            # The local configuration is reloaded when the graph is built.
-            # Simulate an operator removing the selected profile in between.
-            return {**current, "business_profiles": {"south": profiles["south"]}}
-        return current
-
+    original = {"business_profiles": profiles}
+    replacement = profile_config(name="North", spreadsheet_id="replacement-sheet")
+    replacement["google_drive"] = {**profiles["north"]["google_drive"], "receipt_folder": {"id": "new-folder"}}
+    updated = {"business_profiles": {"north": replacement, "south": profiles["south"]}}
     with (
-        patch("tabula_rasa.page_renderers.dashboard.render_dashboard") as render,
+        patch("tabula_rasa.page_renderers.transactions.render_transactions") as render,
+        patch("tabula_rasa.page_renderers.data_backup.render_data_backup") as backup_render,
+        patch("tabula_rasa.google_drive.GoogleDriveClient", side_effect=lambda config, settings: dict(settings)) as drive_factory,
+        patch("tabula_rasa.google_drive.load_oauth_config", return_value=object()),
         patch(
             "tabula_rasa.local_profile_store.merged_profile_secrets",
-            side_effect=reloaded_secrets,
-        ),
-        patch.object(GoogleSheetsStorage, "ensure_defaults") as initialize,
+            return_value=original,
+        ) as configuration,
+        patch("tabula_rasa.local_profile_store.local_profile_revision", return_value="same-revision"),
+        patch("tabula_rasa.composition.create_sheets_application", wraps=create_sheets_application) as compose,
         authenticated_app(storages=storages, profiles=profiles) as app,
     ):
-        assert reads == 2
+        def change_during_assembly(key, snapshot, **composition_options):
+            configuration.return_value = updated
+            return create_sheets_application(key, snapshot, **composition_options)
+
+        # Rebuild the graph while simulating a settings replacement after the
+        # shell has loaded its snapshot. Assembly must not read it again.
+        st.cache_resource.clear()
+        compose.side_effect = change_during_assembly
+        reads = configuration.call_count
+        navigate_to(app, "Transactions")
         assert not app.exception
-        assert any(
-            "Reload the app and check the selected profile settings." in error.value
-            for error in app.error
-        )
-        render.assert_not_called()
-        initialize.assert_not_called()
-        assert "defaults_initialized_profiles" not in app.session_state
-        assert not storages["south-sheet"].list_accounts()
+        assert configuration.call_count == reads + 1
+        context = render.call_args.args[0]
+        assert context.storage is storages["north-sheet"]
+        assert context.services.profile_key == "north"
+        assert context.profile_secrets["spreadsheet_id"] == "north-sheet"
+        assert context.profile_secrets["google_drive"] == profiles["north"]["google_drive"]
+        assert context.services.receipts.document_scope == ""
+        # Lazy Drive creation must retain the original snapshot even though
+        # the next configuration read would now return replacement settings.
+        original_drive = context.get_drive_client("north", context.configuration_revision)
+        assert original_drive == profiles["north"]["google_drive"]
+        assert context.get_drive_client("north", context.configuration_revision) is original_drive
+        assert configuration.call_count == reads + 1
+        old_revision = context.configuration_revision
+        old_exports = prepared_exports_key("north", old_revision, 0)
+        app.session_state[old_exports] = {"synthetic": b"old workbook"}
+        before = context.services
+        calls = compose.call_count
+        app.run()
+        assert not app.exception
+        changed = render.call_args.args[0]
+        assert changed.storage is storages["replacement-sheet"]
+        assert changed.profile_secrets["google_drive"] == replacement["google_drive"]
+        assert changed.services.receipts.document_scope == "new-folder"
+        assert changed.services is not before
+        assert compose.call_count == calls + 1
+        assert changed.configuration_revision != old_revision
+        changed_drive = changed.get_drive_client("north", changed.configuration_revision)
+        assert changed_drive == replacement["google_drive"]
+        assert changed_drive is not original_drive
+        assert drive_factory.call_count == 2
+        assert storages["replacement-sheet"].list_accounts()
+        assert storages["replacement-sheet"].list_categories()
+        navigate_to(app, "Data & backup")
+        backup = backup_render.call_args.args[0]
+        assert backup.storage is storages["replacement-sheet"]
+        new_exports = prepared_exports_key("north", backup.configuration_revision, 0)
+        assert new_exports != old_exports
+        assert new_exports not in app.session_state
+        assert backup.get_drive_client("north", backup.configuration_revision) is changed_drive
+        manifest = Mock(return_value={"synthetic": "manifest"})
+        with patch.dict(backup.receipt_manifest_for_backup.func.__globals__, prepare_backup_receipt_manifest=manifest):
+            result = backup.receipt_manifest_for_backup(
+                backup.storage, profile_key="north", drive_settings=backup.drive_settings,
+                configuration_revision=backup.configuration_revision,
+            )
+        assert result == {"synthetic": "manifest"}
+        assert manifest.call_args.args == (backup.storage, changed_drive)
+        assert manifest.call_args.kwargs["folder_id"] == "new-folder"
+        assert storages["south-sheet"].list_accounts() == []

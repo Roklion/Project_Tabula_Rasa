@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from functools import partial
 from pathlib import Path
 import sys
 
@@ -121,20 +122,21 @@ def get_application(
     profile_key: str,
     implementation_version: int,
     configuration_revision: str,
+    configuration: dict[str, object],
 ) -> SheetsApplication:
     # Include the implementation version in Streamlit's cache key. Otherwise a
     # service graph created before a deployment can survive with older class
     # definitions. Profile and configuration revision scope the whole graph,
-    # including the transitional facade, to the selected business.
+    # including the transitional facade, to the selected business. Hash the
+    # supplied snapshot too so a cache hit cannot pair a different graph with
+    # the shell's profile/workbook/receipt settings.
     del implementation_version
-    secrets = merged_profile_secrets(
-        st.secrets,
-        path=LOCAL_PROFILE_STORE_PATH,
-    )
     return create_sheets_application(
         profile_key,
-        secrets,
-        drive_client_factory=lambda: get_drive_client(profile_key, configuration_revision),
+        configuration,
+        drive_client_factory=lambda: get_drive_client(
+            profile_key, configuration_revision, configuration=configuration,
+        ),
     )
 
 
@@ -152,13 +154,12 @@ def current_app_url() -> str:
 def get_drive_client(
     profile_key: str,
     configuration_revision: str,
+    *,
+    configuration: dict[str, object],
 ) -> GoogleDriveClient:
     """Build a Drive client only when the selected profile is connected."""
     del configuration_revision
-    app_secrets = merged_profile_secrets(
-        st.secrets,
-        path=LOCAL_PROFILE_STORE_PATH,
-    )
+    app_secrets = configuration
     profile_secrets = select_profile_secrets(app_secrets, profile_key)
     config = load_oauth_config(app_secrets)
     drive_settings = profile_secrets.get("google_drive")
@@ -175,6 +176,7 @@ def receipt_manifest_for_backup(
     profile_key: str,
     drive_settings: Mapping[str, object] | None,
     configuration_revision: str,
+    configuration: dict[str, object],
 ) -> dict[str, object]:
     """Build a fresh profile-scoped receipt inventory for one ledger backup."""
     receipt_folder = (
@@ -187,7 +189,9 @@ def receipt_manifest_for_backup(
             "A current-format backup requires a selected Google Drive receipt "
             "folder so its receipt inventory is complete."
         )
-    drive = get_drive_client(profile_key, configuration_revision)
+    drive = get_drive_client(
+        profile_key, configuration_revision, configuration=configuration
+    )
     return prepare_backup_receipt_manifest(
         storage,
         drive,
@@ -281,7 +285,7 @@ profile_admin_enabled = local_profile_admin_available(
 )
 try:
     effective_secrets = merged_profile_secrets(
-        st.secrets,
+        st.secrets.to_dict(),
         path=LOCAL_PROFILE_STORE_PATH,
     )
     profiles = load_business_profiles(effective_secrets)
@@ -460,10 +464,19 @@ else:
             profile_by_key[selected_profile_key].secrets.get("spreadsheet_id")
             or revision
         )
+        revision = f"{revision}:{workbook_identity}"
+        configuration_snapshot = dict(effective_secrets)
+        snapshot_drive_client = partial(
+            get_drive_client, configuration=configuration_snapshot
+        )
+        snapshot_receipt_manifest = partial(
+            receipt_manifest_for_backup, configuration=configuration_snapshot
+        )
         application = get_application(
             selected_profile_key,
             APPLICATION_IMPLEMENTATION_VERSION,
             revision,
+            configuration_snapshot,
         )
         services = application.services
         storage = application.legacy_storage
@@ -475,9 +488,10 @@ else:
         initialized_profiles = st.session_state.setdefault(
             "defaults_initialized_profiles", set()
         )
-        if selected_profile_key not in initialized_profiles:
+        initialization_key = (selected_profile_key, workbook_identity)
+        if initialization_key not in initialized_profiles:
             services.ledger.ensure_defaults()
-            initialized_profiles.add(selected_profile_key)
+            initialized_profiles.add(initialization_key)
         reconciled_profiles = st.session_state.setdefault(
             "recurring_reconciled_profiles", set()
         )
@@ -543,7 +557,7 @@ try:
                 services=services,
                 profile_secrets=profile_by_key[selected_profile_key].secrets,
                 configuration_revision=revision,
-                get_drive_client=get_drive_client,
+                get_drive_client=snapshot_drive_client,
                 confirmed_write=confirmed_write,
                 report_storage_error=report_storage_error,
                 reset_widget_state_if_requested=reset_widget_state_if_requested,
@@ -636,8 +650,8 @@ try:
                     "synology_recovery"
                 ),
                 configuration_revision=revision,
-                get_drive_client=get_drive_client,
-                receipt_manifest_for_backup=receipt_manifest_for_backup,
+                get_drive_client=snapshot_drive_client,
+                receipt_manifest_for_backup=snapshot_receipt_manifest,
                 confirmed_write=confirmed_write,
                 report_storage_error=report_storage_error,
             )

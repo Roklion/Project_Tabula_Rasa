@@ -130,6 +130,37 @@ def test_prepare_receipts_rejects_count_and_batch_size_limits() -> None:
             prepare_receipt_uploads([upload, upload])
 
 
+def test_prepare_receipts_rejects_reference_count_before_reading_files() -> None:
+    upload = UploadedFile("receipt.pdf", b"receipt", "application/pdf")
+    upload.getvalue = Mock(side_effect=AssertionError("Receipt content was read"))
+    with pytest.raises(GoogleDriveAccessError, match="no more than 100"):
+        prepare_receipt_uploads([upload, upload], existing_reference_count=99)
+    upload.getvalue.assert_not_called()
+
+
+def test_prepare_receipts_stops_reading_after_an_invalid_file() -> None:
+    invalid = UploadedFile("receipt.txt", b"receipt", "text/plain")
+    later = UploadedFile("later.pdf", b"receipt", "application/pdf")
+    later.getvalue = Mock(side_effect=AssertionError("Later receipt was read"))
+    with pytest.raises(GoogleDriveAccessError, match="must be PDF"):
+        prepare_receipt_uploads([invalid, later])
+    later.getvalue.assert_not_called()
+
+
+def test_prepare_receipts_stops_reading_after_aggregate_limit() -> None:
+    first = UploadedFile("first.pdf", b"123", "application/pdf")
+    second = UploadedFile("second.pdf", b"456", "application/pdf")
+    later = UploadedFile("later.pdf", b"receipt", "application/pdf")
+    later.getvalue = Mock(side_effect=AssertionError("Later receipt was read"))
+    with patch(
+        "tabula_rasa.page_renderers.transactions.receipts.MAX_RECEIPT_UPLOAD_TOTAL_BYTES",
+        5,
+    ):
+        with pytest.raises(GoogleDriveAccessError, match="200 MB total"):
+            prepare_receipt_uploads([first, second, later])
+    later.getvalue.assert_not_called()
+
+
 def test_normal_upload_and_link_clears_pending_work() -> None:
     workflow = new_receipt_creation_workflow("txn-1", [_prepared()])
     linked = Mock()

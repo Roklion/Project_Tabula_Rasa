@@ -261,10 +261,11 @@ or rebuild page-local filters, selections, edit targets, widget generations,
 and pending notices. Never initialize or access another profile's storage
 under the new selection.
 
-If profile configuration is invalid or changes during ledger initialization,
-stop before rendering a ledger page and show a safe error directing the user
-to reload and check the selected profile settings. Never substitute another
-profile's workbook or expose a raw traceback for this configuration failure.
+Use one configuration snapshot for ledger initialization and page settings;
+apply configuration changes together on the next rerun. If the selected
+profile cannot be resolved, stop before rendering a ledger page and show a
+safe reload/settings error. Never substitute another profile's workbook or
+expose a raw traceback for this configuration failure.
 
 ## Page headers, workflow groups, and messages
 
@@ -1088,8 +1089,8 @@ An absent hosted/local record is reported as unavailable, not as healthy.
 Exports retain one Prepare/Refresh workflow, preparation timestamp,
 transactions CSV, mileage CSV, and a complete backup when receipt preparation
 succeeds. CSV downloads remain available when the complete backup fails.
-Prepared data is scoped to profile, configuration revision, and confirmed
-workbook data revision.
+Prepared data is scoped to profile, configuration revision, workbook identity,
+and confirmed workbook data revision.
 
 Imports retain the three distinct workflows and all previews, diagnostics,
 duplicate summaries, and explicit actions in the import contract above.

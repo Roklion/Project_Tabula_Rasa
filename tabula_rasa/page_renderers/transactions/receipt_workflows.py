@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from collections.abc import Sequence
 from typing import Any
 from typing import MutableMapping
+from typing import overload
 import streamlit as st
 from tabula_rasa.application.documents import (
     DocumentError, DocumentReference, DocumentUpload, DocumentValidationError,
@@ -284,6 +285,35 @@ def _receipt_folder(context: TransactionsContext) -> Mapping[str, object] | None
 def receipt_editor_upload_reset_key(profile_key: str, transaction_id: str) -> str:
     return f"reset-receipt-editor:{profile_key}:{transaction_id}"
 
+
+class _ReceiptUploadSequence(Sequence[DocumentUpload]):
+    """Copy UI file content only as the receipt service validates each file."""
+
+    def __init__(self, files: Sequence[Any]) -> None:
+        self._files = files
+
+    def __len__(self) -> int:
+        return len(self._files)
+
+    @overload
+    def __getitem__(self, index: int) -> DocumentUpload: ...
+
+    @overload
+    def __getitem__(self, index: slice) -> Sequence[DocumentUpload]: ...
+
+    def __getitem__(self, index: int | slice) -> DocumentUpload | Sequence[DocumentUpload]:
+        if isinstance(index, slice):
+            return _ReceiptUploadSequence(self._files[index])
+        file = self._files[index]
+        return DocumentUpload(
+            "",
+            str(getattr(file, "name", "") or ""),
+            str(getattr(file, "type", "") or "application/octet-stream"),
+            "",
+            file.getvalue(),
+        )
+
+
 def prepare_receipt_uploads(
     uploaded_files: Sequence[Any],
     *,
@@ -297,7 +327,7 @@ def prepare_receipt_uploads(
         else _max_upload_total_bytes
     )
     return prepare_document_uploads(
-        [DocumentUpload("", str(getattr(file, "name", "") or ""), str(getattr(file, "type", "") or "application/octet-stream"), "", file.getvalue()) for file in uploaded_files],
+        _ReceiptUploadSequence(uploaded_files),
         existing_reference_count=existing_reference_count,
         max_upload_total_bytes=max_upload_total_bytes,
     )
