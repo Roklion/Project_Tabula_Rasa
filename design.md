@@ -826,7 +826,7 @@ and source controls.
 Rename retains the stable ID and every existing reference. A merge requires an
 explicit target, one or more explicit sources, and acknowledgement before one
 confirmed, atomic workbook mutation. Payee merges update Transactions,
-RecurringSchedules, Assets, and the corresponding MixedUseExpenses
+RecurringSchedules, Assets, JournalPostings, and the corresponding MixedUseExpenses
 source/projection pair. Tag merges update Transactions, Mileage,
 RecurringSchedules, Assets, and MixedUseExpenses, replace source IDs with the
 target, and de-duplicate an association when both are present. Unrelated fields

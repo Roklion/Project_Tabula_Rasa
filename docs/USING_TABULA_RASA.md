@@ -440,7 +440,7 @@ Select a Payee or Tag row in its table before opening **Rename** or **Remove**.
 Both actions use the selected row; neither requires another record dropdown.
 
 Merging requires an explicit target, one or more source values, and an
-acknowledgement. Payee merges update transaction, recurring-schedule, and asset
+acknowledgement. Payee merges update transaction, recurring-schedule, journal, and asset
 references and both sides of each MixedUseExpenses source/projection pair. Tag
 merges update Transactions, Mileage, recurring schedules, Assets, and
 MixedUseExpenses and remove duplicate associations when a row already has both
