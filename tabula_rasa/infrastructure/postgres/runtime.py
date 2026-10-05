@@ -102,7 +102,7 @@ class Database:
                             raise DatabaseError("operation_aborted")
                     finally:
                         self._operation.reset(token)
-        except SQLAlchemyError as error:
+        except (SQLAlchemyError, PsycopgError) as error:
             failure = safe_database_error(error)
         else:
             return

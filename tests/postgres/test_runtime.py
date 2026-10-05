@@ -122,3 +122,24 @@ def test_connectivity_error_diagnostic_hides_url_and_password():
         assert database.health() == {"connected": False, "code": "unavailable"}
     finally:
         database.dispose()
+
+
+@pytest.mark.parametrize("nested", [False, True])
+def test_raw_driver_failure_is_safe_and_rolls_back(database, nested, capsys, caplog):
+    with pytest.raises(DatabaseError) as caught:
+        with database.transaction() as connection:
+            entity(connection)
+            if nested:
+                with database.transaction() as inner:
+                    with inner.connection.driver_connection.cursor() as cursor:
+                        cursor.execute("SELECT 'synthetic private value'::integer")
+            else:
+                with connection.connection.driver_connection.cursor() as cursor:
+                    cursor.execute("SELECT 'synthetic private value'::integer")
+    assert caught.value.code == "unavailable"
+    assert str(caught.value) == "PostgreSQL operation failed (unavailable)."
+    assert caught.value.__context__ is None
+    assert "synthetic private value" not in caplog.text + capsys.readouterr().out
+    with database.transaction(read_only=True) as connection:
+        assert connection.scalar(text("SELECT count(*) FROM business_entities")) == 0
+    assert database.health()["connected"] is True
