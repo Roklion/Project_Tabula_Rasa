@@ -99,6 +99,41 @@ def test_inline_references_roll_back_on_late_validation_and_sql_failure(database
     assert alpha.transactions.list() == alpha.payees.list() == alpha.tags.list() == []
 
 
+@pytest.mark.parametrize('command', ['create', 'update'])
+def test_inline_reactivation_refreshes_selected_references_and_rolls_back_on_failure(database, command):
+    alpha, beta = seed_core(database)
+    inactive = [service.create(name, active=False) for service, name in
+                ((alpha.payees, 'Vendor'), (alpha.tags, 'Job'))]
+    beta_inactive = [service.create(name, active=False) for service, name in
+                     ((beta.payees, 'Vendor'), (beta.tags, 'Job'))]
+    original = alpha.transactions.create(transaction_id='one', **expense()) if command == 'update' else None
+
+    def mutate(**changes):
+        if command == 'create':
+            return alpha.transactions.create(transaction_id='one', **expense(**changes))
+        return alpha.transactions.update('one', expected=original, **changes)
+
+    changed = mutate(new_payee_name='vendor', new_tag_name='job')
+    assert changed['payee_id'] == inactive[0]['id'] and changed['tag_ids'] == [inactive[1]['id']]
+    assert changed['payee'] == 'Vendor' and changed['tags'] == ['Job']
+    for service, before in zip((alpha.payees, alpha.tags), inactive):
+        current = service.list()[0]
+        assert current['active'] == 'TRUE' and current['created_at'] == before['created_at']
+        assert current['baseline'] != before['baseline']
+        service.update(current['id'], active=False)
+    inactive_after = [alpha.payees.list()[0], alpha.tags.list()[0]]
+    original = changed
+    if command == 'create':
+        alpha.transactions.delete('one', expected=changed)
+    with pytest.raises(StorageValidationError):
+        mutate(payee_id='', tag_ids=[], new_payee_name='Vendor', new_tag_name='Job',
+               receipt_references=[{'id': 'not-registered', 'name': 'synthetic.pdf'}])
+    assert [alpha.payees.list()[0], alpha.tags.list()[0]] == inactive_after
+    assert alpha.transactions.list() == ([] if command == 'create' else [changed])
+    assert [beta.payees.list()[0], beta.tags.list()[0]] == beta_inactive
+    assert beta.transactions.list() == []
+
+
 def test_baseline_survives_display_renames_but_rejects_recreated_lifetime(database):
     alpha, _ = seed_core(database)
     original = alpha.transactions.create(transaction_id='stable', **expense(new_payee_name='Vendor', new_tag_name='Job'))

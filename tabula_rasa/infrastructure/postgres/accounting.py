@@ -9,7 +9,7 @@ from tabula_rasa.accounting_postings import accounting_postings
 from tabula_rasa.errors import StorageConflictError, StorageNotFoundError, StorageValidationError
 from tabula_rasa.journal import prepare_journal_postings
 from tabula_rasa.ledger_validation import decode_receipt_references, iso_date
-from tabula_rasa.reference_data import clean_text, normalize_tag_ids
+from tabula_rasa.reference_data import as_bool, clean_text, normalize_tag_ids
 from tabula_rasa.transaction import (
     RECURRING_FIELDS, TransactionReferences, prepare_bulk_transaction_changes,
     prepare_transaction, reject_derived_transaction, validate_transaction_update,
@@ -152,7 +152,7 @@ class PostgresTransactionRepository(_AccountingRepository):
         )
 
     def inline_references(self, connection, references, built):
-        """Add only references created by this operation's preparation callback."""
+        """Refresh selected new or previously inactive callback references."""
         lookups = []
         for table, originals, identities in (
             ('payees', references.payees, [built.get('payee_id')]),
@@ -160,7 +160,7 @@ class PostgresTransactionRepository(_AccountingRepository):
         ):
             lookup = dict(originals)
             for identity in identities:
-                if not identity or identity in lookup:
+                if not identity or (identity in lookup and as_bool(lookup[identity]['active'])):
                     continue
                 row = connection.execute(text(
                     f'SELECT * FROM {table} WHERE entity_id=:scope AND id=:id FOR SHARE'
