@@ -124,16 +124,24 @@ class AccountService:
         )
 
     def update(
-        self, account_id: str, **changes: Unpack[AccountChanges]
+        self, account_id: str, *, expected: ExpectedRecord | None = None,
+        **changes: Unpack[AccountChanges]
     ) -> AccountRecord:
         account_id = clean_text(account_id, "Account ID", required=True)
-        return self._repository.update(account_id, changes=_account_changes(changes))
+        return self._repository.update(
+            account_id, changes=_account_changes(changes),
+            **({"expected": expected} if expected is not None else {}),
+        )
 
-    def rename(self, account_id: str, name: str) -> AccountRecord:
-        return self.update(account_id, name=name)
+    def rename(
+        self, account_id: str, name: str, *, expected: ExpectedRecord | None = None,
+    ) -> AccountRecord:
+        return self.update(account_id, name=name, expected=expected)
 
-    def deactivate(self, account_id: str) -> AccountRecord:
-        return self.update(account_id, active=False)
+    def deactivate(
+        self, account_id: str, *, expected: ExpectedRecord | None = None,
+    ) -> AccountRecord:
+        return self.update(account_id, active=False, expected=expected)
 
 
 class CategoryService:
@@ -162,7 +170,8 @@ class CategoryService:
         )
 
     def update(
-        self, category_id: str, **changes: Unpack[CategoryChanges]
+        self, category_id: str, *, expected: ExpectedRecord | None = None,
+        **changes: Unpack[CategoryChanges]
     ) -> CategoryRecord:
         normalized = dict(changes)
         if "name" in changes:
@@ -176,10 +185,14 @@ class CategoryService:
         return self._repository.update(
             clean_text(category_id, "Category ID", required=True),
             changes=cast(CategoryChanges, normalized),
+            **({"expected": expected} if expected is not None else {}),
         )
 
-    def delete(self, category_id: str) -> None:
-        self._repository.delete(clean_text(category_id, "Category ID", required=True))
+    def delete(self, category_id: str, *, expected: ExpectedRecord | None = None) -> None:
+        self._repository.delete(
+            clean_text(category_id, "Category ID", required=True),
+            **({"expected": expected} if expected is not None else {}),
+        )
 
 
 class PayeeService:

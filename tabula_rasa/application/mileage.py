@@ -17,6 +17,7 @@ from tabula_rasa.quickbooks_mileage_import import (
 )
 
 from .mileage_contracts import CreateTag, MileageRepository
+from .contracts import ExpectedRecord
 
 
 class MileageValidationError(ValueError):
@@ -44,6 +45,7 @@ class MileageTrip:
     tag_ids: tuple[str, ...]
     created_at: str
     tags: tuple[str, ...] = ()
+    baseline: str | None = None
 
     def as_record(self) -> dict[str, Any]:
         """Return portable field values for existing table/form consumers."""
@@ -59,6 +61,7 @@ class MileageTrip:
             "tag_ids": list(self.tag_ids),
             "created_at": self.created_at,
             "tags": list(self.tags),
+            **({"baseline": self.baseline} if self.baseline is not None else {}),
         }
 
 
@@ -231,13 +234,13 @@ def _validated_trips(
         if start and normalized.trip_date < start or end and normalized.trip_date > end:
             continue
         result.append(
-            prepare_mileage_trip(
+            replace(prepare_mileage_trip(
                 trip.as_record(),
                 tags,
                 trip_id=trip_id,
                 created_at=trip.created_at,
                 original_tag_ids=trip.tag_ids,
-            )
+            ), baseline=trip.baseline)
         )
     # Preserve backend insertion order for equal timestamps (new return first).
     return tuple(
@@ -339,7 +342,9 @@ class MileageService:
 
         return tuple(self._repository.add_trips(prepare))
 
-    def edit_trip(self, trip_id: str, **changes: Any) -> MileageTrip:
+    def edit_trip(
+        self, trip_id: str, *, expected: ExpectedRecord | None = None, **changes: Any,
+    ) -> MileageTrip:
         def prepare(
             current: MileageTrip,
             tags: Sequence[MileageTag],
@@ -356,10 +361,14 @@ class MileageService:
                 0
             ]
 
-        return self._repository.update_trip(trip_id, prepare)
+        return self._repository.update_trip(
+            trip_id, prepare, **({"expected": expected} if expected is not None else {}),
+        )
 
-    def delete_trip(self, trip_id: str) -> None:
-        self._repository.delete_trip(trip_id)
+    def delete_trip(self, trip_id: str, *, expected: ExpectedRecord | None = None) -> None:
+        self._repository.delete_trip(
+            trip_id, **({"expected": expected} if expected is not None else {}),
+        )
 
     def preview_quickbooks_mileage(
         self,

@@ -29,6 +29,7 @@ class TransactionRecord(TypedDict):
     recurring_scheduled_date: NotRequired[str]
     recurring_source_kind: NotRequired[str]
     recurring_occurrence_type: NotRequired[str]
+    baseline: NotRequired[str]
 
 
 class JournalPosting(TypedDict):
@@ -53,6 +54,7 @@ class JournalEntry(TypedDict):
     postings: list[JournalPosting]
     total_debits: NotRequired[str]
     total_credits: NotRequired[str]
+    baseline: NotRequired[str]
 
 
 # A narrow mutation callback lets the service apply domain rules and inline

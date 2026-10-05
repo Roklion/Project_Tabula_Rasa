@@ -122,6 +122,12 @@ restore rehearsals remain #259/#223's work and gate #258 activation.
 
 ## Infrastructure operation convention
 
+[#253's implemented operation and baseline convention](POSTGRESQL_CONCURRENCY.md)
+extends this runtime with the adapter error boundary, ordered root guards and
+revision `0002_aggregate_versions`. Later repository slices must consume it
+before exposing supported mutations. The canonical baseline below remains
+revision `0001_canonical`; `upgrade` now also applies the aggregate-version revision.
+
 Composition constructs one `Database(DatabaseSettings(...))` per process/service
 graph. Infrastructure adapters use `with database.transaction() as connection`
 for a supported mutation. Participating repositories share that same Database

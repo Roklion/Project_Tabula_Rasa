@@ -3,6 +3,8 @@
 from collections.abc import Callable, Sequence
 from typing import Protocol, TYPE_CHECKING
 
+from .contracts import ExpectedRecord
+
 if TYPE_CHECKING:
     from .mileage import MileageTag, MileageTrip
 
@@ -32,9 +34,10 @@ class MileageRepository(Protocol):
     def add_trips(self, prepare: PrepareNewTrips) -> Sequence["MileageTrip"]: ...
 
     def update_trip(
-        self, trip_id: str, prepare: PrepareUpdatedTrip
+        self, trip_id: str, prepare: PrepareUpdatedTrip, *,
+        expected: ExpectedRecord | None = None,
     ) -> "MileageTrip": ...
 
-    def delete_trip(self, trip_id: str) -> None: ...
+    def delete_trip(self, trip_id: str, *, expected: ExpectedRecord | None = None) -> None: ...
 
     def import_trips(self, prepare: PrepareImport) -> Sequence["MileageTrip"]: ...

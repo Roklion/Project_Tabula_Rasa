@@ -524,7 +524,8 @@ and mileage/reference versions for their supported changes. Schedule attention
 and derived display/next-due fields are outside its editable baseline. Denormalized
 display-name refreshes do not advance the referring entry's version.
 
-#253 owns additive persistence-neutral baseline transport. Use an opaque token
+#253's initial [implemented convention](../POSTGRESQL_CONCURRENCY.md) supplies
+additive persistence-neutral baseline transport. Use an opaque token
 encoding the entity, aggregate kind/ID, incarnation, and version returned when the caller
 loads the record, carried separately from proposed editable fields. It grants
 no authorization. Existing full expected snapshots remain supported and compare
@@ -547,13 +548,13 @@ the user's loaded baseline. Two callers load version 1; one commits version 2;
 the other's later edit or delete with version 1 must fail, even if its submission
 begins after the first commit.
 
-Current Account/Category and Mileage mutation ports lack baselines; #245/#250
-consume #253's additive contract change. Payee/Tag/Transaction and several
+Account/Category and Mileage mutation ports now carry optional expected
+baselines; #245/#250 consume #253's additive contract change. Payee/Tag/Transaction and several
 source ports permit omitted expected values; documented legacy/internal calls
 retain that compatibility path, using fresh locking/domain checks without a
 claim of stale-form protection. Journal update/delete currently require an
-expected entry; retain that stricter contract. No service signatures change in
-this documentation ticket.
+expected entry; retain that stricter contract. Commercial propagation and
+cross-adapter verification remain required as the repository slices land.
 
 ## Delete, merge, and correction behavior
 

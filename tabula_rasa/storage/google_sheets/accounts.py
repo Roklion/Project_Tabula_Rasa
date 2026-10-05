@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from .baselines import ACCOUNT_FIELDS, CATEGORY_FIELDS, check_expected_snapshot
 from uuid import uuid4
 from tabula_rasa.quickbooks_import import suggested_account_classification
 from .schema import (
@@ -110,12 +111,13 @@ class AccountsMixin:
         self._append("Accounts", record)
         return dict(record)
 
-    def edit_account(self, account_id: str, **changes: Any) -> dict[str, Any]:
+    def edit_account(self, account_id: str, *, expected_account=None, **changes: Any) -> dict[str, Any]:
         with self._workbook_locks.ledger:
-            return self._edit_account(account_id, **changes)
+            return self._edit_account(account_id, expected_account=expected_account, **changes)
 
-    def _edit_account(self, account_id: str, **changes: Any) -> dict[str, Any]:
+    def _edit_account(self, account_id: str, *, expected_account=None, **changes: Any) -> dict[str, Any]:
         current = self._find_row("Accounts", account_id)
+        check_expected_snapshot(current.values, expected_account, fields=ACCOUNT_FIELDS, label="account")
         account_id = _clean_text(current.values.get("id"), "Account ID", required=True)
         updated = dict(current.values)
         existing_accounts = self.list_accounts(active_only=False)
@@ -246,12 +248,13 @@ class AccountsMixin:
         self._append("Categories", record)
         return record
 
-    def edit_category(self, category_id: str, **changes: Any) -> dict[str, str]:
+    def edit_category(self, category_id: str, *, expected_category=None, **changes: Any) -> dict[str, str]:
         with self._workbook_locks.ledger:
-            return self._edit_category(category_id, **changes)
+            return self._edit_category(category_id, expected_category=expected_category, **changes)
 
-    def _edit_category(self, category_id: str, **changes: Any) -> dict[str, str]:
+    def _edit_category(self, category_id: str, *, expected_category=None, **changes: Any) -> dict[str, str]:
         current = self._find_row("Categories", category_id)
+        check_expected_snapshot(current.values, expected_category, fields=CATEGORY_FIELDS, label="category")
         updated = dict(current.values)
         normalized_category_id = _clean_text(
             updated.get("id"), "Category ID", required=True
@@ -293,6 +296,7 @@ class AccountsMixin:
         if kind != updated["kind"]:
             reject_mixed_use_kind_change()
             current = self._find_row("Categories", normalized_category_id)
+            check_expected_snapshot(current.values, expected_category, fields=CATEGORY_FIELDS, label="category")
             updated = dict(current.values)
             existing_categories = self.list_categories()
             name = _clean_text(
@@ -362,17 +366,18 @@ class AccountsMixin:
         ):
             raise StorageConflictError(message)
 
-    def delete_category(self, category_id: str) -> None:
+    def delete_category(self, category_id: str, *, expected_category=None) -> None:
         with self._workbook_locks.ledger:
-            self._delete_category(category_id)
+            self._delete_category(category_id, expected_category=expected_category)
 
-    def _delete_category(self, category_id: str) -> None:
+    def _delete_category(self, category_id: str, *, expected_category=None) -> None:
         self._reject_asset_expense_category_change(category_id)
         category_id = _clean_text(category_id, "ID", required=True)
         self._reject_journal_category_reference(
             category_id, "That category has journal entries and cannot be deleted"
         )
         current = self._find_row("Categories", category_id)
+        check_expected_snapshot(current.values, expected_category, fields=CATEGORY_FIELDS, label="category")
         existing_categories = self.list_categories(_force_refresh=True)
         if any(
             str(category.get("parent_id") or "").strip() == category_id

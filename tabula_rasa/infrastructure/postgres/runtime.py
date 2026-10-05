@@ -72,10 +72,12 @@ class Database:
         )
 
     @contextmanager
-    def transaction(self, *, read_only: bool = False) -> Iterator[Connection]:
+    def transaction(
+        self, *, read_only: bool = False, require_outer: bool = False,
+    ) -> Iterator[Connection]:
         current = self._operation.get()
         if current is not None:
-            if current.read_only and not read_only:
+            if require_outer or (current.read_only and not read_only):
                 current.failed = True
                 raise DatabaseError("boundary_mismatch")
             try:

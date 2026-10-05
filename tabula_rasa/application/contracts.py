@@ -15,6 +15,7 @@ class AccountRecord(TypedDict):
     active: str | bool
     created_at: str
     parent_id: str
+    baseline: NotRequired[str]
 
 
 class AccountChanges(TypedDict, total=False):
@@ -33,6 +34,7 @@ class CategoryRecord(TypedDict):
     name: str
     kind: str
     parent_id: str
+    baseline: NotRequired[str]
 
 
 class CategoryChanges(TypedDict, total=False):
@@ -48,6 +50,7 @@ class ManagedReferenceRecord(TypedDict):
     name: str
     active: str
     created_at: str
+    baseline: NotRequired[str]
 
 
 class ManagedReferenceChanges(TypedDict, total=False):
@@ -84,7 +87,10 @@ class AccountRepository(Protocol):
         parent_id: str,
     ) -> AccountRecord: ...
 
-    def update(self, account_id: str, *, changes: AccountChanges) -> AccountRecord: ...
+    def update(
+        self, account_id: str, *, changes: AccountChanges,
+        expected: ExpectedRecord | None = None,
+    ) -> AccountRecord: ...
 
 
 class CategoryRepository(Protocol):
@@ -98,9 +104,12 @@ class CategoryRepository(Protocol):
 
     def create(self, name: str, kind: str, *, parent_id: str) -> CategoryRecord: ...
 
-    def update(self, category_id: str, *, changes: CategoryChanges) -> CategoryRecord: ...
+    def update(
+        self, category_id: str, *, changes: CategoryChanges,
+        expected: ExpectedRecord | None = None,
+    ) -> CategoryRecord: ...
 
-    def delete(self, category_id: str) -> None: ...
+    def delete(self, category_id: str, *, expected: ExpectedRecord | None = None) -> None: ...
 
 
 class PayeeRepository(Protocol):
