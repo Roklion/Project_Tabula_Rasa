@@ -202,12 +202,20 @@ class PostgresTransactionRepository(_AccountingRepository):
             if len(rows) != 1 or self.receipt_reference(rows[0]) != reference:
                 raise StorageValidationError('Receipt metadata must already exist in this entity and match the reference.')
             documents.append(rows[0]['id'])
-        existing = set(connection.execute(text(
-            'SELECT document_id FROM document_links WHERE entity_id=:scope AND entry_id=:id'
-        ), {'scope': self.entity_id, 'id': identity}).scalars())
-        for document_id in existing - set(documents):
+        existing = dict(connection.execute(text(
+            'SELECT document_id,position FROM document_links WHERE entity_id=:scope AND entry_id=:id'
+        ), {'scope': self.entity_id, 'id': identity}).all())
+        for document_id in set(existing) - set(documents):
             connection.execute(text('DELETE FROM document_links WHERE entity_id=:scope AND entry_id=:id AND document_id=:document'),
                                {'scope': self.entity_id, 'id': identity, 'document': document_id})
+        if any(existing[document_id] != position for position, document_id in enumerate(documents, 1)
+               if document_id in existing):
+            # Position uniqueness is immediate. Move retained links beyond both
+            # old and final ranges before assigning the new order, preserving
+            # their creation instants inside the same accounting transaction.
+            connection.execute(text(
+                'UPDATE document_links SET position=position+:offset WHERE entity_id=:scope AND entry_id=:id'
+            ), {'scope': self.entity_id, 'id': identity, 'offset': max(existing.values()) + len(documents)})
         for position, document_id in enumerate(documents, 1):
             if document_id in existing:
                 connection.execute(text('UPDATE document_links SET position=:position WHERE entity_id=:scope AND entry_id=:id AND document_id=:document'),

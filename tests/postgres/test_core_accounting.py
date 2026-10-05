@@ -252,6 +252,49 @@ def test_direct_journal_repository_rechecks_balance(database):
         PostgresJournalRepository(database, 'alpha').create(entry_id='one', txn_date='2026-10-05', description='', postings=bad)
 
 
+def test_receipt_reordering_preserves_links_isolation_and_rolls_back_failed_replacement(database):
+    alpha, beta = seed_core(database)
+    references = [{'id': f'opaque-key-{identity}', 'name': f'{identity}.pdf'} for identity in ('a', 'b', 'c', 'd')]
+    with database.transaction() as connection:
+        for scope in ('alpha', 'beta'):
+            for identity in ('a', 'b', 'c', 'd'):
+                connection.execute(text('''INSERT INTO documents(entity_id,id,incarnation_id,stored_filename,store_kind,storage_key)
+                    VALUES (:scope,:id,:id,:name,'synthetic',:key)'''),
+                    {'scope': scope, 'id': identity, 'name': f'{identity}.pdf', 'key': f'opaque-key-{identity}'})
+    original = alpha.transactions.create(transaction_id='linked', **expense(receipt_references=references[:2]))
+    beta_original = beta.transactions.create(transaction_id='linked', **expense(receipt_references=references[:2]))
+    with database.transaction(read_only=True) as connection:
+        original_instants = dict(connection.execute(text(
+            "SELECT document_id,created_at FROM document_links WHERE entity_id='alpha' AND entry_id='linked'"
+        )).all())
+    changed = alpha.transactions.update('linked', expected=original, receipt_references=[references[1], references[0]])
+    assert changed['receipt_references'] == [references[1], references[0]]
+    assert alpha.transactions.list()[0]['baseline'] == changed['baseline'] != original['baseline']
+    changed = alpha.transactions.update('linked', expected=changed, receipt_references=[references[2], references[1], references[0]])
+    assert changed['receipt_references'] == [references[2], references[1], references[0]]
+    with database.transaction(read_only=True) as connection:
+        retained = dict(connection.execute(text(
+            "SELECT document_id,created_at FROM document_links WHERE entity_id='alpha' AND document_id IN ('a','b')"
+        )).all())
+        assert retained == original_instants
+    with pytest.raises(StorageValidationError):
+        alpha.transactions.update('linked', expected=changed, description='Must roll back',
+                                  receipt_references=[references[0], references[0]])
+    alpha.transactions.create(transaction_id='other', **expense(receipt_references=[references[3]]))
+    # The first new link conflicts after retained links move to temporary positions.
+    with pytest.raises(StorageConflictError) as failure:
+        alpha.transactions.update('linked', expected=changed, description='Must roll back',
+                                  receipt_references=[references[3], references[0], references[1]])
+    assert failure.value.code == 'duplicate'
+    assert next(row for row in alpha.transactions.list() if row['id'] == 'linked') == changed
+    assert beta.transactions.list()[0] == beta_original
+    with database.transaction(read_only=True) as connection:
+        assert connection.execute(text(
+            "SELECT document_id,position FROM document_links WHERE entity_id='alpha' AND entry_id='linked' ORDER BY position"
+        )).all() == [('c', 1), ('b', 2), ('a', 3)]
+        assert connection.scalar(text('SELECT count(*) FROM documents')) == 8
+
+
 def test_owned_and_recurring_provenance_is_read_and_preserved_but_generic_ownership_changes_fail(database):
     alpha, _ = seed_core(database)
     ordinary = alpha.transactions.create(transaction_id='ordinary', **expense())
