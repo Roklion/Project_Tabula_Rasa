@@ -696,7 +696,14 @@ dependency-complete Sheets migration units. Application/domain owners above reta
 ADR maps every current repository port to the canonical model. It introduces no
 production adapter, migration, UI change, or authority switch.
 
-#244 implements the database foundation; #245/#246 and usable #247 reporting
+#244's optional database runtime and initial canonical migrations live in
+`infrastructure/postgres/`. [PostgreSQL development and operations](POSTGRESQL.md)
+documents the SQLAlchemy Core/Psycopg/Alembic choice, connection/transaction
+boundaries, exact baseline coverage, native test harness, and remaining #253
+integrity work. Current Sheets composition imports none of this infrastructure
+and still works without database configuration or database dependencies.
+
+#245/#246 and usable #247 reporting
 support the early #221 commercial web/API milestone. Later slices, whole-profile
 reconciliation, concurrency verification, complete entity export, and recovery
 rehearsals remain required before #258 commercial production activation. Identity
