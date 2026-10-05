@@ -825,17 +825,18 @@ and source controls.
 
 Rename retains the stable ID and every existing reference. A merge requires an
 explicit target, one or more explicit sources, and acknowledgement before one
-confirmed, atomic workbook mutation. Payee merges update Transactions, Assets,
-and the corresponding MixedUseExpenses source/projection pair. Tag merges update
-Transactions, Mileage, and Assets, replace source IDs with the target, and de-duplicate
-an association when both are present. Unrelated fields and associations remain
-unchanged.
+confirmed, atomic workbook mutation. Payee merges update Transactions,
+RecurringSchedules, Assets, JournalPostings, and the corresponding MixedUseExpenses
+source/projection pair. Tag merges update Transactions, Mileage,
+RecurringSchedules, Assets, and MixedUseExpenses, replace source IDs with the
+target, and de-duplicate an association when both are present. Unrelated fields
+and associations remain unchanged.
 
 Removal is permanent and permitted only when a fresh reference check finds no
 uses. A referenced Payee or Tag is not silently unassigned; the page reports
 the reference count and directs the user to unassign it through the relevant
-transaction, mileage, or asset editor, or to merge it. Confirmed writes invalidate only
-the affected profile-local caches. Uncertain batch responses receive one fresh
+transaction, mileage, recurring, or asset editor, or to merge it. Confirmed writes
+invalidate only the affected profile-local caches. Uncertain batch responses receive one fresh
 readback; only a clearly unchanged operation may be retried once, while a
 partial or unreadable state invalidates caches and gives inspection guidance.
 
