@@ -198,28 +198,23 @@ detectable and recoverable, keep recovery scoped to the selected profile and
 configuration revision, and expose a user-facing recovery boundary when
 automatic repair would require a distributed transaction simulation.
 
-### Current formats and explicit migration
+### Frozen Sheets source boundary
 
-Normal runtime primarily understands the current format-13 workbook schema and
-backup format. A genuinely new/empty workbook may be bootstrapped, but a
-populated historical workbook is validated and rejected with an actionable
-instruction to run the explicit workbook migration tool
-(`scripts/migrate_workbook.py`). Historical backup conversion likewise lives
-in `scripts/migrate_legacy_backup.py`; production
-restore accepts only format 13 and validates the converted output using the
-normal current-format validator. The explicit migration tools recognize
-format-12 workbooks and archives as the previous schema, add empty
-`JournalEntries` and `JournalPostings` tables, and preserve existing simple
-transaction rows.
+[Final Sheets source contract](SHEETS_SOURCE_CONTRACT.md) owns the frozen
+format-13 worksheet/header, archive/manifest, domain-relationship, and retirement
+decision under #261, #220, and initiative #124. Runtime, backup validation,
+restore, and future #254 extraction consume this same boundary. Only genuinely
+blank workbooks or interrupted current-header bootstrap may be initialized.
+Populated unsupported workbooks and non-13 archives fail before writes;
+historical ledger-format converters and their aliases have been retired.
 
-Migration tools have a narrower trust boundary than production runtime. They
-recognize supported standard application outputs, perform deterministic
-transformations, and fail clearly when the recognized contract is not met.
-Archive migration preserves its source archive; `scripts/migrate_workbook.py`
-intentionally upgrades the selected workbook in place and should be run only
-after the operator has secured a recoverable backup. The tools do not
-permanently carry every old schema into startup or reproduce adversarial
-validation for inputs they are explicitly designed to convert.
+Retirement preserves existing accounting history, ledgers, receipts, backup
+files, and the pre-cutover Sheets source. Backup retention belongs to #223.
+Profile/OAuth migration, current-format receipt recovery/association tooling,
+and ordinary CSV/QuickBooks imports remain supported. PostgreSQL schema
+migrations and managed backup/PITR (#259) remain independent; #260 owns its
+separately versioned canonical export. #243's canonical PostgreSQL model maps
+this source by domain meaning rather than duplicating worksheet layouts.
 
 ### Proportionality and review drift
 
@@ -697,8 +692,6 @@ local-only recovery metadata.
 | Profile selection and readiness | tabula_rasa/business_profiles.py and tabula_rasa/profile_readiness.py |
 | Local profile persistence | tabula_rasa/local_profile_store.py |
 | Sheets storage, current v13 backup format, and restore validation | `tabula_rasa/storage/google_sheets/` |
-| Legacy backup conversion (v1–v12 to v13) | scripts/migrate_legacy_backup.py |
-| Legacy workbook conversion and historical schema definitions | `scripts/migrate_workbook.py`, `scripts/migrate_payees.py`, and `scripts/migration_schemas.py` |
 | Drive OAuth and file operations | tabula_rasa/google_drive/__init__.py, with `oauth.py`, `client.py`, `folders.py`, `receipts.py`, and `backups.py` responsibility modules |
 | Drive administration and Picker | tabula_rasa/google_drive_admin.py and tabula_rasa/google_drive_picker.py |
 | Maps autocomplete and route distance | tabula_rasa/address_autocomplete.py and tabula_rasa/maps_routing.py |

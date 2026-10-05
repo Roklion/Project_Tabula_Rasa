@@ -783,4 +783,9 @@ class TestBackupScripts:
         assert "Accounts=0" in report
         assert "Tags=0" in report
         assert "Mileage=0" in report
+        assert "RecurringSchedules=0" in report
+        assert "Assets=0" in report
+        assert "JournalEntries=0" in report
+        assert "JournalPostings=0" in report
+        assert "Receipt inventory: verified" in report
         assert "Manifest checksums: verified" in report

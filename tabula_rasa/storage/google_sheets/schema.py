@@ -1,7 +1,10 @@
-"""Worksheet schemas and domain constants shared by Sheets storage."""
+"""Frozen format-13 Sheets source contract; see docs/SHEETS_SOURCE_CONTRACT.md."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+
+from .errors import StorageValidationError
 from tabula_rasa.reference_data import (
     ACCOUNT_CLASSIFICATIONS,
     ACCOUNT_TYPES,
@@ -152,7 +155,53 @@ CATEGORY_KINDS = {"Income", "Expense"}
 
 TRANSACTION_KINDS = {"Income", "Expense", "Transfer"}
 
-BACKUP_FORMAT_VERSION = 13
+WORKBOOK_FORMAT_VERSION = 13
+BACKUP_FORMAT_VERSION = WORKBOOK_FORMAT_VERSION
+
+
+def validate_worksheet_headers(title: str, headers: Sequence[str]) -> None:
+    """Require exactly the frozen fields, preserving name-based column order."""
+    required = set(WORKSHEET_HEADERS[title])
+    if not headers:
+        raise StorageValidationError(
+            f"{title} header row is empty; format 13 is required"
+        )
+    if any(not header for header in headers):
+        raise StorageValidationError(
+            f"{title} has a blank header; format 13 is required"
+        )
+    if len(headers) != len(set(headers)):
+        raise StorageValidationError(
+            f"{title} has duplicate headers; format 13 is required"
+        )
+    missing = sorted(required - set(headers))
+    if missing:
+        raise StorageValidationError(
+            f"{title} is missing headers: {', '.join(missing)}. "
+            "Only the frozen format-13 Sheets schema is supported; "
+            "preserve this workbook and select a supported workbook."
+        )
+    if set(headers) != required:
+        raise StorageValidationError(
+            f"{title} has unsupported headers. Only the frozen format-13 "
+            "Sheets schema is supported; preserve this workbook and select "
+            "a supported workbook."
+        )
+
+
+def validate_workbook_headers(headers: Mapping[str, Sequence[str]]) -> None:
+    """Read-only schema preflight shared with future migration extraction."""
+    missing = sorted(set(WORKSHEET_HEADERS) - set(headers))
+    if missing:
+        raise StorageValidationError(
+            "Workbook is missing worksheets: "
+            + ", ".join(missing)
+            + ". Only the frozen format-13 Sheets schema is supported; "
+            "preserve this workbook and select a supported workbook."
+        )
+    for title in WORKSHEET_HEADERS:
+        validate_worksheet_headers(title, headers[title])
+
 
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 
@@ -187,6 +236,9 @@ __all__ = [
     "CATEGORY_KINDS",
     "TRANSACTION_KINDS",
     "BACKUP_FORMAT_VERSION",
+    "WORKBOOK_FORMAT_VERSION",
+    "validate_worksheet_headers",
+    "validate_workbook_headers",
     "SHEETS_SCOPE",
     "SHEETS_READONLY_SCOPE",
     "DEFAULT_ACCOUNTS",

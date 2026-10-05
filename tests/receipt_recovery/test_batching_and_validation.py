@@ -386,7 +386,7 @@ def test_recovery_rejects_pre_manifest_v4_until_migrated() -> None:
         TemporaryDirectory() as directory,
         pytest.raises(
             StorageError,
-            match="migrate_legacy_backup",
+            match="Only backup format 13",
         ),
     ):
         recover_receipts_from_synology(

@@ -524,7 +524,8 @@ relationship, use fresh reads, and confirm uncertain multi-record writes with
 one readback and at most one retry when the pair is clearly unchanged;
 they do not expose a mixed-use page or workflow in Phase A. Current-format
 backups include the source collection and reject orphaned or inconsistent
-relationships; older backup formats restore with no mixed-use records.
+relationships. Only the frozen format-13 archive is supported; earlier
+formats are rejected before restore writes.
 
 The Transactions page also provides a **Mixed-use expenses** tab. Its
 profile-scoped source editor exposes normal Expense fields plus Total Expense,
@@ -1094,7 +1095,10 @@ An absent hosted/local record is reported as unavailable, not as healthy.
 
 Exports retain one Prepare/Refresh workflow, preparation timestamp,
 transactions CSV, mileage CSV, and a complete backup when receipt preparation
-succeeds. CSV downloads remain available when the complete backup fails.
+succeeds. Complete Sheets backups and recovery accept only the frozen
+[format-13 source contract](docs/SHEETS_SOURCE_CONTRACT.md). Unsupported archives
+fail before writes, preserving the file. CSV downloads remain available when
+the complete backup fails.
 Prepared data is scoped to profile, configuration revision, workbook identity,
 and confirmed workbook data revision.
 
@@ -1136,7 +1140,9 @@ unrelated Drive or Synology controls. Preserve:
   Editor capability validation before saving its ID, rejecting a ledger
   already assigned to another local business profile;
 - Validate ledger: initialize genuinely blank workbooks; populated legacy or
-  incompatible workbooks require the explicit migration command;
+  incompatible workbooks are rejected without writes under the frozen
+  [format-13 source contract](docs/SHEETS_SOURCE_CONTRACT.md); historical
+  ledger/archive conversion is retired;
 - edit of business name and local backup folder; and
 - candidate workbook Picker authorization for recovery/migration that preserves
   the active ledger ID.

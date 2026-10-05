@@ -636,7 +636,7 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             format_version=5,
         )
         target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
-        with pytest.raises(StorageValidationError, match="migrate_legacy_backup"):
+        with pytest.raises(StorageValidationError, match="Only backup format 13"):
             target.restore_backup_zip(backup)
         assert target.list_accounts(active_only=False) == []
 

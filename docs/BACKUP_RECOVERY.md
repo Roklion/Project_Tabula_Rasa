@@ -31,31 +31,12 @@ storage as the active ledger.
 
 ## Archive format and safety
 
-The current backup format is version 13. Each archive contains:
+The only supported Sheets archive is frozen at format 13. Exact worksheet
+headers, ZIP members, manifest requirements, and relationships live in
+[Final Sheets source contract](SHEETS_SOURCE_CONTRACT.md).
 
-- Accounts.csv;
-- Categories.csv;
-- Payees.csv;
-- Tags.csv;
-- Transactions.csv;
-- Mileage.csv;
-- MixedUseExpenses.csv;
-- RecurringSchedules.csv;
-- Assets.csv;
-- JournalEntries.csv;
-- JournalPostings.csv;
-- receipts.json; and
-- manifest.json.
-
-The manifest records the format version, UTC backup time, source workbook
-title, worksheet headers, row counts, and SHA-256 checksums for every archive
-data file.
-
-receipts.json is a profile-scoped metadata inventory of referenced and
-intentionally unreferenced app-managed receipt files. It includes stable
-receipt identities, transaction associations, original and stored filenames,
-MIME types, sizes, checksums, old Drive IDs, and available timestamps. Receipt
-bytes are not embedded in every ledger archive.
+The archive includes a profile-scoped receipt metadata inventory; receipt bytes
+remain in the document store or its recovery copy, outside the ledger ZIP.
 
 Current-format backups require the selected profile's configured Drive receipt
 folder. Immediately before creation, the app and command-line tools refresh
@@ -64,9 +45,8 @@ only references already present in the current workbook. They do not infer
 historical associations from Drive metadata. If preparation or validation is
 incomplete, no backup is created.
 
-For a workbook that was explicitly upgraded from a legacy schema and still has
-blank receipt-reference cells, migrate old Drive-only associations once before
-normal operation:
+For a supported format-13 workbook with blank receipt-reference cells, recover
+old Drive-only associations once before normal operation when needed:
 
 ```powershell
 python scripts\migrate_receipt_associations.py --secrets .streamlit\secrets.toml --profile PROFILE_KEY
@@ -75,56 +55,16 @@ python scripts\migrate_receipt_associations.py --secrets .streamlit\secrets.toml
 The command considers only blank legacy cells; an explicit empty list remains
 intentionally unlinked. It is safe to rerun after an interrupted migration.
 
-The application validator and restore path accept **only format 13**. Older
-archives are not migrated during validation or restore: supplying one directly
-fails before any workbook write and points to the explicit migration command
-below. The migration command supports standard format-1 through format-12
-archives and emits a fresh format-13 archive. Format 12 is the historical
-fixed-asset schema; its offline conversion adds empty JournalEntries and
-JournalPostings tables while preserving all existing simple transaction rows.
+The application validator and restore path accept **only format 13**. Every
+other archive format is rejected before target initialization or writes.
+Historical converters are retired. Preserve an unsupported archive privately;
+select a validated format-13 generation for supported recovery. The application
+does not delete old archives, receipts, ledgers, or accounting history as part
+of retirement. Backup-file retention is an operational policy owned by #223.
 
-MixedUseExpenses.csv is the authoritative source record for each cost-based
-mixed-use expense, including its durable `tag_ids` metadata. Transactions.csv contains one ordinary Expense projection
-for each source, with source_type=mixed_use_expense and source_id set to the
-source ID; its amount is the allocated business amount only. The source's
-linked_transaction_id must point back to that projection. Current-format
-backup validation rejects missing, orphaned, duplicated, or inconsistent
-source/projection relationships. Legacy formats 2 through 8 contain no
-mixed-use source records or linkage; convert them to v13 before application
-restore.
-
-Before upgrading an existing workbook, run the one-time combined workbook
-migration:
-
-```text
-python scripts/migrate_workbook.py --secrets .streamlit/secrets.toml --profile PROFILE_KEY
-```
-
-For a new or reassigned profile that has not been saved yet, use the candidate
-workbook using a saved profile OAuth grant, after authorizing the candidate
-through Google setup > Authorize a recovery or migration workbook:
-
-```text
-python scripts/migrate_workbook.py --profile PROFILE_KEY --spreadsheet-id WORKBOOK_ID
-```
-
-After it succeeds, return to Account settings to validate and save the profile.
-Keep the profile OAuth grant protected; do not commit exported Secrets.
-
-For a legacy workbook schema, follow the explicit workbook migration procedure
-in the setup and architecture guides. Payee text embedded in a legacy backup
-is converted by the archive migration command above; it is not resolved during
-application restore.
-
-Pre-inventory formats 1–4 may contain legacy receipt-reference cells but do
-not contain the receipt inventory and integrity metadata required by current backups. The
-offline migration therefore clears those associations in the new archive;
-the original archive is preserved for separate receipt recovery or manual
-inspection through the Unreferenced Receipts workflow.
-
-The migration command preserves the source archive and never overwrites it.
-Migration is intentionally an operator-run conversion for standard historical
-archives, not a repair mechanism for hand-edited or corrupt ZIP files.
+Mixed-use source/projection, recurring occurrence, depreciation, journal, and
+receipt relationships are validated under the shared source contract. Restore
+retains their existing identities and complete supported bookkeeping history.
 
 ## Create a backup in the application
 
@@ -242,8 +182,8 @@ checksums, row counts, IDs, ledger relationships,
 and the receipt inventory's profile, identities, filenames, sizes, checksums,
 duplicates, and transaction associations. Journal parent and posting
 identities, ordering, balance, typed targets, and managed references are also
-validated. Convert older v1-v12 archives with
-`scripts/migrate_legacy_backup.py` before validating them.
+validated. Non-13 archives are unsupported; preserve them privately and use
+a validated format-13 recovery generation.
 
 Do not modify a failed archive. Preserve it privately, choose another
 generation, and validate again.
@@ -280,10 +220,10 @@ representative relationships, then delete or clearly label the drill workbook.
 
 ## Recover receipt bytes and remap Drive IDs
 
-Ledger restoration does not restore receipt bytes. After converting a legacy
-format 5 through 12 archive to v13, copy the matching profile Receipts
-directory from the protected Synology recovery set to a safe local path, then
-recover against the new workbook using the converted archive:
+Ledger restoration does not restore receipt bytes. Using a validated format-13
+archive, copy the matching profile Receipts directory from the protected
+Synology recovery set to a safe local path, then recover against the new
+workbook:
 
 ```powershell
 python scripts\recover_synology_receipts.py "C:\Safe-Recovery\tabula-rasa-backup-YYYYMMDDTHHMMSSZ-format13.zip" "C:\Safe-Recovery\Receipts" --profile PROFILE_KEY --target-spreadsheet-id NEW_SPREADSHEET_ID
@@ -318,29 +258,26 @@ The recovery order is:
 4. Verify referenced receipts through remapped Drive IDs.
 5. Verify unreferenced receipts remain available without automatic attachment.
 
-Formats 2, 3, and pre-inventory format 4 are ledger-only migration sources;
-they must first be converted to v13 before any application restore or receipt
-recovery operation.
+Supported receipt recovery requires a validated format-13 archive and the
+matching profile inventory. Earlier archive formats are rejected before any
+Drive upload or target-ledger change.
 
-## Convert a legacy archive
+## PostgreSQL transition and operational recovery
 
-Convert a format-1 through format-12 archive offline. The default output is a
-new `-format13.zip` file beside the source; use `--output` for another new
-path. For ledger-only archives (formats 1–4), pass the business profile key so
-the generated empty receipt inventory is scoped correctly.
+#254 extracts only the frozen format-13 live Sheets source; #257 verifies
+whole-profile reconciliation and source-format rejection. #258 requires #261's
+retirement evidence, #257 acceptance, and #260's verified complete per-entity
+export before migrated-entity activation. Preserve the pre-cutover Sheets
+source unchanged; rollback to it is available only before divergent PostgreSQL
+writes make it stale.
 
-```powershell
-python scripts\migrate_legacy_backup.py "C:\Safe-Recovery\tabula-rasa-backup-YYYYMMDDTHHMMSSZ.zip" --profile PROFILE_KEY
-```
-
-The converter infers missing account classifications, renames the historical
-Loan subtype to Short-term debt, normalizes legacy active values, creates
-managed payees from legacy payee text, carries receipt inventory forward, and
-copies v9 mixed-use projection tags to their authoritative sources. It adds
-empty journal tables when converting a format-12 archive, records the source
-archive hash, and validates the result with the normal format-13
-validator. It never overwrites the original. A legacy format-1 compatibility
-module remains for Python imports, but it is not an operator-facing command.
+After divergence, PostgreSQL managed backup/PITR and recovery-point schema
+validation belong to #259 with #223's operational runbooks and document-store
+recovery. Commercial production activation requires successful real restore
+and requested-point PITR evidence. #260's canonical export has its own version
+and accounting model; it is neither a format-13 Sheets archive nor a replacement
+for disaster recovery. These downstream capabilities remain initiative work;
+retiring historical Sheets formats does not implement them.
 
 ## Optional Synology recovery copy
 
@@ -509,4 +446,3 @@ retry; identity and checksum rules prevent unnecessary duplicate uploads.
 | Workbook restore | scripts/restore_google_sheets_backup.py |
 | Receipt preparation and manifest | tabula_rasa/receipt_backfill.py and tabula_rasa/receipt_manifest.py |
 | Receipt recovery and Drive-ID remapping | scripts/recover_synology_receipts.py and tabula_rasa/receipt_recovery.py |
-| Legacy archive migration (v1–v12 to v13) | scripts/migrate_legacy_backup.py |

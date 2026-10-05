@@ -35,12 +35,15 @@ from protected operator storage. Do not mix old/new Secrets, use dual-auth mode,
 or change workbook data to solve an authentication failure. Retry the cutover
 only after local OAuth validation succeeds.
 
-## Recovery and historical schema migration
+## Recovery and the final Sheets source
 
 Use Google setup > Authorize a recovery or migration workbook to grant access
 to a candidate without selecting it as the active ledger. Existing restore
 commands still reject any configured live workbook and require a blank target.
-Authentication conversion does not run historical workbook conversion.
+Authentication conversion preserves profile settings and grants independently
+of the [frozen format-13 Sheets boundary](SHEETS_SOURCE_CONTRACT.md). Earlier
+ledger/workbook and archive formats are unsupported; their converters are
+retired. OAuth/profile conversion itself remains supported.
 
 See [Setup](SETUP.md), [Google OAuth/Picker](GOOGLE_DRIVE.md), and
 [Backup and recovery](BACKUP_RECOVERY.md) for the canonical workflows.

@@ -187,17 +187,14 @@ class BackupMixin:
         """Return a validated manifest or raise a safe validation error."""
         manifest, _, receipt_manifest = _parse_backup_zip(backup)
         result = dict(manifest)
-        result["receipt_inventory"] = receipt_manifest is not None
-        if receipt_manifest is not None:
-            result["receipt_count"] = len(receipt_manifest["receipts"])
-            result["business_profile_key"] = receipt_manifest[
-                "business_profile_key"
-            ]
+        result["receipt_inventory"] = True
+        result["receipt_count"] = len(receipt_manifest["receipts"])
+        result["business_profile_key"] = receipt_manifest["business_profile_key"]
         return result
 
     @staticmethod
-    def receipt_manifest_from_backup(backup: bytes) -> dict[str, Any] | None:
-        """Return a validated receipt inventory, or None for ledger-only backups."""
+    def receipt_manifest_from_backup(backup: bytes) -> dict[str, Any]:
+        """Return the required, validated format-13 receipt inventory."""
         _, _, receipt_manifest = _parse_backup_zip(backup)
         return receipt_manifest
 

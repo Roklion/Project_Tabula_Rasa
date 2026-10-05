@@ -221,10 +221,6 @@ def recover_receipts_from_synology(
 ) -> dict[str, Any]:
     """Recover verified receipt bytes and remap transaction references."""
     manifest = storage.receipt_manifest_from_backup(backup)
-    if manifest is None:
-        raise ReceiptRecoveryError(
-            "This is a ledger-only backup without a recoverable receipt inventory."
-        )
     try:
         manifest = validate_receipt_manifest(
             manifest,

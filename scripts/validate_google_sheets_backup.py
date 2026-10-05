@@ -13,6 +13,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from tabula_rasa.storage import GoogleSheetsStorage, StorageValidationError
+from tabula_rasa.storage.google_sheets.schema import WORKSHEET_HEADERS
 
 
 def validate_backup_file(path: Path) -> dict[str, Any]:
@@ -35,22 +36,9 @@ def validation_report(path: Path, manifest: Mapping[str, Any]) -> str:
         raise StorageValidationError("Backup manifest is missing row counts.")
     rows = ", ".join(
         f"{title}={row_counts.get(title, 0)}"
-        for title in (
-            "Accounts",
-            "Categories",
-            "Payees",
-            "Tags",
-            "Transactions",
-            "Mileage",
-            "MixedUseExpenses",
-        )
-        if title in row_counts
+        for title in WORKSHEET_HEADERS
     )
-    receipt_status = (
-        f"verified ({manifest.get('receipt_count', 0)} entries)"
-        if manifest.get("receipt_inventory")
-        else "not present; ledger-only recovery source"
-    )
+    receipt_status = f"verified ({manifest.get('receipt_count', 0)} entries)"
     return "\n".join(
         (
             f"Validated backup: {path.resolve()}",
