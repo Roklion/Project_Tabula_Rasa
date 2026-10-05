@@ -27,6 +27,7 @@ def test_url_normalization_and_secret_safe_representation():
     "postgresql://user:private-secret@host:not-a-port/dev",
     "postgresql+psycopg2://user:private-secret@host/dev",
     "postgresql://user:private-secret@host/dev?options=private-secret",
+    "postgresql malformed user:private-secret@host/dev",
 ])
 def test_invalid_urls_have_safe_errors(url):
     with pytest.raises(DatabaseConfigurationError) as caught:

@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 import os
 
 from sqlalchemy.engine import URL, make_url
+from sqlalchemy.exc import ArgumentError
 
 
 class DatabaseConfigurationError(ValueError):
@@ -52,7 +53,7 @@ class DatabaseSettings:
                 pool_size=int(values.get("TABULA_DATABASE_POOL_SIZE", "5")),
                 max_overflow=int(values.get("TABULA_DATABASE_MAX_OVERFLOW", "5")),
             )
-        except (TypeError, ValueError):
+        except (ArgumentError, TypeError, ValueError):
             pass
         # Raise outside the handler so the public error does not retain a raw
         # parser exception (which may contain the credential-bearing URL).
