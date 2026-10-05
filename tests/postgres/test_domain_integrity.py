@@ -211,6 +211,22 @@ def test_zero_periods_commit_and_history_details_stay_protected(database):
     rejected(database, "INSERT INTO entry_tags VALUES ('alpha','zero','tag')")
 
 
+@pytest.mark.parametrize("destination_scope", ["alpha", "beta"])
+def test_tag_repointing_checks_both_history_owners_and_entity_scopes(database, destination_scope):
+    with repository_operation(database) as connection:
+        for scope in ("alpha", "beta"):
+            expense_references(connection, scope)
+            asset(connection, scope, posted=True)
+            expense_entry(connection, scope, "ordinary")
+            connection.execute(text("""INSERT INTO tags(entity_id,id,incarnation_id,name,name_key)
+                VALUES (:scope,'tag','tag','Synthetic','synthetic')"""), {"scope": scope})
+        connection.execute(text("INSERT INTO entry_tags VALUES ('alpha','ordinary','tag')"))
+    rejected(database, f"""UPDATE entry_tags SET entity_id='{destination_scope}',entry_id='depreciation'
+        WHERE entity_id='alpha' AND entry_id='ordinary'""")
+    with repository_operation(database, read_only=True) as connection:
+        assert connection.execute(text("SELECT entity_id,entry_id FROM entry_tags")).all() == [("alpha", "ordinary")]
+
+
 @pytest.mark.parametrize("sql", [
     "UPDATE mixed_use_sources SET payee_id='beta-only' WHERE entity_id='alpha'",
     "INSERT INTO mixed_use_tags VALUES ('alpha','source','beta-only')",

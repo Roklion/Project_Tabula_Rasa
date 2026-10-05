@@ -63,7 +63,7 @@ def guarded_mutation(
     Domain/reference validation remains the adapter's responsibility.
     """
     selected = set(keys)
-    if (not isinstance(entity_id, str) or not entity_id.strip()
+    if (not selected or not isinstance(entity_id, str) or not entity_id.strip()
             or any(key.entity_id != entity_id for key in selected)
             or set(expected) - selected):
         raise StorageValidationError("Invalid mutation scope.", code="baseline_invalid")

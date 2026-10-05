@@ -83,7 +83,9 @@ Use `guarded_mutation(database, selected_entity, keys, expected=tokens)` for an
 edit/delete/bulk operation. It starts or joins the shared transaction, validates
 that every key belongs to the server-selected entity, locks the entire affected
 set, and checks **every** loaded token before yielding any write or inline
-reference callback. A partial bulk token set fails before any callback. It
+reference callback. An edit/delete guard requires a nonempty root set; adapters
+handle an empty bulk selection as a no-op before invoking it. A partial bulk token
+set fails before any callback. It
 rejects extraneous expected keys rather than silently ignoring them. `tokens`
 maps each `AggregateKey` to its loaded baseline string; adapters extract it from
 the neutral `expected` inputs. Domain/reference validation remains in the

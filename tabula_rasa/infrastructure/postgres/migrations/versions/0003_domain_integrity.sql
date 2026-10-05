@@ -150,8 +150,8 @@ END;
 $$;
 
 CREATE FUNCTION protect_committed_history() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE scope text := COALESCE(NEW.entity_id,OLD.entity_id); asset_key text; entry_key text;
-        has_events boolean; fields text[];
+DECLARE scope text := COALESCE(NEW.entity_id,OLD.entity_id); asset_key text;
+        has_events boolean; fields text[]; target record;
 BEGIN
     IF TG_TABLE_NAME='recurring_schedules' AND TG_OP='UPDATE'
         AND to_jsonb(NEW)->'source_kind' IS DISTINCT FROM to_jsonb(OLD)->'source_kind' THEN
@@ -191,13 +191,21 @@ BEGIN
             RAISE EXCEPTION USING ERRCODE='23514', CONSTRAINT='ck_asset_history', MESSAGE='Override has committed history';
         END IF;
     ELSIF TG_TABLE_NAME IN ('entries','postings','entry_tags') THEN
-        entry_key := CASE WHEN TG_TABLE_NAME='entries' THEN to_jsonb(OLD)->>'id'
-                         ELSE COALESCE(to_jsonb(OLD)->>'entry_id',to_jsonb(NEW)->>'entry_id') END;
-        IF EXISTS (SELECT 1 FROM depreciation_events WHERE entity_id=scope AND entry_id=entry_key)
-           AND (TG_OP<>'UPDATE' OR (to_jsonb(NEW)-ARRAY['version','updated_at'])
-                 IS DISTINCT FROM (to_jsonb(OLD)-ARRAY['version','updated_at'])) THEN
-            RAISE EXCEPTION USING ERRCODE='23514', CONSTRAINT='ck_depreciation_history', MESSAGE='Immutable posted depreciation';
-        END IF;
+        -- Repointable tag rows must preserve both the old and new owner,
+        -- including their separate entity scopes. Root/posting identities
+        -- themselves remain protected by the canonical migration.
+        FOR target IN SELECT DISTINCT r->>'entity_id' AS entity_id,
+            CASE WHEN TG_TABLE_NAME='entries' THEN r->>'id' ELSE r->>'entry_id' END AS entry_id
+            FROM (VALUES (CASE WHEN TG_OP<>'INSERT' THEN to_jsonb(OLD) END),
+                         (CASE WHEN TG_OP<>'DELETE' THEN to_jsonb(NEW) END)) AS rows(r)
+            WHERE r IS NOT NULL
+        LOOP
+            IF EXISTS (SELECT 1 FROM depreciation_events WHERE entity_id=target.entity_id AND entry_id=target.entry_id)
+               AND (TG_OP<>'UPDATE' OR (to_jsonb(NEW)-ARRAY['version','updated_at'])
+                     IS DISTINCT FROM (to_jsonb(OLD)-ARRAY['version','updated_at'])) THEN
+                RAISE EXCEPTION USING ERRCODE='23514', CONSTRAINT='ck_depreciation_history', MESSAGE='Immutable posted depreciation';
+            END IF;
+        END LOOP;
     END IF;
     RETURN COALESCE(NEW,OLD);
 END;

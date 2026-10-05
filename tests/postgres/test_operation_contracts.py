@@ -19,6 +19,13 @@ def transactions(database, scope="alpha", **options):
         tags=TagService(ReferenceProbe(database, scope, "tags")))
 
 
+def test_empty_guard_cannot_yield_an_unguarded_write(database):
+    with pytest.raises(StorageValidationError) as caught:
+        with guarded_mutation(database, "alpha", [], expected={}):
+            pytest.fail("An edit/delete guard requires an affected root")
+    assert caught.value.code == "baseline_invalid"
+
+
 def test_bulk_guard_checks_every_loaded_baseline_before_any_write(database):
     with repository_operation(database) as connection:
         expense_references(connection)
