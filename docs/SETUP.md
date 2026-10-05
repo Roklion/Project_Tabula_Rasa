@@ -62,79 +62,26 @@ restricted Picker key as described in [Google Drive](GOOGLE_DRIVE.md).
 3. Leave the workbook blank; the application creates or validates these tabs
    and headers:
 
-| Worksheet | Required headers, left to right |
-| --- | --- |
-| Accounts | id, name, type, classification, opening_balance, active, created_at, parent_id |
-| Categories | id, name, kind, parent_id |
-| Payees | id, name, active, created_at |
-| Tags | id, name, active, created_at |
-| Transactions | id, txn_date, kind, amount, account_id, to_account_id, category_id, payee_id, description, reference, receipt_references, created_at, source_type, source_id, tag_ids, recurring_schedule_id, recurring_scheduled_date, recurring_source_kind, recurring_occurrence_type |
-| Mileage | id, trip_date, miles, vehicle, start_location, destination, business_purpose, notes, created_at, tag_ids |
-| MixedUseExpenses | id, txn_date, kind, total_expense, business_use_percentage, allocated_amount, account_id, category_id, payee_id, description, reference, receipt_references, allocation_rationale, linked_transaction_id, tag_ids, recurring_schedule_id, recurring_scheduled_date, recurring_source_kind, recurring_occurrence_type, created_at |
-| RecurringSchedules | id, name, kind, source_kind, recurrence_unit, recurrence_interval, anchor_date, start_date, end_date, status, amount, total_expense, business_use_percentage, account_id, category_id, payee_id, description, reference, allocation_rationale, tag_ids, created_at, updated_at, attention_code, attention_at |
-| Assets | id, name, asset_type, notes, acquisition_date, depreciation_start_date, cost_basis, salvage_value, useful_life_quarters, depreciation_method, depreciation_expense_account_id, accumulated_depreciation_account_id, payee_id, reference, tag_ids, source_transaction_id, retired_date, status, schedule_overrides, created_at, updated_at |
-| JournalEntries | id, txn_date, description, created_at, updated_at |
-| JournalPostings | id, parent_entry_id, position, target_type, target_id, side, amount, payee_id, description |
+The exact worksheet/header contract is centralized in
+[Final Sheets source contract](SHEETS_SOURCE_CONTRACT.md). The default Sheet1
+tab may remain. A genuinely empty workbook, or interrupted bootstrap containing
+only current headers and no records, receives format-13 tabs and headers.
+Populated workbooks are validated without modification; missing, historical,
+or additional ledger fields are rejected. Select a supported format-13 workbook
+or restore a validated format-13 backup into a new blank workbook. Historical
+ledger and archive converters are retired; preserve unsupported source files.
 
-The default Sheet1 tab may remain or be deleted. Existing compatible tabs are
-preserved. Blank-workbook initialization creates the required tabs and headers;
-populated workbooks with empty or incompatible required tabs fail validation
-rather than being overwritten. Defaults are seeded only in a blank workbook.
-
-Existing workbooks that still store transaction payee text must be upgraded
-with the one-time combined workbook migration before using the managed
-`Payees` and `Transactions.payee_id` schema:
-
-```text
-python scripts/migrate_workbook.py --secrets .streamlit/secrets.toml --profile PROFILE_KEY
-```
-
-For a candidate historical workbook, connect a saved profile first, use
-Google setup > Authorize a recovery or migration workbook, then run:
-
-```text
-python scripts/migrate_workbook.py --profile PROFILE_KEY --spreadsheet-id WORKBOOK_ID
-```
-
-An override must target an unconfigured candidate workbook. To migrate the
-selected profile's configured ledger, use `--profile` alone; an override naming
-any configured live ledger is rejected before Google access.
-
-Return to Google setup, select the migrated workbook as the ledger, and
-validate it. Merely pasting a workbook ID does not grant `drive.file` access.
-
-See [Backup and recovery](BACKUP_RECOVERY.md) for migration behavior and
-legacy-backup compatibility details.
-
-Normal startup validates populated workbooks against the current headers only;
-it never upgrades historical worksheet schemas or creates migration markers.
-An outdated workbook fails with an actionable error and remains unchanged.
-Upgrade a standard historical workbook explicitly, using the selected profile's
-Google OAuth access:
-
-```text
-python scripts/migrate_workbook.py --secrets .streamlit/secrets.toml --profile PROFILE_KEY
-```
-
-The migration command adds the hierarchy, receipt, managed-payee, tag,
-provenance, mixed-use, recurring, fixed-asset, and journal tables and columns,
-and backfills v9 mixed-use source tags from their linked projection. When it
-recognizes a format-12 workbook, it adds empty `JournalEntries` and
-`JournalPostings` tables without rewriting simple transaction rows. It validates
-the complete format-13 schema before reporting success and can be rerun after
-an interrupted migration. Read-only validation remains non-mutating and does
-not perform this conversion.
-
-If the historical Drive receipt files predate workbook receipt references, run
-the separate one-time association migration after the workbook migration:
+For a supported format-13 workbook whose receipt-reference cells remain blank,
+the separate receipt-association tool is still available:
 
 ```text
 python scripts/migrate_receipt_associations.py --secrets .streamlit/secrets.toml --profile PROFILE_KEY
 ```
 
-Normal startup and backup creation never infer associations from legacy Drive
-metadata. The receipt migration considers only blank legacy cells and leaves an
-explicit empty receipt list unlinked.
+This tool changes receipt associations, not the ledger schema. It considers
+only blank cells carrying old Drive-only associations; an explicit empty
+receipt list remains unlinked. Normal startup and backup creation do not infer
+these associations. Profile/OAuth migration remains supported separately.
 
 ## Local profile administration
 
@@ -166,7 +113,7 @@ before configuration changes.
    a workbook or alter its rows. Each ledger may belong to only one local
    business profile; selecting another profile's ledger is rejected.
 4. Select Validate ledger. Genuinely blank workbooks receive the existing schema
-   and defaults; populated historical workbooks require explicit migration.
+   and defaults; populated workbooks must match the frozen format-13 contract.
 5. For receipts/backups, choose or create a storage root and Provision storage
    folders. Run readiness under Recovery.
 

@@ -43,8 +43,7 @@ def validate(
     workbook = GoogleSheetsStorage._open_workbook_from_secrets(
         {**secrets, "spreadsheet_id": target_spreadsheet_id}, scopes=[]
     )
-    # Readiness must match strict application startup. Legacy hierarchy
-    # workbooks need the explicit migration command before they can be ready.
+    # Readiness must match strict startup under the frozen format-13 schema.
     storage = GoogleSheetsStorage(workbook)
     row_counts = {
         "Accounts": len(storage.list_accounts(active_only=False)),

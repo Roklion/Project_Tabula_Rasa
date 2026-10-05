@@ -34,7 +34,6 @@ from tabula_rasa.storage.google_sheets import (
     StorageWorkbookAccessError,
     WORKSHEET_HEADERS,
 )
-from scripts.migration_schemas import VERSION_5_WORKSHEET_HEADERS
 
 from tabula_rasa.quickbooks_import import (
     general_ledger_rows,
@@ -105,60 +104,6 @@ def rewrite_backup_tables(
     manifest = json.loads(contents["manifest.json"])
     if format_version is not None:
         manifest["format_version"] = format_version
-        if format_version < 7 and "Payees.csv" in contents:
-            payee_rows = list(
-                csv.reader(io.StringIO(contents["Payees.csv"].decode("utf-8")))
-            )
-            payee_headers = payee_rows[0]
-            payee_id_index = payee_headers.index("id")
-            payee_name_index = payee_headers.index("name")
-            payee_names = {
-                row[payee_id_index]: row[payee_name_index]
-                for row in payee_rows[1:]
-            }
-            transaction_rows = list(
-                csv.reader(io.StringIO(contents["Transactions.csv"].decode("utf-8")))
-            )
-            transaction_headers = transaction_rows[0]
-            payee_id_index = transaction_headers.index("payee_id")
-            transaction_headers[payee_id_index] = "payee"
-            for row in transaction_rows[1:]:
-                row[payee_id_index] = payee_names.get(row[payee_id_index], "")
-            csv_buffer = io.StringIO(newline="")
-            csv.writer(csv_buffer, lineterminator="\n").writerows(transaction_rows)
-            contents["Transactions.csv"] = csv_buffer.getvalue().encode("utf-8")
-            manifest["worksheet_headers"]["Transactions"] = transaction_headers
-            manifest["sha256"]["Transactions.csv"] = hashlib.sha256(
-                contents["Transactions.csv"]
-            ).hexdigest()
-            contents.pop("Payees.csv")
-            manifest["worksheet_headers"].pop("Payees", None)
-            manifest["row_counts"].pop("Payees", None)
-            manifest["sha256"].pop("Payees.csv", None)
-        if format_version < 8:
-            for title in ("Transactions", "Mileage"):
-                filename = f"{title}.csv"
-                rows = list(
-                    csv.reader(io.StringIO(contents[filename].decode("utf-8")))
-                )
-                if "tag_ids" in rows[0]:
-                    tag_index = rows[0].index("tag_ids")
-                    rows = [
-                        [value for index, value in enumerate(row) if index != tag_index]
-                        for row in rows
-                    ]
-                    csv_buffer = io.StringIO(newline="")
-                    csv.writer(csv_buffer, lineterminator="\n").writerows(rows)
-                    contents[filename] = csv_buffer.getvalue().encode("utf-8")
-                    manifest["worksheet_headers"][title] = rows[0]
-                    manifest["row_counts"][title] = len(rows) - 1
-                    manifest["sha256"][filename] = hashlib.sha256(
-                        contents[filename]
-                    ).hexdigest()
-            contents.pop("Tags.csv", None)
-            manifest["worksheet_headers"].pop("Tags", None)
-            manifest["row_counts"].pop("Tags", None)
-            manifest["sha256"].pop("Tags.csv", None)
     for title, transform in transforms.items():
         filename = f"{title}.csv"
         rows = list(
@@ -173,25 +118,6 @@ def rewrite_backup_tables(
         manifest["sha256"][filename] = hashlib.sha256(
             contents[filename]
         ).hexdigest()
-    if format_version is not None and format_version < 9:
-        contents.pop("MixedUseExpenses.csv", None)
-        manifest["worksheet_headers"].pop("MixedUseExpenses", None)
-        manifest["row_counts"].pop("MixedUseExpenses", None)
-        manifest["sha256"].pop("MixedUseExpenses.csv", None)
-    if format_version is not None:
-        introduced = {
-            "RecurringSchedules": 11,
-            "Assets": 12,
-            "JournalEntries": 13,
-            "JournalPostings": 13,
-        }
-        for title, first_version in introduced.items():
-            if format_version >= first_version:
-                continue
-            contents.pop(f"{title}.csv", None)
-            manifest["worksheet_headers"].pop(title, None)
-            manifest["row_counts"].pop(title, None)
-            manifest["sha256"].pop(f"{title}.csv", None)
     contents["manifest.json"] = json.dumps(manifest).encode("utf-8")
     with zipfile.ZipFile(output, "w") as destination:
         for name, content in contents.items():
@@ -225,7 +151,6 @@ __all__ = [
     'StorageValidationError',
     'StorageWorkbookAccessError',
     'TEST_RECEIPT_REFERENCE',
-    'VERSION_5_WORKSHEET_HEADERS',
     'WORKSHEET_HEADERS',
     '_mutation_guidance',
     'account_balances',

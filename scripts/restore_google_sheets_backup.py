@@ -22,6 +22,7 @@ from tabula_rasa.business_profiles import (
 from tabula_rasa.local_profile_store import load_business_profile_document
 from tabula_rasa.storage import GoogleSheetsStorage, StorageValidationError
 from tabula_rasa.storage.google_sheets import WORKSHEET_HEADERS
+from tabula_rasa.storage.google_sheets.validation import _looks_like_partial_blank_workbook
 
 
 def validate_restore_target(
@@ -52,8 +53,18 @@ def validate_restore_backup(
 
 
 def initialize_blank_ledger_sheets(workbook: object) -> None:
-    """Add ledger headers while refusing to alter a populated required sheet."""
+    """Preflight the whole blank target before creating any format-13 sheets."""
     actual = {worksheet.title: worksheet for worksheet in workbook.worksheets()}
+    values = {title: worksheet.get_all_values() for title, worksheet in actual.items()}
+    is_blank = not any(
+        str(value).strip()
+        for rows in values.values() for row in rows for value in row
+    )
+    if not is_blank and not _looks_like_partial_blank_workbook(values):
+        raise StorageValidationError(
+            "Refusing to initialize a populated or incompatible restore target; "
+            "use a new blank workbook."
+        )
     for title, headers in WORKSHEET_HEADERS.items():
         worksheet = actual.get(title)
         if worksheet is None:
@@ -62,12 +73,7 @@ def initialize_blank_ledger_sheets(workbook: object) -> None:
             )
             worksheet.update([list(headers)], range_name="A1", raw=True)
             continue
-        values = worksheet.get_all_values()
-        if values and values != [list(headers)]:
-            raise StorageValidationError(
-                f"Refusing to initialize populated or incompatible {title} sheet"
-            )
-        if not values:
+        if values[title] != [list(headers)]:
             worksheet.update([list(headers)], range_name="A1", raw=True)
 
 

@@ -42,76 +42,12 @@ from tabula_rasa.reference_data import (
 )
 from .schema import (
     BACKUP_FORMAT_VERSION,
-    MIXED_USE_WORKSHEET_HEADERS,
     WORKSHEET_HEADERS,
+    validate_worksheet_headers,
 )
 from .errors import (
     StorageValidationError,
 )
-
-def _looks_like_historical_workbook(
-    values: Mapping[str, list[list[Any]]],
-) -> bool:
-    """Return whether a workbook has a recognizable migration-only marker.
-
-    The detailed historical layouts belong to ``scripts.migration_schemas``.
-    Runtime needs only the small set of stable markers required to direct an
-    older workbook to the explicit migration command.
-    """
-    present_titles = set(values)
-    if "Assets" in present_titles and not {
-        "JournalEntries",
-        "JournalPostings",
-    }.issubset(present_titles):
-        # Format 12 and an interrupted format-13 migration have the fixed-asset
-        # register but not both journal worksheets.
-        return True
-    if "Assets" not in present_titles and "RecurringSchedules" in present_titles:
-        return True
-    if "RecurringSchedules" not in present_titles and (
-        "Transactions" in present_titles
-        or any(
-            str(value).strip()
-            for row in values.get("MixedUseExpenses") or []
-            for value in row
-        )
-    ):
-        return True
-    for title, rows in values.items():
-        if not rows:
-            continue
-        headers = [str(value).strip() for value in rows[0]]
-        if "tag_ids__migration_pending" in headers:
-            return True
-        if (
-            title == "MixedUseExpenses"
-            and set(headers)
-            == set(MIXED_USE_WORKSHEET_HEADERS) - {"tag_ids"}
-            and len(headers) == len(set(headers))
-        ):
-            # Version 9 mixed-use sources predate durable source tag IDs.
-            return True
-        if title == "Transactions" and len(headers) == len(set(headers)):
-            header_set = set(headers)
-            if "payee" in header_set:
-                return True
-            if (
-                "MixedUseExpenses" not in present_titles
-                and header_set != set(WORKSHEET_HEADERS["Transactions"])
-                and {"payee_id", "source_type", "source_id", "tag_ids"}
-                <= header_set
-            ):
-                # The explicit migration updates Transactions before Mileage;
-                # preserve the historical marker if startup observes that
-                # supported intermediate layout after an interrupted run.
-                return True
-            if (
-                "MixedUseExpenses" not in present_titles
-                and "payee_id" in header_set
-                and "source_type" not in header_set
-            ):
-                return True
-    return False
 
 def _looks_like_partial_blank_workbook(
     values: Mapping[str, list[list[Any]]],
@@ -336,7 +272,7 @@ def _parse_backup_zip(
 ) -> tuple[
     dict[str, Any],
     dict[str, tuple[list[str], list[dict[str, str]]]],
-    dict[str, Any] | None,
+    dict[str, Any],
 ]:
     """Validate a ledger backup without extracting files to disk."""
     try:
@@ -356,11 +292,19 @@ def _parse_backup_zip(
             if not isinstance(manifest, dict):
                 raise StorageValidationError("Backup manifest fields are invalid")
             format_version = manifest.get("format_version")
-            if format_version != BACKUP_FORMAT_VERSION:
+            if type(format_version) is not int or format_version != BACKUP_FORMAT_VERSION:
                 raise StorageValidationError(
-                    "Backup format version is not supported by the application; "
-                    "convert it with scripts/migrate_legacy_backup.py first."
+                    "Only backup format 13 is supported. Historical archive conversion "
+                    "is retired; preserve this file and select a format-13 backup."
                 )
+            try:
+                backup_time = datetime.fromisoformat(manifest["backup_time"])
+            except (KeyError, TypeError, ValueError) as exc:
+                raise StorageValidationError("Backup time must be a UTC timestamp") from exc
+            if backup_time.utcoffset() != timezone.utc.utcoffset(backup_time):
+                raise StorageValidationError("Backup time must be a UTC timestamp")
+            if not isinstance(manifest.get("workbook_title"), str) or not manifest["workbook_title"].strip():
+                raise StorageValidationError("Backup workbook title is missing or invalid")
             backup_headers = WORKSHEET_HEADERS
             required_files = {
                 f"{title}.csv" for title in backup_headers
@@ -384,6 +328,8 @@ def _parse_backup_zip(
     worksheet_headers = manifest.get("worksheet_headers")
     if not all(isinstance(value, dict) for value in (row_counts, file_hashes, worksheet_headers)):
         raise StorageValidationError("Backup manifest is missing validation metadata")
+    if set(row_counts) != set(backup_headers) or set(worksheet_headers) != set(backup_headers):
+        raise StorageValidationError("Backup manifest worksheet entries are invalid")
     expected_hash_names = {
         f"{title}.csv" for title in backup_headers
     } | {"receipts.json"}
@@ -401,13 +347,8 @@ def _parse_backup_zip(
         if not parsed_rows:
             raise StorageValidationError(f"{title} backup has no header row")
         headers = [value.strip() for value in parsed_rows[0]]
-        required_headers = set(backup_headers[title])
-        if (
-            any(not value for value in headers)
-            or len(headers) != len(set(headers))
-            or not required_headers.issubset(headers)
-            or worksheet_headers.get(title) != headers
-        ):
+        validate_worksheet_headers(title, headers)
+        if worksheet_headers.get(title) != headers:
             raise StorageValidationError(f"{title} backup headers are invalid")
         records: list[dict[str, str]] = []
         for raw_row in parsed_rows[1:]:
@@ -416,7 +357,7 @@ def _parse_backup_zip(
             padded = raw_row + [""] * (len(headers) - len(raw_row))
             if any(value.strip() for value in padded):
                 records.append(dict(zip(headers, padded)))
-        if row_counts.get(title) != len(records):
+        if type(row_counts.get(title)) is not int or row_counts[title] != len(records):
             raise StorageValidationError(f"{title} backup row count does not match")
         record_ids = [record.get("id", "").strip() for record in records]
         if any(not record_id for record_id in record_ids) or len(record_ids) != len(
@@ -668,66 +609,64 @@ def _parse_backup_zip(
 
     _validate_mixed_use_tables(tables)
 
-    receipt_manifest: dict[str, Any] | None = None
-    if receipt_manifest_bytes is not None:
-        if (
-            hashlib.sha256(receipt_manifest_bytes).hexdigest()
-            != file_hashes.get("receipts.json")
+    if (
+        hashlib.sha256(receipt_manifest_bytes).hexdigest()
+        != file_hashes.get("receipts.json")
+    ):
+        raise StorageValidationError("Receipt manifest checksum does not match")
+    try:
+        raw_receipt_manifest = json.loads(receipt_manifest_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise StorageValidationError(
+            "Receipt manifest is not valid UTF-8 JSON"
+        ) from exc
+    try:
+        receipt_manifest = validate_receipt_manifest(
+            raw_receipt_manifest,
+            transaction_ids={
+                transaction["id"] for transaction in tables["Transactions"][1]
+            },
+        )
+    except ReceiptManifestError as exc:
+        raise StorageValidationError(str(exc)) from exc
+    referenced_entries = {
+        (str(entry["transaction_id"]), str(entry["old_drive_file_id"])): entry
+        for entry in receipt_manifest["receipts"]
+        if entry["reference_state"] == "referenced"
+    }
+    expected_references: set[tuple[str, str]] = set()
+    for transaction in tables["Transactions"][1]:
+        for reference in decode_receipt_references(
+            transaction.get("receipt_references", "")
         ):
-            raise StorageValidationError("Receipt manifest checksum does not match")
-        try:
-            raw_receipt_manifest = json.loads(receipt_manifest_bytes.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise StorageValidationError(
-                "Receipt manifest is not valid UTF-8 JSON"
-            ) from exc
-        try:
-            receipt_manifest = validate_receipt_manifest(
-                raw_receipt_manifest,
-                transaction_ids={
-                    transaction["id"] for transaction in tables["Transactions"][1]
-                },
-            )
-        except ReceiptManifestError as exc:
-            raise StorageValidationError(str(exc)) from exc
-        referenced_entries = {
-            (str(entry["transaction_id"]), str(entry["old_drive_file_id"])): entry
-            for entry in receipt_manifest["receipts"]
-            if entry["reference_state"] == "referenced"
-        }
-        expected_references: set[tuple[str, str]] = set()
-        for transaction in tables["Transactions"][1]:
-            for reference in decode_receipt_references(
-                transaction.get("receipt_references", "")
+            if "receipt_id" not in reference:
+                raise StorageValidationError(
+                    "Receipt references need integrity metadata before backup"
+                )
+            key = (transaction["id"], str(reference["id"]))
+            entry = referenced_entries.get(key)
+            if entry is None or any(
+                (
+                    reference[reference_field]
+                    != entry[entry_field]
+                )
+                for reference_field, entry_field in (
+                    ("name", "stored_filename"),
+                    ("receipt_id", "receipt_id"),
+                    ("original_filename", "original_filename"),
+                    ("mime_type", "mime_type"),
+                    ("byte_size", "byte_size"),
+                    ("sha256", "sha256"),
+                )
             ):
-                if "receipt_id" not in reference:
-                    raise StorageValidationError(
-                        "Receipt references need integrity metadata before backup"
-                    )
-                key = (transaction["id"], str(reference["id"]))
-                entry = referenced_entries.get(key)
-                if entry is None or any(
-                    (
-                        reference[reference_field]
-                        != entry[entry_field]
-                    )
-                    for reference_field, entry_field in (
-                        ("name", "stored_filename"),
-                        ("receipt_id", "receipt_id"),
-                        ("original_filename", "original_filename"),
-                        ("mime_type", "mime_type"),
-                        ("byte_size", "byte_size"),
-                        ("sha256", "sha256"),
-                    )
-                ):
-                    raise StorageValidationError(
-                        "Receipt manifest does not match transaction references"
-                    )
-                expected_references.add(key)
-        if expected_references != set(referenced_entries):
-            raise StorageValidationError(
-                "Receipt manifest has an invalid transaction association"
-            )
+                raise StorageValidationError(
+                    "Receipt manifest does not match transaction references"
+                )
+            expected_references.add(key)
+    if expected_references != set(referenced_entries):
+        raise StorageValidationError(
+            "Receipt manifest has an invalid transaction association"
+        )
     return manifest, tables, receipt_manifest
 
 __all__ = [
@@ -735,7 +674,6 @@ __all__ = [
     "normalize_payee_name",
     "normalize_tag_name",
     "mixed_use_ledger_description",
-    "_looks_like_historical_workbook",
     "_looks_like_partial_blank_workbook",
     "_utc_now",
     "_clean_text",

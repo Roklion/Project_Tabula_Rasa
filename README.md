@@ -63,6 +63,7 @@ The documentation index is this section of the root README. Go directly to:
 | Configure Maps autocomplete, routing, quotas, and billing | [Google Maps mileage](docs/GOOGLE_MAPS.md) |
 | Review application legal terms and privacy practices | [Terms of Use](docs/TERMS_OF_USE.md) · [Privacy Policy](docs/PRIVACY_POLICY.md) |
 | Use ledgers, receipts, mileage, reports, and imports | [Using Tabula Rasa](docs/USING_TABULA_RASA.md) |
+| Inspect the frozen final Sheets workbook/archive source | [Final Sheets source contract](docs/SHEETS_SOURCE_CONTRACT.md) |
 | Back up, validate, restore, and recover receipts | [Backup and recovery](docs/BACKUP_RECOVERY.md) |
 | Run development checks and tests | [Development](docs/DEVELOPMENT.md) |
 

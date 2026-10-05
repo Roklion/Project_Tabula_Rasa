@@ -636,20 +636,16 @@ workflow.
 
 Payees are managed values. Transaction forms offer existing active payees and
 support inline creation by typing a new name into the selector and pressing
-Enter. Existing workbooks must be upgraded once with
-`scripts/migrate_workbook.py --profile PROFILE_KEY` before using the new
-transaction schema. For a new or reassigned profile, run
-`scripts/migrate_workbook.py --spreadsheet-id WORKBOOK_ID
---profile PROFILE_KEY` after connecting Google and authorizing the candidate
-workbook through Google setup > Authorize a recovery or migration workbook.
-The command upgrades the complete recognized historical layout, including
-managed payees.
+Enter. Existing populated workbooks must match the frozen
+[format-13 Sheets source contract](SHEETS_SOURCE_CONTRACT.md); older ledger
+layouts and backup formats are unsupported. Validation preserves incompatible
+workbooks. Use a supported workbook or restore a validated format-13 backup
+into a new blank workbook; historical converters are retired.
 
-Tags are managed, profile-local values referenced by stable IDs from both
-transactions and mileage rows. Inline Tag creation normalizes names and prevents
-duplicates. The explicit workbook migration upgrades compatible historical Tags
-schemas and preserves existing tag associations; normal startup does not
-perform this conversion.
+Tags remain managed, profile-local values referenced by stable IDs from
+transactions, mileage, mixed-use sources, schedules, and assets. Inline Tag
+creation normalizes names and prevents duplicates. Format retirement preserves
+existing accounting records, receipt files, and backup files.
 
 ## Imports
 

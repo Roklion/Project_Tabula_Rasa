@@ -9,7 +9,6 @@ from ._support import (
     StorageUnavailableError,
     StorageValidationError,
     StorageWorkbookAccessError,
-    VERSION_5_WORKSHEET_HEADERS,
     WORKSHEET_HEADERS,
     _mutation_guidance,
     gspread,
@@ -242,7 +241,7 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
     def test_read_only_profile_storage_rejects_legacy_headers_without_migration(
         self,
     ) -> None:
-        workbook = FakeWorkbook(VERSION_5_WORKSHEET_HEADERS)
+        workbook = FakeWorkbook({"Transactions": ("id", "txn_date", "payee")})
         google_client = Mock()
         google_client.open_by_key.return_value = workbook
         for worksheet in workbook.sheets.values():

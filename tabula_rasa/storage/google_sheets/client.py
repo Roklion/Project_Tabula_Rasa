@@ -22,6 +22,8 @@ from .schema import (
     SHEETS_READONLY_SCOPE,
     SHEETS_SCOPE,
     WORKSHEET_HEADERS,
+    validate_worksheet_headers,
+    validate_workbook_headers,
 )
 from .errors import (
     StorageAuthenticationError,
@@ -36,7 +38,6 @@ from .errors import (
 )
 from .validation import (
     _clean_text,
-    _looks_like_historical_workbook,
     _looks_like_partial_blank_workbook,
     _utc_now,
     _validate_hierarchy_records,
@@ -97,11 +98,10 @@ class _GoogleSheetsStorageClient:
         if _initial_values is None:
             self.validate_headers()
         else:
-            missing = sorted(set(WORKSHEET_HEADERS) - set(_initial_values))
-            if missing:
-                raise StorageValidationError(
-                    "Workbook is missing worksheets: " + ", ".join(missing)
-                )
+            validate_workbook_headers({
+                title: [str(value).strip() for value in rows[0]] if rows else []
+                for title, rows in _initial_values.items()
+            })
             for title in WORKSHEET_HEADERS:
                 self._cache_values(title, _initial_values[title])
 
@@ -179,9 +179,8 @@ class _GoogleSheetsStorageClient:
     def from_secrets(cls, secrets: Mapping[str, Any]) -> "GoogleSheetsStorage":
         """Open a workbook, bootstrapping only a genuinely blank workbook.
 
-        Populated workbooks are intentionally validation-only. Historical
-        schema conversion is performed by ``scripts/migrate_workbook.py`` so
-        an ordinary application startup cannot mutate ledger data.
+        Populated workbooks must use the frozen format-13 schema. Unsupported
+        schemas are rejected without conversion or source-ledger writes.
         """
         spreadsheet_id = _configured_spreadsheet_id(secrets)
         workbook = cls._open_workbook_from_secrets(
@@ -223,23 +222,12 @@ class _GoogleSheetsStorageClient:
                     },
                 )
 
-            try:
-                return cls(
-                    workbook,
-                    spreadsheet_id=spreadsheet_id,
-                    _initial_worksheets=worksheets,
-                    _initial_values=values,
-                )
-            except StorageValidationError as exc:
-                if _looks_like_historical_workbook(values):
-                    raise StorageInitializationError(
-                        "This workbook uses an older Tabula Rasa schema. "
-                        "Run `python scripts/migrate_workbook.py --profile "
-                        "PROFILE_KEY` for the selected workbook, replacing "
-                        "PROFILE_KEY with its business-profile key, then "
-                        "restart the application."
-                    ) from exc
-                raise
+            return cls(
+                workbook,
+                spreadsheet_id=spreadsheet_id,
+                _initial_worksheets=worksheets,
+                _initial_values=values,
+            )
         except GoogleAuthError as exc:
             raise StorageAuthenticationError(
                 "Google OAuth connection failed. Reconnect this profile's Google account"
@@ -306,18 +294,7 @@ class _GoogleSheetsStorageClient:
         return list(headers)
 
     def _validate_header_values(self, title: str, headers: list[str]) -> None:
-        required = set(WORKSHEET_HEADERS[title])
-        if not headers:
-            raise StorageValidationError(f"{title} header row is empty")
-        if any(not header for header in headers):
-            raise StorageValidationError(f"{title} has a blank header")
-        if len(headers) != len(set(headers)):
-            raise StorageValidationError(f"{title} has duplicate headers")
-        missing = sorted(required - set(headers))
-        if missing:
-            raise StorageValidationError(
-                f"{title} is missing headers: {', '.join(missing)}"
-            )
+        validate_worksheet_headers(title, headers)
 
     def validate_headers(self) -> None:
         """Validate required worksheets and headers without relying on positions."""
@@ -328,15 +305,14 @@ class _GoogleSheetsStorageClient:
             }
         except AttributeError as exc:
             raise StorageValidationError("Invalid workbook object") from exc
-        missing = sorted(set(WORKSHEET_HEADERS) - set(worksheets))
-        if missing:
-            raise StorageValidationError(
-                "Workbook is missing worksheets: " + ", ".join(missing)
-            )
+        headers = {
+            title: [str(value).strip() for value in self._api(lambda: sheet.row_values(1))]
+            for title, sheet in worksheets.items() if title in WORKSHEET_HEADERS
+        }
+        validate_workbook_headers(headers)
         with self._cache_lock:
             self._worksheet_cache.update(worksheets)
-        for title in WORKSHEET_HEADERS:
-            self._headers(title)
+            self._header_cache.update(headers)
 
     def ensure_defaults(self) -> dict[str, int]:
         """Seed default accounts/categories once for a blank workbook."""
@@ -412,6 +388,8 @@ class _GoogleSheetsStorageClient:
         self._validate_header_values(title, headers)
         rows: list[_StoredRow] = []
         for row_number, raw_row in enumerate(values[1:], start=2):
+            if any(str(value).strip() for value in raw_row[len(headers):]):
+                raise StorageValidationError(f"{title} has data outside the frozen format-13 headers")
             padded = [str(value) for value in raw_row] + [""] * (
                 len(headers) - len(raw_row)
             )
