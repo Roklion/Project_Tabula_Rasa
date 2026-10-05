@@ -2,6 +2,7 @@
 
 from tabula_rasa.application.services import assemble_application_services
 from .accounting import PostgresTransactionRepository, PostgresJournalRepository
+from .reporting import PostgresLedgerQueryRepository
 from .reference_data import (
     PostgresLedgerSetupRepository, PostgresAccountRepository, PostgresCategoryRepository,
     PostgresPayeeRepository, PostgresTagRepository,
@@ -24,4 +25,5 @@ def create_postgres_services(database, entity_id):
         tag_repository=PostgresTagRepository(database, entity_id),
         transaction_repository=PostgresTransactionRepository(database, entity_id),
         journal_repository=PostgresJournalRepository(database, entity_id),
+        reporting_repository=PostgresLedgerQueryRepository(database, entity_id),
     )
