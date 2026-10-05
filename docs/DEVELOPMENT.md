@@ -20,6 +20,11 @@ The Codex-managed Windows environment intentionally requires Python 3.12 so
 worktrees use one interpreter series. Its environment setup fails clearly when
 that interpreter is unavailable.
 
+The optional PostgreSQL development runtime, migration policy, environment
+variables, and real-database test setup are documented in
+[PostgreSQL development and operations](POSTGRESQL.md). Development dependencies
+include the database tools; the Sheets runtime does not require them or a DB URL.
+
 ## Local main-branch push guard
 
 The tracked .githooks/pre-push hook blocks pushes that would update remote
