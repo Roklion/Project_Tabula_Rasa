@@ -1,6 +1,6 @@
 """Small shared transaction/error boundary for PostgreSQL adapters."""
 
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
 
 from psycopg import Error as PsycopgError
@@ -9,6 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from tabula_rasa.errors import StorageConflictError, StorageError, StorageValidationError
 from .runtime import Database, DatabaseError, safe_database_error
+from .concurrency import AggregateKey, check_baseline, lock_aggregates
 
 
 def application_database_error(error: DatabaseError) -> StorageError:
@@ -47,3 +48,27 @@ def repository_operation(
     except StorageError:
         failure.__context__ = None
         raise
+
+
+@contextmanager
+def guarded_mutation(
+    database: Database, entity_id: str, keys: Iterable[AggregateKey], *,
+    expected: Mapping[AggregateKey, str | None], require_baselines: bool = True,
+) -> Iterator[tuple[Connection, dict[AggregateKey, Mapping[str, object]]]]:
+    """Check the whole selected entity/bulk baseline set before yielding writes.
+
+    Keys include every root this operation changes. Commercial composition
+    leaves require_baselines enabled; the explicit legacy/internal path may
+    disable it, while retaining fresh locks and supplied-token checks.
+    Domain/reference validation remains the adapter's responsibility.
+    """
+    selected = set(keys)
+    if (not isinstance(entity_id, str) or not entity_id.strip()
+            or any(key.entity_id != entity_id for key in selected)
+            or set(expected) - selected):
+        raise StorageValidationError("Invalid mutation scope.", code="baseline_invalid")
+    with repository_operation(database) as connection:
+        rows = lock_aggregates(connection, selected)
+        for key, row in rows.items():
+            check_baseline(key, row, expected.get(key), required=require_baselines)
+        yield connection, rows
