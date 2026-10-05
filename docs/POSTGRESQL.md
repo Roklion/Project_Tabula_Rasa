@@ -180,6 +180,96 @@ text. #253 and domain repositories translate these infrastructure codes into
 the existing application error/result contract at their boundary. No provider
 exception type is added to a service contract in this foundation.
 
+## Core repository composition (#245 / #246)
+
+`create_postgres_services(database, entity_id)` supplies the existing ledger,
+account, category, payee, tag, transaction and journal application services for
+one explicit, existing business entity. All adapters share the same `Database`.
+The caller supplies authorized entity context and owns the database lifecycle;
+this function neither authenticates users nor selects the production backend.
+Schema upgrades remain an explicit operator step.
+
+For a migrated disposable development database:
+
+```python
+from tabula_rasa.infrastructure.postgres.config import DatabaseSettings
+from tabula_rasa.infrastructure.postgres.runtime import Database
+from tabula_rasa.infrastructure.postgres.reference_data import PostgresLedgerSetupRepository
+from tabula_rasa.infrastructure.postgres.composition import create_postgres_services
+
+database = Database(DatabaseSettings.from_environment(required=True))
+try:
+    # Explicit provisioning, once per entity; duplicate IDs are refused.
+    PostgresLedgerSetupRepository.create_entity(database, "example", "Example business")
+    services = create_postgres_services(database, "example")
+    services.ledger.ensure_defaults()
+    loaded = services.accounts.list()[0]
+    services.accounts.rename(
+        loaded["id"], "Operating account",
+        expected={"baseline": loaded["baseline"]},
+    )
+finally:
+    database.dispose()
+```
+
+Defaults use the same definitions as Sheets and seed only when **both** accounts
+and categories are empty. Names, active states, signed openings, classifications
+and two-level hierarchies retain the current domain rules. Account deletion is
+not a supported port. Category and managed-reference deletion refuse remaining
+references. Payee/tag merges repoint every canonical owner atomically, including
+journal line payees and mixed-source, schedule, asset and mileage associations.
+Tag merges deduplicate associations before removing source identities. Display
+names continue to resolve from stable IDs; a rename does not alter the referring
+entry's baseline.
+
+Simple Ledger entries contain the existing two canonical postings with stable
+`<transaction-id>:1` / `:2` IDs. Advanced journals retain their original ordered
+line IDs in the separate journal namespace. Simple and journal read models are
+disjoint; both preserve exact amounts and shared accounting/domain validation.
+Transaction CRUD/bulk and journal CRUD commit their complete aggregates together.
+Inline payee/tag creation during service preparation joins the same transaction;
+a validation or deferred-commit failure rolls it back too. Bulk selection is
+all-or-nothing. No process-local workbook lock or remote-write retry applies.
+
+Loaded records return #253's opaque `baseline` token from the same snapshot as
+their values. Pass it separately through `expected`, never as an editable field
+or entity selector. The adapters use the shared token/lock/error helpers and
+`0002_aggregate_versions` triggers. Returned tokens are mapped after participating
+posting/tag/document-link writes, before the outer commit. A later stale submit,
+including one after deletion and recreation with the same domain ID, fails.
+Journals require a token or complete normalized loaded entry/posting snapshot.
+Account/category snapshots must also be complete; the existing payee/tag/simple
+transaction partial-snapshot compatibility remains. Derived labels and totals
+are excluded from comparisons. Optional no-`expected` paths remain available
+for legacy/internal callers and cannot detect a stale form. #221 must propagate
+and require the agreed loaded baseline for supported commercial interactive
+mutations; tokens confer no authorization.
+
+Hierarchy mutations take the entity guard; accounting operations protect the
+reference fields used during preparation. Bulk and merge roots use #253's ordered
+aggregate locks. Merges discover all affected roots before locking and stop if
+new owners appear while locks wait. FK, uniqueness and deferred posting checks
+remain authoritative at commit. Repository failures use the shared safe error
+codes documented in [PostgreSQL mutations and baselines](POSTGRESQL_CONCURRENCY.md).
+An unavailable outcome does not prove rollback and does not trigger a blind retry.
+
+Receipt references can link only matching metadata already registered in the
+selected entity. Unlinking/deleting an ordinary entry retains the document.
+New document acceptance and external bytes remain #251's responsibility. Existing
+source-owned projections and recurring provenance are readable; generic mutation
+of derived projections or provenance is refused. Existing ordinary recurring
+occurrences retain their association on edit and remove it on deletion. New
+recurring/source/asset workflows remain in their owning later repository slices.
+Reporting, mileage, document-store, import and other secondary services are not
+installed by this core composition.
+
+Reuse map: the implementation inspected and extends the existing reference-data,
+transaction/journal preparation, canonical posting translation, service assembly,
+and #244/#253 infrastructure owners. Shared bootstrap defaults were extracted
+from the Sheets schema without changing workbook format. New SQL mappings and
+legacy snapshot normalization belong to the core adapters; there is no parallel
+domain state machine, token format, version counter or error translator.
+
 ## Native integration tests
 
 ```powershell
@@ -202,16 +292,20 @@ Coverage includes zero-to-head and repeat upgrades, destructive downgrade and
 re-upgrade, schema inspection, direct invalid writes, two-entity references,
 exact money/signed openings, complete posting commit, nested atomicity, aborted
 operations, independent-connection read snapshots, and safe failure diagnostics.
+Core tests cover service workflows on both adapters, complete canonical postings,
+all-owner multi-source merges, two-entity isolation, late validation/commit rollback,
+inline-reference atomicity, independent loaded callers and overlapping writers,
+recreated identities, receipt metadata retention and immutable provenance.
 Run the existing full suite with this endpoint too when validating shared changes.
 
 ## Delivery boundary for the initiative
 
-#244 supplies a reusable runtime and baseline, not finished commercial ledger
-repositories. #245–#252 implement domain SQL mappings and complete their own
-mutation constraints/tests. #253 owns caller-baseline transport, aggregate
-version advancement (including detail/link changes), deterministic multi-root
-lock order, concurrent-writer verification, and the remaining specialized
-deferred relationship/provenance enforcement from ADR 0001. In particular,
+#244 supplies the reusable runtime and baseline. #245/#246 now supply the core
+reference and accounting adapters described above. #247–#252 complete the
+remaining domain mappings and mutation constraints/tests. #253 supplies shared
+caller-baseline transport, aggregate version advancement and ordered locks.
+Cross-adapter acceptance and specialized deferred relationship/provenance
+enforcement from ADR 0001 remain open under #253. In particular,
 mixed complete/inspectable pairs, recurring target/history rules, asset override
 and committed-event immutability, and allowed document/import targets need
 those repository slices and coordinated #253 migrations before use.

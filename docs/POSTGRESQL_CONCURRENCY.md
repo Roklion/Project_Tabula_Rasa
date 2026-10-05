@@ -174,9 +174,11 @@ verify entity-qualified FKs across all 26 tables. Sheets tests cover optional
 baselines, no-baseline compatibility, failure before inline tags, normalization
 and two-workbook isolation.
 
-**#253 remains open.** #245–#252 have not supplied their PostgreSQL adapters on
-this foundation. Remaining work is their actual boundary/baseline/read-model
-integration and cross-adapter concurrent verification; specialized mixed-use
+**#253 remains open.** #245/#246 now integrate the core reference/accounting
+adapters with these helpers and verify native loaded-caller and overlapping-writer
+behavior; see [core repository composition](POSTGRESQL.md#core-repository-composition-245--246).
+Remaining work is #247–#252's boundary/baseline/read-model integration and
+cross-adapter concurrent verification; specialized mixed-use
 complete/inspectable relationships, recurring target/provenance/history rules,
 asset override/committed-event protections, and allowed document/import targets;
 plus #221's required commercial caller propagation. Occurrence provenance and

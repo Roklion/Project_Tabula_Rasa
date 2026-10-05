@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from tabula_rasa.ledger_defaults import DEFAULT_ACCOUNTS, DEFAULT_CATEGORIES
 
 from .errors import StorageValidationError
 from tabula_rasa.reference_data import (
@@ -206,26 +207,6 @@ def validate_workbook_headers(headers: Mapping[str, Sequence[str]]) -> None:
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 
 SHEETS_READONLY_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly"
-
-DEFAULT_ACCOUNTS = (("Checking", "Bank"), ("Cash", "Cash"))
-
-DEFAULT_CATEGORIES = {
-    "Income": ("Sales", "Services", "Interest", "Other income"),
-    "Expense": (
-        "Advertising",
-        "Bank fees",
-        "Insurance",
-        "Meals",
-        "Office",
-        "Professional fees",
-        "Rent",
-        "Software",
-        "Supplies",
-        "Travel",
-        "Utilities",
-        "Other expense",
-    ),
-}
 
 __all__ = [
     "MIXED_USE_WORKSHEET_HEADERS",
