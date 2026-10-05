@@ -68,8 +68,8 @@ class GoogleSheetsAccountRepository:
             ),
         )
 
-    def update(self, account_id: str, *, changes: AccountChanges) -> AccountRecord:
-        return cast(AccountRecord, self._storage.edit_account(account_id, **changes))
+    def update(self, account_id: str, *, changes: AccountChanges, expected=None) -> AccountRecord:
+        return cast(AccountRecord, self._storage.edit_account(account_id, expected_account=expected, **changes))
 
 
 class GoogleSheetsCategoryRepository:
@@ -87,11 +87,11 @@ class GoogleSheetsCategoryRepository:
             self._storage.create_category(name, kind, parent_id=parent_id),
         )
 
-    def update(self, category_id: str, *, changes: CategoryChanges) -> CategoryRecord:
-        return cast(CategoryRecord, self._storage.edit_category(category_id, **changes))
+    def update(self, category_id: str, *, changes: CategoryChanges, expected=None) -> CategoryRecord:
+        return cast(CategoryRecord, self._storage.edit_category(category_id, expected_category=expected, **changes))
 
-    def delete(self, category_id: str) -> None:
-        self._storage.delete_category(category_id)
+    def delete(self, category_id: str, *, expected=None) -> None:
+        self._storage.delete_category(category_id, expected_category=expected)
 
 
 class GoogleSheetsPayeeRepository:

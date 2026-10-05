@@ -31,3 +31,13 @@ def ledger(connection):
     entity(connection)
     account(connection)
     category(connection)
+
+
+def load_baseline(database, key):
+    from tabula_rasa.infrastructure.postgres.concurrency import AGGREGATE_TABLES, baseline_for
+    from tabula_rasa.infrastructure.postgres.operations import repository_operation
+    with repository_operation(database, read_only=True) as connection:
+        row = connection.execute(text(
+            f"SELECT * FROM {AGGREGATE_TABLES[key.kind]} WHERE entity_id=:scope AND id=:id",
+        ), {"scope": key.entity_id, "id": key.record_id}).mappings().one()
+        return baseline_for(key, row)

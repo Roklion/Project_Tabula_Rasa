@@ -20,6 +20,7 @@ from tabula_rasa.storage.google_sheets.validation import (
     _encode_tag_ids,
     _normalize_tag_ids,
 )
+from tabula_rasa.storage.google_sheets.baselines import MILEAGE_FIELDS, check_expected_snapshot
 
 if TYPE_CHECKING:
     from tabula_rasa.storage import GoogleSheetsStorage
@@ -54,6 +55,7 @@ def mileage_trip_to_record(trip: MileageTrip) -> dict[str, str]:
     """Serialize the current workbook fields, omitting resolved display labels."""
     record = trip.as_record()
     record.pop("tags")
+    record.pop("baseline", None)
     record["tag_ids"] = _encode_tag_ids(trip.tag_ids)
     return record
 
@@ -93,9 +95,10 @@ class GoogleSheetsMileageRepository:
                 )
             return trips
 
-    def update_trip(self, trip_id: str, prepare: PrepareUpdatedTrip) -> MileageTrip:
+    def update_trip(self, trip_id: str, prepare: PrepareUpdatedTrip, *, expected=None) -> MileageTrip:
         with self._storage._workbook_locks.ledger:
             current = self._storage._find_row("Mileage", trip_id)
+            check_expected_snapshot(current.values, expected, fields=MILEAGE_FIELDS, label="mileage trip")
             updated = prepare(
                 mileage_trip_from_record(current.values),
                 self.list_tags(fresh=True),
@@ -117,9 +120,10 @@ class GoogleSheetsMileageRepository:
             )
             return trips
 
-    def delete_trip(self, trip_id: str) -> None:
+    def delete_trip(self, trip_id: str, *, expected=None) -> None:
         with self._storage._workbook_locks.ledger:
             current = self._storage._find_row("Mileage", trip_id)
+            check_expected_snapshot(current.values, expected, fields=MILEAGE_FIELDS, label="mileage trip")
             original = dict(current.values)
             current_row = current
             worksheet = self._storage._worksheet("Mileage")
