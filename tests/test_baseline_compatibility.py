@@ -45,6 +45,29 @@ def test_account_baseline_normalization_stale_detection_and_no_baseline_compatib
     assert service.list() == []
 
 
+@pytest.mark.parametrize("invalid", ["sNaN", "NaN", "Infinity", "-Infinity"])
+def test_nonfinite_expected_snapshots_fail_safely_before_mutation(storage, invalid):
+    accounts = AccountService(GoogleSheetsAccountRepository(storage))
+    accounts.create("Synthetic cash", "Cash", "1.20")
+    account = accounts.list()[0]
+    with pytest.raises(StorageValidationError, match="Invalid loaded account snapshot"):
+        accounts.rename(account["id"], "Must not change", expected={**account, "opening_balance": invalid})
+    assert accounts.list()[0] == account
+
+    mileage = MileageService(GoogleSheetsMileageRepository(storage))
+    trip = mileage.create_trip(
+        trip_date="2026-10-05", miles=12.3, start_location="Synthetic start",
+        destination="Synthetic end", business_purpose="Synthetic purpose",
+    )
+    with pytest.raises(StorageValidationError, match="Invalid loaded mileage trip snapshot"):
+        mileage.edit_trip(
+            trip.id, miles=20, new_tag_name="Must not exist",
+            expected={**trip.as_record(), "miles": invalid},
+        )
+    assert mileage.list_trips() == (trip,)
+    assert mileage.list_tags() == ()
+
+
 @pytest.mark.parametrize("delete", [False, True])
 def test_category_update_and_delete_carry_the_loaded_snapshot(storage, delete):
     service = CategoryService(GoogleSheetsCategoryRepository(storage))

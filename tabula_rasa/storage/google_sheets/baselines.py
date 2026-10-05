@@ -22,7 +22,10 @@ def check_expected_snapshot(
             return _as_bool(raw)
         if field in {"opening_balance", "miles"}:
             try:
-                return Decimal(str(raw))
+                number = Decimal(str(raw))
+                if not number.is_finite():
+                    raise ValueError
+                return number
             except (InvalidOperation, ValueError):
                 raise StorageValidationError(f"Invalid loaded {label} snapshot") from None
         if field == "tag_ids":
