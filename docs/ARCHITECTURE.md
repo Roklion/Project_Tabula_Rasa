@@ -685,6 +685,29 @@ or rebuilt. The new profile's workbook is initialized and accessed only under
 its own key. Hosted projections do not grant local administration or reveal
 local-only recovery metadata.
 
+## Commercial PostgreSQL design (#243)
+
+The current runtime still uses Google Sheets. The proposed commercial v1
+relational implementation contract is [ADR 0001: Canonical accounting schema
+and persistence conventions](adr/0001-canonical-accounting-schema.md), under
+[EPIC #220](https://github.com/Roklion/Project_Tabula_Rasa/issues/220) and the
+[commercialization initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124).
+
+It specifies entity-scoped tables and constraints, shared entries/postings with
+disjoint Simple Ledger and advanced-journal projections, signed account opening
+values counted once, source-owned recurring/mixed-use/depreciation relationships,
+loaded-record baseline conventions, strict v13-only backup input, and
+dependency-complete Sheets migration units. Application/domain owners above retain their accounting behavior; the
+ADR maps every current repository port to the canonical model. It introduces no
+production adapter, migration, UI change, or authority switch.
+
+#244 implements the database foundation; #245/#246 and usable #247 reporting
+support the early #221 commercial web/API milestone. Later slices, whole-profile
+reconciliation, concurrency verification, complete entity export, and recovery
+rehearsals remain required before #258 commercial production activation. Identity
+and membership remain #222's responsibility rather than a new profile-key
+permission model.
+
 ## Implementation map
 
 | Area | Primary implementation |
