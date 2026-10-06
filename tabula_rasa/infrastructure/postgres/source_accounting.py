@@ -8,6 +8,7 @@ from tabula_rasa.reference_data import normalize_tag_ids
 from tabula_rasa.transaction import RECURRING_FIELDS
 from .concurrency import check_baseline
 from .repository import insert
+from .snapshots import check_expected_snapshot
 
 
 def occurrence_fields(connection, scope, *, entry_id=None, source_id=None):
@@ -59,3 +60,13 @@ def check_occurrence_schedule(repository, connection, identity, expected=None):
         check_baseline(repository.key('recurring_schedules', identity), row, expected.get('baseline'))
     if row['status'] != 'active':
         raise StorageConflictError('The occurrence schedule is no longer active; reconcile again.')
+
+
+def confirm_occurrence(current, prepared):
+    """Confirm committed business facts and provenance, retaining stored timestamps."""
+    expected = {key: value for key, value in prepared.items()
+                if key not in {'created_at', 'updated_at', 'baseline', 'payee', 'tags'}}
+    if set(expected) - set(current):
+        raise StorageConflictError('The existing occurrence does not match the requested record.')
+    check_expected_snapshot(current, expected)
+    return current

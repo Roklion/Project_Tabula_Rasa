@@ -11,7 +11,7 @@ from .accounting import PostgresTransactionRepository
 from .concurrency import lock_aggregates
 from .operations import repository_operation
 from .repository import EntityRepository, insert, new_object, record, replace
-from .source_accounting import occurrence_fields, tag_fields, write_occurrence, write_tags, check_occurrence_schedule
+from .source_accounting import occurrence_fields, tag_fields, write_occurrence, write_tags, check_occurrence_schedule, confirm_occurrence
 
 
 SOURCE_FIELDS = ('id', 'total_expense', 'allocated_amount', 'account_id', 'category_id', 'payee_id',
@@ -122,10 +122,11 @@ class PostgresMixedUseRepository(EntityRepository):
                root_keys=[self.key('recurring_schedules', data['recurring_schedule_id'])] if recurring else [])
         if recurring:
             check_occurrence_schedule(self, connection, data['recurring_schedule_id'], expected_schedule)
-        if (connection.execute(text('SELECT 1 FROM mixed_use_sources WHERE entity_id=:scope AND id=:id'),
-                               {'scope': self.entity_id, 'id': source_id}).first()
-                or connection.execute(text('SELECT 1 FROM entries WHERE entity_id=:scope AND id=:id'),
-                                      {'scope': self.entity_id, 'id': entry_id}).first()):
+        existing = connection.execute(text('SELECT * FROM mixed_use_sources WHERE entity_id=:scope AND id=:id'),
+                                      {'scope': self.entity_id, 'id': source_id}).mappings().first()
+        entry_exists = connection.execute(text('SELECT 1 FROM entries WHERE entity_id=:scope AND id=:id'),
+                                          {'scope': self.entity_id, 'id': entry_id}).first()
+        if (existing or entry_exists) and (not recurring or not existing or not entry_exists):
             raise StorageConflictError('The source or projection identity already exists.')
         if not recurring and any(data.get(field) for field in RECURRING_FIELDS):
             raise StorageValidationError('Recurring provenance is reserved for recurring creation.')
@@ -133,6 +134,10 @@ class PostgresMixedUseRepository(EntityRepository):
         if source['id'] != source_id or projection['id'] != entry_id:
             raise StorageValidationError('Source and projection identities cannot change.')
         projection = self.validate_pair(connection, source, projection, refs)
+        if existing:
+            stored_source, stored_projection = self.complete_pair(connection, existing)
+            confirm_occurrence(stored_projection, projection)
+            return confirm_occurrence(stored_source, source)
         return self.write_pair(connection, source, projection, create=True, recurring=recurring)
 
     def create_occurrence(self, data, *, build, expected_schedule=None):

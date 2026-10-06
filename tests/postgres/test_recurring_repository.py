@@ -282,3 +282,66 @@ def test_initial_operation_refuses_schedule_that_appears_after_discovery(databas
             assert connection.scalar(text("SELECT count(*) FROM recurring_occurrences WHERE entity_id='alpha'")) == 0
     finally:
         other.dispose()
+
+
+@pytest.mark.parametrize('is_mixed', [False, True])
+@pytest.mark.parametrize('conflict', [None, 'amount', 'identity'])
+def test_reconciliation_confirms_occurrence_committed_after_snapshot(database, monkeypatch, is_mixed, conflict):
+    from tabula_rasa.infrastructure.postgres.config import DatabaseSettings
+    from tabula_rasa.infrastructure.postgres.runtime import Database
+    from tabula_rasa.infrastructure.postgres.composition import create_postgres_services
+
+    alpha, beta = seed_core(database)
+    data = {**schedule(), **(mixed() if is_mixed else {}),
+            'source_kind': 'mixed_use' if is_mixed else 'transaction'}
+    alpha.recurring.create(schedule_id='shared', **data)
+    other = Database(DatabaseSettings(database.engine.url))
+    client = create_postgres_services(other, 'alpha')
+    service = alpha.mixed_use if is_mixed else alpha.transactions
+    original = service.create_occurrence
+    fired = False
+    saved = None
+
+    def interleave(**payload):
+        nonlocal fired, saved
+        if not fired:
+            fired = True
+            if conflict == 'identity':
+                client.transactions.create(
+                    transaction_id=payload['linked_transaction_id'] if is_mixed else payload['transaction_id'],
+                    **expense(txn_date='2026-01-01'))
+            else:
+                saved = client.recurring.reconcile(as_of='2026-01-01')['generated'][0]
+                if conflict == 'amount':
+                    if is_mixed:
+                        saved = client.mixed_use.update(saved['id'], total_expense='200')
+                    else:
+                        saved = client.transactions.update(saved['id'], amount='99')
+        return original(**payload)
+    monkeypatch.setattr(service, 'create_occurrence', interleave)
+    try:
+        result = alpha.recurring.reconcile(as_of='2026-02-01')
+        assert fired
+        if conflict:
+            assert result['generated'] == []
+            assert result['attention'] == {'shared': 'storage'}
+            assert len(alpha.transactions.list()) == 1
+            if saved:
+                current = alpha.mixed_use.get(saved['id']) if is_mixed else alpha.transactions.list()[0]
+                assert current['created_at'] == saved['created_at']
+                assert current.get('total_expense', current.get('amount')) == ('200.00' if is_mixed else '99.00')
+        else:
+            assert result['attention'] == {}
+            assert len(result['generated']) == len(alpha.transactions.list()) == 2
+            confirmed = result['generated'][0]
+            assert confirmed['id'] == saved['id']
+            assert confirmed['created_at'] == saved['created_at']
+            assert confirmed['baseline'] == saved['baseline']
+            assert alpha.recurring.get('shared')['attention_code'] == ''
+            assert alpha.recurring.reconcile(as_of='2026-02-01') == {'generated': [], 'attention': {}}
+        assert beta.transactions.list() == beta.recurring.list() == []
+        with database.transaction(read_only=True) as connection:
+            count = connection.scalar(text("SELECT count(*) FROM recurring_occurrences WHERE entity_id='alpha'"))
+            assert count == (2 if not conflict else 0 if conflict == 'identity' else 1)
+    finally:
+        other.dispose()

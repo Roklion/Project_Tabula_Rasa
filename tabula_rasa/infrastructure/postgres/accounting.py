@@ -18,7 +18,7 @@ from .reference_data import reference_record
 from .repository import EntityRepository, insert, new_object, record, replace, serialized
 from .concurrency import AGGREGATE_TABLES, lock_aggregates
 from .operations import repository_operation
-from .source_accounting import occurrence_fields, write_occurrence, check_occurrence_schedule
+from .source_accounting import occurrence_fields, write_occurrence, check_occurrence_schedule, confirm_occurrence
 from .documents import receipt_reference, write_document_links
 
 
@@ -226,8 +226,9 @@ class PostgresTransactionRepository(_AccountingRepository):
                      root_keys=[self.key('recurring_schedules', schedule_id)] if recurring else [])
         if recurring:
             check_occurrence_schedule(self, connection, schedule_id, expected_schedule)
-        if connection.execute(text('SELECT 1 FROM entries WHERE entity_id=:scope AND id=:id'),
-                              {'scope': self.entity_id, 'id': identity}).first():
+        existing = connection.execute(text('SELECT * FROM entries WHERE entity_id=:scope AND id=:id'),
+                                      {'scope': self.entity_id, 'id': identity}).mappings().first()
+        if existing and not recurring:
             raise StorageConflictError('The entry identity already exists; refresh the ledger.')
         built = dict(build(references, None))
         if recurring:
@@ -238,6 +239,10 @@ class PostgresTransactionRepository(_AccountingRepository):
                 raise StorageValidationError('Recurring occurrence provenance is invalid.')
         prepared = self.prepare(built, self.inline_references(connection, references, built), identity,
                                 recurring=recurring)
+        if existing:
+            if existing['projection_kind'] != self.projection:
+                raise StorageConflictError('The entry identity belongs to another ledger projection.')
+            return confirm_occurrence(self.project(connection, existing), prepared)
         self.write(connection, identity, prepared, create=True)
         if recurring:
             write_occurrence(connection, self.entity_id, prepared, entry_id=identity)

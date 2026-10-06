@@ -512,6 +512,10 @@ occurrence, preserves earlier commits, and permits unrelated schedules to run.
 Each occurrence locks the schedule in the shared aggregate order and checks the
 loaded schedule baseline and active status before preparation; a concurrent
 edit, pause or end stops stale generation while retaining earlier commits.
+When another reconciliation has already committed the requested stable identity,
+the waiting caller confirms matching business fields and occurrence provenance
+without rewriting the record; mismatched contents or unrelated identities fail.
+Mixed-use confirmation validates both the complete source and its projection.
 Attention remains best effort: a failed attention write cannot undo occurrences
 or poison the next schedule. An uncertain response fails safely without a blind
 retry; callers inspect stable identities before resubmission.
