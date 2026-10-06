@@ -132,7 +132,14 @@ class PostgresAssetRepository(EntityRepository):
             row = self.get_row(connection, 'fixed_assets', asset_id)
             asset = self.project(connection, row)
             self.check_expected(row, 'fixed_assets', expected, asset)
-            transactions = [self.transactions.project(connection, entry) for entry in self.transactions.entry_rows(connection)]
+            period_ids = [depreciation_entry_id(asset_id, period.sequence) for period in asset_schedule(asset)]
+            relevant = connection.execute(text(
+                "SELECT * FROM entries WHERE entity_id=:scope AND projection_kind='simple' "
+                "AND (depreciation_asset_id=:asset OR id=ANY(:ids)) ORDER BY txn_date,id"
+            ), {'scope': self.entity_id, 'asset': asset_id, 'ids': period_ids}).mappings()
+            # Preserve all asset history and period-ID collision checks without
+            # projecting unrelated ledger records inside this mutation.
+            transactions = [self.transactions.project(connection, entry) for entry in relevant]
             pending = list(build(asset, refs, transactions))
             validate_depreciation_accounts(asset, refs.accounts, refs.categories, required=True, active=True)
             history = self.history(connection, asset_id)

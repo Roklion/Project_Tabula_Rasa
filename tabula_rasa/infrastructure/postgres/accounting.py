@@ -18,7 +18,7 @@ from .reference_data import reference_record
 from .repository import EntityRepository, insert, new_object, record, replace, serialized
 from .concurrency import AGGREGATE_TABLES, lock_aggregates
 from .operations import repository_operation
-from .source_accounting import occurrence_fields, write_occurrence
+from .source_accounting import occurrence_fields, write_occurrence, check_occurrence_schedule
 
 
 class _AccountingRepository(EntityRepository):
@@ -236,15 +236,19 @@ class PostgresTransactionRepository(_AccountingRepository):
         with self.operation() as connection:
             return self.create_record(connection, transaction_id, build=build)
 
-    def create_occurrence(self, transaction_id, *, build):
+    def create_occurrence(self, transaction_id, *, build, schedule_id, expected_schedule=None):
         # Reconciliation owns no surrounding transaction. Only committed values
         # may reach its generated result; initial pairs use create_record.
         with repository_operation(self.database, require_outer=True) as connection:
-            return self.create_record(connection, transaction_id, build=build, recurring=True)
+            return self.create_record(connection, transaction_id, build=build, recurring=True,
+                                      schedule_id=schedule_id, expected_schedule=expected_schedule)
 
-    def create_record(self, connection, transaction_id, *, build, recurring=False):
+    def create_record(self, connection, transaction_id, *, build, recurring=False, schedule_id=None, expected_schedule=None):
         identity = clean_text(transaction_id, 'Transaction ID', required=True)
-        references = self.references(connection, lock=True)
+        references = self.references(connection, lock=True,
+                     root_keys=[self.key('recurring_schedules', schedule_id)] if recurring else [])
+        if recurring:
+            check_occurrence_schedule(self, connection, schedule_id, expected_schedule)
         if connection.execute(text('SELECT 1 FROM entries WHERE entity_id=:scope AND id=:id'),
                               {'scope': self.entity_id, 'id': identity}).first():
             raise StorageConflictError('The entry identity already exists; refresh the ledger.')
@@ -253,7 +257,7 @@ class PostgresTransactionRepository(_AccountingRepository):
             from tabula_rasa.ledger_validation import validate_recurring_provenance
             validate_recurring_provenance(built, 'Recurring occurrence')
             if (built.get('kind') != 'Expense' or built.get('recurring_source_kind') != 'transaction'
-                    or not built.get('recurring_schedule_id')):
+                    or built.get('recurring_schedule_id') != schedule_id):
                 raise StorageValidationError('Recurring occurrence provenance is invalid.')
         prepared = self.prepare(built, self.inline_references(connection, references, built), identity,
                                 recurring=recurring)

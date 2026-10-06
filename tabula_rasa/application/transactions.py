@@ -119,7 +119,7 @@ class TransactionService:
             **options,
         )
 
-    def create_occurrence(self, *, transaction_id, **data):
+    def create_occurrence(self, *, transaction_id, expected_schedule=None, **data):
         """Create a source-owned recurring occurrence with a stable identity."""
         from tabula_rasa.ledger_validation import validate_recurring_provenance
 
@@ -134,12 +134,16 @@ class TransactionService:
         identity = clean_text(transaction_id, "Transaction ID", required=True)
         data = {**data, "receipt_references": []}
         created_at = utc_now()
-        create = getattr(self._repository, 'create_occurrence', self._repository.create)
-        return create(
+        create = getattr(self._repository, 'create_occurrence', None)
+        options = {} if create is None else {
+            'schedule_id': data['recurring_schedule_id'], 'expected_schedule': expected_schedule,
+        }
+        return (create or self._repository.create)(
             identity,
             build=lambda references, current: self._prepare(
                 data, references, identity, created_at=created_at
             ),
+            **options,
         )
 
     def update(

@@ -2,9 +2,11 @@
 
 from sqlalchemy import text
 
+from tabula_rasa.errors import StorageConflictError
 from tabula_rasa.ledger_validation import validate_recurring_provenance, iso_date
 from tabula_rasa.reference_data import normalize_tag_ids
 from tabula_rasa.transaction import RECURRING_FIELDS
+from .concurrency import check_baseline
 from .repository import insert
 
 
@@ -46,3 +48,14 @@ def write_tags(connection, scope, table, column, identity, tags):
                            {'scope': scope, 'id': identity, 'tag': tag})
     for tag in sorted(wanted - current):
         insert(connection, table, {'entity_id': scope, column: identity, 'tag_id': tag})
+
+
+def check_occurrence_schedule(repository, connection, identity, expected=None):
+    """References acquire this schedule root in the shared order before checking."""
+    row = repository.get_row(connection, 'recurring_schedules', identity)
+    if expected is not None:
+        if expected.get('id') != identity:
+            raise StorageConflictError('The occurrence schedule changed; reconcile again.')
+        check_baseline(repository.key('recurring_schedules', identity), row, expected.get('baseline'))
+    if row['status'] != 'active':
+        raise StorageConflictError('The occurrence schedule is no longer active; reconcile again.')

@@ -227,6 +227,7 @@ class RecurringService:
                 _validate_recurring_provenance(row, "Recurring occurrence")
         mixed_sources_by_id = {str(row.get("id", "")): row for row in mixed_sources}
         for schedule in schedules:
+            expected_schedule = {key: schedule[key] for key in ("id", "baseline") if key in schedule}
             try:
                 if not schedule["id"]:
                     raise StorageValidationError("Schedule ID is missing")
@@ -349,11 +350,13 @@ class RecurringService:
                         continue
                     if schedule.get("source_kind") == "mixed_use":
                         persisted_source = self._mixed_use.create_occurrence(
+                            expected_schedule=expected_schedule,
                             **occurrence_data(schedule, scheduled, role="generated")
                         )
                         generated.append(persisted_source)
                     else:
                         record = self._transactions.create_occurrence(
+                            expected_schedule=expected_schedule,
                             **occurrence_data(schedule, scheduled, role="generated")
                         )
                         generated.append(record)

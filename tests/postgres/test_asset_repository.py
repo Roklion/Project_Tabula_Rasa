@@ -181,3 +181,24 @@ def test_asset_mutation_and_posting_share_outer_commit_and_rollback(database, mo
         posted = alpha.assets.post_due('asset', '2026-01-01', expected=changed)
     assert len(posted) == 1 and alpha.assets.list()[0]['notes'] == 'Committed'
     assert beta.assets.list() == []
+
+
+def test_asset_post_reads_only_its_history_and_preserves_period_collision_checks(database, monkeypatch):
+    alpha, beta = seed_core(database)
+    first_offset, _ = offsets(alpha, beta)
+    alpha.assets.create(asset_id='asset', **asset(first_offset))
+    for index in range(12):
+        alpha.transactions.create(transaction_id=f'unrelated-{index}', **expense())
+    project = PostgresTransactionRepository.project
+
+    def assert_relevant(self, connection, row):
+        assert not row['id'].startswith('unrelated-')
+        return project(self, connection, row)
+    monkeypatch.setattr(PostgresTransactionRepository, 'project', assert_relevant)
+    assert len(alpha.assets.post_due('asset', '2026-01-01')) == 1
+    assert alpha.assets.post_due('asset', '2026-01-01') == []
+    monkeypatch.setattr(PostgresTransactionRepository, 'project', project)
+    alpha.transactions.create(transaction_id=depreciation_entry_id('asset', 2), **expense())
+    with pytest.raises(StorageConflictError, match='already in use'):
+        alpha.assets.post_due('asset', '2026-04-01')
+    assert len([row for row in alpha.transactions.list() if row['source_type'] == 'depreciation']) == 1

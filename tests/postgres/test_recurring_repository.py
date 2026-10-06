@@ -187,3 +187,43 @@ def test_initial_request_can_confirm_the_existing_generated_occurrence(database,
     result = create(schedule_id='existing', **data)
     assert result['transaction']['recurring_occurrence_type'] == 'generated'
     assert len(alpha.transactions.list()) == 1
+
+
+@pytest.mark.parametrize('is_mixed', [False, True])
+@pytest.mark.parametrize('change', ['pause', 'end', 'amount'])
+def test_schedule_change_between_occurrences_stops_stale_generation(database, monkeypatch, is_mixed, change):
+    alpha, beta = seed_core(database)
+    data = {**schedule(), **(mixed() if is_mixed else {}),
+            'source_kind': 'mixed_use' if is_mixed else 'transaction'}
+    alpha.recurring.create(schedule_id='z-changed', **data)
+    alpha.recurring.create(schedule_id='a-healthy', **schedule())
+    service = alpha.mixed_use if is_mixed else alpha.transactions
+    original = service.create_occurrence
+    changed = False
+
+    def interleave(**payload):
+        nonlocal changed
+        if payload['recurring_schedule_id'] == 'z-changed' and not changed:
+            saved = original(**payload)
+            if change == 'pause':
+                alpha.recurring.pause('z-changed')
+            elif change == 'end':
+                alpha.recurring.end('z-changed')
+            else:
+                alpha.recurring.update('z-changed', amount='18', total_expense='180' if is_mixed else '')
+            changed = True
+            return saved
+        return original(**payload)
+    monkeypatch.setattr(service, 'create_occurrence', interleave)
+    result = alpha.recurring.reconcile(as_of='2026-03-01')
+    assert result['attention'] == {'z-changed': 'storage'}
+    assert len(result['generated']) == len(alpha.transactions.list()) == 4
+    assert sorted(row['txn_date'] for row in alpha.transactions.list()
+                  if row['recurring_schedule_id'] == 'z-changed') == ['2026-01-01']
+    assert len(beta.transactions.list()) == 0
+    monkeypatch.setattr(service, 'create_occurrence', original)
+    rerun = alpha.recurring.reconcile(as_of='2026-03-01')['generated']
+    assert len(rerun) == (2 if change == 'amount' else 0)
+    if rerun:
+        assert all(row.get('total_expense', row.get('amount')) == ('180.00' if is_mixed else '18.00') for row in rerun)
+    assert alpha.recurring.reconcile(as_of='2026-03-01')['generated'] == []

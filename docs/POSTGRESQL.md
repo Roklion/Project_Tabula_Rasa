@@ -382,6 +382,9 @@ each occurrence commits its entry or complete mixed pair and its natural-key
 association in one independent transaction. Only after that commit can its value
 enter `generated`. A later SQL or deferred-check failure rolls back that one
 occurrence, preserves earlier commits, and permits unrelated schedules to run.
+Each occurrence locks the schedule in the shared aggregate order and checks the
+loaded schedule baseline and active status before preparation; a concurrent
+edit, pause or end stops stale generation while retaining earlier commits.
 Attention remains best effort: a failed attention write cannot undo occurrences
 or poison the next schedule. An uncertain response fails safely without a blind
 retry; callers inspect stable identities before resubmission.
@@ -420,6 +423,8 @@ lifecycle, straight-line schedule and posting decisions. Depreciation remains a
 Simple Ledger Expense with two canonical postings, including zero-valued quarters;
 it does not add a second advanced journal. Its stable entry ID and the
 `depreciation_events` entity/asset/sequence key identify the same committed period.
+Posting loads only the selected asset history and candidate period identities,
+preserving collision checks without projecting unrelated ledger records.
 All periods from one posting call commit together; a failed period rolls back
 that call's entries, events and asset version. Coupled infrastructure operations
 can join asset mutation and posting in the same outer transaction. Loaded asset

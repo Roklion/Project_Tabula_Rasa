@@ -11,7 +11,7 @@ from .accounting import PostgresTransactionRepository
 from .concurrency import lock_aggregates
 from .operations import repository_operation
 from .repository import EntityRepository, insert, new_object, record, replace
-from .source_accounting import occurrence_fields, tag_fields, write_occurrence, write_tags
+from .source_accounting import occurrence_fields, tag_fields, write_occurrence, write_tags, check_occurrence_schedule
 
 
 SOURCE_FIELDS = ('id', 'total_expense', 'allocated_amount', 'account_id', 'category_id', 'payee_id',
@@ -115,10 +115,13 @@ class PostgresMixedUseRepository(EntityRepository):
             write_occurrence(connection, self.entity_id, source, source_id=source['id'])
         return self.project(connection, self.get_row(connection, 'mixed_use_sources', source['id']))
 
-    def create_pair(self, connection, data, *, build, recurring=False):
+    def create_pair(self, connection, data, *, build, recurring=False, expected_schedule=None):
         source_id = clean_text(data.get('source_id', data.get('id')), 'Source ID', required=True)
         entry_id = clean_text(data.get('linked_transaction_id'), 'Projection ID', required=True)
-        refs = self.transactions.references(connection, lock=True)
+        refs = self.transactions.references(connection, lock=True,
+               root_keys=[self.key('recurring_schedules', data['recurring_schedule_id'])] if recurring else [])
+        if recurring:
+            check_occurrence_schedule(self, connection, data['recurring_schedule_id'], expected_schedule)
         if (connection.execute(text('SELECT 1 FROM mixed_use_sources WHERE entity_id=:scope AND id=:id'),
                                {'scope': self.entity_id, 'id': source_id}).first()
                 or connection.execute(text('SELECT 1 FROM entries WHERE entity_id=:scope AND id=:id'),
@@ -131,6 +134,10 @@ class PostgresMixedUseRepository(EntityRepository):
             raise StorageValidationError('Source and projection identities cannot change.')
         projection = self.validate_pair(connection, source, projection, refs)
         return self.write_pair(connection, source, projection, create=True, recurring=recurring)
+
+    def create_occurrence(self, data, *, build, expected_schedule=None):
+        with repository_operation(self.database, require_outer=True) as connection:
+            return self.create_pair(connection, data, build=build, recurring=True, expected_schedule=expected_schedule)
 
     def create(self, data, *, build, recurring=False):
         with repository_operation(self.database, require_outer=recurring) as connection:
