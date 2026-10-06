@@ -9,7 +9,7 @@ from tabula_rasa.infrastructure.postgres.runtime import DatabaseError
 def test_zero_to_head_repeated_upgrade_and_explicit_downgrade(empty_database):
     assert empty_database.health() == {"connected": True, "revision": None}
     upgrade(empty_database)
-    assert empty_database.health()["revision"] == head_revision() == "0003_domain_integrity"
+    assert empty_database.health()["revision"] == head_revision() == "0004_mileage_order"
     with empty_database.transaction() as connection:
         entity(connection)
     upgrade(empty_database)
@@ -44,6 +44,25 @@ def test_catalog_is_canonical_and_every_relationship_is_entity_qualified(databas
         assert str({c["name"]: c for c in inspector.get_columns("postings")}["amount"]["type"]) == "NUMERIC(28, 2)"
         assert not any("password" in c["name"] or "token" in c["name"]
                        for t in tables for c in inspector.get_columns(t))
+
+
+def test_mileage_order_revision_preserves_populated_rows_and_downgrades(database):
+    downgrade(database, '0003_domain_integrity', allow_destructive=True)
+    with database.transaction() as connection:
+        entity(connection)
+        connection.execute(text("""INSERT INTO mileage_records(
+            entity_id,id,incarnation_id,trip_date,miles,start_location,destination,business_purpose)
+            VALUES ('alpha','trip','trip','2026-10-05',12.3,'Office','Client','Meeting')"""))
+        original = dict(connection.execute(text('SELECT * FROM mileage_records')).mappings().one())
+    upgrade(database)
+    with database.transaction(read_only=True) as connection:
+        loaded = dict(connection.execute(text('SELECT * FROM mileage_records')).mappings().one())
+        assert loaded.pop('insertion_order') > 0
+        assert loaded == original
+    downgrade(database, '0003_domain_integrity', allow_destructive=True)
+    with database.transaction(read_only=True) as connection:
+        assert dict(connection.execute(text('SELECT * FROM mileage_records')).mappings().one()) == original
+    upgrade(database)
 
 
 def test_raw_driver_migration_errors_are_safe_and_roll_back(empty_database, monkeypatch):

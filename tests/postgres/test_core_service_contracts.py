@@ -15,6 +15,8 @@ from tabula_rasa.infrastructure.google_sheets import (
 )
 from tabula_rasa.infrastructure.postgres.composition import create_postgres_services
 from tabula_rasa.infrastructure.postgres.reference_data import PostgresLedgerSetupRepository
+from tabula_rasa.infrastructure.google_sheets_mileage import GoogleSheetsMileageRepository
+from tabula_rasa.infrastructure.google_sheets_imports import GoogleSheetsTransactionImportRepository
 from tabula_rasa.storage import GoogleSheetsStorage
 from tests.fakes import FakeWorkbook
 
@@ -33,7 +35,39 @@ def services(request):
         payee_repository=GoogleSheetsPayeeRepository(storage), tag_repository=GoogleSheetsTagRepository(storage),
         transaction_repository=GoogleSheetsTransactionRepository(storage),
         journal_repository=GoogleSheetsJournalRepository(storage),
+        mileage_repository=GoogleSheetsMileageRepository(storage),
+        import_repository=GoogleSheetsTransactionImportRepository(storage),
     )
+
+
+def test_mileage_workflow_has_the_same_domain_outcome_on_both_adapters(services):
+    trips = services.mileage.create_round_trip(
+        trip_date='2026-10-05', miles='12.34', start_location='Office',
+        destination='Client', business_purpose='Meeting', new_tag_name='Job',
+    )
+    assert [(trip.start_location, trip.destination, trip.miles) for trip in trips] == [
+        ('Office', 'Client', '12.3'), ('Client', 'Office', '12.3'),
+    ]
+    assert [item.id for item in services.mileage.list_trips()] == [trips[1].id, trips[0].id]
+    updated = services.mileage.edit_trip(trips[0].id, miles='15.25')
+    assert updated.miles == '15.2' and updated.created_at == trips[0].created_at
+    services.mileage.delete_trip(trips[1].id)
+    assert len(services.mileage.list_trips()) == 1
+    assert services.transactions.list() == []
+
+
+def test_import_workflow_has_the_same_accounting_outcome_on_both_adapters(services):
+    services.accounts.create('Checking', 'Bank', '0')
+    services.accounts.create('Savings', 'Bank', '0')
+    services.categories.create('Office', 'Expense')
+    source = {'Date': '10/05/2026', 'Transaction Type': 'Expense', 'Account': 'Checking',
+              'Split': 'Office', 'Amount': '-12.50', 'Name': 'Vendor', 'Num': 'INV-1'}
+    rows = [source, source, {**source, 'Transaction Type': 'Transfer', 'Split': 'Savings', 'Amount': '5'}]
+    result = services.imports.import_quickbooks(rows)
+    assert [(item['kind'], item['amount']) for item in result] == [('Expense', '12.50'), ('Transfer', '5.00')]
+    assert services.imports.import_quickbooks(rows) == []
+    assert len(services.payees.list()) == 1
+    assert len(services.transactions.list()) == 2
 
 
 def test_reference_contract_success_failure_and_expected_record_transport(services):

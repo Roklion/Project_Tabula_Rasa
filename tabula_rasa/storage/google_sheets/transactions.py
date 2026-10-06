@@ -15,9 +15,8 @@ from tabula_rasa.transaction import (
     prepare_bulk_transaction_changes, validate_transaction_create, validate_transaction_update,
 )
 from tabula_rasa.mixed_use import MIXED_USE_SOURCE_TYPE
-from tabula_rasa.application.imports import TransactionImportContext, preview_quickbooks
+from tabula_rasa.application.imports import TransactionImportContext, csv_transaction_inputs, preview_quickbooks
 from .schema import (
-    CATEGORY_KINDS,
     TRANSACTION_KINDS,
     WORKSHEET_HEADERS,
 )
@@ -722,43 +721,19 @@ class TransactionsMixin:
         self._snapshot(["Accounts", "Categories"], force_refresh=True)
         accounts = self._account_lookup()
         categories = self._category_lookup()
-        accounts_by_name = {
-            account["name"].casefold(): account for account in accounts.values()
-        }
-        categories_by_name = {
-            (category["name"].casefold(), category["kind"]): category
-            for category in categories.values()
-        }
         payees = self._payee_lookup(force_refresh=True)
         tags = self._tag_lookup(force_refresh=True)
         prepared: list[dict[str, str]] = []
         payee_names: list[str] = []
-        for index, row in enumerate(rows, start=2):
-            kind = _clean_text(row.get("Type"), "Type", required=True).title()
-            if kind not in CATEGORY_KINDS:
-                raise StorageValidationError(
-                    f"CSV row {index}: Type must be Income or Expense"
-                )
-            account_name = _clean_text(row.get("Account"), "Account", required=True)
-            category_name = _clean_text(row.get("Category"), "Category", required=True)
-            account = accounts_by_name.get(account_name.casefold())
-            category = categories_by_name.get((category_name.casefold(), kind))
-            if account is None or category is None:
-                raise StorageValidationError(
-                    f"CSV row {index}: unknown account or category"
-                )
+        context = TransactionImportContext(list(accounts.values()), list(categories.values()), [], [])
+        for inputs in csv_transaction_inputs(rows, context):
+            payee_names.append(inputs.pop("new_payee_name"))
             prepared.append(
                 self._prepare_transaction(
                     {
-                        "txn_date": row.get("Date"),
-                        "kind": kind,
-                        "amount": row.get("Amount"),
-                        "account_id": account["id"],
-                        "category_id": category["id"],
+                        **inputs,
                         "payee_id": "",
                         "new_payee_name": "",
-                        "description": row.get("Description", ""),
-                        "reference": row.get("Reference", ""),
                     },
                     accounts=accounts,
                     categories=categories,
@@ -766,7 +741,6 @@ class TransactionsMixin:
                     tags=tags,
                 )
             )
-            payee_names.append(_clean_text(row.get("Payee", ""), "New payee"))
         payees = self._ensure_payee_names(payee_names)
         payee_ids_by_name = {
             normalize_payee_name(item["name"]): item for item in payees.values()

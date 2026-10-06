@@ -17,6 +17,7 @@ from tabula_rasa.transaction import (
 from .reference_data import reference_record
 from .repository import EntityRepository, insert, new_object, record, replace, serialized
 from .concurrency import lock_aggregates
+from .documents import receipt_reference, write_document_links
 
 
 class _AccountingRepository(EntityRepository):
@@ -116,11 +117,7 @@ class PostgresTransactionRepository(_AccountingRepository):
 
     @staticmethod
     def receipt_reference(doc):
-        result = {'id': doc['storage_key'], 'name': doc['stored_filename']}
-        if doc['sha256']:
-            result.update(receipt_id=doc['id'], original_filename=doc['original_filename'],
-                          mime_type=doc['mime_type'], byte_size=doc['byte_size'], sha256=doc['sha256'])
-        return result
+        return receipt_reference(doc)
 
     def list(self, *, start=None, end=None, kind=None, account_ids=None, fresh=False):
         if kind is not None and kind not in {'Income', 'Expense', 'Transfer'}:
@@ -202,27 +199,7 @@ class PostgresTransactionRepository(_AccountingRepository):
             if len(rows) != 1 or self.receipt_reference(rows[0]) != reference:
                 raise StorageValidationError('Receipt metadata must already exist in this entity and match the reference.')
             documents.append(rows[0]['id'])
-        existing = dict(connection.execute(text(
-            'SELECT document_id,position FROM document_links WHERE entity_id=:scope AND entry_id=:id'
-        ), {'scope': self.entity_id, 'id': identity}).all())
-        for document_id in set(existing) - set(documents):
-            connection.execute(text('DELETE FROM document_links WHERE entity_id=:scope AND entry_id=:id AND document_id=:document'),
-                               {'scope': self.entity_id, 'id': identity, 'document': document_id})
-        if any(existing[document_id] != position for position, document_id in enumerate(documents, 1)
-               if document_id in existing):
-            # Position uniqueness is immediate. Move retained links beyond both
-            # old and final ranges before assigning the new order, preserving
-            # their creation instants inside the same accounting transaction.
-            connection.execute(text(
-                'UPDATE document_links SET position=position+:offset WHERE entity_id=:scope AND entry_id=:id'
-            ), {'scope': self.entity_id, 'id': identity, 'offset': max(existing.values()) + len(documents)})
-        for position, document_id in enumerate(documents, 1):
-            if document_id in existing:
-                connection.execute(text('UPDATE document_links SET position=:position WHERE entity_id=:scope AND entry_id=:id AND document_id=:document'),
-                                   {'scope': self.entity_id, 'id': identity, 'document': document_id, 'position': position})
-            else:
-                insert(connection, 'document_links', {'entity_id': self.entity_id, 'entry_id': identity,
-                                                      'document_id': document_id, 'position': position})
+        write_document_links(connection, self.entity_id, 'entry_id', identity, documents)
 
     def create(self, transaction_id, *, build):
         identity = clean_text(transaction_id, 'Transaction ID', required=True)
