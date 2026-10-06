@@ -257,9 +257,6 @@ shared implementation. Contract probes prove the exercised service/SQL commit
 behavior without claiming that absent full adapters or commercial endpoints
 exist. Keep #253's acceptance evidence open where it requires those concrete
 consumer paths; each adapter enforces its invariants from its first release.
-#245/#246 integrate the core reference/accounting adapters with these helpers
-and verify native loaded-caller and overlapping-writer behavior; see
-[core repository composition](POSTGRESQL.md#core-repository-composition-245--246).
 #247 integrates committed, entity-scoped reporting snapshots and verifies a
 bounded concurrent writer; its read models do not carry mutation baselines.
 This slice does not satisfy #258's production activation gate, #257 migration
