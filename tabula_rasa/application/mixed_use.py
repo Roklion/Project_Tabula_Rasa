@@ -49,7 +49,7 @@ class MixedUseService:
             )
         return self._create(data, recurring=False)
 
-    def create_occurrence(self, **data):
+    def create_occurrence(self, *, expected_schedule=None, **data):
         """Source-owned recurring generation; ordinary creates reject provenance."""
         from tabula_rasa.ledger_validation import validate_recurring_provenance
 
@@ -60,9 +60,9 @@ class MixedUseService:
             or not data.get("recurring_schedule_id")
         ):
             raise StorageValidationError("Recurring occurrence provenance is invalid")
-        return self._create(data, recurring=True)
+        return self._create(data, recurring=True, expected_schedule=expected_schedule)
 
-    def _create(self, data, *, recurring):
+    def _create(self, data, *, recurring, expected_schedule=None):
         data = dict(data)
         data["source_id"] = clean_text(
             data.get("source_id", data.get("id")), "Mixed-use source ID"
@@ -70,6 +70,9 @@ class MixedUseService:
         data["linked_transaction_id"] = clean_text(
             data.get("linked_transaction_id"), "Linked transaction ID"
         ) or str(uuid4())
+        create = getattr(self._repository, "create_occurrence", None) if recurring else None
+        if create is not None:
+            return create(data, build=self.prepare_pair, expected_schedule=expected_schedule)
         return self._repository.create(
             data, build=self.prepare_pair, recurring=recurring
         )

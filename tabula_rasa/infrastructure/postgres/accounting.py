@@ -16,22 +16,27 @@ from tabula_rasa.transaction import (
 )
 from .reference_data import reference_record
 from .repository import EntityRepository, insert, new_object, record, replace, serialized
-from .concurrency import lock_aggregates
+from .concurrency import AGGREGATE_TABLES, lock_aggregates
+from .operations import repository_operation
+from .source_accounting import occurrence_fields, write_occurrence, check_occurrence_schedule, confirm_occurrence
 from .documents import receipt_reference, write_document_links
 
 
 class _AccountingRepository(EntityRepository):
     projection = ''
 
-    def references(self, connection, *, lock=False, entry_ids=()):
+    def references(self, connection, *, lock=False, entry_ids=(), root_keys=()):
         if lock:
             # Hierarchy writers acquire the entity before reference rows. This
             # FK-compatible lock avoids the opposite order at entry insert time.
             self.lock_entity(connection, key_share=True)
+        roots = [*root_keys, *[self.key('entries', identity) for identity in entry_ids]]
         lookups = []
         for table in ('accounts', 'categories', 'payees', 'tags'):
-            if lock and table == 'payees':
-                lock_aggregates(connection, [self.key('entries', identity) for identity in entry_ids])
+            if lock:
+                before = [key for key in roots if AGGREGATE_TABLES[key.kind] < table]
+                lock_aggregates(connection, before)
+                roots = [key for key in roots if key not in before]
             lookups.append({row['id']: reference_record(row, table) for row in self.rows(connection, table, lock=lock)})
         return TransactionReferences(*lookups)
 
@@ -100,13 +105,7 @@ class PostgresTransactionRepository(_AccountingRepository):
         result['tags'] = [item.name for item in labels]
         result['source_type'] = 'mixed_use_expense' if source else 'depreciation' if row['depreciation_asset_id'] else ''
         result['source_id'] = source or row['depreciation_asset_id'] or ''
-        occurrence = connection.execute(text(
-            'SELECT * FROM recurring_occurrences WHERE entity_id=:scope AND '
-            + ('mixed_use_source_id=:id' if source else 'entry_id=:id')
-        ), {'scope': self.entity_id, 'id': source or row['id']}).mappings().first()
-        values = [occurrence['schedule_id'], occurrence['scheduled_date'].isoformat(),
-                  occurrence['source_kind'], occurrence['occurrence_type']] if occurrence else ['', '', '', '']
-        result.update(zip(RECURRING_FIELDS, values))
+        result.update(occurrence_fields(connection, self.entity_id, entry_id=row['id'], source_id=source))
         docs = connection.execute(text(
             'SELECT d.* FROM document_links l JOIN documents d ON d.entity_id=l.entity_id AND d.id=l.document_id '
             'WHERE l.entity_id=:scope AND ' + ('l.mixed_use_source_id=:id' if source else 'l.entry_id=:id')
@@ -128,12 +127,13 @@ class PostgresTransactionRepository(_AccountingRepository):
             return [row for row in results if (kind is None or row['kind'] == kind)
                     and (selected is None or {row['account_id'], row['to_account_id']} & selected)]
 
-    def prepare(self, data, references, identity, *, current=None):
+    def prepare(self, data, references, identity, *, current=None, recurring=False):
         if clean_text(data.get('id'), 'Transaction ID', required=True) != identity:
             raise StorageValidationError('Transaction identity cannot change.')
         reject_derived_transaction(data)
-        validate_transaction_update(current or {}, data)
-        if current is None and any(data.get(field) for field in RECURRING_FIELDS):
+        if current is not None or not recurring:
+            validate_transaction_update(current or {}, data)
+        if current is None and not recurring and any(data.get(field) for field in RECURRING_FIELDS):
             raise StorageValidationError('Recurring creation requires the recurring repository.')
 
         def no_inline(name):
@@ -168,9 +168,14 @@ class PostgresTransactionRepository(_AccountingRepository):
             lookups.append(lookup)
         return TransactionReferences(references.accounts, references.categories, *lookups)
 
-    def write(self, connection, identity, prepared, *, create=False):
+    def write(self, connection, identity, prepared, *, create=False, owner=None):
         values = {'txn_date': iso_date(prepared['txn_date']), 'simple_kind': prepared['kind'],
                   'description': prepared['description'], 'reference': prepared['reference'], 'payee_id': prepared['payee_id'] or None}
+        if owner is not None:
+            column, source_id = owner
+            if column not in {'mixed_use_source_id', 'depreciation_asset_id'}:
+                raise ValueError('Unknown accounting owner')
+            values[column] = source_id
         if create:
             insert(connection, 'entries', new_object(
                 self.entity_id, id=identity, projection_kind='simple',
@@ -183,13 +188,16 @@ class PostgresTransactionRepository(_AccountingRepository):
                            {'scope': self.entity_id, 'id': identity})
         for tag_id in normalize_tag_ids(prepared['tag_ids']):
             insert(connection, 'entry_tags', {'entity_id': self.entity_id, 'entry_id': identity, 'tag_id': tag_id})
-        self.write_receipts(connection, identity, prepared['receipt_references'])
+        if owner is None:
+            self.write_receipts(connection, identity, prepared['receipt_references'])
         # Detail triggers advance the root after its INSERT/UPDATE RETURNING.
         return self.project(connection, self.entry(connection, identity))
 
-    def write_receipts(self, connection, identity, references):
+    def write_receipts(self, connection, identity, references, *, target_column='entry_id'):
         # #251 owns document metadata acceptance and the external store. This
         # slice links existing metadata without fabricating its storage scope.
+        if target_column not in {'entry_id', 'mixed_use_source_id'}:
+            raise ValueError('Unknown receipt target')
         documents = []
         for reference in decode_receipt_references(references):
             rows = connection.execute(text(
@@ -199,18 +207,46 @@ class PostgresTransactionRepository(_AccountingRepository):
             if len(rows) != 1 or self.receipt_reference(rows[0]) != reference:
                 raise StorageValidationError('Receipt metadata must already exist in this entity and match the reference.')
             documents.append(rows[0]['id'])
-        write_document_links(connection, self.entity_id, 'entry_id', identity, documents)
+        write_document_links(connection, self.entity_id, target_column, identity, documents)
 
     def create(self, transaction_id, *, build):
-        identity = clean_text(transaction_id, 'Transaction ID', required=True)
         with self.operation() as connection:
-            references = self.references(connection, lock=True)
-            if connection.execute(text('SELECT 1 FROM entries WHERE entity_id=:scope AND id=:id'),
-                                  {'scope': self.entity_id, 'id': identity}).first():
-                raise StorageConflictError('The entry identity already exists; refresh the ledger.')
-            built = dict(build(references, None))
-            prepared = self.prepare(built, self.inline_references(connection, references, built), identity)
-            return self.write(connection, identity, prepared, create=True)
+            return self.create_record(connection, transaction_id, build=build)
+
+    def create_occurrence(self, transaction_id, *, build, schedule_id, expected_schedule=None):
+        # Reconciliation owns no surrounding transaction. Only committed values
+        # may reach its generated result; initial pairs use create_record.
+        with repository_operation(self.database, require_outer=True) as connection:
+            return self.create_record(connection, transaction_id, build=build, recurring=True,
+                                      schedule_id=schedule_id, expected_schedule=expected_schedule)
+
+    def create_record(self, connection, transaction_id, *, build, recurring=False, schedule_id=None, expected_schedule=None):
+        identity = clean_text(transaction_id, 'Transaction ID', required=True)
+        references = self.references(connection, lock=True,
+                     root_keys=[self.key('recurring_schedules', schedule_id)] if recurring else [])
+        if recurring:
+            check_occurrence_schedule(self, connection, schedule_id, expected_schedule)
+        existing = connection.execute(text('SELECT * FROM entries WHERE entity_id=:scope AND id=:id'),
+                                      {'scope': self.entity_id, 'id': identity}).mappings().first()
+        if existing and not recurring:
+            raise StorageConflictError('The entry identity already exists; refresh the ledger.')
+        built = dict(build(references, None))
+        if recurring:
+            from tabula_rasa.ledger_validation import validate_recurring_provenance
+            validate_recurring_provenance(built, 'Recurring occurrence')
+            if (built.get('kind') != 'Expense' or built.get('recurring_source_kind') != 'transaction'
+                    or built.get('recurring_schedule_id') != schedule_id):
+                raise StorageValidationError('Recurring occurrence provenance is invalid.')
+        prepared = self.prepare(built, self.inline_references(connection, references, built), identity,
+                                recurring=recurring)
+        if existing:
+            if existing['projection_kind'] != self.projection:
+                raise StorageConflictError('The entry identity belongs to another ledger projection.')
+            return confirm_occurrence(self.project(connection, existing), prepared)
+        self.write(connection, identity, prepared, create=True)
+        if recurring:
+            write_occurrence(connection, self.entity_id, prepared, entry_id=identity)
+        return self.project(connection, self.entry(connection, identity))
 
     def update(self, transaction_id, *, build, expected=None):
         identity = clean_text(transaction_id, 'Transaction ID', required=True)
