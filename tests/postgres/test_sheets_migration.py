@@ -234,3 +234,21 @@ def test_locale_collated_tags_restart_and_detect_changes_in_two_profiles(databas
         with database.transaction(read_only=True) as connection:
             assert not CoreLoader().verify(connection, plan_for(values, profile="alpha"), unit)
     assert runner.execute(plan, dry_run=False)["skipped_units"] == 3
+
+
+def test_signed_zero_opening_balances_restart_and_detect_drift_in_two_profiles(database):
+    runner = PostgresMigrationRunner(database)
+    plans = []
+    for profile, opening in (("alpha", "-0.00"), ("beta", "-0.004")):
+        values = values_with_records()
+        values["Accounts"][1][values["Accounts"][0].index("opening_balance")] = opening
+        plan = plan_for(values, profile=profile, entity=profile, workbook=f"workbook-{profile}")
+        plans.append(plan)
+        assert plan.snapshot.tables["Accounts"][0]["opening_balance"] == "-0.00"
+        assert runner.execute(plan, dry_run=False)["loaded_units"] == 2
+        assert runner.execute(plan, dry_run=False)["skipped_units"] == 2
+    with database.transaction() as connection:
+        connection.execute(text("UPDATE accounts SET opening_balance=1 WHERE entity_id='alpha'"))
+    with pytest.raises(MigrationError, match="committed migration target has changed"):
+        runner.execute(plans[0], dry_run=False)
+    assert runner.execute(plans[1], dry_run=False)["skipped_units"] == 2

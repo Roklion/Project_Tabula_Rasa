@@ -298,3 +298,17 @@ def test_journal_postings_freeze_shared_canonical_fields():
     values["JournalPostings"][1][fields.index("side")] = "invalid"
     with pytest.raises(MigrationError, match="Source domain/reference/provenance"):
         plan_for(values)
+
+
+def test_retired_asset_life_target_integer_boundary_before_planning():
+    values = values_with_mixed_asset_history()
+    values["Transactions"] = values["Transactions"][:2]
+    fields = values["Assets"][0]
+    for field, value in (("status", "retired"), ("retired_date", "2026-10-05"),
+                         ("useful_life_quarters", "2147483647")):
+        values["Assets"][1][fields.index(field)] = value
+    assert plan_for(values).snapshot.tables["Assets"][0]["useful_life_quarters"] == "2147483647"
+    values["Assets"][1][fields.index("useful_life_quarters")] = "2147483648"
+    with pytest.raises(MigrationError, match="Source domain/reference/provenance") as caught:
+        plan_for(values)
+    assert caught.value.__context__ is None

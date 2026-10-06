@@ -108,7 +108,10 @@ class CoreLoader:
                 by_id = {row["id"]: row for row in actual}
                 for row in unit.rows[title]:
                     found = by_id.get(plan.target_id(title, row["id"]))
-                    if found is None or any(str(found[key]) != str(value) for key, value in builder(row).items()):
+                    if found is None or any(
+                        (found[key] != Decimal(str(value)) if isinstance(found[key], Decimal)
+                         else str(found[key]) != str(value)) for key, value in builder(row).items()
+                    ):
                         return False
                     if row.get("created_at") and timestamp(found["created_at"].isoformat()) != row["created_at"]:
                         return False

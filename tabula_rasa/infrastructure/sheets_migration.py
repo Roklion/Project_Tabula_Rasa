@@ -170,6 +170,9 @@ def snapshot_from_values(binding: Binding, values, *, extracted_at=None):
         for row in tables["RecurringSchedules"][1]:
             if int(row["recurrence_interval"]) > 2147483647:
                 raise StorageValidationError("Schedule interval exceeds target precision.")
+        for row in tables["Assets"][1]:
+            if int(row["useful_life_quarters"]) > 2147483647:
+                raise StorageValidationError("Asset life exceeds target precision.")
         # Canonical PostgreSQL numeric limits are part of target preflight.
         for _, rows in tables.values():
             for row in rows:
