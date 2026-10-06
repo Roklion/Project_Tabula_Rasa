@@ -713,9 +713,15 @@ does not activate PostgreSQL or meet #257 whole-profile acceptance by itself.
 #245/#246's explicit `postgres/composition.py` now assembles entity-scoped
 reference-data, Simple Ledger and advanced journal services on canonical
 entries/postings. It reuses #253's operation, baseline and version machinery.
-The current Streamlit service composition continues to use Sheets. The core
-composition leaves reporting and other secondary capabilities uninstalled;
-usable #247 reporting completes the early #221 commercial web/API milestone.
+The current Streamlit service composition continues to use Sheets. #247 adds
+`PostgresLedgerQueryRepository` and `ReportingService` to the opt-in graph, with
+entity-scoped native projections from one committed read-only REPEATABLE READ
+snapshot. Batched reads preserve disjoint simple/journal streams and historical
+references; filters and financial calculations retain their existing application
+and domain owners. Reporting requires its own outer query operation, rather than
+joining a partially written mutation. [Reporting and query-plan coverage](POSTGRESQL.md#reporting-repository-247)
+documents the contract and native validation. Other secondary capabilities remain
+uninstalled; core reporting supports the early #221 commercial web/API milestone.
 Later slices, whole-profile
 reconciliation, concurrency verification, complete entity export, and recovery
 rehearsals remain required before #258 commercial production activation. Identity

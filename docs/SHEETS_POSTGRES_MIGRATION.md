@@ -210,5 +210,12 @@ databases; no operator database or real bookkeeping data was reset/read.
   explicit disposable downgrade/rebuild pass on the consolidated baseline.
 
 Dependency PR #266 merged while implementation was underway. The branch
-integrates main `86988422`, whose tree matches the starting dependency head
-`aeee01eb`; its final implementation diff is scoped to #254.
+first integrated main `86988422`, whose tree matches the starting dependency
+head `aeee01eb`. Before publication it also integrated main `2cca151f`,
+including #247 reporting from PR #268, without conflicts. Its implementation
+diff against current main remains scoped to #254.
+
+The publication gate after that integration passed Ruff and all **1,564 tests
+in 98.63 seconds**, with native PostgreSQL coverage and no skips. Working,
+staged and committed-branch diff checks also passed. Persistent staging remains
+deferred and is tracked as an unchecked acceptance item in #254.

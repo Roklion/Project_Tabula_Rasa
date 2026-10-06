@@ -15,6 +15,7 @@ from tabula_rasa.infrastructure.google_sheets import (
 )
 from tabula_rasa.infrastructure.postgres.composition import create_postgres_services
 from tabula_rasa.infrastructure.postgres.reference_data import PostgresLedgerSetupRepository
+from tabula_rasa.infrastructure.google_sheets_reporting import GoogleSheetsLedgerQueryRepository
 from tabula_rasa.storage import GoogleSheetsStorage
 from tests.fakes import FakeWorkbook
 
@@ -33,6 +34,7 @@ def services(request):
         payee_repository=GoogleSheetsPayeeRepository(storage), tag_repository=GoogleSheetsTagRepository(storage),
         transaction_repository=GoogleSheetsTransactionRepository(storage),
         journal_repository=GoogleSheetsJournalRepository(storage),
+        reporting_repository=GoogleSheetsLedgerQueryRepository(storage),
     )
 
 
@@ -98,3 +100,33 @@ def test_transaction_and_journal_contracts_keep_identity_domain_rules_and_projec
     assert services.journals.list() == []
     assert services.transactions.bulk_delete(['one', two['id']], expected=services.transactions.list())['count'] == '2'
     assert services.transactions.list() == []
+
+
+def test_reporting_contract_has_independent_totals_on_both_backends(services):
+    checking = services.accounts.create('Checking', 'Bank', '100')
+    savings = services.accounts.create('Savings', 'Bank')
+    capital = services.accounts.create('Capital', 'Equity', '-100', classification='Equity')
+    sales = services.categories.create('Sales', 'Income')
+    operations = services.categories.create('Operations', 'Expense')
+    office = services.categories.create('Office', 'Expense', parent_id=operations['id'])
+    services.transactions.create(transaction_id='income', txn_date='2026-06-30', kind='Income', amount='50',
+                                 account_id=checking['id'], category_id=sales['id'])
+    services.transactions.create(transaction_id='expense', txn_date='2026-07-01', kind='Expense', amount='20',
+                                 account_id=checking['id'], category_id=office['id'])
+    services.transactions.create(transaction_id='transfer', txn_date='2026-07-02', kind='Transfer', amount='30',
+                                 account_id=checking['id'], to_account_id=savings['id'])
+    services.journals.create(entry_id='split', txn_date='2026-07-03', postings=[
+        dict(id='debit', target_type='category', target_id=office['id'], side='Debit', amount='15'),
+        dict(id='credit', target_type='account', target_id=checking['id'], side='Credit', amount='15'),
+    ])
+    services.accounts.deactivate(savings['id'])
+    snapshot = services.reporting.read_ledger()
+    assert [entry.id for entry in services.reporting.query_ledger(snapshot=snapshot).entries] == [
+        'journal:split', 'transfer', 'expense', 'income',
+    ]
+    assert services.reporting.period_report(snapshot).totals == {'income': 50.0, 'expenses': 35.0, 'net': 15.0}
+    assert {row['id']: row['balance'] for row in services.reporting.account_balances(snapshot)} == {
+        checking['id']: 85.0, savings['id']: 30.0, capital['id']: -100.0,
+    }
+    statement = services.reporting.balance_sheet(snapshot)
+    assert statement['current_earnings'] == 15.0 and statement['difference'] == 0.0
