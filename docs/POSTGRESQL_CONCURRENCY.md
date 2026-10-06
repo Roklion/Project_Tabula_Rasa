@@ -246,7 +246,10 @@ baselines, no-baseline compatibility, failure before inline tags, normalization
 and two-workbook isolation.
 
 The shared guards and specialized relational enforcement are implemented.
-#245–#252 own the full domain adapters and must verify their actual
+#245/#246 integrate the core reference/accounting adapters with these helpers
+and verify native loaded-caller and overlapping-writer behavior; see
+[core repository composition](POSTGRESQL.md#core-repository-composition-245--246).
+#247–#252 own the remaining domain adapters and must verify their actual
 boundary/baseline/read-model integration against these rules as each slice
 lands. #221 owns required commercial load/form/request propagation. These are
 coordinated delivery/verification steps, not prerequisites that prevent #253's
