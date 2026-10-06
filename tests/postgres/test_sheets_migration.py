@@ -100,7 +100,8 @@ def test_missing_loader_and_forged_plan_fail_before_any_target_mutation(database
     runner = PostgresMigrationRunner(database)
     values = values_with_records()
     fields = values["Mileage"][0]
-    row = dict(id="trip", trip_date="2026-10-05", miles="1.2", created_at="2026-10-05T00:00:00Z")
+    row = dict(id="trip", trip_date="2026-10-05", miles="1.2", created_at="2026-10-05T00:00:00Z",
+               start_location="Office", destination="Client", business_purpose="Site visit")
     values["Mileage"].append([row.get(field, "") for field in fields])
     plan = plan_for(values)
     assert runner.execute(plan)["missing_loaders"] == ["mileage"]

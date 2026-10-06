@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 import json
 
+from tabula_rasa.application.mileage import prepare_mileage_trip
 from tabula_rasa.errors import StorageValidationError
 from tabula_rasa.ledger_validation import iso_date, decode_receipt_references
 from tabula_rasa.reference_data import (
@@ -15,7 +16,7 @@ from tabula_rasa.storage.google_sheets.schema import (
     WORKSHEET_HEADERS, validate_workbook_headers,
 )
 from tabula_rasa.storage.google_sheets.validation import (
-    _positive_miles, validate_source_tables,
+    validate_source_tables,
 )
 from tabula_rasa.transaction import RECURRING_FIELDS, prepare_transaction
 from tabula_rasa.journal import normalize_journal_postings
@@ -86,8 +87,12 @@ def _normalize_record(title, row, lookups):
     elif title == "JournalEntries":
         row["txn_date"] = iso_date(row["txn_date"])
     elif title == "Mileage":
-        row["trip_date"] = iso_date(row["trip_date"])
-        row["miles"] = _positive_miles(row["miles"])
+        prepared = prepare_mileage_trip(
+            row, (), trip_id=row["id"], created_at=row["created_at"], validate_tags=False,
+        )
+        # Historical Tag references are checked by validate_source_tables below.
+        row.update({field: value for field, value in prepared.as_record().items()
+                    if field in row and field != "tag_ids"})
     elif title == "RecurringSchedules":
         if row["source_kind"] == "transaction" and (row["total_expense"] or row["business_use_percentage"] or row["allocation_rationale"]):
             raise StorageValidationError("Ordinary schedule contains mixed-use fields.")

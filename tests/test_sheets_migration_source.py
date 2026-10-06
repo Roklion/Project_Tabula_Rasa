@@ -312,3 +312,39 @@ def test_retired_asset_life_target_integer_boundary_before_planning():
     with pytest.raises(MigrationError, match="Source domain/reference/provenance") as caught:
         plan_for(values)
     assert caught.value.__context__ is None
+
+
+def mileage_values():
+    values = values_with_records()
+    row = dict(id="trip", trip_date="2026-10-05", miles="1.2", vehicle="Synthetic car",
+               start_location="Office", destination="Client", business_purpose="Site visit",
+               notes="Synthetic note", tag_ids='["job"]', created_at=WHEN)
+    values["Mileage"].append([row.get(field, "") for field in values["Mileage"][0]])
+    return values
+
+
+@pytest.mark.parametrize("field", ["start_location", "destination", "business_purpose"])
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_mileage_required_fields_fail_during_preflight(field, blank):
+    values = mileage_values()
+    values["Mileage"][1][values["Mileage"][0].index(field)] = blank
+    with pytest.raises(MigrationError, match="Mileage row 2: invalid domain") as caught:
+        plan_for(values)
+    assert caught.value.__context__ is None
+
+
+def test_mileage_shared_preparation_freezes_canonical_fields_for_two_profiles():
+    canonical = mileage_values()
+    padded = deepcopy(canonical)
+    fields = padded["Mileage"][0]
+    for field in ("trip_date", "vehicle", "start_location", "destination", "business_purpose", "notes"):
+        padded["Mileage"][1][fields.index(field)] = " " + padded["Mileage"][1][fields.index(field)] + " "
+    padded["Mileage"][1][fields.index("miles")] = "1.24"
+    plans = []
+    for profile in ("alpha", "beta"):
+        plan = plan_for(padded, profile=profile, entity=profile, workbook=f"workbook-{profile}")
+        assert plan == plan_for(canonical, profile=profile, entity=profile, workbook=f"workbook-{profile}")
+        assert plan.snapshot.tables["Mileage"][0]["tag_ids"] == '["job"]'
+        assert plan.report({"foundation", "simple_entry"})["missing_loaders"] == ["mileage"]
+        plans.append(plan)
+    assert plans[0].run_id != plans[1].run_id
