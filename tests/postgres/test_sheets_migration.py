@@ -179,3 +179,24 @@ def test_padded_journal_date_loads_and_restarts_in_two_profiles(database):
         assert PostgresJournalRepository(database, profile).list()[0]["txn_date"] == "2026-10-05"
         assert runner.execute(plan, dry_run=False)["skipped_units"] == 3
     assert counts(database, "alpha") == counts(database, "beta")
+
+
+def test_canonical_occurrence_and_journal_postings_restart_in_two_profiles(database):
+    runner = PostgresMigrationRunner(database)
+    for profile in ("alpha", "beta"):
+        values = values_with_records(recurring=True, journal=True)
+        fields = values["Transactions"][0]
+        values["Transactions"][1][fields.index("recurring_scheduled_date")] = "20261005"
+        fields = values["JournalPostings"][0]
+        for row in values["JournalPostings"][1:]:
+            for field in ("target_type", "side", "amount"):
+                row[fields.index(field)] = " " + row[fields.index(field)] + " "
+        plan = plan_for(values, profile=profile, entity=profile, workbook=f"workbook-{profile}")
+        assert runner.execute(plan, dry_run=False)["loaded_units"] == 4
+        transaction = PostgresTransactionRepository(database, profile).list()[0]
+        assert transaction["recurring_scheduled_date"] == "2026-10-05"
+        journal = PostgresJournalRepository(database, profile).list()[0]
+        assert [(row["target_type"], row["side"]) for row in journal["postings"]] == [
+            ("category", "Debit"), ("account", "Credit")]
+        assert runner.execute(plan, dry_run=False)["skipped_units"] == 4
+    assert counts(database, "alpha") == counts(database, "beta")

@@ -1,5 +1,6 @@
 """Read-only live format-13 extraction and independent domain preflight."""
 
+from collections import defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal
 import json
@@ -16,7 +17,8 @@ from tabula_rasa.storage.google_sheets.schema import (
 from tabula_rasa.storage.google_sheets.validation import (
     _positive_miles, validate_source_tables,
 )
-from tabula_rasa.transaction import prepare_transaction
+from tabula_rasa.transaction import RECURRING_FIELDS, prepare_transaction
+from tabula_rasa.journal import normalize_journal_postings
 from tabula_rasa.recurring import schedule_template
 from tabula_rasa.recurrence import occurrence_id
 
@@ -79,6 +81,8 @@ def _normalize_record(title, row, lookups):
         row["kind"] = prepared["kind"]
         row["amount"] = prepared["amount"]
         row["txn_date"] = prepared["txn_date"]
+        for field in RECURRING_FIELDS:
+            row[field] = prepared.get(field, "")
     elif title == "JournalEntries":
         row["txn_date"] = iso_date(row["txn_date"])
     elif title == "Mileage":
@@ -145,6 +149,14 @@ def snapshot_from_values(binding: Binding, values, *, extracted_at=None):
                 _raise_safe(f"{title} row {position}: invalid domain or reference fields; inspect the source privately.")
     try:
         validate_source_tables(tables)
+        # Freeze the same canonical postings the shared source validator checked.
+        journals = defaultdict(list)
+        for row in tables["JournalPostings"][1]:
+            journals[row["parent_entry_id"]].append(row)
+        for postings in journals.values():
+            postings.sort(key=lambda row: int(row["position"]))
+            for row, canonical in zip(postings, normalize_journal_postings(postings)):
+                row.update({field: str(value) for field, value in canonical.items()})
         # Decode every receipt cell, including owners with no current projection.
         for title in ("Transactions", "MixedUseExpenses"):
             for row in tables[title][1]:

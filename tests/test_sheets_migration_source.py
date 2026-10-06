@@ -273,3 +273,28 @@ def test_journal_date_is_frozen_canonically_and_invalid_date_is_rejected():
     values["JournalEntries"][1][index] = "invalid date"
     with pytest.raises(MigrationError, match="invalid domain or reference"):
         plan_for(values)
+
+
+def test_occurrence_date_is_canonical_before_uniqueness_validation():
+    values = values_with_records(recurring=True)
+    fields = values["Transactions"][0]
+    values["Transactions"][1][fields.index("recurring_scheduled_date")] = "20261005"
+    assert plan_for(values) == plan_for(values_with_records(recurring=True))
+    duplicate = deepcopy(values["Transactions"][1])
+    duplicate[fields.index("id")] = "duplicate"
+    duplicate[fields.index("recurring_scheduled_date")] = "2026-10-05"
+    values["Transactions"].append(duplicate)
+    with pytest.raises(MigrationError, match="Source domain/reference/provenance"):
+        plan_for(values)
+
+
+def test_journal_postings_freeze_shared_canonical_fields():
+    values = values_with_records(journal=True)
+    fields = values["JournalPostings"][0]
+    for row in values["JournalPostings"][1:]:
+        for field in ("target_type", "side", "amount"):
+            row[fields.index(field)] = " " + row[fields.index(field)] + " "
+    assert plan_for(values) == plan_for(values_with_records(journal=True))
+    values["JournalPostings"][1][fields.index("side")] = "invalid"
+    with pytest.raises(MigrationError, match="Source domain/reference/provenance"):
+        plan_for(values)
