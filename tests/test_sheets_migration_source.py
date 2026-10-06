@@ -230,3 +230,21 @@ def test_schedule_interval_target_integer_boundary_is_validated_before_planning(
     with pytest.raises(MigrationError, match="Source domain/reference/provenance") as caught:
         plan_for(values)
     assert caught.value.__context__ is None
+
+
+def values_with_transfer(kind, category=""):
+    values = values_with_records()
+    account = dict(zip(values["Accounts"][0], values["Accounts"][1]))
+    account.update(id="destination", name="Synthetic destination")
+    values["Accounts"].append([account[field] for field in values["Accounts"][0]])
+    fields = values["Transactions"][0]
+    for field, value in (("kind", kind), ("category_id", category), ("to_account_id", "destination"), ("payee_id", "")):
+        values["Transactions"][1][fields.index(field)] = value
+    return values
+
+
+@pytest.mark.parametrize("kind", ["Transfer", "transfer", " transfer "])
+def test_transfer_category_guard_uses_canonical_kind(kind):
+    assert plan_for(values_with_transfer(kind)) == plan_for(values_with_transfer("Transfer"))
+    with pytest.raises(MigrationError, match="invalid domain or reference"):
+        plan_for(values_with_transfer(kind, "office"))

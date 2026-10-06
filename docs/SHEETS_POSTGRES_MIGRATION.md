@@ -34,7 +34,8 @@ before #254 acceptance. #257 owns whole-profile acceptance; #258 owns authority
 switching. Matching core totals and local disposable tests do not authorize
 cutover. #259 recovery and #260 complete export remain independent gates.
 
-The active revision is `0001_initial`. Its four SQL assets preserve the existing
+The initial baseline is `0001_initial`; the current head is the forward
+`0004_mileage_order` revision from #250. The baseline's four SQL assets preserve the existing
 canonical definitions, balance/hierarchy checks, aggregate-version triggers and
 domain/history enforcement. The mapping table additionally records original
 source update timestamps. The original revision modules are removed from the

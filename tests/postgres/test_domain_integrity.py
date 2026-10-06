@@ -9,7 +9,7 @@ from sqlalchemy import text
 from tabula_rasa.errors import StorageValidationError
 from tabula_rasa.infrastructure.postgres.concurrency import AggregateKey
 from tabula_rasa.infrastructure.postgres.config import DatabaseSettings
-from tabula_rasa.infrastructure.postgres.migrations import current_revision, upgrade
+from tabula_rasa.infrastructure.postgres.migrations import current_revision, downgrade, upgrade, head_revision
 from tabula_rasa.infrastructure.postgres.operations import repository_operation
 from tabula_rasa.infrastructure.postgres.runtime import Database
 from tests.postgres._support import (
@@ -252,6 +252,7 @@ def test_secondary_references_reject_foreign_entity_only_identifiers(database, s
 
 
 def test_initial_baseline_contains_all_domain_history_guards(database):
+    downgrade(database, "0001_initial", allow_destructive=True)
     with database.transaction(read_only=True) as connection:
         assert current_revision(connection) == "0001_initial"
         functions = set(connection.scalars(text("SELECT proname FROM pg_proc WHERE pronamespace='public'::regnamespace")))
@@ -260,4 +261,4 @@ def test_initial_baseline_contains_all_domain_history_guards(database):
         triggers = set(connection.scalars(text("SELECT tgname FROM pg_trigger WHERE NOT tgisinternal")))
         assert {"domain_integrity", "protect_history", "version_entry", "version_source"} <= triggers
     upgrade(database)
-    assert database.health()["revision"] == "0001_initial"
+    assert database.health()["revision"] == head_revision()

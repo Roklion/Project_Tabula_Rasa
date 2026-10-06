@@ -10,7 +10,7 @@ from tabula_rasa.infrastructure.postgres.accounting import PostgresTransactionRe
 from tabula_rasa.infrastructure.postgres.migration import CoreLoader, PostgresMigrationRunner
 from tabula_rasa.infrastructure.postgres.runtime import DatabaseError
 from tabula_rasa.migration.model import MigrationError
-from tests.test_sheets_migration_source import plan_for, values_with_records
+from tests.test_sheets_migration_source import plan_for, values_with_records, values_with_transfer
 
 
 def counts(database, scope):
@@ -154,5 +154,16 @@ def test_normalized_transaction_kind_loads_and_restarts_in_two_profiles(database
         plan = plan_for(values, profile=profile, entity=profile, workbook=f"workbook-{profile}")
         assert runner.execute(plan, dry_run=False)["loaded_units"] == 2
         assert PostgresTransactionRepository(database, profile).list()[0]["kind"] == "Expense"
+        assert runner.execute(plan, dry_run=False)["skipped_units"] == 2
+    assert counts(database, "alpha") == counts(database, "beta")
+
+
+def test_normalized_transfer_without_payee_loads_and_restarts_in_two_profiles(database):
+    runner = PostgresMigrationRunner(database)
+    for profile, kind in (("alpha", "transfer"), ("beta", " transfer ")):
+        plan = plan_for(values_with_transfer(kind), profile=profile, entity=profile, workbook=f"workbook-{profile}")
+        assert runner.execute(plan, dry_run=False)["loaded_units"] == 2
+        row = PostgresTransactionRepository(database, profile).list()[0]
+        assert row["kind"] == "Transfer" and row["category_id"] == row["payee_id"] == ""
         assert runner.execute(plan, dry_run=False)["skipped_units"] == 2
     assert counts(database, "alpha") == counts(database, "beta")

@@ -64,8 +64,6 @@ def _normalize_record(title, row, lookups):
         source = row["source_type"]
         if bool(source) != bool(row["source_id"]) or source not in {"", "mixed_use_expense", "depreciation"}:
             raise StorageValidationError("Invalid source ownership.")
-        if row["kind"] == "Transfer" and row["category_id"]:
-            raise StorageValidationError("Transfer category would be discarded.")
         original = dict(row)
         if source == "depreciation":
             original.update(source_type="", source_id="")
@@ -76,6 +74,8 @@ def _normalize_record(title, row, lookups):
             create_payee=_no_inline, create_tag=_no_inline,
             original_transaction=original, allow_zero_amount=source == "depreciation",
         )
+        if prepared["kind"] == "Transfer" and row["category_id"]:
+            raise StorageValidationError("Transfer category would be discarded.")
         row["kind"] = prepared["kind"]
         row["amount"] = prepared["amount"]
         row["txn_date"] = prepared["txn_date"]
