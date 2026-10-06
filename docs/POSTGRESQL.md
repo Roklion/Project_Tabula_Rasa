@@ -395,11 +395,11 @@ Run the existing full suite with this endpoint too when validating shared change
 reference and accounting adapters described above. #247–#252 complete the
 remaining domain mappings and mutation constraints/tests. #253 supplies shared
 caller-baseline transport, aggregate version advancement and ordered locks.
-Cross-adapter acceptance remains open under #253. Specialized deferred
-relationship/provenance enforcement from ADR 0001, including mixed
-complete/inspectable pairs, recurring target/history rules, asset override
-and committed-event immutability, and allowed document/import targets, is now
-enforced by #253's `0003_domain_integrity`. The actual domain repository slices
+Cross-adapter acceptance remains coordinated with the domain repository slices.
+Revision `0003_domain_integrity` implements #253's specialized enforcement from
+ADR 0001: mixed complete/inspectable pairs, recurring target/history rules,
+asset override and committed-event immutability, and allowed document/import
+targets. The actual domain repository slices
 must consume these guards, reuse the existing domain algorithms and verify
 their full supported paths before use. Native service contract probes validate
 shared atomicity and recurring failure isolation without supplying full adapters.
