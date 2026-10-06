@@ -121,6 +121,8 @@ def snapshot_from_values(binding: Binding, values, *, extracted_at=None):
             identity = row["id"]
             if not identity or identity != identity.strip() or identity in seen:
                 raise MigrationError(f"{title} row {position}: missing, padded or duplicate identity.")
+            if any(value != value.strip() for field, value in row.items() if field.endswith("_id")):
+                raise MigrationError(f"{title} row {position}: padded reference identity; inspect the source privately.")
             seen.add(identity)
             records.append(row)
             positions[title].append(position)

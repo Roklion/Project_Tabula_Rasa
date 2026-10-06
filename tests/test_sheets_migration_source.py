@@ -248,3 +248,18 @@ def test_transfer_category_guard_uses_canonical_kind(kind):
     assert plan_for(values_with_transfer(kind)) == plan_for(values_with_transfer("Transfer"))
     with pytest.raises(MigrationError, match="invalid domain or reference"):
         plan_for(values_with_transfer(kind, "office"))
+
+
+@pytest.mark.parametrize("title,field,value", [
+    ("JournalPostings", "target_id", " office "),
+    ("JournalPostings", "payee_id", " vendor "),
+    ("JournalPostings", "parent_entry_id", " entry "),
+    ("Transactions", "account_id", " cash "),
+])
+def test_padded_reference_identity_fails_before_planning(title, field, value):
+    values = values_with_records(journal=True)
+    values[title][1][values[title][0].index(field)] = value
+    with pytest.raises(MigrationError, match="padded reference identity") as caught:
+        plan_for(values)
+    assert value not in str(caught.value)
+    assert caught.value.__context__ is None

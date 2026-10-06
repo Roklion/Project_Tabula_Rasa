@@ -68,6 +68,8 @@ validates domain/reference/provenance relationships, creates a private in-memory
 frozen snapshot and plans every source row. It never initializes Sheets, creates
 a PostgreSQL pool or writes run metadata. Backup archives are not accepted.
 Unsupported/retired schemas fail before either source-ledger or target writes.
+Record and reference identifiers must be unpadded; fix surrounding whitespace
+in the source privately before extracting a new snapshot.
 
 The JSON report contains versions, opaque run/digest identifiers, unit counts,
 missing loaders and explicit provisional acceptance/cutover=false fields. It
