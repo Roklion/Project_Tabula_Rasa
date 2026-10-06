@@ -144,3 +144,15 @@ def test_uninitialized_target_schema_is_rejected_without_initialization(empty_da
     with pytest.raises(MigrationError, match="initialize it explicitly"):
         PostgresMigrationRunner(empty_database).execute(plan_for(), dry_run=False)
     assert empty_database.health()["revision"] is None
+
+
+def test_normalized_transaction_kind_loads_and_restarts_in_two_profiles(database):
+    runner = PostgresMigrationRunner(database)
+    for profile, kind in (("alpha", "expense"), ("beta", " Expense ")):
+        values = values_with_records()
+        values["Transactions"][1][values["Transactions"][0].index("kind")] = kind
+        plan = plan_for(values, profile=profile, entity=profile, workbook=f"workbook-{profile}")
+        assert runner.execute(plan, dry_run=False)["loaded_units"] == 2
+        assert PostgresTransactionRepository(database, profile).list()[0]["kind"] == "Expense"
+        assert runner.execute(plan, dry_run=False)["skipped_units"] == 2
+    assert counts(database, "alpha") == counts(database, "beta")

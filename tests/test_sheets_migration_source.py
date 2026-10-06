@@ -212,3 +212,21 @@ def test_generated_identity_is_validated_without_replaying_schedule():
     identity = occurrence_id("schedule", "2026-10-05", "generated")
     values["Transactions"][1][fields.index("id")] = identity
     assert plan_for(values).target_id("Transactions", identity) == identity
+
+
+@pytest.mark.parametrize("kind", ["expense", " Expense "])
+def test_transaction_kind_uses_canonical_domain_normalization(kind):
+    values = values_with_records()
+    values["Transactions"][1][values["Transactions"][0].index("kind")] = kind
+    assert plan_for(values) == plan_for()
+
+
+def test_schedule_interval_target_integer_boundary_is_validated_before_planning():
+    values = values_with_records(recurring=True)
+    index = values["RecurringSchedules"][0].index("recurrence_interval")
+    values["RecurringSchedules"][1][index] = "2147483647"
+    assert plan_for(values).snapshot.tables["RecurringSchedules"][0]["recurrence_interval"] == "2147483647"
+    values["RecurringSchedules"][1][index] = "2147483648"
+    with pytest.raises(MigrationError, match="Source domain/reference/provenance") as caught:
+        plan_for(values)
+    assert caught.value.__context__ is None

@@ -76,6 +76,7 @@ def _normalize_record(title, row, lookups):
             create_payee=_no_inline, create_tag=_no_inline,
             original_transaction=original, allow_zero_amount=source == "depreciation",
         )
+        row["kind"] = prepared["kind"]
         row["amount"] = prepared["amount"]
         row["txn_date"] = prepared["txn_date"]
     elif title == "Mileage":
@@ -150,6 +151,9 @@ def snapshot_from_values(binding: Binding, values, *, extracted_at=None):
                         role += "-source" if title == "MixedUseExpenses" else "-projection"
                     if row["id"] != occurrence_id(row["recurring_schedule_id"], row["recurring_scheduled_date"], role):
                         raise StorageValidationError("Generated occurrence identity differs from its provenance.")
+        for row in tables["RecurringSchedules"][1]:
+            if int(row["recurrence_interval"]) > 2147483647:
+                raise StorageValidationError("Schedule interval exceeds target precision.")
         # Canonical PostgreSQL numeric limits are part of target preflight.
         for _, rows in tables.values():
             for row in rows:
