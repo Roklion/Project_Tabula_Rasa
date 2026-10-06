@@ -47,13 +47,15 @@ An occurrence creation or independent attention write uses
 `repository_operation(database, require_outer=True)`. This refuses nesting in
 an all-run transaction. Each committed occurrence can then enter `generated`;
 a failed occurrence rolls back before attention writes or the next schedule.
-#248 owns the full recurring adapter and best-effort attention policy. Native
-contract probes now run the real `RecurringService` and `TransactionService`:
+#248's full recurring/mixed-use adapters implement the best-effort attention
+policy; their native repository tests and the earlier contract probes run the
+real `RecurringService` and `TransactionService`:
 a deferred SQL failure on the second occurrence preserves the first, permits
 a healthy schedule to continue, and produces only durable returned records.
 Attention failure cannot undo those commits; rerun fills missing dates without
 duplicates. The small test probes implement only the exercised ports and are
-not deployable adapters or substitutes for #248's full adapter conformance.
+not deployable adapters. #248's full conformance tests exercise its actual
+source/accounting ports, including SQL failures on mixed occurrence pairs.
 
 Connection loss can leave commit status uncertain. The safe `unavailable`
 result makes no rollback claim and does not retry. Domain adapters must classify
@@ -119,7 +121,7 @@ For existing full snapshots, the domain adapter compares normalized persisted
 fields and relationships, excluding derived display labels/totals/next-due and
 attention fields. A partial expected record is insufficient for a commercial
 guard. This foundation does not implement SQL/domain snapshot projections;
-#245–#252 own those mappings. The token path covers database metadata without
+#245â€“#252 own those mappings. The token path covers database metadata without
 embedding SQL columns in services.
 
 The new Sheets account comparison includes ID, name, type, classification,
@@ -249,7 +251,7 @@ The shared guards and specialized relational enforcement are implemented.
 #245/#246 integrate the core reference/accounting adapters with these helpers
 and verify native loaded-caller and overlapping-writer behavior; see
 [core repository composition](POSTGRESQL.md#core-repository-composition-245--246).
-#247–#252 own the remaining domain adapters and must verify their actual
+#247â€“#252 own the remaining domain adapters and must verify their actual
 boundary/baseline/read-model integration against these rules as each slice
 lands. #221 owns required commercial load/form/request propagation. These are
 coordinated delivery/verification steps, not prerequisites that prevent #253's

@@ -134,7 +134,8 @@ class TransactionService:
         identity = clean_text(transaction_id, "Transaction ID", required=True)
         data = {**data, "receipt_references": []}
         created_at = utc_now()
-        return self._repository.create(
+        create = getattr(self._repository, 'create_occurrence', self._repository.create)
+        return create(
             identity,
             build=lambda references, current: self._prepare(
                 data, references, identity, created_at=created_at

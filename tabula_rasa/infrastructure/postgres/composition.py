@@ -1,6 +1,12 @@
-"""Opt-in core service graph; production authority selection belongs to #258."""
+"""Opt-in entity service graph; production authority selection belongs to #258."""
 
+from dataclasses import replace
+
+from tabula_rasa.application.recurring import RecurringService
 from tabula_rasa.application.services import assemble_application_services
+from .assets import PostgresAssetRepository
+from .mixed_use import PostgresMixedUseRepository
+from .recurring import PostgresRecurringRepository
 from .accounting import PostgresTransactionRepository, PostgresJournalRepository
 from .reference_data import (
     PostgresLedgerSetupRepository, PostgresAccountRepository, PostgresCategoryRepository,
@@ -16,7 +22,7 @@ def create_postgres_services(database, entity_id):
     """
     ledger = PostgresLedgerSetupRepository(database, entity_id)
     ledger.ledger_name  # Reject an unknown entity before returning a service graph.
-    return assemble_application_services(
+    services = assemble_application_services(
         entity_id, ledger_repository=ledger,
         account_repository=PostgresAccountRepository(database, entity_id),
         category_repository=PostgresCategoryRepository(database, entity_id),
@@ -24,4 +30,13 @@ def create_postgres_services(database, entity_id):
         tag_repository=PostgresTagRepository(database, entity_id),
         transaction_repository=PostgresTransactionRepository(database, entity_id),
         journal_repository=PostgresJournalRepository(database, entity_id),
+        asset_repository=PostgresAssetRepository(database, entity_id),
+        mixed_use_repository=PostgresMixedUseRepository(database, entity_id),
     )
+    # Initial creation/conversion uses these same service preparation owners;
+    # reconciliation generates through the same transaction/mixed services.
+    recurring = PostgresRecurringRepository(
+        database, entity_id, transactions=services.transactions, mixed_use=services.mixed_use,
+    )
+    return replace(services, recurring=RecurringService(recurring,
+                   transactions=services.transactions, mixed_use=services.mixed_use))

@@ -504,7 +504,7 @@ Document/receipt mutations and reporting queries retain their separate
 service owners. Contracts define behavior for a future relational
 adapter without specifying PostgreSQL tables or an HTTP API.
 
-### Recurring, assets, and mixed-use services (#230–#232)
+### Recurring, assets, and mixed-use services (#230â€“#232)
 
 The production composition supplies `RecurringService`, `AssetService`, and
 `MixedUseService` alongside the same profile's transaction and journal services.
@@ -706,9 +706,15 @@ and still works without database configuration or database dependencies.
 #245/#246's explicit `postgres/composition.py` now assembles entity-scoped
 reference-data, Simple Ledger and advanced journal services on canonical
 entries/postings. It reuses #253's operation, baseline and version machinery.
-The current Streamlit service composition continues to use Sheets. The core
-composition leaves reporting and other secondary capabilities uninstalled;
-usable #247 reporting completes the early #221 commercial web/API milestone.
+The current Streamlit service composition continues to use Sheets. The opt-in
+composition also supplies #248's recurring/mixed-use and #249's asset services,
+reusing current domain preparation and canonical source-owned posting paths.
+Reconciliation commits independent occurrences; initial source pairs and asset
+posting calls retain their atomic operation boundaries. See the
+[secondary repository guide](POSTGRESQL.md#recurring-mixed-use-and-asset-repositories-248--249).
+Reporting (#247) completes the early #221 commercial web/API milestone; reporting
+and the parallel mileage/document/import capabilities (#250–#252) have separate
+adapter and composition ownership.
 Later slices, whole-profile
 reconciliation, concurrency verification, complete entity export, and recovery
 rehearsals remain required before #258 commercial production activation. Identity
