@@ -191,8 +191,8 @@ exception type is added to a service contract in this foundation.
 ## Core repository composition (#245 / #246)
 
 `create_postgres_services(database, entity_id)` supplies the existing ledger,
-account, category, payee, tag, transaction and journal application services for
-one explicit, existing business entity. All adapters share the same `Database`.
+account, category, payee, tag, transaction, journal and reporting application
+services for one explicit, existing business entity. All adapters share the same `Database`.
 The caller supplies authorized entity context and owns the database lifecycle;
 this function neither authenticates users nor selects the production backend.
 Schema upgrades remain an explicit operator step.
@@ -268,7 +268,7 @@ source-owned projections and recurring provenance are readable; generic mutation
 of derived projections or provenance is refused. Existing ordinary recurring
 occurrences retain their association on edit and remove it on deletion. New
 recurring/source/asset workflows remain in their owning later repository slices.
-Reporting, mileage, document-store, import and other secondary services are not
+Mileage, document-store, import and other secondary services are not
 installed by this core composition.
 
 Reuse map: the implementation inspected and extends the existing reference-data,
@@ -277,6 +277,89 @@ and #244/#253 infrastructure owners. Shared bootstrap defaults were extracted
 from the Sheets schema without changing workbook format. New SQL mappings and
 legacy snapshot normalization belong to the core adapters; there is no parallel
 domain state machine, token format, version counter or error translator.
+
+## Reporting repository (#247)
+
+`PostgresLedgerQueryRepository` implements #229's `LedgerQueryRepository` and
+is installed as `services.reporting` by the opt-in composition above. This is
+the core reporting slice of #220/#124 and supports the early #221 web/API
+milestone. It does not activate an entity, migrate Sheets data, or satisfy the
+later whole-profile reconciliation, complete export, recovery or production
+activation gates.
+
+`read_ledger()` opens its own read-only REPEATABLE READ operation. The entity
+existence check, accounts, categories, entry projections, tags, receipt counts
+and recurring metadata all use that connection and committed snapshot. Reporting
+refuses nesting inside **any** existing `Database` operation, including another
+read-only operation, with the shared `boundary_mismatch` error. This prevents
+joining a READ COMMITTED mutation with incomplete/uncommitted aggregates; the
+normal operation-abort rules still apply. Invoke reporting at the query boundary
+and reuse the returned snapshot for multiple service calculations.
+
+Reads include inactive accounts and historical payee/tag labels. Every join uses
+the selected entity as well as local IDs. The adapter returns only native
+`ReportingAccount`, `ReportingCategory`, `LedgerTransaction`, `LedgerJournal`
+and `LedgerPosting` values: SQL dates, exact Decimal amounts, booleans, tuples
+and UTC timestamp strings. SQL connections, rows, version tokens, document
+locators and worksheet-shaped records do not enter these projections.
+
+The immutable `projection_kind` separates simple entries from advanced journals.
+Simple entries map their two ordered canonical postings into one transaction;
+advanced journals retain their complete ordered lines, even when posting IDs
+overlap the separate simple namespace. Mixed-use entries use source tags and
+receipt links once, and occurrences resolve through the ordinary entry or mixed
+source owner. Depreciation, including zero periods, remains a source-owned
+Simple Ledger Expense. Only persisted activity is read; nothing is regenerated.
+
+The adapter batches each relation rather than querying once per entry. There is
+no process cache: `force_refresh` is accepted for port compatibility and either
+value reads a fresh snapshot. Date/kind/account/category/tag filters, complete
+journal selection, opening balances, P&L, current earnings and hierarchy rollups
+remain owned by `ReportingService`, `ledger_queries.py`, `ledger_reporting.py`
+and `accounting_postings.py`. Dataframe/display formatting remains in presentation
+code. No financial calculations or second filter implementation are added to SQL.
+
+### Query plans and index coverage
+
+The current port reads the full selected entity before applying service filters;
+it does not accept a SQL date/target/tag filter or pagination input. Snapshot work
+therefore grows with that entity's ledger size. The canonical baseline already
+provides the required access paths; #247 adds no migration or speculative index.
+
+| Read relationship | Existing access paths |
+| --- | --- |
+| Entity/reference rows | `business_entities` PK; entity-leading account/category/payee/tag PKs |
+| Entry projection and date | `ix_entries_projection_date (entity_id, projection_kind, txn_date, id)` and `ix_entries_date` |
+| Complete ordered postings | `uq_postings_entry_id_position (entity_id, entry_id, position)`; entity-qualified projection/entry FK |
+| Account/category targets | `ix_postings_account_entry` and `ix_postings_category_entry` |
+| Ordinary/source tags | Entry/source join PKs and `ix_entry_tags_reverse` / `ix_mixed_use_tags_reverse` |
+| Recurring owner lookup | Entity/entry and entity/source unique occurrence indexes |
+| Receipt owner counts | Entity-leading document-link owner indexes and unique owner/position indexes |
+
+`tests/postgres/test_reporting_plans.py` seeds two synthetic entities, each with
+2,000 simple entries, 200 journals, 500 tag associations and 200 receipt links.
+It analyzes table statistics, verifies the index catalog, executes the actual
+adapter SQL with `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)`, checks output
+cardinality, and enforces a fixed snapshot query budget (seven SELECTs rather
+than one per entry). Both entities independently report income 22,000.
+
+On PostgreSQL 18.6, the representative run returned 2,000 simple projections,
+500 tag rows, 200 receipt counts and 400 journal lines. The planner used hash
+joins and sequential/bitmap scans for broad entity reads, indexed mixed-owner
+lookup, and the projection/date index for the smaller journal subset. Sequential
+scans are reasonable when a selected entity contains half of a small table; the
+test does not disable them or freeze a particular node strategy. Observed query
+execution times were approximately 3.3, 0.9, 0.1 and 0.3 ms respectively, excluding
+connection setup, transport and Python service calculations. These are development
+diagnostics, not a production latency guarantee. Reassess with representative
+customer distributions before extending the port or adding indexes.
+
+Native reporting tests also verify independent expected balances/totals,
+contra activity, inclusive dates, hierarchy rollups, complete journals, two-entity
+isolation with overlapping IDs, inactive historical labels, source-owned history,
+safe read failure and a bounded concurrent-write snapshot. The existing shared
+service-contract fixture runs one independently calculated reporting workflow
+on both Sheets and PostgreSQL.
 
 ## Native integration tests
 
