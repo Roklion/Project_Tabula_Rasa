@@ -706,7 +706,13 @@ and still works without database configuration or database dependencies.
 #245/#246's explicit `postgres/composition.py` now assembles entity-scoped
 reference-data, Simple Ledger and advanced journal services on canonical
 entries/postings. It reuses #253's operation, baseline and version machinery.
-The current Streamlit service composition continues to use Sheets. #247 adds
+The current Streamlit service composition continues to use Sheets. #250–#252
+extend the opt-in PostgreSQL graph with mileage and bounded transaction imports,
+reuse core default bootstrap, and install receipt services when an authorized
+DocumentStore and stable store kind are explicitly supplied. SQL owns canonical
+metadata/relationships; the store owns bytes. See the adapter and migration
+integration seams in [PostgreSQL development and operations](POSTGRESQL.md).
+#247 adds
 `PostgresLedgerQueryRepository` and `ReportingService` to the opt-in graph, with
 entity-scoped native projections from one committed read-only REPEATABLE READ
 snapshot. Batched reads preserve disjoint simple/journal streams and historical
@@ -721,8 +727,8 @@ services, reusing current domain preparation and canonical source-owned posting
 paths. Reconciliation commits independent occurrences; initial source pairs and
 asset posting calls retain their atomic operation boundaries. See the
 [secondary repository guide](POSTGRESQL.md#recurring-mixed-use-and-asset-repositories-248--249).
-The parallel mileage/document/import capabilities (#250–#252) retain their
-separate adapter and composition ownership.
+The merged mileage/document/import capabilities (#250–#252) retain their
+separate adapter ownership and explicit document-store binding.
 Later slices, whole-profile
 reconciliation, concurrency verification, complete entity export, and recovery
 rehearsals remain required before #258 commercial production activation. Identity

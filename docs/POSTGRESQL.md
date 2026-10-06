@@ -188,12 +188,12 @@ text. #253 and domain repositories translate these infrastructure codes into
 the existing application error/result contract at their boundary. No provider
 exception type is added to a service contract in this foundation.
 
-## Core repository composition (#245 / #246)
+## Repository composition (#245–#252)
 
 `create_postgres_services(database, entity_id)` supplies the existing ledger,
-account, category, payee, tag, transaction, journal, reporting, recurring, mixed-use
-and asset application services for one explicit, existing business entity. All
-adapters share the same `Database`.
+account, category, payee, tag, transaction, journal, reporting, recurring, mixed-use,
+asset, mileage and import application services for one explicit, existing business
+entity. All adapters share the same `Database`.
 The caller supplies authorized entity context and owns the database lifecycle;
 this function neither authenticates users nor selects the production backend.
 Schema upgrades remain an explicit operator step.
@@ -264,14 +264,13 @@ An unavailable outcome does not prove rollback and does not trigger a blind retr
 
 Receipt references can link only matching metadata already registered in the
 selected entity. Unlinking/deleting an ordinary entry retains the document.
-New document acceptance and external bytes remain #251's responsibility. Existing
+Document acceptance and external bytes follow the metadata/store boundary below. Existing
 source-owned projections and recurring provenance are readable; generic mutation
 of derived projections or provenance is refused. Existing ordinary recurring
 occurrences retain their association on edit and remove it on deletion. The
 secondary repositories described below implement recurring/source/asset
-workflows. Mileage (#250), document-store/metadata acceptance (#251), and
-import/bootstrap (#252) remain independently delivered capabilities; this
-composition does not install them.
+workflows alongside mileage and imports. Receipt services require an explicitly
+supplied authorized DocumentStore.
 
 Reuse map: the implementation inspected and extends the existing reference-data,
 transaction/journal preparation, canonical posting translation, service assembly,
@@ -279,6 +278,134 @@ and #244/#253 infrastructure owners. Shared bootstrap defaults were extracted
 from the Sheets schema without changing workbook format. New SQL mappings and
 legacy snapshot normalization belong to the core adapters; there is no parallel
 domain state machine, token format, version counter or error translator.
+
+## Mileage, receipt metadata and import adapters (#250–#252)
+
+These adapters extend the core implementation from dependency PR #266 under
+EPIC #220 and initiative #124. #248 and #249 are parallel work; this slice
+does not implement their recurring, mixed-use or asset workflows.
+
+`PostgresMileageRepository` maps native MileageTrip/MileageTag values to
+mileage records and tag associations. The existing MileageService owns field
+normalization, active-tag rules, round-trip preparation and QuickBooks mileage
+classification. Maps and routing remain outside persistence. CRUD and submitted
+imports use the shared Database operation, entity-qualified references and
+#253's baseline checks. New/reactivated inline tags roll back with failed trips.
+Loaded mileage baselines cover tag and import-attribution changes; update/delete
+accept the existing optional loaded token or snapshot. Commercial callers must
+propagate their loaded baseline.
+
+Revision **`0004_mileage_order`**, after `0003_domain_integrity`, adds a
+database-generated insertion ordinal. Equal-date/equal-instant round trips show
+the return leg first, edits preserve that ordering, and imported trips preserve
+their prepared source order. The ordinal is an adapter ordering detail, not a
+bookkeeping identity or source timestamp. Upgrading existing rows preserves
+their IDs, fields and baselines; their previously unspecified tie order receives
+an ordinal. Downgrade removes only this ordering detail. Coordinate Alembic
+revision ancestry if parallel #248/#249 work also adds a revision.
+
+`PostgresReceiptRepository` accepts provider-independent metadata, canonical
+document IDs, opaque store locators and links. Supply the selected entity's
+authorized store and its stable kind explicitly:
+
+```python
+services = create_postgres_services(
+    database, entity_id,
+    document_store=authorized_store,
+    document_store_kind="google_drive",
+)
+```
+
+The store is configured for that same entity/profile context; its scope_key is
+the opaque binding saved with accepted metadata. Schema/entity checks do not
+authorize external byte access. Repositories never construct a Drive client,
+read credentials, manage folders, fetch/upload files or delete bytes.
+Without a store, mileage/imports are available and receipts remain uninstalled.
+The existing Google Drive DocumentStore remains usable; selecting a future
+object-storage vendor and adapting the current Simple Ledger receipt-reference
+compatibility representation are separate work.
+
+SQL acceptance and linking commit atomically. Stable canonical identity and
+entity/store/scope/locator uniqueness deduplicate confirmed replays; conflicting
+metadata or ownership is refused. One receipt belongs to one logical target.
+The already-locked target serializes additions and enforces the 100-receipt
+limit. Accounting and receipt mutations share `write_document_links` for
+ordering, retained link timestamps and removal. Unlink and target deletion
+retain document metadata and external bytes. Failed SQL linking leaves the
+uploaded file recoverable from the DocumentStore inventory; ReceiptService's
+existing recovery loop reuses its confirmed uploaded reference.
+
+Mixed-use projection reads resolve the single source-owned link set.
+`repository.for_mixed_use(source_id, expected_source={"baseline": loaded_token})`
+binds a source-aware ReceiptRepository for `ReceiptService.with_repository`.
+It locks and validates the complete pair and source baseline before changing
+links. A caller loads the current source baseline for each mutation, including
+after its own earlier successful link. Ordinary transaction receipt mutations
+refuse a mixed projection. This integration seam is available to #248; it does
+not create, repair or edit mixed-use pairs. Journals and depreciation entries
+remain ineligible for receipt links.
+
+### Existing receipt mapping
+
+Explicit migration tooling may call `register_document` to accept known
+metadata without linking or moving bytes. Preserve an existing portable
+DocumentMetadata.document_id. When absent, `map_legacy_document` supplies the
+hex UUID5 of the URL namespace and compact JSON
+`["tabula-rasa-document-v1", entity_id, store_kind, store_scope_key, storage_key]`.
+Repeated mapping is deterministic and distinguishes entity/store bindings.
+The original Drive file ID stays in storage_key. Preserve available filenames,
+MIME type, size, checksum and URL; missing checksum/size stays unknown. Legacy
+Drive names accepted by the frozen source contract remain representable.
+The compatibility receipt record remains a legacy locator/name pair until
+integrity is known; a canonical database ID alone never claims verification.
+#254/#256 own extraction manifests and migration ID-mapping records. This helper
+does not migrate a live workbook, backfill bytes or invent historical provenance.
+
+### Bootstrap and submitted imports
+
+Reuse `PostgresLedgerSetupRepository.ensure_defaults` from #245: one entity
+guard, the shared default definitions and an atomic seed only when both
+accounts/categories are empty. Repeated/concurrent setup does not duplicate
+defaults; partial existing ledgers are preserved.
+
+`PostgresTransactionImportRepository` uses the existing pure QuickBooks preview
+and shared CSV input/reference mapping. Imports create references through the
+existing reference adapters and entries/postings through TransactionService.
+Fresh references are locked and duplicate selection is serialized with supported
+ledger writes by the database entity guard. Auto-created references, payees,
+balanced entries and completed import attribution commit together. A failure
+rolls back the submitted batch; its safe error directs the caller to correct the
+preview or inspect the ledger. There is no adapter retry.
+
+Submit at most **1,000 transaction source rows**, or **1,000 accepted mileage
+trips**, per operation; split larger sources deliberately. The repository does
+not silently commit a prefix or retain raw uploaded files. CSV/QuickBooks batch
+IDs hash their source kind/version and ordered supported field values before
+fresh reference resolution. Entry IDs are reproducible UUID5 values from the
+entity, batch identity and actual source row. An identical completed submission
+returns no new rows, even after target edits or deletes; this also makes a
+caller replay after lost commit confirmation safe. CSV retains identical rows
+within a new submitted batch; QuickBooks retains the existing fingerprint
+duplicate rules. Known accepted fingerprints continue suppressing repeated
+QuickBooks rows after later edits. Manual identical transactions remain valid.
+
+Transaction import_records retain actual source positions (CSV row 2 onwards,
+including positions skipped as QuickBooks duplicates). Mileage's current port
+receives prepared trips rather than raw source positions: its
+`mileage-prepared-v1` attribution records accepted-trip ordinals, explicitly
+not raw CSV row numbers, and hashes accepted normalized fingerprints for batch
+identity. Existing IDs supplied by mileage preparation are preserved. Attribution
+is target-owned and cascades on deletion; a completed batch is retained, but v1
+does not promise permanent deletion history or every differently-shaped
+resubmission after deletions. #223 owns durable audit extensions.
+
+Reuse map: inspected MileageService/GoogleSheetsMileageRepository,
+ReceiptService/receipt_records and the current receipt writers, the pure import
+preview and Sheets CSV mapping, and #266's defaults/reference/accounting
+adapters. Reuse those domain owners, the shared operation/baseline machinery and
+one receipt-link writer. New logic is SQL mapping, metadata acceptance,
+source-aware link guarding and bounded accepted import provenance. No parallel
+Maps, accounting, normalization or recovery state machine is introduced.
 
 ## Reporting repository (#247)
 
@@ -497,8 +624,9 @@ Run the existing full suite with this endpoint too when validating shared change
 ## Delivery boundary for the initiative
 
 #244 supplies the reusable runtime and baseline. #245/#246 now supply the core
-reference and accounting adapters described above. #247–#252 complete the
-remaining domain mappings and mutation constraints/tests. #253 supplies shared
+reference and accounting adapters described above. #250–#252 supply mileage,
+document metadata and imports/bootstrap. #247–#249 complete the other domain
+mappings and mutation constraints/tests. #253 supplies shared
 caller-baseline transport, aggregate version advancement and ordered locks.
 Cross-adapter acceptance remains coordinated with the domain repository slices.
 Revision `0003_domain_integrity` implements #253's specialized enforcement from

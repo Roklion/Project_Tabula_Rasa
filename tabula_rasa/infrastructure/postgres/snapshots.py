@@ -20,7 +20,7 @@ def check_expected_snapshot(current, expected, *, required_fields=()):
     ignored = {'baseline', 'payee', 'tags', 'total_debits', 'total_credits'}
 
     def normalized(key, value):
-        if key in {'amount', 'opening_balance', 'total_expense', 'allocated_amount', 'business_use_percentage', 'cost_basis', 'salvage_value'}:
+        if key in {'amount', 'opening_balance', 'miles', 'total_expense', 'allocated_amount', 'business_use_percentage', 'cost_basis', 'salvage_value'}:
             if value in (None, ''):
                 return ''
             number = Decimal(str(value))

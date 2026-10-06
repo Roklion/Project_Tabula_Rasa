@@ -1,4 +1,4 @@
-"""Opt-in entity service graph; production authority selection belongs to #258."""
+"""Opt-in repository service graph; production authority selection belongs to #258."""
 
 from dataclasses import replace
 
@@ -8,6 +8,9 @@ from .assets import PostgresAssetRepository
 from .mixed_use import PostgresMixedUseRepository
 from .recurring import PostgresRecurringRepository
 from .accounting import PostgresTransactionRepository, PostgresJournalRepository
+from .documents import PostgresReceiptRepository
+from .imports import PostgresTransactionImportRepository
+from .mileage import PostgresMileageRepository
 from .reporting import PostgresLedgerQueryRepository
 from .reference_data import (
     PostgresLedgerSetupRepository, PostgresAccountRepository, PostgresCategoryRepository,
@@ -15,7 +18,7 @@ from .reference_data import (
 )
 
 
-def create_postgres_services(database, entity_id):
+def create_postgres_services(database, entity_id, *, document_store=None, document_store_kind=None):
     """Compose one explicit entity using the shared infrastructure operation.
 
     The caller resolves authorized entity context and owns database lifecycle.
@@ -23,6 +26,8 @@ def create_postgres_services(database, entity_id):
     """
     ledger = PostgresLedgerSetupRepository(database, entity_id)
     ledger.ledger_name  # Reject an unknown entity before returning a service graph.
+    if (document_store is None) != (document_store_kind is None):
+        raise ValueError('Supply both the authorized DocumentStore and its stable store kind.')
     services = assemble_application_services(
         entity_id, ledger_repository=ledger,
         account_repository=PostgresAccountRepository(database, entity_id),
@@ -33,6 +38,12 @@ def create_postgres_services(database, entity_id):
         journal_repository=PostgresJournalRepository(database, entity_id),
         asset_repository=PostgresAssetRepository(database, entity_id),
         mixed_use_repository=PostgresMixedUseRepository(database, entity_id),
+        import_repository=PostgresTransactionImportRepository(database, entity_id),
+        mileage_repository=PostgresMileageRepository(database, entity_id),
+        receipt_repository=PostgresReceiptRepository(
+            database, entity_id, store_kind=document_store_kind, store_scope_key=document_store.scope_key,
+        ) if document_store is not None else None,
+        document_store=document_store,
         reporting_repository=PostgresLedgerQueryRepository(database, entity_id),
     )
     # Initial creation/conversion uses these same service preparation owners;
