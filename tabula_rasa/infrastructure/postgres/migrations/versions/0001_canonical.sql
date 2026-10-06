@@ -689,6 +689,7 @@ CREATE TABLE migration_id_mappings (
     target_record_kind text NOT NULL,
     target_id text NOT NULL,
     mapping_reason text NOT NULL,
+    source_updated_at timestamptz,
     CONSTRAINT pk_migration_id_mappings PRIMARY KEY (entity_id, run_id, source_record_kind, source_id),
     CONSTRAINT fk_migration_id_mappings_entity FOREIGN KEY (entity_id) REFERENCES business_entities(id),
     CONSTRAINT ck_migration_id_mappings_source_record_kind CHECK (btrim(source_record_kind) <> ''),

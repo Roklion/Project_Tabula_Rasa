@@ -19,6 +19,13 @@ from .repository import EntityRepository, insert, new_object, record, replace, s
 from .concurrency import lock_aggregates
 
 
+def entry_values(prepared):
+    """Shared simple-entry payload for runtime and explicit historical loading."""
+    return {'txn_date': iso_date(prepared['txn_date']), 'simple_kind': prepared['kind'],
+            'description': prepared['description'], 'reference': prepared['reference'],
+            'payee_id': prepared['payee_id'] or None}
+
+
 class _AccountingRepository(EntityRepository):
     projection = ''
 
@@ -172,8 +179,7 @@ class PostgresTransactionRepository(_AccountingRepository):
         return TransactionReferences(references.accounts, references.categories, *lookups)
 
     def write(self, connection, identity, prepared, *, create=False):
-        values = {'txn_date': iso_date(prepared['txn_date']), 'simple_kind': prepared['kind'],
-                  'description': prepared['description'], 'reference': prepared['reference'], 'payee_id': prepared['payee_id'] or None}
+        values = entry_values(prepared)
         if create:
             insert(connection, 'entries', new_object(
                 self.entity_id, id=identity, projection_kind='simple',

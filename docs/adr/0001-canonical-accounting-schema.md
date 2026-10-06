@@ -324,7 +324,7 @@ typed relationship extension, not an unchecked polymorphic target string.
 | `import_records` | `entity_id text`, `batch_id text` FK import batches, `source_position integer`, `record_kind text` (`entry/mileage`), `entry_id text?` FK entries, `mileage_id text?` FK mileage, `fingerprint text`, `created_at timestamptz`. | PK `(entity_id,batch_id,source_position)`; position `> 0`; target XOR matches kind; entry target simple; target FK indexes and `(entity_id,fingerprint)`. Fingerprints follow existing import normalization, not global uniqueness: identical legitimate manual records remain supported. Repeated batch identity cannot reimport its rows. |
 | `migration_runs` | Common object columns; `source_profile_key text`, `source_workbook_key text`, `source_kind text` (`current_workbook/v13_backup`), `source_backup_version smallint?`, `manifest_version text`, `mapping_version text`, `source_snapshot_sha256 text`, `extracted_at timestamptz`, `status text` (`prepared/loading/failed/validated`). | One explicit source-profile/workbook/target binding per run; nonblank identity/version fields, valid snapshot digest. Source-kind/version CHECK requires NULL backup version for current_workbook, exactly non-NULL 13 for v13_backup. No financial row payload, credentials, or private artifact bytes. Index `(entity_id,source_snapshot_sha256,id)`. Validated means migration validation, not production backend activation. |
 | `migration_units` | `entity_id text`, `run_id text` FK runs, `unit_key text`, `unit_kind text`, `unit_sha256 text`, `status text` (`pending/loaded/failed`), `loaded_at timestamptz?`. | PK `(entity_id,run_id,unit_key)`; digest identifies immutable normalized unit content. Loaded iff loaded_at present; unit status and its bookkeeping rows commit together. No unchecked cross-entity pointer. |
-| `migration_id_mappings` | `entity_id text`, `run_id text` FK runs, `source_record_kind text`, `source_id text`, `target_record_kind text`, `target_id text`, `mapping_reason text`. | PK `(entity_id,run_id,source_record_kind,source_id)`; unique `(entity_id,run_id,target_record_kind,target_id)`. This is immutable mapping evidence, not a live polymorphic FK. Typed domain tables enforce all actual links; migration validation verifies each mapping's target. Index `(entity_id,target_record_kind,target_id)`. |
+| `migration_id_mappings` | `entity_id text`, `run_id text` FK runs, `source_record_kind text`, `source_id text`, `target_record_kind text`, `target_id text`, `mapping_reason text`, `source_updated_at timestamptz?`. | PK `(entity_id,run_id,source_record_kind,source_id)`; unique `(entity_id,run_id,target_record_kind,target_id)`. This is immutable mapping evidence, not a live polymorphic FK. Typed domain tables enforce all actual links; migration validation verifies each mapping's target. Index `(entity_id,target_record_kind,target_id)`. |
 
 `import_records` is target-owned provenance: its target FK may use ON DELETE
 CASCADE so deleting an eligible ordinary entry/trip also removes that attribution
@@ -633,25 +633,19 @@ and managed backups are different capabilities.
 
 ## Current Sheets-to-canonical mapping (#254–#256)
 
-Extraction accepts the supported current workbook format (`schema.py`). When
-the source is a backup archive, it accepts **only backup format v13** with the
-required manifest, checksums, headers, and domain/reference validation. V1–v12
-archives are rejected before any target mutation. Missing/invalid version data
-and unknown future versions are also rejected; a valid checksum does not make
-an unsupported format acceptable. There is no automatic conversion, version
-fallback, or retained old-format reader in this PostgreSQL extraction/load
-contract. Existing separately invoked legacy-conversion scripts are outside
-this ticket and are not part of, or called by, the migration path; any archive
-presented to that path must already be independently validated as v13.
+Issue #254 implements extraction of the live frozen format-13 workbook through
+shared header and domain validators. It does not import backup archives. The
+v13 archive policy remains authoritative for Sheets backup/restore and does
+not expand migration input scope. Earlier/unsupported live schemas fail before
+source-ledger or target mutation; no historical conversion is invoked.
 
-Persist the accepted backup format (`13`) in the versioned migration manifest
-when archive input is used. A resumed run revalidates that same format and
-source digest rather than loosening the gate. Do not confuse the accepted source
-backup version with `manifest_version`, `mapping_version`, a database schema
-migration revision, or an aggregate `version` baseline. #260's future canonical
-entity-export format is a different artifact and does not add legacy backup
-readers. Profile key + configured workbook identity bind to one manifest target
-entity. They are migration provenance, never commercial membership authorization.
+`manifest_version`, `mapping_version`, the PostgreSQL revision and aggregate
+`version` baselines are independent. Profile key + configured workbook identity
+bind one source snapshot to one target entity. These are migration provenance,
+not membership authorization. Current aggregate update instants are controlled
+by database version triggers; retain original source update timestamps in
+`migration_id_mappings.source_updated_at` rather than bypassing those triggers.
+Creation timestamps remain on their canonical records.
 
 | Current record/field | Target and normalization |
 | --- | --- |
@@ -740,7 +734,7 @@ production additionally requires #253 and #259 evidence as the EPIC states.
 | How do identity and audit attach later? | Through stable entity/object identities. #222/#223 own memberships, actors, audit event content, period locks, and correction policies. They must not be invented by repository slices. |
 | Is a schema/tool/provider choice still needed? | #244 chooses driver/migration tooling and supported PostgreSQL release. This ADR requires ordinary relational types plus deferred constraint triggers, partial indexes, and coherent SQL snapshots; it requires no extensions, provider-specific hosting, or native enum. |
 | How are baselines transported? | Row/aggregate version and loaded-record policy fixed here; #253 adds neutral token/expected transport and #221 carries it through forms/API. Legacy no-baseline calls remain explicitly limited. |
-| Which historical backup formats are retained? | None before v13. Archive input must be v13 and fully validated; earlier, missing, malformed, or unknown versions fail before writes. #254 implements this strict gate without conversion/fallback. |
+| Which inputs does #254 accept? | Live final-format-13 workbooks only; shared validators reject earlier/unsupported schemas before writes. Format-13 backup/restore remains separate and does not add archive import to this framework. |
 | What remains for export/recovery/launch? | #260 versioned complete entity artifact; #259 real restore/PITR; #258 authority switch; #224 customer lifecycle. None changes v1 accounting identity/projection rules. |
 
 No unresolved product choice is required to implement v1 table shapes or the
@@ -776,10 +770,10 @@ the implementing slices includes:
 - Supported inspectable sources survive inspection/export with diagnostics,
   while unrepresentable anomalies block load/acceptance. Missing historical
   metadata is explicit; source data and document bytes remain unchanged.
-- A valid v13 archive passes the format gate with its manifest/checksums and
-  domain validation. Otherwise-valid v1–v12 archives, missing/malformed versions,
-  and unknown future versions fail before target writes, including on resume;
-  no historical converter is invoked by the PostgreSQL path.
+- A live final-format-13 workbook passes shared schema/domain preflight;
+  representative retired/unsupported headers and invalid provenance fail before
+  source-ledger or target writes, including on resume. Archive validation remains
+  in Sheets backup/restore; #254 does not accept archive inputs or invoke converters.
 - A concurrent-write reporting/export scenario proves one coherent snapshot;
   core query plans use the entity/date, target, and reverse-tag indexes at
   representative beta scale. Add indexes only for demonstrated query needs.

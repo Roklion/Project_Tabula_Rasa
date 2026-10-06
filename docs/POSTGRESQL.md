@@ -83,7 +83,7 @@ inspection before migration. `health` and `upgrade` exit successfully only when
 connected and at head. These commands emit one credential-safe JSON object.
 This is a foundation readiness diagnostic, not an application health endpoint.
 
-Baseline revision **`0001_canonical`** contains all 26 ADR tables, named
+Baseline revision **`0001_initial`** contains all 26 ADR tables, named
 row-local constraints, entity-qualified FKs, required indexes, immutable object
 identities, and deferred entry balance/shape and two-level hierarchy checks.
 It includes category-kind revalidation and the owned-event requirement for
@@ -93,7 +93,7 @@ they are not duplicated as entries. Document tables hold metadata/links only.
 Each future migration gets a new immutable revision in
 `tabula_rasa/infrastructure/postgres/migrations/versions/`, with explicit
 upgrade/downgrade behavior and native tests. Do not edit a revision once it has
-been deployed. The SQL files beside `0001_canonical.py` are frozen migration
+been deployed. The SQL files beside `0001_initial.py` are frozen migration
 assets, not runtime schema/model generators. No autogenerate/create_all/stamp
 path substitutes for versioned migrations.
 
@@ -124,12 +124,9 @@ restore rehearsals remain #259/#223's work and gate #258 activation.
 
 [#253's implemented operation and baseline convention](POSTGRESQL_CONCURRENCY.md)
 extends this runtime with the adapter error boundary, ordered root guards and
-revisions `0002_aggregate_versions` and `0003_domain_integrity`. Later repository
-slices must consume it
-before exposing supported mutations. The canonical baseline below remains
-revision `0001_canonical`; `upgrade` also applies aggregate-version and specialized
-relationship/history enforcement. The latter validates existing affected rows
-once during upgrade and refuses incompatible data without partial installation.
+the consolidated initial revision `0001_initial`. Later repository slices must
+consume its version and specialized relationship/history guards before exposing
+supported mutations. Schema initialization is explicit and atomic.
 
 Composition constructs one `Database(DatabaseSettings(...))` per process/service
 graph. Infrastructure adapters use `with database.transaction() as connection`
@@ -242,7 +239,7 @@ all-or-nothing. No process-local workbook lock or remote-write retry applies.
 Loaded records return #253's opaque `baseline` token from the same snapshot as
 their values. Pass it separately through `expected`, never as an editable field
 or entity selector. The adapters use the shared token/lock/error helpers and
-`0002_aggregate_versions` triggers. Returned tokens are mapped after participating
+`0001_initial` aggregate-version triggers. Returned tokens are mapped after participating
 posting/tag/document-link writes, before the outer commit. A later stale submit,
 including one after deletion and recreation with the same domain ID, fails.
 Journals require a token or complete normalized loaded entry/posting snapshot.
@@ -313,7 +310,7 @@ reference and accounting adapters described above. #247–#252 complete the
 remaining domain mappings and mutation constraints/tests. #253 supplies shared
 caller-baseline transport, aggregate version advancement and ordered locks.
 Cross-adapter acceptance remains coordinated with the domain repository slices.
-Revision `0003_domain_integrity` implements #253's specialized enforcement from
+The `0001_initial` baseline includes #253's specialized enforcement from
 ADR 0001: mixed complete/inspectable pairs, recurring target/history rules,
 asset override and committed-event immutability, and allowed document/import
 targets. The actual domain repository slices
@@ -329,3 +326,32 @@ entity/reference/transaction slices (#245/#246 and usable #247) unblock early
 entity export (#260), recovery rehearsal (#259), and controlled single-backend
 activation (#258) remain separate. No Sheets data migration, dual write,
 identity model, frontend replacement, or production activation happens here.
+
+
+## Initial baseline and Sheets migration
+
+Issue #254 consolidates the unused pre-production `0001_canonical`,
+`0002_aggregate_versions`, and `0003_domain_integrity` revisions into
+`0001_initial`, retaining their table definitions, aggregate-version machinery,
+and domain/history guards. The operator confirmed on 2026-10-05 that only
+disposable development/test databases exist and no staging database has been
+provisioned. Original revisions remain in Git history, not the active Alembic
+chain. `migration_id_mappings.source_updated_at` retains original source update
+provenance independently of database-controlled aggregate update instants.
+
+An old disposable database must be explicitly recreated, never stamped to the
+new revision. An unexpected retained database is a stop-and-investigate case;
+preserve its data and old revision chain. This implementation recreates only
+synthetic UUID test databases through the existing test fixture. It does not
+reset an operator database or silently upgrade an old revision identifier.
+
+Parallel repository tickets #248–#252 consume this baseline. Repository code
+alone need not introduce a revision. Any later schema/constraint change uses a
+new forward revision after `0001_initial`, coordinated to keep one Alembic head.
+Once this baseline is deployed to a retained database, keep it immutable.
+Do not delay #254 framework work for every secondary repository; corresponding
+loaders remain #256's responsibility.
+
+See [the migration operator guide](SHEETS_POSTGRES_MIGRATION.md) for dry-run,
+explicit loading, extension contracts, restart, and the persistent staging
+checkpoint. #257 whole-profile acceptance and #258 cutover remain separate.

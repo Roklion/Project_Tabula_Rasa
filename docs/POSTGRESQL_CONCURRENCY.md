@@ -154,7 +154,7 @@ in its consistent operation order. `FOR SHARE` protects those field reads;
 `FOR KEY SHARE` only protects keys/deletion and is insufficient for that check.
 Do not replace these targeted checks with a whole-ledger lock or graph snapshot.
 
-Revision `0002_aggregate_versions` leaves the frozen baseline migration intact:
+The consolidated `0001_initial` baseline includes aggregate-version enforcement:
 
 - Business-field root updates advance `version` and `updated_at`; no-op updates
   do not. Explicit counter decreases/jumps are rejected. Attention code/time
@@ -172,13 +172,13 @@ Consumers require equality, not a particular increment or initial counter.
 Build the returned baseline after all participating detail writes, using the
 same transaction; a root `RETURNING` value captured before details is obsolete.
 This is an in-transaction mapping read, not post-success verification. Counters
-and changes roll back together. Downgrading this revision removes its machinery
-but preserves records/counters; the existing explicit downgrade gate still applies.
+and changes roll back together. Explicit baseline downgrade removes the schema
+and remains destructive; the operator gate and recovery requirements still apply.
 
 ## Relational integrity and saved history
 
-Revision `0003_domain_integrity` extends the frozen canonical/version revisions
-without changing table shapes or implementing domain calculations in SQL.
+The consolidated `0001_initial` baseline includes specialized integrity/history
+guards without implementing domain calculations in SQL.
 Deferred checks inspect the final shape of affected roots under row locks:
 
 - A complete mixed source has its expected same-entity Expense projection,
