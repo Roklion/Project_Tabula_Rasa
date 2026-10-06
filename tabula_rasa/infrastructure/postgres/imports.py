@@ -12,7 +12,7 @@ from tabula_rasa.application.reference_data import PayeeService, TagService
 from tabula_rasa.application.transactions import TransactionService
 from tabula_rasa.errors import StorageValidationError
 from tabula_rasa.quickbooks_import import fingerprint, normalize_rows
-from tabula_rasa.reference_data import normalize_payee_name
+from tabula_rasa.reference_data import clean_text, normalize_payee_name
 from .accounting import PostgresTransactionRepository
 from .concurrency import baseline_for
 from .provenance import bounded_rows, complete_import, completed_import, import_identity
@@ -67,7 +67,7 @@ class PostgresTransactionImportRepository(EntityRepository):
     def identity(self, source, rows):
         fields = CSV_FIELDS if source == 'csv' else QUICKBOOKS_FIELDS
         return import_identity(source+'-v1', [
-            [str(row.get(field) or '').strip() for field in fields] for row in rows
+            [clean_text(row.get(field), field) for field in fields] for row in rows
         ])
 
     def persist(self, connection, source, batch_id, positioned):

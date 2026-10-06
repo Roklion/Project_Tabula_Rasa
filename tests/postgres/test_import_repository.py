@@ -175,3 +175,28 @@ def test_replay_after_lost_commit_confirmation_does_not_duplicate(database, monk
     with database.transaction(read_only=True) as connection:
         assert connection.scalar(text('SELECT count(*) FROM import_batches')) == 1
         assert connection.scalar(text('SELECT count(*) FROM import_records')) == 1
+
+
+@pytest.mark.parametrize('scope', ['alpha', 'beta'])
+def test_csv_numeric_zero_reference_is_distinct_from_blank_and_replays(database, scope):
+    seed_core(database)
+    services = create_postgres_services(database, scope)
+    zero = [csv(Reference=0)]
+    blank = [csv(Reference='')]
+    made_zero = services.imports.import_csv(zero)
+    made_blank = services.imports.import_csv(blank)
+    assert made_zero[0]['reference'] == '0'
+    assert made_blank[0]['reference'] == ''
+    assert made_zero[0]['id'] != made_blank[0]['id']
+    assert services.imports.import_csv([csv(Reference='0')]) == []
+    assert services.imports.import_csv(zero) == []
+    assert services.imports.import_csv(blank) == []
+    other = 'beta' if scope == 'alpha' else 'alpha'
+    assert create_postgres_services(database, other).transactions.list() == []
+
+
+def test_csv_none_optional_fields_use_transaction_normalization(database):
+    alpha, _ = seed_core(database)
+    made = alpha.imports.import_csv([csv(Description=None, Reference=None, Payee=None)])
+    assert made[0]['description'] == made[0]['reference'] == made[0]['payee'] == ''
+    assert alpha.imports.import_csv([csv(Description='', Reference='', Payee='')]) == []
