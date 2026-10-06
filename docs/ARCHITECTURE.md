@@ -706,14 +706,20 @@ and still works without database configuration or database dependencies.
 #245/#246's explicit `postgres/composition.py` now assembles entity-scoped
 reference-data, Simple Ledger and advanced journal services on canonical
 entries/postings. It reuses #253's operation, baseline and version machinery.
-The current Streamlit service composition continues to use Sheets. #247 adds
+The current Streamlit service composition continues to use Sheets. #250–#252
+extend the opt-in PostgreSQL graph with mileage and bounded transaction imports,
+reuse core default bootstrap, and install receipt services when an authorized
+DocumentStore and stable store kind are explicitly supplied. SQL owns canonical
+metadata/relationships; the store owns bytes. See the adapter and migration
+integration seams in [PostgreSQL development and operations](POSTGRESQL.md).
+#247 adds
 `PostgresLedgerQueryRepository` and `ReportingService` to the opt-in graph, with
 entity-scoped native projections from one committed read-only REPEATABLE READ
 snapshot. Batched reads preserve disjoint simple/journal streams and historical
 references; filters and financial calculations retain their existing application
 and domain owners. Reporting requires its own outer query operation, rather than
 joining a partially written mutation. [Reporting and query-plan coverage](POSTGRESQL.md#reporting-repository-247)
-documents the contract and native validation. Other secondary capabilities remain
+documents the contract and native validation. Recurring/mixed-use and asset capabilities remain
 uninstalled; core reporting supports the early #221 commercial web/API milestone.
 Later slices, whole-profile
 reconciliation, concurrency verification, complete entity export, and recovery

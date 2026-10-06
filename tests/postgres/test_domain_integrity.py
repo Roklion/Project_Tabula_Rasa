@@ -9,7 +9,7 @@ from sqlalchemy import text
 from tabula_rasa.errors import StorageValidationError
 from tabula_rasa.infrastructure.postgres.concurrency import AggregateKey
 from tabula_rasa.infrastructure.postgres.config import DatabaseSettings
-from tabula_rasa.infrastructure.postgres.migrations import current_revision, downgrade, upgrade
+from tabula_rasa.infrastructure.postgres.migrations import current_revision, downgrade, upgrade, head_revision
 from tabula_rasa.infrastructure.postgres.operations import repository_operation
 from tabula_rasa.infrastructure.postgres.runtime import Database, DatabaseError
 from tests.postgres._support import (
@@ -267,4 +267,4 @@ def test_new_revision_refuses_invalid_existing_data_without_partial_install(data
     with repository_operation(database) as connection:
         connection.execute(text("UPDATE mixed_use_sources SET relationship_state='projection_mismatch'"))
     upgrade(database)
-    assert database.health()["revision"] == "0003_domain_integrity"
+    assert database.health()["revision"] == head_revision()

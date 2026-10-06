@@ -12,6 +12,8 @@ from tabula_rasa.quickbooks_import import (
     suggested_account_type,
 )
 from tabula_rasa.reference_data import normalize_payee_name
+from tabula_rasa.reference_data import clean_text
+from tabula_rasa.errors import StorageValidationError
 
 
 ImportRow = Mapping[str, Any]
@@ -25,6 +27,7 @@ class TransactionImportContext:
     categories: Sequence[ImportRow]
     payees: Sequence[ImportRow]
     transactions: Sequence[ImportRow]
+    import_fingerprints: Sequence[str] = ()
 
 
 class TransactionImportRepository(Protocol):
@@ -79,7 +82,7 @@ def preview_quickbooks(
     payee_names = {
         normalize_payee_name(item["name"]): item["name"] for item in context.payees
     }
-    existing = {fingerprint(item) for item in context.transactions}
+    existing = {fingerprint(item) for item in context.transactions} | set(context.import_fingerprints)
     seen: set[str] = set()
     ready: list[dict[str, str]] = []
     duplicate_rows: list[int] = []
@@ -113,6 +116,30 @@ def preview_quickbooks(
         "new_categories": new_categories,
         "summary": {"ready": len(ready), "duplicates": len(duplicate_rows), **counts},
     }
+
+
+def csv_transaction_inputs(rows: Iterable[ImportRow], context: TransactionImportContext):
+    """Shared CSV field/reference mapping; transaction rules validate the commands."""
+    accounts = {str(item['name']).casefold(): item for item in context.accounts}
+    categories = {(str(item['name']).casefold(), item['kind']): item for item in context.categories}
+    result = []
+    for index, row in enumerate(rows, 2):
+        kind = clean_text(row.get('Type'), 'Type', required=True).title()
+        if kind not in {'Income', 'Expense'}:
+            raise StorageValidationError(f'CSV row {index}: Type must be Income or Expense')
+        account_name = clean_text(row.get('Account'), 'Account', required=True)
+        category_name = clean_text(row.get('Category'), 'Category', required=True)
+        account = accounts.get(account_name.casefold())
+        category = categories.get((category_name.casefold(), kind))
+        if account is None or category is None:
+            raise StorageValidationError(f'CSV row {index}: unknown account or category')
+        result.append({
+            'txn_date': row.get('Date'), 'kind': kind, 'amount': row.get('Amount'),
+            'account_id': account['id'], 'category_id': category['id'],
+            'description': row.get('Description', ''), 'reference': row.get('Reference', ''),
+            'new_payee_name': clean_text(row.get('Payee', ''), 'New payee'),
+        })
+    return result
 
 
 class TransactionImportService:
