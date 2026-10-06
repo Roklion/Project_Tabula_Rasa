@@ -9,7 +9,7 @@ from tabula_rasa.infrastructure.postgres.runtime import DatabaseError
 def test_zero_to_head_repeated_upgrade_and_explicit_downgrade(empty_database):
     assert empty_database.health() == {"connected": True, "revision": None}
     upgrade(empty_database)
-    assert empty_database.health()["revision"] == head_revision() == "0002_aggregate_versions"
+    assert empty_database.health()["revision"] == head_revision() == "0003_domain_integrity"
     with empty_database.transaction() as connection:
         entity(connection)
     upgrade(empty_database)

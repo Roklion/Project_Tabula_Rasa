@@ -95,6 +95,7 @@ def test_projection_detail_changes_advance_the_mixed_source(database):
         connection.execute(text("""INSERT INTO entries(entity_id,id,incarnation_id,txn_date,projection_kind,
             simple_kind,mixed_use_source_id)
             VALUES ('alpha','projection','projection','2026-10-05','simple','Expense','source')"""))
+        connection.execute(text("UPDATE entries SET description='Allocation rationale: Synthetic' WHERE id='projection'"))
         connection.execute(text("""INSERT INTO postings(entity_id,id,entry_id,projection_kind,position,side,
             amount,account_id,category_id) VALUES
             ('alpha','projection:1','projection','simple',1,'Debit',50,NULL,'expense'),
@@ -111,7 +112,9 @@ def test_projection_detail_changes_advance_the_mixed_source(database):
 
 def test_schedule_attention_is_outside_the_editable_baseline(database):
     with repository_operation(database) as connection:
-        ledger(connection)
+        entity(connection)
+        account(connection)
+        category(connection, kind="Expense")
         connection.execute(text("""INSERT INTO recurring_schedules(entity_id,id,incarnation_id,name,source_kind,
             recurrence_unit,recurrence_interval,anchor_date,start_date,status,amount,account_id,category_id)
             VALUES ('alpha','schedule','schedule','Synthetic','transaction','month',1,

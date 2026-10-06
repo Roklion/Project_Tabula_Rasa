@@ -1,6 +1,6 @@
 # PostgreSQL mutations and loaded-record baselines
 
-This is the initial implementation of [#253](https://github.com/Roklion/Project_Tabula_Rasa/issues/253)
+This is the shared implementation of [#253](https://github.com/Roklion/Project_Tabula_Rasa/issues/253)
 under [EPIC #220](https://github.com/Roklion/Project_Tabula_Rasa/issues/220) and
 [initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124).
 It extends #244's database runtime; the supported commit units, canonical
@@ -12,14 +12,17 @@ PostgreSQL in the current Sheets/Streamlit application.
 ## Reuse and ownership
 
 - Inspected `postgres/runtime.py`, the canonical migration/ADR, reference-data,
-  transaction/journal and mileage ports/services, and their Sheets adapters.
+  transaction/journal, recurring, mixed-use, asset and mileage ports/services,
+  domain preparation/history rules, and their Sheets adapters.
   The runtime already owns shared connections and outer commit/rollback;
   services/domain modules already own normalization and bookkeeping decisions.
 - Reuse that runtime through `postgres/operations.py`; extend existing ports
   with optional `expected` inputs instead of adding parallel mutation APIs.
   Sheets snapshots reuse the existing fresh row, lock and uncertain-write paths.
-- New logic is limited to token transport, ordered aggregate locks, error
-  translation, and database version triggers. These are concurrency mechanics,
+- New logic comprises token transport, ordered aggregate locks, error
+  translation, version triggers, and deferred relationship/history constraints.
+  Recurrence, allocation and depreciation calculations keep their Python owners.
+  These are concurrency and relational integrity mechanics,
   not a second domain workflow or generic CRUD framework. There is no new
   process-local lock or Sheets retry/reconciliation mechanism.
 
@@ -44,8 +47,13 @@ An occurrence creation or independent attention write uses
 `repository_operation(database, require_outer=True)`. This refuses nesting in
 an all-run transaction. Each committed occurrence can then enter `generated`;
 a failed occurrence rolls back before attention writes or the next schedule.
-#248 still owns the actual recurring adapter and best-effort attention policy.
-Native primitive tests do not constitute its final cross-adapter verification.
+#248 owns the full recurring adapter and best-effort attention policy. Native
+contract probes now run the real `RecurringService` and `TransactionService`:
+a deferred SQL failure on the second occurrence preserves the first, permits
+a healthy schedule to continue, and produces only durable returned records.
+Attention failure cannot undo those commits; rerun fills missing dates without
+duplicates. The small test probes implement only the exercised ports and are
+not deployable adapters or substitutes for #248's full adapter conformance.
 
 Connection loss can leave commit status uncertain. The safe `unavailable`
 result makes no rollback claim and does not retry. Domain adapters must classify
@@ -71,9 +79,21 @@ An edit/delete request carries the loaded baseline separately from changes:
 service.update(record_id, expected={"baseline": loaded_record["baseline"]}, name="New name")
 ```
 
-The adapter locks all affected roots with `lock_aggregates(connection, keys)`
-and then calls `check_baseline(key, locked_row, token, required=True)` **before**
-any write or inline reference callback. A mismatched entity, kind, ID,
+Use `guarded_mutation(database, selected_entity, keys, expected=tokens)` for an
+edit/delete/bulk operation. It starts or joins the shared transaction, validates
+that every key belongs to the server-selected entity, locks the entire affected
+set, and checks **every** loaded token before yielding any write or inline
+reference callback. An edit/delete guard requires a nonempty root set; adapters
+handle an empty bulk selection as a no-op before invoking it. A partial bulk token
+set fails before any callback. It
+rejects extraneous expected keys rather than silently ignoring them. `tokens`
+maps each `AggregateKey` to its loaded baseline string; adapters extract it from
+the neutral `expected` inputs. Domain/reference validation remains in the
+adapter and its build callback after this guard.
+
+The lower-level `lock_aggregates` and `check_baseline` remain available for
+specialized operations that enforce the same ordering and complete set. A
+mismatched entity, kind, ID,
 incarnation or version raises `StorageConflictError(code="stale")`. Absence
 raises `StorageValidationError(code="baseline_required")`; malformed tokens
 fail validation. A baseline from before delete/recreate remains stale even if
@@ -89,6 +109,11 @@ a new baseline: it must describe the record the user loaded.
 | Journal edit/delete (#246) | Existing required `expected` input retained. PostgreSQL maps the entry token or complete normalized entry/posting snapshot. |
 | Other owner/source ports (#248/#249/#251/#252) | Apply the same aggregate convention in their adapters and extend typed metadata where their implemented read models need it. |
 | Legacy/internal calls without `expected` | Preserve fresh locks, domain/reference checks and existing results; do not claim stale-form detection. Services omit the newly added keyword for this calling path to preserve older internal ports. |
+
+The guarded boundary requires baselines by default. Only an explicitly chosen
+legacy/internal adapter policy uses `require_baselines=False`; supplied tokens
+are still checked and fresh locking is still mandatory. This switch does not
+turn a commercial request with a missing token into an internal request.
 
 For existing full snapshots, the domain adapter compares normalized persisted
 fields and relationships, excluding derived display labels/totals/next-due and
@@ -150,6 +175,48 @@ This is an in-transaction mapping read, not post-success verification. Counters
 and changes roll back together. Downgrading this revision removes its machinery
 but preserves records/counters; the existing explicit downgrade gate still applies.
 
+## Relational integrity and saved history
+
+Revision `0003_domain_integrity` extends the frozen canonical/version revisions
+without changing table shapes or implementing domain calculations in SQL.
+Deferred checks inspect the final shape of affected roots under row locks:
+
+- A complete mixed source has its expected same-entity Expense projection,
+  matching date, account/category amounts, payee, reference, deterministic
+  allocation description and tag set. A missing or mismatched state must
+  accurately describe actual rows; it never excuses an invalid accounting
+  entry. Both source/detail edits and referenced category changes recheck it.
+- Recurring targets match their schedule's immutable source kind, use ordinary
+  Expense entries or complete mixed pairs, and exclude depreciation. Current
+  occurrence provenance cannot be repointed. Removing a current association
+  remains supported and advances the target's baseline; template edits do not
+  rewrite past occurrence values. Attention stays outside the template token.
+- Populated asset posting settings retain their Expense/Other-Asset types;
+  acquisition targets must be simple entries and override sequences fit the
+  asset life. Events index entries owned by that asset. Posted events and their
+  entry/posting/tag facts are immutable, including zero-valued quarters.
+  Saved history locks the existing domain schedule terms; posted history also
+  locks posting targets. Descriptive asset edits and valid later retirement
+  remain supported. Retirement cannot precede a saved event. Override changes
+  lock the asset before checking history, including a posting that committed
+  while the writer waited. Earlier overrides remain locked by later ones.
+- Receipt links use ordinary simple entries or the logical mixed source;
+  journals and depreciation entries cannot receive links. Import entry targets
+  must be simple. Entity-qualified FKs continue to apply to every relationship.
+
+The checks target affected relationships, not repeated whole-ledger snapshots.
+Adapters still own active-reference validation, normalized allocation/schedule
+calculations, generated identities, receipt limits and supported read mappings.
+They must lock the complete affected set before running their domain callbacks.
+
+Upgrade performs a one-time validation of existing affected roots and link
+targets. Incompatible rows cause the entire migration to roll back, retaining
+the prior revision/data; the operator must inspect and correct the declared
+state through the supported inactive-data workflow before retrying. There is
+no automatic history repair or startup conversion. Explicit downgrade removes
+these new guards and occurrence version triggers while preserving data and
+existing aggregate counters; normal runtime never invokes downgrade.
+
 ## Safe failures and remaining acceptance
 
 `repository_operation` translates raw/nested/deferred provider failures into
@@ -170,19 +237,27 @@ Native tests cover independent loaded callers, a later stale update/delete,
 an overlapping writer, incarnation/scope checks, versioned detail/link changes,
 inline accounting atomicity, isolated occurrence commit units, migration
 downgrade/reupgrade, and safe nested failures. Existing native catalog tests
-verify entity-qualified FKs across all 26 tables. Sheets tests cover optional
+verify entity-qualified FKs across all 26 tables. New native cases exercise
+complete/inspectable pairs, forbidden history/target changes, secondary
+cross-entity references, a partial/stale bulk token set before callbacks, real
+service inline-reference commit/rollback, real recurring service reconciliation,
+and migration validation/refusal against existing data. Sheets tests cover optional
 baselines, no-baseline compatibility, failure before inline tags, normalization
 and two-workbook isolation.
 
-**#253 remains open.** #245/#246 now integrate the core reference/accounting
-adapters with these helpers and verify native loaded-caller and overlapping-writer
-behavior; see [core repository composition](POSTGRESQL.md#core-repository-composition-245--246).
-Remaining work is #247–#252's boundary/baseline/read-model integration and
-cross-adapter concurrent verification; specialized mixed-use
-complete/inspectable relationships, recurring target/provenance/history rules,
-asset override/committed-event protections, and allowed document/import targets;
-plus #221's required commercial caller propagation. Occurrence provenance and
-other secondary relationships must be covered as their supported adapters land.
-Each adapter must enforce its supported invariants from its first release.
+The shared guards and specialized relational enforcement are implemented.
+#245–#252 own the full domain adapters and must verify their actual
+boundary/baseline/read-model integration against these rules as each slice
+lands. #221 owns required commercial load/form/request propagation. These are
+coordinated delivery/verification steps, not prerequisites that prevent #253's
+shared implementation. Contract probes prove the exercised service/SQL commit
+behavior without claiming that absent full adapters or commercial endpoints
+exist. Keep #253's acceptance evidence open where it requires those concrete
+consumer paths; each adapter enforces its invariants from its first release.
+#245/#246 integrate the core reference/accounting adapters with these helpers
+and verify native loaded-caller and overlapping-writer behavior; see
+[core repository composition](POSTGRESQL.md#core-repository-composition-245--246).
+#247 integrates committed, entity-scoped reporting snapshots and verifies a
+bounded concurrent writer; its read models do not carry mutation baselines.
 This slice does not satisfy #258's production activation gate, #257 migration
 acceptance, #259 recovery rehearsal or #260 complete entity export.
