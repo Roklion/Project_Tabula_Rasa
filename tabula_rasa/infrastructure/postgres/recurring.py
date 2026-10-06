@@ -121,7 +121,7 @@ class PostgresRecurringRepository(EntityRepository):
             return [self.key('recurring_schedules', identity)]
         return []
 
-    def prepare_initial(self, connection, data, *, mixed, current=None, projection=None):
+    def prepare_initial(self, connection, data, *, mixed, schedule_locked, current=None, projection=None):
         identity = clean_text(data.get('schedule_id'), 'Schedule ID') or str(uuid4())
         if identity in {data.get('transaction_id'), data.get('source_id'), data.get('linked_transaction_id')}:
             raise StorageValidationError('Schedule identity must be distinct from its occurrence identities.')
@@ -150,6 +150,8 @@ class PostgresRecurringRepository(EntityRepository):
         existing = connection.execute(text('SELECT * FROM recurring_schedules WHERE entity_id=:scope AND id=:id'),
                                       {'scope': self.entity_id, 'id': identity}).mappings().first()
         if existing:
+            if not schedule_locked:
+                raise StorageConflictError('The schedule appeared after lock discovery; reload before trying again.')
             stored = self.project(connection, existing)
             check_expected_snapshot(stored, {field: schedule[field] for field in SCHEDULE_EDITABLE})
             schedule = stored
@@ -180,8 +182,8 @@ class PostgresRecurringRepository(EntityRepository):
         # Derive stable initial identities with the same domain owner as future occurrences.
         payload = {**data, 'schedule_id': identity, 'source_kind': 'mixed_use' if mixed else 'transaction'}
         with self.operation() as connection:
-            refs = self.transactions.references(connection, lock=True,
-                   root_keys=self.existing_schedule_keys(connection, identity))
+            schedule_keys = self.existing_schedule_keys(connection, identity)
+            refs = self.transactions.references(connection, lock=True, root_keys=schedule_keys)
             template = self.template(payload, refs, schedule_id=identity)
             initial = occurrence_data(template, date.fromisoformat(template['start_date']), role='initial')
             payload = {**initial, **payload}
@@ -192,7 +194,7 @@ class PostgresRecurringRepository(EntityRepository):
                 payload['transaction_id'] = data.get('transaction_id') or initial['transaction_id']
             for field in RECURRING_FIELDS:
                 payload.pop(field, None)
-            schedule, source, prepared, refs = self.prepare_initial(connection, payload, mixed=mixed)
+            schedule, source, prepared, refs = self.prepare_initial(connection, payload, mixed=mixed, schedule_locked=bool(schedule_keys))
             existing = connection.execute(text('SELECT * FROM recurring_occurrences WHERE entity_id=:scope AND schedule_id=:id AND scheduled_date=:date'),
                                           {'scope': self.entity_id, 'id': identity, 'date': schedule['start_date']}).mappings().first()
             if existing:
@@ -269,7 +271,7 @@ class PostgresRecurringRepository(EntityRepository):
                 raise StorageValidationError('Only an existing Expense can be made recurring.')
             data = {**{key: value for key, value in current.items() if key != 'payee'}, **changes,
                     'source_id' if mixed else 'transaction_id': identity}
-            schedule, source, prepared, refs = self.prepare_initial(connection, data, mixed=mixed,
+            schedule, source, prepared, refs = self.prepare_initial(connection, data, mixed=mixed, schedule_locked=bool(schedule_keys),
                                                                     current=current, projection=projection)
             if mixed:
                 prepared = self.mixed.validate_pair(connection, source, prepared, refs, current=projection)

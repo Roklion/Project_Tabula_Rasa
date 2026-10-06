@@ -121,7 +121,7 @@ For existing full snapshots, the domain adapter compares normalized persisted
 fields and relationships, excluding derived display labels/totals/next-due and
 attention fields. A partial expected record is insufficient for a commercial
 guard. This foundation does not implement SQL/domain snapshot projections;
-#245â€“#252 own those mappings. The token path covers database metadata without
+#245–#252 own those mappings. The token path covers database metadata without
 embedding SQL columns in services.
 
 The new Sheets account comparison includes ID, name, type, classification,
@@ -251,7 +251,7 @@ The shared guards and specialized relational enforcement are implemented.
 #245/#246 integrate the core reference/accounting adapters with these helpers
 and verify native loaded-caller and overlapping-writer behavior; see
 [core repository composition](POSTGRESQL.md#core-repository-composition-245--246).
-#247â€“#252 own the remaining domain adapters and must verify their actual
+#247–#252 own the remaining domain adapters and must verify their actual
 boundary/baseline/read-model integration against these rules as each slice
 lands. #221 owns required commercial load/form/request propagation. These are
 coordinated delivery/verification steps, not prerequisites that prevent #253's

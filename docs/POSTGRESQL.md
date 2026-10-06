@@ -55,9 +55,9 @@ only for an intentional local reset.
 | Variable | Meaning / default |
 | --- | --- |
 | `TABULA_DATABASE_URL` | Explicit target database. `postgresql://` normalizes to `postgresql+psycopg://`; other drivers are rejected. Optional for Sheets, required for DB commands. |
-| `TABULA_DATABASE_CONNECT_TIMEOUT` | Initial connection timeout in seconds, 1â€“60; default 5. |
-| `TABULA_DATABASE_POOL_SIZE` | Connections retained per process, 1â€“50; default 5. |
-| `TABULA_DATABASE_MAX_OVERFLOW` | Extra concurrent connections per process, 0â€“50; default 5. |
+| `TABULA_DATABASE_CONNECT_TIMEOUT` | Initial connection timeout in seconds, 1–60; default 5. |
+| `TABULA_DATABASE_POOL_SIZE` | Connections retained per process, 1–50; default 5. |
+| `TABULA_DATABASE_MAX_OVERFLOW` | Extra concurrent connections per process, 0–50; default 5. |
 | `TABULA_TEST_DATABASE_URL` | Explicit test administrator endpoint with CREATE DATABASE permission. No fallback to `TABULA_DATABASE_URL`. |
 | `TABULA_POSTGRES_PORT` | Compose loopback port; default 55432. |
 
@@ -392,7 +392,9 @@ retry; callers inspect stable identities before resubmission.
 `TransactionService.create_occurrence` uses the adapter's optional dedicated
 occurrence hook; Sheets retains its existing create fallback. PostgreSQL's hook,
 mixed occurrence creation and attention writes refuse an enclosing transaction.
-Initial creation/conversion instead joins one operation covering the schedule,
+Initial creation/conversion refuses a schedule that appears after lock discovery
+with a reload conflict; it never adopts an existing root outside the ordered
+lock set. It otherwise joins one operation covering the schedule,
 inline payee/tag resolution, accounting and association. No pending partial pair
 is created by these SQL operations. Repeated initial requests can confirm the
 existing initial or generated occurrence at that natural key; a repeated
@@ -495,7 +497,7 @@ Run the existing full suite with this endpoint too when validating shared change
 ## Delivery boundary for the initiative
 
 #244 supplies the reusable runtime and baseline. #245/#246 now supply the core
-reference and accounting adapters described above. #247â€“#252 complete the
+reference and accounting adapters described above. #247–#252 complete the
 remaining domain mappings and mutation constraints/tests. #253 supplies shared
 caller-baseline transport, aggregate version advancement and ordered locks.
 Cross-adapter acceptance remains coordinated with the domain repository slices.
@@ -511,7 +513,7 @@ The full PostgreSQL repository paths are not exposed by the current application;
 commercial mutation should rely on FK/row checks alone. Every repository slice
 must enforce its supported invariants from its first implementation. Stable
 entity/reference/transaction slices (#245/#246 and usable #247) unblock early
-#221 web/API work. Final v13 extraction/reconciliation (#254â€“#257), complete
+#221 web/API work. Final v13 extraction/reconciliation (#254–#257), complete
 entity export (#260), recovery rehearsal (#259), and controlled single-backend
 activation (#258) remain separate. No Sheets data migration, dual write,
 identity model, frontend replacement, or production activation happens here.

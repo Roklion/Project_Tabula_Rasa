@@ -504,7 +504,7 @@ Document/receipt mutations and reporting queries retain their separate
 service owners. Contracts define behavior for a future relational
 adapter without specifying PostgreSQL tables or an HTTP API.
 
-### Recurring, assets, and mixed-use services (#230â€“#232)
+### Recurring, assets, and mixed-use services (#230–#232)
 
 The production composition supplies `RecurringService`, `AssetService`, and
 `MixedUseService` alongside the same profile's transaction and journal services.

@@ -227,3 +227,58 @@ def test_schedule_change_between_occurrences_stops_stale_generation(database, mo
     if rerun:
         assert all(row.get('total_expense', row.get('amount')) == ('180.00' if is_mixed else '18.00') for row in rerun)
     assert alpha.recurring.reconcile(as_of='2026-03-01')['generated'] == []
+
+
+@pytest.mark.parametrize('is_mixed', [False, True])
+@pytest.mark.parametrize('convert', [False, True])
+def test_initial_operation_refuses_schedule_that_appears_after_discovery(database, monkeypatch, is_mixed, convert):
+    from tabula_rasa.infrastructure.postgres.config import DatabaseSettings
+    from tabula_rasa.infrastructure.postgres.runtime import Database
+    from tabula_rasa.infrastructure.postgres.composition import create_postgres_services
+    from tabula_rasa.infrastructure.postgres.recurring import PostgresRecurringRepository
+
+    alpha, beta = seed_core(database)
+    data = {**schedule(), **(mixed() if is_mixed else {}),
+            'source_kind': 'mixed_use' if is_mixed else 'transaction'}
+    original_record = None
+    if convert:
+        if is_mixed:
+            original_record = alpha.mixed_use.create(source_id='source', linked_transaction_id='projection', **mixed())
+        else:
+            original_record = alpha.transactions.create(transaction_id='existing', **expense(txn_date=data['txn_date']))
+    other = Database(DatabaseSettings(database.engine.url))
+    client = create_postgres_services(other, 'alpha')
+    discover = PostgresRecurringRepository.existing_schedule_keys
+    fired = False
+
+    def appear(self, connection, identity):
+        nonlocal fired
+        keys = discover(self, connection, identity)
+        if not fired and identity == 'appeared':
+            assert keys == []
+            fired = True
+            client.recurring.create(schedule_id=identity, **data)
+        return keys
+    monkeypatch.setattr(PostgresRecurringRepository, 'existing_schedule_keys', appear)
+    try:
+        with pytest.raises(StorageConflictError, match='appeared after lock discovery'):
+            if convert:
+                if is_mixed:
+                    alpha.recurring.from_mixed_use('source', expected_source=original_record,
+                                                  schedule_id='appeared', name=data['name'])
+                else:
+                    alpha.recurring.from_transaction('existing', expected_transaction=original_record,
+                                                    schedule_id='appeared', name=data['name'])
+            elif is_mixed:
+                alpha.recurring.create_mixed_expense(schedule_id='appeared', **data)
+            else:
+                alpha.recurring.create_expense(schedule_id='appeared', **data)
+        assert fired
+        assert alpha.recurring.get('appeared')['status'] == 'active'
+        assert len(alpha.transactions.list()) == (1 if convert else 0)
+        assert all(not row['recurring_schedule_id'] for row in alpha.transactions.list())
+        assert beta.recurring.list() == beta.transactions.list() == []
+        with database.transaction(read_only=True) as connection:
+            assert connection.scalar(text("SELECT count(*) FROM recurring_occurrences WHERE entity_id='alpha'")) == 0
+    finally:
+        other.dispose()
