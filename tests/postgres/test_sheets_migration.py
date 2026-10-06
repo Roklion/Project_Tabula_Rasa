@@ -200,3 +200,37 @@ def test_canonical_occurrence_and_journal_postings_restart_in_two_profiles(datab
             ("category", "Debit"), ("account", "Credit")]
         assert runner.execute(plan, dry_run=False)["skipped_units"] == 4
     assert counts(database, "alpha") == counts(database, "beta")
+
+
+def test_locale_collated_tags_restart_and_detect_changes_in_two_profiles(database):
+    # Only this fixture's disposable database changes; the runtime is untouched.
+    with database.transaction() as connection:
+        connection.execute(text('ALTER TABLE tags ALTER COLUMN id TYPE text COLLATE "en-x-icu"'))
+        connection.execute(text('ALTER TABLE schedule_tags ALTER COLUMN tag_id TYPE text COLLATE "en-x-icu"'))
+    runner = PostgresMigrationRunner(database)
+    for profile in ("alpha", "beta"):
+        values = values_with_records(recurring=True)
+        fields = values["Tags"][0]
+        tag = dict(zip(fields, values["Tags"][1]))
+        values["Tags"] = [fields]
+        for identity in ("a", "B"):
+            record = {**tag, "id": identity, "name": "Synthetic tag " + identity}
+            values["Tags"].append([record[field] for field in fields])
+        for title in ("Transactions", "RecurringSchedules"):
+            values[title][1][values[title][0].index("tag_ids")] = '["B","a"]'
+        plan = plan_for(values, profile=profile, entity=profile, workbook=f"workbook-{profile}")
+        assert runner.execute(plan, dry_run=False)["loaded_units"] == 3
+        assert PostgresTransactionRepository(database, profile).list()[0]["tag_ids"] == ["a", "B"]
+        with database.transaction(read_only=True) as connection:
+            assert connection.scalars(text("SELECT tag_id FROM schedule_tags WHERE entity_id=:scope ORDER BY tag_id"),
+                                      {"scope": profile}).all() == ["a", "B"]
+        assert runner.execute(plan, dry_run=False)["skipped_units"] == 3
+    assert counts(database, "alpha") == counts(database, "beta")
+    # Ordering is immaterial; actual membership changes must still block restart.
+    for table, kind in (("entry_tags", "recurring_entry"), ("schedule_tags", "schedule")):
+        with database.transaction() as connection:
+            connection.execute(text(f"DELETE FROM {table} WHERE entity_id='alpha' AND tag_id='a'"))
+        unit = next(unit for unit in plan_for(values, profile="alpha").units if unit.kind == kind)
+        with database.transaction(read_only=True) as connection:
+            assert not CoreLoader().verify(connection, plan_for(values, profile="alpha"), unit)
+    assert runner.execute(plan, dry_run=False)["skipped_units"] == 3

@@ -126,7 +126,7 @@ class CoreLoader:
                 return False
             tags = connection.scalars(text("SELECT tag_id FROM schedule_tags WHERE entity_id=:scope AND schedule_id=:id ORDER BY tag_id"),
                                       {"scope": scope, "id": found["id"]}).all()
-            return int(row["recurrence_interval"]) == found["recurrence_interval"] and tags == normalize_tag_ids(row["tag_ids"])
+            return int(row["recurrence_interval"]) == found["recurrence_interval"] and sorted(tags) == normalize_tag_ids(row["tag_ids"])
         title = "JournalEntries" if unit.kind == "journal" else "Transactions"
         row = unit.rows[title][0]
         repository = (PostgresJournalRepository if unit.kind == "journal" else PostgresTransactionRepository)(None, scope)
@@ -144,7 +144,7 @@ class CoreLoader:
                 if any(str(actual[field]) != wanted[field] for field in
                        ("id", "target_type", "target_id", "side", "amount", "payee_id", "description")):
                     return False
-        return all((found[field] == normalize_tag_ids(row[field]) if field == "tag_ids"
+        return all((sorted(found[field]) == normalize_tag_ids(row[field]) if field == "tag_ids"
                     else found[field] == [] if field == "receipt_references"
                     else str(found[field]) == (identity if field == "id" else row[field])) for field in fields)
 
