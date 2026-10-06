@@ -1,6 +1,12 @@
 """Opt-in repository service graph; production authority selection belongs to #258."""
 
+from dataclasses import replace
+
+from tabula_rasa.application.recurring import RecurringService
 from tabula_rasa.application.services import assemble_application_services
+from .assets import PostgresAssetRepository
+from .mixed_use import PostgresMixedUseRepository
+from .recurring import PostgresRecurringRepository
 from .accounting import PostgresTransactionRepository, PostgresJournalRepository
 from .documents import PostgresReceiptRepository
 from .imports import PostgresTransactionImportRepository
@@ -22,7 +28,7 @@ def create_postgres_services(database, entity_id, *, document_store=None, docume
     ledger.ledger_name  # Reject an unknown entity before returning a service graph.
     if (document_store is None) != (document_store_kind is None):
         raise ValueError('Supply both the authorized DocumentStore and its stable store kind.')
-    return assemble_application_services(
+    services = assemble_application_services(
         entity_id, ledger_repository=ledger,
         account_repository=PostgresAccountRepository(database, entity_id),
         category_repository=PostgresCategoryRepository(database, entity_id),
@@ -30,6 +36,8 @@ def create_postgres_services(database, entity_id, *, document_store=None, docume
         tag_repository=PostgresTagRepository(database, entity_id),
         transaction_repository=PostgresTransactionRepository(database, entity_id),
         journal_repository=PostgresJournalRepository(database, entity_id),
+        asset_repository=PostgresAssetRepository(database, entity_id),
+        mixed_use_repository=PostgresMixedUseRepository(database, entity_id),
         import_repository=PostgresTransactionImportRepository(database, entity_id),
         mileage_repository=PostgresMileageRepository(database, entity_id),
         receipt_repository=PostgresReceiptRepository(
@@ -38,3 +46,10 @@ def create_postgres_services(database, entity_id, *, document_store=None, docume
         document_store=document_store,
         reporting_repository=PostgresLedgerQueryRepository(database, entity_id),
     )
+    # Initial creation/conversion uses these same service preparation owners;
+    # reconciliation generates through the same transaction/mixed services.
+    recurring = PostgresRecurringRepository(
+        database, entity_id, transactions=services.transactions, mixed_use=services.mixed_use,
+    )
+    return replace(services, recurring=RecurringService(recurring,
+                   transactions=services.transactions, mixed_use=services.mixed_use))

@@ -726,8 +726,16 @@ snapshot. Batched reads preserve disjoint simple/journal streams and historical
 references; filters and financial calculations retain their existing application
 and domain owners. Reporting requires its own outer query operation, rather than
 joining a partially written mutation. [Reporting and query-plan coverage](POSTGRESQL.md#reporting-repository-247)
-documents the contract and native validation. Recurring/mixed-use and asset capabilities remain
-uninstalled; core reporting supports the early #221 commercial web/API milestone.
+documents the contract and native validation, supporting the early #221
+commercial web/API milestone.
+
+The opt-in composition also supplies #248's recurring/mixed-use and #249's asset
+services, reusing current domain preparation and canonical source-owned posting
+paths. Reconciliation commits independent occurrences; initial source pairs and
+asset posting calls retain their atomic operation boundaries. See the
+[secondary repository guide](POSTGRESQL.md#recurring-mixed-use-and-asset-repositories-248--249).
+The merged mileage/document/import capabilities (#250–#252) retain their
+separate adapter ownership and explicit document-store binding.
 Later slices, whole-profile
 reconciliation, concurrency verification, complete entity export, and recovery
 rehearsals remain required before #258 commercial production activation. Identity

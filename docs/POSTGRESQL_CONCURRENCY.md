@@ -47,13 +47,15 @@ An occurrence creation or independent attention write uses
 `repository_operation(database, require_outer=True)`. This refuses nesting in
 an all-run transaction. Each committed occurrence can then enter `generated`;
 a failed occurrence rolls back before attention writes or the next schedule.
-#248 owns the full recurring adapter and best-effort attention policy. Native
-contract probes now run the real `RecurringService` and `TransactionService`:
+#248's full recurring/mixed-use adapters implement the best-effort attention
+policy; their native repository tests and the earlier contract probes run the
+real `RecurringService` and `TransactionService`:
 a deferred SQL failure on the second occurrence preserves the first, permits
 a healthy schedule to continue, and produces only durable returned records.
 Attention failure cannot undo those commits; rerun fills missing dates without
 duplicates. The small test probes implement only the exercised ports and are
-not deployable adapters or substitutes for #248's full adapter conformance.
+not deployable adapters. #248's full conformance tests exercise its actual
+source/accounting ports, including SQL failures on mixed occurrence pairs.
 
 Connection loss can leave commit status uncertain. The safe `unavailable`
 result makes no rollback claim and does not retry. Domain adapters must classify

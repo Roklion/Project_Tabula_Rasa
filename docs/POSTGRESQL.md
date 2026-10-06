@@ -185,11 +185,12 @@ text. #253 and domain repositories translate these infrastructure codes into
 the existing application error/result contract at their boundary. No provider
 exception type is added to a service contract in this foundation.
 
-## Repository composition (#245 / #246 / #250–#252)
+## Repository composition (#245–#252)
 
 `create_postgres_services(database, entity_id)` supplies the existing ledger,
-account, category, payee, tag, transaction, journal, reporting, mileage and import
-application services for one explicit, existing business entity. All adapters share the same `Database`.
+account, category, payee, tag, transaction, journal, reporting, recurring, mixed-use,
+asset, mileage and import application services for one explicit, existing business
+entity. All adapters share the same `Database`.
 The caller supplies authorized entity context and owns the database lifecycle;
 this function neither authenticates users nor selects the production backend.
 Schema upgrades remain an explicit operator step.
@@ -263,10 +264,10 @@ selected entity. Unlinking/deleting an ordinary entry retains the document.
 Document acceptance and external bytes follow the metadata/store boundary below. Existing
 source-owned projections and recurring provenance are readable; generic mutation
 of derived projections or provenance is refused. Existing ordinary recurring
-occurrences retain their association on edit and remove it on deletion. New
-recurring/source/asset workflows remain in their owning later repository slices.
-Recurring/mixed-use and asset services remain their separate repository slices.
-Receipt services require an explicitly supplied authorized DocumentStore.
+occurrences retain their association on edit and remove it on deletion. The
+secondary repositories described below implement recurring/source/asset
+workflows alongside mileage and imports. Receipt services require an explicitly
+supplied authorized DocumentStore.
 
 Reuse map: the implementation inspected and extends the existing reference-data,
 transaction/journal preparation, canonical posting translation, service assembly,
@@ -485,6 +486,113 @@ isolation with overlapping IDs, inactive historical labels, source-owned history
 safe read failure and a bounded concurrent-write snapshot. The existing shared
 service-contract fixture runs one independently calculated reporting workflow
 on both Sheets and PostgreSQL.
+
+## Recurring, mixed-use and asset repositories (#248 / #249)
+
+These secondary slices implement the existing #230–#232 contracts under
+[EPIC #220](https://github.com/Roklion/Project_Tabula_Rasa/issues/220) and
+[initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124).
+They consume #245/#246's canonical accounting repositories and #253's shared
+transaction, baseline and integrity implementation. #247 reporting and the
+parallel #250–#252 repositories retain their separate ownership. Integrating
+those slices must retain each capability's composition arguments and the shared
+accounting writer rather than replacing the factory wholesale.
+
+`PostgresRecurringRepository` provides schedule creation/update, coherent
+snapshots, independent attention writes, initial expense creation and conversion.
+The existing `RecurringService` owns cadence, due dates, reconciliation and
+attention classification. A reconciliation snapshot closes before generation;
+each occurrence commits its entry or complete mixed pair and its natural-key
+association in one independent transaction. Only after that commit can its value
+enter `generated`. A later SQL or deferred-check failure rolls back that one
+occurrence, preserves earlier commits, and permits unrelated schedules to run.
+Each occurrence locks the schedule in the shared aggregate order and checks the
+loaded schedule baseline and active status before preparation; a concurrent
+edit, pause or end stops stale generation while retaining earlier commits.
+When another reconciliation has already committed the requested stable identity,
+the waiting caller confirms matching business fields and occurrence provenance
+without rewriting the record; mismatched contents or unrelated identities fail.
+Mixed-use confirmation validates both the complete source and its projection.
+Attention remains best effort: a failed attention write cannot undo occurrences
+or poison the next schedule. An uncertain response fails safely without a blind
+retry; callers inspect stable identities before resubmission.
+
+`TransactionService.create_occurrence` uses the adapter's optional dedicated
+occurrence hook; Sheets retains its existing create fallback. PostgreSQL's hook,
+mixed occurrence creation and attention writes refuse an enclosing transaction.
+Initial creation/conversion refuses a schedule that appears after lock discovery
+with a reload conflict; it never adopts an existing root outside the ordered
+lock set. It otherwise joins one operation covering the schedule,
+inline payee/tag resolution, accounting and association. No pending partial pair
+is created by these SQL operations. Repeated initial requests can confirm the
+existing initial or generated occurrence at that natural key; a repeated
+conversion with the same explicit schedule identity confirms matching committed
+facts without another mutation. Conflicting payloads fail. Existing conversion
+retains the source/entry identity, creation instant and receipt links. Template
+changes preserve historical occurrences; ordinary occurrence edits retain the
+association and deletion removes it. Schedule tokens exclude attention and
+derived due/display metadata.
+
+`PostgresMixedUseRepository` persists source-authoritative allocation output and
+its deterministic Simple Ledger projection atomically. It reuses
+`MixedUseService.prepare_pair`, transaction preparation and the existing
+allocation/parity owners. Source and projection identities remain stable; tags
+are maintained on both canonical owners, while receipts have one logical source
+link set visible through both read models. Links require matching registered
+metadata in the selected entity, enforce the current 100-receipt limit and one
+logical target, and preserve retained-link creation instants during reordering.
+Unlinking or deleting a pair retains document metadata and external bytes.
+Document registration/storage remains #251's responsibility. `sources()` exposes
+declared missing/mismatched relationships for inspection; normal list/get/edit,
+link and generation refuse incomplete pairs and never regenerate them.
+
+`PostgresAssetRepository` maps current asset properties, tags, optional acquisition
+references and historical overrides to the canonical asset tables. `AssetService`,
+`asset.py`, `depreciation.py` and `JournalService.prepare_depreciation` retain the
+lifecycle, straight-line schedule and posting decisions. Depreciation remains a
+Simple Ledger Expense with two canonical postings, including zero-valued quarters;
+it does not add a second advanced journal. Its stable entry ID and the
+`depreciation_events` entity/asset/sequence key identify the same committed period.
+Posting loads only the selected asset history and candidate period identities,
+preserving collision checks without projecting unrelated ledger records.
+All periods from one posting call commit together; a failed period rolls back
+that call's entries, events and asset version. Coupled infrastructure operations
+can join asset mutation and posting in the same outer transaction. Loaded asset
+locks precede fresh history checks, so concurrent edits/postings cannot bypass
+saved-history restrictions or double-post. Descriptive edits and valid retirement
+remain supported; mixed-use depreciation (#121) remains outside this slice.
+
+All records and relationships include the selected entity. Source, schedule and
+asset mappings return #253 baselines after participating detail writes; supplied
+stale or cross-entity tokens fail before mutation callbacks. Legacy/internal
+no-baseline calls retain fresh locking but provide no stale-form guarantee.
+#221 remains responsible for requiring and transporting loaded baselines and
+#222 for deriving authorized entity context.
+
+Reuse map: inspect the three application/domain owners, their Sheets adapters,
+canonical migration/ADR, core accounting/reference adapters and #253 operation
+helpers; extend the canonical writer for typed source ownership, source receipt
+targets and ordered secondary-root locks. Small shared helpers own occurrence
+projection and tag associations. No schema revision, allocation/recurrence/
+depreciation formula, parallel state machine, token scheme, retry manager or
+workbook lock is introduced.
+
+Native tests in `tests/postgres/test_recurring_repository.py`,
+`test_mixed_use_repository.py` and `test_asset_repository.py` verify committed
+results after immediate/deferred SQL failures, best-effort attention failure,
+rerun deduplication, source/receipt atomicity and retention, inspectable incomplete
+states, asset history/zero periods, shared-operation rollback, independent loaded
+callers and overlapping writers, and two entities with overlapping identities.
+`test_secondary_service_contracts.py` runs independently expected month-end,
+allocation, conversion and depreciation workflows through both Sheets and native
+PostgreSQL services. Tests use only synthetic disposable databases.
+
+These adapters do not switch the active Sheets ledger, add scheduling workers,
+migrate source records or document bytes, or satisfy production activation by
+themselves. #256 can consume these domain paths for secondary migration; #257
+whole-profile reconciliation, #260 complete entity export, #259 real recovery
+rehearsals, #261's frozen source boundary and #253's remaining consumer checks
+still gate #258 commercial production activation.
 
 ## Native integration tests
 

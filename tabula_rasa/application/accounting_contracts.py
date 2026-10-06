@@ -74,7 +74,11 @@ class TransactionRepository(Protocol):
     serialization, cache invalidation and bounded uncertain-write recovery.
     Bulk operations use the same domain rules against their fresh selection.
     Generic update/delete/bulk operations reject derived projections; source
-    workflows retain ownership. Recurring provenance is immutable.
+    workflows retain ownership. Recurring provenance is immutable. An adapter
+    may additionally expose create_occurrence with create arguments plus
+    schedule_id and expected_schedule to check the loaded schedule inside an
+    independently committed occurrence boundary; TransactionService
+    uses it when available, preserving existing adapters' create fallback.
     """
 
     def prepare_workspace(self) -> None:

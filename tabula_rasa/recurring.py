@@ -242,10 +242,12 @@ def decode_schedule(values: Mapping[str, Any]) -> dict[str, str]:
         schedule["attention_message"] = "Missing schedule ID; edit the workbook."
     try:
         schedule["tag_ids"] = _encode_tag_ids(
-            _normalize_tag_ids(schedule.get("tag_ids", ""))
+            _normalize_tag_ids(values.get("tag_ids", ""))
         )
     except StorageValidationError:
         schedule["tag_ids"] = str(values.get("tag_ids", "") or "")
+    if values.get('baseline'):
+        schedule['baseline'] = values['baseline']
     return schedule
 
 
