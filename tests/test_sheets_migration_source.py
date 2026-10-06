@@ -348,3 +348,17 @@ def test_mileage_shared_preparation_freezes_canonical_fields_for_two_profiles():
         assert plan.report({"foundation", "simple_entry"})["missing_loaders"] == ["mileage"]
         plans.append(plan)
     assert plans[0].run_id != plans[1].run_id
+
+
+@pytest.mark.parametrize("source_kind", ["transaction", "Transaction", " Transaction "])
+@pytest.mark.parametrize("field,value", [("total_expense", "25.00"),
+                                         ("business_use_percentage", "50"),
+                                         ("allocation_rationale", "Synthetic allocation")])
+def test_ordinary_schedule_preserves_mixed_field_refusal_after_kind_normalization(source_kind, field, value):
+    values = values_with_records(recurring=True)
+    fields = values["RecurringSchedules"][0]
+    values["RecurringSchedules"][1][fields.index("source_kind")] = source_kind
+    values["RecurringSchedules"][1][fields.index(field)] = value
+    with pytest.raises(MigrationError, match="RecurringSchedules row 2: invalid domain") as caught:
+        plan_for(values)
+    assert caught.value.__context__ is None

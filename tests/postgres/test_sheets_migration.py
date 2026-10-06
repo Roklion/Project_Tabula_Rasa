@@ -253,3 +253,15 @@ def test_signed_zero_opening_balances_restart_and_detect_drift_in_two_profiles(d
     with pytest.raises(MigrationError, match="committed migration target has changed"):
         runner.execute(plans[0], dry_run=False)
     assert runner.execute(plans[1], dry_run=False)["skipped_units"] == 2
+
+
+def test_normalized_schedule_source_kind_loads_and_restarts_in_two_profiles(database):
+    runner = PostgresMigrationRunner(database)
+    for profile, source_kind in (("alpha", "Transaction"), ("beta", " Transaction ")):
+        values = values_with_records(recurring=True)
+        values["RecurringSchedules"][1][values["RecurringSchedules"][0].index("source_kind")] = source_kind
+        plan = plan_for(values, profile=profile, entity=profile, workbook=f"workbook-{profile}")
+        assert plan.snapshot.tables["RecurringSchedules"][0]["source_kind"] == "transaction"
+        assert runner.execute(plan, dry_run=False)["loaded_units"] == 3
+        assert runner.execute(plan, dry_run=False)["skipped_units"] == 3
+    assert counts(database, "alpha") == counts(database, "beta")

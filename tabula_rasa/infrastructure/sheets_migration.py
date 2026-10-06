@@ -94,11 +94,12 @@ def _normalize_record(title, row, lookups):
         row.update({field: value for field, value in prepared.as_record().items()
                     if field in row and field != "tag_ids"})
     elif title == "RecurringSchedules":
-        if row["source_kind"] == "transaction" and (row["total_expense"] or row["business_use_percentage"] or row["allocation_rationale"]):
-            raise StorageValidationError("Ordinary schedule contains mixed-use fields.")
-        row.update(schedule_template(row, schedule_id=row["id"], created_at=row["created_at"], updated_at=row["updated_at"],
+        prepared = schedule_template(row, schedule_id=row["id"], created_at=row["created_at"], updated_at=row["updated_at"],
                                      account_lookup=lookups["Accounts"], category_lookup=lookups["Categories"],
-                                     payee_lookup=lookups["Payees"], tag_lookup=lookups["Tags"]))
+                                     payee_lookup=lookups["Payees"], tag_lookup=lookups["Tags"])
+        if prepared["source_kind"] == "transaction" and (row["total_expense"] or row["business_use_percentage"] or row["allocation_rationale"]):
+            raise StorageValidationError("Ordinary schedule contains mixed-use fields.")
+        row.update(prepared)
 
 
 def snapshot_from_values(binding: Binding, values, *, extracted_at=None):
