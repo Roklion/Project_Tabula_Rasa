@@ -5,6 +5,7 @@ from .accounting import PostgresTransactionRepository, PostgresJournalRepository
 from .documents import PostgresReceiptRepository
 from .imports import PostgresTransactionImportRepository
 from .mileage import PostgresMileageRepository
+from .reporting import PostgresLedgerQueryRepository
 from .reference_data import (
     PostgresLedgerSetupRepository, PostgresAccountRepository, PostgresCategoryRepository,
     PostgresPayeeRepository, PostgresTagRepository,
@@ -35,4 +36,5 @@ def create_postgres_services(database, entity_id, *, document_store=None, docume
             database, entity_id, store_kind=document_store_kind, store_scope_key=document_store.scope_key,
         ) if document_store is not None else None,
         document_store=document_store,
+        reporting_repository=PostgresLedgerQueryRepository(database, entity_id),
     )
