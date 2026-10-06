@@ -8,6 +8,7 @@ from .assets import PostgresAssetRepository
 from .mixed_use import PostgresMixedUseRepository
 from .recurring import PostgresRecurringRepository
 from .accounting import PostgresTransactionRepository, PostgresJournalRepository
+from .reporting import PostgresLedgerQueryRepository
 from .reference_data import (
     PostgresLedgerSetupRepository, PostgresAccountRepository, PostgresCategoryRepository,
     PostgresPayeeRepository, PostgresTagRepository,
@@ -32,6 +33,7 @@ def create_postgres_services(database, entity_id):
         journal_repository=PostgresJournalRepository(database, entity_id),
         asset_repository=PostgresAssetRepository(database, entity_id),
         mixed_use_repository=PostgresMixedUseRepository(database, entity_id),
+        reporting_repository=PostgresLedgerQueryRepository(database, entity_id),
     )
     # Initial creation/conversion uses these same service preparation owners;
     # reconciliation generates through the same transaction/mixed services.

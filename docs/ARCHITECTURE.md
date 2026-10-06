@@ -706,15 +706,23 @@ and still works without database configuration or database dependencies.
 #245/#246's explicit `postgres/composition.py` now assembles entity-scoped
 reference-data, Simple Ledger and advanced journal services on canonical
 entries/postings. It reuses #253's operation, baseline and version machinery.
-The current Streamlit service composition continues to use Sheets. The opt-in
-composition also supplies #248's recurring/mixed-use and #249's asset services,
-reusing current domain preparation and canonical source-owned posting paths.
-Reconciliation commits independent occurrences; initial source pairs and asset
-posting calls retain their atomic operation boundaries. See the
+The current Streamlit service composition continues to use Sheets. #247 adds
+`PostgresLedgerQueryRepository` and `ReportingService` to the opt-in graph, with
+entity-scoped native projections from one committed read-only REPEATABLE READ
+snapshot. Batched reads preserve disjoint simple/journal streams and historical
+references; filters and financial calculations retain their existing application
+and domain owners. Reporting requires its own outer query operation, rather than
+joining a partially written mutation. [Reporting and query-plan coverage](POSTGRESQL.md#reporting-repository-247)
+documents the contract and native validation, supporting the early #221
+commercial web/API milestone.
+
+The opt-in composition also supplies #248's recurring/mixed-use and #249's asset
+services, reusing current domain preparation and canonical source-owned posting
+paths. Reconciliation commits independent occurrences; initial source pairs and
+asset posting calls retain their atomic operation boundaries. See the
 [secondary repository guide](POSTGRESQL.md#recurring-mixed-use-and-asset-repositories-248--249).
-Reporting (#247) completes the early #221 commercial web/API milestone; reporting
-and the parallel mileage/document/import capabilities (#250–#252) have separate
-adapter and composition ownership.
+The parallel mileage/document/import capabilities (#250–#252) retain their
+separate adapter and composition ownership.
 Later slices, whole-profile
 reconciliation, concurrency verification, complete entity export, and recovery
 rehearsals remain required before #258 commercial production activation. Identity
