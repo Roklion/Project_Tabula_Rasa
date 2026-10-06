@@ -124,9 +124,12 @@ restore rehearsals remain #259/#223's work and gate #258 activation.
 
 [#253's implemented operation and baseline convention](POSTGRESQL_CONCURRENCY.md)
 extends this runtime with the adapter error boundary, ordered root guards and
-revision `0002_aggregate_versions`. Later repository slices must consume it
+revisions `0002_aggregate_versions` and `0003_domain_integrity`. Later repository
+slices must consume it
 before exposing supported mutations. The canonical baseline below remains
-revision `0001_canonical`; `upgrade` now also applies the aggregate-version revision.
+revision `0001_canonical`; `upgrade` also applies aggregate-version and specialized
+relationship/history enforcement. The latter validates existing affected rows
+once during upgrade and refuses incompatible data without partial installation.
 
 Composition constructs one `Database(DatabaseSettings(...))` per process/service
 graph. Infrastructure adapters use `with database.transaction() as connection`
@@ -163,6 +166,11 @@ codes include `ck_entry_balance`, `ck_simple_shape`, `ck_simple_category`,
 `ck_journal_shape`, `ck_depreciation_entry`, `ck_reference_hierarchy`,
 `ck_object_identity`, `ck_object_version`, `ck_entry_identity`, and
 `ck_posting_identity`.
+Specialized codes include `ck_mixed_category`, `ck_mixed_relationship`,
+`ck_recurring_relationship`, `ck_recurring_identity`, `ck_asset_relationship`,
+`ck_asset_history`, `ck_depreciation_history`, `ck_document_target`,
+`ck_import_target` and migration-only `ck_link_target`. All use SQLSTATE 23514
+and the same safe `invariant` application code; constraint text is not user text.
 
 | PostgreSQL SQLSTATE | Safe infrastructure error code |
 | --- | --- |
@@ -304,13 +312,16 @@ Run the existing full suite with this endpoint too when validating shared change
 reference and accounting adapters described above. #247–#252 complete the
 remaining domain mappings and mutation constraints/tests. #253 supplies shared
 caller-baseline transport, aggregate version advancement and ordered locks.
-Cross-adapter acceptance and specialized deferred relationship/provenance
-enforcement from ADR 0001 remain open under #253. In particular,
-mixed complete/inspectable pairs, recurring target/history rules, asset override
-and committed-event immutability, and allowed document/import targets need
-those repository slices and coordinated #253 migrations before use.
+Cross-adapter acceptance remains coordinated with the domain repository slices.
+Revision `0003_domain_integrity` implements #253's specialized enforcement from
+ADR 0001: mixed complete/inspectable pairs, recurring target/history rules,
+asset override and committed-event immutability, and allowed document/import
+targets. The actual domain repository slices
+must consume these guards, reuse the existing domain algorithms and verify
+their full supported paths before use. Native service contract probes validate
+shared atomicity and recurring failure isolation without supplying full adapters.
 
-These unimplemented paths are not exposed by the current application; no
+The full PostgreSQL repository paths are not exposed by the current application; no
 commercial mutation should rely on FK/row checks alone. Every repository slice
 must enforce its supported invariants from its first implementation. Stable
 entity/reference/transaction slices (#245/#246 and usable #247) unblock early

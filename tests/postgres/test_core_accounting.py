@@ -342,8 +342,8 @@ def test_owned_and_recurring_provenance_is_read_and_preserved_but_generic_owners
         connection.execute(text("""INSERT INTO mixed_use_sources(entity_id,id,incarnation_id,txn_date,total_expense,business_use_percentage,
             allocated_amount,account_id,category_id,allocation_rationale,expected_projection_entry_id)
             VALUES ('alpha','mixed','mixed','2026-10-05',25,50,12.50,'cash','office','Synthetic','projection')"""))
-        connection.execute(text("""INSERT INTO entries(entity_id,id,incarnation_id,txn_date,projection_kind,simple_kind,mixed_use_source_id)
-            VALUES ('alpha','projection','projection','2026-10-05','simple','Expense','mixed')"""))
+        connection.execute(text("""INSERT INTO entries(entity_id,id,incarnation_id,txn_date,projection_kind,simple_kind,mixed_use_source_id,description)
+            VALUES ('alpha','projection','projection','2026-10-05','simple','Expense','mixed','Allocation rationale: Synthetic')"""))
         connection.execute(text("""INSERT INTO postings(entity_id,id,entry_id,projection_kind,position,side,amount,account_id,category_id)
             VALUES ('alpha','projection:1','projection','simple',1,'Debit',12.50,NULL,'office'),
             ('alpha','projection:2','projection','simple',2,'Credit',12.50,'cash',NULL)"""))
