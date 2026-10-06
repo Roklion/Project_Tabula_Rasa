@@ -263,3 +263,13 @@ def test_padded_reference_identity_fails_before_planning(title, field, value):
         plan_for(values)
     assert value not in str(caught.value)
     assert caught.value.__context__ is None
+
+
+def test_journal_date_is_frozen_canonically_and_invalid_date_is_rejected():
+    values = values_with_records(journal=True)
+    index = values["JournalEntries"][0].index("txn_date")
+    values["JournalEntries"][1][index] = " 2026-10-05 "
+    assert plan_for(values) == plan_for(values_with_records(journal=True))
+    values["JournalEntries"][1][index] = "invalid date"
+    with pytest.raises(MigrationError, match="invalid domain or reference"):
+        plan_for(values)

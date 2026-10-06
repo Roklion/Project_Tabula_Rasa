@@ -79,6 +79,8 @@ def _normalize_record(title, row, lookups):
         row["kind"] = prepared["kind"]
         row["amount"] = prepared["amount"]
         row["txn_date"] = prepared["txn_date"]
+    elif title == "JournalEntries":
+        row["txn_date"] = iso_date(row["txn_date"])
     elif title == "Mileage":
         row["trip_date"] = iso_date(row["trip_date"])
         row["miles"] = _positive_miles(row["miles"])

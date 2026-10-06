@@ -167,3 +167,15 @@ def test_normalized_transfer_without_payee_loads_and_restarts_in_two_profiles(da
         assert row["kind"] == "Transfer" and row["category_id"] == row["payee_id"] == ""
         assert runner.execute(plan, dry_run=False)["skipped_units"] == 2
     assert counts(database, "alpha") == counts(database, "beta")
+
+
+def test_padded_journal_date_loads_and_restarts_in_two_profiles(database):
+    runner = PostgresMigrationRunner(database)
+    for profile in ("alpha", "beta"):
+        values = values_with_records(journal=True)
+        values["JournalEntries"][1][values["JournalEntries"][0].index("txn_date")] = " 2026-10-05 "
+        plan = plan_for(values, profile=profile, entity=profile, workbook=f"workbook-{profile}")
+        assert runner.execute(plan, dry_run=False)["loaded_units"] == 3
+        assert PostgresJournalRepository(database, profile).list()[0]["txn_date"] == "2026-10-05"
+        assert runner.execute(plan, dry_run=False)["skipped_units"] == 3
+    assert counts(database, "alpha") == counts(database, "beta")
