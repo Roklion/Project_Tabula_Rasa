@@ -25,6 +25,22 @@ variables, and real-database test setup are documented in
 [PostgreSQL development and operations](POSTGRESQL.md). Development dependencies
 include the database tools; the Sheets runtime does not require them or a DB URL.
 
+## Commercial web/API development
+
+[ADR 0002](adr/0002-commercial-web-runtime.md) selects the commercial browser,
+HTTP and deployment stack under #276/#221/#124. Follow
+[Commercial web development and deployment](COMMERCIAL_WEB.md) for the
+`tabula_rasa/http/` and `web/` package contract, Python 3.12/Node 24 tooling,
+local Vite -> API -> PostgreSQL topology, OpenAPI/client generation, environment
+separation and #279's provider/secret/persistent-staging checkpoint. Its commands
+clearly distinguish the existing PostgreSQL harness from planned #277/#278
+runtime commands; the browser and API are not scaffolded by #276.
+
+The HTTP runtime reuses application services and PostgreSQL adapters. Preserve
+the server-side #222 membership/context seam, #280 loaded-baseline form contract,
+and #223 health/request/job seams. Keep ordinary development and tests synthetic;
+the current Streamlit/Sheets setup and validation gates continue to apply.
+
 ## Local main-branch push guard
 
 The tracked .githooks/pre-push hook blocks pushes that would update remote

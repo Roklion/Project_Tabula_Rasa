@@ -742,6 +742,34 @@ rehearsals remain required before #258 commercial production activation. Identit
 and membership remain #222's responsibility rather than a new profile-key
 permission model.
 
+## Commercial browser/API runtime decision (#276)
+
+[ADR 0002: Commercial web stack and runtime topology](adr/0002-commercial-web-runtime.md)
+selects React/TypeScript with Vite, React Router, TanStack Query and React Hook
+Form; FastAPI/Pydantic/Uvicorn over the existing Python services; and a
+same-origin compiled-SPA/API container on Render with Neon PostgreSQL. It is
+the decision gate for #277 API, #278 browser shell and #279 staging under
+[EPIC #221](https://github.com/Roklion/Project_Tabula_Rasa/issues/221) and
+[initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124).
+These runtime packages/deployments remain follow-on implementation, not a change
+to today's Streamlit/Sheets authority.
+
+The HTTP composition resolves server-authorized entity context before invoking
+`create_postgres_services`; handlers translate transport models and call the
+existing application/query owners. OpenAPI generates browser transport types
+without making application services depend on HTTP DTOs. #280 carries the
+original loaded baseline through API responses, forms and edit/delete commands;
+it is #253's explicit commercial-caller dependency, not the whole web epic.
+
+#222 owns real sessions, memberships, authorization and onboarding; #223 owns
+durable jobs, audit and operations. The ADR defines their context, cookie/CSRF,
+request-ID, health and worker seams. No client-selected profile/entity ID grants
+authorization. [Commercial development and deployment](COMMERCIAL_WEB.md)
+defines package ownership, local commands, environment/secret boundaries,
+restricted synthetic alpha access and #279's persistent staging/manual setup
+checkpoint. Production authority/recovery and external beta retain the separate
+#220/#222/#223/#224 gates.
+
 ## Implementation map
 
 | Area | Primary implementation |

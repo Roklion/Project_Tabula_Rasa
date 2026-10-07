@@ -57,6 +57,8 @@ The documentation index is this section of the root README. Go directly to:
 | Goal | Guide |
 | --- | --- |
 | Understand the system and data boundaries | [Architecture](docs/ARCHITECTURE.md) |
+| Implement the selected commercial browser/API/runtime stack | [Commercial web ADR](docs/adr/0002-commercial-web-runtime.md) |
+| Follow commercial package, local topology and deployment conventions | [Commercial development and deployment](docs/COMMERCIAL_WEB.md) |
 | Implement the commercial PostgreSQL accounting model | [Canonical schema ADR](docs/adr/0001-canonical-accounting-schema.md) |
 | Start PostgreSQL, run migrations, and test database infrastructure | [PostgreSQL development and operations](docs/POSTGRESQL.md) |
 | Implement PostgreSQL mutations and carry loaded-record baselines | [PostgreSQL concurrency convention](docs/POSTGRESQL_CONCURRENCY.md) |

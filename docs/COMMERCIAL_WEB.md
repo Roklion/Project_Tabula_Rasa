@@ -1,0 +1,257 @@
+# Commercial web development and deployment
+
+[ADR 0002](adr/0002-commercial-web-runtime.md) is the selected stack/topology
+contract for [#276](https://github.com/Roklion/Project_Tabula_Rasa/issues/276),
+under [EPIC #221](https://github.com/Roklion/Project_Tabula_Rasa/issues/221)
+and [initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124).
+Use it together with [Development](DEVELOPMENT.md),
+[PostgreSQL operations](POSTGRESQL.md), and
+[loaded-record concurrency](POSTGRESQL_CONCURRENCY.md).
+
+## Implementation status
+
+#276 records decisions and commands. The API/package files below are contracts
+for #277, the browser package for #278, and deployment files/resources for #279;
+they are **not present or runnable yet**. Do not report a browser/API launch or
+staging deployment based on this documentation. The current Streamlit/Sheets
+runtime and the existing PostgreSQL CLI/test harness remain runnable now.
+
+## Package and build ownership
+
+Keep one repository, the existing Python package and existing Alembic chain.
+Do not move neutral services into the HTTP package or introduce an ORM mirror.
+The intended additions are:
+
+```text
+tabula_rasa/
+  application/                  existing neutral services/contracts/domain seams
+  infrastructure/postgres/      existing SQL adapters, database lifecycle, migrations
+  http/                         #277 Python transport package
+    app.py                      create_app factory, lifespan, route assembly
+    composition.py              database + authorized entity/document service binding
+    context.py                  replaceable #222 context resolver
+    models/                     transport-only Pydantic request/response models
+    routes/                     thin resource/command handlers
+    errors.py                   safe error/HTTP mapping
+    export_openapi.py           schema-only deterministic export CLI
+  jobs/                         reserved for #223, no alpha scheduler scaffold
+web/                            #278 single npm package
+  package.json
+  package-lock.json
+  src/api/schema.d.ts            generated from HTTP OpenAPI
+  src/api/                      typed client + query keys/mutation wrappers
+  src/app/                      routing/context and responsive shell
+  src/components/               shared accessible controls/form states
+  src/features/                 independently delivered bookkeeping slices
+  src/styles/                   design tokens and common layout rules
+  dist/                         ignored build output
+contracts/http/openapi.json      generated, committed transport schema
+requirements-api.txt             #277 API + audited non-UI Python dependencies
+deploy/commercial/Dockerfile      #279 multi-stage Node-build/Python-runtime image
+deploy/commercial/render.yaml     #279 Render environment/resource declaration
+tests/http/                      #277 transport and real-PostgreSQL integration
+web/src/**/*.test.tsx             #278 Vitest/React Testing Library tests
+web/e2e/                         #287 Playwright workflow suite
+```
+
+Use root Python imports for `tabula_rasa` in local commands, tests and images.
+Do not create a second Python distribution or npm workspace manager for one
+browser package. `requirements-api.txt` pins the API runtime and required
+shared dependencies without importing/installing Streamlit as an API runtime
+requirement. Install it together with `requirements-postgres.txt` in the image;
+extend the development dependency file for API tests. #283 adds document-provider
+dependencies when its adapter is selected, without making Drive part of HTTP
+models. Commit library locks/pins; never commit generated build output or
+environment secrets.
+
+Required npm scripts from #278: `dev`, `build` (TypeScript check + Vite build),
+`typecheck`, `lint`, `test` (Vitest run), `test:e2e` (Playwright), and
+`api:generate` (`openapi-typescript` over `../contracts/http/openapi.json`).
+The API exporter from #277 writes deterministic JSON to `--output` without
+reading settings/credentials, starting database lifespan or using the network.
+CI runs export then generation, rejects changes to committed generated files,
+and compiles the consumer; no schema fetch from a running staging service.
+
+## Local topology and commands
+
+Use Python 3.12 and Node.js 24 LTS with npm. From the repository root, the
+**existing, runnable** database setup is:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements-dev.txt
+docker compose -f compose.postgres.yml up -d --wait
+$env:TABULA_RASA_DATABASE_URL = 'postgresql+psycopg://tabula_dev@127.0.0.1:55432/tabula_dev'
+python -m tabula_rasa.infrastructure.postgres upgrade
+python -m tabula_rasa.infrastructure.postgres health
+```
+
+This is a synthetic, disposable loopback database. Native pytest integration
+requires the separate `TABULA_RASA_TEST_DATABASE_URL` process variable pointing
+to a disposable administrator endpoint; never infer it from the runtime URL or
+point tests at retained staging/production. Migration/operator details stay in
+[PostgreSQL operations](POSTGRESQL.md#local-setup).
+
+After #277/#278 implement the contract, install/export/generate once from root:
+
+```powershell
+# Planned commands; require #277 and #278.
+python -m pip install -r requirements-api.txt
+python -m tabula_rasa.http.export_openapi --output contracts/http/openapi.json
+npm --prefix web ci
+npm --prefix web run api:generate
+```
+
+Run the API and Vite in separate terminals. Each terminal starts at repository
+root. API terminal (activate `.venv` first):
+
+```powershell
+# Planned #277 local API command.
+$env:TABULA_RASA_ENVIRONMENT = 'development'
+$env:TABULA_RASA_PUBLIC_ORIGIN = 'http://127.0.0.1:5173'
+$env:TABULA_RASA_DATABASE_URL = 'postgresql+psycopg://tabula_dev@127.0.0.1:55432/tabula_dev'
+$env:TABULA_RASA_TRUSTED_ENTITY_ID = 'alpha-synthetic'
+python -m uvicorn tabula_rasa.http.app:create_app --factory --host 127.0.0.1 --port 8000 --reload
+```
+
+Browser terminal:
+
+```powershell
+# Planned #278 browser command.
+npm --prefix web run dev -- --host 127.0.0.1 --port 5173 --strictPort
+```
+
+Open `http://127.0.0.1:5173`. Vite must proxy `/api` (without stripping the prefix)
+to `http://127.0.0.1:8000`; the browser uses relative URLs and has one origin.
+Use `127.0.0.1` consistently, rather than mixing it with `localhost` for cookies.
+PostgreSQL remains on `127.0.0.1:55432`. Bind all local listeners to loopback.
+Health checks can be called directly on API port 8000. Root production routes
+serve `/health/live`, `/health/ready` and `/version`; they are not SPA paths.
+
+The trusted ID must refer to an explicitly seeded synthetic entity. #277
+provides a reviewed fixture/seed command using the existing entity repository;
+unknown IDs fail instead of creating an entity at startup. No seeding, recurring
+generation or schema migration occurs on ordinary application startup. Before
+#222, no local environment variable stands in for commercial membership.
+
+For schema/client checks after their implementation:
+
+```powershell
+python -m tabula_rasa.http.export_openapi --output contracts/http/openapi.json
+npm --prefix web run api:generate
+git diff --exit-code -- contracts/http/openapi.json web/src/api/schema.d.ts
+npm --prefix web run build
+npm --prefix web run lint
+npm --prefix web test
+```
+
+API tests call the service boundary with fakes and native PostgreSQL; browser
+tests cover visible loading/validation/conflict and entity-cache isolation.
+#280 adds the two-loaded-client stale edit/delete and missing-baseline scenarios
+against real PostgreSQL. Full repository gates still apply before initial
+publication and terminal review; focused checks apply between those gates.
+
+## Hosted environment contract
+
+| Environment | Runtime/data | Exposure and release |
+| --- | --- | --- |
+| Local | Vite + loopback Uvicorn + existing Docker PostgreSQL 18 | Synthetic fixture context; developer starts each process. |
+| Hosted development | Own paid Render Docker service + own Neon project/roles | Synthetic data; validated `main` deploys; temporary alpha gate until #222. |
+| Retained staging | Separate paid Render Docker service + retained Neon project/roles | Explicit commit/image promotion; synthetic acceptance data; restricted operator access until #222. This is the real persistent staging target, not local Compose or a per-test DB. |
+| Intended production | Separate Render service + separate Neon project/runtime/migration roles | Promote the staging-tested image digest only after identity, cutover and operations/recovery gates. Reject trusted alpha context. |
+
+GitHub Actions builds the `linux/amd64` image into GHCR; Render image-backed
+services (`runtime: image`) consume its immutable digest. CI explicitly triggers
+hosted dev after checks; image-backed services do not follow Git pushes on their
+own. Render terminates HTTPS and forwards to one Uvicorn port. The image contains
+the compiled browser assets and the API, with no Node process. Use one canonical
+origin per environment; redirect additional hosts rather than sharing session
+cookies across environments. HTTP and static routing/cache policy is owned by
+[ADR 0002](adr/0002-commercial-web-runtime.md#deployment-decision).
+
+Neon runtime connections use direct/unpooled TLS URLs with `sslmode=require`,
+small SQLAlchemy pools and the existing bounded configuration. Keep the runtime
+role free of schema-administration permissions. Environment projects are not
+tenant boundaries: authorized membership/entity context still scopes every
+bookkeeping operation within a project's database. Do not provision one DB per
+client-supplied profile key.
+
+## Configuration and secrets boundary
+
+Names below, other than the existing database settings, are **planned #277/#279
+configuration**, not options read by today's Streamlit/PostgreSQL runtime.
+
+| Setting | Owner and visibility |
+| --- | --- |
+| `TABULA_RASA_ENVIRONMENT` | Server; `development`, `staging` or `production`. Trusted fixture mode explicitly prohibited in production. |
+| `TABULA_RASA_PUBLIC_ORIGIN` | Server; exact canonical browser origin for Host/Origin/cookie policy; no wildcard. |
+| `TABULA_RASA_RELEASE_ID` | Build/deploy metadata; Git SHA or immutable release ID, safe in `/version` and logs. Image digest/schema head recorded with the release. |
+| `PORT` | Hosting process; Uvicorn binds the assigned container port. Local command explicitly selects 8000. |
+| `TABULA_RASA_DATABASE_URL` and existing pool/timeout settings | Server runtime secrets/config; current `DatabaseSettings` owns validation. URL never enters the browser, image layer, logs, error text or OpenAPI. |
+| `TABULA_RASA_MIGRATION_DATABASE_URL` | Deployment job secret only; job maps it to `TABULA_RASA_DATABASE_URL` for the existing CLI. Never injected into the running app. |
+| `TABULA_RASA_TEST_DATABASE_URL` | Explicit test process only; disposable native test administrator endpoint. |
+| `TABULA_RASA_TRUSTED_ENTITY_ID` | Local/test synthetic context, or fixed hosted synthetic alpha scope behind the deployment gate. Never accepted from a request; absent in production. |
+| `TABULA_RASA_ALPHA_USERNAME` / `TABULA_RASA_ALPHA_PASSWORD_HASH` | Temporary #279 server gate secrets; distinct per hosted non-production environment, never browser build values or commercial roles. |
+| Identity/session/OAuth secrets | #222 server secret injection and authorized credential-store binding. Provider-specific names/schema belong to #222, not frontend config. |
+
+The browser has no environment-specific API URL or secrets. Relative API routing
+lets the same compiled artifact promote from staging to production. `VITE_*`
+values are public build constants; allow only reviewed non-sensitive values such
+as build identity, and never copy server environment files into the web build.
+Do not introduce frontend environment overrides for entity authorization.
+
+Local `.env.local` remains ignored and is loaded by the existing database
+settings only. Export planned HTTP settings in the local process until #277
+implements and documents its loader. Hosted processes receive secrets from the
+environment's provider secret store; image builds and schema export have none.
+Existing `.streamlit` files/password/Google grants stay with the internal
+edition. Commercial per-customer connections are resolved from authorized
+context under #222; no fallback to a legacy profile's grant or Drive root.
+
+## Deployment lifecycle and manual checkpoint (#279)
+
+Before provisioning, the operator supplies Render account/project access,
+selected paid service capacity, GHCR image access, Neon projects/roles,
+approved geographically close US regions with PostgreSQL 18, DNS/TLS ownership,
+and environment-specific secrets/deploy credentials. Verify provider support, budgets/limits and retained
+staging connectivity. These are explicit manual tasks, not completed resources.
+An agent must stop at this checkpoint if credentials/provisioning are missing;
+do not substitute SQLite, temporary memory, another provider or production data.
+
+#279 implements a reproducible multi-stage image build and explicit promotion:
+
+1. Run required Python/native-PostgreSQL and implemented web/API checks; export
+   and verify schema/client drift. Build the image without runtime secrets and
+   identify it by commit and immutable digest. Retain rollback digests in GHCR.
+   For schema changes, first deploy a tested bridge image declaring both old and
+   target schema revisions compatible; otherwise plan explicit maintenance and
+   drain. Initially API readiness accepts only the current head. Compatibility
+   is declared by tested code, never an operator wildcard/bypass setting.
+2. In a serialized environment deployment job with the **migration** credential,
+   inspect `current`, apply `upgrade`, then run `health` using the existing CLI.
+   Schema changes must remain compatible with the still-running old image.
+3. Deploy the image to Render with the **runtime** credential. Require
+   `/health/ready` before traffic/promotion; a failed migration or readiness
+   step stops the release. Application startup never migrates.
+4. Verify version, deep-link/static/API routing, browser -> API -> real
+   PostgreSQL synthetic smoke and access restrictions. A post-deploy smoke
+   failure stops further promotion and redeploys the prior compatible digest.
+   Promote the same image only after staging acceptance evidence is recorded.
+5. If application code fails, redeploy the prior schema-compatible digest.
+   Incompatible schema failures stop for the operator; no automatic downgrade,
+   restore or accounting-data deletion. Recovery is #259/#223.
+
+The temporary alpha HTTP Basic gate covers shell, data, document and schema
+routes over TLS. Minimal health probes are exempt for the platform; unsafe
+requests still require Origin/CSRF protection. A trusted fixture ID without the
+gate must make hosted startup fail closed. #222 replaces both the gate and
+fixture resolver before external beta/customer data. #279 records the precise
+proxy trust configuration and tests spoofed forwarding/Host inputs.
+
+Retain staging across releases and coordinate its separate migration rehearsal
+with [the persistent staging checkpoint](SHEETS_POSTGRES_MIGRATION.md#persistent-staging-checkpoint).
+Do not overwrite an existing operator UAT target, stamp a retained old schema,
+or claim that a local UUID integration database satisfies this gate. Selection
+of this stack does not activate entities or complete migration, exports,
+recovery/PITR, commercial auth, beta or Streamlit retirement requirements.
