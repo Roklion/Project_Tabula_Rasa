@@ -53,3 +53,10 @@ def create_postgres_services(database, entity_id, *, document_store=None, docume
     )
     return replace(services, recurring=RecurringService(recurring,
                    transactions=services.transactions, mixed_use=services.mixed_use))
+
+
+def create_postgres_export_service(database, entity_id):
+    """Compose operator portability without Sheets, DocumentStore or UI setup."""
+    from tabula_rasa.application.entity_export import EntityExportService
+    from .entity_export import PostgresEntityExportRepository
+    return EntityExportService(PostgresEntityExportRepository(database, entity_id))
