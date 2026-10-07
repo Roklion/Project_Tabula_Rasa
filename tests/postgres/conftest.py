@@ -14,10 +14,10 @@ from tabula_rasa.infrastructure.postgres.runtime import Database
 
 @pytest.fixture
 def empty_database():
-    raw = os.environ.get("TABULA_TEST_DATABASE_URL", "")
+    raw = os.environ.get("TABULA_RASA_TEST_DATABASE_URL", "")
     if not raw:
-        pytest.skip("Set TABULA_TEST_DATABASE_URL for real PostgreSQL integration tests.")
-    settings = DatabaseSettings.from_environment({"TABULA_DATABASE_URL": raw}, required=True)
+        pytest.skip("Set TABULA_RASA_TEST_DATABASE_URL for real PostgreSQL integration tests.")
+    settings = DatabaseSettings.from_environment({"TABULA_RASA_DATABASE_URL": raw}, required=True)
     name = "tabula_test_" + uuid4().hex
     # Constructed here, never from a profile, URL or external input.
     admin = create_engine(settings.url, isolation_level="AUTOCOMMIT", poolclass=NullPool,

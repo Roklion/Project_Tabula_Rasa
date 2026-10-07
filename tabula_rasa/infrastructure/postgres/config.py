@@ -3,9 +3,15 @@
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 import os
+from pathlib import Path
+
+from dotenv import dotenv_values
 
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.exc import ArgumentError
+
+
+_LOCAL_ENV_PATH = Path(__file__).resolve().parents[3] / ".env.local"
 
 
 class DatabaseConfigurationError(ValueError):
@@ -33,11 +39,25 @@ class DatabaseSettings:
     def from_environment(
         cls, environ: Mapping[str, str] | None = None, *, required: bool = False,
     ) -> "DatabaseSettings | None":
-        values = os.environ if environ is None else environ
-        raw = values.get("TABULA_DATABASE_URL", "").strip()
+        # Explicit mappings (including test configuration) never read local secrets.
+        values = environ
+        if values is None:
+            local = {}
+            failed = False
+            try:
+                if _LOCAL_ENV_PATH.is_file():
+                    local = dotenv_values(_LOCAL_ENV_PATH, interpolate=False, encoding="utf-8-sig")
+            except (OSError, UnicodeError):
+                failed = True
+            if failed:
+                raise DatabaseConfigurationError("Cannot read local database configuration.")
+            # Do not export local values into the process, especially test targets.
+            values = {**{key: value for key, value in local.items() if value is not None},
+                      **os.environ}
+        raw = values.get("TABULA_RASA_DATABASE_URL", "").strip()
         if not raw:
             if required:
-                raise DatabaseConfigurationError("Set TABULA_DATABASE_URL to use PostgreSQL.")
+                raise DatabaseConfigurationError("Set TABULA_RASA_DATABASE_URL to use PostgreSQL.")
             return None
         try:
             url = make_url(raw)
@@ -49,9 +69,9 @@ class DatabaseSettings:
                 raise ValueError
             return cls(
                 url=url,
-                connect_timeout=int(values.get("TABULA_DATABASE_CONNECT_TIMEOUT", "5")),
-                pool_size=int(values.get("TABULA_DATABASE_POOL_SIZE", "5")),
-                max_overflow=int(values.get("TABULA_DATABASE_MAX_OVERFLOW", "5")),
+                connect_timeout=int(values.get("TABULA_RASA_DATABASE_CONNECT_TIMEOUT", "5")),
+                pool_size=int(values.get("TABULA_RASA_DATABASE_POOL_SIZE", "5")),
+                max_overflow=int(values.get("TABULA_RASA_DATABASE_MAX_OVERFLOW", "5")),
             )
         except (ArgumentError, TypeError, ValueError):
             pass

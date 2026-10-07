@@ -31,7 +31,7 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements-dev.txt
 docker compose -f compose.postgres.yml up -d --wait
-$env:TABULA_DATABASE_URL = 'postgresql+psycopg://tabula_dev@127.0.0.1:55432/tabula_dev'
+$env:TABULA_RASA_DATABASE_URL = 'postgresql+psycopg://tabula_dev@127.0.0.1:55432/tabula_dev'
 python -m tabula_rasa.infrastructure.postgres upgrade
 python -m tabula_rasa.infrastructure.postgres current
 python -m tabula_rasa.infrastructure.postgres health
@@ -39,11 +39,25 @@ python -m tabula_rasa.infrastructure.postgres health
 
 The Compose service uses PostgreSQL 18.6, a named Docker volume, loopback-only
 port 55432, and trust authentication for disposable development. Use a different
-`TABULA_POSTGRES_PORT` if the port is occupied. Use synthetic bookkeeping data
+`TABULA_RASA_POSTGRES_PORT` if the port is occupied. Use synthetic bookkeeping data
 here; real staging/production use authenticated roles and appropriate TLS.
-The `.env.example` contains only synthetic configuration. Python does not
-automatically load `.env`: supply process environment explicitly or through
-your deployment's secret injection. Neither CLI output nor settings repr includes
+For a persistent UAT database, copy `.env.example` to `.env.local` in the
+repository root and populate `TABULA_RASA_DATABASE_URL` privately. PostgreSQL tools
+load that exact file independently of the working directory; existing process
+environment variables take precedence, including explicitly empty values.
+Values are read literally without variable interpolation. `.env.local` is
+Git-ignored; `.env` and `.env.example` are not loaded. For Neon use the UAT
+branch's direct/unpooled URL with `sslmode=require`; remove
+`channel_binding=require` if present because it is not a supported URL option.
+Installing `requirements-postgres.txt` supplies the environment-file loader.
+Deployment secret injection remains supported. The file does not change the
+active Sheets ledger or initialize database tables.
+
+`TABULA_RASA_TEST_DATABASE_URL` must still be supplied explicitly in the process
+environment and must target a disposable test administrator database, never UAT
+or production. Loading local database settings does not modify process
+variables or select the test target. Explicit settings mappings bypass the file.
+Neither CLI output nor settings repr includes
 the connection URL, username, password, SQL parameters, or private row contents.
 
 `docker compose -f compose.postgres.yml down` stops the local service and keeps
@@ -52,14 +66,18 @@ only for an intentional local reset.
 
 ## Environment variables
 
+PostgreSQL settings use the `TABULA_RASA_` prefix. Update any previously
+configured `TABULA_DATABASE_*`, `TABULA_TEST_DATABASE_URL`, or
+`TABULA_POSTGRES_PORT` variables to the names below; the old names are not read.
+
 | Variable | Meaning / default |
 | --- | --- |
-| `TABULA_DATABASE_URL` | Explicit target database. `postgresql://` normalizes to `postgresql+psycopg://`; other drivers are rejected. Optional for Sheets, required for DB commands. |
-| `TABULA_DATABASE_CONNECT_TIMEOUT` | Initial connection timeout in seconds, 1–60; default 5. |
-| `TABULA_DATABASE_POOL_SIZE` | Connections retained per process, 1–50; default 5. |
-| `TABULA_DATABASE_MAX_OVERFLOW` | Extra concurrent connections per process, 0–50; default 5. |
-| `TABULA_TEST_DATABASE_URL` | Explicit test administrator endpoint with CREATE DATABASE permission. No fallback to `TABULA_DATABASE_URL`. |
-| `TABULA_POSTGRES_PORT` | Compose loopback port; default 55432. |
+| `TABULA_RASA_DATABASE_URL` | Explicit target database. `postgresql://` normalizes to `postgresql+psycopg://`; other drivers are rejected. Optional for Sheets, required for DB commands. |
+| `TABULA_RASA_DATABASE_CONNECT_TIMEOUT` | Initial connection timeout in seconds, 1–60; default 5. |
+| `TABULA_RASA_DATABASE_POOL_SIZE` | Connections retained per process, 1–50; default 5. |
+| `TABULA_RASA_DATABASE_MAX_OVERFLOW` | Extra concurrent connections per process, 0–50; default 5. |
+| `TABULA_RASA_TEST_DATABASE_URL` | Explicit test administrator endpoint with CREATE DATABASE permission. No fallback to `TABULA_RASA_DATABASE_URL`. |
+| `TABULA_RASA_POSTGRES_PORT` | Compose loopback port; default 55432. |
 
 URLs accept only the transport options `sslmode`, `sslrootcert`, `sslcert`, and
 `sslkey`. URL-encode credentials containing reserved characters. Database roles
@@ -597,7 +615,7 @@ still gate #258 commercial production activation.
 ## Native integration tests
 
 ```powershell
-$env:TABULA_TEST_DATABASE_URL = 'postgresql+psycopg://tabula_dev@127.0.0.1:55432/tabula_dev'
+$env:TABULA_RASA_TEST_DATABASE_URL = 'postgresql+psycopg://tabula_dev@127.0.0.1:55432/tabula_dev'
 python -m pytest tests/postgres
 ```
 

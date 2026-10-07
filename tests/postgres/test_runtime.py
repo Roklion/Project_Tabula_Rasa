@@ -115,8 +115,8 @@ def test_constraint_error_translation_never_prints_private_values(database, caps
 
 def test_connectivity_error_diagnostic_hides_url_and_password():
     database = Database(DatabaseSettings.from_environment({
-        "TABULA_DATABASE_URL": "postgresql://private-user:private-password@127.0.0.1:1/private-database",
-        "TABULA_DATABASE_CONNECT_TIMEOUT": "1",
+        "TABULA_RASA_DATABASE_URL": "postgresql://private-user:private-password@127.0.0.1:1/private-database",
+        "TABULA_RASA_DATABASE_CONNECT_TIMEOUT": "1",
     }))
     try:
         assert database.health() == {"connected": False, "code": "unavailable"}
