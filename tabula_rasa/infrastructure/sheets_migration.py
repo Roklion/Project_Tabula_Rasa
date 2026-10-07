@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal
 import json
+from uuid import UUID
 
 from tabula_rasa.application.mileage import prepare_mileage_trip
 from tabula_rasa.errors import StorageValidationError
@@ -172,7 +173,15 @@ def snapshot_from_values(binding: Binding, values, *, extracted_at=None):
                     if row["recurring_source_kind"] == "mixed_use":
                         role += "-source" if title == "MixedUseExpenses" else "-projection"
                     if row["id"] != occurrence_id(row["recurring_schedule_id"], row["recurring_scheduled_date"], role):
-                        raise StorageValidationError("Generated occurrence identity differs from its provenance.")
+                        # The pre-service ordinary recurring caller calculated a UUIDv5
+                        # but omitted the transaction_id argument, saving UUIDv4.
+                        # Preserve that historical ID; shared validation above still
+                        # enforces schedule references, provenance and unique dates.
+                        legacy_ordinary = (title == "Transactions"
+                                           and row["recurring_source_kind"] == "transaction"
+                                           and UUID(row["id"]).version == 4)
+                        if not legacy_ordinary:
+                            raise StorageValidationError("Generated occurrence identity differs from its provenance.")
         for row in tables["RecurringSchedules"][1]:
             if int(row["recurrence_interval"]) > 2147483647:
                 raise StorageValidationError("Schedule interval exceeds target precision.")

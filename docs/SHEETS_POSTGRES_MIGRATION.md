@@ -117,6 +117,14 @@ Preserve original IDs within their valid target namespaces. When a simple entry
 and journal share an ID, preserve the simple entry and deterministically remap
 the journal to an unused UUID, recording the reason. Journal posting IDs stay in
 their separate namespace; simple posting IDs use the existing shared expansion.
+Historical ordinary generated occurrences may have UUIDv4 identities: the
+original recurring caller calculated a UUIDv5 but did not pass the explicit
+transaction identity into preparation. The application-service path corrected
+that caller in `84893b0`. Migration preserves those existing UUIDv4 IDs rather
+than rewriting the source or regenerating history. Schedule references, complete
+provenance and unique occurrence dates remain mandatory; other generated-ID
+mismatches remain rejected. This allowance belongs only to one-time extraction.
+
 Mapping rows and unit hashes are persisted before loading and compared on every
 restart. No historical batch/actor facts are invented.
 

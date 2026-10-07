@@ -265,3 +265,20 @@ def test_normalized_schedule_source_kind_loads_and_restarts_in_two_profiles(data
         assert runner.execute(plan, dry_run=False)["loaded_units"] == 3
         assert runner.execute(plan, dry_run=False)["skipped_units"] == 3
     assert counts(database, "alpha") == counts(database, "beta")
+
+
+def test_historical_generated_uuid4_load_restart_and_two_profile_isolation(database):
+    from tests.test_sheets_migration_source import values_with_legacy_generated_occurrence, LEGACY_RECURRING_ID
+    runner = PostgresMigrationRunner(database)
+    for profile in ("alpha", "beta"):
+        plan = plan_for(values_with_legacy_generated_occurrence(), profile=profile, entity=profile, workbook=f"workbook-{profile}")
+        first = runner.execute(plan, dry_run=False)
+        assert first["loaded_units"] == 3
+        row = PostgresTransactionRepository(database, profile).list()[0]
+        assert row["id"] == LEGACY_RECURRING_ID
+        assert row["recurring_occurrence_type"] == "generated"
+        before = counts(database, profile)
+        resumed = runner.execute(plan, dry_run=False)
+        assert resumed["loaded_units"] == 0 and resumed["skipped_units"] == 3
+        assert counts(database, profile) == before
+    assert counts(database, "alpha") == counts(database, "beta")
