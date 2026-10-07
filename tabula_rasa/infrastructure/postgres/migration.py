@@ -5,17 +5,16 @@ backend selection or generation of recurring/depreciation history occurs here.
 """
 
 from dataclasses import asdict
-from decimal import Decimal
 
 from sqlalchemy import text
 
 from tabula_rasa.accounting_postings import accounting_postings
-from tabula_rasa.errors import StorageNotFoundError
 from tabula_rasa.reference_data import as_bool, normalize_payee_name, normalize_tag_ids, normalize_tag_name
 from tabula_rasa.migration.model import (
     MANIFEST_VERSION, MAPPING_VERSION, SYNTHESIZED_TIMESTAMP, MigrationError, stable_id,
 )
 from tabula_rasa.migration.planning import build_plan
+from tabula_rasa.migration.documents import validate_context
 from tabula_rasa.infrastructure.sheets_migration import snapshot_from_values, timestamp
 from tabula_rasa.storage.google_sheets.schema import WORKSHEET_HEADERS
 
@@ -27,6 +26,18 @@ from .migrations import current_revision, head_revision
 
 ROOT_TABLES = ("accounts", "categories", "payees", "tags", "entries", "mixed_use_sources",
                "recurring_schedules", "fixed_assets", "mileage_records", "documents", "import_batches")
+
+
+def validate_plan(plan):
+    """Revalidate public plans, including the private source context."""
+    snapshot = plan.snapshot
+    tables = snapshot.tables
+    values = {title: [list(fields), *[[row[field] for field in fields] for row in tables[title]]]
+              for title, fields in WORKSHEET_HEADERS.items()}
+    checked = snapshot_from_values(snapshot.binding, values, extracted_at=snapshot.extracted_at)
+    checked = validate_context(type(snapshot)(checked.binding, checked.extracted_at, checked.content, snapshot.context))
+    if build_plan(checked) != plan:
+        raise MigrationError("The plan does not match its validated frozen snapshot.")
 
 
 def _object(plan, kind, identity, row):
@@ -64,7 +75,7 @@ class CoreLoader:
             insert(connection, "recurring_schedules", {**_object(plan, "schedule", identity, row), **values})
             for tag in normalize_tag_ids(row["tag_ids"]):
                 insert(connection, "schedule_tags", {"entity_id": scope, "schedule_id": identity, "tag_id": tag})
-        elif unit.kind in {"simple_entry", "recurring_entry"}:
+        elif unit.kind in {"simple_entry", "recurring_entry", "simple_entry_receipts", "recurring_entry_receipts"}:
             row = rows["Transactions"][0]
             identity = plan.target_id("Transactions", row["id"])
             repository = PostgresTransactionRepository(None, scope)
@@ -94,80 +105,33 @@ class CoreLoader:
 
     def verify(self, connection, plan, unit):
         """On operator restart only, reject altered/deleted committed targets."""
-        scope = plan.snapshot.binding.entity_id
+        from .migration_readback import unit_differences
         if unit.kind == "foundation":
-            for title, table, builder in (
-                ("Accounts", "accounts", PostgresAccountRepository.values),
-                ("Categories", "categories", PostgresCategoryRepository.values),
-                ("Payees", "payees", lambda row: self.managed(row, normalize_payee_name)),
-                ("Tags", "tags", lambda row: self.managed(row, normalize_tag_name)),
-            ):
-                actual = list(connection.execute(text(f"SELECT * FROM {table} WHERE entity_id=:scope"), {"scope": scope}).mappings())
-                if len(actual) != len(unit.rows[title]):
+            for title, table in (("Accounts", "accounts"), ("Categories", "categories"),
+                                 ("Payees", "payees"), ("Tags", "tags")):
+                count = connection.scalar(text(f"SELECT count(*) FROM {table} WHERE entity_id=:scope"),
+                                          {"scope": plan.snapshot.binding.entity_id})
+                if count != len(unit.rows[title]):
                     return False
-                by_id = {row["id"]: row for row in actual}
-                for row in unit.rows[title]:
-                    found = by_id.get(plan.target_id(title, row["id"]))
-                    if found is None or any(
-                        (found[key] != Decimal(str(value)) if isinstance(found[key], Decimal)
-                         else str(found[key]) != str(value)) for key, value in builder(row).items()
-                    ):
-                        return False
-                    if row.get("created_at") and timestamp(found["created_at"].isoformat()) != row["created_at"]:
-                        return False
-            return True
-        if unit.kind == "schedule":
-            row = unit.rows["RecurringSchedules"][0]
-            found = connection.execute(text("SELECT * FROM recurring_schedules WHERE entity_id=:scope AND id=:id"),
-                                       {"scope": scope, "id": plan.target_id("RecurringSchedules", row["id"])}).mappings().first()
-            if found is None:
-                return False
-            from .repository import serialized
-            if any((found[field] != Decimal(row[field]) if isinstance(found[field], Decimal)
-                    else str(serialized(found[field])) != row[field]) for field in WORKSHEET_HEADERS["RecurringSchedules"]
-                   if field not in {"id", "kind", "tag_ids", "recurrence_interval", "updated_at"}):
-                return False
-            tags = connection.scalars(text("SELECT tag_id FROM schedule_tags WHERE entity_id=:scope AND schedule_id=:id ORDER BY tag_id"),
-                                      {"scope": scope, "id": found["id"]}).all()
-            return int(row["recurrence_interval"]) == found["recurrence_interval"] and sorted(tags) == normalize_tag_ids(row["tag_ids"])
-        title = "JournalEntries" if unit.kind == "journal" else "Transactions"
-        row = unit.rows[title][0]
-        repository = (PostgresJournalRepository if unit.kind == "journal" else PostgresTransactionRepository)(None, scope)
-        identity = plan.target_id(title, row["id"])
-        try:
-            found = repository.project(connection, repository.entry(connection, identity))
-        except StorageNotFoundError:
-            return False
-        fields = [field for field in WORKSHEET_HEADERS[title] if field != "updated_at"]
-        if unit.kind == "journal":
-            expected = sorted(unit.rows["JournalPostings"], key=lambda line: int(line["position"]))
-            if len(found["postings"]) != len(expected):
-                return False
-            for actual, wanted in zip(found["postings"], expected):
-                if any(str(actual[field]) != wanted[field] for field in
-                       ("id", "target_type", "target_id", "side", "amount", "payee_id", "description")):
-                    return False
-        return all((sorted(found[field]) == normalize_tag_ids(row[field]) if field == "tag_ids"
-                    else found[field] == [] if field == "receipt_references"
-                    else str(found[field]) == (identity if field == "id" else row[field])) for field in fields)
-
+        return not unit_differences(connection, plan, unit)
 
 class PostgresMigrationRunner:
-    def __init__(self, database, *, loaders=None):
+    def __init__(self, database, *, loaders=None, secondary=False):
         self.database = database
         core = CoreLoader()
         self.loaders = {kind: core for kind in core.kinds}
+        if secondary:
+            from .migration_secondary import SecondaryLoader
+            additional = SecondaryLoader()
+            self.loaders.update({kind: additional for kind in additional.kinds})
         self.loaders.update(loaders or {})
 
     def execute(self, plan, *, dry_run=True):
         # Public callers cannot bypass extraction by forging mutable Plan objects.
-        snapshot = plan.snapshot
-        tables = snapshot.tables
-        values = {title: [list(fields), *[[row[field] for field in fields] for row in tables[title]]]
-                  for title, fields in WORKSHEET_HEADERS.items()}
-        validated = build_plan(snapshot_from_values(snapshot.binding, values, extracted_at=snapshot.extracted_at))
-        if validated != plan:
-            raise MigrationError("The plan does not match its validated frozen snapshot.")
+        validate_plan(plan)
+        for loader in {id(value): value for value in self.loaders.values()}.values():
+            if hasattr(loader, "preflight"):
+                loader.preflight(plan)
         report = plan.report(self.loaders)
         if dry_run:
             return {**report, "dry_run": True, "load_complete": False}
@@ -222,6 +186,11 @@ class PostgresMigrationRunner:
             if current_revision(connection) != head_revision():
                 raise MigrationError("Target schema is not at this checkout's current revision; initialize it explicitly before loading.")
             self._lock(connection, plan)
+            root = connection.execute(text("SELECT name,currency_code FROM business_entities WHERE id=:scope"),
+                                      self._params(plan)).mappings().first()
+            if root is not None and (root["name"] != plan.snapshot.metadata.get("entity_name", plan.snapshot.binding.entity_id)
+                                     or root["currency_code"] != "USD"):
+                raise MigrationError("Target entity identity/defaults differ from the source binding; use a matching empty inactive target.")
             existing = connection.execute(text("SELECT * FROM migration_runs WHERE entity_id=:scope"), self._params(plan)).mappings().all()
             if existing:
                 if len(existing) != 1 or existing[0]["id"] != plan.run_id:
@@ -249,7 +218,7 @@ class PostgresMigrationRunner:
                         raise MigrationError("Migration requires an empty inactive target entity.")
                 scope = plan.snapshot.binding.entity_id
                 if not connection.execute(text("SELECT id FROM business_entities WHERE id=:scope"), self._params(plan)).first():
-                    insert(connection, "business_entities", {"id": scope, "name": scope,
+                    insert(connection, "business_entities", {"id": scope, "name": plan.snapshot.metadata.get("entity_name", scope),
                            "incarnation_id": stable_id(plan.run_id, "entity"),
                            "created_at": SYNTHESIZED_TIMESTAMP, "updated_at": SYNTHESIZED_TIMESTAMP})
                 insert(connection, "migration_runs", {**_object(plan, "run", plan.run_id, {}),
