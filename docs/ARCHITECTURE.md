@@ -755,7 +755,8 @@ These runtime packages/deployments remain follow-on implementation, not a change
 to today's Streamlit/Sheets authority.
 
 The HTTP composition resolves server-authorized entity context before invoking
-`create_postgres_services`; handlers translate transport models and call the
+`create_postgres_services`, retaining `create_application` authority/environment
+checks for migrated profiles; handlers translate transport models and call the
 existing application/query owners. OpenAPI generates browser transport types
 without making application services depend on HTTP DTOs. #280 carries the
 original loaded baseline through API responses, forms and edit/delete commands;

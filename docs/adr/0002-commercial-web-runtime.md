@@ -34,6 +34,7 @@ Read with [Architecture](../ARCHITECTURE.md), [ADR 0001](0001-canonical-accounti
 | --- | --- |
 | `application/services.py` and domain services/contracts | `ApplicationServices`, bookkeeping validation, orchestration, and query behavior. |
 | `infrastructure/postgres/composition.py`, `config.py`, `runtime.py` | Explicit entity-scoped service composition, safe database settings, one pool per process, adapter-owned operation/commit boundaries. |
+| `composition.py`, PostgreSQL cutover controller, `infrastructure/entity_documents.py` | Trusted migrated-profile authority/environment checks and entity-to-existing-document-store binding; preserve #258 activation controls. |
 | `application/baselines.py`, PostgreSQL operation guards | Portable loaded-record token and stale/missing-baseline enforcement; #280 transports these through real forms. |
 | `application/documents.py` and PostgreSQL receipt metadata adapter | `DocumentStore`, portable document identity, recoverable upload/link outcomes; metadata in SQL, bytes outside SQL. |
 | `design.md`, current pages and canonical architecture/developer guides | Product character, accounting behavior, responsive/accessibility baseline, reference workflows, validation and migration policies. |
@@ -123,6 +124,15 @@ one `Database` per API process at lifespan startup, calls
 request scope, and disposes the pool at shutdown. A service graph containing an
 entity or credential binding is never a process-global default. The shared pool
 is deployment configuration; repository/service contexts remain entity-scoped.
+
+For migrated profiles, enter through the existing `create_application` trusted
+composition (which calls the PostgreSQL factory) so #258's recorded authority,
+environment/database and document-folder binding checks remain enforced. Do not
+bypass them by calling the low-level factory directly. Fresh synthetic entity
+fixtures use explicit test/development composition without claiming a migrated
+profile's acceptance or activation. New customer onboarding/authorization is
+#222; legacy profile configuration is never part of the browser contract.
+See [Bookkeeping acceptance and cutover](../BOOKKEEPING_CUTOVER.md).
 
 Handlers validate/translate DTOs, obtain authorized context, call the existing
 service, and map committed results/errors. They do not issue SQL, compute
@@ -221,9 +231,14 @@ names, domain ownership, capacity and recovery-plan procurement are operator
 configuration. No resources or paid plans are purchased by this decision.
 
 This fits the existing Neon UAT configuration direction in
-[PostgreSQL development](../POSTGRESQL.md#local-setup). It does not assert that
-UAT/staging resources already exist. #279 provisions a real persistent staging
-target and coordinates the still-pending migration rehearsal checkpoint.
+[PostgreSQL development](../POSTGRESQL.md#local-setup). The operator-selected Neon
+UAT environment completed #254's synthetic two-profile framework drill on
+2026-10-06, as recorded in the migration guide. That evidence does not establish
+a deployed commercial browser/API or realistic migrated-profile acceptance.
+#279 verifies an explicitly authorized compatible staging target or provisions
+a separate one, preserving the retained UAT database and deployed migration
+chain. Remaining source reconciliation/acceptance and recovery gates stay with
+their owners; do not repeat or relabel the completed framework checkpoint.
 [Render Docker hosting](https://render.com/docs/docker),
 [Render deployment lifecycle](https://render.com/docs/deploys),
 [Render prebuilt images](https://render.com/docs/deploying-an-image),
@@ -262,7 +277,8 @@ overlap cannot be demonstrated, use an explicit maintenance/drain procedure
 instead of attempting a rolling deploy. Application
 rollback redeploys a prior compatible image; it never automatically downgrades
 or restores a database. Real recovery/PITR and document recovery are #259/#223;
-production activation remains #258, with #253/#257/#259/#260/#261 evidence.
+production activation follows [#258's cutover contract](../BOOKKEEPING_CUTOVER.md),
+with #253/#257/#259/#260/#261 evidence.
 Selecting Neon does not establish a recovery guarantee or pass a restore drill.
 
 ## Identity/session integration seam (#222)

@@ -251,6 +251,14 @@ proxy trust configuration and tests spoofed forwarding/Host inputs.
 
 Retain staging across releases and coordinate its separate migration rehearsal
 with [the persistent staging checkpoint](SHEETS_POSTGRES_MIGRATION.md#persistent-staging-checkpoint).
+The #254 framework drill already passed on the operator-selected Neon UAT
+environment on 2026-10-06; #279 must verify authorized reuse of a compatible
+retained target or provision a separate commercial staging target. That drill
+does not substitute for realistic source reconciliation, whole-profile
+acceptance or the browser/API staging smoke. Migrated-profile HTTP composition
+must reuse [#258's trusted authority/document binding](BOOKKEEPING_CUTOVER.md)
+through `create_application`, rather than bypassing it with the low-level
+PostgreSQL factory.
 Do not overwrite an existing operator UAT target, stamp a retained old schema,
 or claim that a local UUID integration database satisfies this gate. Selection
 of this stack does not activate entities or complete migration, exports,
