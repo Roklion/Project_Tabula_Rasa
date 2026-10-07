@@ -693,3 +693,14 @@ loaders remain #256's responsibility.
 See [the migration operator guide](SHEETS_POSTGRES_MIGRATION.md) for dry-run,
 explicit loading, extension contracts, restart, and the persistent staging
 checkpoint. #257 whole-profile acceptance and #258 cutover remain separate.
+
+## Complete entity portability export (#260)
+
+The operator command exports one explicitly selected PostgreSQL entity through
+an application-owned capability, without Sheets access. Its independently
+versioned canonical format includes all supported bookkeeping domains, retained
+provenance, historical references and external document metadata. See
+[Complete PostgreSQL bookkeeping export](BOOKKEEPING_EXPORT.md) for the private
+artifact procedure, format/validation contract, #224 customer-delivery handoff
+and #258's verified-export activation evidence. It does not switch the active
+ledger or replace #259's managed backup/PITR recovery requirements.

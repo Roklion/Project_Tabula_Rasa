@@ -763,3 +763,18 @@ permission model.
 Setup, OAuth administration, and recovery procedures belong in the specialized
 guides linked from the root [README](../README.md), not in this architecture
 overview.
+
+## Complete entity export
+
+`application/entity_export.py` owns the persistence-neutral snapshot port and
+export service. `bookkeeping_export/` owns the versioned canonical inventory,
+exact serialization, offline structural/relationship validation and projection
+into the existing reporting models. `infrastructure/postgres/entity_export.py`
+reads the full selected entity in an independent read-only database snapshot.
+It does not use worksheet-shaped CRUD records or regenerate source history.
+
+`scripts/export_postgres_entity.py` composes this capability for an authorized
+operator and writes private artifacts outside Git checkouts. DocumentStore
+continues to own external bytes. Commercial customer authorization/delivery
+belongs to #224; #258 must verify the target export alongside its other
+activation gates. See [the export operator guide](BOOKKEEPING_EXPORT.md).
