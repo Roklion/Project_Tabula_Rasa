@@ -362,3 +362,45 @@ def test_ordinary_schedule_preserves_mixed_field_refusal_after_kind_normalizatio
     with pytest.raises(MigrationError, match="RecurringSchedules row 2: invalid domain") as caught:
         plan_for(values)
     assert caught.value.__context__ is None
+
+
+LEGACY_RECURRING_ID = "5a362e86-2956-4ddd-b3bb-7e45f76f564c"
+
+
+def values_with_legacy_generated_occurrence():
+    values = values_with_records(recurring=True)
+    fields = values["Transactions"][0]
+    values["Transactions"][1][fields.index("id")] = LEGACY_RECURRING_ID
+    values["Transactions"][1][fields.index("recurring_occurrence_type")] = "generated"
+    return values
+
+
+def test_historical_uuid4_generated_occurrence_preserves_source_identity():
+    values = values_with_legacy_generated_occurrence()
+    plan = plan_for(values)
+    assert plan.target_id("Transactions", LEGACY_RECURRING_ID) == LEGACY_RECURRING_ID
+    assert plan.snapshot.tables["Transactions"][0]["recurring_occurrence_type"] == "generated"
+    assert plan == plan_for(deepcopy(values))
+
+
+def test_historical_uuid4_allowance_keeps_unique_schedule_date_validation():
+    values = values_with_legacy_generated_occurrence()
+    duplicate = list(values["Transactions"][1])
+    duplicate[values["Transactions"][0].index("id")] = "85164485-3798-4bfa-a213-22e253c2c61b"
+    values["Transactions"].append(duplicate)
+    with pytest.raises(MigrationError, match="Source domain/reference/provenance"):
+        plan_for(values)
+
+
+@pytest.mark.parametrize("field,value", [
+    ("id", occurrence_id("another-schedule", "2026-10-05", "generated")),
+    ("recurring_schedule_id", "missing"),
+    ("recurring_scheduled_date", ""),
+    ("recurring_source_kind", "mixed_use"),
+])
+def test_historical_uuid4_allowance_retains_identity_and_provenance_refusals(field, value):
+    values = values_with_legacy_generated_occurrence()
+    values["Transactions"][1][values["Transactions"][0].index(field)] = value
+    with pytest.raises(MigrationError) as caught:
+        plan_for(values)
+    assert caught.value.__context__ is None
