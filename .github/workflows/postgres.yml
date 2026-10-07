@@ -19,7 +19,7 @@ jobs:
           --health-cmd "pg_isready -U tabula_test -d tabula_test"
           --health-interval 2s --health-timeout 3s --health-retries 30
     env:
-      TABULA_TEST_DATABASE_URL: postgresql+psycopg://tabula_test@127.0.0.1:5432/tabula_test
+      TABULA_RASA_TEST_DATABASE_URL: postgresql+psycopg://tabula_test@127.0.0.1:5432/tabula_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

@@ -86,7 +86,7 @@ do not grant commercial tenant membership or permission.
 
 After dry-run, provision/inspect an inactive, empty target and initialize its
 schema separately with the PostgreSQL operator tools. Supply
-`TABULA_DATABASE_URL` through approved secret injection. Then explicitly load:
+`TABULA_RASA_DATABASE_URL` through approved secret injection. Then explicitly load:
 
 ```powershell
 python scripts/migrate_sheets_to_postgres.py --profile alpha --entity rehearsal-alpha --load

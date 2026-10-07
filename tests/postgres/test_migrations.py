@@ -96,7 +96,7 @@ def test_operator_cli_readiness_and_successful_explicit_downgrade(empty_database
     import json
     from tabula_rasa.infrastructure.postgres.__main__ import main
 
-    monkeypatch.setenv("TABULA_DATABASE_URL", empty_database.engine.url.render_as_string(hide_password=False))
+    monkeypatch.setenv("TABULA_RASA_DATABASE_URL", empty_database.engine.url.render_as_string(hide_password=False))
     monkeypatch.setattr("sys.argv", ["postgres", "current"])
     assert main() == 0
     assert json.loads(capsys.readouterr().out)["revision"] is None
