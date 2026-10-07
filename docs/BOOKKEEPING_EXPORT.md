@@ -1,5 +1,13 @@
 # Complete PostgreSQL bookkeeping export
 
+Revision `0005_bookkeeping_cutover` adds operator authority/evidence controls
+outside the portable bookkeeping inventory. The existing v1 exports from
+`0004_mileage_order` remain valid; the exporter reports the observed supported
+revision and validates the same exact collection/field coverage. Migrated
+document ID mappings are included in provenance validation. The
+[cutover guide](BOOKKEEPING_CUTOVER.md) owns verification of this export before
+authority switching; this export does not replace managed backup/PITR.
+
 Issue [#260](https://github.com/Roklion/Project_Tabula_Rasa/issues/260) delivers
 operator portability under [EPIC #220](https://github.com/Roklion/Project_Tabula_Rasa/issues/220)
 and [initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124).
@@ -67,7 +75,7 @@ completeness, relationships and accounting meaning beyond JSON Schema.
 | Manifest field | Meaning |
 | --- | --- |
 | `format`, `format_version` | `tabula-rasa-bookkeeping`, integer `1`; independent of Sheets/archive format 13 |
-| `database_schema_version` | Observed supported PostgreSQL revision (`0004_mileage_order` in this implementation) |
+| `database_schema_version` | Observed supported PostgreSQL revision (`0004_mileage_order` or `0005_bookkeeping_cutover`; both have the same v1 bookkeeping inventory) |
 | `entity_id` | Explicit selected business entity; also present on every entity-local record |
 | `snapshot_at` | Database transaction-start instant in UTC; all reads use that transaction's coherent snapshot |
 | `counts` | Count for every included canonical collection, including zero counts |

@@ -68,3 +68,19 @@ def test_cli_returns_nonzero_on_reconciliation_failure_and_does_not_claim_accept
         "reconciliation": {"passed": False, "whole_profile_accepted": False, "cutover_authorized": False}})
     assert cli.main(["--profile", "alpha", "--entity", "alpha", "--reconcile"]) == 1
     assert json.loads(capsys.readouterr().out)["reconciliation"]["passed"] is False
+
+
+def test_cli_acceptance_is_final_and_supports_human_and_machine_reports(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "load_business_profile_document", lambda _: {})
+    report = {"passed": True, "whole_profile_accepted": True, "export_verified": True,
+              "run_id": "opaque-run", "source_snapshot_sha256": "a" * 64, "exceptions": []}
+    monkeypatch.setattr(cli, "run_migration", lambda *_, **kwargs: {"acceptance_report": report} if kwargs["accept"] else {})
+    args = ["--profile", "alpha", "--entity", "alpha", "--accept"]
+    assert cli.main(args) == 0
+    assert json.loads(capsys.readouterr().out)["acceptance_report"]["whole_profile_accepted"]
+    assert cli.main(args + ["--format", "text"]) == 0
+    assert "Whole-profile migration acceptance: PASS" in capsys.readouterr().out
+    report.update(passed=False, whole_profile_accepted=False,
+                  exceptions=[{"domain": "Reports", "fields": ["period_0"]}])
+    assert cli.main(args + ["--format", "text"]) == 1
+    assert "Reports:\n  domain: period_0" in capsys.readouterr().out

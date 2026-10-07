@@ -5,6 +5,11 @@ see. Setup is in [Setup](SETUP.md), Drive administration is in
 [Google Drive](GOOGLE_DRIVE.md), and backup or recovery procedures are in
 [Backup and recovery](BACKUP_RECOVERY.md).
 
+The Streamlit edition uses Sheets. A profile configured by the operator for
+bookkeeping maintenance or PostgreSQL stops before Sheets initialization; it
+does not silently open another backend. Backend changes have no UI picker and
+follow the [controlled cutover procedure](BOOKKEEPING_CUTOVER.md).
+
 ## Sign in and select a business
 
 Enter the application password before any ledger page or workbook data is

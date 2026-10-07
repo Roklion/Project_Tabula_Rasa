@@ -7,6 +7,11 @@ and [initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124)
 This foundation does not select a managed provider or activate a PostgreSQL
 ledger. The Streamlit composition still uses Google Sheets, even if a database
 URL is present. Installing only `requirements.txt` remains sufficient for it.
+Explicit per-profile service composition and the #257/#258 acceptance,
+maintenance, activation and rollback procedure are documented in
+[Bookkeeping acceptance and cutover](BOOKKEEPING_CUTOVER.md). Forward revision
+`0005_bookkeeping_cutover` adds operator controls without rewriting the retained
+schema baseline or changing the canonical export v1 bookkeeping inventory.
 
 ## Access and migration tools
 

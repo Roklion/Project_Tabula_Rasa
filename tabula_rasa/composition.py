@@ -1,4 +1,4 @@
-"""Composition root for the current Sheets runtime; no Streamlit dependency."""
+"""Trusted per-profile bookkeeping composition; no Streamlit dependency."""
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -40,6 +40,76 @@ class SheetsApplication:
     workbook_admin: GoogleSheetsStorage = field(repr=False)
 
 
+@dataclass(frozen=True)
+class PostgresApplication:
+    services: ApplicationServices
+    workbook_admin: None = None
+
+
+def _backend_configuration(profile_key, secrets, *, explicit=False):
+    configurations = secrets.get("bookkeeping_backends", {})
+    if not isinstance(configurations, Mapping):
+        raise BusinessProfileConfigurationError("bookkeeping_backends must be a trusted per-profile mapping.")
+    configured = configurations.get(profile_key)
+    if profile_key not in configurations and not explicit:
+        return {"backend": "sheets"}
+    if (not isinstance(configured, Mapping) or not isinstance(configured.get("backend"), str)
+            or configured["backend"] not in {"sheets", "postgres", "maintenance"}):
+        raise BusinessProfileConfigurationError("An explicit valid bookkeeping backend is required for this profile.")
+    if configured["backend"] == "postgres" and (
+            not isinstance(configured.get("entity_id"), str) or not configured["entity_id"].strip()
+            or not isinstance(configured.get("mode"), str)
+            or configured["mode"] not in {"rehearsal", "commercial_production"}):
+        raise BusinessProfileConfigurationError("PostgreSQL requires an explicit entity and activation environment.")
+    return configured
+
+
+def _document_store(profile_key, selected_secrets, secrets, drive_client_factory):
+    drive_settings = selected_secrets.get("google_drive")
+    receipt_folder = drive_settings.get("receipt_folder") if isinstance(drive_settings, Mapping) else None
+    folder_id = str(receipt_folder.get("id", "")) if isinstance(receipt_folder, Mapping) else ""
+
+    def create_drive_client():
+        from tabula_rasa.google_drive import GoogleDriveClient, GoogleDriveConfigurationError, load_oauth_config
+        if not isinstance(drive_settings, Mapping):
+            raise GoogleDriveConfigurationError("Google Drive is not connected for this business profile.")
+        return GoogleDriveClient(load_oauth_config(secrets), drive_settings)
+
+    return GoogleDriveDocumentStore(profile_key, folder_id,
+                                    drive_client_factory if drive_client_factory is not None else create_drive_client)
+
+
+def create_application(profile_key, secrets, *, database=None, drive_client_factory=None):
+    """Resolve trusted configuration after the caller resolves authorized scope.
+
+    Configuration is not tenant authorization. Pool/schema lifecycle belongs
+    to the caller; ordinary requests never migrate, activate or dual-write.
+    """
+    if not isinstance(profile_key, str) or not profile_key.strip():
+        raise BusinessProfileConfigurationError("Application services require a selected business profile.")
+    selected = select_profile_secrets(secrets, profile_key)
+    configured = _backend_configuration(profile_key, secrets, explicit=True)
+    backend = configured["backend"]
+    if backend == "sheets":
+        return create_sheets_application(profile_key, secrets, drive_client_factory=drive_client_factory)
+    if backend == "maintenance":
+        raise BusinessProfileConfigurationError("This profile is in bookkeeping maintenance.")
+    if database is None:
+        raise BusinessProfileConfigurationError("The selected PostgreSQL backend requires its configured database.")
+    from tabula_rasa.migration.model import Binding
+    from tabula_rasa.infrastructure.postgres.cutover import PostgresCutoverController
+    from tabula_rasa.infrastructure.postgres.composition import create_postgres_services
+    from tabula_rasa.infrastructure.entity_documents import EntityDocumentStore
+    binding = Binding(profile_key, str(selected["spreadsheet_id"]).strip(), configured["entity_id"])
+    store = EntityDocumentStore(binding.entity_id, profile_key,
+                                _document_store(profile_key, selected, secrets, drive_client_factory))
+    PostgresCutoverController(database).require_postgres(binding, mode=configured["mode"], document_scope=store.scope_key)
+    services = create_postgres_services(database, binding.entity_id,
+        document_store=store if store.scope_key else None,
+        document_store_kind="google_drive" if store.scope_key else None)
+    return PostgresApplication(services)
+
+
 def create_sheets_application(
     profile_key: str,
     secrets: Mapping[str, object],
@@ -54,37 +124,16 @@ def create_sheets_application(
             "Application services require a selected business profile."
         )
     selected_secrets = select_profile_secrets(secrets, profile_key)
+    if _backend_configuration(profile_key, secrets)["backend"] != "sheets":
+        raise BusinessProfileConfigurationError("This profile is not configured for the Sheets runtime.")
     storage = GoogleSheetsStorage.from_secrets(selected_secrets)
-    drive_settings = selected_secrets.get("google_drive")
-    receipt_folder = (
-        drive_settings.get("receipt_folder") if isinstance(drive_settings, Mapping) else None
-    )
-    folder_id = str(receipt_folder.get("id", "")) if isinstance(receipt_folder, Mapping) else ""
-
-    def create_drive_client() -> object:
-        # Receipt availability does not gate ledger startup. Construct OAuth
-        # infrastructure only when a document operation needs it.
-        from tabula_rasa.google_drive import (
-            GoogleDriveClient,
-            GoogleDriveConfigurationError,
-            load_oauth_config,
-        )
-
-        if not isinstance(drive_settings, Mapping):
-            raise GoogleDriveConfigurationError(
-                "Google Drive is not connected for this business profile."
-            )
-        return GoogleDriveClient(load_oauth_config(secrets), drive_settings)
 
     services = assemble_application_services(
         profile_key,
         ledger_repository=GoogleSheetsLedgerSetupRepository(storage),
         reporting_repository=GoogleSheetsLedgerQueryRepository(storage),
         receipt_repository=GoogleSheetsReceiptRepository(profile_key, storage),
-        document_store=GoogleDriveDocumentStore(
-            profile_key, folder_id,
-            drive_client_factory if drive_client_factory is not None else create_drive_client,
-        ),
+        document_store=_document_store(profile_key, selected_secrets, secrets, drive_client_factory),
         mileage_repository=GoogleSheetsMileageRepository(storage),
         account_repository=GoogleSheetsAccountRepository(storage),
         category_repository=GoogleSheetsCategoryRepository(storage),

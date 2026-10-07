@@ -10,7 +10,10 @@ from dataclasses import dataclass
 FORMAT_NAME = "tabula-rasa-bookkeeping"
 FORMAT_VERSION = 1
 # A new database revision requires a completeness review for this format.
-SUPPORTED_DATABASE_REVISION = "0004_mileage_order"
+# 0005 adds only operator authority/evidence, not bookkeeping fields. The v1
+# inventory remains complete; cutover controls are deployment records.
+SUPPORTED_DATABASE_REVISION = "0005_bookkeeping_cutover"
+SUPPORTED_DATABASE_REVISIONS = ("0004_mileage_order", SUPPORTED_DATABASE_REVISION)
 ROOT = "id:text created_at:instant updated_at:instant incarnation_id:text version:integer"
 
 
@@ -120,7 +123,7 @@ def json_schema():
                              "counts", "content_sha256", "status", "diagnostics", "document_bytes"],
                 "properties": {
                     "format": {"const": FORMAT_NAME}, "format_version": {"const": FORMAT_VERSION},
-                    "database_schema_version": {"const": SUPPORTED_DATABASE_REVISION}, "entity_id": {"type": "string", "minLength": 1},
+                    "database_schema_version": {"enum": list(SUPPORTED_DATABASE_REVISIONS)}, "entity_id": {"type": "string", "minLength": 1},
                     "snapshot_at": {"type": "string", "format": "date-time"},
                     "counts": {"type": "object", "additionalProperties": False, "required": list(DOMAINS),
                                "properties": {name: {"type": "integer", "minimum": 0} for name in DOMAINS}},
