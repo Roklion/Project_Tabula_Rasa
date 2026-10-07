@@ -20,6 +20,8 @@ def application_database_error(error: DatabaseError) -> StorageError:
         return StorageValidationError("The operation violates a bookkeeping constraint.", code=code)
     if code == "read_only":
         return StorageValidationError("This operation is read-only.", code=code)
+    if code == "backend_inactive":
+        return StorageConflictError("The bookkeeping backend is inactive. Restart with the configured authority.", code=code)
     return StorageError("The database operation could not be confirmed. Inspect current data before trying again.", code=code)
 
 

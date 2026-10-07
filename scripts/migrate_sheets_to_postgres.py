@@ -20,10 +20,12 @@ from tabula_rasa.storage import GoogleSheetsStorage
 from tabula_rasa.infrastructure.postgres.config import DatabaseSettings
 from tabula_rasa.infrastructure.postgres.migration import PostgresMigrationRunner
 from tabula_rasa.infrastructure.postgres.migration_reconciliation import PostgresMigrationReconciler
+from tabula_rasa.infrastructure.postgres.migration_acceptance import PostgresMigrationAcceptance
+from tabula_rasa.migration.acceptance import acceptance_text
 from tabula_rasa.infrastructure.postgres.runtime import Database, DatabaseError
 
 
-def run_migration(all_secrets, *, profile_key, entity_id, load=False, reconcile=False, document_store=None):
+def extract_plan(all_secrets, *, profile_key, entity_id, document_store=None):
     # Explicit profile selection has no fallback to a previously selected profile.
     settings = select_profile_secrets(all_secrets, profile_key)
     binding = Binding(profile_key, str(settings["spreadsheet_id"]).strip(), entity_id)
@@ -47,15 +49,21 @@ def run_migration(all_secrets, *, profile_key, entity_id, load=False, reconcile=
                                documents=inventory.documents if inventory is not None else (),
                                inventory_complete=inventory is not None,
                                document_timestamps=getattr(inventory, "timestamps", {}))
-    plan = build_plan(snapshot)
+    return build_plan(snapshot)
+
+
+def run_migration(all_secrets, *, profile_key, entity_id, load=False, reconcile=False, accept=False, document_store=None):
+    plan = extract_plan(all_secrets, profile_key=profile_key, entity_id=entity_id, document_store=document_store)
     database = None
     try:
         # Dry-run never creates a DB pool, checks health or writes run metadata.
-        if load or reconcile:
+        if load or reconcile or accept:
             database = Database(DatabaseSettings.from_environment(required=True))
         report = PostgresMigrationRunner(database, secondary=True).execute(plan, dry_run=not load)
         if reconcile:
             report["reconciliation"] = PostgresMigrationReconciler(database).reconcile(plan)
+        if accept:
+            report["acceptance_report"] = PostgresMigrationAcceptance(database).accept(plan)
         return report
     finally:
         if database is not None:
@@ -69,10 +77,13 @@ def main(argv=None):
     parser.add_argument("--secrets", type=Path, default=PROJECT_ROOT / ".streamlit/secrets.toml")
     parser.add_argument("--load", action="store_true", help="Write only to an empty/inactive rehearsal entity.")
     parser.add_argument("--reconcile", action="store_true", help="Read-only comparison with the frozen source; no acceptance or cutover.")
+    parser.add_argument("--accept", action="store_true", help="Whole-profile read-only acceptance and complete export verification.")
+    parser.add_argument("--format", choices=("json", "text"), default="json")
     args = parser.parse_args(argv)
     try:
         secrets = load_business_profile_document(args.secrets)
-        report = run_migration(secrets, profile_key=args.profile, entity_id=args.entity, load=args.load, reconcile=args.reconcile)
+        report = run_migration(secrets, profile_key=args.profile, entity_id=args.entity, load=args.load,
+                               reconcile=args.reconcile, accept=args.accept)
     except (MigrationError, DatabaseError) as error:
         print(json.dumps({"error": str(error), "cutover_authorized": False}, sort_keys=True))
         return 1
@@ -81,8 +92,9 @@ def main(argv=None):
         print(json.dumps({"error": "Migration setup or extraction failed; inspect configuration privately.",
                           "cutover_authorized": False}, sort_keys=True))
         return 1
-    print(json.dumps(report, sort_keys=True))
-    return 1 if report.get("reconciliation", {}).get("passed") is False else 0
+    print(acceptance_text(report["acceptance_report"]) if args.format == "text" and args.accept
+          else json.dumps(report, sort_keys=True))
+    return 1 if any(report.get(name, {}).get("passed") is False for name in ("reconciliation", "acceptance_report")) else 0
 
 
 if __name__ == "__main__":

@@ -3,9 +3,10 @@
 Implementation of #254 under EPIC #220 and commercialization initiative #124.
 The core and secondary implementation extends that framework for #255/#256.
 The current local implementation uses PR #274's historical recurring-ID
-correction as a dependency. Whole-profile acceptance (#257), backend selection
-and cutover (#258), recovery (#259), and complete entity export (#260) retain
-their separate owners and release gates.
+correction as a dependency. Whole-profile acceptance (#257) and guarded backend
+selection/cutover (#258) now extend these loaders through the
+[acceptance and cutover guide](BOOKKEEPING_CUTOVER.md). Recovery (#259) and
+complete entity export (#260) retain their separate owners and release gates.
 The framework starts from dependency PR #266 at `aeee01eb` and consumes the
 merged #243 canonical model, #244 runtime, #253 integrity rules, and #261 frozen
 format-13 source contract.
@@ -46,8 +47,9 @@ before #254 acceptance; the completed framework drill is recorded below.
 core totals and local disposable tests do not authorize cutover. #259 recovery
 and #260 complete export remain independent gates.
 
-The initial baseline is `0001_initial`; the current head is the forward
-`0004_mileage_order` revision from #250. The baseline's four SQL assets preserve the existing
+The initial baseline is `0001_initial`; `0004_mileage_order` from #250 remains
+in the deployed forward chain, followed by `0005_bookkeeping_cutover` from #258.
+The baseline's four SQL assets preserve the existing
 canonical definitions, balance/hierarchy checks, aggregate-version triggers and
 domain/history enforcement. The mapping table additionally records original
 source update timestamps. The original revision modules are removed from the
@@ -269,6 +271,11 @@ All results remain `provisional_reconciliation`, with
 `whole_profile_accepted=false` and `cutover_authorized=false`; even matching
 totals do not mark a run `validated`. #257 owns whole-profile acceptance and
 #258 owns enforcement of that acceptance plus the independent initiative gates.
+Use `--accept` for the new final whole-profile report; `--reconcile` retains
+these explicitly provisional semantics. The standalone acceptance command is
+read-only; cutover preparation records a successful matching run as `validated`.
+See [Bookkeeping acceptance and cutover](BOOKKEEPING_CUTOVER.md) for its exact
+checks, output formats and authority boundaries.
 
 ## Persistent staging checkpoint
 
