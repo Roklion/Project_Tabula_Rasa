@@ -703,6 +703,13 @@ boundaries, exact baseline coverage, native test harness, and remaining #253
 integrity work. Current Sheets composition imports none of this infrastructure
 and still works without database configuration or database dependencies.
 
+#254's explicit migration tooling keeps provider-neutral plans in `migration/`,
+the read-only Sheets extraction adapter in `infrastructure/sheets_migration.py`,
+and canonical loading/checkpoints in `infrastructure/postgres/migration.py`.
+The [operator guide](SHEETS_POSTGRES_MIGRATION.md) documents deterministic unit
+ordering, dry-run, restart and the persistent staging checkpoint. This tooling
+does not activate PostgreSQL or meet #257 whole-profile acceptance by itself.
+
 #245/#246's explicit `postgres/composition.py` now assembles entity-scoped
 reference-data, Simple Ledger and advanced journal services on canonical
 entries/postings. It reuses #253's operation, baseline and version machinery.

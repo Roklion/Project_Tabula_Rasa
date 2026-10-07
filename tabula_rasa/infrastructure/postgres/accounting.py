@@ -22,6 +22,13 @@ from .source_accounting import occurrence_fields, write_occurrence, check_occurr
 from .documents import receipt_reference, write_document_links
 
 
+def entry_values(prepared):
+    """Shared simple-entry payload for runtime and explicit historical loading."""
+    return {'txn_date': iso_date(prepared['txn_date']), 'simple_kind': prepared['kind'],
+            'description': prepared['description'], 'reference': prepared['reference'],
+            'payee_id': prepared['payee_id'] or None}
+
+
 class _AccountingRepository(EntityRepository):
     projection = ''
 
@@ -169,8 +176,7 @@ class PostgresTransactionRepository(_AccountingRepository):
         return TransactionReferences(references.accounts, references.categories, *lookups)
 
     def write(self, connection, identity, prepared, *, create=False, owner=None):
-        values = {'txn_date': iso_date(prepared['txn_date']), 'simple_kind': prepared['kind'],
-                  'description': prepared['description'], 'reference': prepared['reference'], 'payee_id': prepared['payee_id'] or None}
+        values = entry_values(prepared)
         if owner is not None:
             column, source_id = owner
             if column not in {'mixed_use_source_id', 'depreciation_asset_id'}:

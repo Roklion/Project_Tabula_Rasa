@@ -11,7 +11,7 @@ from tabula_rasa.infrastructure.postgres.concurrency import AggregateKey
 from tabula_rasa.infrastructure.postgres.config import DatabaseSettings
 from tabula_rasa.infrastructure.postgres.migrations import current_revision, downgrade, upgrade, head_revision
 from tabula_rasa.infrastructure.postgres.operations import repository_operation
-from tabula_rasa.infrastructure.postgres.runtime import Database, DatabaseError
+from tabula_rasa.infrastructure.postgres.runtime import Database
 from tests.postgres._support import (
     asset, expense_entry, expense_references, load_baseline, mixed_pair, schedule,
 )
@@ -251,20 +251,14 @@ def test_secondary_references_reject_foreign_entity_only_identifiers(database, s
     assert load_baseline(database, AggregateKey("beta", "mixed_use", "source")) == before
 
 
-def test_new_revision_refuses_invalid_existing_data_without_partial_install(database):
-    downgrade(database, "0002_aggregate_versions", allow_destructive=True)
-    with repository_operation(database) as connection:
-        expense_references(connection)
-        mixed_pair(connection)
-        connection.execute(text("UPDATE entries SET reference='mismatch'"))
-    with pytest.raises(DatabaseError) as caught:
-        upgrade(database)
-    assert caught.value.code == "invariant"
+def test_initial_baseline_contains_all_domain_history_guards(database):
+    downgrade(database, "0001_initial", allow_destructive=True)
     with database.transaction(read_only=True) as connection:
-        assert current_revision(connection) == "0002_aggregate_versions"
-        assert connection.scalar(text("SELECT reference FROM entries")) == "mismatch"
-        assert connection.scalar(text("SELECT count(*) FROM pg_proc WHERE proname='check_mixed_relationship'")) == 0
-    with repository_operation(database) as connection:
-        connection.execute(text("UPDATE mixed_use_sources SET relationship_state='projection_mismatch'"))
+        assert current_revision(connection) == "0001_initial"
+        functions = set(connection.scalars(text("SELECT proname FROM pg_proc WHERE pronamespace='public'::regnamespace")))
+        assert {"check_mixed_relationship", "check_schedule_relationship", "check_asset_relationship",
+                "protect_committed_history", "enforce_domain_integrity"} <= functions
+        triggers = set(connection.scalars(text("SELECT tgname FROM pg_trigger WHERE NOT tgisinternal")))
+        assert {"domain_integrity", "protect_history", "version_entry", "version_source"} <= triggers
     upgrade(database)
     assert database.health()["revision"] == head_revision()

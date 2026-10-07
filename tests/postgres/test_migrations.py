@@ -47,7 +47,7 @@ def test_catalog_is_canonical_and_every_relationship_is_entity_qualified(databas
 
 
 def test_mileage_order_revision_preserves_populated_rows_and_downgrades(database):
-    downgrade(database, '0003_domain_integrity', allow_destructive=True)
+    downgrade(database, '0001_initial', allow_destructive=True)
     with database.transaction() as connection:
         entity(connection)
         connection.execute(text("""INSERT INTO mileage_records(
@@ -59,7 +59,7 @@ def test_mileage_order_revision_preserves_populated_rows_and_downgrades(database
         loaded = dict(connection.execute(text('SELECT * FROM mileage_records')).mappings().one())
         assert loaded.pop('insertion_order') > 0
         assert loaded == original
-    downgrade(database, '0003_domain_integrity', allow_destructive=True)
+    downgrade(database, '0001_initial', allow_destructive=True)
     with database.transaction(read_only=True) as connection:
         assert dict(connection.execute(text('SELECT * FROM mileage_records')).mappings().one()) == original
     upgrade(database)

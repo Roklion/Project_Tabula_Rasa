@@ -372,6 +372,71 @@ def _parse_backup_zip(
                 record["payee_id"] = _clean_text(record.get("payee_id"), "Payee")
         tables[title] = (headers, records)
 
+    validate_source_tables(tables)
+
+    if (
+        hashlib.sha256(receipt_manifest_bytes).hexdigest()
+        != file_hashes.get("receipts.json")
+    ):
+        raise StorageValidationError("Receipt manifest checksum does not match")
+    try:
+        raw_receipt_manifest = json.loads(receipt_manifest_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise StorageValidationError(
+            "Receipt manifest is not valid UTF-8 JSON"
+        ) from exc
+    try:
+        receipt_manifest = validate_receipt_manifest(
+            raw_receipt_manifest,
+            transaction_ids={
+                transaction["id"] for transaction in tables["Transactions"][1]
+            },
+        )
+    except ReceiptManifestError as exc:
+        raise StorageValidationError(str(exc)) from exc
+    referenced_entries = {
+        (str(entry["transaction_id"]), str(entry["old_drive_file_id"])): entry
+        for entry in receipt_manifest["receipts"]
+        if entry["reference_state"] == "referenced"
+    }
+    expected_references: set[tuple[str, str]] = set()
+    for transaction in tables["Transactions"][1]:
+        for reference in decode_receipt_references(
+            transaction.get("receipt_references", "")
+        ):
+            if "receipt_id" not in reference:
+                raise StorageValidationError(
+                    "Receipt references need integrity metadata before backup"
+                )
+            key = (transaction["id"], str(reference["id"]))
+            entry = referenced_entries.get(key)
+            if entry is None or any(
+                (
+                    reference[reference_field]
+                    != entry[entry_field]
+                )
+                for reference_field, entry_field in (
+                    ("name", "stored_filename"),
+                    ("receipt_id", "receipt_id"),
+                    ("original_filename", "original_filename"),
+                    ("mime_type", "mime_type"),
+                    ("byte_size", "byte_size"),
+                    ("sha256", "sha256"),
+                )
+            ):
+                raise StorageValidationError(
+                    "Receipt manifest does not match transaction references"
+                )
+            expected_references.add(key)
+    if expected_references != set(referenced_entries):
+        raise StorageValidationError(
+            "Receipt manifest has an invalid transaction association"
+        )
+    return manifest, tables, receipt_manifest
+
+
+def validate_source_tables(tables) -> None:
+    """Validate current-format domain relationships for archive/live extraction."""
     _validate_hierarchy_records(
         tables["Accounts"][1],
         compatibility_field="classification",
@@ -609,65 +674,6 @@ def _parse_backup_zip(
 
     _validate_mixed_use_tables(tables)
 
-    if (
-        hashlib.sha256(receipt_manifest_bytes).hexdigest()
-        != file_hashes.get("receipts.json")
-    ):
-        raise StorageValidationError("Receipt manifest checksum does not match")
-    try:
-        raw_receipt_manifest = json.loads(receipt_manifest_bytes.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise StorageValidationError(
-            "Receipt manifest is not valid UTF-8 JSON"
-        ) from exc
-    try:
-        receipt_manifest = validate_receipt_manifest(
-            raw_receipt_manifest,
-            transaction_ids={
-                transaction["id"] for transaction in tables["Transactions"][1]
-            },
-        )
-    except ReceiptManifestError as exc:
-        raise StorageValidationError(str(exc)) from exc
-    referenced_entries = {
-        (str(entry["transaction_id"]), str(entry["old_drive_file_id"])): entry
-        for entry in receipt_manifest["receipts"]
-        if entry["reference_state"] == "referenced"
-    }
-    expected_references: set[tuple[str, str]] = set()
-    for transaction in tables["Transactions"][1]:
-        for reference in decode_receipt_references(
-            transaction.get("receipt_references", "")
-        ):
-            if "receipt_id" not in reference:
-                raise StorageValidationError(
-                    "Receipt references need integrity metadata before backup"
-                )
-            key = (transaction["id"], str(reference["id"]))
-            entry = referenced_entries.get(key)
-            if entry is None or any(
-                (
-                    reference[reference_field]
-                    != entry[entry_field]
-                )
-                for reference_field, entry_field in (
-                    ("name", "stored_filename"),
-                    ("receipt_id", "receipt_id"),
-                    ("original_filename", "original_filename"),
-                    ("mime_type", "mime_type"),
-                    ("byte_size", "byte_size"),
-                    ("sha256", "sha256"),
-                )
-            ):
-                raise StorageValidationError(
-                    "Receipt manifest does not match transaction references"
-                )
-            expected_references.add(key)
-    if expected_references != set(referenced_entries):
-        raise StorageValidationError(
-            "Receipt manifest has an invalid transaction association"
-        )
-    return manifest, tables, receipt_manifest
 
 __all__ = [
     "decode_receipt_references",
@@ -695,4 +701,5 @@ __all__ = [
     "_as_bool",
     "_validate_mixed_use_tables",
     "_parse_backup_zip",
+    "validate_source_tables",
 ]

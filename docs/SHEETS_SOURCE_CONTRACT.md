@@ -153,6 +153,8 @@ source. Preserve account classification/current earnings and the
   before target writes. Keep source Sheets unchanged. Define deterministic
   IDs, dry-run behavior, dependency-complete units, and load ordering with
   #243/#255/#256. This contract does not add backup-archive import to #254.
+  The [migration framework guide](SHEETS_POSTGRES_MIGRATION.md) documents the
+  implemented extraction/core rehearsal path and pending staging acceptance.
 - **#257:** verify supported final-format success and unsupported/retired-format
   rejection without writes, plus whole-profile accounting/reference/receipt
   reconciliation across both backends. Core totals alone do not authorize cutover.

@@ -3,7 +3,7 @@
 from alembic import op
 
 revision = "0004_mileage_order"
-down_revision = "0003_domain_integrity"
+down_revision = "0001_initial"
 branch_labels = None
 depends_on = None
 

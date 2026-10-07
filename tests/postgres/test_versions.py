@@ -3,7 +3,7 @@ from sqlalchemy import text
 
 from tabula_rasa.errors import StorageConflictError, StorageValidationError
 from tabula_rasa.infrastructure.postgres.concurrency import AggregateKey, check_baseline, lock_aggregates
-from tabula_rasa.infrastructure.postgres.migrations import downgrade, upgrade
+from tabula_rasa.infrastructure.postgres.migrations import upgrade
 from tabula_rasa.infrastructure.postgres.operations import repository_operation
 from tests.postgres._support import account, category, entity, ledger, simple_entry, load_baseline as load
 
@@ -129,16 +129,15 @@ def test_schedule_attention_is_outside_the_editable_baseline(database):
     assert load(database, key) != before
 
 
-def test_version_revision_downgrade_preserves_data_and_reupgrade(database):
+def test_initial_baseline_repeat_upgrade_preserves_data_and_version_guards(database):
     with repository_operation(database) as connection:
         entity(connection)
         account(connection)
         connection.execute(text("UPDATE accounts SET opening_balance=25"))
-    downgrade(database, "0001_canonical", allow_destructive=True)
+    upgrade(database)
     with database.transaction(read_only=True) as connection:
         assert version(connection, "accounts", "cash") == 2
         assert connection.scalar(text("SELECT opening_balance FROM accounts")) == 25
-    upgrade(database)
     with repository_operation(database) as connection:
         connection.execute(text("UPDATE accounts SET opening_balance=30"))
         assert version(connection, "accounts", "cash") == 3
