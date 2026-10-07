@@ -183,7 +183,8 @@ def _validate(domains, indexes):
         require((row["entry_id"] is None) != (row["mixed_use_source_id"] is None), "relationship")
         if row["entry_id"]:
             entry = entries[row["entry_id"]]
-            require(entry["projection_kind"] == "simple" and entry["mixed_use_source_id"] is None, "relationship")
+            require(entry["projection_kind"] == "simple" and entry["mixed_use_source_id"] is None
+                    and entry["depreciation_asset_id"] is None, "relationship")
         link_positions[(row["entry_id"], row["mixed_use_source_id"])].append(row["position"])
     for positions in link_positions.values():
         require(sorted(positions) == list(range(1, len(positions) + 1)) and len(positions) <= 100, "relationship")

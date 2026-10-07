@@ -52,7 +52,8 @@ def write_artifact(path, artifact):
             try:
                 temporary.unlink(missing_ok=True)
             except OSError:
-                failed = True
+                # Publication status belongs to os.link; cleanup is best effort.
+                pass
     if failed:
         raise ExportError("output_write")
 

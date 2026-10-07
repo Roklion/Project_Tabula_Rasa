@@ -270,3 +270,16 @@ def test_native_export_preserves_supported_money_extremes_and_calendar_dates(dat
     artifact = create_postgres_export_service(database, "alpha").export()
     assert {row["id"]: row["opening_balance"] for row in artifact["domains"]["accounts"]}["cash"] == "-99999999999999999999999999.99"
     assert artifact["domains"]["entries"][0]["txn_date"] == "2024-02-29"
+
+
+def test_offline_validation_rejects_receipt_on_depreciation_entry_for_each_entity(database):
+    representative(database)
+    for scope in ("alpha", "beta"):
+        artifact = create_postgres_export_service(database, scope).export()
+        assert validate_artifact(artifact, entity_id=scope) == artifact
+        depreciation = next(row for row in artifact["domains"]["entries"] if row["depreciation_asset_id"])
+        link = next(row for row in artifact["domains"]["document_links"] if row["entry_id"] == "ordinary")
+        link["entry_id"] = depreciation["id"]
+        artifact["manifest"]["content_sha256"] = content_digest(artifact["domains"])
+        with pytest.raises(ExportError, match="relationship"):
+            validate_artifact(artifact, entity_id=scope)

@@ -121,3 +121,40 @@ def test_manifest_rejects_unsupported_versions_dates_and_byte_boundary():
         changed = {**artifact, "manifest": {**artifact["manifest"], field: value}}
         with pytest.raises(ExportError):
             validate_artifact(changed, entity_id="alpha")
+
+
+@pytest.mark.parametrize("revision", ["0003_migration_provenance", "unreviewed-revision"])
+def test_supported_database_revision_is_shared_by_export_offline_validation_and_schema(revision):
+    from jsonschema import Draft202012Validator, ValidationError
+    from tabula_rasa.bookkeeping_export.schema import json_schema
+
+    artifact = build_artifact(empty_snapshot())
+    artifact["manifest"]["database_schema_version"] = revision
+    with pytest.raises(ExportError, match="unsupported_database_schema"):
+        parse_artifact(canonical_json(artifact), entity_id="alpha")
+    with pytest.raises(ExportError, match="unsupported_database_schema"):
+        build_artifact(replace(empty_snapshot(), database_schema_version=revision))
+    with pytest.raises(ValidationError):
+        Draft202012Validator(json_schema()).validate(artifact)
+
+
+@pytest.mark.parametrize("publish_fails", [False, True])
+def test_temporary_cleanup_failure_does_not_change_publication_status(tmp_path, monkeypatch, publish_fails):
+    artifact = build_artifact(empty_snapshot())
+    path = tmp_path / "synthetic.json"
+
+    def fail_cleanup(*args, **kwargs):
+        raise OSError("private-cleanup-sentinel")
+
+    monkeypatch.setattr(Path, "unlink", fail_cleanup)
+    if publish_fails:
+        def fail_publish(*args):
+            raise OSError("private-publish-sentinel")
+        monkeypatch.setattr("tabula_rasa.bookkeeping_export.files.os.link", fail_publish)
+        with pytest.raises(ExportError, match="output_write") as caught:
+            write_artifact(path, artifact)
+        assert caught.value.__context__ is None
+        assert not path.exists()
+    else:
+        write_artifact(path, artifact)
+        assert read_artifact(path, entity_id="alpha") == artifact

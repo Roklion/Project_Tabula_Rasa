@@ -41,7 +41,8 @@ records cannot be presented as a committed export. The artifact is validated
 before writing. Output refuses a Git checkout (including managed worktrees),
 existing files, and missing directories. A fully written, flushed temporary file
 is atomically published without overwriting the destination. The filesystem must
-support same-directory hard links. Interrupted exports can leave a private
+support same-directory hard links. A cleanup failure after publication does not
+change successful delivery. Interrupted exports or cleanup failures can leave a private
 `.bookkeeping-*.tmp` file; inspect/remove that specific file locally.
 
 The command prints only a status, format version and diagnostic count. On
@@ -121,7 +122,8 @@ unbalanced/invalid entry shapes or undeclared source relationship problems fail.
 Completeness describes coverage of persisted supported data, not whether an
 incomplete migration has loaded all of its source units.
 
-The adapter pins its supported database revision and checks every supported
+The format pins its supported database revision for both export and offline
+validation. The adapter also checks every supported
 table's exact field inventory before reading data. A later schema revision must
 review export coverage and update its compatibility decision; supported new
 bookkeeping fields/domains must not be silently ignored. The format is an

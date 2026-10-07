@@ -5,15 +5,11 @@ from datetime import timezone
 from sqlalchemy import text
 
 from tabula_rasa.application.entity_export import EntityExportSnapshot, ExportError
-from tabula_rasa.bookkeeping_export.schema import DOMAINS
+from tabula_rasa.bookkeeping_export.schema import DOMAINS, SUPPORTED_DATABASE_REVISION
 from tabula_rasa.errors import StorageNotFoundError
 from .migrations import current_revision
 from .operations import repository_operation
 from .repository import EntityRepository
-
-# Deliberately pinned: a new DB revision requires a completeness review before
-# it can produce a complete export, even when the new checkout knows that head.
-SUPPORTED_DATABASE_REVISION = "0004_mileage_order"
 
 
 class PostgresEntityExportRepository(EntityRepository):
