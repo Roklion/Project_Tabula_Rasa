@@ -79,8 +79,12 @@ class PostgresMigrationReconciler:
             source = plan.snapshot.metadata.get("documents", []) if title == "Documents" else tables[title]
             ids = {plan.target_id(title, row["storage_key"] if title == "Documents" else row["id"]) for row in source}
             check(title, "record_counts_and_identities", {row["id"] for row in actual} == ids)
+        secondary_unit_failed = False
         for unit in plan.units:
             differences = unit_differences(connection, plan, unit)
+            if differences and unit.kind in {"mixed_pair", "asset_history", "recurring_entry",
+                                             "simple_entry_receipts", "recurring_entry_receipts"}:
+                secondary_unit_failed = True
             checks.append(dict(domain=unit.kind, check="record_fields_and_relationships", passed=not differences))
             exceptions.extend(differences)
 
@@ -97,7 +101,11 @@ class PostgresMigrationReconciler:
         else:
             self._reports(tables, source_transactions, source_journals, calculation_records(reporting_snapshot), periods, check)
         core_passed = not any(item["domain"] in CORE for item in exceptions)
-        secondary_passed = not any(item["domain"] not in CORE for item in exceptions)
+        # Shared binding/checkpoint failures invalidate both evidence groups;
+        # source-owned core projections also belong to their secondary unit.
+        global_failed = any(item["domain"] in {"Entity", "Migration"} for item in exceptions)
+        secondary_passed = not (global_failed or secondary_unit_failed or
+                                any(item["domain"] not in CORE for item in exceptions))
         secondary_present = any(tables[title] for title in ("RecurringSchedules", "MixedUseExpenses", "Assets", "Mileage")) or bool(
             plan.snapshot.metadata.get("documents"))
         return dict(reconciliation_version="1", run_id=plan.run_id, source_snapshot_sha256=plan.snapshot.sha256,
