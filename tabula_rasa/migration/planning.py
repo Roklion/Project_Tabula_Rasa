@@ -3,6 +3,7 @@
 import json
 
 from tabula_rasa.ledger_validation import decode_receipt_references
+from tabula_rasa.document_identity import legacy_document_id
 
 from .model import IdMapping, MigrationError, Plan, Unit, digest, stable_id
 
@@ -38,6 +39,13 @@ def build_plan(snapshot):
                 reserved.add(target)
                 reason = "simple_journal_entry_namespace_collision"
             mappings.append(IdMapping(title, row["id"], TARGET_KINDS[title], target, reason, row.get("updated_at") or None))
+    documents = snapshot.metadata.get("documents", [])
+    for row in documents:
+        mappings.append(IdMapping("Documents", row["storage_key"], "document", row["metadata"]["document_id"],
+                                  "entity_store_locator_identity" if row["metadata"]["document_id"] == legacy_document_id(
+                                      snapshot.binding.entity_id, "google_drive", snapshot.metadata["document_scope"], row["storage_key"])
+                                  else "preserved",
+                                  row.get("updated_at") or None))
 
     units = []
 
@@ -47,6 +55,8 @@ def build_plan(snapshot):
 
     add("foundation", "foundation", {title: tables[title] for title in
                                      ("Accounts", "Categories", "Payees", "Tags")}, ())
+    if documents:
+        add("documents", "documents", {"Documents": documents})
     for row in tables["RecurringSchedules"]:
         add(_key("schedule", row["id"]), "schedule", {"RecurringSchedules": [row]})
     owners = {}
@@ -62,6 +72,8 @@ def build_plan(snapshot):
                 kind += "_receipts"
             key = owners[row["id"]] = _key("entry", row["id"])
             dependencies = ["foundation"]
+            if documents and kind.endswith("_receipts"):
+                dependencies.append("documents")
             if row["recurring_schedule_id"]:
                 dependencies.append(_key("schedule", row["recurring_schedule_id"]))
             add(key, kind, {"Transactions": [row]}, dependencies)
@@ -69,6 +81,8 @@ def build_plan(snapshot):
         entries = [row for row in tables["Transactions"]
                    if row["source_type"] == "mixed_use_expense" and row["source_id"] == source["id"]]
         dependencies = ["foundation"]
+        if documents and decode_receipt_references(source["receipt_references"]):
+            dependencies.append("documents")
         if source["recurring_schedule_id"]:
             dependencies.append(_key("schedule", source["recurring_schedule_id"]))
         add(_key("mixed_pair", source["id"]), "mixed_pair",
@@ -98,7 +112,7 @@ def build_plan(snapshot):
             ordered.append(pending.pop(key))
             complete.add(key)
     # Every source row belongs to exactly one unit, including source-owned entries.
-    actual = [(title, row["id"]) for unit in ordered for title, rows in unit.rows.items() for row in rows]
+    actual = [(title, row["id"]) for unit in ordered for title, rows in unit.rows.items() for row in rows if title != "Documents"]
     expected = {(title, row["id"]) for title, rows in tables.items() for row in rows}
     if len(actual) != len(set(actual)) or set(actual) != expected:
         raise MigrationError("Source records are missing or multiply owned in the migration plan.")

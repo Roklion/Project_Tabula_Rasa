@@ -249,7 +249,7 @@ The current decomposition uses these seams:
 
 | Responsibility | Current boundary |
 | --- | --- |
-| Application composition | `tabula_rasa/composition.py` selects one profile, constructs the adapters, and returns `SheetsApplication` with neutral services and explicit workbook administration for backup/operator workflows. |
+| Application composition | `tabula_rasa/composition.py` resolves trusted per-profile backend configuration. Internal Sheets graphs retain explicit workbook administration; activated PostgreSQL graphs contain services only. `create_application` enforces the recorded cutover/environment binding before composing PostgreSQL. |
 | Application services and contracts | `tabula_rasa/application/services.py` assembles `ApplicationServices`; `ledger_setup.py` owns the initial setup service and its result DTO; `contracts.py` declares the repository capabilities that service needs. |
 | Infrastructure adapter | `tabula_rasa/infrastructure/google_sheets.py` adapts the existing storage facade to `LedgerSetupRepository` without duplicating storage behavior. |
 | Sheets storage facade | `tabula_rasa/storage/google_sheets/__init__.py` keeps `GoogleSheetsStorage` and re-exports intentionally public names. |
@@ -771,6 +771,17 @@ checkpoint. Production authority/recovery and external beta retain the separate
 #220/#222/#223/#224 gates.
 
 ## Implementation map
+
+Whole-profile acceptance extends migration reconciliation with complete export
+validation on one snapshot. Native per-entity authority controls block prepared
+or rolled-back target writes and persist the first committed PostgreSQL mutation
+that ends Sheets rollback. Existing Google receipt ownership stays bound to the
+original selected profile through a thin entity adapter. The
+[acceptance and cutover guide](BOOKKEEPING_CUTOVER.md) owns maintenance, trusted
+configuration, independent production gates and the recovery boundary. This
+composition is not commercial membership authorization; #222 remains its owner.
+The Streamlit edition continues to use Sheets and refuses profiles configured
+for maintenance or PostgreSQL. The commercial web/API stack remains #221 work.
 
 | Area | Primary implementation |
 | --- | --- |

@@ -2,9 +2,7 @@
 
 from dataclasses import replace as replace_document
 from collections.abc import Mapping
-import json
 import re
-from uuid import NAMESPACE_URL, uuid5
 
 from sqlalchemy import text
 
@@ -15,6 +13,7 @@ from tabula_rasa.application.documents import (
 from tabula_rasa.errors import StorageConflictError, StorageValidationError
 from tabula_rasa.receipt_manifest import validate_receipt_filename, validate_receipt_reference, ReceiptManifestError
 from tabula_rasa.reference_data import clean_text
+from tabula_rasa.document_identity import legacy_document_id
 from .concurrency import check_baseline, lock_aggregates
 from .repository import EntityRepository, insert, new_object
 
@@ -68,10 +67,8 @@ def map_legacy_document(entity_id, store_kind, store_scope_key, document):
         raise DocumentValidationError('The receipt belongs to a different business entity.')
     if document.metadata.document_id:
         return document
-    payload = json.dumps(['tabula-rasa-document-v1', entity_id, store_kind, store_scope_key,
-                          document.storage_key], separators=(',', ':'))
     return replace_document(document, metadata=replace_document(
-        document.metadata, document_id=uuid5(NAMESPACE_URL, payload).hex,
+        document.metadata, document_id=legacy_document_id(entity_id, store_kind, store_scope_key, document.storage_key),
     ))
 
 

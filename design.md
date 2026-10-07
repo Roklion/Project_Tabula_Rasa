@@ -32,6 +32,12 @@ in [Architecture](docs/ARCHITECTURE.md), [Setup](docs/SETUP.md),
 [Backup and recovery](docs/BACKUP_RECOVERY.md); this file should specify UI
 intent rather than duplicate those guides.
 
+**Current behavior:** The Streamlit composition refuses a profile configured
+for bookkeeping maintenance or PostgreSQL before initializing its Sheet.
+Backend activation is an operator procedure documented in
+[Bookkeeping acceptance and cutover](docs/BOOKKEEPING_CUTOVER.md); no backend
+picker or commercial authorization flow is added to the Streamlit interface.
+
 ## Product character
 
 The interface should feel professional, calm, precise, trustworthy,

@@ -89,31 +89,35 @@ class PostgresLedgerQueryRepository(EntityRepository):
         # A nested mutation uses READ COMMITTED and may contain incomplete,
         # uncommitted aggregates. Refuse it instead of weakening this contract.
         with repository_operation(self.database, read_only=True, require_outer=True) as connection:
-            params = {'scope': self.entity_id}
-            if connection.scalar(text('SELECT id FROM business_entities WHERE id=:scope'), params) is None:
-                raise StorageNotFoundError('The selected business entity does not exist.')
-            accounts = tuple(sorted((
-                ReportingAccount(
-                    id=row['id'], name=row['name'], type=row['type'],
-                    classification=row['classification'], opening_balance=row['opening_balance'],
-                    active=row['active'], parent_id=row['parent_id'] or '',
-                )
-                for row in connection.execute(text(
-                    'SELECT id,name,type,classification,opening_balance,active,parent_id '
-                    'FROM accounts WHERE entity_id=:scope ORDER BY id'
-                ), params).mappings()
-            ), key=lambda row: row.name.casefold()))
-            categories = tuple(sorted((
-                ReportingCategory(
-                    id=row['id'], name=row['name'], kind=row['kind'], parent_id=row['parent_id'] or '',
-                )
-                for row in connection.execute(text(
-                    'SELECT id,name,kind,parent_id FROM categories WHERE entity_id=:scope ORDER BY id'
-                ), params).mappings()
-            ), key=lambda row: (row.kind, row.name.casefold())))
-            transactions = self._transactions(connection, params)
-            journals = self._journals(connection, params)
-            return LedgerSnapshot(accounts, categories, transactions, journals)
+            return self.project_ledger(connection)
+
+    def project_ledger(self, connection):
+        """Project a caller-owned coherent read snapshot (migration tooling)."""
+        params = {'scope': self.entity_id}
+        if connection.scalar(text('SELECT id FROM business_entities WHERE id=:scope'), params) is None:
+            raise StorageNotFoundError('The selected business entity does not exist.')
+        accounts = tuple(sorted((
+            ReportingAccount(
+                id=row['id'], name=row['name'], type=row['type'],
+                classification=row['classification'], opening_balance=row['opening_balance'],
+                active=row['active'], parent_id=row['parent_id'] or '',
+            )
+            for row in connection.execute(text(
+                'SELECT id,name,type,classification,opening_balance,active,parent_id '
+                'FROM accounts WHERE entity_id=:scope ORDER BY id'
+            ), params).mappings()
+        ), key=lambda row: row.name.casefold()))
+        categories = tuple(sorted((
+            ReportingCategory(
+                id=row['id'], name=row['name'], kind=row['kind'], parent_id=row['parent_id'] or '',
+            )
+            for row in connection.execute(text(
+                'SELECT id,name,kind,parent_id FROM categories WHERE entity_id=:scope ORDER BY id'
+            ), params).mappings()
+        ), key=lambda row: (row.kind, row.name.casefold())))
+        transactions = self._transactions(connection, params)
+        journals = self._journals(connection, params)
+        return LedgerSnapshot(accounts, categories, transactions, journals)
 
     @staticmethod
     def _transactions(connection, params):

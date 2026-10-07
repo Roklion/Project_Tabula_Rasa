@@ -16,7 +16,7 @@ from tabula_rasa.bookkeeping_export.schema import DOMAINS
 
 
 def empty_snapshot():
-    return EntityExportSnapshot("alpha", "0004_mileage_order", "2026-10-05T12:00:00.123456Z", {
+    return EntityExportSnapshot("alpha", "0005_bookkeeping_cutover", "2026-10-05T12:00:00.123456Z", {
         name: ({"id": "alpha", "name": "Synthetic entity", "currency_code": "USD",
                 "incarnation_id": "synthetic-incarnation", "version": 1,
                 "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -121,6 +121,15 @@ def test_manifest_rejects_unsupported_versions_dates_and_byte_boundary():
         changed = {**artifact, "manifest": {**artifact["manifest"], field: value}}
         with pytest.raises(ExportError):
             validate_artifact(changed, entity_id="alpha")
+
+
+@pytest.mark.parametrize("revision", ["0004_mileage_order", "0005_bookkeeping_cutover"])
+def test_control_plane_revision_preserves_the_existing_v1_portable_inventory(revision):
+    from jsonschema import Draft202012Validator
+    from tabula_rasa.bookkeeping_export.schema import json_schema
+    artifact = build_artifact(replace(empty_snapshot(), database_schema_version=revision))
+    assert parse_artifact(canonical_json(artifact), entity_id="alpha") == artifact
+    Draft202012Validator(json_schema()).validate(artifact)
 
 
 @pytest.mark.parametrize("revision", ["0003_migration_provenance", "unreviewed-revision"])

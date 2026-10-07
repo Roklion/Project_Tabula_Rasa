@@ -40,6 +40,7 @@ class Snapshot:
     binding: Binding
     extracted_at: str
     content: str = field(repr=False)
+    context: str = field(default="{}", repr=False)
 
     @property
     def tables(self):
@@ -47,7 +48,12 @@ class Snapshot:
 
     @property
     def sha256(self):
-        return sha256(self.content.encode("utf-8")).hexdigest()
+        content = self.content if self.context == "{}" else self.content + self.context
+        return sha256(content.encode("utf-8")).hexdigest()
+
+    @property
+    def metadata(self):
+        return json.loads(self.context)
 
     def __repr__(self):
         return "Snapshot(format=13, private_content=True)"

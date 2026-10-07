@@ -5,6 +5,13 @@ Tabula Rasa backups. Backups are recovery artifacts, not alternate live
 ledgers. Every restore targets a new blank Google workbook and refuses the
 configured live workbook.
 
+For an activated PostgreSQL entity, the
+[bookkeeping cutover guide](BOOKKEEPING_CUTOVER.md) defines the bounded rollback
+to its preserved format-13 Sheets source. After committed PostgreSQL writes,
+recover PostgreSQL through #259/#223 backup/PITR procedures and coordinate
+document-byte recovery. The preserved Sheet and these ZIP backups cannot
+become a live fallback to a diverged PostgreSQL ledger.
+
 ## Recovery topology
 
 ```mermaid

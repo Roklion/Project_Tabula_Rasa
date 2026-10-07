@@ -9,7 +9,7 @@ from tabula_rasa.infrastructure.postgres.runtime import DatabaseError
 def test_zero_to_head_repeated_upgrade_and_explicit_downgrade(empty_database):
     assert empty_database.health() == {"connected": True, "revision": None}
     upgrade(empty_database)
-    assert empty_database.health()["revision"] == head_revision() == "0004_mileage_order"
+    assert empty_database.health()["revision"] == head_revision() == "0005_bookkeeping_cutover"
     with empty_database.transaction() as connection:
         entity(connection)
     upgrade(empty_database)
@@ -29,7 +29,7 @@ def test_catalog_is_canonical_and_every_relationship_is_entity_qualified(databas
     with database.engine.connect() as connection:
         inspector = inspect(connection)
         tables = set(inspector.get_table_names()) - {"alembic_version"}
-        assert len(tables) == 26
+        assert len(tables) == 27  # 26 bookkeeping collections plus operator cutover controls.
         assert {"entries", "postings", "business_entities", "migration_id_mappings"} <= tables
         assert "transactions" not in tables
         for table in tables - {"business_entities"}:

@@ -1,6 +1,6 @@
 """Native core loading, source ownership, atomic checkpoints and restart."""
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from contextlib import contextmanager
 
 import pytest
@@ -145,6 +145,26 @@ def test_uninitialized_target_schema_is_rejected_without_initialization(empty_da
     with pytest.raises(MigrationError, match="initialize it explicitly"):
         PostgresMigrationRunner(empty_database).execute(plan_for(), dry_run=False)
     assert empty_database.health()["revision"] is None
+
+
+def test_unhashable_extension_preflight_runs_once_and_refuses_foreign_profile_before_writes(database):
+    @dataclass
+    class ProfileGuard(CoreLoader):
+        calls: int = 0
+
+        def preflight(self, plan):
+            self.calls += 1
+            if plan.snapshot.binding.profile_key != "alpha":
+                raise MigrationError("Synthetic profile guard.")
+
+    loader = ProfileGuard()
+    runner = PostgresMigrationRunner(database, loaders={"simple_entry": loader, "recurring_entry": loader})
+    assert runner.execute(plan_for())["dry_run"]
+    assert loader.calls == 1
+    with pytest.raises(MigrationError, match="Synthetic profile guard"):
+        runner.execute(plan_for(profile="beta", entity="beta", workbook="workbook-beta"), dry_run=False)
+    assert counts(database, "beta")["migration_runs"] == 0
+    assert counts(database, "beta")["entries"] == 0
 
 
 def test_normalized_transaction_kind_loads_and_restarts_in_two_profiles(database):

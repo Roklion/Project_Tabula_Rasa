@@ -213,7 +213,8 @@ def _validate(domains, indexes):
         require(row["status"] in {"prepared", "loading", "failed", "validated"})
     # Migration maps deliberately outlive deletion of their target records.
     targets = {"account": "accounts", "category": "categories", "payee": "payees", "tag": "tags", "entry": "entries",
-               "mixed_use": "mixed_use_sources", "schedule": "recurring_schedules", "asset": "fixed_assets", "mileage": "mileage_records"}
+               "mixed_use": "mixed_use_sources", "schedule": "recurring_schedules", "asset": "fixed_assets", "mileage": "mileage_records",
+               "document": "documents"}
     journal_ids = {row["id"] for row in domains["postings"] if row["projection_kind"] == "journal"}
     for position, row in enumerate(domains["migration_id_mappings"]):
         kind = row["target_record_kind"]

@@ -7,7 +7,7 @@ import json
 import re
 
 from tabula_rasa.application.entity_export import ExportError
-from .schema import DOMAINS, FORMAT_NAME, FORMAT_VERSION, SCALES, SUPPORTED_DATABASE_REVISION
+from .schema import DOMAINS, FORMAT_NAME, FORMAT_VERSION, SCALES, SUPPORTED_DATABASE_REVISIONS
 
 
 def encoded_value(value, kind):
@@ -103,7 +103,7 @@ def validate_domains(domains, entity_id):
 
 
 def build_artifact(snapshot):
-    if snapshot.database_schema_version != SUPPORTED_DATABASE_REVISION:
+    if snapshot.database_schema_version not in SUPPORTED_DATABASE_REVISIONS:
         raise ExportError("unsupported_database_schema")
     if not snapshot.entity_id.strip() or not _valid(snapshot.snapshot_at, "instant"):
         raise ExportError("snapshot_metadata")
@@ -142,7 +142,7 @@ def validate_artifact(artifact, *, entity_id):
             or not isinstance(manifest["database_schema_version"], str) or not manifest["database_schema_version"]
             or not _valid(manifest["snapshot_at"], "instant")):
         raise ExportError("manifest")
-    if manifest["database_schema_version"] != SUPPORTED_DATABASE_REVISION:
+    if manifest["database_schema_version"] not in SUPPORTED_DATABASE_REVISIONS:
         raise ExportError("unsupported_database_schema")
     if not isinstance(entity_id, str) or not entity_id.strip() or manifest["entity_id"] != entity_id:
         raise ExportError("entity_scope")
