@@ -156,3 +156,27 @@ def test_added_core_activity_fails_counts_and_financial_reconciliation(database)
     report = PostgresMigrationReconciler(database).reconcile(plan)
     assert not report["passed"]
     assert any(item["domain"] == "Reports" for item in report["exceptions"])
+
+
+@pytest.mark.parametrize("mutation", [
+    "UPDATE entries SET description='Synthetic drift' WHERE entity_id='alpha' AND id='ordinary'",
+    "UPDATE entries SET description='Synthetic drift' WHERE entity_id='alpha' AND id IN (SELECT entry_id FROM recurring_occurrences WHERE entity_id='alpha' AND entry_id IS NOT NULL)",
+    "UPDATE migration_runs SET source_workbook_key='Synthetic wrong binding' WHERE entity_id='alpha'",
+    "UPDATE migration_units SET unit_sha256=repeat('f',64) WHERE entity_id='alpha'",
+    "UPDATE business_entities SET name='Synthetic wrong identity' WHERE id='alpha'",
+])
+def test_owned_projection_and_global_drift_invalidate_both_groups_without_cross_profile_effects(database, mutation):
+    plans = [complete_plan(profile)[0] for profile in ("alpha", "beta")]
+    runner = PostgresMigrationRunner(database, secondary=True)
+    reconciler = PostgresMigrationReconciler(database)
+    for plan in plans:
+        runner.execute(plan, dry_run=False)
+        assert reconciler.reconcile(plan)["passed"]
+    with database.transaction() as connection:
+        connection.execute(text(mutation))
+    affected = reconciler.reconcile(plans[0])
+    assert not affected["passed"]
+    assert not affected["core_passed"] and not affected["secondary_passed"]
+    assert not affected["whole_profile_accepted"] and not affected["cutover_authorized"]
+    unaffected = reconciler.reconcile(plans[1])
+    assert unaffected["passed"] and unaffected["core_passed"] and unaffected["secondary_passed"]
