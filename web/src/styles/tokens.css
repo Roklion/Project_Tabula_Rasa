@@ -37,3 +37,13 @@ caption { text-align: left; padding: 16px 0; font-weight: 600; }
 th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid #E9E9E5; white-space: nowrap; }
 thead { background: #FAFAF8; }
 .amount { text-align: right; font-variant-numeric: tabular-nums; }
+.editor { margin: 16px 0; }
+.editor fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 16px; min-width: 0; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 24px; }
+.recordList { list-style: none; padding: 0; }
+.recordList li { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.recordList li span { min-width: 0; }
+.recordList li button { flex-shrink: 0; max-width: 60%; overflow-wrap: anywhere; }
+.checkbox { display: flex; gap: 8px; align-items: center; min-height: 44px; }
+.checkbox input { width: 20px; height: 20px; }
+.posting { padding: 16px; border: 1px solid var(--border); display: grid; gap: 12px; }

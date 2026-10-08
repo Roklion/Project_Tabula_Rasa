@@ -3,6 +3,7 @@ from typing import Annotated
 from pydantic import StringConstraints
 
 from .common import DTO
+from .mutations import ProtectedMutation
 
 DecimalString = Annotated[str, StringConstraints(pattern=r"^-?\d+(\.\d+)?$", max_length=100)]
 
@@ -29,6 +30,19 @@ class Account(DTO):
 
 class AccountList(DTO):
     items: list[Account]
+
+
+class AccountChanges(DTO):
+    name: str
+    type: str
+    classification: str
+    opening_balance: DecimalString
+    active: bool
+    parent_id: str | None = None
+
+
+class AccountUpdate(ProtectedMutation):
+    changes: AccountChanges
 
 
 def account_response(record) -> Account:

@@ -275,7 +275,7 @@ expose a raw traceback for this configuration failure.
 
 ## Commercial shell
 
-**Current behavior** for the #277/#278 local technical-alpha foundation:
+**Current behavior** for the #277/#278/#280 local technical-alpha application:
 
 - The React shell uses the visual tokens, typography and approximately 760px
   stacking boundary above. Navigation covers Dashboard, Transactions, Assets,
@@ -285,20 +285,32 @@ expose a raw traceback for this configuration failure.
   context is identified as technical-alpha development. This shell does not
   expose internal profile keys, workbook metadata, Google credentials or local
   administration controls as commercial authorization.
-- Dashboard links to a read-only Accounts view. Other routes show an explicit
-  availability state until their separately scoped vertical slices land.
-  The foundation does not remove or replace any internal-edition workflow.
+- Dashboard links to Accounts. The #280 concurrency bridge adds edit/deactivate
+  forms to that view and narrow existing-record edit/delete lists for Categories,
+  Transactions, Journals and Mileage. Categories links to Payees/Tags and their
+  merge forms; Transactions links to Journals. Derived transactions retain their
+  source owner. Other routes show availability states until their separately
+  scoped slices land. No internal-edition workflow is removed or replaced.
 - Shared loading, empty, validation, conflict, unexpected-error and success
   states use text plus semantic status/alert roles. Conflicts preserve drafts
   and offer an explicit review action. Forms retain loaded server metadata
   independently from editable values and request confirmation before dirty
   navigation or document unload.
+- Protected mutations submit the baseline captured at load. Conflicts retain the
+  draft and original token. Review latest record offers Keep draft or Discard
+  draft and reload; only the latter replaces fields and metadata together.
+  Fixed account types select their required classification; Other permits a classification choice. Payee/tag active-to-inactive saves require confirmation and preserve the original loaded baseline. Active accounts deactivate only through the confirmed Deactivate action; inactive accounts may reactivate through Active and Save changes. Parent choices contain compatible roots, and parents with children remain roots and retain their classification/kind until the children are moved. Transfer destinations exclude the selected source account; changing the source clears an identical destination. Changing transaction kind clears an incompatible category, and existing/new payee inputs are mutually exclusive. Bookkeeping selectors retain only each loaded field/posting's historical inactive references alongside active choices.
+  Deletion/deactivation requires acknowledgement; merges retain target/source
+  tokens. Merge source choices exclude the selected target, and changing the target clears it from selected sources. Successful saves advance the baseline from the confirmed response.
+  No mutation retries automatically. Journal target selectors show Choose target
+  for new postings and clear the selection when Account/Category changes.
 - Context changes remount private queries and drafts; no prior business/session
   cache is reused. Forms stack; tables may scroll within their own region.
   Keyboard focus, labels and business scope remain reachable at 320 CSS pixels.
 
 [Foundation conventions](docs/COMMERCIAL_FOUNDATION.md) owns technical contracts.
-#222 adds real identity/context selection, #280 adds protected edit/delete forms,
+[Commercial concurrency](docs/COMMERCIAL_CONCURRENCY.md) owns the #280 contract.
+#222 adds real identity/context selection,
 #281–#286 add domain workflows, and #287 expands accessibility/browser coverage.
 The Streamlit-specific shell requirements above continue to govern the internal
 edition.

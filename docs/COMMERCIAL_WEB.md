@@ -17,6 +17,11 @@ and hosted gating remain #279 work; this local foundation does not establish
 staging, external-beta readiness or production authority. Streamlit/Sheets
 continues as the internal/reference runtime.
 
+#280 adds the [protected commercial edit/delete bridge](COMMERCIAL_CONCURRENCY.md)
+over those foundations, carrying loaded baselines through actual browser/API
+mutations while preserving service-owned concurrency and compatibility.
+Broader domain workflow migration remains #281–#286.
+
 #299's [owner-operated production procedure](BOOKKEEPING_CUTOVER.md#owner-operated-production-procedure-299)
 uses this same application and deployment. `open_migrated_runtime` binds accepted
 profiles through the normal authenticated context resolver and existing cutover

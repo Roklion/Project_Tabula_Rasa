@@ -325,10 +325,11 @@ domain engine, source loader, scheduler or recovery state machine is introduced.
 
 The resolver and deployment integration must be real and approved before using
 private data. #222 owns normal web identity/session delivery; #279 owns hosted
-deployment, and #280/#281–#286 own the remaining protected interactions and
-workflow coverage. The current shared HTTP foundation exposes account reads and
-creation; service/report/export verification does not claim those later browser
-screens are delivered. Until the selected deployment has the resolver and
+deployment, and #281–#286 own the remaining domain workflow coverage. The shared
+HTTP foundation exposes account reads and creation, and #280 adds protected
+edit/delete endpoints and browser forms with loaded baselines. Service/report/
+export verification does not claim the remaining domain browser screens are
+delivered. Until the selected deployment has the resolver and
 required workflows, stop before live migration and complete those shared
 integration tasks. This is a setup/coverage checkpoint, not a second owner app.
 
