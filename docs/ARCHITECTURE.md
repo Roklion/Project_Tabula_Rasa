@@ -249,7 +249,7 @@ The current decomposition uses these seams:
 
 | Responsibility | Current boundary |
 | --- | --- |
-| Application composition | `tabula_rasa/composition.py` resolves trusted per-profile backend configuration. Internal Sheets graphs retain explicit workbook administration; activated PostgreSQL graphs contain services only. `create_application` enforces the recorded cutover/environment binding before composing PostgreSQL. |
+| Application composition | `tabula_rasa/composition.py` resolves trusted per-profile backend configuration. Internal Sheets graphs retain explicit workbook administration; activated PostgreSQL graphs contain services only. `create_application` enforces the recorded cutover binding before composing PostgreSQL. `http/composition.py:open_migrated_runtime` validates configured migrated profiles at startup and uses the same HTTP app and normal authorization resolver for owner and commercial deployments. |
 | Application services and contracts | `tabula_rasa/application/services.py` assembles `ApplicationServices`; `ledger_setup.py` owns the initial setup service and its result DTO; `contracts.py` declares the repository capabilities that service needs. |
 | Infrastructure adapter | `tabula_rasa/infrastructure/google_sheets.py` adapts the existing storage facade to `LedgerSetupRepository` without duplicating storage behavior. |
 | Sheets storage facade | `tabula_rasa/storage/google_sheets/__init__.py` keeps `GoogleSheetsStorage` and re-exports intentionally public names. |

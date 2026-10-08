@@ -17,6 +17,15 @@ and hosted gating remain #279 work; this local foundation does not establish
 staging, external-beta readiness or production authority. Streamlit/Sheets
 continues as the internal/reference runtime.
 
+#299's [owner-operated production procedure](BOOKKEEPING_CUTOVER.md#owner-operated-production-procedure-299)
+uses this same application and deployment. `open_migrated_runtime` binds accepted
+profiles through the normal authenticated context resolver and existing cutover
+checks. HTTP `production` and database branch names are distinct from commercial
+activation evidence policy. Owner recovery acceptance does not require a provider
+upgrade; NAS automation/restore remains #294. The current synthetic foundation,
+missing normal identity/deployment integration and unfinished browser workflows
+must not be presented as a completed live owner deployment.
+
 ## Package and build ownership
 
 Keep one repository, the existing Python package and existing Alembic chain.

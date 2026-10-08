@@ -57,6 +57,9 @@ def _backend_configuration(profile_key, secrets, *, explicit=False):
             or configured["backend"] not in {"sheets", "postgres", "maintenance"}):
         raise BusinessProfileConfigurationError("An explicit valid bookkeeping backend is required for this profile.")
     if configured["backend"] == "postgres" and (
+            # This is the stored cutover policy, independent of the HTTP
+            # deployment environment. Rehearsal also supports lasting owner
+            # operation under the documented non-commercial recovery contract.
             not isinstance(configured.get("entity_id"), str) or not configured["entity_id"].strip()
             or not isinstance(configured.get("mode"), str)
             or configured["mode"] not in {"rehearsal", "commercial_production"}):
