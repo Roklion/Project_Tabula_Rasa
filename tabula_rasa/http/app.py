@@ -80,7 +80,10 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
             # Do not emit exception repr/tracebacks: they may contain SQL or draft values.
             response = error_response(request, "unexpected")
         response.headers["X-Request-ID"] = request.state.request_id
-        response.headers.setdefault("Cache-Control", "no-store")
+        if configured and configured.hosted_alpha:
+            response.headers["Cache-Control"] = "no-store"
+        else:
+            response.headers.setdefault("Cache-Control", "no-store")
         route = request.scope.get("route")
         logger.info(json.dumps({
             "request_id": request.state.request_id,

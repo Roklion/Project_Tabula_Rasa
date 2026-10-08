@@ -78,7 +78,7 @@ No subscription purchase is implied.
    `Deployment connectivity` account. The seed uses the existing entity/account
    services in one transaction and refuses an existing fixture; inspect rather
    than delete/reset an existing fixture. Nothing seeds/migrates on API startup.
-5. Generate a separate operator password hash per environment with
+5. Generate a separate nonempty operator password hash per environment with
    `python -m tabula_rasa.http.alpha` (hidden password prompt). In each Render
    service set the runtime URL, endpoint fingerprint, public origin, environment,
    fixed trusted entity, username and hash. Use a small pool (template: two
@@ -149,7 +149,10 @@ Hosted development/staging refuses startup without explicit HTTPS,
 `alpha-synthetic`, an operator username, a valid scrypt password hash, direct
 TLS database URL and matching endpoint binding. HTTP Basic protects shell,
 assets, API, documents and schema paths; only minimal health/version probes are
-public. Unsafe requests still require exact Origin and the shared context's
+public. Hosted responses, including compiled assets, use `Cache-Control: no-store`
+so shared caches cannot bypass the gate. Empty passwords are rejected by both
+the hash generator and authentication boundary. Unsafe requests still require
+exact Origin and the shared context's
 CSRF token. The browser receives the fixed synthetic entity, never a scope
 override. Different environment credentials and connections remain independent.
 Secrets and private request/draft data never enter safe HTTP error/log output.

@@ -35,7 +35,10 @@ def test_gate_covers_shell_assets_schema_and_api_before_composition(tmp_path, ca
             assert client.get(path, headers={"Host": "internal-probe"}).status_code == 200
         client.auth = ("operator", "synthetic-alpha-password")
         assert client.get("/accounts", headers={"Accept": "text/html"}).status_code == 200
-        assert client.get("/assets/app.js").status_code == 200
+        asset = client.get("/assets/app.js")
+        assert asset.status_code == 200 and asset.headers["cache-control"] == "no-store"
+        cached = client.get("/assets/app.js", headers={"If-None-Match": asset.headers["etag"]})
+        assert cached.status_code == 304 and cached.headers["cache-control"] == "no-store"
         assert client.get("/api/openapi.json").status_code == 200
         assert client.get("/api/v1/session").json()["entity"]["id"] == "alpha-synthetic"
         runtime.services.reset_mock()
@@ -63,6 +66,22 @@ def test_two_environments_do_not_accept_each_others_operator_credentials():
             assert client.get("/api/v1/session", auth=(username, password)).status_code == 200
             wrong = ("stage", "stage-password") if environment == "development" else ("dev", "dev-password")
             assert client.get("/api/v1/session", auth=wrong).status_code == 401
+
+
+def test_empty_password_cannot_be_generated_or_authenticate_with_an_existing_hash():
+    from hashlib import scrypt
+    with pytest.raises(ValueError, match="must not be empty"):
+        password_hash("")
+    # Even an imported hash created before the generator guard cannot grant access.
+    salt = bytes(16)
+    empty_hash = f"scrypt${salt.hex()}${scrypt(b'', salt=salt, n=16384, r=8, p=1, dklen=32).hex()}"
+    runtime = FakeRuntime()
+    runtime.resolve_context = TrustedDevelopmentContext("alpha-synthetic", "csrf", hosted=True)
+    configured = settings(hashed=empty_hash)
+    with TestClient(create_app(settings=configured, runtime_factory=lambda _: runtime), base_url=configured.public_origin) as client:
+        response = client.get("/api/v1/session", auth=("operator", ""))
+        assert response.status_code == 401
+        runtime.services.assert_not_called()
 
 
 @pytest.mark.parametrize("kwargs", [
