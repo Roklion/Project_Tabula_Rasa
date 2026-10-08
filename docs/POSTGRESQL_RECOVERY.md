@@ -263,8 +263,9 @@ isolation through the console. The hashes cannot prove that distinction.
 ## Milestone B: requested-point PITR
 
 1. Use the actual production root's protected history, independently of the
-   snapshot milestone. Confirm T remains within the effective six-hour/1 GB
-   history boundary and approve a dedicated new recovery branch; never choose
+   snapshot milestone. Confirm the requested recovery point T remains within
+   the effective six-hour/1 GB history boundary and approve a dedicated new
+   recovery branch; never choose
    production or retained UAT as a restore target. Neon supports creating a
    branch from an explicit parent's historical timestamp/LSN. This new-branch recovery path
    reads the original production root's history without rewinding production.
