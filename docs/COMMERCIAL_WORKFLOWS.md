@@ -5,8 +5,8 @@ Issues [#281](https://github.com/Roklion/Project_Tabula_Rasa/issues/281) and
 technical-alpha workflows in [EPIC #221](https://github.com/Roklion/Project_Tabula_Rasa/issues/221),
 under [initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124).
 They consume the #277/#278 foundation and #280 protected-edit contract.
-The implementation consumes dependency PR #296 at `b70b7d4`. Its final
-merged revision must be integrated before this dependent PR is merged.
+The implementation consumes #280 from merged PR #296, including its final
+`b70b7d4` revision and merge commit `9260b895`.
 
 ## Business selection
 
