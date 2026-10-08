@@ -279,8 +279,9 @@ source unchanged; rollback to it is available only before divergent PostgreSQL
 writes make it stale.
 
 After divergence, PostgreSQL managed backup/PITR and recovery-point schema
-validation belong to #259 with #223's operational runbooks and document-store
-recovery. Commercial production activation requires successful real restore
+validation use [#259's managed recovery runbook](POSTGRESQL_RECOVERY.md), with
+#223 owning ongoing operations and document-store recovery. Commercial
+production activation requires successful real restore
 and requested-point PITR evidence. #260's canonical export has its own version
 and accounting model; it is neither a format-13 Sheets archive nor a replacement
 for disaster recovery. These downstream capabilities remain initiative work;
