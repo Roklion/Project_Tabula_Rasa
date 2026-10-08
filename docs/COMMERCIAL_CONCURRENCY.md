@@ -82,7 +82,7 @@ reference or inline-tag writes. Handlers never manufacture a fresh expected toke
 thin domain adapters own fields and DTO mapping. Loaded identity/baseline metadata
 is cloned separately from editable values. Rerenders, background reads and cache
 invalidation cannot replace the draft or its baseline. Merge forms keep their
-original target/source token map separately from editable selections. Existing
+original target/source token map separately from editable selections. Merge source choices exclude the selected target, and changing the target clears it from selected sources. Existing
 scope boundaries remount private state on session/entity/capability changes.
 
 Errors preserve the draft and expose **Review latest record**, or **Reload** for

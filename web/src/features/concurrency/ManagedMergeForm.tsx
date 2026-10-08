@@ -52,6 +52,7 @@ function MergeEditor({ resource, rows, onClose }: { resource: 'payees' | 'tags';
     catch (failure) { setError(failure); }
     finally { setReloading(false); }
   }
+  const target = form.watch('target');
   const pending = mutation.isPending || reloading;
   return <section className="surface editor"><h2>Merge {resource}</h2><UnsavedChanges dirty={form.formState.isDirty} />
     {success ? <><SuccessNotice>Records merged.</SuccessNotice><button type="button" onClick={onClose}>Back to records</button></>
@@ -59,10 +60,12 @@ function MergeEditor({ resource, rows, onClose }: { resource: 'payees' | 'tags';
         {error !== undefined && <ErrorNotice error={error} onReview={() => setReview(true)} />}
         {review && <ReloadPrompt pending={pending} onKeep={() => setReview(false)} onReload={() => void reloadLatest()} />}
         <fieldset disabled={pending || review}><label htmlFor="merge-target">Keep this record</label>
-          <select id="merge-target" {...form.register('target')}><option value="">Choose target</option>
+          <select id="merge-target" {...form.register('target', { onChange: () => {
+            form.setValue('sources', form.getValues('sources').filter(id => id !== form.getValues('target')), { shouldDirty: true });
+          } })}><option value="">Choose target</option>
             {metadata.rows.filter(row => row.active).map(row => <option key={row.id} value={row.id}>{row.name}</option>)}
           </select><p>Merge these records into the selected target:</p>
-          {metadata.rows.map(row => <label className="checkbox" key={row.id}><input type="checkbox" value={row.id} {...form.register('sources')} />{row.name}</label>)}
+          {metadata.rows.filter(row => row.id !== target).map(row => <label className="checkbox" key={row.id}><input type="checkbox" value={row.id} {...form.register('sources')} />{row.name}</label>)}
         </fieldset><p>The selected source records will be removed and their references moved to the target.</p>
         <button type="submit" disabled={pending || review}>Confirm merge</button>
       </form>}

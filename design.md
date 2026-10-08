@@ -301,7 +301,7 @@ expose a raw traceback for this configuration failure.
   draft and reload; only the latter replaces fields and metadata together.
   Fixed account types select their required classification; Other permits a classification choice. Payee/tag active-to-inactive saves require confirmation and preserve the original loaded baseline. Active accounts deactivate only through the confirmed Deactivate action; inactive accounts may reactivate through Active and Save changes. Parent choices contain compatible roots, and parents with children remain roots and retain their classification/kind until the children are moved. Transfer destinations exclude the selected source account; changing the source clears an identical destination. Changing transaction kind clears an incompatible category, and existing/new payee inputs are mutually exclusive. Bookkeeping selectors retain only each loaded field/posting's historical inactive references alongside active choices.
   Deletion/deactivation requires acknowledgement; merges retain target/source
-  tokens. Successful saves advance the baseline from the confirmed response.
+  tokens. Merge source choices exclude the selected target, and changing the target clears it from selected sources. Successful saves advance the baseline from the confirmed response.
   No mutation retries automatically. Journal target selectors show Choose target
   for new postings and clear the selection when Account/Category changes.
 - Context changes remount private queries and drafts; no prior business/session
