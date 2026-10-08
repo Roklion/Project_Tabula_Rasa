@@ -219,9 +219,21 @@ proves the required operational behavior. Budget database pools across all
 workers/instances; sessions and durable jobs cannot live only in process memory.
 
 Use paid, continuously available Render services for hosted dev/staging and
-intended production. Use separate Neon projects for
-hosted development, retained staging and production, with separate roles and
-secrets; synthetic non-production data only, no automatic production cloning.
+intended production. The 2026-10-07 operator amendment permits Neon Free for
+the current pre-activation stage: production and retained UAT use distinct
+branches/endpoints in one Neon project, with separately scoped connection
+configuration and access controls. The production root is the #259 recovery
+source; isolated recovery targets must not overwrite production or retained UAT.
+Keep synthetic non-production data only and no automatic production cloning.
+Shared-project administration, capacity and recovery-history limits create a
+common operational boundary; branches are not an independent project-access
+boundary. Before commercial activation under #220/#258/#223, review and approve
+environment isolation, roles/secrets and operational blast radius; separate
+projects remain the proposed stronger isolation direction, rather than a
+prerequisite for the current Free-plan drills. This amendment changes Neon
+separation/recovery preparation only, not the paid Render runtime decision.
+See [the recovery contract](../POSTGRESQL_RECOVERY.md) for current Free-plan
+limits and the future protection/objective gates.
 Start with direct/unpooled TLS connections and the existing small application
 pool. Pooler adoption requires verifying the implemented transaction/migration
 contract. Select Neon PostgreSQL 18 and geographically close Render/Neon US
