@@ -8,6 +8,8 @@ import { RecordList } from './RecordList';
 import { latest } from './mutations';
 import { ActiveField, SelectField, TextField } from './Fields';
 
+const fixedClassifications: Record<string, string> = { Bank: 'Asset', Cash: 'Asset', 'Credit card': 'Liability', 'Short-term debt': 'Liability', Equity: 'Equity' };
+
 const options = (values: string[]) => values.map(value => ({ id: value, name: value }));
 function eligibleParents<T extends { id: string; parent_id?: string | null }>(rows: T[], id: string, compatible: (row: T) => boolean) {
   if (rows.some(row => row.parent_id === id)) return [];
@@ -30,8 +32,15 @@ export function AccountEditor({ row, onClose }: { row: Account; onClose: () => v
     remove={(id, baseline) => api.deactivateAccount(session, id, baseline)} removeLabel="Deactivate"
     loadLatest={async id => accountLoaded(await latest(api.accounts, session, id))}
     fields={form => <><TextField form={form} name="name" label="Account name" />
-      <SelectField form={form} name="type" label="Type" options={options(['Bank', 'Cash', 'Credit card', 'Short-term debt', 'Equity', 'Other'])} />
-      <SelectField form={form} name="classification" label="Classification" options={options(['Asset', 'Liability', 'Equity'])}
+      <SelectField form={form} name="type" label="Type" options={options(['Bank', 'Cash', 'Credit card', 'Short-term debt', 'Equity', 'Other'])}
+        onChange={() => {
+          const classification = fixedClassifications[form.getValues('type') ?? ''];
+          if (classification && classification !== form.getValues('classification')) {
+            form.setValue('classification', classification, { shouldDirty: true });
+            form.setValue('parent_id', '', { shouldDirty: true });
+          }
+        }} />
+      <SelectField form={form} name="classification" label="Classification" options={options(fixedClassifications[form.watch('type') ?? ''] ? [fixedClassifications[form.watch('type') ?? '']] : ['Asset', 'Liability', 'Equity'])}
         onChange={() => form.setValue('parent_id', '', { shouldDirty: true })} />
       <TextField form={form} name="opening_balance" label="Opening balance" />
       <p className="muted">Asset opening balances are normally positive. Liability and equity opening ledger balances are normally negative.</p>
@@ -72,6 +81,7 @@ function ManagedEditor({ row, resource, onClose }: { row: Schemas['ManagedRefere
   const save = resource === 'payees' ? api.updatePayee : api.updateTag;
   const remove = resource === 'payees' ? api.removePayee : api.removeTag;
   return <ProtectedEditor session={session} loaded={managedLoaded(row)} title={resource === 'payees' ? 'Edit payee' : 'Edit tag'} onClose={onClose}
+    confirmSave={(values, defaults) => Boolean(defaults.active && !values.active)}
     save={async (id, baseline, changes) => managedLoaded(await save(session, id, { baseline, changes }))}
     remove={(id, baseline) => remove(session, id, baseline)}
     loadLatest={async id => managedLoaded(await latest(list, session, id))}

@@ -386,3 +386,84 @@ def test_parent_choices_follow_two_level_compatibility(commercial, commercial_se
             assert loaded(clients[0], resource, child['id'])['parent_id'] == other['id']
         finally:
             browser.close()
+
+
+@pytest.mark.parametrize('account_type,classification', [
+    ('Bank', 'Asset'), ('Cash', 'Asset'), ('Credit card', 'Liability'),
+    ('Short-term debt', 'Liability'), ('Equity', 'Equity'),
+])
+def test_fixed_account_type_changes_align_classification(commercial, commercial_server, account_type, classification):
+    alpha, _, clients, _ = commercial
+    previous = 'Liability' if classification == 'Asset' else 'Asset'
+    parent = alpha.accounts.create('Previous parent', 'Other', '0', classification=previous)
+    row = alpha.accounts.create('Subtype switch', 'Other', '0', classification=previous, parent_id=parent['id'])
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.goto(commercial_server + '/accounts')
+            page.get_by_role('button', name=edit_label('accounts', row), exact=True).click()
+            page.get_by_label('Type', exact=True).select_option(account_type)
+            expect(page.get_by_label('Classification', exact=True)).to_have_value(classification)
+            expect(page.get_by_label('Classification', exact=True).locator('option')).to_have_count(1)
+            expect(page.get_by_label('Parent account', exact=True)).to_have_value('')
+            with page.expect_response(lambda response: response.request.method == 'PATCH') as saved:
+                page.get_by_role('button', name='Save changes', exact=True).click()
+            assert saved.value.status == 200
+            assert saved.value.request.post_data_json['baseline'] == row['baseline']
+            actual = loaded(clients[0], 'accounts', row['id'])
+            assert actual['type'] == account_type and actual['classification'] == classification
+            assert not actual['parent_id']
+            page.get_by_label('Type', exact=True).select_option('Other')
+            expect(page.get_by_label('Classification', exact=True).locator('option')).to_have_count(3)
+            expect(page.get_by_label('Classification', exact=True)).to_have_value(classification)
+        finally:
+            browser.close()
+
+
+@pytest.mark.parametrize('resource', ['payees', 'tags'])
+def test_managed_deactivation_confirms_original_baseline_and_retains_stale_draft(database, commercial, commercial_server, resource):
+    alpha, _, clients, ids = commercial
+    row = loaded(clients[0], resource, ids[resource])
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page(viewport={'width': 390, 'height': 844})
+            page.goto(commercial_server + '/' + resource)
+            page.get_by_role('button', name=edit_label(resource, row), exact=True).click()
+            page.get_by_label('Name', exact=True).fill('Deactivation draft')
+            page.get_by_label('Active', exact=True).uncheck()
+            page.get_by_role('button', name='Save changes', exact=True).click()
+            expect(page.get_by_role('alertdialog', name='Deactivate record')).to_be_visible()
+            assert loaded(clients[0], resource, row['id'])['active']
+            page.get_by_role('button', name='Keep editing', exact=True).click()
+            expect(page.get_by_label('Name', exact=True)).to_have_value('Deactivation draft')
+            expect(page.get_by_label('Active', exact=True)).not_to_be_checked()
+            getattr(alpha, resource).update(row['id'], name='Other writer')
+            before = snapshot(database)
+            page.get_by_role('button', name='Save changes', exact=True).click()
+            with page.expect_response(lambda response: response.request.method == 'PATCH') as stale:
+                page.get_by_role('button', name='Confirm deactivate', exact=True).click()
+            assert stale.value.status == 409
+            assert stale.value.request.post_data_json['baseline'] == row['baseline']
+            assert snapshot(database) == before
+            page.get_by_role('button', name='Keep editing', exact=True).click()
+            expect(page.get_by_label('Name', exact=True)).to_have_value('Deactivation draft')
+            page.get_by_role('button', name='Review latest record', exact=True).click()
+            page.get_by_role('button', name='Discard draft and reload', exact=True).click()
+            expect(page.get_by_label('Name', exact=True)).to_have_value('Other writer')
+            page.get_by_label('Active', exact=True).uncheck()
+            page.get_by_role('button', name='Save changes', exact=True).click()
+            with page.expect_response(lambda response: response.request.method == 'PATCH') as saved:
+                page.get_by_role('button', name='Confirm deactivate', exact=True).click()
+            assert saved.value.status == 200
+            assert saved.value.request.post_data_json['baseline'] != row['baseline']
+            assert not loaded(clients[0], resource, row['id'])['active']
+            page.get_by_label('Active', exact=True).check()
+            with page.expect_response(lambda response: response.request.method == 'PATCH') as reactivated:
+                page.get_by_role('button', name='Save changes', exact=True).click()
+            assert reactivated.value.status == 200
+            expect(page.get_by_role('alertdialog', name='Deactivate record')).to_have_count(0)
+            assert loaded(clients[0], resource, row['id'])['active']
+        finally:
+            browser.close()

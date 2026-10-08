@@ -91,7 +91,7 @@ and reload**. Only the latter replaces values and metadata together. Review the
 latest values before saving again. If another client removed the record, reload
 reports an error without converting the draft into a create. Successful saves
 advance the baseline from the confirmed response. Delete/deactivate requires an
-explicit acknowledgement. Dirty navigation/close keeps the keep/discard choice.
+explicit acknowledgement, including payee/tag active-to-inactive saves. Cancelling keeps the draft; confirming uses its original baseline. Fixed account types constrain classification to the domain-required value and clear an incompatible parent when classification changes. Dirty navigation/close keeps the keep/discard choice.
 Uncertain failures invalidate private caches, preserve the draft and never retry
 automatically.
 

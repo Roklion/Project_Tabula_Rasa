@@ -16,16 +16,18 @@ export function ReloadPrompt({ pending, onKeep, onReload }: { pending: boolean; 
   </div>;
 }
 
-export function ProtectedEditor<T extends FieldValues>({ session, loaded, title, fields, save, remove, removeLabel = 'Delete', loadLatest, onClose }: {
+export function ProtectedEditor<T extends FieldValues>({ session, loaded, title, fields, save, remove, removeLabel = 'Delete', confirmSave, loadLatest, onClose }: {
   session: Session; loaded: LoadedForm<T, LoadMetadata>; title: string;
   fields: (form: UseFormReturn<T>) => ReactNode;
   save: (id: string, baseline: string, changes: T) => Promise<LoadedForm<T, LoadMetadata>>;
   remove: (id: string, baseline: string) => Promise<unknown>;
+  confirmSave?: (values: T, defaults: Partial<T>) => boolean;
   removeLabel?: string; loadLatest: (id: string) => Promise<LoadedForm<T, LoadMetadata>>;
   onClose?: () => void;
 }) {
   const { form, metadata, reload } = useLoadedForm(loaded);
   const [review, setReview] = useState(false);
+  const [pendingSave, setPendingSave] = useState<T>();
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [failure, setFailure] = useState<unknown>();
   const [success, setSuccess] = useState('');
@@ -44,7 +46,7 @@ export function ProtectedEditor<T extends FieldValues>({ session, loaded, title,
       reload(next);
       setSuccess('Changes saved.');
     }
-    setConfirmRemove(false);
+    setConfirmRemove(false); setPendingSave(undefined);
   });
   async function submit(action: 'save' | 'remove', values?: T) {
     setFailure(undefined); setSuccess('');
@@ -55,7 +57,7 @@ export function ProtectedEditor<T extends FieldValues>({ session, loaded, title,
     setReloading(true); setSuccess('');
     try {
       const next = await loadLatest(metadata.id);
-      reload(next); setFailure(undefined); setReview(false); setConfirmRemove(false);
+      reload(next); setFailure(undefined); setReview(false); setConfirmRemove(false); setPendingSave(undefined);
     } catch (error) { setFailure(error); }
     finally { setReloading(false); }
   }
@@ -70,10 +72,18 @@ export function ProtectedEditor<T extends FieldValues>({ session, loaded, title,
     </div>}
     {failure !== undefined && <ErrorNotice error={failure} onReview={() => setReview(true)} />}
     {review && <ReloadPrompt pending={pending} onKeep={() => setReview(false)} onReload={() => void reloadLatest()} />}
-    {!removed && <form onSubmit={form.handleSubmit(values => void submit('save', values))}>
-      <fieldset disabled={pending || review}>{fields(form)}</fieldset>
-      <div className="actions"><button type="submit" disabled={pending || review}>Save changes</button>
-        <button type="button" disabled={pending || review} onClick={() => setConfirmRemove(true)}>{removeLabel}</button></div>
+    {!removed && <form onSubmit={form.handleSubmit(values => {
+      if (confirmSave?.(values, form.formState.defaultValues as Partial<T>)) setPendingSave(values);
+      else void submit('save', values);
+    })}>
+      <fieldset disabled={pending || review || pendingSave !== undefined}>{fields(form)}</fieldset>
+      <div className="actions"><button type="submit" disabled={pending || review || pendingSave !== undefined}>Save changes</button>
+        <button type="button" disabled={pending || review || pendingSave !== undefined} onClick={() => setConfirmRemove(true)}>{removeLabel}</button></div>
+      {pendingSave !== undefined && <div role="alertdialog" aria-label="Deactivate record" className="notice warning">
+        <p>Deactivate this record and save your changes? The saved record must still match the one you loaded.</p>
+        <button type="button" disabled={pending || review} onClick={() => setPendingSave(undefined)}>Keep editing</button>
+        <button type="button" disabled={pending || review} onClick={() => void submit('save', pendingSave)}>Confirm deactivate</button>
+      </div>}
       {confirmRemove && <div role="alertdialog" aria-label={removeLabel + ' record'} className="notice warning">
         <p>{removeLabel === 'Delete' ? 'Permanently delete this record?' : 'Deactivate this account?'} The saved record must still match the one you loaded.</p>
         <button type="button" disabled={pending || review} onClick={() => setConfirmRemove(false)}>Keep record</button>
