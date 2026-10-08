@@ -273,6 +273,36 @@ profile cannot be resolved, stop before rendering a ledger page and show a
 safe reload/settings error. Never substitute another profile's workbook or
 expose a raw traceback for this configuration failure.
 
+## Commercial shell
+
+**Current behavior** for the #277/#278 local technical-alpha foundation:
+
+- The React shell uses the visual tokens, typography and approximately 760px
+  stacking boundary above. Navigation covers Dashboard, Transactions, Assets,
+  Mileage, Accounts, Categories, Reports, and Data & backup in the same order.
+  A labeled Menu button exposes navigation on narrow screens.
+- The server-resolved business name is always visible. The fixed synthetic
+  context is identified as technical-alpha development. This shell does not
+  expose internal profile keys, workbook metadata, Google credentials or local
+  administration controls as commercial authorization.
+- Dashboard links to a read-only Accounts view. Other routes show an explicit
+  availability state until their separately scoped vertical slices land.
+  The foundation does not remove or replace any internal-edition workflow.
+- Shared loading, empty, validation, conflict, unexpected-error and success
+  states use text plus semantic status/alert roles. Conflicts preserve drafts
+  and offer an explicit review action. Forms retain loaded server metadata
+  independently from editable values and request confirmation before dirty
+  navigation or document unload.
+- Context changes remount private queries and drafts; no prior business/session
+  cache is reused. Forms stack; tables may scroll within their own region.
+  Keyboard focus, labels and business scope remain reachable at 320 CSS pixels.
+
+[Foundation conventions](docs/COMMERCIAL_FOUNDATION.md) owns technical contracts.
+#222 adds real identity/context selection, #280 adds protected edit/delete forms,
+#281–#286 add domain workflows, and #287 expands accessibility/browser coverage.
+The Streamlit-specific shell requirements above continue to govern the internal
+edition.
+
 ## Page headers, workflow groups, and messages
 
 Page headers state the page purpose and place its primary workflow actions
