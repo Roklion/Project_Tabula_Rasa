@@ -1,10 +1,10 @@
 import type { FieldValues, Path, UseFormReturn } from 'react-hook-form';
 import { Field } from '../../components/States';
 
-export function TextField<T extends FieldValues>({ form, name, label, type = 'text' }: {
-  form: UseFormReturn<T>; name: Path<T>; label: string; type?: string;
+export function TextField<T extends FieldValues>({ form, name, label, type = 'text', onChange }: {
+  form: UseFormReturn<T>; name: Path<T>; label: string; type?: string; onChange?: () => void;
 }) {
-  return <Field id={name} label={label}><input id={name} type={type} {...form.register(name)} /></Field>;
+  return <Field id={name} label={label}><input id={name} type={type} {...form.register(name, { onChange })} /></Field>;
 }
 
 export function SelectField<T extends FieldValues>({ form, name, label, options, multiple = false, onChange }: {

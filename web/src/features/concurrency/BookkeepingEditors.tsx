@@ -29,7 +29,13 @@ function TransactionFields({ form }: { form: UseFormReturn<Schemas['TransactionC
   const source = form.watch('account_id');
   if (choices.pending) return <LoadingState label="Loading choices…" />;
   if (choices.error) return <ErrorNotice error={choices.error} />;
-  return <><SelectField form={form} name="kind" label="Type" options={options(['Income', 'Expense', 'Transfer'])} />
+  return <><SelectField form={form} name="kind" label="Type" options={options(['Income', 'Expense', 'Transfer'])}
+    onChange={() => {
+      const nextKind = form.getValues('kind');
+      if (nextKind !== 'Transfer' && choices.categories.find(category => category.id === form.getValues('category_id'))?.kind !== nextKind) {
+        form.setValue('category_id', '', { shouldDirty: true });
+      }
+    }} />
     <TextField form={form} name="txn_date" label="Date" type="date" />
     <TextField form={form} name="amount" label="Amount" />
     <SelectField form={form} name="account_id" label={kind === 'Income' ? 'To account' : 'From account'} options={activeChoices(choices.accounts, [original?.account_id])}
@@ -38,8 +44,10 @@ function TransactionFields({ form }: { form: UseFormReturn<Schemas['TransactionC
       }} />
     {kind === 'Transfer' ? <SelectField form={form} name="to_account_id" label="To account" options={[blank, ...activeChoices(choices.accounts, [original?.to_account_id]).filter(account => account.id !== source)]} />
       : <SelectField form={form} name="category_id" label="Category" options={[blank, ...choices.categories.filter(row => row.kind === kind)]} />}
-    <SelectField form={form} name="payee_id" label="Payee / customer" options={[blank, ...activeChoices(choices.payees, [original?.payee_id])]} />
-    <TextField form={form} name="new_payee_name" label="New payee name (optional)" />
+    <SelectField form={form} name="payee_id" label="Payee / customer" options={[blank, ...activeChoices(choices.payees, [original?.payee_id])]}
+      onChange={() => { if (form.getValues('payee_id')) form.setValue('new_payee_name', '', { shouldDirty: true }); }} />
+    <TextField form={form} name="new_payee_name" label="New payee name (optional)"
+      onChange={() => { if (form.getValues('new_payee_name').trim()) form.setValue('payee_id', '', { shouldDirty: true }); }} />
     <SelectField form={form} name="tag_ids" label="Tags" options={activeChoices(choices.tags, original?.tag_ids ?? [])} multiple />
     <TextField form={form} name="new_tag_name" label="New tag name (optional)" />
     <TextField form={form} name="description" label="Description / memo" />

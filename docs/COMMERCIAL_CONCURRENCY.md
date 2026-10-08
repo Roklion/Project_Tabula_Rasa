@@ -91,7 +91,7 @@ and reload**. Only the latter replaces values and metadata together. Review the
 latest values before saving again. If another client removed the record, reload
 reports an error without converting the draft into a create. Successful saves
 advance the baseline from the confirmed response. Delete/deactivate requires an
-explicit acknowledgement, including payee/tag active-to-inactive saves. Cancelling keeps the draft; confirming uses its original baseline. Fixed account types constrain classification to the domain-required value and clear an incompatible parent when classification changes. Hierarchy roots retain their classification/kind while they have children; compatible subtype changes remain available. Transfer destination choices exclude the source and source changes clear an identical destination. Dirty navigation/close keeps the keep/discard choice.
+explicit acknowledgement, including payee/tag active-to-inactive saves. Cancelling keeps the draft; confirming uses its original baseline. Fixed account types constrain classification to the domain-required value and clear an incompatible parent when classification changes. Hierarchy roots retain their classification/kind while they have children; compatible subtype changes remain available. Transfer destination choices exclude the source and source changes clear an identical destination. Transaction kind changes clear an incompatible category; entering a new payee clears the selected payee and selecting an existing payee clears the new name. Dirty navigation/close keeps the keep/discard choice.
 Uncertain failures invalidate private caches, preserve the draft and never retry
 automatically.
 

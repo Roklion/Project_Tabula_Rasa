@@ -541,3 +541,68 @@ def test_hierarchy_root_choices_preserve_children_compatibility(commercial, comm
             expect(page.get_by_label(group, exact=True).locator('option')).to_have_count(3 if resource == 'accounts' else 2)
         finally:
             browser.close()
+
+
+
+@pytest.mark.parametrize('kind,category', [('Expense', 'office'), ('Income', 'sales')])
+def test_income_expense_switch_clears_category_payload_before_selection(database, commercial, commercial_server, kind, category):
+    from tests.postgres.core_support import expense
+
+    alpha, _, clients, _ = commercial
+    initial = 'Income' if kind == 'Expense' else 'Expense'
+    row = alpha.transactions.create(transaction_id='category-switch', **expense(kind=initial,
+        category_id='sales' if initial == 'Income' else 'office', description='Category switch'))
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.goto(commercial_server + '/transactions')
+            page.get_by_role('button', name=edit_label('transactions', row), exact=True).click()
+            page.get_by_label('Type', exact=True).select_option(kind)
+            expect(page.get_by_label('Category', exact=True)).to_have_value('')
+            before = snapshot(database)
+            with page.expect_response(lambda response: response.request.method == 'PATCH') as rejected:
+                page.get_by_role('button', name='Save changes', exact=True).click()
+            assert rejected.value.status == 422
+            assert rejected.value.request.post_data_json['changes']['category_id'] == ''
+            assert snapshot(database) == before
+            page.get_by_label('Category', exact=True).select_option(category)
+            with page.expect_response(lambda response: response.request.method == 'PATCH') as saved:
+                page.get_by_role('button', name='Save changes', exact=True).click()
+            assert saved.value.status == 200
+            assert saved.value.request.post_data_json['baseline'] == row['baseline']
+            assert loaded(clients[0], 'transactions', row['id'])['category_id'] == category
+        finally:
+            browser.close()
+
+
+def test_new_payee_replaces_loaded_payee_and_existing_selection_clears_new_name(commercial, commercial_server):
+    _, _, clients, ids = commercial
+    row = loaded(clients[0], 'transactions', ids['transactions'])
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.goto(commercial_server + '/transactions')
+            page.get_by_role('button', name=edit_label('transactions', row), exact=True).click()
+            selected = page.get_by_label('Payee / customer', exact=True)
+            new_name = page.get_by_label('New payee name (optional)', exact=True)
+            expect(selected).to_have_value(ids['payees'])
+            new_name.fill('Replacement payee')
+            expect(selected).to_have_value('')
+            selected.select_option(ids['payees'])
+            expect(new_name).to_have_value('')
+            new_name.fill('Replacement payee')
+            with page.expect_response(lambda response: response.request.method == 'PATCH') as saved:
+                page.get_by_role('button', name='Save changes', exact=True).click()
+            assert saved.value.status == 200
+            payload = saved.value.request.post_data_json
+            assert payload['baseline'] == row['baseline']
+            assert payload['changes']['payee_id'] == ''
+            assert payload['changes']['new_payee_name'] == 'Replacement payee'
+            actual = loaded(clients[0], 'transactions', row['id'])
+            assert actual['payee_id'] != ids['payees']
+            payees = clients[0].get('/api/v1/entities/alpha/payees').json()['items']
+            assert next(payee for payee in payees if payee['id'] == actual['payee_id'])['name'] == 'Replacement payee'
+        finally:
+            browser.close()
