@@ -73,6 +73,13 @@ async def handle_error(request, error):
 
 
 async def handle_validation(request, error: RequestValidationError):
+    body_field = getattr(request.scope.get('route'), 'body_field', None)
+    body_model = getattr(getattr(body_field, 'field_info', None), 'annotation', None)
+    body_fields = getattr(body_model, 'model_fields', {})
+    if {'baseline', 'baselines'} & body_fields.keys() and any(
+        item.get('loc') == ('body',) and item['type'] == 'missing' for item in error.errors()
+    ):
+        return error_response(request, 'baseline_required')
     baseline_errors = [item for item in error.errors()
                        if len(item.get('loc', ())) >= 2 and item['loc'][0] == 'body'
                        and item['loc'][1] in {'baseline', 'baselines'}]

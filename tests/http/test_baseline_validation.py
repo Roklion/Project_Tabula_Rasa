@@ -42,3 +42,20 @@ def test_missing_posting_identity_returns_safe_field_feedback(client):
     assert response.status_code == 422
     assert response.json()['error']['fields'] == [
         {'field': 'id', 'code': 'invalid', 'message': 'Check this value.'}]
+
+
+def test_absent_protected_body_is_baseline_required_without_composing_services(client, runtime):
+    for method, path in [('PATCH', 'accounts/account-1'), ('POST', 'accounts/account-1/deactivate'),
+                         ('DELETE', 'transactions/transaction-1'), ('POST', 'payees/target/merge')]:
+        for body in (b'', b'null'):
+            response = client.request(method, '/api/v1/entities/alpha/' + path,
+                headers={**HEADERS, 'Content-Type': 'application/json'}, content=body)
+            assert response.status_code == 422
+            assert response.json()['error']['code'] == 'baseline_required'
+    runtime.services.assert_not_called()
+    # Creation has no loaded baseline, and invalid JSON is a different failure.
+    for path, body in [('accounts', b''), ('accounts/account-1', b'{')]:
+        response = client.request('POST' if path == 'accounts' else 'PATCH',
+            '/api/v1/entities/alpha/' + path,
+            headers={**HEADERS, 'Content-Type': 'application/json'}, content=body)
+        assert response.status_code == 422 and response.json()['error']['code'] == 'validation'
