@@ -7,6 +7,7 @@ import { ProtectedEditor } from './ProtectedEditor';
 import { RecordList } from './RecordList';
 import { latest } from './mutations';
 import { ActiveField, SelectField, TextField } from './Fields';
+import type { UseFormReturn } from 'react-hook-form';
 
 const fixedClassifications: Record<string, string> = { Bank: 'Asset', Cash: 'Asset', 'Credit card': 'Liability', 'Short-term debt': 'Liability', Equity: 'Equity' };
 
@@ -28,16 +29,11 @@ function accountLoaded(row: Account) {
   return { values, metadata: metadata(row) };
 }
 
-export function AccountEditor({ row, onClose }: { row: Account; onClose: () => void }) {
+export function AccountFields({ form, excludeId, creating = false }: { form: UseFormReturn<Schemas['AccountChanges']>; excludeId?: string; creating?: boolean }) {
   const session = useEntity();
   const accounts = useQuery(accountQuery(session));
-  return <ProtectedEditor session={session} loaded={accountLoaded(row)} title="Edit account" onClose={onClose}
-    save={async (id, baseline, changes) => accountLoaded(await api.updateAccount(session, id, { baseline, changes }))}
-    remove={(id, baseline) => api.deactivateAccount(session, id, baseline)} removeLabel="Deactivate"
-    loadLatest={async id => accountLoaded(await latest(api.accounts, session, id))}
-    fields={form => {
-      const root = hasChildren(accounts.data?.items ?? [], row.id);
-      const classification = form.formState.defaultValues?.classification ?? row.classification;
+  const root = hasChildren(accounts.data?.items ?? [], excludeId ?? '');
+      const classification = form.formState.defaultValues?.classification ?? form.getValues('classification') ?? 'Asset';
       const fixed = fixedClassifications[form.watch('type') ?? ''];
       return <><TextField form={form} name="name" label="Account name" />
       <SelectField form={form} name="type" label="Type" options={options(['Bank', 'Cash', 'Credit card', 'Short-term debt', 'Equity', 'Other'].filter(type => !root || !fixedClassifications[type] || fixedClassifications[type] === classification))}
@@ -54,10 +50,20 @@ export function AccountEditor({ row, onClose }: { row: Account; onClose: () => v
       <TextField form={form} name="opening_balance" label="Opening balance" />
       <p className="muted">Asset opening balances are normally positive. Liability and equity opening ledger balances are normally negative.</p>
       <SelectField form={form} name="parent_id" label="Parent account" options={[{ id: '', name: 'No parent' },
-        ...eligibleParents(accounts.data?.items ?? [], row.id, item => item.classification === form.watch('classification'))]} />
-      {form.formState.defaultValues?.active
+        ...eligibleParents(accounts.data?.items ?? [], excludeId ?? '', item => item.classification === form.watch('classification'))]} />
+      {!creating && form.formState.defaultValues?.active
         ? <p className="muted">Active. Use Deactivate to review and confirm deactivation.</p>
-        : <ActiveField form={form} name="active" />}</>; }} />;
+        : !creating && <ActiveField form={form} name="active" />}</>;
+
+}
+
+export function AccountEditor({ row, onClose }: { row: Account; onClose: () => void }) {
+  const session = useEntity();
+  return <ProtectedEditor session={session} loaded={accountLoaded(row)} title="Edit account" onClose={onClose}
+    save={async (id, baseline, changes) => accountLoaded(await api.updateAccount(session, id, { baseline, changes }))}
+    remove={(id, baseline) => api.deactivateAccount(session, id, baseline)} removeLabel="Deactivate"
+    loadLatest={async id => accountLoaded(await latest(api.accounts, session, id))}
+    fields={form => <AccountFields form={form} excludeId={row.id} />} />;
 }
 
 function categoryLoaded(row: Schemas['Category']) {
@@ -65,19 +71,24 @@ function categoryLoaded(row: Schemas['Category']) {
   return { values, metadata: metadata(row) };
 }
 
-function CategoryEditor({ row, onClose }: { row: Schemas['Category']; onClose: () => void }) {
+export function CategoryFields({ form, excludeId }: { form: UseFormReturn<Schemas['CategoryChanges']>; excludeId?: string }) {
   const session = useEntity();
   const categories = useQuery({ queryKey: resourceKey(session, 'categories'), queryFn: ({ signal }) => api.categories(session, signal) });
+  return <><TextField form={form} name="name" label="Category name" />
+      <SelectField form={form} name="kind" label="Kind" options={options(hasChildren(categories.data?.items ?? [], excludeId ?? '') ? [form.formState.defaultValues?.kind ?? form.getValues('kind') ?? 'Expense'] : ['Income', 'Expense'])}
+        onChange={() => form.setValue('parent_id', '', { shouldDirty: true })} />
+      {hasChildren(categories.data?.items ?? [], excludeId ?? '') && <p className="muted">Move child categories before changing kind.</p>}
+      <SelectField form={form} name="parent_id" label="Parent category" options={[{ id: '', name: 'No parent' },
+        ...eligibleParents(categories.data?.items ?? [], excludeId ?? '', item => item.kind === form.watch('kind'))]} /></>;
+}
+
+function CategoryEditor({ row, onClose }: { row: Schemas['Category']; onClose: () => void }) {
+  const session = useEntity();
   return <ProtectedEditor session={session} loaded={categoryLoaded(row)} title="Edit category" onClose={onClose}
     save={async (id, baseline, changes) => categoryLoaded(await api.updateCategory(session, id, { baseline, changes }))}
     remove={(id, baseline) => api.deleteCategory(session, id, baseline)}
     loadLatest={async id => categoryLoaded(await latest(api.categories, session, id))}
-    fields={form => <><TextField form={form} name="name" label="Category name" />
-      <SelectField form={form} name="kind" label="Kind" options={options(hasChildren(categories.data?.items ?? [], row.id) ? [form.formState.defaultValues?.kind ?? row.kind] : ['Income', 'Expense'])}
-        onChange={() => form.setValue('parent_id', '', { shouldDirty: true })} />
-      {hasChildren(categories.data?.items ?? [], row.id) && <p className="muted">Move child categories before changing kind.</p>}
-      <SelectField form={form} name="parent_id" label="Parent category" options={[{ id: '', name: 'No parent' },
-        ...eligibleParents(categories.data?.items ?? [], row.id, item => item.kind === form.watch('kind'))]} /></>} />;
+    fields={form => <CategoryFields form={form} excludeId={row.id} />} />;
 }
 
 function managedLoaded(row: Schemas['ManagedReference']) {
@@ -99,13 +110,17 @@ function ManagedEditor({ row, resource, onClose }: { row: Schemas['ManagedRefere
 }
 
 export function ReferencesPage({ resource }: { resource: 'categories' | 'payees' | 'tags' }) {
+  const session = useEntity();
   const title = resource[0].toUpperCase() + resource.slice(1);
   return <><h1>{title}</h1><p className="lead">Review existing records and save changes for this business.</p>
     <nav aria-label="Reference data"><Link to="/categories">Categories</Link> · <Link to="/payees">Payees</Link> · <Link to="/tags">Tags</Link></nav>
+    {session.capabilities.includes('bookkeeping:write') && <Link className="button" to={'/' + resource + '/new'}>Add {resource === 'categories' ? 'category' : resource === 'payees' ? 'payee' : 'tag'}</Link>}
     {resource === 'categories'
       ? <RecordList resource={resource} title="Categories" list={api.categories} label={row => row.name}
+          columns={[{ title: 'Kind', render: row => row.kind }, { title: 'Parent category', render: (row, rows) => rows.find(parent => parent.id === row.parent_id)?.name ?? '—' }]}
           editor={(row, close) => <CategoryEditor row={row} onClose={close} />} />
       : <><RecordList key={resource} resource={resource} title={title} list={resource === 'payees' ? api.payees : api.tags} label={row => row.name}
+          columns={[{ title: 'Status', render: row => row.active ? 'Active' : 'Inactive' }]}
           editor={(row, close) => <ManagedEditor row={row} resource={resource} onClose={close} />} />
         <Link to={'/' + resource + '/merge'}>Merge {resource}</Link></>}
   </>;

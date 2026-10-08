@@ -8,6 +8,7 @@ import { RecordList } from './RecordList';
 import { latest } from './mutations';
 import { SelectField, TextField } from './Fields';
 import { activeChoices, useReferenceChoices } from './useReferenceChoices';
+import { journalTotals } from '../workflows/journalDraft';
 
 const options = (values: string[]) => values.map(value => ({ id: value, name: value }));
 const blank = { id: '', name: 'None' };
@@ -21,11 +22,12 @@ function transactionLoaded(row: Schemas['Transaction']) {
   return { values, metadata: metadata(row) };
 }
 
-function TransactionFields({ form }: { form: UseFormReturn<Schemas['TransactionChanges']> }) {
+export function TransactionFields({ form, creating = false }: { form: UseFormReturn<Schemas['TransactionChanges']>; creating?: boolean }) {
   const session = useEntity();
   const choices = useReferenceChoices(session);
   const original = form.formState.defaultValues;
   const kind = form.watch('kind');
+  const accounts = activeChoices(choices.accounts, creating ? [] : [original?.account_id]);
   const source = form.watch('account_id');
   if (choices.pending) return <LoadingState label="Loading choices…" />;
   if (choices.error) return <ErrorNotice error={choices.error} />;
@@ -36,9 +38,11 @@ function TransactionFields({ form }: { form: UseFormReturn<Schemas['TransactionC
         form.setValue('category_id', '', { shouldDirty: true });
       }
     }} />
+    {creating && (accounts.length === 0 || (kind !== 'Transfer' && !choices.categories.some(row => row.kind === kind))) &&
+      <p role="alert">Set up an active account and a matching category before saving. Transfers require two active accounts.</p>}
     <TextField form={form} name="txn_date" label="Date" type="date" />
     <TextField form={form} name="amount" label="Amount" />
-    <SelectField form={form} name="account_id" label={kind === 'Income' ? 'To account' : 'From account'} options={activeChoices(choices.accounts, [original?.account_id])}
+    <SelectField form={form} name="account_id" label={kind === 'Income' ? 'To account' : 'From account'} options={[blank, ...accounts]}
       onChange={() => {
         if (form.getValues('account_id') === form.getValues('to_account_id')) form.setValue('to_account_id', '', { shouldDirty: true });
       }} />
@@ -54,7 +58,7 @@ function TransactionFields({ form }: { form: UseFormReturn<Schemas['TransactionC
     <TextField form={form} name="reference" label="Reference" /></>;
 }
 
-function TransactionEditor({ row, onClose }: { row: Schemas['Transaction']; onClose: () => void }) {
+export function TransactionEditor({ row, onClose }: { row: Schemas['Transaction']; onClose: () => void }) {
   const session = useEntity();
   return <ProtectedEditor session={session} loaded={transactionLoaded(row)} title="Edit transaction" onClose={onClose}
     save={async (id, baseline, changes) => transactionLoaded(await api.updateTransaction(session, id, { baseline, changes: { ...changes,
@@ -70,16 +74,17 @@ function journalLoaded(row: Schemas['Journal']) {
   return { values, metadata: metadata(row) };
 }
 
-function JournalFields({ form }: { form: UseFormReturn<Schemas['JournalChanges']> }) {
+export function JournalFields({ form, creating = false }: { form: UseFormReturn<Schemas['JournalChanges']>; creating?: boolean }) {
   const session = useEntity();
   const choices = useReferenceChoices(session);
   const lines = useFieldArray({ control: form.control, name: 'postings', keyName: 'formKey' });
+  const totals = journalTotals(form.watch('postings'));
   if (choices.pending) return <LoadingState label="Loading choices…" />;
   if (choices.error) return <ErrorNotice error={choices.error} />;
   return <><TextField form={form} name="txn_date" label="Date" type="date" />
     <TextField form={form} name="description" label="Description / memo" />
     {lines.fields.map((line, index) => {
-      const original = form.formState.defaultValues?.postings?.find(posting => posting?.id === line.id);
+      const original = creating ? undefined : form.formState.defaultValues?.postings?.find(posting => posting?.id === line.id);
       const accounts = activeChoices(choices.accounts, [original?.target_type === 'account' ? original.target_id : undefined]);
       const payees = activeChoices(choices.payees, [original?.payee_id]);
       return <div className="posting" key={line.formKey}>
@@ -94,11 +99,12 @@ function JournalFields({ form }: { form: UseFormReturn<Schemas['JournalChanges']
       <button type="button" disabled={lines.fields.length <= 2} onClick={() => lines.remove(index)}>Remove posting {index + 1}</button>
     </div>; })}
     <button type="button" onClick={() => lines.append({ id: crypto.randomUUID(), target_type: 'account', target_id: '', side: 'Debit', amount: '0.00', payee_id: '', description: '' })}>Add posting</button>
+    <p role="status">Total Debits: {totals.debit} · Total Credits: {totals.credit} · Difference: {totals.difference}</p>
     <p className="muted">Debits and credits must balance. Saving validates the complete journal.</p>
   </>;
 }
 
-function JournalEditor({ row, onClose }: { row: Schemas['Journal']; onClose: () => void }) {
+export function JournalEditor({ row, onClose }: { row: Schemas['Journal']; onClose: () => void }) {
   const session = useEntity();
   return <ProtectedEditor session={session} loaded={journalLoaded(row)} title="Edit journal" onClose={onClose}
     save={async (id, baseline, changes) => journalLoaded(await api.updateJournal(session, id, { baseline, changes }))}
@@ -140,9 +146,11 @@ function MileageEditor({ row, onClose }: { row: Schemas['Mileage']; onClose: () 
 }
 
 export function BookkeepingPage({ resource }: { resource: 'transactions' | 'journals' | 'mileage' }) {
+  const session = useEntity();
   const title = resource[0].toUpperCase() + resource.slice(1);
   return <><h1>{title}</h1><p className="lead">Review existing records and save changes for this business.</p>
     {resource !== 'mileage' && <nav aria-label="Entries"><Link to="/transactions">Transactions</Link> · <Link to="/journals">Journals</Link></nav>}
+    {resource !== 'mileage' && session.capabilities.includes('bookkeeping:write') && <Link className="button" to={'/' + resource + '/new'}>Add {resource === 'transactions' ? 'transaction' : 'journal'}</Link>}
     {resource === 'transactions' ? <RecordList key={resource} resource={resource} title="Transactions" list={api.transactions}
       label={row => `${row.txn_date} · ${row.description || row.kind} · ${row.amount}`} canEdit={row => !row.source_type}
       editor={(row, close) => <TransactionEditor row={row} onClose={close} />} />

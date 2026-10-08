@@ -21,13 +21,14 @@ export function Accounts() {
   const [selected, setSelected] = useState<Account>();
   const query = useQuery(accountQuery(session));
   return <><h1>Accounts</h1><p className="lead">Accounts for {session.entity.name}.</p>
+    {!selected && session.capabilities.includes('bookkeeping:write') && <Link to="/accounts/new" className="button">Add account</Link>}
     {selected ? <AccountEditor row={selected} onClose={() => setSelected(undefined)} /> : query.isPending ? <LoadingState label="Loading accounts…" />
       : query.isError ? <ErrorNotice error={query.error} onReview={() => void query.refetch()} />
-      : query.data.items.length === 0 ? <EmptyState title="No accounts yet">Account setup will be available in the next release.</EmptyState>
+      : query.data.items.length === 0 ? <EmptyState title="No accounts yet">Add an account to start bookkeeping.</EmptyState>
       : <div className="tableScroll" role="region" aria-label="Accounts" tabIndex={0}><table>
-        <caption>Business accounts</caption><thead><tr><th>Name</th><th>Type</th><th>Classification</th><th>Opening balance</th><th>Status</th><th>Actions</th></tr></thead>
+        <caption>Business accounts</caption><thead><tr><th>Name</th><th>Type</th><th>Classification</th><th>Parent account</th><th>Opening balance</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>{query.data.items.map(account => <tr key={account.id}><th scope="row">{account.name}</th>
-          <td>{account.type}</td><td>{account.classification}</td><td className="amount">{account.opening_balance}</td>
+          <td>{account.type}</td><td>{account.classification}</td><td>{query.data.items.find(parent => parent.id === account.parent_id)?.name ?? '—'}</td><td className="amount">{account.opening_balance}</td>
           <td>{account.active ? 'Active' : 'Inactive'}</td><td>{session.capabilities.includes('bookkeeping:write') &&
             <button type="button" onClick={() => setSelected(structuredClone(account))}>Edit {account.name}</button>}</td></tr>)}</tbody></table></div>}
   </>;

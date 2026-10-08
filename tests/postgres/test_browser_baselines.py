@@ -21,13 +21,18 @@ DIST = Path(__file__).resolve().parents[2] / 'web' / 'dist'
 
 
 @pytest.fixture
-def commercial_server(database, commercial):
+def browser_resolver():
+    context = RequestContext('actor', 'org', 'alpha', frozenset({'bookkeeping:read', 'bookkeeping:write'}), 'browser-scope', 'csrf')
+    return lambda request: context
+
+
+@pytest.fixture
+def commercial_server(database, commercial, browser_resolver):
     if not (DIST / 'index.html').is_file():
         if os.environ.get('TABULA_RASA_REQUIRE_BROWSER_TESTS') == '1':
             pytest.fail('Build web before running required native browser tests.')
         pytest.skip('Build web to run native browser baseline tests.')
-    context = RequestContext('actor', 'org', 'alpha', frozenset({'bookkeeping:read', 'bookkeeping:write'}), 'browser-scope', 'csrf')
-    runtime = PostgresRuntime(database, lambda request: context,
+    runtime = PostgresRuntime(database, browser_resolver,
         service_factory=lambda context: create_postgres_services(database, context.entity_id))
     runtime.close = lambda: None  # The synthetic DB fixture owns this pool.
     listener = socket.socket()

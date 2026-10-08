@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/api/v1/entities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Entities */
+        get: operations["list_entities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/entities/{entity_id}/accounts": {
         parameters: {
             query?: never;
@@ -66,7 +83,8 @@ export interface paths {
         /** List Categories */
         get: operations["list_categories"];
         put?: never;
-        post?: never;
+        /** Create Category */
+        post: operations["create_category"];
         delete?: never;
         options?: never;
         head?: never;
@@ -101,7 +119,8 @@ export interface paths {
         /** List Journals */
         get: operations["list_journals"];
         put?: never;
-        post?: never;
+        /** Create Journal */
+        post: operations["create_journal"];
         delete?: never;
         options?: never;
         head?: never;
@@ -124,6 +143,23 @@ export interface paths {
         head?: never;
         /** Update Journal */
         patch: operations["update_journal"];
+        trace?: never;
+    };
+    "/api/v1/entities/{entity_id}/ledger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Query Ledger */
+        get: operations["query_ledger"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/entities/{entity_id}/mileage": {
@@ -171,7 +207,8 @@ export interface paths {
         /** List References */
         get: operations["list_payees"];
         put?: never;
-        post?: never;
+        /** Create Reference */
+        post: operations["create_payee"];
         delete?: never;
         options?: never;
         head?: never;
@@ -213,6 +250,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/entities/{entity_id}/reports/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Report Summary */
+        get: operations["report_summary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/entities/{entity_id}/tags": {
         parameters: {
             query?: never;
@@ -223,7 +277,8 @@ export interface paths {
         /** List References */
         get: operations["list_tags"];
         put?: never;
-        post?: never;
+        /** Create Reference */
+        post: operations["create_tag"];
         delete?: never;
         options?: never;
         head?: never;
@@ -275,7 +330,8 @@ export interface paths {
         /** List Transactions */
         get: operations["list_transactions"];
         put?: never;
-        post?: never;
+        /** Create Transaction */
+        post: operations["create_transaction"];
         delete?: never;
         options?: never;
         head?: never;
@@ -311,6 +367,23 @@ export interface paths {
         get: operations["get_session"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/session/entity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Select Entity */
+        post: operations["select_entity"];
         delete?: never;
         options?: never;
         head?: never;
@@ -393,6 +466,19 @@ export interface components {
             /** Type */
             type: string;
         };
+        /** AccountBalance */
+        AccountBalance: {
+            /** Active */
+            active: boolean;
+            /** Balance */
+            balance: string;
+            /** Classification */
+            classification: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+        };
         /** AccountChanges */
         AccountChanges: {
             /** Active */
@@ -435,6 +521,42 @@ export interface components {
             baseline: string;
             changes: components["schemas"]["AccountChanges"];
         };
+        /** BalanceRow */
+        BalanceRow: {
+            /** Balance */
+            balance: string;
+            /** Direct Balance */
+            direct_balance: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Parent Id */
+            parent_id: string;
+            /** Rollup Balance */
+            rollup_balance: string;
+            /** Type */
+            type: string;
+        };
+        /** BalanceSheet */
+        BalanceSheet: {
+            /** Assets */
+            assets: components["schemas"]["BalanceRow"][];
+            /** Current Earnings */
+            current_earnings: string;
+            /** Difference */
+            difference: string;
+            /** Equity */
+            equity: components["schemas"]["BalanceRow"][];
+            /** Liabilities */
+            liabilities: components["schemas"]["BalanceRow"][];
+            /** Total Assets */
+            total_assets: string;
+            /** Total Equity */
+            total_equity: string;
+            /** Total Liabilities */
+            total_liabilities: string;
+        };
         /** Category */
         Category: {
             /** Baseline */
@@ -450,6 +572,15 @@ export interface components {
         };
         /** CategoryChanges */
         CategoryChanges: {
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string;
+            /** Parent Id */
+            parent_id?: string | null;
+        };
+        /** CategoryCreate */
+        CategoryCreate: {
             /** Kind */
             kind: string;
             /** Name */
@@ -474,6 +605,16 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+        };
+        /** EntityList */
+        EntityList: {
+            /** Items */
+            items: components["schemas"]["EntityInfo"][];
+        };
+        /** EntitySelection */
+        EntitySelection: {
+            /** Entity Id */
+            entity_id: string;
         };
         /**
          * ErrorCode
@@ -534,6 +675,17 @@ export interface components {
             /** Txn Date */
             txn_date: string;
         };
+        /** JournalCreate */
+        JournalCreate: {
+            /** Description */
+            description: string;
+            /** Entry Id */
+            entry_id: string;
+            /** Postings */
+            postings: components["schemas"]["Posting"][];
+            /** Txn Date */
+            txn_date: string;
+        };
         /** JournalList */
         JournalList: {
             /** Items */
@@ -545,9 +697,96 @@ export interface components {
             baseline: string;
             changes: components["schemas"]["JournalChanges"];
         };
+        /** LedgerItem */
+        LedgerItem: {
+            /**
+             * Account
+             * @default
+             */
+            account: string;
+            /** Amount */
+            amount: string;
+            /**
+             * Category
+             * @default
+             */
+            category: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Entry Type */
+            entry_type: string;
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /**
+             * Payee
+             * @default
+             */
+            payee: string;
+            /** Postings */
+            postings: components["schemas"]["LedgerLine"][];
+            /**
+             * Receipt Count
+             * @default 0
+             */
+            receipt_count: number;
+            /** Record Id */
+            record_id: string;
+            /**
+             * Reference
+             * @default
+             */
+            reference: string;
+            /**
+             * Source Type
+             * @default
+             */
+            source_type: string;
+            /** Tags */
+            tags: string[];
+            /**
+             * To Account
+             * @default
+             */
+            to_account: string;
+            /** Txn Date */
+            txn_date: string;
+        };
+        /** LedgerLine */
+        LedgerLine: {
+            /** Amount */
+            amount: string;
+            /** Description */
+            description: string;
+            /** Payee */
+            payee: string;
+            /** Side */
+            side: string;
+            /** Target */
+            target: string;
+        };
+        /** LedgerList */
+        LedgerList: {
+            /** Items */
+            items: components["schemas"]["LedgerItem"][];
+        };
         /** ManagedChanges */
         ManagedChanges: {
             /** Active */
+            active: boolean;
+            /** Name */
+            name: string;
+        };
+        /** ManagedCreate */
+        ManagedCreate: {
+            /**
+             * Active
+             * @default true
+             */
             active: boolean;
             /** Name */
             name: string;
@@ -678,10 +917,26 @@ export interface components {
             /** Target Type */
             target_type: string;
         };
+        /** ProfitLoss */
+        ProfitLoss: {
+            /** Expenses */
+            expenses: string;
+            /** Income */
+            income: string;
+            /** Net */
+            net: string;
+        };
         /** ProtectedMutation */
         ProtectedMutation: {
             /** Baseline */
             baseline: string;
+        };
+        /** ReportSummary */
+        ReportSummary: {
+            /** Account Balances */
+            account_balances: components["schemas"]["AccountBalance"][];
+            balance_sheet: components["schemas"]["BalanceSheet"];
+            profit_loss: components["schemas"]["ProfitLoss"];
         };
         /** SessionInfo */
         SessionInfo: {
@@ -778,6 +1033,56 @@ export interface components {
             /** Txn Date */
             txn_date: string;
         };
+        /** TransactionCreate */
+        TransactionCreate: {
+            /** Account Id */
+            account_id: string;
+            /** Amount */
+            amount: string;
+            /**
+             * Category Id
+             * @default
+             */
+            category_id: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Kind */
+            kind: string;
+            /**
+             * New Payee Name
+             * @default
+             */
+            new_payee_name: string;
+            /**
+             * New Tag Name
+             * @default
+             */
+            new_tag_name: string;
+            /**
+             * Payee Id
+             * @default
+             */
+            payee_id: string;
+            /**
+             * Reference
+             * @default
+             */
+            reference: string;
+            /** Tag Ids */
+            tag_ids?: string[];
+            /**
+             * To Account Id
+             * @default
+             */
+            to_account_id: string;
+            /** Transaction Id */
+            transaction_id: string;
+            /** Txn Date */
+            txn_date: string;
+        };
         /** TransactionList */
         TransactionList: {
             /** Items */
@@ -803,6 +1108,89 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_entities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntityList"];
+                };
+            };
+            /** @description Identity required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Operation denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Duplicate or concurrent change */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Transport or domain validation */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unexpected failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     list_accounts: {
         parameters: {
             query?: {
@@ -1244,6 +1632,95 @@ export interface operations {
             };
         };
     };
+    create_category: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Category"];
+                };
+            };
+            /** @description Identity required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Operation denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Duplicate or concurrent change */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Transport or domain validation */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unexpected failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     delete_category: {
         parameters: {
             query?: never;
@@ -1509,6 +1986,95 @@ export interface operations {
             };
         };
     };
+    create_journal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JournalCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Journal"];
+                };
+            };
+            /** @description Identity required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Operation denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Duplicate or concurrent change */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Transport or domain validation */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unexpected failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     delete_journal: {
         parameters: {
             query?: never;
@@ -1622,6 +2188,98 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Journal"];
+                };
+            };
+            /** @description Identity required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Operation denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Duplicate or concurrent change */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Transport or domain validation */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unexpected failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    query_ledger: {
+        parameters: {
+            query?: {
+                start?: string | null;
+                end?: string | null;
+                kind?: "All" | "Income" | "Expense" | "Transfer" | "Journal";
+                account_ids?: string[] | null;
+                category_ids?: string[] | null;
+                tag_ids?: string[] | null;
+            };
+            header?: never;
+            path: {
+                entity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerList"];
                 };
             };
             /** @description Identity required */
@@ -2039,6 +2697,95 @@ export interface operations {
             };
         };
     };
+    create_payee: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManagedCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedReference"];
+                };
+            };
+            /** @description Identity required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Operation denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Duplicate or concurrent change */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Transport or domain validation */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unexpected failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     remove_payee: {
         parameters: {
             query?: never;
@@ -2309,6 +3056,94 @@ export interface operations {
             };
         };
     };
+    report_summary: {
+        parameters: {
+            query?: {
+                start?: string | null;
+                end?: string | null;
+            };
+            header?: never;
+            path: {
+                entity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportSummary"];
+                };
+            };
+            /** @description Identity required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Operation denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Duplicate or concurrent change */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Transport or domain validation */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unexpected failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     list_tags: {
         parameters: {
             query?: never;
@@ -2327,6 +3162,95 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ManagedList"];
+                };
+            };
+            /** @description Identity required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Operation denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Duplicate or concurrent change */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Transport or domain validation */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unexpected failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    create_tag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManagedCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedReference"];
                 };
             };
             /** @description Identity required */
@@ -2749,6 +3673,95 @@ export interface operations {
             };
         };
     };
+    create_transaction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransactionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Transaction"];
+                };
+            };
+            /** @description Identity required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Operation denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Duplicate or concurrent change */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Transport or domain validation */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unexpected failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     delete_transaction: {
         parameters: {
             query?: never;
@@ -2937,6 +3950,93 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionInfo"];
+                };
+            };
+            /** @description Identity required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Operation denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Duplicate or concurrent change */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Transport or domain validation */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unexpected failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    select_entity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntitySelection"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

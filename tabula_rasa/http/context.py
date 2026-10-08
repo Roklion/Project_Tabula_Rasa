@@ -32,17 +32,29 @@ class DenyContext:
 class TrustedDevelopmentContext:
     """Fixed synthetic scope, server configured; requires loopback on every request."""
 
-    def __init__(self, entity_id, csrf_token):
+    def __init__(self, entity_id, csrf_token, *, entity_ids=()):
         self.context = RequestContext(
             "synthetic-operator", "synthetic", entity_id,
             frozenset({"bookkeeping:read", "bookkeeping:write"}),
             "development:" + entity_id, csrf_token, True,
         )
+        from dataclasses import replace
+        self.contexts = tuple(replace(self.context, entity_id=value, cache_scope='development:' + value)
+                              for value in dict.fromkeys((entity_id, *entity_ids)))
 
     def __call__(self, request):
         if request.client is None or request.client.host not in {"127.0.0.1", "::1"}:
             raise TransportError("forbidden")
-        return self.context
+        selected = request.cookies.get('tabula_entity', self.context.entity_id)
+        return next((item for item in self.contexts if item.entity_id == selected), None) or self._forbidden()
+
+    @staticmethod
+    def _forbidden():
+        raise TransportError('forbidden')
+
+    def available_contexts(self, request):
+        self(request)  # Enforce the same loopback boundary for enumeration.
+        return self.contexts
 
 
 def resolve_context(request: Request) -> RequestContext:

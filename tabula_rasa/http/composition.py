@@ -58,7 +58,7 @@ def open_runtime(settings):
     database = Database(DatabaseSettings.from_environment(required=True))
     try:
         resolver = (
-            TrustedDevelopmentContext(settings.trusted_entity_id, secrets.token_urlsafe(32))
+            TrustedDevelopmentContext(settings.trusted_entity_id, secrets.token_urlsafe(32), entity_ids=('beta-synthetic',))
             if settings.trusted_entity_id else DenyContext()
         )
         runtime = PostgresRuntime(database, resolver, service_factory=

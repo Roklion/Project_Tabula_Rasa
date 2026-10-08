@@ -23,7 +23,8 @@ the user selects an account or category.
 
 These narrow forms are available on Accounts, Categories, Transactions and
 Mileage; Categories links to Payees/Tags and Transactions to Journals. Full
-list/create/report/receipt workflows remain #281–#286. Streamlit behavior and
+list/create/report workflows are extended by [Core workflows](COMMERCIAL_WORKFLOWS.md)
+under #281/#282; receipt and secondary workflows remain #283–#286. Streamlit behavior and
 internal service compatibility remain unchanged. Real identity/memberships (#222),
 hosted environments (#279), operations (#223), wider browser QA (#287), alpha
 acceptance (#288) and production activation gates remain separate.

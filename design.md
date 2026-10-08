@@ -275,7 +275,7 @@ expose a raw traceback for this configuration failure.
 
 ## Commercial shell
 
-**Current behavior** for the #277/#278/#280 local technical-alpha application:
+**Current behavior** for the #277/#278/#280/#281/#282 local technical-alpha application:
 
 - The React shell uses the visual tokens, typography and approximately 760px
   stacking boundary above. Navigation covers Dashboard, Transactions, Assets,
@@ -285,12 +285,28 @@ expose a raw traceback for this configuration failure.
   context is identified as technical-alpha development. This shell does not
   expose internal profile keys, workbook metadata, Google credentials or local
   administration controls as commercial authorization.
-- Dashboard links to Accounts. The #280 concurrency bridge adds edit/deactivate
-  forms to that view and narrow existing-record edit/delete lists for Categories,
-  Transactions, Journals and Mileage. Categories links to Payees/Tags and their
-  merge forms; Transactions links to Journals. Derived transactions retain their
-  source owner. Other routes show availability states until their separately
-  scoped slices land. No internal-edition workflow is removed or replaced.
+- Dashboard and Reports show service-calculated profit/loss, balance-sheet
+  sections, current earnings, the accounting-equation check and clearly labeled
+  all-date account balances. Their From/To inputs govern the period/as-of date.
+  Accounts, Categories and Payees/Tags offer shared create fields and tables,
+  plus protected edits/removals/merges. Accounts deactivate; categories retain
+  guarded removal without an invented inactive flag. Parent names are visible.
+- The server-configured local business selector requires an explicit keep or
+  discard-and-switch choice, is disabled during mutations and remounts queries
+  and drafts after a confirmed context change. Independent clients select
+  independently. Functional selection never proves membership authorization.
+- Transactions offers separate guarded navigation to Add transaction and Add
+  journal forms. Creation uses the protected editors' shared fields; journals use
+  target/side/amount posting rows, stable line IDs, visible totals/difference and
+  explicit add/remove controls. Creates retain identities/drafts on failure,
+  never retry automatically and reset only after confirmed success.
+- The combined ledger offers inclusive From/To, Type, Accounts, Tags and text
+  search, defaults to all dates/newest first and preserves journal grouping.
+  Amounts, dates and receipt contents are outside text search. Journal posting
+  rows show Debit/Credit with no independent mutation action. Derived transactions
+  retain their source owner. Other scoped routes retain availability states;
+  Mileage retains the #280 existing-record editor. No internal-edition workflow
+  is removed or replaced.
 - Shared loading, empty, validation, conflict, unexpected-error and success
   states use text plus semantic status/alert roles. Conflicts preserve drafts
   and offer an explicit review action. Forms retain loaded server metadata
@@ -310,8 +326,9 @@ expose a raw traceback for this configuration failure.
 
 [Foundation conventions](docs/COMMERCIAL_FOUNDATION.md) owns technical contracts.
 [Commercial concurrency](docs/COMMERCIAL_CONCURRENCY.md) owns the #280 contract.
-#222 adds real identity/context selection,
-#281–#286 add domain workflows, and #287 expands accessibility/browser coverage.
+[Commercial core workflows](docs/COMMERCIAL_WORKFLOWS.md) owns #281/#282 scope.
+#222 adds authenticated identity/membership context selection,
+#283–#286 add remaining domain workflows, and #287 expands accessibility/browser coverage.
 The Streamlit-specific shell requirements above continue to govern the internal
 edition.
 

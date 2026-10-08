@@ -20,6 +20,10 @@ class TransactionChanges(DTO):
     new_tag_name: str = ''
 
 
+class TransactionCreate(TransactionChanges):
+    transaction_id: str
+
+
 class Transaction(DTO):
     id: str
     txn_date: str
@@ -59,6 +63,10 @@ class JournalChanges(DTO):
     txn_date: str
     description: str
     postings: list[Posting]
+
+
+class JournalCreate(JournalChanges):
+    entry_id: str
 
 
 class Journal(JournalChanges):
