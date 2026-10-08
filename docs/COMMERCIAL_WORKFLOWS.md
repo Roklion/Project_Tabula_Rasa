@@ -5,8 +5,8 @@ Issues [#281](https://github.com/Roklion/Project_Tabula_Rasa/issues/281) and
 technical-alpha workflows in [EPIC #221](https://github.com/Roklion/Project_Tabula_Rasa/issues/221),
 under [initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124).
 They consume the #277/#278 foundation and #280 protected-edit contract.
-This implementation branch starts from dependency PR #296 at `69d0533`;
-integrate its final merged revision before publishing this dependent work.
+The implementation consumes dependency PR #296 at `b70b7d4`. Its final
+merged revision must be integrated before this dependent PR is merged.
 
 ## Business selection
 
@@ -90,7 +90,8 @@ independently editable posting rows. Streamlit state/reruns are not involved.
 inclusive. Type, account/category target and tag filters preserve the shared
 service semantics, including either transfer account, whole-journal target
 matching and OR-within-tag matching. The browser exposes From, To, Type, Accounts
-and Tags, plus case-insensitive search of displayed text and journal posting text.
+and Tags (Accounts also offers labeled Income/Expense category targets),
+complete-entry sort/order controls and a logical result count, plus case-insensitive search of displayed text and journal posting text.
 Search does not match amounts, dates or receipt contents. The initial view covers
 all dates, newest first; **Clear filters** restores it.
 

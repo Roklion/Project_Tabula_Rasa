@@ -95,6 +95,8 @@ def test_ledger_and_reports_preserve_filters_accounting_and_history(commercial):
     for query, expected in [('kind=Transfer', {transfer['id']}), ('kind=Journal', {'journal:journal'}),
                             ('start=2026-10-05&end=2026-10-05', {'expense', 'transfer', 'journal:journal'}),
                             ('start=2026-10-06', set()), ('account_ids=bank', {'transfer'}),
+                            ('category_ids=office', {'expense', 'journal:journal'}),
+                            ('account_ids=bank&category_ids=office', {'expense', 'transfer', 'journal:journal'}),
                             ('tag_ids=' + ids['tags'], {'expense'})]:
         response = client.get(PREFIX + 'ledger?' + query)
         assert response.status_code == 200

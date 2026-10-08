@@ -10,13 +10,16 @@ import { latest } from '../concurrency/mutations';
 import { useReferenceChoices } from '../concurrency/useReferenceChoices';
 
 type Selection = { transaction: Schemas['Transaction'] } | { journal: Schemas['Journal'] };
+const sortFields = { Date: 'txn_date', Type: 'kind', Account: 'account', Payee: 'payee', Amount: 'amount', Description: 'description', ID: 'record_id' } as const;
 type Kind = 'All' | 'Income' | 'Expense' | 'Transfer' | 'Journal';
 
 export function LedgerPage() {
   const session = useEntity();
   const choices = useReferenceChoices(session);
-  const [filters, setFilters] = useState<{ start?: string; end?: string; kind: Kind; account_ids: string[]; tag_ids: string[] }>({ kind: 'All', account_ids: [], tag_ids: [] });
+  const [filters, setFilters] = useState<{ start?: string; end?: string; kind: Kind; account_ids: string[]; category_ids: string[]; tag_ids: string[] }>({ kind: 'All', account_ids: [], category_ids: [], tag_ids: [] });
   const [search, setSearch] = useState('');
+  const [sortField, setSortField] = useState<keyof typeof sortFields>('Date');
+  const [descending, setDescending] = useState(true);
   const [selected, setSelected] = useState<Selection>();
   const [loadingRecord, setLoadingRecord] = useState(false);
   const [failure, setFailure] = useState<unknown>();
@@ -32,6 +35,13 @@ export function LedgerPage() {
   const rows = query.data?.items.filter(row => !search.trim() || [row.kind, row.account, row.to_account, row.category, row.payee, ...row.tags,
     row.description, row.reference, row.id, ...row.postings.flatMap(line => [line.target, line.payee, line.description])]
     .some(text => text.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()))) ?? [];
+  rows.sort((a, b) => {
+    const field = sortFields[sortField];
+    const left = field === 'amount' ? BigInt(a.amount.replace('.', '')) : a[field].toLocaleLowerCase();
+    const right = field === 'amount' ? BigInt(b.amount.replace('.', '')) : b[field].toLocaleLowerCase();
+    const compared = left < right ? -1 : left > right ? 1 : 0;
+    return descending ? -compared : compared;
+  });
   const multi = (element: HTMLSelectElement) => Array.from(element.selectedOptions, option => option.value);
   return <><h1>Transactions</h1><p className="lead">Simple transactions and complete journals for {session.entity.name}.</p>
     <nav aria-label="Entries"><Link to="/transactions">Transactions</Link> · <Link to="/journals">Journals</Link> · <Link to="/payees">Payees</Link> · <Link to="/tags">Tags</Link></nav>
@@ -42,11 +52,19 @@ export function LedgerPage() {
         <Field id="from" label="From"><input id="from" type="date" value={filters.start ?? ''} onChange={event => setFilters({ ...filters, start: event.target.value || undefined })} /></Field>
         <Field id="to" label="To"><input id="to" type="date" value={filters.end ?? ''} onChange={event => setFilters({ ...filters, end: event.target.value || undefined })} /></Field>
         <Field id="kind" label="Type"><select id="kind" value={filters.kind} onChange={event => setFilters({ ...filters, kind: event.target.value as Kind })}>{['All', 'Income', 'Expense', 'Transfer', 'Journal'].map(kind => <option key={kind}>{kind}</option>)}</select></Field>
-        <Field id="account-filter" label="Accounts"><select id="account-filter" multiple value={filters.account_ids} onChange={event => setFilters({ ...filters, account_ids: multi(event.target) })}>{choices.accounts.map(row => <option key={row.id} value={row.id}>{row.name}{row.active ? '' : ' (Inactive)'}</option>)}</select></Field>
+        <Field id="account-filter" label="Accounts"><select id="account-filter" multiple value={[...filters.account_ids.map(id => 'account:' + id), ...filters.category_ids.map(id => 'category:' + id)]} onChange={event => {
+          const targets = multi(event.target);
+          setFilters({ ...filters, account_ids: targets.filter(id => id.startsWith('account:')).map(id => id.slice(8)),
+            category_ids: targets.filter(id => id.startsWith('category:')).map(id => id.slice(9)) });
+        }}>{choices.accounts.map(row => <option key={row.id} value={'account:' + row.id}>{row.name}{row.active ? '' : ' (Inactive)'}</option>)}{choices.categories.map(row => <option key={'category:' + row.id} value={'category:' + row.id}>{row.kind} category · {row.name}</option>)}</select></Field>
         <Field id="tag-filter" label="Tags"><select id="tag-filter" multiple value={filters.tag_ids} onChange={event => setFilters({ ...filters, tag_ids: multi(event.target) })}>{choices.tags.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></Field>
         <Field id="search" label="Search transactions"><input id="search" value={search} onChange={event => setSearch(event.target.value)} /></Field>
-        <button type="button" onClick={() => { setFilters({ kind: 'All', account_ids: [], tag_ids: [] }); setSearch(''); }}>Clear filters</button>
+        {search.trim() && <button type="button" onClick={() => setSearch('')}>Clear search</button>}
+        <Field id="sort-field" label="Sort entries by"><select id="sort-field" value={sortField} onChange={event => setSortField(event.target.value as keyof typeof sortFields)}>{Object.keys(sortFields).map(field => <option key={field}>{field}</option>)}</select></Field>
+        <Field id="entry-order" label="Entry order"><select id="entry-order" value={descending ? 'Descending' : 'Ascending'} onChange={event => setDescending(event.target.value === 'Descending')}><option>Descending</option><option>Ascending</option></select></Field>
+        <button type="button" onClick={() => { setFilters({ kind: 'All', account_ids: [], category_ids: [], tag_ids: [] }); setSearch(''); setSortField('Date'); setDescending(true); }}>Clear filters</button>
       </div>
+      {!query.isPending && !query.isError && <p role="status">{rows.length} matching entries</p>}
       {choices.error && <ErrorNotice error={choices.error} />}
       {failure !== undefined && <ErrorNotice error={failure} />}
       {query.isPending ? <LoadingState label="Loading ledger…" /> : query.isError ? <ErrorNotice error={query.error} onReview={() => void query.refetch()} />

@@ -13,7 +13,7 @@ const fixedClassifications: Record<string, string> = { Bank: 'Asset', Cash: 'Ass
 
 const options = (values: string[]) => values.map(value => ({ id: value, name: value }));
 function hasChildren(rows: { parent_id?: string | null }[], id: string) {
-  return rows.some(row => row.parent_id === id);
+  return Boolean(id) && rows.some(row => row.parent_id === id);
 }
 
 function eligibleParents<T extends { id: string; parent_id?: string | null }>(rows: T[], id: string, compatible: (row: T) => boolean) {

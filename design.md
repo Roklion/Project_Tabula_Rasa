@@ -300,7 +300,8 @@ expose a raw traceback for this configuration failure.
   target/side/amount posting rows, stable line IDs, visible totals/difference and
   explicit add/remove controls. Creates retain identities/drafts on failure,
   never retry automatically and reset only after confirmed success.
-- The combined ledger offers inclusive From/To, Type, Accounts, Tags and text
+- The combined ledger offers inclusive From/To, Type, Accounts (including labeled
+  Income/Expense category targets), Tags, complete-entry sorting and text
   search, defaults to all dates/newest first and preserves journal grouping.
   Amounts, dates and receipt contents are outside text search. Journal posting
   rows show Debit/Credit with no independent mutation action. Derived transactions
