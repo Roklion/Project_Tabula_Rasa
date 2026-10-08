@@ -60,8 +60,8 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
         )
         try:
             configured = getattr(app.state, "settings", None)
-            if (configured and request.url.path not in {"/health/live", "/health/ready"}
-                    and request.headers.get("host") != configured.public_origin.split("://", 1)[1]):
+            if (configured and request.url.path not in {"/health/live", "/health/ready", "/version"}
+                    and (request.headers.get("host") or "").lower() != configured.public_origin.split("://", 1)[1].lower()):
                 response = error_response(request, "forbidden")
             else:
                 if request.url.path in {"/api/docs", "/api/openapi.json"}:

@@ -37,6 +37,18 @@ def test_native_http_list_create_validation_and_two_entity_isolation(database):
             json={**body, "name": "Invalid", "classification": "Liability"}, headers=headers)
         assert invalid.status_code == 422
         assert len(create_postgres_services(database, "alpha").accounts.list()) == 1
+        for amount in ("9" * 27, "-" + "9" * 27, "9" * 26 + ".999"):
+            invalid = client.post("/api/v1/entities/alpha/accounts",
+                json={**body, "name": "Overflow", "opening_balance": amount}, headers=headers)
+            assert invalid.status_code == 422
+            assert invalid.json()["error"]["code"] == "validation"
+            assert amount not in invalid.text
+        assert len(create_postgres_services(database, "alpha").accounts.list()) == 1
+        assert create_postgres_services(database, "beta").accounts.list() == []
+        maximum = client.post("/api/v1/entities/alpha/accounts",
+            json={**body, "name": "Maximum", "opening_balance": "9" * 26 + ".99"}, headers=headers)
+        assert maximum.status_code == 201
+        assert maximum.json()["opening_balance"] == "9" * 26 + ".99"
 
 
 def test_native_readiness_rejects_unmigrated_database(empty_database):

@@ -36,3 +36,15 @@ it('invalidates the affected scope after success and uncertain failure, with no 
   expect(create).toHaveBeenCalledTimes(2);
   expect(cache.getQueryState(alpha)?.isInvalidated).toBe(true);
 });
+
+
+it('retries an unavailable read exactly once and does not retry other failures', async () => {
+  for (const [code, attempts] of [['unavailable', 2], ['forbidden', 1]] as const) {
+    const cache = createPrivateCache();
+    const queryFn = vi.fn().mockRejectedValue(new ApiError(code));
+    await expect(cache.fetchQuery({ queryKey: ['probe', code], queryFn, retryDelay: 0 }))
+      .rejects.toHaveProperty('code', code);
+    expect(queryFn).toHaveBeenCalledTimes(attempts);
+    cache.clear();
+  }
+});

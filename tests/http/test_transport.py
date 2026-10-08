@@ -227,7 +227,11 @@ def test_schema_access_guard_and_asset_cache_policy(client, runtime, tmp_path):
     runtime.resolve_context = DenyContext()
     assert client.get("/api/openapi.json").status_code == 401
     assert client.get("/api/docs").status_code == 401
-    assert client.get("/health/live", headers={"Host": "internal-probe"}).status_code == 200
+    for path in ("/health/live", "/health/ready", "/version"):
+        assert client.get(path, headers={"Host": "internal-probe"}).status_code == 200
+    runtime.services.reset_mock()
+    assert client.get("/api/v1/session", headers={"Host": "TESTSERVER"}).status_code == 401
+    runtime.services.assert_not_called()
 
 
 def test_hashed_asset_cache_and_html_revalidation(runtime, tmp_path):
@@ -237,3 +241,10 @@ def test_hashed_asset_cache_and_html_revalidation(runtime, tmp_path):
     with TestClient(create_app(settings=SETTINGS, runtime_factory=lambda settings: runtime, static_dir=tmp_path)) as client:
         assert client.get("/assets/app-hash.js").headers["Cache-Control"] == "public, max-age=31536000, immutable"
         assert client.get("/accounts", headers={"Accept": "text/html"}).headers["Cache-Control"] == "no-cache"
+
+
+def test_host_case_equivalence_preserves_private_route_guard(client, runtime):
+    assert client.get("/api/v1/session", headers={"Host": "TESTSERVER"}).status_code == 200
+    runtime.services.reset_mock()
+    assert client.get("/api/v1/session", headers={"Host": "TESTSERVER:8000"}).status_code == 403
+    runtime.services.assert_not_called()

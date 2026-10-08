@@ -129,6 +129,8 @@ def test_account_service_normalizes_inputs_without_additional_reads():
         lambda service: service.create("Checking", "Bank", classification="Liability"),
         lambda service: service.create("Checking", "Bank", "NaN"),
         lambda service: service.create("Checking", "Bank", "bad amount"),
+        lambda service: service.create("Checking", "Bank", "9" * 27),
+        lambda service: service.update("account-1", opening_balance="9" * 26 + ".999"),
         lambda service: service.update("", name="Checking"),
         lambda service: service.update("account-1", classification="invalid"),
         lambda service: service.update(

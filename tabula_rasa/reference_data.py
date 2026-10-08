@@ -122,7 +122,10 @@ def balance_amount(value: Any) -> str:
         raise StorageValidationError("Opening balance must be numeric") from None
     if not amount.is_finite():
         raise StorageValidationError("Opening balance must be finite")
-    return format(amount.quantize(Decimal("0.01")), "f")
+    try:
+        return format(amount.quantize(Decimal("0.01")), "f")
+    except InvalidOperation:
+        raise StorageValidationError("Opening balance exceeds supported precision") from None
 
 
 def validate_account_classification(

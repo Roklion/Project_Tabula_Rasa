@@ -39,3 +39,15 @@ describe('typed client', () => {
     expect(signal?.aborted).toBe(true);
   });
 });
+
+
+it('maps proxy JSON and HTML errors to a safe API error without leaking a TypeError', async () => {
+  for (const body of [JSON.stringify({ message: 'private upstream detail' }), '<html>private upstream detail</html>']) {
+    const fetcher = vi.fn(async () => new Response(body, { status: 502 }));
+    const client = createApi(fetcher as typeof fetch);
+    await expect(client.accounts(session)).rejects.toEqual(new ApiError('unavailable'));
+    await expect(client.createAccount(session, { name: 'Draft', type: 'Bank', opening_balance: '0.00' }))
+      .rejects.toEqual(new ApiError('unavailable'));
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  }
+});

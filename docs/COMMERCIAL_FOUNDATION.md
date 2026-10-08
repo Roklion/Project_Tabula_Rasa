@@ -73,7 +73,9 @@ HTTP settings are read only from process environment. Database settings retain
 their existing loader. `TABULA_RASA_PUBLIC_ORIGIN` is the exact browser origin,
 without a trailing slash. Vite forwards the original Host on `/api` calls;
 direct data/schema requests to API port 8000 therefore need the configured Host.
-Minimal health probes are exempt from Host checks and expose no business data.
+Host names are compared case-insensitively. Minimal health and release probes
+(`/health/live`, `/health/ready`, `/version`) are exempt from Host checks and
+expose no business data.
 No CORS or browser API-origin override is enabled.
 
 ## Errors, request IDs and operational hooks
