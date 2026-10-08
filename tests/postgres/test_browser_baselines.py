@@ -467,3 +467,77 @@ def test_managed_deactivation_confirms_original_baseline_and_retains_stale_draft
             assert loaded(clients[0], resource, row['id'])['active']
         finally:
             browser.close()
+
+
+
+def test_transfer_destination_excludes_source_and_clears_on_source_change(commercial, commercial_server):
+    from tests.postgres.core_support import expense
+
+    alpha, _, clients, _ = commercial
+    row = alpha.transactions.create(transaction_id='transfer-choices', **expense(kind='Transfer',
+        category_id='', to_account_id='bank', description='Transfer choices'))
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.goto(commercial_server + '/transactions')
+            page.get_by_role('button', name=edit_label('transactions', row), exact=True).click()
+            source = page.get_by_label('From account', exact=True)
+            destination = page.get_by_label('To account', exact=True)
+            expect(destination.locator('option[value="cash"]')).to_have_count(0)
+            expect(destination).to_have_value('bank')
+            source.select_option('bank')
+            expect(destination).to_have_value('')
+            expect(destination.locator('option[value="bank"]')).to_have_count(0)
+            destination.select_option('cash')
+            with page.expect_response(lambda response: response.request.method == 'PATCH') as saved:
+                page.get_by_role('button', name='Save changes', exact=True).click()
+            assert saved.value.status == 200
+            assert saved.value.request.post_data_json['baseline'] == row['baseline']
+            actual = loaded(clients[0], 'transactions', row['id'])
+            assert actual['account_id'] == 'bank' and actual['to_account_id'] == 'cash'
+        finally:
+            browser.close()
+
+
+@pytest.mark.parametrize('resource', ['accounts', 'categories'])
+def test_hierarchy_root_choices_preserve_children_compatibility(commercial, commercial_server, resource):
+    alpha, _, clients, ids = commercial
+    service = getattr(alpha, resource)
+    if resource == 'accounts':
+        root = service.create('Protected root', 'Other', '0', classification='Asset')
+        child = service.create('Protected child', 'Other', '0', classification='Asset', parent_id=root['id'])
+        group, expected_group = 'Classification', 'Asset'
+        name = 'Account name'
+    else:
+        root = service.create('Protected root', 'Expense')
+        child = service.create('Protected child', 'Expense', parent_id=root['id'])
+        group, expected_group = 'Kind', 'Expense'
+        name = 'Category name'
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.goto(commercial_server + '/' + resource)
+            page.get_by_role('button', name=edit_label(resource, root), exact=True).click()
+            expect(page.get_by_label(group, exact=True).locator('option')).to_have_count(1)
+            expect(page.get_by_label(group, exact=True)).to_have_value(expected_group)
+            if resource == 'accounts':
+                types = page.get_by_label('Type', exact=True)
+                assert types.locator('option').evaluate_all('(options) => options.map(option => option.value)') == ['Bank', 'Cash', 'Other']
+                types.select_option('Bank')
+                expect(page.get_by_label(group, exact=True)).to_have_value('Asset')
+            page.get_by_label(name, exact=True).fill('Renamed root')
+            with page.expect_response(lambda response: response.request.method == 'PATCH') as saved:
+                page.get_by_role('button', name='Save changes', exact=True).click()
+            assert saved.value.status == 200
+            assert saved.value.request.post_data_json['baseline'] == root['baseline']
+            assert loaded(clients[0], resource, child['id'])['parent_id'] == root['id']
+            service.update(child['id'], parent_id=ids[resource])
+            page.reload()
+            page.get_by_role('button', name='Edit Renamed root', exact=True).click()
+            if resource == 'accounts':
+                page.get_by_label('Type', exact=True).select_option('Other')
+            expect(page.get_by_label(group, exact=True).locator('option')).to_have_count(3 if resource == 'accounts' else 2)
+        finally:
+            browser.close()

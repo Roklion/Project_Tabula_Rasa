@@ -11,8 +11,12 @@ import { ActiveField, SelectField, TextField } from './Fields';
 const fixedClassifications: Record<string, string> = { Bank: 'Asset', Cash: 'Asset', 'Credit card': 'Liability', 'Short-term debt': 'Liability', Equity: 'Equity' };
 
 const options = (values: string[]) => values.map(value => ({ id: value, name: value }));
+function hasChildren(rows: { parent_id?: string | null }[], id: string) {
+  return rows.some(row => row.parent_id === id);
+}
+
 function eligibleParents<T extends { id: string; parent_id?: string | null }>(rows: T[], id: string, compatible: (row: T) => boolean) {
-  if (rows.some(row => row.parent_id === id)) return [];
+  if (hasChildren(rows, id)) return [];
   return rows.filter(row => row.id !== id && !row.parent_id && compatible(row));
 }
 
@@ -31,8 +35,12 @@ export function AccountEditor({ row, onClose }: { row: Account; onClose: () => v
     save={async (id, baseline, changes) => accountLoaded(await api.updateAccount(session, id, { baseline, changes }))}
     remove={(id, baseline) => api.deactivateAccount(session, id, baseline)} removeLabel="Deactivate"
     loadLatest={async id => accountLoaded(await latest(api.accounts, session, id))}
-    fields={form => <><TextField form={form} name="name" label="Account name" />
-      <SelectField form={form} name="type" label="Type" options={options(['Bank', 'Cash', 'Credit card', 'Short-term debt', 'Equity', 'Other'])}
+    fields={form => {
+      const root = hasChildren(accounts.data?.items ?? [], row.id);
+      const classification = form.formState.defaultValues?.classification ?? row.classification;
+      const fixed = fixedClassifications[form.watch('type') ?? ''];
+      return <><TextField form={form} name="name" label="Account name" />
+      <SelectField form={form} name="type" label="Type" options={options(['Bank', 'Cash', 'Credit card', 'Short-term debt', 'Equity', 'Other'].filter(type => !root || !fixedClassifications[type] || fixedClassifications[type] === classification))}
         onChange={() => {
           const classification = fixedClassifications[form.getValues('type') ?? ''];
           if (classification && classification !== form.getValues('classification')) {
@@ -40,15 +48,16 @@ export function AccountEditor({ row, onClose }: { row: Account; onClose: () => v
             form.setValue('parent_id', '', { shouldDirty: true });
           }
         }} />
-      <SelectField form={form} name="classification" label="Classification" options={options(fixedClassifications[form.watch('type') ?? ''] ? [fixedClassifications[form.watch('type') ?? '']] : ['Asset', 'Liability', 'Equity'])}
+      <SelectField form={form} name="classification" label="Classification" options={options(root ? [classification] : fixed ? [fixed] : ['Asset', 'Liability', 'Equity'])}
         onChange={() => form.setValue('parent_id', '', { shouldDirty: true })} />
+      {root && <p className="muted">Move child accounts before changing classification.</p>}
       <TextField form={form} name="opening_balance" label="Opening balance" />
       <p className="muted">Asset opening balances are normally positive. Liability and equity opening ledger balances are normally negative.</p>
       <SelectField form={form} name="parent_id" label="Parent account" options={[{ id: '', name: 'No parent' },
         ...eligibleParents(accounts.data?.items ?? [], row.id, item => item.classification === form.watch('classification'))]} />
       {form.formState.defaultValues?.active
         ? <p className="muted">Active. Use Deactivate to review and confirm deactivation.</p>
-        : <ActiveField form={form} name="active" />}</>} />;
+        : <ActiveField form={form} name="active" />}</>; }} />;
 }
 
 function categoryLoaded(row: Schemas['Category']) {
@@ -64,8 +73,9 @@ function CategoryEditor({ row, onClose }: { row: Schemas['Category']; onClose: (
     remove={(id, baseline) => api.deleteCategory(session, id, baseline)}
     loadLatest={async id => categoryLoaded(await latest(api.categories, session, id))}
     fields={form => <><TextField form={form} name="name" label="Category name" />
-      <SelectField form={form} name="kind" label="Kind" options={options(['Income', 'Expense'])}
+      <SelectField form={form} name="kind" label="Kind" options={options(hasChildren(categories.data?.items ?? [], row.id) ? [form.formState.defaultValues?.kind ?? row.kind] : ['Income', 'Expense'])}
         onChange={() => form.setValue('parent_id', '', { shouldDirty: true })} />
+      {hasChildren(categories.data?.items ?? [], row.id) && <p className="muted">Move child categories before changing kind.</p>}
       <SelectField form={form} name="parent_id" label="Parent category" options={[{ id: '', name: 'No parent' },
         ...eligibleParents(categories.data?.items ?? [], row.id, item => item.kind === form.watch('kind'))]} /></>} />;
 }

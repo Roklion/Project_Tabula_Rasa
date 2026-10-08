@@ -26,13 +26,17 @@ function TransactionFields({ form }: { form: UseFormReturn<Schemas['TransactionC
   const choices = useReferenceChoices(session);
   const original = form.formState.defaultValues;
   const kind = form.watch('kind');
+  const source = form.watch('account_id');
   if (choices.pending) return <LoadingState label="Loading choices…" />;
   if (choices.error) return <ErrorNotice error={choices.error} />;
   return <><SelectField form={form} name="kind" label="Type" options={options(['Income', 'Expense', 'Transfer'])} />
     <TextField form={form} name="txn_date" label="Date" type="date" />
     <TextField form={form} name="amount" label="Amount" />
-    <SelectField form={form} name="account_id" label={kind === 'Income' ? 'To account' : 'From account'} options={activeChoices(choices.accounts, [original?.account_id])} />
-    {kind === 'Transfer' ? <SelectField form={form} name="to_account_id" label="To account" options={[blank, ...activeChoices(choices.accounts, [original?.to_account_id])]} />
+    <SelectField form={form} name="account_id" label={kind === 'Income' ? 'To account' : 'From account'} options={activeChoices(choices.accounts, [original?.account_id])}
+      onChange={() => {
+        if (form.getValues('account_id') === form.getValues('to_account_id')) form.setValue('to_account_id', '', { shouldDirty: true });
+      }} />
+    {kind === 'Transfer' ? <SelectField form={form} name="to_account_id" label="To account" options={[blank, ...activeChoices(choices.accounts, [original?.to_account_id]).filter(account => account.id !== source)]} />
       : <SelectField form={form} name="category_id" label="Category" options={[blank, ...choices.categories.filter(row => row.kind === kind)]} />}
     <SelectField form={form} name="payee_id" label="Payee / customer" options={[blank, ...activeChoices(choices.payees, [original?.payee_id])]} />
     <TextField form={form} name="new_payee_name" label="New payee name (optional)" />
