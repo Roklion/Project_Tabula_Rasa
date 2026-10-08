@@ -266,8 +266,10 @@ production later promotes that same staging-tested digest. Builds receive no
 database or identity secrets. #279 implements image delivery and explicit
 promotion, with deploys serialized per environment. Retain registry digests
 needed for rollback. A release records Git SHA/image digest and expected
-Alembic head. Retain the existing full-suite gates and native PostgreSQL checks;
-browser/API quality checks grow with #277/#278/#287.
+Alembic head. Retain the authoritative current-revision CI full-suite gate and
+native PostgreSQL checks described in [Development](../DEVELOPMENT.md#authoritative-ci-and-required-check);
+browser/API quality checks grow with #277/#278/#287. Affected local validation
+supports development while CI and advisory review proceed concurrently.
 
 Migrate explicitly in the deployment lifecycle; never at startup.
 The deployment workflow runs the existing PostgreSQL `current`,

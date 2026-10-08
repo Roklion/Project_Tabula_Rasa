@@ -34,7 +34,7 @@ def settings(
     return build_profile_settings(
         name,
         f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit",
-        r"G:\My Drive\Project Tabula Rasa Backups\north",
+        str(Path(tempfile.gettempdir()) / "Tabula Rasa Test Backups" / "north"),
         google_drive={"authorized_email": "owner@example.test", "refresh_token": "fake-refresh", "token_uri": "https://oauth2.googleapis.com/token", "scopes": ["https://www.googleapis.com/auth/drive.file"]},
     )
 

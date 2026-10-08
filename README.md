@@ -97,16 +97,15 @@ different users must be restricted to different businesses.
 
 ## Development checks
 
-Install the development dependencies and run the required checks:
+Install the development dependencies, then run affected tests and applicable
+fast lint/type/style checks for the behavior and shared dependencies you change.
+Full local suites are exceptional diagnostics; the current revision's GitHub
+Actions **Full test suite** check is the authoritative merge gate and runs
+concurrently with PR review.
 
-```powershell
-pip install -r requirements-dev.txt
-ruff check .
-python -m pytest
-```
-
-See the [development guide](docs/DEVELOPMENT.md) for test isolation
-and live validation commands.
+See the [development guide](docs/DEVELOPMENT.md#required-validation) for local
+validation, CI coverage, required-check administration, failure diagnosis and
+test isolation.
 
 ## Authors
 

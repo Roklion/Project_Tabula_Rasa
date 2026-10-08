@@ -181,6 +181,10 @@ smoke tests use intercepted synthetic responses at 1440, 1200, 900, 390 and
 320 CSS-pixel widths. This is Chromium smoke evidence, not real-device or full
 cross-browser certification; #287 owns that wider gate.
 
-The commercial foundation CI job exports/regenerates both contract artifacts,
-rejects drift, compiles the consumer and runs these foundation checks.
-Repository full-suite publication and terminal-review gates still apply.
+[Repository CI](DEVELOPMENT.md#authoritative-ci-and-required-check) exports and
+regenerates both contract artifacts, rejects drift, compiles the consumer and
+runs the browser foundation checks. Its complete Python job owns API/native
+PostgreSQL tests without a duplicate foundation pytest invocation. A dedicated
+Windows job covers platform-specific setup tests. The aggregate **Full test
+suite** check gates the current PR candidate while CI and advisory review proceed
+concurrently; publication and review completion require no ritual full local run.

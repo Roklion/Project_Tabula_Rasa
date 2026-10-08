@@ -57,20 +57,130 @@ configured clone and is not a substitute for server-side branch protection.
 
 ## Required validation
 
-Run these commands from the repository root before initially publishing a
-coding branch or creating/marking its pull request Ready for Review, and run
-them again before declaring the completed review loop fully terminal:
+Run affected tests and applicable fast lint/type/style checks from the repository
+root in the active development environment during implementation, after fixes,
+and before committing or publishing. Choose coverage by changed behavior,
+callers, shared dependencies and relevant failure paths, rather than test-file
+names alone. Add regression coverage when behavior changes. For example, a CI
+workflow change affects `tests/tooling`; a service change also needs its callers
+and adapter/isolation coverage. Run `git diff --check` and check the branch diff
+against `origin/main` before publishing. Resolve affected failures before
+committing that round.
 
-```powershell
-ruff check .
-python -m pytest
-git diff --check
-```
+Publish after those local checks and begin Codex/Gemini reviews while full-suite
+CI runs independently. Continue processing feedback during pending CI. A review
+fix gets affected local checks and a fresh CI run for the new revision. Full
+local runs are exceptional diagnostics for CI failures, global fixtures/test
+infrastructure or especially broad changes that affected checks cannot cover;
+they are not mandatory before PR creation or at review completion.
 
-For implementation commits and review-remediation rounds between those two
-gates, run `git diff --check` plus linting and tests scoped to the affected
-files and behavior. Intermediate commits do not require a full-suite rerun when
-their affected checks pass.
+### Authoritative CI and required check
+
+[Repository CI](../.github/workflows/ci.yml) consolidates the former PostgreSQL
+and commercial-foundation workflows. Its stable merge-gate check name is
+**`Full test suite`**. It requires success from all three parallel jobs:
+
+- **Python suite (Linux + PostgreSQL)** installs `requirements-dev.txt` with
+  Python 3.12, runs `ruff check .` and `python -m pytest -ra` over every test
+  discovered by `pytest.ini`, and supplies disposable PostgreSQL 18.6 through
+  `TABULA_RASA_TEST_DATABASE_URL`. Missing/inaccessible PostgreSQL must not be
+  used to make this gate green. There are no marker filters or deselections.
+- **Windows environment setup** runs the Windows-only
+  `tests/tooling/test_codex_environment_setup.py` on Windows with PowerShell and
+  Python 3.12. Those tests' existing platform skips on Linux are covered here,
+  including the real Python 3.12 setup harness. The remaining suite runs once
+  on Linux; no second full Python run is added on Windows.
+- **Browser and generated API contract** retains the existing Node 24/npm
+  contract generation/drift check, TypeScript build, ESLint, Vitest and Chromium
+  Playwright smoke checks. Python tests/lint and PostgreSQL provisioning are
+  owned by the Python job rather than repeated here. The explicitly invoked
+  Streamlit viewport scripts below remain optional developer checks.
+
+The suite needs no production credentials, Google OAuth grants or live ledgers.
+It uses read-only repository permissions, pip/npm dependency caches, bounded job
+timeouts and PR-scoped cancellation of superseded runs. Python jobs print
+failure/skip details and retain JUnit results as Actions artifacts. A failing,
+cancelled, skipped or missing component cannot make the aggregate check pass.
+
+PRs targeting `main` run on `opened`, `synchronize`, `reopened` and
+`ready_for_review`, including drafts. Feature-branch pushes do not launch a
+second push workflow. Ready/reopened events intentionally refresh the candidate;
+concurrency cancels unfinished superseded runs for the same PR. Pushes to `main`
+also run CI after merges. `merge_group: checks_requested` supports a future
+merge queue. Checkout uses GitHub's current PR merge candidate (the default
+`pull_request` checkout), or the merge-group SHA. Match the run to the current
+PR head and candidate; a previous head's green result cannot establish readiness.
+
+#### Optional GitHub enforcement (good to have)
+
+The maintainer has chosen to retain the current GitHub plan. A plan upgrade,
+GitHub-enforced branch protection/rulesets and their associated protections,
+configuration readback, and a probe proving that GitHub blocks a failing merge
+are optional future improvements. They do not block closing issue #295.
+Current-revision CI success and satisfied review conditions remain required by
+repository/agent policy; enforcement is procedural while GitHub's hard block
+is unavailable. Do not describe optional enforcement as configured or verified.
+
+Repository files cannot enable GitHub's required-check enforcement. If the
+maintainer elects to enable it later, an administrator can use this optional setup:
+
+1. Ensure the private repository's plan supports branch protection/rulesets.
+   On 2026-10-07, read-only queries of both `main` protection and rulesets
+   returned HTTP 403 with GitHub's "Upgrade to GitHub Pro or make this repository
+   public" response. Enforcement remains **unverified and unavailable on that
+   plan**; do not describe this implementation as enforced protection. Keep the
+   repository private. Arrange an eligible plan only if the owner elects to
+   pursue this optional improvement.
+2. In **Settings > Branches > Add branch protection rule**, target exactly
+   `main`. Enable **Require a pull request before merging**, **Require status
+   checks to pass before merging**, and **Require branches to be up to date
+   before merging**. Add **`Full test suite`**, selecting **GitHub Actions** as
+   the expected source, and prevent admin/role bypass of the rule. Preserve any
+   existing required reviews/checks and other protections. A ruleset equivalent
+   must be active, target `main`, require the same check/source and strict update
+   policy, and have no bypass that defeats the gate. Replace obsolete
+   `integration`/`foundation` checks only after the aggregate check is available.
+3. Read the saved protection/ruleset back. For classic protection, use
+   `gh api repos/Roklion/Project_Tabula_Rasa/branches/main/protection` and confirm
+   `required_status_checks.strict` is true and the required check context is
+   `Full test suite` with the GitHub Actions app identity. For a ruleset, use
+   `gh api repos/Roklion/Project_Tabula_Rasa/rulesets`, inspect the active rule's
+   detail and confirm its `main` target, status-check source, strict policy and
+   bypass list. Do not treat HTTP 403 or absent checks as verification.
+4. On a controlled synthetic PR, confirm CI and advisory review start without a
+   full local run; handle feedback while CI is pending. Commit a deliberately
+   failing test and verify the current candidate's gate fails and merging is
+   blocked. Fix it with affected tests and a new commit; verify the older green
+   result is insufficient while the new run is pending, and completion becomes
+   eligible only after that run passes and review conditions are satisfied.
+   Do not merge the probe or use production data. The server-enforcement probe
+   is optional, requires separate authorization and does not block issue #295
+   closure. Normal hosted CI/review behavior verification remains required.
+
+### CI failures and review completion
+
+Open the PR's **Checks > Full test suite > Details** or **Actions > Repository
+CI**. Inspect the failed component's named step and download its JUnit artifact
+when present. CLI equivalents are `gh pr checks <PR>`,
+`gh run view <RUN_ID> --log-failed` and `gh run download <RUN_ID>`.
+Reproduce the affected failure locally and fix it with scoped checks; a new
+commit triggers fresh CI. Rerun only a diagnosed transient failure with
+`gh run rerun <RUN_ID> --failed` (or Actions' **Re-run failed jobs**), on the
+current candidate. If the aggregate job ran during the failure, ensure it is
+also rerun after its dependencies succeed; use **Re-run all jobs** once if the
+failed-jobs rerun does not recompute the aggregate. Do not loop on an unchanged
+code failure or use reruns as evidence for a newer head.
+
+Monitor CI and reviewer states independently. Review may finish before CI or
+vice versa. Pending CI continues monitoring; failed/timed-out/cancelled/missing
+CI is an actionable incomplete or blocked state, never success. Report the
+current head, run/check name and failing job/logs, distinguishing code defects
+from infrastructure or account limitations. Missing checks require inspecting
+event/base-branch routing, Actions permissions/approval and required-check setup;
+do not weaken the gate. Successful review-loop completion and merge readiness
+require satisfied review conditions, current-revision required checks passing
+and a conflict-free/current candidate. Human approval and merge authority remain
+unchanged.
 
 Tests use fake or in-memory services and must not read live ledger data,
 application credentials, service-account keys, or OAuth tokens.
