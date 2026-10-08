@@ -11,7 +11,9 @@ The implementation consumes #280 from merged PR #296, including its final
 ## Business selection
 
 The local development seed creates Alpha and Beta demonstration entities in the
-disposable loopback database. **Select business** lists the development resolver's
+disposable loopback database. Startup validates both configured fixtures and fails
+closed if either is missing; it never creates missing entities. A disposable fixture
+from the former Alpha-only setup must be recreated with the explicit seed tooling. **Select business** lists the development resolver's
 server-configured choices. Switching requires **Keep current business** or
 **Discard draft and switch**. A confirmed switch replaces the context, private
 query cache, selections and drafts. Selection is disabled during a pending
@@ -73,7 +75,8 @@ The commercial editor currently uses Side/Amount controls, consistent with its
 
 Create forms preserve drafts and stable transaction/journal identities through
 errors, perform no automatic mutation retry and reset only after confirmed
-success. Inline references, financial records and posting writes remain in the
+success. HTTP transaction-create identities reserve the `journal:` prefix for the
+combined ledger's journal projection, preventing colliding selection identities. Inline references, financial records and posting writes remain in the
 existing PostgreSQL transaction. Successful creates advance draft identities;
 an explicit retry after failure retains the original IDs. Inspect records after
 an uncertain response before deciding how to proceed.

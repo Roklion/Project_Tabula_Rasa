@@ -132,3 +132,19 @@ def test_alpha_entity_selection_is_per_client_and_server_bounded(database, comme
         assert len(second.get(PREFIX + 'transactions').json()['items']) == 1
         # Functional selection is not offered as a bypass on a #222 resolver.
         assert commercial[2][0].post('/api/v1/session/entity', headers=HEADERS, json={'entity_id': 'alpha'}).status_code == 403
+
+
+def test_transaction_create_rejects_reserved_projection_identity(database, commercial):
+    _, beta, (client, _), _ = commercial
+    body = dict(transaction_id='journal:reserved', **expense(new_payee_name='Must not create', new_tag_name='Must not create'))
+    for identity in ('journal:reserved', ' journal:reserved '):
+        before = snapshot(database)
+        response = client.post(PREFIX + 'transactions', headers=HEADERS, json={**body, 'transaction_id': identity})
+        assert response.status_code == 422 and response.json()['error']['code'] == 'validation'
+        assert snapshot(database) == before
+    create(client, 'journals', dict(entry_id='reserved', txn_date='2026-10-06', description='Valid journal', postings=journal_lines(prefix='reserved-')))
+    before = snapshot(database)
+    assert client.post(PREFIX + 'transactions', headers=HEADERS, json=body).status_code == 422
+    assert snapshot(database) == before
+    assert client.get(PREFIX + 'ledger').status_code == 200
+    assert not beta.transactions.list()

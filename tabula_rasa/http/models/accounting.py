@@ -1,4 +1,4 @@
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from .accounts import DecimalString
 from .common import DTO
@@ -21,7 +21,14 @@ class TransactionChanges(DTO):
 
 
 class TransactionCreate(TransactionChanges):
-    transaction_id: str
+    transaction_id: str = Field(description='Stable client-generated identity; the journal: prefix is reserved.')
+
+    @field_validator('transaction_id')
+    @classmethod
+    def reject_journal_namespace(cls, value):
+        if value.strip().startswith('journal:'):
+            raise ValueError('Reserved ledger identity namespace.')
+        return value
 
 
 class Transaction(DTO):

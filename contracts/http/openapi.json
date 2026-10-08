@@ -1637,6 +1637,7 @@
             "type": "string"
           },
           "transaction_id": {
+            "description": "Stable client-generated identity; the journal: prefix is reserved.",
             "title": "Transaction Id",
             "type": "string"
           },

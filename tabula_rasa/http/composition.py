@@ -65,7 +65,8 @@ def open_runtime(settings):
             lambda context: create_postgres_services(database, context.entity_id))
         if settings.trusted_entity_id:
             # Only explicit seed tooling creates synthetic entities.
-            runtime.services(resolver.context)
+            for context in resolver.contexts:
+                runtime.services(context)
         return runtime
     except BaseException:
         database.dispose()

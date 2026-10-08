@@ -1078,7 +1078,10 @@ export interface components {
              * @default
              */
             to_account_id: string;
-            /** Transaction Id */
+            /**
+             * Transaction Id
+             * @description Stable client-generated identity; the journal: prefix is reserved.
+             */
             transaction_id: string;
             /** Txn Date */
             txn_date: string;
