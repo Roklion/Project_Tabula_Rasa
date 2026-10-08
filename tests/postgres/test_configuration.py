@@ -23,11 +23,22 @@ def test_url_normalization_and_secret_safe_representation():
     assert "operator" not in repr(settings)
 
 
+@pytest.mark.parametrize("mode", ["disable", "prefer", "require"])
+def test_channel_binding_security_option_is_preserved(mode):
+    settings = DatabaseSettings.from_environment({
+        "TABULA_RASA_DATABASE_URL": f"postgresql://operator:private-password@localhost/dev?sslmode=require&channel_binding={mode}",
+    })
+    assert settings.url.query == {"sslmode": "require", "channel_binding": mode}
+    assert "private-password" not in repr(settings)
+
+
 @pytest.mark.parametrize("url", [
     "sqlite:///private-secret.db", "postgresql://user:private-secret@host",
     "postgresql://user:private-secret@host:not-a-port/dev",
     "postgresql+psycopg2://user:private-secret@host/dev",
     "postgresql://user:private-secret@host/dev?options=private-secret",
+    "postgresql://user:private-secret@host/dev?channel_binding=private-secret",
+    "postgresql://user:private-secret@host/dev?channel_binding=require&channel_binding=disable",
     "postgresql malformed user:private-secret@host/dev",
 ])
 def test_invalid_urls_have_safe_errors(url):

@@ -370,14 +370,26 @@ this guide.
 
 ## Implementation evidence and remaining operational acceptance
 
-Local #299 implementation checks on 2026-10-08: scoped Ruff passed and **170
-application/HTTP, backend/document composition, source migration and export tests
-passed**. The nine new native PostgreSQL regression cases collected successfully
-but have not executed: Windows Smart App Control blocked `plpgsql.dll` during
-initialization of an isolated synthetic test cluster. An approved disposable
-PostgreSQL test endpoint or the current-revision GitHub CI run must supply that
-missing verification before #299 is described as complete. No private source,
-live migration, production authority switch or deployed authentication is claimed.
+Local #299 implementation verification on 2026-10-08: **261 affected tests
+passed across focused runs**, with no skips: 170 application/HTTP,
+backend/document composition, source migration and export tests; 22 database
+configuration tests; and 69 native PostgreSQL tests. The native runs covered
+all nine new owner-operation cases, 29 existing cutover/whole-profile acceptance
+cases and 31 HTTP/schema/export cases. The new write/restart test initially used
+an inactive historical account; after correcting it to use the active account
+created through the HTTP API, that case passed on rerun.
+
+Windows Smart App Control blocked the temporary local PostgreSQL runtime;
+verification instead used the operator's separate, empty Neon test project and
+its `test` branch on PostgreSQL 18.6. Its direct endpoint connected with TLS and
+`channel_binding=require`, and its test role could create/drop the fixture's
+disposable databases. All disposable test databases were removed afterward.
+The dedicated test URL was explicitly loaded into the test process from the
+operator's Git-ignored `.env.local`; no credentials were printed or committed.
+Scoped Ruff, working/branch whitespace and generated OpenAPI contract checks
+passed. This is focused local evidence; the full-suite publication/review checks
+and linked-issue tracking remain separate. No private source, live migration,
+production authority switch or deployed authentication is claimed.
 
 Synthetic native PostgreSQL tests cover complete final-format profiles, two
 isolated profiles with shared source IDs, exact financial/reference/document

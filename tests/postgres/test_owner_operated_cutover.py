@@ -75,7 +75,7 @@ def test_owner_authority_survives_production_restart_writes_reports_and_complete
                     json={"name": "Synthetic owner reserve", "type": "Bank", "opening_balance": "0"})
                 assert response.status_code == 201
                 services.transactions.create(transaction_id="owner-expense", kind="Expense",
-                    txn_date="2026-10-08", amount="12.50", account_id="cash", category_id="office")
+                    txn_date="2026-10-08", amount="12.50", account_id=response.json()["id"], category_id="office")
             else:
                 accounts = client.get("/api/v1/entities/alpha/accounts").json()["items"]
                 assert sum(row["name"] == "Synthetic owner reserve" for row in accounts) == 1
