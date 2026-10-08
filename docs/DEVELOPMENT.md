@@ -111,15 +111,26 @@ merge queue. Checkout uses GitHub's current PR merge candidate (the default
 `pull_request` checkout), or the merge-group SHA. Match the run to the current
 PR head and candidate; a previous head's green result cannot establish readiness.
 
-Repository files cannot enable GitHub's required-check enforcement. A repository
-administrator must apply and verify this setup after the check has run:
+#### Optional GitHub enforcement (good to have)
+
+The maintainer has chosen to retain the current GitHub plan. A plan upgrade,
+GitHub-enforced branch protection/rulesets and their associated protections,
+configuration readback, and a probe proving that GitHub blocks a failing merge
+are optional future improvements. They do not block closing issue #295.
+Current-revision CI success and satisfied review conditions remain required by
+repository/agent policy; enforcement is procedural while GitHub's hard block
+is unavailable. Do not describe optional enforcement as configured or verified.
+
+Repository files cannot enable GitHub's required-check enforcement. If the
+maintainer elects to enable it later, an administrator can use this optional setup:
 
 1. Ensure the private repository's plan supports branch protection/rulesets.
    On 2026-10-07, read-only queries of both `main` protection and rulesets
    returned HTTP 403 with GitHub's "Upgrade to GitHub Pro or make this repository
    public" response. Enforcement remains **unverified and unavailable on that
    plan**; do not describe this implementation as enforced protection. Keep the
-   repository private and arrange an eligible plan with the owner.
+   repository private. Arrange an eligible plan only if the owner elects to
+   pursue this optional improvement.
 2. In **Settings > Branches > Add branch protection rule**, target exactly
    `main`. Enable **Require a pull request before merging**, **Require status
    checks to pass before merging**, and **Require branches to be up to date
@@ -142,8 +153,9 @@ administrator must apply and verify this setup after the check has run:
    blocked. Fix it with affected tests and a new commit; verify the older green
    result is insufficient while the new run is pending, and completion becomes
    eligible only after that run passes and review conditions are satisfied.
-   Do not merge the probe or use production data. This hosted acceptance check
-   remains pending until publication and admin setup are authorized.
+   Do not merge the probe or use production data. The server-enforcement probe
+   is optional, requires separate authorization and does not block issue #295
+   closure. Normal hosted CI/review behavior verification remains required.
 
 ### CI failures and review completion
 
