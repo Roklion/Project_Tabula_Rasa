@@ -33,3 +33,7 @@ data/*.db-*
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+/web/node_modules/
+/web/dist/
+/web/test-results/
+/web/playwright-report/

@@ -32,9 +32,10 @@ HTTP and deployment stack under #276/#221/#124. Follow
 [Commercial web development and deployment](COMMERCIAL_WEB.md) for the
 `tabula_rasa/http/` and `web/` package contract, Python 3.12/Node 24 tooling,
 local Vite -> API -> PostgreSQL topology, OpenAPI/client generation, environment
-separation and #279's provider/secret/persistent-staging checkpoint. Its commands
-clearly distinguish the existing PostgreSQL harness from planned #277/#278
-runtime commands; the browser and API are not scaffolded by #276.
+separation and #279's provider/secret/persistent-staging checkpoint. #277/#278
+now supply runnable local foundations; [Foundation conventions](COMMERCIAL_FOUNDATION.md)
+covers transport/context contracts, cache/form ownership and focused validation.
+Hosted deployment remains #279 work.
 
 The HTTP runtime reuses application services and PostgreSQL adapters. Preserve
 the server-side #222 membership/context seam, #280 loaded-baseline form contract,

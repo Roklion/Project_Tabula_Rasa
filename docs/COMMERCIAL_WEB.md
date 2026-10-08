@@ -10,17 +10,18 @@ Use it together with [Development](DEVELOPMENT.md),
 
 ## Implementation status
 
-#276 records decisions and commands. The API/package files below are contracts
-for #277, the browser package for #278, and deployment files/resources for #279;
-they are **not present or runnable yet**. Do not report a browser/API launch or
-staging deployment based on this documentation. The current Streamlit/Sheets
-runtime and the existing PostgreSQL CLI/test harness remain runnable now.
+#277/#278 now provide the runnable local HTTP/browser foundations. See
+[Foundation conventions](COMMERCIAL_FOUNDATION.md) for endpoints, context/error
+contracts, query/form primitives and test ownership. Deployment files/resources
+and hosted gating remain #279 work; this local foundation does not establish
+staging, external-beta readiness or production authority. Streamlit/Sheets
+continues as the internal/reference runtime.
 
 ## Package and build ownership
 
 Keep one repository, the existing Python package and existing Alembic chain.
 Do not move neutral services into the HTTP package or introduce an ORM mirror.
-The intended additions are:
+The package ownership is:
 
 ```text
 tabula_rasa/
@@ -51,7 +52,7 @@ deploy/commercial/Dockerfile      #279 multi-stage Node-build/Python-runtime ima
 deploy/commercial/render.yaml     #279 Render environment/resource declaration
 tests/http/                      #277 transport and real-PostgreSQL integration
 web/src/**/*.test.tsx             #278 Vitest/React Testing Library tests
-web/e2e/                         #287 Playwright workflow suite
+web/e2e/                         #278 shell smoke; #287 grows workflow coverage
 ```
 
 Use root Python imports for `tabula_rasa` in local commands, tests and images.
@@ -93,11 +94,10 @@ to a disposable administrator endpoint; never infer it from the runtime URL or
 point tests at retained staging/production. Migration/operator details stay in
 [PostgreSQL operations](POSTGRESQL.md#local-setup).
 
-After #277/#278 implement the contract, install/export/generate once from root:
+Install/export/generate the implemented foundations once from root:
 
 ```powershell
-# Planned commands; require #277 and #278.
-python -m pip install -r requirements-api.txt
+python -m pip install -r requirements-api.txt -r requirements-postgres.txt
 python -m tabula_rasa.http.export_openapi --output contracts/http/openapi.json
 npm --prefix web ci
 npm --prefix web run api:generate
@@ -107,18 +107,17 @@ Run the API and Vite in separate terminals. Each terminal starts at repository
 root. API terminal (activate `.venv` first):
 
 ```powershell
-# Planned #277 local API command.
 $env:TABULA_RASA_ENVIRONMENT = 'development'
 $env:TABULA_RASA_PUBLIC_ORIGIN = 'http://127.0.0.1:5173'
 $env:TABULA_RASA_DATABASE_URL = 'postgresql+psycopg://tabula_dev@127.0.0.1:55432/tabula_dev'
 $env:TABULA_RASA_TRUSTED_ENTITY_ID = 'alpha-synthetic'
-python -m uvicorn tabula_rasa.http.app:create_app --factory --host 127.0.0.1 --port 8000 --reload
+python -m tabula_rasa.http.seed_development  # Once, on the blank synthetic development DB.
+python -m uvicorn tabula_rasa.http.app:create_app --factory --host 127.0.0.1 --port 8000 --reload --no-access-log
 ```
 
 Browser terminal:
 
 ```powershell
-# Planned #278 browser command.
 npm --prefix web run dev -- --host 127.0.0.1 --port 5173 --strictPort
 ```
 
@@ -129,13 +128,14 @@ PostgreSQL remains on `127.0.0.1:55432`. Bind all local listeners to loopback.
 Health checks can be called directly on API port 8000. Root production routes
 serve `/health/live`, `/health/ready` and `/version`; they are not SPA paths.
 
-The trusted ID must refer to an explicitly seeded synthetic entity. #277
-provides a reviewed fixture/seed command using the existing entity repository;
-unknown IDs fail instead of creating an entity at startup. No seeding, recurring
+The default trusted ID is the explicitly seeded `alpha-synthetic` entity.
+The seed command uses the existing entity repository, refuses hosted/non-development
+targets, and stops if that ID exists. Other IDs or an unseeded fixture fail
+startup. No seeding, recurring
 generation or schema migration occurs on ordinary application startup. Before
 #222, no local environment variable stands in for commercial membership.
 
-For schema/client checks after their implementation:
+For schema/client checks:
 
 ```powershell
 python -m tabula_rasa.http.export_openapi --output contracts/http/openapi.json
@@ -190,8 +190,9 @@ client-supplied profile key.
 
 ## Configuration and secrets boundary
 
-Names below, other than the existing database settings, are **planned #277/#279
-configuration**, not options read by today's Streamlit/PostgreSQL runtime.
+The HTTP environment/public-origin/release/trusted-entity settings below are
+implemented by #277 and read from process environment only. Alpha gate, deployment
+and identity settings remain #279/#222 work. They do not alter Streamlit settings.
 
 | Setting | Owner and visibility |
 | --- | --- |
@@ -213,8 +214,8 @@ as build identity, and never copy server environment files into the web build.
 Do not introduce frontend environment overrides for entity authorization.
 
 Local `.env.local` remains ignored and is loaded by the existing database
-settings only. Export planned HTTP settings in the local process until #277
-implements and documents its loader. Hosted processes receive secrets from the
+settings only. Export HTTP settings explicitly in the process; its loader does
+not read an environment file. Hosted processes receive secrets from the
 environment's provider secret store; image builds and schema export have none.
 Existing `.streamlit` files/password/Google grants stay with the internal
 edition. Commercial per-customer connections are resolved from authorized

@@ -751,8 +751,10 @@ same-origin compiled-SPA/API container on Render with Neon PostgreSQL. It is
 the decision gate for #277 API, #278 browser shell and #279 staging under
 [EPIC #221](https://github.com/Roklion/Project_Tabula_Rasa/issues/221) and
 [initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124).
-These runtime packages/deployments remain follow-on implementation, not a change
-to today's Streamlit/Sheets authority.
+#277/#278 now implement the local FastAPI transport and responsive React shell.
+[Foundation conventions](COMMERCIAL_FOUNDATION.md) owns their DTO/error/context,
+query/cache/form and validation contracts. Hosted deployment remains #279 work;
+these foundations do not change the internal Streamlit/Sheets authority.
 
 The HTTP composition resolves server-authorized entity context before invoking
 `create_postgres_services`, retaining `create_application` authority/environment

@@ -1,0 +1,44 @@
+name: Commercial API and browser
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  foundation:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.6
+        env:
+          POSTGRES_USER: tabula_test
+          POSTGRES_DB: tabula_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U tabula_test -d tabula_test"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      TABULA_RASA_TEST_DATABASE_URL: postgresql+psycopg://tabula_test@127.0.0.1:5432/tabula_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: python -m pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: python -m pytest tests/http tests/postgres/test_http_foundation.py tests/test_application_boundaries.py
+      - run: npm --prefix web ci
+      - run: python -m tabula_rasa.http.export_openapi --output contracts/http/openapi.json
+      - run: npm --prefix web run api:generate
+      - run: git diff --exit-code -- contracts/http/openapi.json web/src/api/schema.d.ts
+      - run: npm --prefix web run build
+      - run: npm --prefix web run lint
+      - run: npm --prefix web test
+      - run: npm --prefix web exec -- playwright install --with-deps chromium
+      - run: npm --prefix web run test:e2e
