@@ -134,6 +134,15 @@ profile's acceptance or activation. New customer onboarding/authorization is
 #222; legacy profile configuration is never part of the browser contract.
 See [Bookkeeping acceptance and cutover](../BOOKKEEPING_CUTOVER.md).
 
+The #299 owner-operated procedure uses this same production application and
+authorization seam with non-commercial recovery acceptance. The existing stored
+`rehearsal` cutover value supports persistent authority independently of HTTP
+environment names; it does not relax request authorization or select a different
+runtime. `open_migrated_runtime` extends the existing pool/composition owner for
+that integration. #294 supplies the separately verified NAS recovery route;
+#298 retains commercial evidence/sign-off. Neither the factory nor the named
+procedure supplies missing identity, deployment or browser workflows.
+
 Handlers validate/translate DTOs, obtain authorized context, call the existing
 service, and map committed results/errors. They do not issue SQL, compute
 postings/balances/depreciation, bootstrap workbooks, or orchestrate new storage

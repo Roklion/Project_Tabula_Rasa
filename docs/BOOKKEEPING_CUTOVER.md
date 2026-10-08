@@ -2,11 +2,13 @@
 
 This guide owns #257/#258 under [EPIC #220](https://github.com/Roklion/Project_Tabula_Rasa/issues/220)
 and [initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124).
+It also owns [#299](https://github.com/Roklion/Project_Tabula_Rasa/issues/299)'s
+lasting owner-operated contract and shared-runtime integration procedure.
 It extends the [migration framework and domain loaders](SHEETS_POSTGRES_MIGRATION.md),
 [frozen format-13 source](SHEETS_SOURCE_CONTRACT.md) and
 [complete canonical entity export](BOOKKEEPING_EXPORT.md). Streamlit remains the
 internal Sheets edition; this work supplies the service composition boundary
-for the commercial runtime rather than a new Streamlit backend picker.
+for the shared web/API runtime rather than a new Streamlit backend picker.
 
 ## Reuse and ownership
 
@@ -140,9 +142,10 @@ The setup record must identify the provisioned, reachable intended production
 database, its approved secret configuration, schema decision/revision chain,
 managed backup/PITR effective settings, agreed/observed RPO/RTO, isolated restore
 strategy and separate staging database. Stop before preparation/activation and
-request operator setup if any prerequisite is absent. Staging/internal rehearsal
-can use `rehearsal` mode before #259; it cannot satisfy the production gates or
-be composed as `commercial_production`.
+request operator setup if any prerequisite is absent. Staging rehearsal and
+lasting owner operation use the non-commercial `rehearsal` evidence policy;
+neither satisfies the commercial gates or can be composed as
+`commercial_production`. See the owner-operated production procedure below.
 
 Prepare an evidence JSON outside Git. Values are reviewed repository issue/PR
 links (optionally with a comment anchor) or `sha256:<64 lowercase hex>` references
@@ -229,7 +232,175 @@ Sheets source is then a historical recovery artifact, never a live fallback.
 Database administrator operations, trigger disabling and direct manual source
 edits remain outside ordinary application guarantees and this cutover procedure.
 
+## Owner-operated production procedure (#299)
+
+Use the same production browser/API application, PostgreSQL repositories,
+accounting services, authorization and deployment process. Only the activation
+evidence/recovery agreement is non-commercial. The database branch name
+`production` and HTTP `environment="production"` do not select commercial
+cutover evidence. Keep the trusted backend entry's **stored** `mode="rehearsal"`:
+this existing value has no timeout, automatic reset, read-only restriction or
+requirement that the database be disposable. Its `postgres` authority is durable
+and continues after committed bookkeeping writes and process/pool restart.
+This procedure gives that existing non-commercial behavior a named lasting-use
+contract without altering deployed revision `0005_bookkeeping_cutover`.
+
+Rehearsal means a controlled practice execution; owner-operated production means
+the owner's lasting live ledger with explicitly accepted recovery limitations.
+External beta adds #222/#224's user/tenant and stage protection requirements.
+Commercial activation additionally uses `commercial_production` and #298's
+completed evidence. An owner acceptance is never commercial certification.
+
+Before an actual live execution, the authorized operator must:
+
+1. Retain a private owner decision identifying the exact profile, source
+   workbook, target entity, intended database fingerprint, document grant/folder,
+   runtime release, authorized access, recovery owner and accepted limitations.
+   Inspect the intended endpoint using `inspect` through approved configuration;
+   do not infer it from a branch name or use UAT as the live target. The existing
+   activation records the actual endpoint fingerprint and composition checks it
+   on every new service graph. Verify schema/connectivity/TLS with the existing
+   PostgreSQL operator tools; keep credentials and evidence contents private.
+2. State which recovery protections are actually available now, their measured
+   limits and document-byte recovery ownership. NAS protection planned in
+   [#294](https://github.com/Roklion/Project_Tabula_Rasa/issues/294) stays marked
+   pending until scheduling, archive protection/health and isolated restore pass.
+   Logical archives recover captured points, not continuous PITR. If working
+   NAS recovery is required before live writes, make #294 a deployment
+   prerequisite. It is not a prerequisite for #299's technical completion.
+   A subscription, commercial RPO/RTO agreement and alternate-operator commercial
+   handoff are not conditions for this owner contract. Explicitly accept current
+   limitations; do not fabricate commercial evidence to unlock use.
+3. Follow the same source freeze/writer drain, supported format-13 extraction,
+   complete load, fresh zero-difference whole-profile acceptance and private
+   26-collection export procedure above. Preserve the source, receipt bytes and
+   backups. Prepare with `--mode rehearsal` and exactly the existing
+   `source_freeze`/`schema_baseline` references. Retain the broader private owner
+   decision separately; the two-field evidence JSON is not a recovery guarantee.
+4. Activate, deploy the explicit PostgreSQL backend configuration and restart
+   the shared runtime with the approved database and authenticated resolver.
+   Run the existing cutover `smoke` before releasing maintenance. A missing
+   target, inactive authority, different mode, profile/source, endpoint or
+   document folder must stop startup/use rather than fall back to Sheets.
+5. With separate authorization for a controlled live bookkeeping operation,
+   verify a legitimate committed write, restart, and verify its persisted result,
+   reports and complete export. Inspect `divergent` and the rollback boundary.
+   After divergence, the frozen-source acceptance/smoke comparison is expected
+   to differ: use ordinary runtime health, report and export checks rather than
+   reloading/reaccepting the old source. Sheets remains archived; recovery uses
+   the available PostgreSQL protection and coordinated document recovery.
+
+### Shared production runtime composition
+
+The deployed app factory uses `create_app` and its existing `runtime_factory`
+seam. Bind migrated entities using `open_migrated_runtime`:
+
+```python
+from functools import partial
+from tabula_rasa.http.app import create_app
+from tabula_rasa.http.composition import open_migrated_runtime
+
+# These are supplied by normal server deployment/identity configuration.
+# The resolver authenticates the request and authorizes its entity/capabilities.
+def build_app(authenticated_resolver, entity_profiles, profile_secrets):
+    return create_app(runtime_factory=partial(
+        open_migrated_runtime,
+        resolve_context=authenticated_resolver,
+        entity_profiles=entity_profiles,
+        profile_secrets=profile_secrets,
+    ))
+```
+
+The server-only mapping explicitly associates canonical entity IDs with source
+profile keys. Database settings use the existing approved loader (or an explicit
+`DatabaseSettings` supplied by the deployment). Startup owns one pool, checks
+all configured authority/document bindings and current schema readiness, and
+closes the pool on failure/shutdown. Requests compose fresh scoped services
+through `MigratedProfileServices` and `create_application`. All normal
+identity, capability, entity, Host, Origin and CSRF checks remain in force.
+The factory refuses the synthetic fixture option; migrated service binding also
+refuses a `trusted_development` context. Setting `rehearsal` or a database URL
+does not authenticate anyone. No new login, owner authorization bypass,
+domain engine, source loader, scheduler or recovery state machine is introduced.
+
+The resolver and deployment integration must be real and approved before using
+private data. #222 owns normal web identity/session delivery; #279 owns hosted
+deployment, and #281–#286 own the remaining domain workflow coverage. The shared
+HTTP foundation exposes account reads and creation, and #280 adds protected
+edit/delete endpoints and browser forms with loaded baselines. Service/report/
+export verification does not claim the remaining domain browser screens are
+delivered. Until the selected deployment has the resolver and
+required workflows, stop before live migration and complete those shared
+integration tasks. This is a setup/coverage checkpoint, not a second owner app.
+
+### Reuse and completion evidence
+
+Inspected/reused: `composition.py` owns authority/profile/document binding;
+the cutover controller/CLI and revision 0005 own acceptance and durable authority;
+native guards own divergence; `http/app.py`, `PostgresRuntime`, request context
+and `MigratedProfileServices` own shared HTTP lifecycle/authorization; existing
+repositories and export/report services own bookkeeping reads/writes. The new
+factory extends that existing composition with startup validation. No parallel
+domain logic or schema/mode extension is needed.
+
+`tests/postgres/test_owner_operated_cutover.py` exercises the actual shared
+production HTTP app and native PostgreSQL with two synthetic migrated profiles,
+two pool/application lifetimes, account/financial writes, report/export reads,
+document ownership, invalid target/authority and request-guard failures, and
+post-divergence rollback refusal. Its resolver is an explicitly synthetic test
+stand-in; this does not certify deployed authentication or a private migration.
+Existing tests retain commercial evidence refusal and complete acceptance gates.
+Run these affected checks against an explicit disposable test endpoint:
+
+```powershell
+python -m pytest tests/http tests/test_backend_composition.py tests/postgres/test_owner_operated_cutover.py tests/postgres/test_cutover.py tests/postgres/test_migration_acceptance.py
+```
+
+#299 closes only after its checks and documentation pass and the linked
+#220/#221/#288/#298 tracking records the supported path. Report missing native
+or deployed verification explicitly; do not infer it from skips or source review.
+#299 completion does not claim a live authority switch or #294 completion.
+
+Tracking handoff after verification: #220 records the supported non-commercial
+authority contract and evidence; #221/#288 consume this shared runtime factory
+and retain their workflow/deployment gates; #298 preserves all commercial
+activation requirements and records that owner use is independent; #294 retains
+NAS implementation/restore status. Updating or closing GitHub issues requires
+separate repository-write authorization. No issue status changes are implied by
+this guide.
+
 ## Implementation evidence and remaining operational acceptance
+
+Initial focused #299 implementation verification on 2026-10-08: **261 affected tests
+passed across focused runs**, with no skips: 170 application/HTTP,
+backend/document composition, source migration and export tests; 22 database
+configuration tests; and 69 native PostgreSQL tests. The native runs covered
+all nine new owner-operation cases, 29 existing cutover/whole-profile acceptance
+cases and 31 HTTP/schema/export cases. The new write/restart test initially used
+an inactive historical account; after correcting it to use the active account
+created through the HTTP API, that case passed on rerun.
+
+Windows Smart App Control blocked the temporary local PostgreSQL runtime;
+verification instead used the operator's separate, empty Neon test project and
+its `test` branch on PostgreSQL 18.6. Its direct endpoint connected with TLS and
+`channel_binding=require`, and its test role could create/drop the fixture's
+disposable databases. All disposable test databases were removed afterward.
+The dedicated test URL was explicitly loaded into the test process from the
+operator's Git-ignored `.env.local`; no credentials were printed or committed.
+Scoped Ruff, working/branch whitespace and generated OpenAPI contract checks
+passed. This is focused local evidence; the full-suite publication/review checks
+and linked-issue tracking remain separate. No private source, live migration,
+production authority switch or deployed authentication is claimed.
+
+Publication validation on 2026-10-08 after integrating #280/current `main`
+at `3eb65b0`: full Ruff and **all 1,970 Python tests passed**, with zero skips,
+in 4,054.97 seconds against the dedicated Neon test project. Native browser
+checks were required and ran against the compiled shared application. Browser
+build/lint, all 14 browser unit tests, deterministic OpenAPI comparison and
+branch whitespace checks also passed. The only warning was an unrelated
+Starlette/httpx deprecation. All fixture-owned test databases were removed.
+Current-revision hosted CI and independent agent reviews remain required;
+local validation does not close #299 or authorize a live cutover.
 
 Synthetic native PostgreSQL tests cover complete final-format profiles, two
 isolated profiles with shared source IDs, exact financial/reference/document

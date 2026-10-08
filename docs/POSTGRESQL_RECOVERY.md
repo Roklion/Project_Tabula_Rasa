@@ -10,18 +10,27 @@ purchase a plan, provision resources, enable protection or execute a restore.
 
 ## Status and production checkpoint
 
-The read-only verifier and rehearsal procedure are implemented. The operator
-has selected Neon Free for the current pre-activation stage, with distinct
-production and UAT branches in one project and the production root as the
-recovery source. The reported setup has revision `0005_bookkeeping_cutover`
-and verified client TLS, with no bookkeeping loaded or production authority
-activated. These are reported setup facts, not recovery evidence. Effective
-recoverability and both actual recovery milestones remain unverified; #259
-remains open. Commercial protection and objective agreement remain future gates.
-Synthetic native tests prove the verifier contract; they cannot satisfy #259,
-#220's recovery exit criterion or [#258's commercial activation gate](BOOKKEEPING_CUTOVER.md).
-Commercial web/API development under #221 and internal/staging cutovers may
-continue while these operational gates remain open.
+The read-only verifier and rehearsal procedure are implemented. [#259](https://github.com/Roklion/Project_Tabula_Rasa/issues/259)
+closed on 2026-10-07 for completed current-stage Neon Free managed-snapshot
+restore and requested-point PITR, including two-entity content, schema/security
+inventory and accounting verification. Production and UAT were distinct branches
+in one project, with the production root as the drill source. Those recorded
+results establish that controlled technical recovery evidence, not ongoing
+commercial guarantees or a live bookkeeping authority switch. Reinspect settings
+and capacity before each new operation; do not infer current protection from an
+old drill or synthetic tests.
+
+[#298](https://github.com/Roklion/Project_Tabula_Rasa/issues/298) retains commercial
+protection/objective agreement, human evidence acceptance, operator handoff and
+final commercial cutover. The [#299 owner-operated procedure](BOOKKEEPING_CUTOVER.md#owner-operated-production-procedure-299)
+supports lasting use of the shared production application under explicit current
+recovery limitations without requiring those commercial sign-offs or a provider
+purchase. [#294](https://github.com/Roklion/Project_Tabula_Rasa/issues/294) owns NAS
+backup automation and isolated restore verification. Its planned protection
+cannot be claimed before it works; if the owner requires it before live writes,
+complete it before that deployment. #299's technical closure is independent.
+Database metadata/dumps do not establish receipt-byte or full-service recovery;
+#223 retains that responsibility. Commercial evidence gates remain intact.
 
 Before provider configuration or a production-derived rehearsal, the operator
 must complete #259's manual setup checkpoint:

@@ -71,3 +71,31 @@ def open_runtime(settings):
         database.dispose()
         # Startup failures must not retain raw configuration/provider text.
         raise RuntimeError("HTTP runtime startup failed. Check configuration and dependency health.") from None
+
+
+def open_migrated_runtime(settings, *, resolve_context, entity_profiles, profile_secrets, database_settings=None):
+    """Bind the shared application to accepted profiles, with normal authorization.
+
+    The deployment supplies its existing authenticated context resolver and
+    trusted configuration. Cutover policy never selects an identity resolver.
+    This factory neither activates authority nor enables the synthetic resolver.
+    """
+    if settings.trusted_entity_id or not callable(resolve_context):
+        raise RuntimeError("Migrated runtime requires an explicit authorization resolver without fixture context.")
+    from .migrated import MigratedProfileServices
+
+    database = None
+    try:
+        database = Database(database_settings or DatabaseSettings.from_environment(required=True))
+        services = MigratedProfileServices(database, entity_profiles=entity_profiles, secrets=profile_secrets)
+        services.validate()
+        runtime = PostgresRuntime(database, resolve_context, service_factory=services)
+        if not runtime.ready():
+            raise RuntimeError("The migrated database is not ready.")
+        return runtime
+    except Exception:
+        if database is not None:
+            database.dispose()
+    # Raise outside the handler: raw provider/configuration exceptions can
+    # contain credentials or ledger values and must not survive as context.
+    raise RuntimeError("Migrated HTTP runtime startup failed. Check authority, bindings and dependency health.")
