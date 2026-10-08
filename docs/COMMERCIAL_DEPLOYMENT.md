@@ -151,7 +151,9 @@ TLS database URL and matching endpoint binding. HTTP Basic protects shell,
 assets, API, documents and schema paths; only minimal health/version probes are
 public. Hosted responses, including compiled assets, use `Cache-Control: no-store`
 so shared caches cannot bypass the gate. Empty passwords are rejected by both
-the hash generator and authentication boundary. Unsafe requests still require
+the hash generator and authentication boundary. Password verification runs
+outside the async request loop with at most two gate workers per process;
+public probes bypass those workers. Unsafe requests still require
 exact Origin and the shared context's
 CSRF token. The browser receives the fixed synthetic entity, never a scope
 override. Different environment credentials and connections remain independent.

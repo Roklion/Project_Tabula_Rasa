@@ -68,6 +68,50 @@ def test_two_environments_do_not_accept_each_others_operator_credentials():
             assert client.get("/api/v1/session", auth=wrong).status_code == 401
 
 
+def test_busy_password_workers_leave_probes_responsive(monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event, Lock
+    from tabula_rasa.http import alpha
+
+    entered = Event()
+    release = Event()
+    lock = Lock()
+    active = peak = 0
+    original = alpha.scrypt
+
+    def blocked_hash(*args, **kwargs):
+        nonlocal active, peak
+        with lock:
+            active += 1
+            peak = max(peak, active)
+            if active == 2:
+                entered.set()
+        try:
+            assert release.wait(10), "Password workers were not released"
+            return original(*args, **kwargs)
+        finally:
+            with lock:
+                active -= 1
+
+    monkeypatch.setattr(alpha, "scrypt", blocked_hash)
+    runtime = FakeRuntime()
+    runtime.resolve_context = TrustedDevelopmentContext("alpha-synthetic", "csrf", hosted=True)
+    configured = settings()
+    with TestClient(create_app(settings=configured, runtime_factory=lambda _: runtime),
+                    base_url=configured.public_origin) as client, ThreadPoolExecutor(max_workers=4) as workers:
+        attempts = [workers.submit(client.get, "/api/v1/session", auth=("operator", password))
+                    for password in ("synthetic-alpha-password", "wrong-password", "synthetic-alpha-password")]
+        try:
+            assert entered.wait(3), "Password verification blocked the request loop"
+            for path in ("/health/live", "/health/ready", "/version"):
+                assert workers.submit(client.get, path).result(timeout=3).status_code == 200
+            assert not any(attempt.done() for attempt in attempts)
+        finally:
+            release.set()
+        assert [attempt.result(timeout=3).status_code for attempt in attempts] == [200, 401, 200]
+        assert peak == 2
+
+
 def test_empty_password_cannot_be_generated_or_authenticate_with_an_existing_hash():
     from hashlib import scrypt
     with pytest.raises(ValueError, match="must not be empty"):

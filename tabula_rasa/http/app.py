@@ -8,13 +8,14 @@ import re
 from time import perf_counter
 from uuid import uuid4
 
+from anyio import CapacityLimiter, to_thread
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException
 from starlette.responses import FileResponse
 from .static import HashedAssets
-from .alpha import gate_response
+from .alpha import PUBLIC_PROBES, gate_response
 
 from tabula_rasa.errors import StorageError
 from tabula_rasa.application.mileage import MileageValidationError
@@ -34,6 +35,7 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
     @asynccontextmanager
     async def lifespan(app):
         app.state.settings = settings or HttpSettings.from_environment()
+        app.state.alpha_workers = CapacityLimiter(2)
         factory = runtime_factory or open_runtime
         app.state.runtime = await run_in_threadpool(factory, app.state.settings)
         try:
@@ -67,7 +69,12 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
                     and (request.headers.get("host") or "").lower() != configured.public_origin.split("://", 1)[1].lower()):
                 response = error_response(request, "forbidden")
             else:
-                response = gate_response(request, configured) if configured else None
+                if configured and configured.hosted_alpha and request.url.path not in PUBLIC_PROBES:
+                    response = await to_thread.run_sync(
+                        gate_response, request, configured, limiter=app.state.alpha_workers,
+                    )
+                else:
+                    response = gate_response(request, configured) if configured else None
                 if response is None and (request.url.path in {"/api/docs", "/api/openapi.json"}
                         or (configured and configured.hosted_alpha and request.method not in {"GET", "HEAD", "OPTIONS"})):
                     from .context import resolve_context
