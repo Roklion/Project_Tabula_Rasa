@@ -17,6 +17,11 @@ and hosted gating remain #279 work; this local foundation does not establish
 staging, external-beta readiness or production authority. Streamlit/Sheets
 continues as the internal/reference runtime.
 
+#280 adds the [protected commercial edit/delete bridge](COMMERCIAL_CONCURRENCY.md)
+over those foundations, carrying loaded baselines through actual browser/API
+mutations while preserving service-owned concurrency and compatibility.
+Broader domain workflow migration remains #281–#286.
+
 ## Package and build ownership
 
 Keep one repository, the existing Python package and existing Alembic chain.

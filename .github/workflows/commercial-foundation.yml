@@ -32,7 +32,7 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: python -m pip install -r requirements-dev.txt
       - run: ruff check .
-      - run: python -m pytest tests/http tests/postgres/test_http_foundation.py tests/test_application_boundaries.py
+      - run: python -m pytest tests/http tests/postgres/test_http_foundation.py tests/postgres/test_http_baselines.py tests/test_application_boundaries.py
       - run: npm --prefix web ci
       - run: python -m tabula_rasa.http.export_openapi --output contracts/http/openapi.json
       - run: npm --prefix web run api:generate
@@ -42,3 +42,7 @@ jobs:
       - run: npm --prefix web test
       - run: npm --prefix web exec -- playwright install --with-deps chromium
       - run: npm --prefix web run test:e2e
+      - run: python -m playwright install --with-deps chromium
+      - run: python -m pytest tests/postgres/test_browser_baselines.py
+        env:
+          TABULA_RASA_REQUIRE_BROWSER_TESTS: '1'

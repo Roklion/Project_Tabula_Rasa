@@ -8,6 +8,7 @@ from tabula_rasa.errors import (
     StorageConflictError, StorageError, StorageNotFoundError, StorageValidationError,
 )
 from .models.common import ErrorCode, ErrorDetail, ErrorEnvelope, FieldError
+from tabula_rasa.application.mileage import MileageValidationError
 
 
 ERRORS = {
@@ -49,6 +50,8 @@ def error_response(request, code, *, fields=None):
 
 
 def failure_code(error):
+    if isinstance(error, MileageValidationError):
+        return "validation"
     if isinstance(error, TransportError):
         return error.code
     if isinstance(error, StorageNotFoundError):
@@ -70,9 +73,22 @@ async def handle_error(request, error):
 
 
 async def handle_validation(request, error: RequestValidationError):
+    baseline_errors = [item for item in error.errors()
+                       if len(item.get('loc', ())) >= 2 and item['loc'][0] == 'body'
+                       and item['loc'][1] in {'baseline', 'baselines'}]
+    if baseline_errors:
+        missing = any(item['type'] == 'missing' or item.get('input') is None for item in baseline_errors)
+        return error_response(request, 'baseline_required' if missing else 'baseline_invalid')
     # Locations can contain client-supplied keys (extra fields): allow only
     # declared transport field names. Never echo input, context, or raw messages.
-    allowed = {"name", "type", "opening_balance", "classification", "parent_id", "active_only"}
+    allowed = {
+        "name", "type", "opening_balance", "classification", "parent_id", "active_only",
+        "active", "kind", "baseline", "baselines", "source_ids", "txn_date", "amount",
+        "account_id", "to_account_id", "category_id", "payee_id", "tag_ids", "description",
+        "reference", "postings", "target_type", "target_id", "side", "trip_date", "miles",
+        "vehicle", "start_location", "destination", "business_purpose", "notes",
+        "new_payee_name", "new_tag_name",
+    }
     fields = [
         FieldError(field=str(item["loc"][-1]), code="invalid", message="Check this value.")
         for item in error.errors()
