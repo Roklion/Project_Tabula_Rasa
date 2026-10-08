@@ -30,9 +30,10 @@ class DenyContext:
 
 
 class TrustedDevelopmentContext:
-    """Fixed synthetic scope, server configured; requires loopback on every request."""
+    """Fixed synthetic scope; require loopback locally or a gated hosted request."""
 
-    def __init__(self, entity_id, csrf_token):
+    def __init__(self, entity_id, csrf_token, *, hosted=False):
+        self.hosted = hosted
         self.context = RequestContext(
             "synthetic-operator", "synthetic", entity_id,
             frozenset({"bookkeeping:read", "bookkeeping:write"}),
@@ -40,7 +41,10 @@ class TrustedDevelopmentContext:
         )
 
     def __call__(self, request):
-        if request.client is None or request.client.host not in {"127.0.0.1", "::1"}:
+        if self.hosted:
+            if not getattr(request.state, "alpha_authenticated", False):
+                raise TransportError("unauthorized")
+        elif request.client is None or request.client.host not in {"127.0.0.1", "::1"}:
             raise TransportError("forbidden")
         return self.context
 

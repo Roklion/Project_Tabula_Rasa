@@ -14,6 +14,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException
 from starlette.responses import FileResponse
 from .static import HashedAssets
+from .alpha import gate_response
 
 from tabula_rasa.errors import StorageError
 from .composition import open_runtime
@@ -64,10 +65,13 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
                     and (request.headers.get("host") or "").lower() != configured.public_origin.split("://", 1)[1].lower()):
                 response = error_response(request, "forbidden")
             else:
-                if request.url.path in {"/api/docs", "/api/openapi.json"}:
+                response = gate_response(request, configured) if configured else None
+                if response is None and (request.url.path in {"/api/docs", "/api/openapi.json"}
+                        or (configured and configured.hosted_alpha and request.method not in {"GET", "HEAD", "OPTIONS"})):
                     from .context import resolve_context
                     await run_in_threadpool(resolve_context, request)
-                response = await call_next(request)
+                if response is None:
+                    response = await call_next(request)
         except TransportError as error:
             response = error_response(request, error.code)
         except Exception:

@@ -104,6 +104,12 @@ jobs:
       - run: npm --prefix web test
       - run: npm --prefix web exec -- playwright install --with-deps chromium
       - run: npm --prefix web run test:e2e
+      - name: Build and inspect commercial runtime image (no runtime secrets)
+        shell: bash
+        run: |
+          SCHEMA=$(python -c 'from tabula_rasa.infrastructure.postgres.migrations import head_revision; print(head_revision())')
+          docker build --platform linux/amd64 --build-arg RELEASE_ID="$GITHUB_SHA" --build-arg SCHEMA_REVISION="$SCHEMA" -f deploy/commercial/Dockerfile -t tabula-commercial:ci .
+          docker run --rm tabula-commercial:ci python -c 'import sys; from tabula_rasa.http.app import create_app; create_app(schema_only=True).openapi(); assert "streamlit" not in sys.modules'
 
   full-suite:
     name: Full test suite

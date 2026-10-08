@@ -218,8 +218,12 @@ Start with one Uvicorn worker per container, horizontally scalable once #223
 proves the required operational behavior. Budget database pools across all
 workers/instances; sessions and durable jobs cannot live only in process memory.
 
-Use paid, continuously available Render services for hosted dev/staging and
-intended production. The 2026-10-07 operator amendment permits Neon Free for
+The 2026-10-07 stage amendment in #124/#221/#279 permits suitable free-tier
+Render/Neon capacity for technical development/staging, with persistent
+PostgreSQL and plan limitations recorded at the operator checkpoint. Use
+continuously available capacity when the intended usage requires it. Commercial
+production capacity/recovery acceptance remains separately owned by #224/#298.
+The earlier 2026-10-07 operator amendment permits Neon Free for
 the current pre-activation stage: production and retained UAT use distinct
 branches/endpoints in one Neon project, with separately scoped connection
 configuration and access controls. The production root is the #259 recovery
@@ -230,8 +234,8 @@ common operational boundary; branches are not an independent project-access
 boundary. Before commercial activation under #220/#258/#223, review and approve
 environment isolation, roles/secrets and operational blast radius; separate
 projects remain the proposed stronger isolation direction, rather than a
-prerequisite for the current Free-plan drills. This amendment changes Neon
-separation/recovery preparation only, not the paid Render runtime decision.
+prerequisite for the current Free-plan drills. The later stage amendment extends
+plan flexibility to technical Render hosting without changing provider/topology.
 See [the recovery contract](../POSTGRESQL_RECOVERY.md) for current Free-plan
 limits and the future protection/objective gates.
 Start with direct/unpooled TLS connections and the existing small application

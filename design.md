@@ -275,7 +275,7 @@ expose a raw traceback for this configuration failure.
 
 ## Commercial shell
 
-**Current behavior** for the #277/#278 local technical-alpha foundation:
+**Current behavior** for the #277/#278 technical-alpha foundation:
 
 - The React shell uses the visual tokens, typography and approximately 760px
   stacking boundary above. Navigation covers Dashboard, Transactions, Assets,
@@ -285,6 +285,12 @@ expose a raw traceback for this configuration failure.
   context is identified as technical-alpha development. This shell does not
   expose internal profile keys, workbook metadata, Google credentials or local
   administration controls as commercial authorization.
+- #279's hosted development/staging mode protects the shell, assets and API
+  with an environment-specific browser HTTP Basic prompt over HTTPS. It retains
+  one fixed synthetic business; the gate grants operator access, not commercial
+  membership. Minimal health/version probes are public. Production rejects this
+  synthetic mode; #222 owns real login and session behavior. Hosted setup and
+  acceptance remain subject to the [operator checkpoint](docs/COMMERCIAL_DEPLOYMENT.md).
 - Dashboard links to a read-only Accounts view. Other routes show an explicit
   availability state until their separately scoped vertical slices land.
   The foundation does not remove or replace any internal-edition workflow.
