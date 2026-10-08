@@ -65,6 +65,7 @@ The documentation index is this section of the root README. Go directly to:
 | Dry-run and rehearse a final-format Sheets migration | [Sheets to PostgreSQL migration](docs/SHEETS_POSTGRES_MIGRATION.md) |
 | Accept a whole migrated profile and control backend cutover | [Bookkeeping acceptance and cutover](docs/BOOKKEEPING_CUTOVER.md) |
 | Export complete PostgreSQL bookkeeping privately | [Complete entity export](docs/BOOKKEEPING_EXPORT.md) |
+| Define managed backup/PITR protection and verify recovery rehearsals | [PostgreSQL recovery](docs/POSTGRESQL_RECOVERY.md) |
 | Configure the application and business profiles | [Setup](docs/SETUP.md) |
 | Configure Drive, Picker, receipts, and cloud backups | [Google Drive](docs/GOOGLE_DRIVE.md) |
 | Configure Maps autocomplete, routing, quotas, and billing | [Google Maps mileage](docs/GOOGLE_MAPS.md) |

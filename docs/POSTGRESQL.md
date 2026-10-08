@@ -141,7 +141,10 @@ python -m tabula_rasa.infrastructure.postgres downgrade --revision base --allow-
 The baseline drops named owned tables/functions explicitly, without CASCADE;
 unexpected external dependencies stop the transaction. It does not delete a
 database or document-store files. Production backup/PITR requirements and real
-restore rehearsals remain #259/#223's work and gate #258 activation.
+restore rehearsals gate #258 activation. The [managed recovery runbook](POSTGRESQL_RECOVERY.md)
+owns #259's production checkpoint, proposed objectives, separate real snapshot
+restore/PITR milestones and read-only expected-point verifier; #223 owns ongoing
+monitoring, document recovery and incident/service restoration.
 
 ## Infrastructure operation convention
 

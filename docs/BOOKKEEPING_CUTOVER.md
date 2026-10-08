@@ -132,7 +132,10 @@ For every migrated entity, retain:
 Commercial production additionally requires **completed #253 commercial caller
 baseline/transaction/integrity verification**, successful **#259 actual managed
 backup restore and requested-point PITR**, and the operator's production setup
-record. A repository test alone does not establish those operational milestones.
+record. The [managed recovery runbook](POSTGRESQL_RECOVERY.md) owns #259's
+objectives, effective-settings inspection, both real recovery milestones and
+the private evidence handoff. A repository test alone does not establish those
+operational milestones.
 The setup record must identify the provisioned, reachable intended production
 database, its approved secret configuration, schema decision/revision chain,
 managed backup/PITR effective settings, agreed/observed RPO/RTO, isolated restore
