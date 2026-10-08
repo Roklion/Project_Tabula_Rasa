@@ -58,7 +58,7 @@ manager, retry/recovery state machine, or commercial profile-permission model.
 | Persistence | Existing synchronous SQLAlchemy Core/Psycopg/Alembic PostgreSQL infrastructure; PostgreSQL 18 baseline. |
 | Contract generation | FastAPI OpenAPI export, `openapi-typescript` generation, `openapi-fetch` typed client; no handwritten duplicate TypeScript response models. |
 | Testing | Existing pytest/Ruff plus API tests; Vitest/React Testing Library for browser logic, Playwright for browser workflows. |
-| Hosting | Paid Render Docker web services; Neon managed PostgreSQL; separate environments. |
+| Hosting | Render Docker web services; suitable free tiers are permitted for technical development/staging under the stage-specific amendment below. Paid capacity and recovery guarantees remain a separate commercial activation gate. Neon managed PostgreSQL; separate environments. |
 | Release | One container per environment containing the compiled SPA and Python API. Node is build-only. |
 
 #277/#278 pin compatible stable library releases and container patch/digest
