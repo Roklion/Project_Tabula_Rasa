@@ -64,6 +64,11 @@ no blind retry or unconditional successful-write readback is introduced here.
 
 ## Token and caller policy
 
+[#280's commercial bridge](COMMERCIAL_CONCURRENCY.md) now carries these tokens
+through real browser load/edit/delete/merge requests and requires them at HTTP
+boundaries. Its two-client native tests exercise the existing repository checks;
+the compatibility policy below remains reserved for internal callers.
+
 `application.baselines.RecordBaseline` encodes an opaque `v1` string containing
 entity, aggregate kind/ID, immutable persisted incarnation, and integer version.
 It contains no SQL/ORM values and grants no authorization. #222 still owns
