@@ -17,7 +17,9 @@ payees and tags retain fresh reference checks before removal. Payee/tag merges
 require the target and every selected source baseline. Derived mixed-use and
 depreciation transactions retain their source owner and have no generic editor.
 Transaction edits preserve receipt links and immutable provenance; there is no
-receipt metadata edit/delete UX here. Journal posting IDs remain stable.
+receipt metadata edit/delete UX here. Journal posting IDs remain stable. Changing a posting target type clears its
+selected target; new or cleared targets explicitly show Choose target until
+the user selects an account or category.
 
 These narrow forms are available on Accounts, Categories, Transactions and
 Mileage; Categories links to Payees/Tags and Transactions to Journals. Full

@@ -301,7 +301,8 @@ expose a raw traceback for this configuration failure.
   draft and reload; only the latter replaces fields and metadata together.
   Deletion/deactivation requires acknowledgement; merges retain target/source
   tokens. Successful saves advance the baseline from the confirmed response.
-  No mutation retries automatically.
+  No mutation retries automatically. Journal target selectors show Choose target
+  for new postings and clear the selection when Account/Category changes.
 - Context changes remount private queries and drafts; no prior business/session
   cache is reused. Forms stack; tables may scroll within their own region.
   Keyboard focus, labels and business scope remain reachable at 320 CSS pixels.

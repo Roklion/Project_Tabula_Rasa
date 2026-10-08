@@ -152,6 +152,8 @@ def test_real_merge_form_keeps_target_and_source_baselines(database, commercial,
             second.goto(commercial_server + '/' + resource + '/merge')
             second.get_by_role('button', name='Merge ' + resource, exact=True).click()
             second.get_by_label('Keep this record').select_option(label='Merge target')
+            second.get_by_role('button', name='Confirm merge', exact=True).click()
+            expect(second.get_by_role('alert')).to_contain_text('Check the highlighted fields and try again.')
             second.get_by_label(original['name'], exact=True).check()
             second.get_by_label('Second source', exact=True).check()
             first.get_by_label('Name', exact=True).fill('Other committed source')
@@ -210,5 +212,36 @@ def test_real_transaction_editor_switches_kind_without_hidden_references(commerc
             actual = loaded(clients[0], 'transactions', row['id'])
             assert actual['kind'] == kind and actual['category_id'] == category
             assert actual['to_account_id'] == ('bank' if kind == 'Transfer' else '')
+        finally:
+            browser.close()
+
+
+def test_real_journal_target_changes_require_explicit_selection(commercial, commercial_server):
+    _, _, clients, ids = commercial
+    row = loaded(clients[0], 'journals', ids['journals'])
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.goto(commercial_server + '/journals')
+            page.get_by_role('button', name=edit_label('journals', row), exact=True).click()
+            target = page.get_by_label('Target', exact=True).first
+            target_type = page.get_by_label('Account or category', exact=True).first
+            for kind in ('account', 'category', 'account'):
+                target_type.select_option(kind)
+                expect(target).to_have_value('')
+                target.select_option('bank' if kind == 'account' else 'office')
+            page.get_by_role('button', name='Add posting', exact=True).click()
+            expect(page.get_by_label('Target', exact=True).nth(2)).to_have_value('')
+            expect(page.get_by_label('Target', exact=True).nth(2).locator('option:checked')).to_have_text('Choose target')
+            page.get_by_role('button', name='Remove posting 3', exact=True).click()
+            with page.expect_response(lambda response: response.request.method == 'PATCH') as saved:
+                page.get_by_role('button', name='Save changes', exact=True).click()
+            assert saved.value.status == 200
+            assert saved.value.request.post_data_json['baseline'] == row['baseline']
+            actual = loaded(clients[0], 'journals', row['id'])
+            assert [line['id'] for line in actual['postings']] == [line['id'] for line in row['postings']]
+            assert actual['postings'][0]['target_type'] == 'account'
+            assert actual['postings'][0]['target_id'] == 'bank'
         finally:
             browser.close()

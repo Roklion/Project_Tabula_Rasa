@@ -67,8 +67,9 @@ function JournalFields({ form }: { form: UseFormReturn<Schemas['JournalChanges']
     <TextField form={form} name="description" label="Description / memo" />
     {lines.fields.map((line, index) => <div className="posting" key={line.formKey}>
       <h3>Posting {index + 1}</h3>
-      <SelectField form={form} name={`postings.${index}.target_type`} label="Account or category" options={options(['account', 'category'])} />
-      <SelectField form={form} name={`postings.${index}.target_id`} label="Target" options={form.watch(`postings.${index}.target_type`) === 'account' ? choices.accounts : choices.categories} />
+      <SelectField form={form} name={`postings.${index}.target_type`} label="Account or category" options={options(['account', 'category'])}
+        onChange={() => form.setValue(`postings.${index}.target_id`, '', { shouldDirty: true })} />
+      <SelectField form={form} name={`postings.${index}.target_id`} label="Target" options={[{ id: '', name: 'Choose target' }, ...(form.watch(`postings.${index}.target_type`) === 'account' ? choices.accounts : choices.categories)]} />
       <SelectField form={form} name={`postings.${index}.side`} label="Side" options={options(['Debit', 'Credit'])} />
       <TextField form={form} name={`postings.${index}.amount`} label="Amount" />
       <SelectField form={form} name={`postings.${index}.payee_id`} label="Payee / customer" options={[blank, ...choices.payees]} />
