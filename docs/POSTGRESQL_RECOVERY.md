@@ -10,9 +10,14 @@ purchase a plan, provision resources, enable protection or execute a restore.
 
 ## Status and production checkpoint
 
-The read-only verifier and rehearsal procedure are implemented. Production
-provisioning, the plan, effective settings, operator agreement on objectives,
-and both actual recovery milestones remain unverified. #259 remains open.
+The read-only verifier and rehearsal procedure are implemented. The operator
+has selected Neon Free for the current pre-activation stage, with distinct
+production and UAT branches in one project and the production root as the
+recovery source. The reported setup has revision `0005_bookkeeping_cutover`
+and verified client TLS, with no bookkeeping loaded or production authority
+activated. These are reported setup facts, not recovery evidence. Effective
+recoverability and both actual recovery milestones remain unverified; #259
+remains open. Commercial protection and objective agreement remain future gates.
 Synthetic native tests prove the verifier contract; they cannot satisfy #259,
 #220's recovery exit criterion or [#258's commercial activation gate](BOOKKEEPING_CUTOVER.md).
 Commercial web/API development under #221 and internal/staging cutovers may
@@ -22,29 +27,59 @@ Before provider configuration or a production-derived rehearsal, the operator
 must complete #259's manual setup checkpoint:
 
 - Identify the actual production Neon project, root branch and database. Keep
-  hosted development and retained staging in distinct projects with separate
-  secrets as ADR 0002 requires. Do not substitute the existing UAT database.
+  production and UAT on distinct branches/endpoints in the shared project,
+  with separately scoped connection configuration and access controls per the
+  current-stage amendment to ADR 0002. Verify the branch identities; do not
+  substitute UAT or restore onto either retained source branch.
 - Configure the approved production secret store, authenticated database roles,
   direct/unpooled TLS endpoint and reachable configuration. Verify actual TLS;
   do not publish connection strings, usernames, tokens or screenshots of secrets.
-- Select sufficient billing/plan capacity, enable the required protection, and
-  inspect its effective history window, snapshot schedule and expiration settings.
+- Inspect the effective Free-plan history window (reported six hours, capped
+  at 1 GB of history), manual snapshot availability/expiration and spare branch,
+  storage and compute capacity for isolated targets. Stop if the requested point
+  is no longer recoverable or capacity is insufficient. No paid schedule or
+  seven-day window is a prerequisite for these current-stage drills.
 - Approve exact isolated recovery targets and access controls. Production-derived
   branches contain private data: they are restricted recovery environments, not
   ordinary developer/staging branches or automatic production clones.
-- Record the objectives below, owner and approval date; identify a second
-  operator with authorized console, secret-store and evidence access.
+- Record the authorized drill scope, current limits, owner and date; identify
+  a second operator with authorized console, secret-store and evidence access.
+  Measure observed RPO/RTO honestly. The proposed commercial objectives below
+  do not require approval before these limited drills, but remain unapproved
+  until an explicit agreement is recorded before commercial activation.
 
 If any item is missing, stop provider-specific work and request operator setup.
 No schema reset, production overwrite, finalization, source edits, document
 movement or cleanup is authorized by this document.
 
-## Requirements and measurement agreement
+## Current Free-plan rehearsal boundary
 
-The following numbers are **proposed beta requirements**, not approved objectives
-or claims about the selected plan. The operator must explicitly accept or revise
-them in a private recovery agreement before rehearsal and commercial activation.
-Keep the proposal, approved values and observed values separately in evidence.
+The current goal is to complete a real managed **manual-snapshot restore** and
+separate **requested-point PITR** within Free-plan capabilities. Retain the
+manual snapshot and each isolated target/evidence through sign-off. Free allows
+one manual snapshot; do not delete an existing required snapshot to make room
+without separate approval. Plan both milestones while the requested point is
+still available within the effective history window and its 1 GB cap. Confirm
+capacity before creating targets; record a blocker rather than overwriting UAT
+or production. The six-hour lookback is a recovery-point availability limit,
+**not RPO**, a six-hour data-loss promise or proof that every point remains
+available under the history cap.
+
+No automated snapshot production, daily frequency, 14-day retention or seven-day
+history evidence is required to execute these current-stage drills. A successful
+drill records what the current plan recovered and how long it took; it does not
+establish ongoing production protection or commercial readiness.
+
+## Future protection and commercial objective agreement
+
+The following numbers are **proposals for formal commercialization**, not approved
+objectives or claims about Free. Under #220/#258/#223, before commercial
+activation the operator must agree or explicitly revise the protection strategy,
+capacity and RPO/RTO objectives, enable/inspect those agreed controls and obtain
+matching recovery evidence. This includes reviewing environment isolation and
+shared-project operational access/blast radius under ADR 0002. Keep proposed,
+approved and observed values separately in private evidence. Current Free-plan
+drills may proceed before that agreement and paid-plan procurement.
 
 | Protection or objective | Proposed requirement |
 | --- | --- |
@@ -86,18 +121,19 @@ under #223/#258 without claiming full-service recovery or introducing a new
 
 ## Neon settings and restore semantics
 
-Provider details were checked on 2026-10-07. Recheck current primary documentation
-and effective console/API settings during execution; a plan name or default is
+Provider details and the Free-plan amendment were checked on 2026-10-07.
+Recheck current primary documentation and effective console/API settings during execution; a plan name or default is
 not configuration evidence.
 
-- Neon documents paid plans for automated schedules and different plan ceilings
-  for history. Select a plan that supports the agreed requirements and explicitly
-  set the window; do not assume a paid plan's default meets seven days.
-  [Plans and history](https://neon.com/docs/introduction/plans).
-- Inspect the production root branch's daily schedule and snapshot expirations.
-  Manual snapshots have separate expiration rules; confirm the pre-change
-  snapshot's retention independently of the schedule.
-  [Backup and snapshot schedules](https://neon.com/docs/guides/backup-restore).
+- Free supports up to six hours of history, capped at 1 GB. Inspect the actual
+  project setting and recoverable point; volume can constrain usable history.
+  [History window](https://neon.com/docs/postgres/backup-restore/history-window).
+- Free supports one manual snapshot and no automated backup schedules. Confirm
+  its availability and expiration/retention without deleting required evidence.
+  Paid-plan scheduling and longer history are future protection improvements,
+  with plan capacity verified before commercial acceptance.
+  [Plans](https://neon.com/docs/introduction/plans),
+  [Snapshots and schedules](https://neon.com/docs/guides/backup-restore).
 - Snapshot restore can create a new branch for inspection. Keep it unfinalized;
   finalization moves compute/identity and is a separate production operation.
   Always identify the exact target rather than relying on a default.
@@ -188,8 +224,8 @@ isolation through the console. The hashes cannot prove that distinction.
 
 ## Milestone A: restore a real managed backup
 
-1. Complete the manual checkpoint and agreed objectives. Declare the drill,
-   record its start, release/revision, source identity and exact isolated target.
+1. Complete the current Free-plan manual checkpoint and authorize the drill.
+   Declare it and record its start, release/revision, source identity and exact isolated target.
    Pause all source writers/jobs/document operations for the controlled capture;
    use representative non-sensitive canary bookkeeping on the actual production
    environment before customer activation. Never insert canaries into a customer
@@ -198,8 +234,9 @@ isolation through the console. The hashes cannot prove that distinction.
    frozen, and record the complete private inventory. Create/identify a real
    managed snapshot of that unchanged source; retain its ID, capture point,
    successful provider status and expiration. Resume only the authorized canary
-   workload after capture. Separately verify a scheduled snapshot was produced
-   by the effective schedule; a manual snapshot cannot prove automation.
+   workload after capture. This manual snapshot is the source for the current
+   restore milestone; its creation alone does not prove recovery or automation. Scheduled snapshot production belongs to the
+   future commercial protection gate, not this Free-plan rehearsal.
 3. Restore that snapshot into the approved new isolated recovery environment
    through Neon's multi-step/new-branch path. Do not finalize onto production or
    move its compute. Record provider completion and connect using the restricted
@@ -215,8 +252,10 @@ isolation through the console. The hashes cannot prove that distinction.
    transfers outside income/expenses, mileage separate, signed opening balances,
    journal balance and `Assets = Liabilities + Equity`. Verify expected document
    metadata against #223's byte-recovery procedure. Record database-ready time,
-   actual snapshot age/data loss and pass/fail against the agreed snapshot
-   budget. Record full-service smoke/readiness separately under #223/#258;
+   actual snapshot age/data loss and any capacity/measurement gaps. Compare
+   against approved objectives only if such an agreement exists; otherwise
+   label objective compliance unassessed and retain proposals separately. Record
+   full-service smoke/readiness separately under #223/#258;
    retain database failures as #259 blockers and service/document gaps with
    their owner. Do not use the pre-cutover migration smoke command against
    a divergent restored ledger: it compares to the now-stale Sheets source.
@@ -224,9 +263,10 @@ isolation through the console. The hashes cannot prove that distinction.
 ## Milestone B: requested-point PITR
 
 1. Use the actual production root's protected history, independently of the
-   snapshot milestone. Approve a dedicated new recovery branch; never choose
-   production as a restore target. Neon supports creating a branch from an
-   explicit parent's historical timestamp/LSN. This new-branch recovery path
+   snapshot milestone. Confirm T remains within the effective six-hour/1 GB
+   history boundary and approve a dedicated new recovery branch; never choose
+   production or retained UAT as a restore target. Neon supports creating a
+   branch from an explicit parent's historical timestamp/LSN. This new-branch recovery path
    reads the original production root's history without rewinding production.
    [Create branch API](https://api-docs.neon.tech/reference/createprojectbranch).
 2. Commit a known canary change A through supported entity-scoped services.
@@ -253,8 +293,10 @@ isolation through the console. The hashes cannot prove that distinction.
    separate known-commit checks from the provider history/authorized private
    view to prove ordering. Repeat schema/control-plane, isolation, service,
    financial/export and document checks from milestone A. Record observed RPO,
-   intentional rollback interval, database-ready time and objective compliance;
-   report full-service readiness separately under #223/#258.
+   intentional rollback interval, database-ready time and history/capacity gaps.
+   Assess objective compliance only against an explicit approved agreement;
+   otherwise record it as unassessed. Report full-service readiness separately
+   under #223/#258.
 
 An isolated environment may be reused only after recording milestone A
 and verifying that its topology supports milestone B; a fresh historical branch
@@ -295,8 +337,9 @@ converter or live fallback. [Existing Sheets/document recovery](BACKUP_RECOVERY.
 
 ## Evidence and #258 handoff
 
-Keep one private record with separate sections for the agreement, inspected
-production settings and each milestone. The record must contain:
+Keep one private record with separate sections for the current drill scope,
+future commercial agreement, inspected production settings and each milestone.
+The record must contain:
 
 - Operator/alternate, approval and drill dates, plan/effective settings, source
   and target identities/lineage, TLS/access verification, release/revision and
@@ -315,9 +358,14 @@ private record. A checksum establishes content integrity, not operator approval.
 An alternate operator should follow the runbook and confirm access/usability;
 record this handoff before acceptance.
 
-Only after both real database milestones, agreed database objectives and required
-integrity/reconciliation checks pass may the operator supply completed `backup_restore` and
-`point_in_time_recovery` evidence to #258. Its `production_setup` record also
-needs inspected settings and distinct staging/production. #253/#280 commercial
-caller verification remains an independent gate. Ticket existence, these docs,
+Record the two real Free-plan milestones independently after their required
+schema/inventory/integrity/content checks pass, with observed measurements and
+any limitations. Do not mark them complete from setup reports or synthetic tests.
+For #258 commercial activation, completed `backup_restore` and
+`point_in_time_recovery` evidence additionally requires the formally agreed
+commercial protection/objectives, effective settings and objective compliance.
+Its `production_setup` record needs inspected settings and distinct
+staging/production environments; the current shared-project branch arrangement
+must receive the commercial isolation review described above. #253/#280
+commercial caller verification remains an independent gate. Ticket existence, these docs,
 a verifier match or synthetic tests cannot substitute for completed evidence.

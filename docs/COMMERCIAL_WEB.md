@@ -157,9 +157,20 @@ publication and terminal review; focused checks apply between those gates.
 | Environment | Runtime/data | Exposure and release |
 | --- | --- | --- |
 | Local | Vite + loopback Uvicorn + existing Docker PostgreSQL 18 | Synthetic fixture context; developer starts each process. |
-| Hosted development | Own paid Render Docker service + own Neon project/roles | Synthetic data; validated `main` deploys; temporary alpha gate until #222. |
-| Retained staging | Separate paid Render Docker service + retained Neon project/roles | Explicit commit/image promotion; synthetic acceptance data; restricted operator access until #222. This is the real persistent staging target, not local Compose or a per-test DB. |
-| Intended production | Separate Render service + separate Neon project/runtime/migration roles | Promote the staging-tested image digest only after identity, cutover and operations/recovery gates. Reject trusted alpha context. |
+| Hosted development | Own paid Render Docker service + scoped Neon environment/roles | Synthetic data; validated `main` deploys; temporary alpha gate until #222. |
+| Retained staging | Separate paid Render Docker service + retained Neon environment/roles | Explicit commit/image promotion; synthetic acceptance data; restricted operator access until #222. This is the real persistent staging target, not local Compose or a per-test DB. |
+| Intended production | Separate Render service + distinct Neon production branch/endpoint and scoped runtime/migration access | Promote the staging-tested image digest only after identity, cutover and operations/recovery gates. Reject trusted alpha context. |
+
+For the current pre-activation stage, the operator has selected Neon Free with
+production and retained UAT on distinct branches/endpoints in one project;
+[ADR 0002](adr/0002-commercial-web-runtime.md#deployment-decision) records this
+amendment. Keep configuration and access scoped to each environment, preserve
+the retained UAT database, and use separate isolated recovery targets. A shared
+project shares administration and capacity; branch separation does not prove
+independent project access. Formal commercial activation still requires the
+isolation/protection/objective review under #220/#258/#223 described in
+[PostgreSQL recovery](POSTGRESQL_RECOVERY.md). This does not change the paid
+Render service decision or authorize provisioning, cloning or activation.
 
 GitHub Actions builds the `linux/amd64` image into GHCR; Render image-backed
 services (`runtime: image`) consume its immutable digest. CI explicitly triggers
