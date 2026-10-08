@@ -65,6 +65,7 @@ The documentation index is this section of the root README. Go directly to:
 | Dry-run and rehearse a final-format Sheets migration | [Sheets to PostgreSQL migration](docs/SHEETS_POSTGRES_MIGRATION.md) |
 | Accept a whole migrated profile and control backend cutover | [Bookkeeping acceptance and cutover](docs/BOOKKEEPING_CUTOVER.md) |
 | Export complete PostgreSQL bookkeeping privately | [Complete entity export](docs/BOOKKEEPING_EXPORT.md) |
+| Define managed backup/PITR protection and verify recovery rehearsals | [PostgreSQL recovery](docs/POSTGRESQL_RECOVERY.md) |
 | Configure the application and business profiles | [Setup](docs/SETUP.md) |
 | Configure Drive, Picker, receipts, and cloud backups | [Google Drive](docs/GOOGLE_DRIVE.md) |
 | Configure Maps autocomplete, routing, quotas, and billing | [Google Maps mileage](docs/GOOGLE_MAPS.md) |
@@ -96,16 +97,15 @@ different users must be restricted to different businesses.
 
 ## Development checks
 
-Install the development dependencies and run the required checks:
+Install the development dependencies, then run affected tests and applicable
+fast lint/type/style checks for the behavior and shared dependencies you change.
+Full local suites are exceptional diagnostics; the current revision's GitHub
+Actions **Full test suite** check is the authoritative merge gate and runs
+concurrently with PR review.
 
-```powershell
-pip install -r requirements-dev.txt
-ruff check .
-python -m pytest
-```
-
-See the [development guide](docs/DEVELOPMENT.md) for test isolation
-and live validation commands.
+See the [development guide](docs/DEVELOPMENT.md#required-validation) for local
+validation, CI coverage, required-check administration, failure diagnosis and
+test isolation.
 
 ## Authors
 

@@ -178,3 +178,37 @@ def test_real_merge_form_keeps_target_and_source_baselines(database, commercial,
             assert len(service.list()) == 1
         finally:
             browser.close()
+
+
+@pytest.mark.parametrize('kind,category', [('Expense', 'office'), ('Income', 'sales'), ('Transfer', '')])
+def test_real_transaction_editor_switches_kind_without_hidden_references(commercial, commercial_server, kind, category):
+    from tests.postgres.core_support import expense
+
+    alpha, _, clients, _ = commercial
+    initial_kind = 'Expense' if kind == 'Transfer' else 'Transfer'
+    row = alpha.transactions.create(transaction_id='switch-kind', **expense(kind=initial_kind,
+        category_id='office' if initial_kind == 'Expense' else '', description='Kind switch',
+        to_account_id='bank' if initial_kind == 'Transfer' else ''))
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.goto(commercial_server + '/transactions')
+            page.get_by_role('button', name=edit_label('transactions', row), exact=True).click()
+            page.get_by_label('Type', exact=True).select_option(kind)
+            if category:
+                page.get_by_label('Category', exact=True).select_option(category)
+            else:
+                page.get_by_label('To account', exact=True).select_option('bank')
+            with page.expect_response(lambda response: response.request.method == 'PATCH') as saved:
+                page.get_by_role('button', name='Save changes', exact=True).click()
+            assert saved.value.status == 200
+            body = saved.value.request.post_data_json
+            assert body['baseline'] == row['baseline']
+            assert body['changes']['category_id'] == category
+            assert body['changes']['to_account_id'] == ('bank' if kind == 'Transfer' else '')
+            actual = loaded(clients[0], 'transactions', row['id'])
+            assert actual['kind'] == kind and actual['category_id'] == category
+            assert actual['to_account_id'] == ('bank' if kind == 'Transfer' else '')
+        finally:
+            browser.close()

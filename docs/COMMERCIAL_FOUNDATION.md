@@ -184,6 +184,10 @@ If a development preview occupies port 5173, set `TABULA_RASA_SMOKE_PORT` to an
 unused loopback port before `npm --prefix web run test:e2e`. The smoke runner
 starts its own server and does not reuse or stop the existing preview.
 
-The commercial foundation CI job exports/regenerates both contract artifacts,
-rejects drift, compiles the consumer and runs these foundation checks.
-Repository full-suite publication and terminal-review gates still apply.
+[Repository CI](DEVELOPMENT.md#authoritative-ci-and-required-check) exports and
+regenerates both contract artifacts, rejects drift, compiles the consumer and
+runs the browser foundation checks. Its complete Python job owns API/native
+PostgreSQL tests without a duplicate foundation pytest invocation. A dedicated
+Windows job covers platform-specific setup tests. The aggregate **Full test
+suite** check gates the current PR candidate while CI and advisory review proceed
+concurrently; publication and review completion require no ritual full local run.

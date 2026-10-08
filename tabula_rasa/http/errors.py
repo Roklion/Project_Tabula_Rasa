@@ -82,7 +82,7 @@ async def handle_validation(request, error: RequestValidationError):
     # Locations can contain client-supplied keys (extra fields): allow only
     # declared transport field names. Never echo input, context, or raw messages.
     allowed = {
-        "name", "type", "opening_balance", "classification", "parent_id", "active_only",
+        "id", "name", "type", "opening_balance", "classification", "parent_id", "active_only",
         "active", "kind", "baseline", "baselines", "source_ids", "txn_date", "amount",
         "account_id", "to_account_id", "category_id", "payee_id", "tag_ids", "description",
         "reference", "postings", "target_type", "target_id", "side", "trip_date", "miles",

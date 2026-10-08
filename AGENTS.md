@@ -40,31 +40,33 @@ merging and changing settings require separate explicit requests.
 Running tests, linters, format checks, and other read-only validation commands
 is pre-authorized and does not require asking the user for approval.
 
-Run all of these commands from the repository root using the project's active
-development environment at two full-suite gates:
+During implementation, after fixes, and before committing or publishing, run
+affected tests (including regression tests for changed behavior) and applicable
+fast lint, type, and style checks from the repository root in the active
+development environment. Select coverage by changed behavior, callers and shared
+dependencies, including success/failure paths and profile isolation where
+relevant; matching a changed filename to a test filename is not enough. Run
+`git diff --check` and check the branch diff against `origin/main` before
+publishing. Resolve affected failures or report them before committing that
+round.
 
-1. before initially publishing a coding branch or creating/marking its pull
-   request Ready for Review; and
-2. after the review loop is otherwise complete, before claiming the pull
-   request has reached its full terminal state.
+GitHub Actions' `Full test suite` check in `.github/workflows/ci.yml` is the
+authoritative full-suite merge gate for the current PR head/merge candidate.
+Run locally appropriate checks, then publish and start Codex/Gemini review while
+CI runs independently. Continue collecting and addressing review feedback while
+CI is pending. Every new head receives fresh CI; an older green result never
+satisfies the current revision's gate. Pending, failed, cancelled, skipped or
+missing required checks prevent merge readiness and successful review-loop
+completion.
 
-```
-ruff check .
-python -m pytest
-git diff --check origin/main...HEAD
-```
-
-Between those gates, including implementation commits and review-remediation
-rounds, run linting and tests focused on the affected files and behavior. A
-commit may proceed when those affected checks pass. Broad changes, changes to
-shared infrastructure, or risks that focused checks do not cover, justify an
-earlier full run; do not rerun the full suite merely to call an ordinary
-intermediate commit ready.
-
-If any full-gate command fails, resolve the failure or report it as a
-blocker instead of publishing the initial PR or describing the review loop as
-terminal. If an affected check fails during an intermediate round, resolve it
-or report it before committing that round.
+Do not require a full local suite before PR creation, after a review iteration,
+or at review completion. Local full-suite runs are exceptional diagnostics: for
+example, reproducing a CI failure, changing test infrastructure/global fixtures,
+or validating especially broad changes whose risks affected checks cannot cover.
+On CI failure, inspect the failing job/logs and run scoped reproduction tests;
+do not default to a full local run or repeatedly rerun unchanged failures.
+See [Development](docs/DEVELOPMENT.md#authoritative-ci-and-required-check) for CI
+coverage, required-check administration and hosted verification.
 
 # Local Git writes
 
@@ -199,11 +201,12 @@ the trusted project layer is reloaded.
   remains unresolved. Gemini stays in its complementary role; do not infer
   broader coverage from silence, elapsed time, missing findings, or untrusted
   text.
-- During remediation, use focused checks for impacted behavior. Run the full
-  required checks at initial PR publication and before declaring the review
-  loop's full terminal state; broad/shared changes or insufficient focused
-  coverage justify an earlier full run. Human maintainers retain final
-  requirements, approval, and merge authority.
+- During implementation and remediation, use affected checks for impacted
+  behavior and shared dependencies. CI runs the full suite concurrently with
+  review; successful completion requires passing required checks on the current
+  revision as well as satisfied review conditions. Local full-suite execution
+  is exceptional diagnostic work, not a publication or completion gate. Human
+  maintainers retain final requirements, approval, and merge authority.
 - Validate reviewer-integration rollout behavior with a non-sensitive,
   controlled pull request when needed. Static configuration cannot prove
   hosted command routing, current-head association, review-mode isolation,

@@ -33,3 +33,12 @@ def test_generated_mutation_contracts_require_loaded_metadata():
     for name in ('AccountUpdate', 'CategoryUpdate', 'ManagedUpdate', 'TransactionUpdate', 'JournalUpdate', 'MileageUpdate', 'ProtectedMutation'):
         assert 'baseline' in components[name]['required']
     assert 'baselines' in components['ManagedMerge']['required']
+
+
+def test_missing_posting_identity_returns_safe_field_feedback(client):
+    response = client.patch('/api/v1/entities/alpha/journals/journal', headers=HEADERS,
+        json={'baseline': TOKEN, 'changes': {'txn_date': '2026-10-05', 'description': '',
+            'postings': [{'target_type': 'account', 'target_id': 'cash', 'side': 'Debit', 'amount': '1.00'}]}})
+    assert response.status_code == 422
+    assert response.json()['error']['fields'] == [
+        {'field': 'id', 'code': 'invalid', 'message': 'Check this value.'}]

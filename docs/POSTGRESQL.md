@@ -141,7 +141,10 @@ python -m tabula_rasa.infrastructure.postgres downgrade --revision base --allow-
 The baseline drops named owned tables/functions explicitly, without CASCADE;
 unexpected external dependencies stop the transaction. It does not delete a
 database or document-store files. Production backup/PITR requirements and real
-restore rehearsals remain #259/#223's work and gate #258 activation.
+restore rehearsals gate #258 activation. The [managed recovery runbook](POSTGRESQL_RECOVERY.md)
+owns #259's production checkpoint, proposed objectives, separate real snapshot
+restore/PITR milestones and read-only expected-point verifier; #223 owns ongoing
+monitoring, document recovery and incident/service restoration.
 
 ## Infrastructure operation convention
 
@@ -630,7 +633,7 @@ database in fixture cleanup. The administrator database is never truncated,
 downgraded, or populated by these fixtures. No SQLite substitute is accepted.
 Missing test configuration skips integration tests; configured but inaccessible
 PostgreSQL fails them. Configuration and Sheets independence tests still run
-without a test endpoint. `.github/workflows/postgres.yml` supplies real
+without a test endpoint. `.github/workflows/ci.yml` supplies real
 PostgreSQL for automated checks, so its integration coverage cannot skip for
 missing configuration. Interrupted runs may leave a disposable UUID database;
 an operator may remove that specific test database after checking its identity.
@@ -643,7 +646,9 @@ Core tests cover service workflows on both adapters, complete canonical postings
 all-owner multi-source merges, two-entity isolation, late validation/commit rollback,
 inline-reference atomicity, independent loaded callers and overlapping writers,
 recreated identities, receipt metadata retention and immutable provenance.
-Run the existing full suite with this endpoint too when validating shared changes.
+CI runs the complete Python suite with this endpoint on every PR revision.
+Use it for affected native tests locally; a full local run is exceptional
+diagnostic work as described in [Development](DEVELOPMENT.md#required-validation).
 
 ## Delivery boundary for the initiative
 

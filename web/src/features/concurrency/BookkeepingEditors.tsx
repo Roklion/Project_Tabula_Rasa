@@ -44,7 +44,9 @@ function TransactionFields({ form }: { form: UseFormReturn<Schemas['TransactionC
 function TransactionEditor({ row, onClose }: { row: Schemas['Transaction']; onClose: () => void }) {
   const session = useEntity();
   return <ProtectedEditor session={session} loaded={transactionLoaded(row)} title="Edit transaction" onClose={onClose}
-    save={async (id, baseline, changes) => transactionLoaded(await api.updateTransaction(session, id, { baseline, changes }))}
+    save={async (id, baseline, changes) => transactionLoaded(await api.updateTransaction(session, id, { baseline, changes: { ...changes,
+      to_account_id: changes.kind === 'Transfer' ? changes.to_account_id : '',
+      category_id: changes.kind === 'Transfer' ? '' : changes.category_id } }))}
     remove={(id, baseline) => api.deleteTransaction(session, id, baseline)}
     loadLatest={async id => transactionLoaded(await latest(api.transactions, session, id))}
     fields={form => <TransactionFields form={form} />} />;
