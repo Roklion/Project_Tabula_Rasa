@@ -245,3 +245,144 @@ def test_real_journal_target_changes_require_explicit_selection(commercial, comm
             assert actual['postings'][0]['target_id'] == 'bank'
         finally:
             browser.close()
+
+
+def test_account_deactivation_requires_confirmation_after_reactivation(commercial, commercial_server):
+    alpha, _, clients, ids = commercial
+    alpha.accounts.deactivate(ids['accounts'])
+    def read_account():
+        response = clients[0].get('/api/v1/entities/alpha/accounts', params={'active_only': False})
+        assert response.status_code == 200
+        return next(item for item in response.json()['items'] if item['id'] == ids['accounts'])
+
+    row = read_account()
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.goto(commercial_server + '/accounts')
+            page.get_by_role('button', name=edit_label('accounts', row), exact=True).click()
+            page.get_by_label('Active', exact=True).check()
+            with page.expect_response(lambda response: response.request.method == 'PATCH') as saved:
+                page.get_by_role('button', name='Save changes', exact=True).click()
+            assert saved.value.status == 200
+            assert saved.value.request.post_data_json['baseline'] == row['baseline']
+            expect(page.get_by_label('Active', exact=True)).to_have_count(0)
+            assert read_account()['active']
+            page.get_by_role('button', name='Deactivate', exact=True).click()
+            expect(page.get_by_role('alertdialog', name='Deactivate record')).to_be_visible()
+            assert read_account()['active']
+            page.get_by_role('button', name='Keep record', exact=True).click()
+            page.get_by_role('button', name='Deactivate', exact=True).click()
+            with page.expect_response(lambda response: response.request.method == 'POST') as removed:
+                page.get_by_role('button', name='Confirm deactivate', exact=True).click()
+            assert removed.value.status == 200
+            assert removed.value.request.post_data_json['baseline'] == saved.value.json()['baseline']
+            assert not read_account()['active']
+        finally:
+            browser.close()
+
+
+@pytest.mark.parametrize('resource', ['transactions', 'journals', 'mileage'])
+def test_edit_choices_preserve_only_field_specific_inactive_references(commercial, commercial_server, resource):
+    alpha, _, clients, ids = commercial
+    journal = loaded(clients[0], 'journals', ids['journals'])
+    journal['postings'][0]['payee_id'] = ids['payees']
+    clients[0].patch('/api/v1/entities/alpha/journals/' + ids['journals'],
+        headers={'Origin': 'http://testserver', 'X-CSRF-Token': 'csrf'},
+        json={'baseline': journal['baseline'], 'changes': {'txn_date': journal['txn_date'], 'description': journal['description'], 'postings': journal['postings']}}).raise_for_status()
+    alpha.accounts.deactivate('cash')
+    alpha.accounts.deactivate('bank')
+    alpha.payees.update(ids['payees'], active=False)
+    alpha.tags.update(ids['tags'], active=False)
+    unrelated_payee = alpha.payees.create('Unused payee', active=False)
+    unrelated_tag = alpha.tags.create('Unused tag', active=False)
+    row = loaded(clients[0], resource, ids[resource])
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.goto(commercial_server + '/' + resource)
+            page.get_by_role('button', name=edit_label(resource, row), exact=True).click()
+            if resource == 'transactions':
+                account = page.get_by_label('From account', exact=True)
+                expect(account.locator('option[value="cash"]')).to_have_count(1)
+                expect(account.locator('option[value="bank"]')).to_have_count(0)
+                page.get_by_label('Type', exact=True).select_option('Transfer')
+                destination = page.get_by_label('To account', exact=True)
+                expect(destination.locator('option[value="cash"]')).to_have_count(0)
+                expect(destination.locator('option[value="bank"]')).to_have_count(0)
+                page.get_by_label('Type', exact=True).select_option('Expense')
+                payee = page.get_by_label('Payee / customer', exact=True)
+                expect(payee.locator(f'option[value="{ids["payees"]}"]')).to_have_count(1)
+                expect(payee.locator(f'option[value="{unrelated_payee["id"]}"]')).to_have_count(0)
+            elif resource == 'journals':
+                target = page.get_by_label('Target', exact=True)
+                expect(target.nth(1).locator('option[value="cash"]')).to_have_count(1)
+                expect(target.nth(1).locator('option[value="bank"]')).to_have_count(0)
+                payee = page.get_by_label('Payee / customer', exact=True)
+                expect(payee.first.locator(f'option[value="{ids["payees"]}"]')).to_have_count(1)
+                expect(payee.nth(1).locator(f'option[value="{ids["payees"]}"]')).to_have_count(0)
+                page.get_by_role('button', name='Add posting', exact=True).click()
+                expect(target.nth(2).locator('option[value="cash"]')).to_have_count(0)
+                expect(payee.nth(2).locator(f'option[value="{ids["payees"]}"]')).to_have_count(0)
+                page.get_by_role('button', name='Remove posting 3', exact=True).click()
+            if resource != 'journals':
+                tags = page.get_by_label('Tags', exact=True)
+                expect(tags.locator(f'option[value="{ids["tags"]}"]')).to_have_count(1)
+                expect(tags.locator(f'option[value="{unrelated_tag["id"]}"]')).to_have_count(0)
+            with page.expect_response(lambda response: response.request.method == 'PATCH') as saved:
+                page.get_by_role('button', name='Save changes', exact=True).click()
+            assert saved.value.status == 200
+            assert saved.value.request.post_data_json['baseline'] == row['baseline']
+            actual = loaded(clients[0], resource, row['id'])
+            if resource == 'transactions':
+                assert actual['account_id'] == row['account_id'] and actual['payee_id'] == row['payee_id']
+            if resource != 'journals':
+                assert actual['tag_ids'] == row['tag_ids']
+            else:
+                assert actual['postings'] == row['postings']
+        finally:
+            browser.close()
+
+
+@pytest.mark.parametrize('resource', ['accounts', 'categories'])
+def test_parent_choices_follow_two_level_compatibility(commercial, commercial_server, resource):
+    alpha, _, clients, ids = commercial
+    if resource == 'accounts':
+        child = alpha.accounts.create('Hierarchy child', 'Other', '0', classification='Asset', parent_id='cash')
+        sibling = alpha.accounts.create('Other child', 'Other', '0', classification='Asset', parent_id='cash')
+        other = alpha.accounts.create('Other group root', 'Other', '0', classification='Liability')
+        field, group, new_group = 'Parent account', 'Classification', 'Liability'
+    else:
+        child = alpha.categories.create('Hierarchy child', 'Expense', parent_id='office')
+        sibling = alpha.categories.create('Other child', 'Expense', parent_id='office')
+        other = alpha.categories.create('Other group root', 'Income')
+        field, group, new_group = 'Parent category', 'Kind', 'Income'
+    root = loaded(clients[0], resource, ids[resource])
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.goto(commercial_server + '/' + resource)
+            page.get_by_role('button', name=edit_label(resource, root), exact=True).click()
+            expect(page.get_by_label(field, exact=True).locator('option')).to_have_count(1)
+            page.get_by_role('button', name='Back to records', exact=True).click()
+            page.get_by_role('button', name=edit_label(resource, child), exact=True).click()
+            parent = page.get_by_label(field, exact=True)
+            expect(parent.locator(f'option[value="{child["id"]}"]')).to_have_count(0)
+            expect(parent.locator(f'option[value="{sibling["id"]}"]')).to_have_count(0)
+            expect(parent.locator(f'option[value="{other["id"]}"]')).to_have_count(0)
+            expect(parent.locator(f'option[value="{root["id"]}"]')).to_have_count(1)
+            page.get_by_label(group, exact=True).select_option(new_group)
+            expect(parent).to_have_value('')
+            expect(parent.locator(f'option[value="{root["id"]}"]')).to_have_count(0)
+            expect(parent.locator(f'option[value="{other["id"]}"]')).to_have_count(1)
+            parent.select_option(other['id'])
+            with page.expect_response(lambda response: response.request.method == 'PATCH') as saved:
+                page.get_by_role('button', name='Save changes', exact=True).click()
+            assert saved.value.status == 200
+            assert saved.value.request.post_data_json['baseline'] == child['baseline']
+            assert loaded(clients[0], resource, child['id'])['parent_id'] == other['id']
+        finally:
+            browser.close()

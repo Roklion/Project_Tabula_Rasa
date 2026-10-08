@@ -299,6 +299,7 @@ expose a raw traceback for this configuration failure.
 - Protected mutations submit the baseline captured at load. Conflicts retain the
   draft and original token. Review latest record offers Keep draft or Discard
   draft and reload; only the latter replaces fields and metadata together.
+  Active accounts deactivate only through the confirmed Deactivate action; inactive accounts may reactivate through Active and Save changes. Parent choices contain compatible roots, and parents with children remain roots. Bookkeeping selectors retain only each loaded field/posting's historical inactive references alongside active choices.
   Deletion/deactivation requires acknowledgement; merges retain target/source
   tokens. Successful saves advance the baseline from the confirmed response.
   No mutation retries automatically. Journal target selectors show Choose target

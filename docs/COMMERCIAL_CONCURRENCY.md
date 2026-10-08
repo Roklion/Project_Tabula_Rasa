@@ -12,7 +12,7 @@ for the remaining #221 workflow tickets.
 
 Existing accounts, categories, payees, tags, simple transactions, advanced journals
 and mileage trips can be edited through the compiled browser, API, application
-services and PostgreSQL. Accounts deactivate rather than delete. Categories,
+services and PostgreSQL. Accounts deactivate rather than delete; active accounts use the confirmed Deactivate action. Inactive accounts may be reactivated through Active and Save changes. Parent choices contain compatible roots only; records with children must stay roots. Bookkeeping selectors offer active references and only the inactive associations retained by that loaded field/posting. Categories,
 payees and tags retain fresh reference checks before removal. Payee/tag merges
 require the target and every selected source baseline. Derived mixed-use and
 depreciation transactions retain their source owner and have no generic editor.

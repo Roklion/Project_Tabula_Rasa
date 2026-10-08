@@ -13,3 +13,9 @@ export function useReferenceChoices(session: Session) {
     error: [accounts, categories, payees, tags].find(query => query.isError)?.error,
   };
 }
+
+// Match historical-reference eligibility at the domain mutation boundary.
+export function activeChoices<T extends { id: string; name: string; active: boolean }>(rows: T[], retainedIds: (string | undefined)[] = []) {
+  return rows.filter(row => row.active || retainedIds.includes(row.id))
+    .map(row => ({ ...row, name: row.active ? row.name : `${row.name} (inactive)` }));
+}

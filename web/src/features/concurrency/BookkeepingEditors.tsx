@@ -7,7 +7,7 @@ import { ProtectedEditor } from './ProtectedEditor';
 import { RecordList } from './RecordList';
 import { latest } from './mutations';
 import { SelectField, TextField } from './Fields';
-import { useReferenceChoices } from './useReferenceChoices';
+import { activeChoices, useReferenceChoices } from './useReferenceChoices';
 
 const options = (values: string[]) => values.map(value => ({ id: value, name: value }));
 const blank = { id: '', name: 'None' };
@@ -24,18 +24,19 @@ function transactionLoaded(row: Schemas['Transaction']) {
 function TransactionFields({ form }: { form: UseFormReturn<Schemas['TransactionChanges']> }) {
   const session = useEntity();
   const choices = useReferenceChoices(session);
+  const original = form.formState.defaultValues;
   const kind = form.watch('kind');
   if (choices.pending) return <LoadingState label="Loading choices…" />;
   if (choices.error) return <ErrorNotice error={choices.error} />;
   return <><SelectField form={form} name="kind" label="Type" options={options(['Income', 'Expense', 'Transfer'])} />
     <TextField form={form} name="txn_date" label="Date" type="date" />
     <TextField form={form} name="amount" label="Amount" />
-    <SelectField form={form} name="account_id" label={kind === 'Income' ? 'To account' : 'From account'} options={choices.accounts} />
-    {kind === 'Transfer' ? <SelectField form={form} name="to_account_id" label="To account" options={[blank, ...choices.accounts]} />
+    <SelectField form={form} name="account_id" label={kind === 'Income' ? 'To account' : 'From account'} options={activeChoices(choices.accounts, [original?.account_id])} />
+    {kind === 'Transfer' ? <SelectField form={form} name="to_account_id" label="To account" options={[blank, ...activeChoices(choices.accounts, [original?.to_account_id])]} />
       : <SelectField form={form} name="category_id" label="Category" options={[blank, ...choices.categories.filter(row => row.kind === kind)]} />}
-    <SelectField form={form} name="payee_id" label="Payee / customer" options={[blank, ...choices.payees]} />
+    <SelectField form={form} name="payee_id" label="Payee / customer" options={[blank, ...activeChoices(choices.payees, [original?.payee_id])]} />
     <TextField form={form} name="new_payee_name" label="New payee name (optional)" />
-    <SelectField form={form} name="tag_ids" label="Tags" options={choices.tags} multiple />
+    <SelectField form={form} name="tag_ids" label="Tags" options={activeChoices(choices.tags, original?.tag_ids ?? [])} multiple />
     <TextField form={form} name="new_tag_name" label="New tag name (optional)" />
     <TextField form={form} name="description" label="Description / memo" />
     <TextField form={form} name="reference" label="Reference" /></>;
@@ -65,17 +66,21 @@ function JournalFields({ form }: { form: UseFormReturn<Schemas['JournalChanges']
   if (choices.error) return <ErrorNotice error={choices.error} />;
   return <><TextField form={form} name="txn_date" label="Date" type="date" />
     <TextField form={form} name="description" label="Description / memo" />
-    {lines.fields.map((line, index) => <div className="posting" key={line.formKey}>
+    {lines.fields.map((line, index) => {
+      const original = form.formState.defaultValues?.postings?.find(posting => posting?.id === line.id);
+      const accounts = activeChoices(choices.accounts, [original?.target_type === 'account' ? original.target_id : undefined]);
+      const payees = activeChoices(choices.payees, [original?.payee_id]);
+      return <div className="posting" key={line.formKey}>
       <h3>Posting {index + 1}</h3>
       <SelectField form={form} name={`postings.${index}.target_type`} label="Account or category" options={options(['account', 'category'])}
         onChange={() => form.setValue(`postings.${index}.target_id`, '', { shouldDirty: true })} />
-      <SelectField form={form} name={`postings.${index}.target_id`} label="Target" options={[{ id: '', name: 'Choose target' }, ...(form.watch(`postings.${index}.target_type`) === 'account' ? choices.accounts : choices.categories)]} />
+      <SelectField form={form} name={`postings.${index}.target_id`} label="Target" options={[{ id: '', name: 'Choose target' }, ...(form.watch(`postings.${index}.target_type`) === 'account' ? accounts : choices.categories)]} />
       <SelectField form={form} name={`postings.${index}.side`} label="Side" options={options(['Debit', 'Credit'])} />
       <TextField form={form} name={`postings.${index}.amount`} label="Amount" />
-      <SelectField form={form} name={`postings.${index}.payee_id`} label="Payee / customer" options={[blank, ...choices.payees]} />
+      <SelectField form={form} name={`postings.${index}.payee_id`} label="Payee / customer" options={[blank, ...payees]} />
       <TextField form={form} name={`postings.${index}.description`} label="Description" />
       <button type="button" disabled={lines.fields.length <= 2} onClick={() => lines.remove(index)}>Remove posting {index + 1}</button>
-    </div>)}
+    </div>; })}
     <button type="button" onClick={() => lines.append({ id: crypto.randomUUID(), target_type: 'account', target_id: '', side: 'Debit', amount: '0.00', payee_id: '', description: '' })}>Add posting</button>
     <p className="muted">Debits and credits must balance. Saving validates the complete journal.</p>
   </>;
@@ -105,7 +110,7 @@ function MileageFields({ form }: { form: UseFormReturn<Schemas['MileageChanges']
   return <><TextField form={form} name="trip_date" label="Trip date" type="date" />
     <TextField form={form} name="vehicle" label="Vehicle" />
     <TextField form={form} name="miles" label="Business miles" />
-    <SelectField form={form} name="tag_ids" label="Tags" options={choices.tags} multiple />
+    <SelectField form={form} name="tag_ids" label="Tags" options={activeChoices(choices.tags, form.formState.defaultValues?.tag_ids ?? [])} multiple />
     <TextField form={form} name="new_tag_name" label="New tag name (optional)" />
     <TextField form={form} name="start_location" label="Starting location" />
     <TextField form={form} name="destination" label="Destination" />
