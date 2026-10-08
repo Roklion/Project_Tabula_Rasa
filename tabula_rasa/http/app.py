@@ -17,13 +17,14 @@ from .static import HashedAssets
 from .alpha import gate_response
 
 from tabula_rasa.errors import StorageError
+from tabula_rasa.application.mileage import MileageValidationError
 from .composition import open_runtime
 from .config import HttpSettings
 from .errors import (
     TransportError, error_response, handle_error, handle_http_error, handle_validation,
 )
 from .models.common import Health, Version
-from .routes import accounts, session
+from .routes import accounting, accounts, mileage, references, session
 
 logger = logging.getLogger("tabula_rasa.http")
 
@@ -48,6 +49,7 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
     )
     app.add_exception_handler(TransportError, handle_error)
     app.add_exception_handler(StorageError, handle_error)
+    app.add_exception_handler(MileageValidationError, handle_error)
     app.add_exception_handler(RequestValidationError, handle_validation)
     app.add_exception_handler(HTTPException, handle_http_error)
 
@@ -112,6 +114,12 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
 
     app.include_router(session.router)
     app.include_router(accounts.router)
+    app.include_router(references.categories)
+    app.include_router(references.payees)
+    app.include_router(references.tags)
+    app.include_router(accounting.transactions)
+    app.include_router(accounting.journals)
+    app.include_router(mileage.router)
     assets = Path(static_dir) if static_dir is not None else Path(__file__).resolve().parents[2] / "web" / "dist"
     if not schema_only and assets.is_dir():
         app.mount("/assets", HashedAssets(directory=assets / "assets"), name="assets")

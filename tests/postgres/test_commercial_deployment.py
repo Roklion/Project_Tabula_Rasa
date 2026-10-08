@@ -35,6 +35,20 @@ def test_hosted_gate_native_fixture_isolation_and_repeat_seed_refusal(database, 
         assert len(rows) == 1 and rows[0]["name"] == "Deployment connectivity"
         assert rows[0]["opening_balance"] == "0.00"
         assert client.get("/api/v1/entities/other-synthetic/accounts").status_code == 403
+        # The hosted gate preserves #280's CSRF and loaded-baseline boundary.
+        session = client.get("/api/v1/session").json()
+        headers = {"Origin": configured.public_origin, "X-CSRF-Token": session["csrf_token"]}
+        path = "/api/v1/entities/alpha-synthetic/accounts/" + rows[0]["id"]
+        changes = {key: rows[0][key] for key in ("type", "classification", "opening_balance", "active", "parent_id")}
+        changes["name"] = "Revised synthetic account"
+        missing = client.patch(path, headers=headers, json={"changes": changes})
+        assert missing.status_code == 422 and missing.json()["error"]["code"] == "baseline_required"
+        payload = {"baseline": rows[0]["baseline"], "changes": changes}
+        assert client.patch(path, json=payload).status_code == 403
+        saved = client.patch(path, headers=headers, json=payload)
+        assert saved.status_code == 200 and saved.json()["baseline"] != rows[0]["baseline"]
+        stale = client.patch(path, headers=headers, json=payload)
+        assert stale.status_code == 409 and stale.json()["error"]["code"] == "stale"
         assert other.accounts.list()[0]["name"] == "Other environment only"
 
 

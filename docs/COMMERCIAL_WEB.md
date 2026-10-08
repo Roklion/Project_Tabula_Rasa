@@ -19,6 +19,11 @@ Repository implementation does not establish reachable staging, external-beta
 readiness or production authority. Streamlit/Sheets
 continues as the internal/reference runtime.
 
+#280 adds the [protected commercial edit/delete bridge](COMMERCIAL_CONCURRENCY.md)
+over those foundations, carrying loaded baselines through actual browser/API
+mutations while preserving service-owned concurrency and compatibility.
+Broader domain workflow migration remains #281–#286.
+
 ## Package and build ownership
 
 Keep one repository, the existing Python package and existing Alembic chain.
@@ -151,8 +156,11 @@ npm --prefix web test
 API tests call the service boundary with fakes and native PostgreSQL; browser
 tests cover visible loading/validation/conflict and entity-cache isolation.
 #280 adds the two-loaded-client stale edit/delete and missing-baseline scenarios
-against real PostgreSQL. Full repository gates still apply before initial
-publication and terminal review; focused checks apply between those gates.
+against real PostgreSQL. Run affected tests and fast lint/type/style checks before
+publishing or pushing review fixes. Repository CI runs the full suite concurrently
+with review; its current-revision `Full test suite` check must succeed before
+review-loop completion. A full local run is exceptional diagnostic work, not a
+publication or terminal-review prerequisite. See [Development](DEVELOPMENT.md#authoritative-ci-and-required-check).
 
 ## Hosted environment contract
 

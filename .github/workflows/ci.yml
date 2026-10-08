@@ -81,6 +81,19 @@ jobs:
     name: Browser and generated API contract
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18.6
+        env:
+          POSTGRES_USER: tabula_test
+          POSTGRES_DB: tabula_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U tabula_test -d tabula_test"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      TABULA_RASA_TEST_DATABASE_URL: postgresql+psycopg://tabula_test@127.0.0.1:5432/tabula_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -93,8 +106,8 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - name: Install schema-export dependencies
-        run: python -m pip install -r requirements-api.txt -r requirements-postgres.txt
+      - name: Install development dependencies
+        run: python -m pip install -r requirements-dev.txt
       - run: npm --prefix web ci
       - run: python -m tabula_rasa.http.export_openapi --output contracts/http/openapi.json
       - run: npm --prefix web run api:generate
@@ -110,6 +123,11 @@ jobs:
           SCHEMA=$(python -c 'from tabula_rasa.infrastructure.postgres.migrations import head_revision; print(head_revision())')
           docker build --platform linux/amd64 --build-arg RELEASE_ID="$GITHUB_SHA" --build-arg SCHEMA_REVISION="$SCHEMA" -f deploy/commercial/Dockerfile -t tabula-commercial:ci .
           docker run --rm tabula-commercial:ci python -c 'import sys; from tabula_rasa.http.app import create_app; create_app(schema_only=True).openapi(); assert "streamlit" not in sys.modules'
+      - run: python -m playwright install --with-deps chromium
+      - name: Run native browser concurrency tests
+        run: python -m pytest tests/postgres/test_browser_baselines.py
+        env:
+          TABULA_RASA_REQUIRE_BROWSER_TESTS: '1'
 
   full-suite:
     name: Full test suite

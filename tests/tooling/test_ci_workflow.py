@@ -65,11 +65,15 @@ def test_ci_preserves_complete_python_and_windows_coverage() -> None:
         "python -m pytest tests/tooling/test_codex_environment_setup.py "
     ) for step in windows["steps"])
 
-    # The browser job keeps its own checks without repeating Python or DB suites.
+    # The browser job runs the compiled SPA against a disposable DB; it does
+    # not repeat the full Python suite or Python lint.
     browser = jobs["browser"]
-    assert "services" not in browser
-    assert not any("pytest" in step.get("run", "") or
+    assert "postgres" in browser["services"]
+    assert not any(step.get("run", "").startswith("python -m pytest -ra") or
                    "ruff check" in step.get("run", "") for step in browser["steps"])
+    native = next(step for step in browser["steps"] if step.get("name") == "Run native browser concurrency tests")
+    assert native["env"]["TABULA_RASA_REQUIRE_BROWSER_TESTS"] == "1"
+    assert browser["env"]["TABULA_RASA_TEST_DATABASE_URL"].startswith("postgresql+psycopg://")
 
 
 def test_required_gate_waits_for_all_suites_even_when_a_dependency_fails() -> None:

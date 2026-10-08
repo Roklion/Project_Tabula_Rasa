@@ -10,6 +10,17 @@ bookkeeping maintenance or PostgreSQL stops before Sheets initialization; it
 does not silently open another backend. Backend changes have no UI picker and
 follow the [controlled cutover procedure](BOOKKEEPING_CUTOVER.md).
 
+The separate commercial technical-alpha browser now supports editing existing
+accounts, categories, payees/tags, simple transactions, journals and mileage.
+Accounts deactivate rather than delete; referenced records retain their deletion
+guards. If another client changes a loaded record, your save/delete is refused
+and your draft stays visible. Choose **Review latest record**, then **Keep draft**
+or **Discard draft and reload**; review the latest values before saving again.
+Payee/tag merges also protect every loaded target/source. See
+[Commercial concurrency](COMMERCIAL_CONCURRENCY.md) for scope and local validation.
+These forms do not change the Streamlit workflows described below or establish
+commercial production readiness.
+
 ## Sign in and select a business
 
 Enter the application password before any ledger page or workbook data is

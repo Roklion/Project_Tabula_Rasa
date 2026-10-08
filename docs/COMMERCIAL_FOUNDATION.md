@@ -17,11 +17,11 @@ query/mutation conventions and loaded-form primitives.
 This is a synthetic local technical-alpha foundation. Domain workflow coverage
 belongs to #281–#286, real edit/delete baseline propagation to #280, membership
 and session lifecycle to #222, deployment and its temporary hosted gate to #279,
-operations to #223, and broader browser/device quality to #287. There are no
-commercial edit/delete endpoints here. The returned account baseline and
-separate form metadata enable #280; they do not establish its two-client
-commercial-caller acceptance or production activation. Streamlit remains the
-internal/reference edition.
+operations to #223, and broader browser/device quality to #287.
+[Commercial concurrency](COMMERCIAL_CONCURRENCY.md) documents #280's subsequent
+protected edit/delete endpoints and forms, loaded-token enforcement and native
+two-client browser validation. Production activation remains separate. Streamlit
+remains the internal/reference edition.
 
 ## Transport and service composition
 
@@ -182,6 +182,9 @@ loaded metadata retention, unsaved navigation and reusable states. Playwright
 smoke tests use intercepted synthetic responses at 1440, 1200, 900, 390 and
 320 CSS-pixel widths. This is Chromium smoke evidence, not real-device or full
 cross-browser certification; #287 owns that wider gate.
+If a development preview occupies port 5173, set `TABULA_RASA_SMOKE_PORT` to an
+unused loopback port before `npm --prefix web run test:e2e`. The smoke runner
+starts its own server and does not reuse or stop the existing preview.
 
 [Repository CI](DEVELOPMENT.md#authoritative-ci-and-required-check) exports and
 regenerates both contract artifacts, rejects drift, compiles the consumer and
