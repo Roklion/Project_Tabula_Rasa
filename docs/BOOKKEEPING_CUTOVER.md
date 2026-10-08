@@ -371,7 +371,7 @@ this guide.
 
 ## Implementation evidence and remaining operational acceptance
 
-Local #299 implementation verification on 2026-10-08: **261 affected tests
+Initial focused #299 implementation verification on 2026-10-08: **261 affected tests
 passed across focused runs**, with no skips: 170 application/HTTP,
 backend/document composition, source migration and export tests; 22 database
 configuration tests; and 69 native PostgreSQL tests. The native runs covered
@@ -391,6 +391,16 @@ Scoped Ruff, working/branch whitespace and generated OpenAPI contract checks
 passed. This is focused local evidence; the full-suite publication/review checks
 and linked-issue tracking remain separate. No private source, live migration,
 production authority switch or deployed authentication is claimed.
+
+Publication validation on 2026-10-08 after integrating #280/current `main`
+at `3eb65b0`: full Ruff and **all 1,970 Python tests passed**, with zero skips,
+in 4,054.97 seconds against the dedicated Neon test project. Native browser
+checks were required and ran against the compiled shared application. Browser
+build/lint, all 14 browser unit tests, deterministic OpenAPI comparison and
+branch whitespace checks also passed. The only warning was an unrelated
+Starlette/httpx deprecation. All fixture-owned test databases were removed.
+Current-revision hosted CI and independent agent reviews remain required;
+local validation does not close #299 or authorize a live cutover.
 
 Synthetic native PostgreSQL tests cover complete final-format profiles, two
 isolated profiles with shared source IDs, exact financial/reference/document
