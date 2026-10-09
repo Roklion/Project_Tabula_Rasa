@@ -12,11 +12,55 @@ from tabula_rasa.infrastructure.postgres.documents import PostgresReceiptReposit
 from tabula_rasa.http.context import TrustedDevelopmentContext
 from tests.postgres.test_browser_baselines import commercial_server as commercial_server
 from tests.postgres.test_http_mileage_documents import commercial as commercial, document_store as document_store
+from tests.postgres.test_http_mileage_documents import TRIP, HEADERS, PREFIX
 
 
 @pytest.fixture
 def browser_resolver():
     return TrustedDevelopmentContext('alpha', 'csrf', entity_ids=('beta',))
+
+
+def test_mileage_revisit_waits_for_fresh_detail_and_surfaces_deleted_record(commercial, commercial_server):
+    _, _, (client, _), _ = commercial
+    created = client.post(PREFIX + 'mileage', headers=HEADERS, json=TRIP).json()['items'][0]
+    path = '/mileage/' + created['id']
+    endpoint = '**/api/v1/entities/alpha/mileage/' + created['id']
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.goto(commercial_server + path)
+            expect(page.get_by_label('Notes', exact=True)).to_have_value(TRIP['notes'])
+            page.get_by_role('button', name='Back to records', exact=True).click()
+            updated = client.patch(PREFIX + 'mileage/' + created['id'], headers=HEADERS,
+                                   json={'baseline': created['baseline'], 'changes': {**TRIP, 'notes': 'Other client edit'}})
+            assert updated.status_code == 200
+            waiting = []
+            page.route(endpoint, lambda route: waiting.append(route))
+            page.go_back()
+            expect(page.get_by_role('heading', name='Mileage trip', exact=True)).to_be_visible()
+            expect(page.get_by_label('Notes', exact=True)).to_have_count(0)
+            expect(page.get_by_role('status').filter(has_text='Loading')).to_be_visible()
+            assert len(waiting) == 1
+            waiting.pop().continue_()
+            expect(page.get_by_label('Notes', exact=True)).to_have_value('Other client edit')
+            page.unroute(endpoint)
+            page.get_by_label('Notes', exact=True).fill('Fresh visit draft')
+            with page.expect_response(lambda response: response.request.method == 'PATCH') as saved:
+                page.get_by_role('button', name='Save changes', exact=True).click()
+            assert saved.value.status == 200
+            assert saved.value.request.post_data_json['baseline'] == updated.json()['baseline']
+            expect(page.get_by_role('status').filter(has_text='Changes saved.')).to_be_visible()
+            page.get_by_role('button', name='Back to records', exact=True).click()
+            deleted = client.request('DELETE', PREFIX + 'mileage/' + created['id'], headers=HEADERS,
+                                    json={'baseline': saved.value.json()['baseline']})
+            assert deleted.status_code == 200
+            page.go_back()
+            expect(page.get_by_role('alert')).to_contain_text('record')
+            expect(page.get_by_label('Notes', exact=True)).to_have_count(0)
+            expect(page.get_by_role('button', name='Save changes', exact=True)).to_have_count(0)
+        finally:
+            browser.close()
 
 
 @pytest.mark.parametrize('width', [1440, 390])
