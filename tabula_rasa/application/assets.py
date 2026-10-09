@@ -4,13 +4,14 @@ from datetime import date
 from uuid import uuid4
 
 from tabula_rasa.asset import (
+    ASSET_TYPES,
     prepare_asset,
     edit_asset,
     override_asset_period,
     remove_asset_period_override,
     _decode_overrides,
 )
-from tabula_rasa.depreciation_posting import asset_schedule
+from tabula_rasa.depreciation_posting import asset_schedule, posted_asset_schedule
 from tabula_rasa.errors import StorageConflictError
 from tabula_rasa.ledger_validation import iso_date
 from tabula_rasa.reference_data import clean_text
@@ -20,12 +21,24 @@ from .journals import JournalService
 
 
 class AssetService:
+    types = ASSET_TYPES
+
     def __init__(self, repository: AssetRepository, *, journals: JournalService):
         self._repository = repository
         self._journals = journals
 
     def list(self, *, fresh=False):
         return self._repository.list(fresh=fresh)
+
+    def detail(self, asset_id, *, fresh=False):
+        asset, history = self._repository.read(
+            clean_text(asset_id, 'Asset ID', required=True), fresh=fresh
+        )
+        overrides = bool(_decode_overrides(asset.get('schedule_overrides', '')))
+        schedule = posted_asset_schedule(asset, [row['id'] for row in history])
+        return dict(asset=asset, schedule=schedule, history=history,
+                    terms_locked=bool(history) or overrides, posting_accounts_locked=bool(history),
+                    can_delete=not history and not overrides)
 
     def create(self, *, asset_id=None, **data):
         identity = (

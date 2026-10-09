@@ -48,6 +48,10 @@ class RecurringService:
 
     def list(self, *, fresh=False):
         snapshot = self._repository.snapshot(fresh=fresh)
+        return self._schedules(snapshot)
+
+    @staticmethod
+    def _schedules(snapshot):
         projections = {
             str(record.get("id", "")): record for record in snapshot.transactions
         }
@@ -76,6 +80,16 @@ class RecurringService:
         return sorted(
             schedules, key=lambda item: (item["start_date"], item["id"]), reverse=True
         )
+
+    def detail(self, schedule_id, *, fresh=False):
+        identity = clean_text(schedule_id, 'Schedule ID', required=True)
+        snapshot = self._repository.snapshot(fresh=fresh)
+        schedule = next((row for row in self._schedules(snapshot) if row['id'] == identity), None)
+        if schedule is None:
+            raise StorageNotFoundError('Recurring schedule no longer exists')
+        return dict(schedule=schedule,
+                    transactions=[row for row in snapshot.transactions if row.get('recurring_schedule_id') == identity],
+                    mixed_sources=[row for row in snapshot.mixed_sources if row.get('recurring_schedule_id') == identity])
 
     def get(self, schedule_id, *, fresh=False):
         identity = clean_text(schedule_id, "Schedule ID", required=True)

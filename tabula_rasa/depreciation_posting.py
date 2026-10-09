@@ -8,6 +8,7 @@ accumulated depreciation without changing the ledger's accounting model.
 from __future__ import annotations
 
 from datetime import date
+from dataclasses import replace
 from decimal import Decimal, InvalidOperation
 import json
 from uuid import NAMESPACE_URL, uuid5
@@ -18,6 +19,17 @@ from tabula_rasa.errors import StorageValidationError
 
 
 DEPRECIATION_SOURCE_TYPE = "depreciation"
+
+
+def posted_asset_schedule(asset, posted_ids):
+    """Annotate the canonical schedule with durable period identities."""
+    posted = set(posted_ids)
+    return [
+        replace(period, posting_status='Posted', journal_entry_id=identity)
+        if (identity := depreciation_entry_id(asset['id'], period.sequence)) in posted
+        else period
+        for period in asset_schedule(asset)
+    ]
 
 
 def _normalize_id(value) -> str:

@@ -9,6 +9,8 @@ import { EntitySelector } from './EntitySelection';
 export function Shell() {
   const session = useEntity();
   const location = useLocation();
+  const workflowName = location.pathname.startsWith('/mixed-use') ? 'Mixed-use expenses'
+    : location.pathname.startsWith('/recurring') ? 'Recurring expenses' : undefined;
   const [menu, setMenu] = useState({ location, open: false });
   // Reset on each successful navigation, including Back to a previous entry.
   // A blocked navigation retains its location and the initiating link.
@@ -41,7 +43,7 @@ export function Shell() {
       <p className={styles.footer}>Bookkeeping with clarity.</p>
     </aside>
     <div className={styles.content}>
-      <header className={styles.topbar}><span>{navigation.find(([path]) => path === location.pathname
+      <header className={styles.topbar}><span>{workflowName ?? navigation.find(([path]) => path === location.pathname
         || path !== '/' && location.pathname.startsWith(path + '/'))?.[1] ?? 'Page'}</span>
         <span className="muted">{session.entity.name}</span></header>
       <main ref={main} id="main" tabIndex={-1} className={styles.main} key={location.key}><Outlet /></main>

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 import json
@@ -15,10 +15,7 @@ from tabula_rasa.application.services import ApplicationServices
 from tabula_rasa.depreciation import STRAIGHT_LINE_METHOD
 from tabula_rasa.asset import ASSET_TYPES
 from tabula_rasa.page_renderers.workflow_services import asset_service
-from tabula_rasa.depreciation_posting import (
-    asset_schedule,
-    depreciation_entry_id,
-)
+from tabula_rasa.depreciation_posting import posted_asset_schedule
 from tabula_rasa.presentation import render_global_footer, render_page_header
 from tabula_rasa.errors import StorageError
 from tabula_rasa.ledger_validation import decode_receipt_references
@@ -42,14 +39,7 @@ def _overrides(asset: dict) -> dict[int, dict[str, str]]:
 
 
 def _schedule(asset: dict):
-    posted_ids = set(asset.get("posted_entry_ids", []))
-    return [
-        replace(period, posting_status="Posted", journal_entry_id=entry_id)
-        if (entry_id := depreciation_entry_id(asset["id"], period.sequence))
-        in posted_ids
-        else period
-        for period in asset_schedule(asset)
-    ]
+    return posted_asset_schedule(asset, asset.get('posted_entry_ids', []))
 
 
 def _display_status(asset: dict, *, today: date) -> str:
