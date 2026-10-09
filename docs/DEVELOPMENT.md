@@ -93,8 +93,8 @@ and commercial-foundation workflows. Its stable merge-gate check name is
   including the real Python 3.12 setup harness. The remaining suite runs once
   on Linux; no second full Python run is added on Windows.
 - **Browser and generated API contract** retains the existing Node 24/npm
-  contract generation/drift check, TypeScript build, ESLint, Vitest and Chromium
-  Playwright smoke checks, plus compiled-browser concurrency tests against a
+  contract generation/drift check, TypeScript build, ESLint, Vitest and three-engine
+  Playwright shell/accessibility checks, plus compiled-browser concurrency and core workflow tests against a
   disposable PostgreSQL instance. The complete Python suite and lint remain
   owned by the Python job; browser concurrency runs here after the SPA build. The explicitly invoked
   Streamlit viewport scripts below remain optional developer checks.
