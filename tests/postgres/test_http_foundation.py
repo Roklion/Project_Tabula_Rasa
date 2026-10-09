@@ -69,6 +69,7 @@ def test_default_local_runtime_starts_with_seeded_fixture_and_real_pool(database
     from tabula_rasa.infrastructure.postgres.config import DatabaseSettings
 
     PostgresLedgerSetupRepository.create_entity(database, "alpha-synthetic", "Synthetic development")
+    PostgresLedgerSetupRepository.create_entity(database, "beta-synthetic", "Beta development")
     monkeypatch.setattr("tabula_rasa.http.composition.DatabaseSettings.from_environment",
                         lambda **kwargs: DatabaseSettings(database.engine.url))
     settings = HttpSettings("test", "http://testserver", trusted_entity_id="alpha-synthetic")
@@ -77,9 +78,23 @@ def test_default_local_runtime_starts_with_seeded_fixture_and_real_pool(database
         assert session["trusted_development"] is True
         assert session["entity"]["id"] == "alpha-synthetic"
         assert client.get("/health/ready").status_code == 200
+        assert {item["id"] for item in client.get("/api/v1/entities").json()["items"]} == {"alpha-synthetic", "beta-synthetic"}
         assert client.get("/api/v1/entities/alpha-synthetic/accounts").json() == {"items": []}
         response = client.post("/api/v1/entities/alpha-synthetic/accounts",
             headers={"Origin": settings.public_origin, "X-CSRF-Token": session["csrf_token"]},
             json={"name": "Synthetic bank", "type": "Bank", "opening_balance": "10.00"})
         assert response.status_code == 201
         assert client.get("/api/v1/entities/another/accounts").status_code == 403
+
+
+def test_default_runtime_refuses_partial_development_fixture(database, monkeypatch):
+    from tabula_rasa.infrastructure.postgres.config import DatabaseSettings
+    from tests.postgres.test_http_baselines import snapshot
+
+    PostgresLedgerSetupRepository.create_entity(database, "alpha-synthetic", "Alpha development")
+    before = snapshot(database)
+    monkeypatch.setattr("tabula_rasa.http.composition.DatabaseSettings.from_environment",
+                        lambda **kwargs: DatabaseSettings(database.engine.url))
+    with pytest.raises(RuntimeError, match="startup failed"):
+        open_runtime(HttpSettings("test", "http://testserver", trusted_entity_id="alpha-synthetic"))
+    assert snapshot(database) == before  # Startup never creates the missing fixture.

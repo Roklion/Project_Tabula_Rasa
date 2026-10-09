@@ -25,7 +25,7 @@ from .errors import (
     TransportError, error_response, handle_error, handle_http_error, handle_validation,
 )
 from .models.common import Health, Version
-from .routes import accounting, accounts, mileage, references, session
+from .routes import accounting, accounts, mileage, references, reporting, session
 
 logger = logging.getLogger("tabula_rasa.http")
 
@@ -130,6 +130,7 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
     app.include_router(accounting.transactions)
     app.include_router(accounting.journals)
     app.include_router(mileage.router)
+    app.include_router(reporting.router)
     assets = Path(static_dir) if static_dir is not None else Path(__file__).resolve().parents[2] / "web" / "dist"
     if not schema_only and assets.is_dir():
         app.mount("/assets", HashedAssets(directory=assets / "assets"), name="assets")

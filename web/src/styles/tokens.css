@@ -47,3 +47,9 @@ thead { background: #FAFAF8; }
 .checkbox { display: flex; gap: 8px; align-items: center; min-height: 44px; }
 .checkbox input { width: 20px; height: 20px; }
 .posting { padding: 16px; border: 1px solid var(--border); display: grid; gap: 12px; }
+.filterGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 16px; margin: 24px 0; }
+.metrics { display: flex; gap: 32px; flex-wrap: wrap; margin: 16px 0 32px; }
+.metrics dt { color: var(--secondary); }
+.metrics dd { margin: 4px 0 0; font-size: 22px; text-align: left; }
+.postingRow { background: #FAFAF8; }
+#business-selector { max-width: 100%; min-height: 44px; }

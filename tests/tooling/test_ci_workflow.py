@@ -71,7 +71,9 @@ def test_ci_preserves_complete_python_and_windows_coverage() -> None:
     assert "postgres" in browser["services"]
     assert not any(step.get("run", "").startswith("python -m pytest -ra") or
                    "ruff check" in step.get("run", "") for step in browser["steps"])
-    native = next(step for step in browser["steps"] if step.get("name") == "Run native browser concurrency tests")
+    native = next(step for step in browser["steps"] if step.get("name") == "Run native browser concurrency and core workflow tests")
+    assert shlex.split(native['run']) == ['python', '-m', 'pytest',
+        'tests/postgres/test_browser_baselines.py', 'tests/postgres/test_browser_workflows.py']
     assert native["env"]["TABULA_RASA_REQUIRE_BROWSER_TESTS"] == "1"
     assert browser["env"]["TABULA_RASA_TEST_DATABASE_URL"].startswith("postgresql+psycopg://")
 

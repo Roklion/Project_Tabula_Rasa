@@ -38,6 +38,7 @@ def account_balances(
     transactions: Iterable[Mapping[str, Any]],
     *,
     journals: Iterable[Mapping[str, Any]] = (),
+    decimal_values: bool = False,
 ) -> list[dict[str, Any]]:
     """Calculate balances including transfers without affecting P&L."""
     accounts = [dict(account) for account in accounts]
@@ -53,7 +54,7 @@ def account_balances(
     return [
         {
             **account,
-            "balance": float(balances[account["id"]]),
+            "balance": balances[account["id"]] if decimal_values else float(balances[account["id"]]),
         }
         for account in sorted(accounts, key=lambda item: str(item["name"]).casefold())
     ]
@@ -91,6 +92,7 @@ def balance_sheet(
     as_of: date | str | None = None,
     journals: Iterable[Mapping[str, Any]] = (),
     categories: Iterable[Mapping[str, Any]] = (),
+    decimal_values: bool = False,
 ) -> dict[str, Any]:
     """Return classified balances and an accounting-equation check."""
     transaction_rows = [
@@ -103,7 +105,7 @@ def balance_sheet(
         entry for entry in journals
         if as_of is None or str(entry["txn_date"]) <= str(_date_text(as_of))
     ]
-    balance_rows = account_balances(accounts, transaction_rows, journals=journal_rows)
+    balance_rows = account_balances(accounts, transaction_rows, journals=journal_rows, decimal_values=True)
     sections: dict[str, list[dict[str, Any]]] = {
         "Asset": [],
         "Liability": [],
@@ -124,9 +126,9 @@ def balance_sheet(
                 "name": account["name"],
                 "type": account["type"],
                 "parent_id": str(account.get("parent_id") or "").strip(),
-                "balance": float(presented_balance),
-                "direct_balance": float(presented_balance),
-                "rollup_balance": float(presented_balance),
+                "balance": presented_balance,
+                "direct_balance": presented_balance,
+                "rollup_balance": presented_balance,
             }
         )
         totals[classification] += presented_balance
@@ -137,7 +139,7 @@ def balance_sheet(
             {row["id"]: _decimal(row["direct_balance"]) for row in rows},
         )
         for row in rows:
-            row["rollup_balance"] = float(rollup_balances[row["id"]])
+            row["rollup_balance"] = rollup_balances[row["id"]]
 
     current_earnings = sum(
         (category_activity(posting) * (1 if posting["category_kind"] == "Income" else -1)
@@ -147,16 +149,24 @@ def balance_sheet(
     )
     total_equity = totals["Equity"] + current_earnings
     difference = totals["Asset"] - totals["Liability"] - total_equity
-    return {
+    result = {
         "assets": sections["Asset"],
         "liabilities": sections["Liability"],
         "equity": sections["Equity"],
-        "current_earnings": float(current_earnings),
-        "total_assets": float(totals["Asset"]),
-        "total_liabilities": float(totals["Liability"]),
-        "total_equity": float(total_equity),
-        "difference": float(difference),
+        "current_earnings": current_earnings,
+        "total_assets": totals["Asset"],
+        "total_liabilities": totals["Liability"],
+        "total_equity": total_equity,
+        "difference": difference,
     }
+    if not decimal_values:
+        for rows in sections.values():
+            for row in rows:
+                for key in ("balance", "direct_balance", "rollup_balance"):
+                    row[key] = float(row[key])
+        for key in ("current_earnings", "total_assets", "total_liabilities", "total_equity", "difference"):
+            result[key] = float(result[key])
+    return result
 
 
 def profit_and_loss(
@@ -166,7 +176,8 @@ def profit_and_loss(
     end: date | str | None = None,
     journals: Iterable[Mapping[str, Any]] = (),
     categories: Iterable[Mapping[str, Any]] = (),
-) -> dict[str, float]:
+    decimal_values: bool = False,
+) -> dict[str, float | Decimal]:
     """Return income, expense, and net totals; transfers are excluded."""
     income = Decimal("0")
     expenses = Decimal("0")
@@ -179,9 +190,9 @@ def profit_and_loss(
         else:
             expenses += activity
     return {
-        "income": float(income),
-        "expenses": float(expenses),
-        "net": float(income - expenses),
+        "income": income if decimal_values else float(income),
+        "expenses": expenses if decimal_values else float(expenses),
+        "net": income - expenses if decimal_values else float(income - expenses),
     }
 
 

@@ -2,21 +2,29 @@ import { createBrowserRouter, createMemoryRouter } from 'react-router-dom';
 import { ContextBoundary } from './ContextBoundary';
 import { Shell } from './Shell';
 import { navigation } from './navigation';
-import { Dashboard, Accounts, PlannedPage, MissingPage, RouteError } from '../features/foundation/Pages';
+import { Accounts, PlannedPage, MissingPage, RouteError } from '../features/foundation/Pages';
 import { ReferencesPage } from '../features/concurrency/ReferenceEditors';
 import { BookkeepingPage } from '../features/concurrency/BookkeepingEditors';
 import { ManagedMergeForm } from '../features/concurrency/ManagedMergeForm';
+import { ReferenceCreator } from '../features/workflows/ReferenceCreators';
+import { EntryCreator } from '../features/workflows/EntryCreators';
+import { LedgerPage } from '../features/workflows/LedgerPage';
+import { ReportsPage } from '../features/workflows/ReportsPage';
 
 const routes = [{
   element: <ContextBoundary><Shell /></ContextBoundary>,
   errorElement: <RouteError />,
   children: [
-    { index: true, element: <Dashboard /> },
+    { index: true, element: <ReportsPage dashboard /> },
     { path: 'accounts', element: <Accounts /> },
+    { path: 'transactions', element: <LedgerPage /> },
+    { path: 'reports', element: <ReportsPage /> },
+    ...(['accounts', 'categories', 'payees', 'tags'] as const).map(resource => ({ path: resource + '/new', element: <ReferenceCreator key={resource} resource={resource} /> })),
+    ...(['transactions', 'journals'] as const).map(resource => ({ path: resource + '/new', element: <EntryCreator key={resource} resource={resource} /> })),
     ...(['categories', 'payees', 'tags'] as const).map(resource => ({ path: resource, element: <ReferencesPage resource={resource} /> })),
-    ...(['transactions', 'journals', 'mileage'] as const).map(resource => ({ path: resource, element: <BookkeepingPage resource={resource} /> })),
+    ...(['journals', 'mileage'] as const).map(resource => ({ path: resource, element: <BookkeepingPage resource={resource} /> })),
     ...(['payees', 'tags'] as const).map(resource => ({ path: resource + '/merge', element: <><h1>Merge {resource}</h1><ManagedMergeForm key={resource} resource={resource} /></> })),
-    ...navigation.filter(([path]) => !['/', '/accounts', '/categories', '/transactions', '/mileage'].includes(path)).map(([path, name]) => ({
+    ...navigation.filter(([path]) => !['/', '/accounts', '/categories', '/transactions', '/mileage', '/reports'].includes(path)).map(([path, name]) => ({
       path: path.slice(1), element: <PlannedPage title={name} />,
     })),
     { path: '*', element: <MissingPage /> },

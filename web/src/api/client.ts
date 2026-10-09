@@ -44,8 +44,12 @@ export function createApi(fetcher: typeof fetch = (...args) => fetch(...args)) {
   const path = (session: Session, record_id: string) => ({ entity_id: session.entity.id, record_id });
   const listParams = (session: Session, signal?: AbortSignal) => ({ params: { path: { entity_id: session.entity.id } }, signal, headers: headers() });
   const mutationParams = (session: Session, id: string) => ({ params: { path: path(session, id) }, headers: headers(session.csrf_token) });
+  const createParams = (session: Session) => ({ ...listParams(session), headers: headers(session.csrf_token) });
   return {
     session: (signal?: AbortSignal) => safe(async () => unwrap(await client.GET('/api/v1/session', { signal, headers: headers() }))),
+    entities: (signal?: AbortSignal) => safe(async () => unwrap(await client.GET('/api/v1/entities', { signal, headers: headers() }))),
+    selectEntity: (s: Session, entity_id: string) => safe(async () => unwrap(await client.POST('/api/v1/session/entity',
+      { body: { entity_id }, headers: headers(s.csrf_token) }))),
     accounts: (session: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
       '/api/v1/entities/{entity_id}/accounts',
       { params: { path: { entity_id: session.entity.id }, query: { active_only: false } }, signal, headers: headers() },
@@ -60,12 +64,16 @@ export function createApi(fetcher: typeof fetch = (...args) => fetch(...args)) {
       '/api/v1/entities/{entity_id}/accounts/{record_id}/deactivate', { ...mutationParams(s, id), body: { baseline } }))),
     categories: (s: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
       '/api/v1/entities/{entity_id}/categories', listParams(s, signal)))),
+    createCategory: (s: Session, body: Schemas['CategoryCreate']) => safe(async () => unwrap(await client.POST(
+      '/api/v1/entities/{entity_id}/categories', { ...createParams(s), body }))),
     updateCategory: (s: Session, id: string, body: Schemas['CategoryUpdate']) => safe(async () => unwrap(await client.PATCH(
       '/api/v1/entities/{entity_id}/categories/{record_id}', { ...mutationParams(s, id), body }))),
     deleteCategory: (s: Session, id: string, baseline: string) => safe(async () => unwrap(await client.DELETE(
       '/api/v1/entities/{entity_id}/categories/{record_id}', { ...mutationParams(s, id), body: { baseline } }))),
     payees: (s: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
       '/api/v1/entities/{entity_id}/payees', listParams(s, signal)))),
+    createPayee: (s: Session, body: Schemas['ManagedCreate']) => safe(async () => unwrap(await client.POST(
+      '/api/v1/entities/{entity_id}/payees', { ...createParams(s), body }))),
     updatePayee: (s: Session, id: string, body: Schemas['ManagedUpdate']) => safe(async () => unwrap(await client.PATCH(
       '/api/v1/entities/{entity_id}/payees/{record_id}', { ...mutationParams(s, id), body }))),
     removePayee: (s: Session, id: string, baseline: string) => safe(async () => unwrap(await client.DELETE(
@@ -74,6 +82,8 @@ export function createApi(fetcher: typeof fetch = (...args) => fetch(...args)) {
       '/api/v1/entities/{entity_id}/payees/{record_id}/merge', { ...mutationParams(s, id), body }))),
     tags: (s: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
       '/api/v1/entities/{entity_id}/tags', listParams(s, signal)))),
+    createTag: (s: Session, body: Schemas['ManagedCreate']) => safe(async () => unwrap(await client.POST(
+      '/api/v1/entities/{entity_id}/tags', { ...createParams(s), body }))),
     updateTag: (s: Session, id: string, body: Schemas['ManagedUpdate']) => safe(async () => unwrap(await client.PATCH(
       '/api/v1/entities/{entity_id}/tags/{record_id}', { ...mutationParams(s, id), body }))),
     removeTag: (s: Session, id: string, baseline: string) => safe(async () => unwrap(await client.DELETE(
@@ -82,12 +92,20 @@ export function createApi(fetcher: typeof fetch = (...args) => fetch(...args)) {
       '/api/v1/entities/{entity_id}/tags/{record_id}/merge', { ...mutationParams(s, id), body }))),
     transactions: (s: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
       '/api/v1/entities/{entity_id}/transactions', listParams(s, signal)))),
+    createTransaction: (s: Session, body: Schemas['TransactionCreate']) => safe(async () => unwrap(await client.POST(
+      '/api/v1/entities/{entity_id}/transactions', { ...createParams(s), body }))),
     updateTransaction: (s: Session, id: string, body: Schemas['TransactionUpdate']) => safe(async () => unwrap(await client.PATCH(
       '/api/v1/entities/{entity_id}/transactions/{record_id}', { ...mutationParams(s, id), body }))),
     deleteTransaction: (s: Session, id: string, baseline: string) => safe(async () => unwrap(await client.DELETE(
       '/api/v1/entities/{entity_id}/transactions/{record_id}', { ...mutationParams(s, id), body: { baseline } }))),
     journals: (s: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
       '/api/v1/entities/{entity_id}/journals', listParams(s, signal)))),
+    createJournal: (s: Session, body: Schemas['JournalCreate']) => safe(async () => unwrap(await client.POST(
+      '/api/v1/entities/{entity_id}/journals', { ...createParams(s), body }))),
+    ledger: (s: Session, filters: { start?: string; end?: string; kind?: 'All' | 'Income' | 'Expense' | 'Transfer' | 'Journal'; account_ids?: string[]; category_ids?: string[]; tag_ids?: string[] } = {}, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
+      '/api/v1/entities/{entity_id}/ledger', { ...listParams(s, signal), params: { path: { entity_id: s.entity.id }, query: filters } }))),
+    reports: (s: Session, filters: { start?: string; end?: string } = {}, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
+      '/api/v1/entities/{entity_id}/reports/summary', { ...listParams(s, signal), params: { path: { entity_id: s.entity.id }, query: filters } }))),
     updateJournal: (s: Session, id: string, body: Schemas['JournalUpdate']) => safe(async () => unwrap(await client.PATCH(
       '/api/v1/entities/{entity_id}/journals/{record_id}', { ...mutationParams(s, id), body }))),
     deleteJournal: (s: Session, id: string, baseline: string) => safe(async () => unwrap(await client.DELETE(

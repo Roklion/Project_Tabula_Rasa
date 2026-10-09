@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, getcontext, localcontext
 from pathlib import Path
 import subprocess
 import sys
@@ -35,6 +35,42 @@ class FakeLedgerQueryRepository:
         if self.error is not None:
             raise self.error
         return self.snapshot
+
+
+@pytest.mark.parametrize("amount", ["90071992547409.99", "99999999999999999999999999.99"])
+def test_http_report_projection_preserves_cents_and_large_aggregate_totals(amount):
+    from tabula_rasa.http.models.reporting import report_response
+
+    large = Decimal(amount)
+    snapshot = LedgerSnapshot(
+        accounts=(
+            ReportingAccount("bank", "Bank", "Bank", "Asset", large, True),
+            ReportingAccount("child", "Child", "Bank", "Asset", Decimal("0"), True, "bank"),
+            ReportingAccount("capital", "Capital", "Equity", "Equity", large.copy_negate(), True),
+        ),
+        categories=(ReportingCategory("sales", "Sales", "Income"), ReportingCategory("office", "Office", "Expense")),
+        transactions=(
+            LedgerTransaction("income", date(2026, 7, 1), "Income", large, "bank", category_id="sales"),
+            LedgerTransaction("expense", date(2026, 7, 1), "Expense", Decimal("0.01"), "bank", category_id="office"),
+            LedgerTransaction("transfer", date(2026, 7, 1), "Transfer", Decimal("0.02"), "bank", to_account_id="child"),
+        ),
+        journals=(LedgerJournal("income-journal", date(2026, 7, 1), (
+            LedgerPosting("debit", "account", "bank", "Debit", large, 1),
+            LedgerPosting("credit", "category", "sales", "Credit", large, 2),
+        )),),
+    )
+    original_precision = getcontext().prec
+    response = report_response(ReportingService(FakeLedgerQueryRepository(snapshot)), snapshot, start=None, end=None)
+    assert getcontext().prec == original_precision
+    with localcontext(prec=60):
+        income, net, assets, bank = (format(value, ".2f") for value in (large * 2, large * 2 - Decimal("0.01"), large * 3 - Decimal("0.01"), large * 3 - Decimal("0.03")))
+    assert response.profit_loss.model_dump() == {"income": income, "expenses": "0.01", "net": net}
+    assert response.balance_sheet.total_assets == response.balance_sheet.total_equity == assets
+    assert response.balance_sheet.current_earnings == net
+    assert response.balance_sheet.difference == "0.00"
+    parent = next(row for row in response.balance_sheet.assets if row.id == "bank")
+    assert parent.direct_balance == bank and parent.rollup_balance == assets
+    assert {row.id: row.balance for row in response.account_balances} == {"bank": bank, "child": "0.02", "capital": "-" + amount}
 
 
 @pytest.fixture

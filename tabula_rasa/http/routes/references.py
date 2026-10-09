@@ -4,12 +4,18 @@ from ..baselines import merge_baselines, required_baseline
 from ..errors import ERROR_RESPONSES
 from ..models.mutations import MutationResult, ProtectedMutation
 from ..models.references import (
-    Category, CategoryList, CategoryUpdate, ManagedList, ManagedMerge,
+    Category, CategoryCreate, CategoryList, CategoryUpdate, ManagedCreate, ManagedList, ManagedMerge,
     ManagedReference, ManagedUpdate, category_response, managed_response,
 )
 from .services import Context, service_operation
 
 categories = APIRouter(prefix='/api/v1/entities/{entity_id}/categories', tags=['Categories'], responses=ERROR_RESPONSES)
+
+
+@categories.post('', response_model=Category, status_code=201, operation_id='create_category')
+def create_category(entity_id: str, body: CategoryCreate, request: Request, context: Context):
+    with service_operation(request, context, 'categories') as service:
+        return category_response(service.create(**body.model_dump()))
 
 
 @categories.get('', response_model=CategoryList, operation_id='list_categories')
@@ -36,6 +42,11 @@ def delete_category(entity_id: str, record_id: str, body: ProtectedMutation, req
 def managed_router(resource):
     # Payees and tags already share one managed-reference command contract.
     router = APIRouter(prefix=f'/api/v1/entities/{{entity_id}}/{resource}', tags=[resource.title()], responses=ERROR_RESPONSES)
+
+    @router.post('', response_model=ManagedReference, status_code=201, operation_id=f'create_{resource[:-1]}')
+    def create_reference(entity_id: str, body: ManagedCreate, request: Request, context: Context):
+        with service_operation(request, context, resource) as service:
+            return managed_response(service.create(**body.model_dump()))
 
     @router.get('', response_model=ManagedList, operation_id=f'list_{resource}')
     def list_references(entity_id: str, request: Request, context: Context):

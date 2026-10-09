@@ -144,7 +144,11 @@ PostgreSQL remains on `127.0.0.1:55432`. Bind all local listeners to loopback.
 Health checks can be called directly on API port 8000. Root production routes
 serve `/health/live`, `/health/ready` and `/version`; they are not SPA paths.
 
-The default trusted ID is the explicitly seeded `alpha-synthetic` entity.
+The default trusted ID is the explicitly seeded `alpha-synthetic` entity; the
+seed also creates `beta-synthetic` so the local business selector can exercise
+independent contexts. Both are fixed demonstration fixtures, not arbitrary
+browser-selected entities. [Core workflows](COMMERCIAL_WORKFLOWS.md) describes
+the selection and bookkeeping paths.
 The seed command uses the existing entity repository, refuses hosted/non-development
 targets, and stops if that ID exists. Other IDs or an unseeded fixture fail
 startup. No seeding, recurring

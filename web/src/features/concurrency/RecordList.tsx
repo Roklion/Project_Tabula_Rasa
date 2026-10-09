@@ -5,9 +5,10 @@ import { useEntity } from '../../app/context';
 import { EmptyState, ErrorNotice, LoadingState } from '../../components/States';
 import type { Session } from '../../api/client';
 
-export function RecordList<R extends { id: string }>({ resource, title, list, label, editor, canEdit = () => true }: {
+export function RecordList<R extends { id: string }>({ resource, title, list, label, editor, canEdit = () => true, columns = [] }: {
   resource: string; title: string; list: (session: Session, signal?: AbortSignal) => Promise<{ items: R[] }>;
   label: (row: R) => string; editor: (row: R, close: () => void) => ReactNode; canEdit?: (row: R) => boolean;
+  columns?: { title: string; render: (row: R, rows: R[]) => ReactNode }[];
 }) {
   const session = useEntity();
   const [selected, setSelected] = useState<R>();
@@ -16,9 +17,11 @@ export function RecordList<R extends { id: string }>({ resource, title, list, la
     {selected ? <>{editor(selected, () => setSelected(undefined))}</> : query.isPending ? <LoadingState />
       : query.isError ? <ErrorNotice error={query.error} onReview={() => void query.refetch()} />
       : query.data.items.length === 0 ? <EmptyState title="No records to edit" />
-      : <ul className="recordList">{query.data.items.map(row => <li key={row.id}>
-        <span>{label(row)}</span>{canEdit(row) && session.capabilities.includes('bookkeeping:write')
-          && <button type="button" onClick={() => setSelected(structuredClone(row))}>Edit {label(row)}</button>}
-      </li>)}</ul>}
+      : <div className="tableScroll" role="region" aria-label={title} tabIndex={0}><table><caption>{title}</caption>
+        <thead><tr><th scope="col">Record</th>{columns.map(column => <th key={column.title} scope="col">{column.title}</th>)}<th scope="col">Actions</th></tr></thead>
+        <tbody>{query.data.items.map(row => <tr key={row.id}><th scope="row">{label(row)}</th>
+          {columns.map(column => <td key={column.title}>{column.render(row, query.data.items)}</td>)}<td>{canEdit(row) && session.capabilities.includes('bookkeeping:write')
+          && <button type="button" onClick={() => setSelected(structuredClone(row))}>Edit {label(row)}</button>}</td>
+        </tr>)}</tbody></table></div>}
   </section>;
 }

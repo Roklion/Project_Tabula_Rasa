@@ -4,6 +4,7 @@ import { useEntity } from './context';
 import styles from './Shell.module.css';
 
 import { navigation } from './navigation';
+import { EntitySelector } from './EntitySelection';
 
 export function Shell() {
   const session = useEntity();
@@ -15,6 +16,7 @@ export function Shell() {
       <div className={styles.brand}>Project <br />Tabula Rasa</div>
       <div className={styles.context}><span className="muted">Business</span>
         <strong>{session.entity.name}</strong>
+        {session.trusted_development && <EntitySelector activeId={session.entity.id} />}
         {session.trusted_development && <span className={styles.badge}>Technical alpha · development</span>}
       </div>
       <button className={styles.menu} type="button" aria-expanded={open} aria-controls="primary-navigation"
