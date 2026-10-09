@@ -17,7 +17,9 @@ from the former Alpha-only setup must be recreated with the explicit seed toolin
 server-configured choices. Switching requires **Keep current business** or
 **Discard draft and switch**. A confirmed switch replaces the context, private
 query cache, selections and drafts. Selection is disabled during a pending
-bookkeeping mutation. Independent browser clients can select different businesses.
+bookkeeping mutation. If switching fails, the current business, private cache and
+draft remain mounted; an error explains that the switch was not confirmed.
+Independent browser clients can select different businesses.
 
 `GET /api/v1/entities` enumerates only resolver-supplied contexts and resolves
 their names through the ledger service. `POST /api/v1/session/entity` requires

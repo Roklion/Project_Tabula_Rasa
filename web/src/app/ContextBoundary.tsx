@@ -10,6 +10,7 @@ export function ContextBoundary({ children }: { children: ReactNode }) {
   const [entities, setEntities] = useState<Schemas['EntityInfo'][]>([]);
   const [entityError, setEntityError] = useState<unknown>();
   const [switching, setSwitching] = useState(false);
+  const [selectionError, setSelectionError] = useState<unknown>();
   useEffect(() => {
     const controller = new AbortController();
     api.session(controller.signal).then(
@@ -29,12 +30,17 @@ export function ContextBoundary({ children }: { children: ReactNode }) {
   async function select(id: string) {
     if (!state.session) return;
     setSwitching(true);
+    setSelectionError(undefined);
     try { setState({ session: await api.selectEntity(state.session, id) }); }
-    catch (error) { setState({ error }); }
+    catch (error) { setSelectionError(error); }
     finally { setSwitching(false); }
   }
   return <EntitySelectionContext.Provider value={{ items: entities, select }}>
     {switching && <LoadingState label="Switching business…" />}
+    {selectionError !== undefined && <div className="standalone">
+      <p>Business switching could not be confirmed. Your current business and draft are preserved.</p>
+      <ErrorNotice error={selectionError} />
+    </div>}
     {entityError !== undefined && state.session.trusted_development && <div className="standalone">
       <p>Business choices could not be loaded.</p><ErrorNotice error={entityError} onReview={() => window.location.reload()} />
     </div>}

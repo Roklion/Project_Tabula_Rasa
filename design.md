@@ -299,7 +299,8 @@ expose a raw traceback for this configuration failure.
   guarded removal without an invented inactive flag. Parent names are visible.
 - The server-configured local business selector requires an explicit keep or
   discard-and-switch choice, is disabled during mutations and remounts queries
-  and drafts after a confirmed context change. Independent clients select
+  and drafts after a confirmed context change. Failed switches preserve the current
+  scope, private cache and draft while showing a selection error. Independent clients select
   independently. Functional selection never proves membership authorization.
 - Transactions offers separate guarded navigation to Add transaction and Add
   journal forms. Creation uses the protected editors' shared fields; journals use
