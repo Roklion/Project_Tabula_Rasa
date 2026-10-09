@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import hashlib
+import mimetypes
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
-from tabula_rasa.application.documents import DocumentError, DocumentUpload, ReceiptService
+from tabula_rasa.application.documents import DocumentError, DocumentUpload, ReceiptService, validate_receipt_upload
 from tabula_rasa.infrastructure.google_drive_documents import (
     GoogleDriveDocumentStore, document_from_receipt_reference, document_to_receipt_reference,
 )
@@ -46,15 +47,25 @@ def test_drive_store_is_lazy_reuses_upload_owner_and_converts_provider_details()
     assert factory.call_count == 1
 
 
-@pytest.mark.parametrize(('filename', 'canonical'), [('CON.pdf', '_CON.pdf'), ('invoice?.pdf', 'invoice_.pdf')])
+@pytest.mark.parametrize(('filename', 'canonical'), [
+    ('CON.pdf', '_CON.pdf'), ('invoice?.pdf', 'invoice_.pdf'),
+    ('a' * 200 + '.pdf', 'a' * 176 + '.pdf'),
+    ('a' * 200 + '.JPEG', 'a' * 175 + '.JPEG'),
+])
 def test_service_reconciles_drive_upload_with_canonical_filename(filename, canonical):
     client = Mock()
     stored = receipt_drive_file(
         'receiptfile12345', canonical, profile_key='north', receipt_id='a' * 32,
         sha256=hashlib.sha256(b'receipt').hexdigest(), original_name=canonical, size=7,
     )
+    stored['mimeType'] = mimetypes.guess_type(canonical)[0]
     client.list_profile_receipts.side_effect = [[], [stored]]
-    client.upload_receipt.side_effect = DocumentError('Upload status is uncertain')
+    def uncertain_upload(**kwargs):
+        # The real Drive upload boundary revalidates the canonical filename.
+        validate_receipt_upload(kwargs['original_name'], kwargs['content'])
+        raise DocumentError('Upload status is uncertain')
+
+    client.upload_receipt.side_effect = uncertain_upload
     service = ReceiptService('north', FakeReceiptRepository(), GoogleDriveDocumentStore(
         'north', 'folder123456', lambda: client,
     ))
@@ -64,7 +75,7 @@ def test_service_reconciles_drive_upload_with_canonical_filename(filename, canon
     assert confirmed.metadata.original_filename == canonical
     client.upload_receipt.assert_called_once_with(
         profile_key='north', folder_id='folder123456', original_name=canonical,
-        content=b'receipt', mime_type='application/pdf', receipt_id='a' * 32,
+        content=b'receipt', mime_type=mimetypes.guess_type(canonical)[0], receipt_id='a' * 32,
     )
 
 
