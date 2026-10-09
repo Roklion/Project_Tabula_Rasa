@@ -1,4 +1,9 @@
 import '@testing-library/jest-dom/vitest';
+
+// jsdom has no top layer. Native browser tests verify inertness, focus trapping,
+// Escape and restoration; this shim only lets component tests render dialogs.
+HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
+HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); };
 import { cleanup } from '@testing-library/react';
 import { afterEach } from 'vitest';
 

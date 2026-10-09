@@ -159,3 +159,15 @@ internal renderers and the design contract. Extended transport DTOs/routes, exis
 field renderers, scoped cache invalidation and native fixtures. New code owns
 create-draft lifecycle, selection presentation and ledger/report presentation;
 there is no parallel domain, persistence, concurrency or retry implementation.
+
+## Accessible confirmations and validation (#287)
+
+Confirmation prompts keep keyboard focus inside the modal and start on the keep
+action. Escape keeps the draft; dismissal returns focus to the initiating
+control where it remains available. Confirmed navigation focuses main content.
+Rejected destructive confirmations and failed reloads close and expose the preserved draft's error
+and review action. Pending operations disable the prompt's actions and Escape.
+Declared field errors identify the affected labeled control without exposing
+submitted values or internal server messages. See the
+[browser-quality gate](COMMERCIAL_BROWSER_QUALITY.md) for coverage and remaining
+receipt, staging and manual acceptance work.
