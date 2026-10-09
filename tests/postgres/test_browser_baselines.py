@@ -26,13 +26,18 @@ def document_store():
 
 
 @pytest.fixture
-def commercial_server(database, commercial, document_store):
+def browser_resolver():
+    context = RequestContext('actor', 'org', 'alpha', frozenset({'bookkeeping:read', 'bookkeeping:write'}), 'browser-scope', 'csrf')
+    return lambda request: context
+
+
+@pytest.fixture
+def commercial_server(database, commercial, browser_resolver, document_store):
     if not (DIST / 'index.html').is_file():
         if os.environ.get('TABULA_RASA_REQUIRE_BROWSER_TESTS') == '1':
             pytest.fail('Build web before running required native browser tests.')
         pytest.skip('Build web to run native browser baseline tests.')
-    context = RequestContext('actor', 'org', 'alpha', frozenset({'bookkeeping:read', 'bookkeeping:write'}), 'browser-scope', 'csrf')
-    runtime = PostgresRuntime(database, lambda request: context,
+    runtime = PostgresRuntime(database, browser_resolver,
         service_factory=lambda context: create_postgres_services(database, context.entity_id,
             **({'document_store': document_store, 'document_store_kind': 'fake'} if document_store is not None else {})))
     runtime.close = lambda: None  # The synthetic DB fixture owns this pool.

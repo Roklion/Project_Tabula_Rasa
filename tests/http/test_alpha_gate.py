@@ -153,3 +153,34 @@ def test_entrypoint_does_not_trust_forwarded_headers(monkeypatch):
     assert calls[0]["proxy_headers"] is False
     assert calls[0]["access_log"] is False
     assert calls[0]["workers"] == 1
+
+
+@pytest.mark.parametrize("hosted,expected", [(False, ("alpha-synthetic", "beta-synthetic")),
+                                           (True, ("alpha-synthetic",))])
+def test_default_runtime_preserves_local_selection_and_fixed_hosted_scope(monkeypatch, hosted, expected):
+    from unittest.mock import Mock
+    from tabula_rasa.http import composition
+
+    database = Mock()
+    monkeypatch.setattr(composition, "open_alpha_database", lambda _: database)
+    monkeypatch.setattr(composition, "Database", lambda _: database)
+    monkeypatch.setattr(composition.DatabaseSettings, "from_environment", lambda **_: None)
+    composed = []
+    monkeypatch.setattr(composition, "create_postgres_services",
+                        lambda db, entity: composed.append(entity))
+    configured = settings() if hosted else HttpSettings("test", "http://testserver", trusted_entity_id="alpha-synthetic")
+    runtime = composition.open_runtime(configured)
+    assert tuple(composed) == expected
+    resolver = runtime.resolve_context
+    request = SimpleNamespace(state=SimpleNamespace(alpha_authenticated=True),
+                              client=SimpleNamespace(host="127.0.0.1"), cookies={})
+    assert tuple(item.entity_id for item in resolver.available_contexts(request)) == expected
+    request.cookies = {"tabula_entity": "beta-synthetic"}
+    if hosted:
+        with pytest.raises(Exception) as failure:
+            resolver(request)
+        assert failure.value.code == "forbidden"
+    else:
+        assert resolver(request).entity_id == "beta-synthetic"
+    runtime.close()
+    database.dispose.assert_called_once()

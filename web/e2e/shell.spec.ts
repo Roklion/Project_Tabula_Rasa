@@ -8,6 +8,12 @@ const session = {
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/v1/session', route => route.fulfill({ json: session }));
+  await page.route('**/api/v1/entities', route => route.fulfill({ json: { items: [session.entity] } }));
+  await page.route('**/api/v1/entities/alpha/reports/summary', route => route.fulfill({ json: {
+    profit_loss: { income: '0.00', expenses: '0.00', net: '0.00' },
+    balance_sheet: { assets: [], liabilities: [], equity: [], current_earnings: '0.00', total_assets: '0.00',
+      total_liabilities: '0.00', total_equity: '0.00', difference: '0.00' }, account_balances: [],
+  } }));
   await page.route('**/api/v1/entities/alpha/accounts?*', route => route.fulfill({ json: { items: [] } }));
 });
 

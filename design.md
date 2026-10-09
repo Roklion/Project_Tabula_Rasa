@@ -275,7 +275,7 @@ expose a raw traceback for this configuration failure.
 
 ## Commercial shell
 
-**Current behavior** for the #277/#278/#279/#280/#283/#286 technical-alpha application:
+**Current behavior** for the #277/#278/#279/#280/#281/#282/#283/#286 technical-alpha application:
 
 - The React shell uses the visual tokens, typography and approximately 760px
   stacking boundary above. Navigation covers Dashboard, Transactions, Assets,
@@ -291,12 +291,30 @@ expose a raw traceback for this configuration failure.
   membership. Minimal health/version probes are public. Production rejects this
   synthetic mode; #222 owns real login and session behavior. Hosted setup and
   acceptance remain subject to the [operator checkpoint](docs/COMMERCIAL_DEPLOYMENT.md).
-- Dashboard links to Accounts. The #280 concurrency bridge adds edit/deactivate
-  forms to that view and narrow existing-record edit/delete lists for Categories,
-  Transactions, Journals and Mileage. Categories links to Payees/Tags and their
-  merge forms; Transactions links to Journals. Derived transactions retain their
-  source owner. Other routes show availability states until their separately
-  scoped slices land. No internal-edition workflow is removed or replaced.
+- Dashboard and Reports show service-calculated profit/loss, balance-sheet
+  sections, current earnings, the accounting-equation check and clearly labeled
+  all-date account balances. Their From/To inputs govern the period/as-of date.
+  Accounts, Categories and Payees/Tags offer shared create fields and tables,
+  plus protected edits/removals/merges. Accounts deactivate; categories retain
+  guarded removal without an invented inactive flag. Parent names are visible.
+- The server-configured local business selector requires an explicit keep or
+  discard-and-switch choice, is disabled during mutations and remounts queries
+  and drafts after a confirmed context change. Failed switches preserve the current
+  scope, private cache and draft while showing a selection error. Independent clients select
+  independently. Functional selection never proves membership authorization.
+- Transactions offers separate guarded navigation to Add transaction and Add
+  journal forms. Creation uses the protected editors' shared fields; journals use
+  target/side/amount posting rows, stable line IDs, visible totals/difference and
+  explicit add/remove controls. Creates retain identities/drafts on failure,
+  never retry automatically and reset only after confirmed success.
+- The combined ledger offers inclusive From/To, Type, Accounts (including labeled
+  Income/Expense category targets), Tags, complete-entry sorting and text
+  search, defaults to all dates/newest first and preserves journal grouping.
+  Amounts, dates and receipt contents are outside text search. Journal posting
+  rows show Debit/Credit with no independent mutation action. Derived transactions
+  retain their source owner. Other scoped routes retain availability states;
+  Mileage retains the #280 existing-record editor. No internal-edition workflow
+  is removed or replaced.
 - Shared loading, empty, validation, conflict, unexpected-error and success
   states use text plus semantic status/alert roles. Conflicts preserve drafts
   and offer an explicit review action. Forms retain loaded server metadata
@@ -325,10 +343,11 @@ Confirmed uploads survive link failures. Confirmed unlink removes only the
 reference; unreferenced files can be relinked. Read-only users can inspect/download;
 unconfigured document storage shows availability text without upload controls.
 Source-owned receipt workflows stay with their owners. Maps/routing and import
-remain internal-edition workflows. [Commercial mileage and receipts](docs/COMMERCIAL_WORKFLOWS.md)
+remain internal-edition workflows. [Commercial mileage and receipts](docs/COMMERCIAL_MILEAGE_RECEIPTS.md)
 owns this slice's transport, recovery and validation contract.
-#222 adds real identity/context selection,
-#281–#286 add domain workflows, and #287 expands accessibility/browser coverage.
+[Commercial core workflows](docs/COMMERCIAL_WORKFLOWS.md) owns #281/#282 scope.
+#222 adds authenticated identity/membership context selection,
+#284/#285 add remaining domain workflows, and #287 expands accessibility/browser coverage.
 The Streamlit-specific shell requirements above continue to govern the internal
 edition.
 

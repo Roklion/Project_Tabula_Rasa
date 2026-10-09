@@ -20,7 +20,7 @@ and session lifecycle to #222, deployment and its temporary hosted gate to #279,
 operations to #223, and broader browser/device quality to #287.
 [Commercial concurrency](COMMERCIAL_CONCURRENCY.md) documents #280's subsequent
 protected edit/delete endpoints and forms, loaded-token enforcement and native
-two-client browser validation. [Commercial mileage and receipts](COMMERCIAL_WORKFLOWS.md)
+two-client browser validation. [Commercial mileage and receipts](COMMERCIAL_MILEAGE_RECEIPTS.md)
 documents #286/#283's subsequent list/create/detail and document-transfer workflows.
 Production activation remains separate. Streamlit
 remains the internal/reference edition.
@@ -46,7 +46,9 @@ remains the internal/reference edition.
   composes each request after context checks, and disposes the pool on shutdown.
   Startup never migrates, seeds or reconciles recurring entries.
 - `PostgresRuntime` requires an explicit service factory. The default local
-  factory uses only the fixed `alpha-synthetic` fixture. For migrated entities,
+  factory uses the fixed `alpha-synthetic` and `beta-synthetic` demonstration
+  fixtures for local functional selection. See [Core workflows](COMMERCIAL_WORKFLOWS.md).
+  For migrated entities,
   use `MigratedProfileServices` with a **server-configured** entity-to-profile
   mapping. It calls existing `create_application`, preserving #258 authority,
   environment and document-store binding checks. Its optional legacy provider

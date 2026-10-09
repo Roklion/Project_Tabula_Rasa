@@ -121,7 +121,7 @@ class LedgerQuery:
 
 @dataclass(frozen=True)
 class PeriodReport:
-    totals: dict[str, float]
+    totals: dict[str, float | Decimal]
     monthly: tuple[dict[str, object], ...]
     expense_categories: tuple[dict[str, object], ...]
 

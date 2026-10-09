@@ -197,7 +197,7 @@ def test_trusted_context_requires_loopback_and_never_uses_request_entity():
     with pytest.raises(Exception) as failure:
         resolver(request)
     assert failure.value.code == "forbidden"
-    assert resolver(SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"))).entity_id == "alpha"
+    assert resolver(SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"), cookies={})).entity_id == "alpha"
 
 
 @pytest.mark.parametrize("environment,origin", [

@@ -1,10 +1,12 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RouterProvider } from 'react-router-dom';
-import { expect, it, vi } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
 import { api, ApiError } from '../api/client';
 import { session } from '../test/fixtures';
 import { createTestRouter } from './router';
+
+beforeEach(() => vi.spyOn(api, 'entities').mockResolvedValue({ items: [session.entity] }));
 
 it('loads server context and navigates without rerun semantics', async () => {
   vi.spyOn(api, 'session').mockResolvedValue(session);

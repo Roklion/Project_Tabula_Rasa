@@ -23,6 +23,14 @@ and your draft stays visible. Choose **Review latest record**, then **Keep draft
 or **Discard draft and reload**; review the latest values before saving again.
 Payee/tag merges also protect every loaded target/source. See
 [Commercial concurrency](COMMERCIAL_CONCURRENCY.md) for scope and local validation.
+The core commercial workflows also provide business selection, reference setup,
+transaction/journal creation, the combined ledger and essential reports. Choose
+**Select business** to switch the configured demonstration business, then confirm
+whether to discard the current draft. Use **Add account/category/payee/tag** on
+the setup pages, or **Add transaction/journal** on Transactions. Reports and the
+Dashboard show server-calculated totals; their date controls govern the period
+and balance-sheet as-of date. See [Commercial core workflows](COMMERCIAL_WORKFLOWS.md)
+for the supported scope, creation/error behavior and remaining initiative work.
 These forms do not change the Streamlit workflows described below or establish
 commercial production readiness.
 
@@ -32,7 +40,7 @@ Saved ordinary transactions offer receipt attachment, inspection/download,
 unreferenced-file recovery and confirmed unlink without deleting the file when
 the business's DocumentStore is configured. Upload/link errors keep confirmed
 work and offer retry for unresolved files. See
-[Commercial mileage and receipts](COMMERCIAL_WORKFLOWS.md) for these browser
+[Commercial mileage and receipts](COMMERCIAL_MILEAGE_RECEIPTS.md) for these browser
 workflows, their recovery behavior and remaining release boundaries.
 
 ## Sign in and select a business

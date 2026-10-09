@@ -61,14 +61,17 @@ def open_runtime(settings):
                 else Database(DatabaseSettings.from_environment(required=True)))
     try:
         resolver = (
-            TrustedDevelopmentContext(settings.trusted_entity_id, secrets.token_urlsafe(32), hosted=settings.hosted_alpha)
+            TrustedDevelopmentContext(settings.trusted_entity_id, secrets.token_urlsafe(32),
+                                      hosted=settings.hosted_alpha,
+                                      entity_ids=() if settings.hosted_alpha else ('beta-synthetic',))
             if settings.trusted_entity_id else DenyContext()
         )
         runtime = PostgresRuntime(database, resolver, service_factory=
             lambda context: create_postgres_services(database, context.entity_id))
         if settings.trusted_entity_id:
             # Only explicit seed tooling creates synthetic entities.
-            runtime.services(resolver.context)
+            for context in resolver.contexts:
+                runtime.services(context)
         return runtime
     except BaseException:
         database.dispose()

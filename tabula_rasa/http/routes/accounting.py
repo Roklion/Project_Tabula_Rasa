@@ -3,7 +3,7 @@ from fastapi import APIRouter, Request
 from ..baselines import required_baseline
 from ..errors import ERROR_RESPONSES
 from ..models.accounting import (
-    Journal, JournalList, JournalUpdate, Transaction, TransactionList, TransactionUpdate,
+    Journal, JournalCreate, JournalList, JournalUpdate, Transaction, TransactionCreate, TransactionList, TransactionUpdate,
     journal_response, transaction_response,
 )
 from ..models.mutations import MutationResult, ProtectedMutation
@@ -11,6 +11,18 @@ from .services import Context, service_operation
 
 transactions = APIRouter(prefix='/api/v1/entities/{entity_id}/transactions', tags=['Transactions'], responses=ERROR_RESPONSES)
 journals = APIRouter(prefix='/api/v1/entities/{entity_id}/journals', tags=['Journals'], responses=ERROR_RESPONSES)
+
+
+@transactions.post('', response_model=Transaction, status_code=201, operation_id='create_transaction')
+def create_transaction(entity_id: str, body: TransactionCreate, request: Request, context: Context):
+    with service_operation(request, context, 'transactions') as service:
+        return transaction_response(service.create(**body.model_dump()))
+
+
+@journals.post('', response_model=Journal, status_code=201, operation_id='create_journal')
+def create_journal(entity_id: str, body: JournalCreate, request: Request, context: Context):
+    with service_operation(request, context, 'journals') as service:
+        return journal_response(service.create(**body.model_dump()))
 
 
 @transactions.get('', response_model=TransactionList, operation_id='list_transactions')

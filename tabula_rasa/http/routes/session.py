@@ -1,10 +1,10 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 
 from ..context import RequestContext, resolve_context
-from ..errors import ERROR_RESPONSES
-from ..models.common import EntityInfo, SessionInfo
+from ..errors import ERROR_RESPONSES, TransportError
+from ..models.common import EntityInfo, EntityList, EntitySelection, SessionInfo
 
 router = APIRouter(responses=ERROR_RESPONSES)
 
@@ -20,3 +20,36 @@ def get_session(request: Request, context: Annotated[RequestContext, Depends(res
             capabilities=sorted(context.capabilities), cache_scope=context.cache_scope,
             csrf_token=context.csrf_token, trusted_development=context.trusted_development,
         )
+
+
+def available_contexts(request, context):
+    resolver = request.app.state.runtime.resolve_context
+    enumerate_contexts = getattr(resolver, 'available_contexts', None)
+    return enumerate_contexts(request) if enumerate_contexts else (context,)
+
+
+@router.get('/api/v1/entities', response_model=EntityList, tags=['Session'], operation_id='list_entities')
+def list_entities(request: Request, context: Annotated[RequestContext, Depends(resolve_context)]):
+    runtime = request.app.state.runtime
+    with runtime.operation():
+        return EntityList(items=[EntityInfo(id=item.entity_id, name=runtime.services(item).ledger.get_info().name)
+                                 for item in available_contexts(request, context)])
+
+
+@router.post('/api/v1/session/entity', response_model=SessionInfo, tags=['Session'], operation_id='select_entity')
+def select_entity(body: EntitySelection, request: Request, response: Response,
+                  context: Annotated[RequestContext, Depends(resolve_context)]):
+    resolver = request.app.state.runtime.resolve_context
+    # Selection is functional alpha context, never proof of membership. Only the
+    # configured development resolver implements this cookie-based seam; #222
+    # owns selection for authenticated sessions.
+    from ..context import TrustedDevelopmentContext
+    if not isinstance(resolver, TrustedDevelopmentContext):
+        raise TransportError('forbidden')
+    selected = next((item for item in available_contexts(request, context) if item.entity_id == body.entity_id), None)
+    if selected is None:
+        raise TransportError('forbidden')
+    result = get_session(request, selected)
+    response.set_cookie('tabula_entity', selected.entity_id, httponly=True, samesite='strict',
+                        secure=request.app.state.settings.public_origin.startswith('https://'))
+    return result

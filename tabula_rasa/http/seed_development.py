@@ -21,6 +21,7 @@ def main():
     database = Database(database_settings)
     try:
         PostgresLedgerSetupRepository.create_entity(database, "alpha-synthetic", "Alpha demonstration")
+        PostgresLedgerSetupRepository.create_entity(database, "beta-synthetic", "Beta demonstration")
     finally:
         database.dispose()
 

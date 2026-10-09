@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { api, ApiError, type Schemas } from '../../api/client';
 import { resourceKey } from '../../api/query';
 import { useEntity } from '../../app/context';
 import { EmptyState, ErrorNotice, Field, LoadingState, SuccessNotice } from '../../components/States';
 import { UnsavedChanges } from '../../components/UnsavedChanges';
+import { useProtectedMutation } from '../concurrency/mutations';
 
 type PendingReceipt = { id: string; file: File; document?: Schemas['Document']; linked: boolean; error?: unknown };
 
@@ -16,7 +17,7 @@ export function ReceiptsPage() {
 
 function ReceiptWorkflow({ recordId }: { recordId: string }) {
   const session = useEntity();
-  const cache = useQueryClient();
+  const operation = useProtectedMutation(session, (action: () => Promise<void>) => action());
   const [pending, setPending] = useState<PendingReceipt[]>([]);
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState('');
@@ -31,9 +32,6 @@ function ReceiptWorkflow({ recordId }: { recordId: string }) {
   const row = transaction.data?.items.find(item => item.id === recordId);
   const writable = session.capabilities.includes('bookkeeping:write');
   const unresolved = pending.filter(item => !item.linked);
-  async function refresh() {
-    await Promise.all(['documents', 'transactions'].map(resource => cache.invalidateQueries({ queryKey: resourceKey(session, resource) })));
-  }
   async function transfer() {
     setBusy(true); setFailure(undefined); setMessage('');
     const next = [...pending];
@@ -57,13 +55,13 @@ function ReceiptWorkflow({ recordId }: { recordId: string }) {
       const remaining = next.length - count;
       if (remaining) setMessage(`${count} attached; ${remaining} unresolved. Uploaded files remain in Unreferenced receipts. Retry only the unresolved files.`);
       else { setMessage(`${count} ${count === 1 ? 'receipt' : 'receipts'} attached.`); setPending([]); }
-    } finally { await refresh(); setBusy(false); setPhase(''); }
+    } finally { setBusy(false); setPhase(''); }
   }
   async function mutate(action: () => Promise<unknown>, success: string) {
     setBusy(true); setFailure(undefined); setMessage('');
     try { await action(); setMessage(success); setRemove(undefined); }
     catch (error) { setFailure(error); }
-    finally { await refresh(); setBusy(false); }
+    finally { setBusy(false); }
   }
   function filesSelected(files: File[]) {
     setFailure(undefined); setMessage('');
@@ -106,20 +104,20 @@ function ReceiptWorkflow({ recordId }: { recordId: string }) {
           {writable && <button type="button" disabled={busy} onClick={() => setRemove(doc)}>Remove {doc.filename}</button>}</li>)}</ul>}
       {remove && <div role="alertdialog" aria-label="Remove receipt" className="notice warning"><p>Remove the reference to {remove.filename}? The stored file remains available in Unreferenced receipts.</p>
         <button type="button" disabled={busy} onClick={() => setRemove(undefined)}>Keep receipt</button>
-        <button type="button" disabled={busy} onClick={() => void mutate(() => api.unlinkDocument(session, recordId, remove.id), 'Receipt reference removed. File retained.')}>Confirm remove</button></div>}
+        <button type="button" disabled={busy || operation.isPending} onClick={() => void operation.mutateAsync(() => mutate(() => api.unlinkDocument(session, recordId, remove.id), 'Receipt reference removed. File retained.'))}>Confirm remove</button></div>}
     </section>
     {writable && <section className="surface editor"><h2>Attach receipts</h2><p>PDF, PNG, JPG, JPEG, WEBP or HEIC; up to 20 MB per file, 200 MB per batch and 100 receipts per transaction.</p>
       <Field id="receipt-files" label="Receipt files"><input id="receipt-files" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.heic" disabled={busy || unresolved.length > 0}
         onChange={event => { filesSelected(Array.from(event.target.files ?? [])); event.target.value = ''; }} /></Field>
       {pending.map(item => <div key={item.id}><p>{item.file.name}: {item.linked ? 'Attached' : item.document ? 'Uploaded; link pending' : 'Upload pending'}</p>
         {item.error !== undefined && <ErrorNotice error={item.error} />}</div>)}
-      <div className="actions"><button type="button" disabled={busy || !unresolved.length} onClick={() => void transfer()}>{pending.some(item => item.error !== undefined) ? 'Retry unresolved receipts' : 'Attach selected receipts'}</button>
+      <div className="actions"><button type="button" disabled={busy || operation.isPending || !unresolved.length} onClick={() => void operation.mutateAsync(transfer)}>{pending.some(item => item.error !== undefined) ? 'Retry unresolved receipts' : 'Attach selected receipts'}</button>
         {!!unresolved.length && <button type="button" disabled={busy} onClick={() => { setPending([]); setMessage('Recovery cancelled. Uploaded files remain in Unreferenced receipts.'); }}>Cancel recovery</button>}</div>
     </section>}
     <section className="surface editor"><h2>Unreferenced receipts</h2>{inventory.isPending ? <LoadingState /> : inventory.isError ? <ErrorNotice error={inventory.error} onReview={() => void inventory.refetch()} /> : <>
       {!!inventory.data.needing_integrity && <p role="alert">{inventory.data.needing_integrity} files need integrity metadata before they can be linked.</p>}
       {!inventory.data.items.length ? <EmptyState title="No unreferenced receipts" /> : <ul className="recordList">{inventory.data.items.map(doc => <li key={doc.id}><div>{documentView(doc)}</div>
-        {writable && <button type="button" disabled={busy || unresolved.length > 0} onClick={() => void mutate(() => api.linkDocument(session, recordId, doc.id), 'Receipt linked.')}>Link {doc.filename}</button>}</li>)}</ul>}
+        {writable && <button type="button" disabled={busy || operation.isPending || unresolved.length > 0} onClick={() => void operation.mutateAsync(() => mutate(() => api.linkDocument(session, recordId, doc.id), 'Receipt linked.'))}>Link {doc.filename}</button>}</li>)}</ul>}
     </>}</section>
   </>;
 }

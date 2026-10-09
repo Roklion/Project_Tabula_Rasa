@@ -56,6 +56,14 @@ class EntityInfo(DTO):
     name: str
 
 
+class EntityList(DTO):
+    items: list[EntityInfo]
+
+
+class EntitySelection(DTO):
+    entity_id: str
+
+
 class SessionInfo(DTO):
     actor_id: str
     organization_id: str

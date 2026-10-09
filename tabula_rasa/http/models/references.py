@@ -8,6 +8,10 @@ class CategoryChanges(DTO):
     parent_id: str | None = None
 
 
+class CategoryCreate(CategoryChanges):
+    pass
+
+
 class Category(CategoryChanges):
     id: str
     baseline: str
@@ -24,6 +28,11 @@ class CategoryUpdate(ProtectedMutation):
 class ManagedChanges(DTO):
     name: str
     active: bool
+
+
+class ManagedCreate(DTO):
+    name: str
+    active: bool = True
 
 
 class ManagedReference(ManagedChanges):

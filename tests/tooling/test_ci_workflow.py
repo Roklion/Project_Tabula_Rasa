@@ -75,6 +75,7 @@ def test_ci_preserves_complete_python_and_windows_coverage() -> None:
                   if "tests/postgres/test_browser_baselines.py" in step.get("run", ""))
     assert set(shlex.split(native["run"])[3:]) == {
         "tests/postgres/test_browser_baselines.py", "tests/postgres/test_browser_workflows.py",
+        "tests/postgres/test_browser_mileage_documents.py",
     }
     assert native["env"]["TABULA_RASA_REQUIRE_BROWSER_TESTS"] == "1"
     assert browser["env"]["TABULA_RASA_TEST_DATABASE_URL"].startswith("postgresql+psycopg://")
