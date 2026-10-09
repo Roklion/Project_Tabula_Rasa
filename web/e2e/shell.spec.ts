@@ -29,10 +29,18 @@ test('deep links, navigation, responsive layout and empty state', async ({ page 
     await expect(page.getByRole('heading', { name: 'Reports', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Balance sheet', exact: true })).toBeVisible();
     await expect(page.getByRole('main')).toBeFocused();
+    if (width <= 760) {
+      await page.goBack();
+      await expect(page.getByRole('heading', { name: 'Accounts', exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Menu', exact: true })).toHaveAttribute('aria-expanded', 'false');
+      await page.goForward();
+      await expect(page.getByRole('heading', { name: 'Reports', exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Menu', exact: true })).toHaveAttribute('aria-expanded', 'false');
+    }
     const accessibility = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
     expect(accessibility.violations).toEqual([]);
     await page.screenshot({ path: test.info().outputPath('shell-' + width + '.png'), fullPage: true });
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   }
 });
 

@@ -9,8 +9,11 @@ import { EntitySelector } from './EntitySelection';
 export function Shell() {
   const session = useEntity();
   const location = useLocation();
-  const [menuKey, setMenuKey] = useState<string>();
-  const open = menuKey === location.key;
+  const [menu, setMenu] = useState({ location, open: false });
+  // Reset on each successful navigation, including Back to a previous entry.
+  // A blocked navigation retains its location and the initiating link.
+  if (menu.location !== location) setMenu({ location, open: false });
+  const open = menu.location === location && menu.open;
   const main = useRef<HTMLElement>(null);
   const previousPath = useRef(location.pathname);
   useEffect(() => {
@@ -27,7 +30,7 @@ export function Shell() {
         {session.trusted_development && <span className={styles.badge}>Technical alpha · development</span>}
       </div>
       <button className={styles.menu} type="button" aria-expanded={open} aria-controls="primary-navigation"
-        onClick={() => setMenuKey(open ? undefined : location.key)}>Menu</button>
+        onClick={() => setMenu({ location, open: !open })}>Menu</button>
       <nav id="primary-navigation" aria-label="Main navigation" className={open ? styles.open : styles.navigation}>
         {navigation.map(([path, name]) => <NavLink key={path} to={path} end={path === '/'}>{name}</NavLink>)}
       </nav>

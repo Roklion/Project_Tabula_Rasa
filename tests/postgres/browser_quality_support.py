@@ -17,7 +17,7 @@ def assert_accessible(page):
     })).violations.map(rule => ({ id: rule.id, impact: rule.impact,
         targets: rule.nodes.map(node => node.target), help: rule.helpUrl }))""")
     assert not violations, violations
-    assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'), 'Page overflow'
+    assert page.evaluate('document.documentElement.scrollWidth <= document.documentElement.clientWidth'), 'Page overflow'
 
 
 def assert_dialog_keyboard(page, title, keep_label, confirm_label, opener):
