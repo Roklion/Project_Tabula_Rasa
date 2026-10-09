@@ -73,6 +73,15 @@ function ReceiptWorkflow({ recordId }: { recordId: string }) {
     }
     setPending(files.map(file => ({ id: crypto.randomUUID().replaceAll('-', ''), file, linked: false })));
   }
+  function cancelRecovery() {
+    const uploaded = unresolved.filter(item => item.document).length;
+    const unconfirmed = unresolved.length - uploaded;
+    setMessage(['Recovery cancelled.',
+      uploaded ? `${uploaded} confirmed uploaded ${uploaded === 1 ? 'file remains' : 'files remain'} in Unreferenced receipts.` : '',
+      unconfirmed ? `${unconfirmed} ${unconfirmed === 1 ? 'file has' : 'files have'} no confirmed upload. Check Unreferenced receipts before selecting those files again.` : '',
+    ].filter(Boolean).join(' '));
+    setPending([]);
+  }
   async function download(doc: Schemas['Document']) {
     if (busy) return;
     setBusy(true); setPhase('Downloading receipt…'); setFailure(undefined);
@@ -96,7 +105,7 @@ function ReceiptWorkflow({ recordId }: { recordId: string }) {
   return <><h1>Receipts</h1><p className="lead">{row ? `${row.txn_date} · ${row.description || row.kind} · ${row.amount}` : 'Saved transaction'}</p>
     <Link to="/transactions">Back to transactions</Link><UnsavedChanges dirty={unresolved.length > 0 || busy} />
     {failure !== undefined && <ErrorNotice error={failure} />}
-    {message && (unresolved.length ? <p role="alert" className="notice warning">{message}</p> : <SuccessNotice>{message}</SuccessNotice>)}
+    {message && (unresolved.length || message.startsWith('Recovery cancelled.') ? <p role="alert" className="notice warning">{message}</p> : <SuccessNotice>{message}</SuccessNotice>)}
     {busy && <><LoadingState label={phase || 'Updating receipts…'} />
       {(phase.startsWith('Uploading') || phase.startsWith('Linking')) && <progress aria-label="Receipt upload progress" />}</>}
     <section className="surface editor"><h2>Linked receipts</h2>
@@ -115,7 +124,7 @@ function ReceiptWorkflow({ recordId }: { recordId: string }) {
       {pending.map(item => <div key={item.id}><p>{item.file.name}: {item.linked ? 'Attached' : item.document ? 'Uploaded; link pending' : 'Upload pending'}</p>
         {item.error !== undefined && <ErrorNotice error={item.error} />}</div>)}
       <div className="actions"><button type="button" disabled={busy || operation.isPending || !unresolved.length} onClick={() => void operation.mutateAsync(transfer)}>{pending.some(item => item.error !== undefined) ? 'Retry unresolved receipts' : 'Attach selected receipts'}</button>
-        {!!unresolved.length && <button type="button" disabled={busy} onClick={() => { setPending([]); setMessage('Recovery cancelled. Uploaded files remain in Unreferenced receipts.'); }}>Cancel recovery</button>}</div>
+        {!!unresolved.length && <button type="button" disabled={busy} onClick={cancelRecovery}>Cancel recovery</button>}</div>
     </section>}
     <section className="surface editor"><h2>Unreferenced receipts</h2>{inventory.isPending ? <LoadingState /> : inventory.isError ? <ErrorNotice error={inventory.error} onReview={() => void inventory.refetch()} /> : <>
       {!!inventory.data.needing_integrity && <p role="alert">{inventory.data.needing_integrity} files need integrity metadata before they can be linked.</p>}

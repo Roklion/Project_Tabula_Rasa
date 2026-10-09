@@ -348,8 +348,11 @@ inclusive date/any-tag filtering, scoped totals/CSV, one-way/round-trip creation
 and fresh detail routes reusing the protected editor. Ordinary saved transactions
 link to receipt management with portable metadata inspection, same-origin
 downloads, multi-file attachment, upload/link progress and unresolved-file retry.
-Confirmed uploads survive link failures. Confirmed unlink removes only the
-reference; unreferenced files can be relinked. Read-only users can inspect/download;
+Confirmed uploads survive link failures. Cancelling recovery distinguishes
+confirmed uploads from unconfirmed selections and directs users to inspect
+unreferenced receipts before selecting unconfirmed files again.
+Confirmed unlink removes only the reference; unreferenced files can be relinked.
+Read-only users can inspect/download;
 unconfigured document storage shows availability text without upload controls.
 Source-owned receipt workflows stay with their owners. Maps/routing and import
 remain internal-edition workflows. [Commercial mileage and receipts](docs/COMMERCIAL_MILEAGE_RECEIPTS.md)

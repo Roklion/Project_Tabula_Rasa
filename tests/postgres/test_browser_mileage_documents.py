@@ -122,6 +122,7 @@ def test_receipt_upload_partial_link_retry_download_remove_and_recover(commercia
             page.get_by_role('button', name='Retry unresolved receipts').click()
             expect(page.get_by_role('status').filter(has_text='1 receipt attached.')).to_be_visible()
             assert document_store.upload_calls == 1
+            expect(page.get_by_role('heading', name='No unreferenced receipts')).to_be_visible()
             with page.expect_download() as download:
                 page.get_by_role('link', name='Download receipt.pdf', exact=True).click()
             assert Path(download.value.path()).read_bytes() == b'%PDF synthetic receipt'
@@ -155,6 +156,52 @@ def test_receipt_upload_partial_link_retry_download_remove_and_recover(commercia
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             page.get_by_role('link', name='Back to transactions').click()
             expect(page.get_by_role('table', name='Business ledger')).to_contain_text('1 receipt(s)')
+        finally:
+            browser.close()
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+def test_receipt_cancel_recovery_distinguishes_confirmed_and_unconfirmed_uploads(commercial, commercial_server, document_store, width):
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page(viewport={'width': width, 'height': 1000})
+            page.goto(commercial_server + '/transactions/expense/receipts')
+            expect(page.get_by_role('heading', name='No receipts attached')).to_be_visible()
+            files = page.get_by_label('Receipt files')
+            files.set_input_files({'name': 'unselected.pdf', 'mimeType': 'application/pdf', 'buffer': b'%PDF synthetic'})
+            page.get_by_role('button', name='Cancel recovery').click()
+            notice = page.get_by_role('alert').filter(has_text='Recovery cancelled.')
+            expect(notice).to_contain_text('1 file has no confirmed upload')
+            expect(notice).to_contain_text('before selecting those files again')
+            expect(notice).not_to_contain_text('file remains')
+            assert document_store.upload_calls == 0
+            files.set_input_files([
+                {'name': 'confirmed.pdf', 'mimeType': 'application/pdf', 'buffer': b'%PDF confirmed'},
+                {'name': 'failed.pdf', 'mimeType': 'application/pdf', 'buffer': b'%PDF failed'},
+            ])
+            original_upload = document_store.upload
+
+            def upload(profile, upload):
+                if upload.original_filename == 'failed.pdf':
+                    raise DocumentError('Synthetic upload failure before create')
+                return original_upload(profile, upload)
+
+            with patch.object(document_store, 'upload', side_effect=upload), \
+                    patch.object(PostgresReceiptRepository, 'link', side_effect=DocumentError('Synthetic link failure')):
+                page.get_by_role('button', name='Attach selected receipts').click()
+                expect(page.get_by_role('alert').filter(has_text='2 unresolved.')).to_be_visible()
+            assert document_store.upload_calls == 1 and len(document_store.files) == 1
+            page.get_by_role('button', name='Cancel recovery').click()
+            expect(notice).to_contain_text('1 confirmed uploaded file remains in Unreferenced receipts.')
+            expect(notice).to_contain_text('1 file has no confirmed upload')
+            expect(page.get_by_role('status').filter(has_text='Recovery cancelled.')).to_have_count(0)
+            expect(files).to_be_enabled()
+            expect(page.get_by_role('button', name='Link confirmed.pdf')).to_be_visible()
+            expect(page.get_by_role('link', name='Download failed.pdf')).to_have_count(0)
+            page.get_by_role('button', name='Link confirmed.pdf').click()
+            expect(page.get_by_role('status').filter(has_text='Receipt linked.')).to_be_visible()
+            assert document_store.upload_calls == 1 and document_store.delete_calls == 0
         finally:
             browser.close()
 
