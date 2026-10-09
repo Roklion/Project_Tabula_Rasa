@@ -1,6 +1,7 @@
 """Core alpha workflows through real HTTP/services/PostgreSQL, with two entities."""
 
 from copy import deepcopy
+from decimal import Decimal, localcontext
 
 from fastapi.testclient import TestClient
 
@@ -17,6 +18,30 @@ def create(client, resource, body):
     result = client.post(PREFIX + resource, headers=HEADERS, json=body)
     assert result.status_code == 201, result.text
     return result.json()
+
+
+def test_summary_preserves_native_numeric_precision_and_entity_isolation(commercial):
+    alpha, beta, (client, _), _ = commercial
+    amount = '99999999999999999999999999.99'
+    parent = create(client, 'accounts', {'name': 'Large balance', 'type': 'Bank', 'opening_balance': amount})
+    create(client, 'accounts', {'name': 'One cent child', 'type': 'Bank', 'opening_balance': '0.01', 'parent_id': parent['id']})
+    create(client, 'transactions', dict(transaction_id='large-income', **expense(kind='Income', amount=amount, account_id=parent['id'], category_id='sales')))
+    response = client.get(PREFIX + 'reports/summary')
+    assert response.status_code == 200, response.text
+    result = response.json()
+    with localcontext(prec=60):
+        direct = format(Decimal(amount) * 2, '.2f')
+        rollup = format(Decimal(amount) * 2 + Decimal('0.01'), '.2f')
+        total = format(Decimal(amount) * 2 + Decimal('0.01') - Decimal('25.00'), '.2f')
+        net = format(Decimal(amount) - Decimal('25.00'), '.2f')
+    assert result['profit_loss'] == {'income': amount, 'expenses': '25.00', 'net': net}
+    assert result['balance_sheet']['current_earnings'] == net
+    assert result['balance_sheet']['total_assets'] == total
+    projected = next(row for row in result['balance_sheet']['assets'] if row['id'] == parent['id'])
+    assert projected['direct_balance'] == direct and projected['rollup_balance'] == rollup
+    assert next(row for row in result['account_balances'] if row['id'] == parent['id'])['balance'] == direct
+    assert beta.reporting.period_report(beta.reporting.read_ledger()).totals == {'income': 0.0, 'expenses': 0.0, 'net': 0.0}
+    assert not any(row.id == parent['id'] for row in beta.reporting.read_ledger().accounts)
 
 
 def test_reference_setup_and_supported_removal(database, commercial):

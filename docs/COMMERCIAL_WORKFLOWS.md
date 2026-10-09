@@ -106,6 +106,9 @@ on narrow screens; posting rows have no separate edit/delete action.
 Dashboard and Reports use `GET .../reports/summary` over one fresh service snapshot.
 `ReportingService` owns profit/loss, balance-sheet sections, hierarchy rollups,
 current earnings, the accounting-equation difference and account balances.
+The shared calculations retain exact decimals for HTTP summary values, including
+cents in large balances, aggregate totals and hierarchy rollups; float conversion
+is reserved for the existing internal presentation projections.
 The endpoint only projects these values into decimal-string DTOs. The browser
 does not recompute accounting totals. Profit/loss uses the selected From/To
 period; the balance sheet uses To as its as-of date. The separately labeled

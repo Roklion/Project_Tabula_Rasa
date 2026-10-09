@@ -107,12 +107,12 @@ class ReportSummary(DTO):
 
 
 def report_response(service, snapshot, *, start, end):
-    period = service.period_report(snapshot, start=start, end=end)
-    sheet = service.balance_sheet(snapshot, as_of=end)
+    period = service.period_report(snapshot, start=start, end=end, decimal_values=True)
+    sheet = service.balance_sheet(snapshot, as_of=end, decimal_values=True)
     sections = {name: [BalanceRow(**{key: money(value) if key in {'balance', 'direct_balance', 'rollup_balance'} else value
                                     for key, value in row.items()}) for row in sheet[name]]
                 for name in ('assets', 'liabilities', 'equity')}
     return ReportSummary(profit_loss=ProfitLoss(**{key: money(value) for key, value in period.totals.items()}),
         balance_sheet=BalanceSheet(**sections, **{name: money(sheet[name]) for name in BalanceSheet.model_fields if name not in sections}),
         account_balances=[AccountBalance(id=row['id'], name=row['name'], classification=row['classification'],
-            active=row['active'], balance=money(row['balance'])) for row in service.account_balances(snapshot)])
+            active=row['active'], balance=money(row['balance'])) for row in service.account_balances(snapshot, decimal_values=True)])
