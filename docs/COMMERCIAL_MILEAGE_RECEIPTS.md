@@ -68,6 +68,10 @@ An explicit upload retry reuses a freshly confirmed document with matching
 canonical safe filename, type, size and checksum; filename normalization is shared
 with storage adapters so reserved names also reconcile on retry. Conflicting reuse of its ID is rejected before
 sending bytes. An unavailable inventory stops the upload for inspection/retry.
+Overlapping HTTP uploads for the same business and document ID are refused with
+a conflict while the first request is running; inspect the result before retrying.
+The PostgreSQL guard coordinates API workers; it does not roll back remote files
+or promise transactionality across storage providers.
 Counts distinguish attached and unresolved work. **Retry unresolved receipts** reuses
 the same ID/file after an upload failure, or retries only linking after a confirmed
 upload. DocumentStore retains responsibility for bounded uncertain-upload

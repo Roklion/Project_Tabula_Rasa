@@ -1,6 +1,9 @@
 """Mileage and provider-neutral receipts through HTTP and native PostgreSQL."""
 
 from dataclasses import replace
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -32,6 +35,35 @@ def document_clients(database, commercial, document_store):
 def upload(client, *, identity='a' * 32, filename='receipt.pdf', content=b'%PDF synthetic receipt'):
     return client.put(PREFIX + 'documents/' + identity + '/content', params={'filename': filename},
                       headers={**HEADERS, 'Content-Type': 'application/octet-stream'}, content=content)
+
+
+def test_overlapping_upload_is_rejected_then_matching_retry_reuses_bytes(document_clients, document_store):
+    client, _ = document_clients
+    entered, release = Event(), Event()
+    original = document_store.upload
+
+    def delayed(profile, prepared):
+        if prepared.document_id == 'a' * 32:
+            entered.set()
+            assert release.wait(10)
+        return original(profile, prepared)
+
+    with patch.object(document_store, 'upload', side_effect=delayed), ThreadPoolExecutor() as pool:
+        first = pool.submit(upload, client)
+        try:
+            assert entered.wait(10)
+            overlapping = upload(client)
+            assert overlapping.status_code == 409
+            assert overlapping.json()['error']['code'] == 'concurrent_write'
+            # Distinct identities and business entities do not share a guard.
+            assert upload(client, identity='b' * 32).status_code == 200
+            with client.app.state.runtime.document_upload_operation(SimpleNamespace(entity_id='beta'), 'a' * 32):
+                pass
+        finally:
+            release.set()
+        assert first.result(timeout=10).status_code == 200
+    assert upload(client).status_code == 200
+    assert document_store.upload_calls == 2  # One upload for each distinct ID.
 
 
 def test_mileage_create_round_trip_detail_filter_and_entity_isolation(database, commercial):

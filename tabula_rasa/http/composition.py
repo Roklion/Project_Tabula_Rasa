@@ -1,8 +1,11 @@
 """Infrastructure imports and lifecycle live here, never in resource handlers."""
 
 from contextlib import contextmanager
+import json
 import os
 import secrets
+
+from sqlalchemy import text
 
 from tabula_rasa.application.services import ApplicationServices
 from tabula_rasa.errors import StorageConflictError, StorageError, StorageValidationError
@@ -45,6 +48,18 @@ class PostgresRuntime:
     def operation(self):
         # Error translation only; repositories own transaction boundaries.
         return translate_database_errors()
+
+    @contextmanager
+    def document_upload_operation(self, context, document_id):
+        """Reject overlapping creates for one entity/ID across HTTP workers."""
+        with translate_database_errors(), self.database.transaction() as connection:
+            scope = json.dumps([context.entity_id, document_id])
+            acquired = connection.scalar(text(
+                'SELECT pg_try_advisory_xact_lock(hashtextextended(:scope,304))'
+            ), {'scope': scope})
+            if not acquired:
+                raise StorageConflictError(code='concurrent_write')
+            yield
 
     def ready(self):
         health = self.database.health()

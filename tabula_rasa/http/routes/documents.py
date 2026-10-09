@@ -36,7 +36,8 @@ async def upload_document(entity_id: str, document_id: str, request: Request, co
         content.extend(chunk)
 
     def upload():
-        with service_operation(request, context, 'receipts') as service:
+        with request.app.state.runtime.document_upload_operation(context, document_id), \
+                service_operation(request, context, 'receipts') as service:
             return document_response(service.upload(document_id, filename, bytes(content)))
 
     return await run_in_threadpool(upload)
