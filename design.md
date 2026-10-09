@@ -348,7 +348,7 @@ inclusive date/any-tag filtering, scoped totals/CSV, one-way/round-trip creation
 and fresh detail routes reusing the protected editor. Ordinary saved transactions
 link to receipt management with portable metadata inspection, same-origin
 downloads, multi-file attachment, upload/link progress and unresolved-file retry.
-Confirmed uploads survive link failures. Cancelling recovery distinguishes
+Confirmed uploads survive link failures. Retry and cancellation notices distinguish
 confirmed uploads from unconfirmed selections and directs users to inspect
 unreferenced receipts before selecting unconfirmed files again.
 Confirmed unlink removes only the reference; unreferenced files can be relinked.

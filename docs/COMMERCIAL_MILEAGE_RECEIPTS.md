@@ -78,7 +78,7 @@ upload. DocumentStore retains responsibility for bounded uncertain-upload
 reconciliation. There are no automatic browser mutation retries. **Cancel recovery**
 or leaving the page retains already uploaded files in **Unreferenced receipts**;
 the unsaved-work guard protects pending selections during navigation.
-Cancellation distinguishes confirmed uploaded files from selections without a
+Partial-transfer and cancellation notices distinguish confirmed uploaded files from selections without a
 confirmed upload. Check **Unreferenced receipts** before selecting unconfirmed
 files again; an uncertain upload may have stored bytes despite its failed response.
 

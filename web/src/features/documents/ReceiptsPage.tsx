@@ -12,6 +12,16 @@ import { ConfirmationDialog } from '../../components/ConfirmationDialog';
 
 type PendingReceipt = { id: string; file: File; document?: Schemas['Document']; linked: boolean; error?: unknown };
 
+function recoverySummary(items: PendingReceipt[]) {
+  const unresolved = items.filter(item => !item.linked);
+  const uploaded = unresolved.filter(item => item.document).length;
+  const unconfirmed = unresolved.length - uploaded;
+  return [
+    uploaded ? `${uploaded} confirmed uploaded ${uploaded === 1 ? 'file remains' : 'files remain'} in Unreferenced receipts.` : '',
+    unconfirmed ? `${unconfirmed} ${unconfirmed === 1 ? 'file has' : 'files have'} no confirmed upload.` : '',
+  ].filter(Boolean).join(' ');
+}
+
 export function ReceiptsPage() {
   const { recordId = '' } = useParams();
   return <ReceiptWorkflow key={recordId} recordId={recordId} />;
@@ -55,7 +65,7 @@ function ReceiptWorkflow({ recordId }: { recordId: string }) {
       }
       const count = next.filter(item => item.linked).length;
       const remaining = next.length - count;
-      if (remaining) setMessage(`${count} attached; ${remaining} unresolved. Uploaded files remain in Unreferenced receipts. Retry only the unresolved files.`);
+      if (remaining) setMessage(`${count} attached; ${remaining} unresolved. ${recoverySummary(next)} Retry only the unresolved files.`);
       else { setMessage(`${count} ${count === 1 ? 'receipt' : 'receipts'} attached.`); setPending([]); }
     } finally { setBusy(false); setPhase(''); }
   }
@@ -74,11 +84,8 @@ function ReceiptWorkflow({ recordId }: { recordId: string }) {
     setPending(files.map(file => ({ id: crypto.randomUUID().replaceAll('-', ''), file, linked: false })));
   }
   function cancelRecovery() {
-    const uploaded = unresolved.filter(item => item.document).length;
-    const unconfirmed = unresolved.length - uploaded;
-    setMessage(['Recovery cancelled.',
-      uploaded ? `${uploaded} confirmed uploaded ${uploaded === 1 ? 'file remains' : 'files remain'} in Unreferenced receipts.` : '',
-      unconfirmed ? `${unconfirmed} ${unconfirmed === 1 ? 'file has' : 'files have'} no confirmed upload. Check Unreferenced receipts before selecting those files again.` : '',
+    setMessage(['Recovery cancelled.', recoverySummary(pending),
+      unresolved.some(item => !item.document) ? 'Check Unreferenced receipts before selecting those files again.' : '',
     ].filter(Boolean).join(' '));
     setPending([]);
   }

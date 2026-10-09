@@ -191,6 +191,9 @@ def test_receipt_cancel_recovery_distinguishes_confirmed_and_unconfirmed_uploads
                     patch.object(PostgresReceiptRepository, 'link', side_effect=DocumentError('Synthetic link failure')):
                 page.get_by_role('button', name='Attach selected receipts').click()
                 expect(page.get_by_role('alert').filter(has_text='2 unresolved.')).to_be_visible()
+                partial = page.get_by_role('alert').filter(has_text='2 unresolved.')
+                expect(partial).to_contain_text('1 confirmed uploaded file remains in Unreferenced receipts.')
+                expect(partial).to_contain_text('1 file has no confirmed upload.')
             assert document_store.upload_calls == 1 and len(document_store.files) == 1
             page.get_by_role('button', name='Cancel recovery').click()
             expect(notice).to_contain_text('1 confirmed uploaded file remains in Unreferenced receipts.')
@@ -236,6 +239,9 @@ def test_receipt_upload_progress_uncertain_retry_and_invalid_batch(commercial, c
                 release.set()
                 expect(page.get_by_role('alert').filter(has_text='1 unresolved.')).to_be_visible()
             assert document_store.upload_calls == 1 and len(document_store.files) == 1
+            partial = page.get_by_role('alert').filter(has_text='1 unresolved.')
+            expect(partial).to_contain_text('1 file has no confirmed upload.')
+            expect(partial).not_to_contain_text('file remains')
             page.get_by_role('button', name='Retry unresolved receipts').click()
             expect(page.get_by_role('status').filter(has_text='1 receipt attached.')).to_be_visible()
             assert document_store.upload_calls == 1 and len(document_store.files) == 1
