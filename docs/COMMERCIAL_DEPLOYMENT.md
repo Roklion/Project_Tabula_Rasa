@@ -223,10 +223,12 @@ equaled the requested top-level digest, and did not inspect that relationship.
 `image.ref` as the deployment reference and `image.sha` as its resolved SHA;
 [Buildx](https://docs.docker.com/reference/cli/docker/buildx/imagetools/inspect/)
 provides the registry descriptor and platform relationships used by the fix.
-The failed run did not record Render's image fields, and no local Render API
-credential was available during this investigation. Its exact reported SHA
-therefore remains unconfirmed; the index/platform difference is verified in
-GHCR, not yet attributed conclusively to Render's response in that run.
+The operator retrieved the failed deployment's image fields on October 9:
+`image.ref` retained the requested index reference above, while `image.sha`
+was the exact runtime manifest digest above. This confirms an index-versus-
+platform-manifest comparison caused the rejection, rather than a different
+deployed release. Accepting this registry-proven relationship preserves the
+artifact integrity check; attestation and unrelated digests still fail.
 After merge, rerun staging with a current CI-approved immutable image and retain
 successful hosted smoke/repeated-promotion evidence. This fix does not close #279.
 

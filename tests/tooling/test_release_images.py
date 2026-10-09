@@ -64,6 +64,14 @@ def test_single_manifest_retains_its_digest(monkeypatch):
     assert run.call_count == 3
 
 
+def test_observed_staging_index_and_render_manifest_pass_integrity_check():
+    # Operator-supplied Render fields; relationship independently read from GHCR.
+    image = REPOSITORY + "@sha256:fe1b5854f3603826e32e228e0f54bd71036454dd3f93f43b43455b2f72ddd727"
+    runtime = "sha256:92a1ede162a837223ea454ae1557a5743623eea2c5db5713371886ceb588d3c8"
+    release.deployed_image({"image": {"ref": image, "sha": runtime}}, image,
+                           {"manifest_digest": runtime}, REPOSITORY)
+
+
 @pytest.mark.parametrize("problem", ["no_amd64", "ambiguous", "bad_digest", "attestation_type", "nested_index", "missing_manifests"])
 def test_unsupported_or_malformed_index_fails_before_pull(monkeypatch, problem):
     root, child = index(), descriptor(CHILD)
