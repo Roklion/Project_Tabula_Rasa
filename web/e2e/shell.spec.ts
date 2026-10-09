@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 
 const session = {
   actor_id: 'synthetic', organization_id: 'synthetic', entity: { id: 'alpha', name: 'Alpha demonstration' },
@@ -26,6 +27,10 @@ test('deep links, navigation, responsive layout and empty state', async ({ page 
     if (width <= 760) await page.getByRole('button', { name: 'Menu', exact: true }).click();
     await page.getByRole('link', { name: 'Reports', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Reports', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Balance sheet', exact: true })).toBeVisible();
+    await expect(page.getByRole('main')).toBeFocused();
+    const accessibility = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
+    expect(accessibility.violations).toEqual([]);
     await page.screenshot({ path: test.info().outputPath('shell-' + width + '.png'), fullPage: true });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   }

@@ -307,3 +307,10 @@ Update the relevant guide when externally visible behavior, configuration,
 recovery procedures, or security boundaries change. Keep Mermaid source in
 Markdown, use repository-relative links, and never commit credentials, tokens,
 private ledger data, receipts, backups, or validation output.
+
+## Commercial browser quality
+
+The [bounded technical-alpha browser gate](COMMERCIAL_BROWSER_QUALITY.md) adds
+axe scans, desktop/mobile journeys and keyboard/failure checks to the existing
+Playwright baseline. Repository CI runs it in the required browser job after
+compiling the SPA; the guide owns local setup and outstanding release evidence.

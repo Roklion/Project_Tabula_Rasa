@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useEntity } from './context';
 import styles from './Shell.module.css';
@@ -8,8 +8,15 @@ import { EntitySelector } from './EntitySelection';
 
 export function Shell() {
   const session = useEntity();
-  const [open, setOpen] = useState(false);
   const location = useLocation();
+  const [menuKey, setMenuKey] = useState<string>();
+  const open = menuKey === location.key;
+  const main = useRef<HTMLElement>(null);
+  const previousPath = useRef(location.pathname);
+  useEffect(() => {
+    if (previousPath.current !== location.pathname) main.current?.focus();
+    previousPath.current = location.pathname;
+  }, [location.pathname]);
   return <div className={styles.shell}>
     <a className={styles.skip} href="#main">Skip to content</a>
     <aside className={styles.sidebar}>
@@ -20,17 +27,16 @@ export function Shell() {
         {session.trusted_development && <span className={styles.badge}>Technical alpha · development</span>}
       </div>
       <button className={styles.menu} type="button" aria-expanded={open} aria-controls="primary-navigation"
-        onClick={() => setOpen(!open)}>Menu</button>
+        onClick={() => setMenuKey(open ? undefined : location.key)}>Menu</button>
       <nav id="primary-navigation" aria-label="Main navigation" className={open ? styles.open : styles.navigation}>
-        {navigation.map(([path, name]) => <NavLink key={path} to={path} end={path === '/'}
-          onClick={() => setOpen(false)}>{name}</NavLink>)}
+        {navigation.map(([path, name]) => <NavLink key={path} to={path} end={path === '/'}>{name}</NavLink>)}
       </nav>
       <p className={styles.footer}>Bookkeeping with clarity.</p>
     </aside>
     <div className={styles.content}>
       <header className={styles.topbar}><span>{navigation.find(([path]) => path === location.pathname)?.[1] ?? 'Page'}</span>
         <span className="muted">{session.entity.name}</span></header>
-      <main id="main" tabIndex={-1} className={styles.main} key={location.key}><Outlet /></main>
+      <main ref={main} id="main" tabIndex={-1} className={styles.main} key={location.key}><Outlet /></main>
     </div>
   </div>;
 }

@@ -23,7 +23,9 @@ button:disabled { cursor: default; opacity: .6; }
 .empty { padding: 32px 0; border-top: 1px solid var(--border); }
 .notice { padding: 16px; margin: 16px 0; border-radius: 4px; overflow-wrap: anywhere; }
 .notice p:last-child { margin-bottom: 0; }
-.notice button + button { margin-left: 8px; }
+.confirmation { border: 1px solid var(--border); margin: auto; width: min(560px, calc(100% - 32px)); max-height: calc(100dvh - 32px); overflow: auto; }
+.confirmation::backdrop { background: rgb(32 33 36 / 40%); }
+.confirmation .actions { margin-top: 16px; }
 .success { color: #287A4B; background: #EAF5EE; }
 .error { color: #B33A3A; background: #FBECEC; }
 .warning { color: #805500; background: #FFF5D9; }

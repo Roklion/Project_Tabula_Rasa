@@ -16,6 +16,8 @@ from tabula_rasa.infrastructure.postgres.runtime import Database
 def empty_database():
     raw = os.environ.get("TABULA_RASA_TEST_DATABASE_URL", "")
     if not raw:
+        if os.environ.get('TABULA_RASA_REQUIRE_BROWSER_TESTS') == '1':
+            pytest.fail("Set TABULA_RASA_TEST_DATABASE_URL for the required native browser gate.")
         pytest.skip("Set TABULA_RASA_TEST_DATABASE_URL for real PostgreSQL integration tests.")
     settings = DatabaseSettings.from_environment({"TABULA_RASA_DATABASE_URL": raw}, required=True)
     name = "tabula_test_" + uuid4().hex

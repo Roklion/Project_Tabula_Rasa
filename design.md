@@ -331,12 +331,22 @@ expose a raw traceback for this configuration failure.
 - Context changes remount private queries and drafts; no prior business/session
   cache is reused. Forms stack; tables may scroll within their own region.
   Keyboard focus, labels and business scope remain reachable at 320 CSS pixels.
+- #287 uses one native modal confirmation component for discard, navigation,
+  business switching, record reload and destructive confirmations. The keep
+  action receives initial focus, Tab/Shift+Tab wrap within the prompt, Escape
+  keeps the draft, and dismissal restores the initiating control when it remains
+  mounted. Pending operations cannot be dismissed or submitted again. A rejected
+  destructive confirmation or failed reload closes so the shared error/review action is reachable.
+  A successful route change closes mobile navigation and focuses main content;
+  blocked navigation keeps its initiating link available. Declared top-level
+  validation errors are associated with their labeled fields and generic messages.
 
 [Foundation conventions](docs/COMMERCIAL_FOUNDATION.md) owns technical contracts.
 [Commercial concurrency](docs/COMMERCIAL_CONCURRENCY.md) owns the #280 contract.
 [Commercial core workflows](docs/COMMERCIAL_WORKFLOWS.md) owns #281/#282 scope.
 #222 adds authenticated identity/membership context selection,
-#283–#286 add remaining domain workflows, and #287 expands accessibility/browser coverage.
+#283–#286 add remaining domain workflows. [Browser quality](docs/COMMERCIAL_BROWSER_QUALITY.md)
+documents #287's automated baseline and the outstanding staging, receipt and manual-device gates.
 The Streamlit-specific shell requirements above continue to govern the internal
 edition.
 

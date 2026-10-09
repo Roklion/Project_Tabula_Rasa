@@ -25,17 +25,20 @@ def capture(page, name):
 
 
 @pytest.mark.parametrize('width', [1440, 390])
-def test_browser_reference_setup_and_entry_lifecycle(database, commercial, commercial_server, width):
+@pytest.mark.parametrize('engine', ['chromium', 'firefox', 'webkit'])
+def test_browser_reference_setup_and_entry_lifecycle(database, commercial, commercial_server, width, engine):
     alpha, beta, _, _ = commercial
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
+        browser = getattr(playwright, engine).launch()
         try:
             page = browser.new_page(viewport={'width': width, 'height': 1000 if width > 760 else 844})
             for resource, field, name in [('accounts', 'Account name', 'Browser bank'), ('categories', 'Category name', 'Browser expense'),
                                           ('payees', 'Name', 'Browser vendor'), ('tags', 'Name', 'Browser tag')]:
                 page.goto(commercial_server + '/' + resource + '/new')
                 page.get_by_label(field, exact=True).fill(name)
-                page.get_by_role('button', name='Create ' + ('category' if resource == 'categories' else resource[:-1]), exact=True).click()
+                with page.expect_response(lambda response: response.request.method == 'POST' and response.url.endswith('/' + resource)) as created_reference:
+                    page.get_by_role('button', name='Create ' + ('category' if resource == 'categories' else resource[:-1]), exact=True).click()
+                assert created_reference.value.status == 201
                 expect(page.get_by_role('status').filter(has_text='Record created.')).to_be_visible()
                 page.get_by_role('button', name='Back to records', exact=True).click()
                 expect(page.get_by_role('button', name='Edit ' + name, exact=True)).to_be_visible()
@@ -77,22 +80,40 @@ def test_browser_reference_setup_and_entry_lifecycle(database, commercial, comme
             page.get_by_label('Entry order', exact=True).select_option('Ascending')
             expect(page.get_by_role('rowheader', name='↳ Posting', exact=True)).to_have_count(2)
             expect(page.get_by_role('status').filter(has_text='1 matching entries')).to_be_visible()
-            capture(page, 'ledger-' + str(width))
+            capture(page, 'ledger-' + str(width) + '-' + engine)
             assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+            for kind in ('Income', 'Transfer'):
+                page.goto(commercial_server + '/transactions/new')
+                page.get_by_label('Type', exact=True).select_option(kind)
+                page.get_by_label('Amount', exact=True).fill('17.25' if kind == 'Income' else '3.00')
+                page.get_by_label('To account' if kind == 'Income' else 'From account', exact=True).select_option('cash')
+                if kind == 'Income':
+                    page.get_by_label('Category', exact=True).select_option('sales')
+                else:
+                    page.get_by_label('To account', exact=True).select_option('bank')
+                with page.expect_response(lambda response: response.request.method == 'POST') as entry:
+                    page.get_by_role('button', name='Save transaction', exact=True).click()
+                assert entry.value.status == 201
+                assert entry.value.json()['kind'] == kind
+                expect(page.get_by_role('status').filter(has_text='Record created.')).to_be_visible()
             page.goto(commercial_server + '/reports')
             expect(page.get_by_role('heading', name='Profit and loss', exact=True)).to_be_visible()
             expect(page.get_by_role('definition').filter(has_text=re.compile(r'^25\.00$'))).to_be_visible()
-            capture(page, 'reports-' + str(width))
+            expect(page.get_by_role('definition').filter(has_text=re.compile(r'^17\.25$'))).to_be_visible()
+            expect(page.get_by_role('definition').filter(has_text=re.compile(r'^-7\.75$')).first).to_be_visible()
+            capture(page, 'reports-' + str(width) + '-' + engine)
             assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
         finally:
             browser.close()
 
 
-def test_browser_journal_balance_and_service_failure_preserve_draft(database, commercial, commercial_server):
+@pytest.mark.parametrize('width', [1440, 390])
+@pytest.mark.parametrize('engine', ['chromium', 'firefox', 'webkit'])
+def test_browser_journal_balance_and_service_failure_preserve_draft(database, commercial, commercial_server, width, engine):
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
+        browser = getattr(playwright, engine).launch()
         try:
-            page = browser.new_page(viewport={'width': 390, 'height': 844})
+            page = browser.new_page(viewport={'width': width, 'height': 1000 if width > 760 else 844})
             page.goto(commercial_server + '/journals/new')
             expect(page.get_by_role('button', name='Save journal', exact=True)).to_be_disabled()
             page.get_by_label('Date', exact=True).fill('2026-10-06')
@@ -108,7 +129,7 @@ def test_browser_journal_balance_and_service_failure_preserve_draft(database, co
             expect(page.get_by_role('button', name='Save journal', exact=True)).to_be_disabled()
             page.get_by_label('Amount', exact=True).nth(1).fill('10.01')
             expect(page.get_by_role('button', name='Save journal', exact=True)).to_be_enabled()
-            capture(page, 'journal-390')
+            capture(page, 'journal-' + str(width) + '-' + engine)
             commercial[0].accounts.deactivate('cash')
             before = snapshot(database)
             with page.expect_response(lambda response: response.request.method == 'POST') as rejected:
@@ -124,14 +145,29 @@ def test_browser_journal_balance_and_service_failure_preserve_draft(database, co
             assert saved.value.request.post_data_json['entry_id'] == rejected.value.request.post_data_json['entry_id']
             assert saved.value.request.post_data_json['postings'] == rejected.value.request.post_data_json['postings']
             expect(page.get_by_role('status').filter(has_text='Record created.')).to_be_visible()
+            identity = saved.value.json()['id']
+            page.get_by_role('button', name='Back to records', exact=True).click()
+            page.get_by_role('button', name='Edit 2026-10-06 · Browser journal', exact=True).click()
+            page.get_by_label('Description / memo', exact=True).fill('Reviewed browser journal')
+            with page.expect_response(lambda response: response.request.method == 'PATCH') as edited:
+                page.get_by_role('button', name='Save changes', exact=True).click()
+            assert edited.value.status == 200
+            assert edited.value.json()['id'] == identity
+            page.get_by_role('button', name='Back to records', exact=True).click()
+            page.goto(commercial_server + '/transactions')
+            expect(page.get_by_role('cell', name='Reviewed browser journal', exact=True)).to_be_visible()
+            expect(page.get_by_role('rowheader', name='↳ Posting', exact=True)).to_have_count(4)
+            page.goto(commercial_server + '/reports')
+            expect(page.get_by_role('definition').filter(has_text=re.compile(r'^35\.01$'))).to_be_visible()
             assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
         finally:
             browser.close()
 
 
-def test_browser_entity_switch_discards_draft_and_isolates_clients(commercial, commercial_server):
+@pytest.mark.parametrize('engine', ['chromium', 'firefox', 'webkit'])
+def test_browser_entity_switch_discards_draft_and_isolates_clients(commercial, commercial_server, engine):
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
+        browser = getattr(playwright, engine).launch()
         try:
             first = browser.new_context().new_page()
             second = browser.new_context().new_page()

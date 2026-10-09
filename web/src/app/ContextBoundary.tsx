@@ -35,7 +35,7 @@ export function ContextBoundary({ children }: { children: ReactNode }) {
     catch (error) { setSelectionError(error); }
     finally { setSwitching(false); }
   }
-  return <EntitySelectionContext.Provider value={{ items: entities, select }}>
+  return <EntitySelectionContext.Provider value={{ items: entities, select, pending: switching }}>
     {switching && <LoadingState label="Switching business…" />}
     {selectionError !== undefined && <div className="standalone">
       <p>Business switching could not be confirmed. Your current business and draft are preserved.</p>
