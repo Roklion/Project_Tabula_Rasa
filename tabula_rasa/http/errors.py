@@ -9,6 +9,7 @@ from tabula_rasa.errors import (
 )
 from .models.common import ErrorCode, ErrorDetail, ErrorEnvelope, FieldError
 from tabula_rasa.application.mileage import MileageValidationError
+from tabula_rasa.application.documents import DocumentError, DocumentNotFoundError, DocumentValidationError
 
 
 ERRORS = {
@@ -50,8 +51,12 @@ def error_response(request, code, *, fields=None):
 
 
 def failure_code(error):
-    if isinstance(error, MileageValidationError):
+    if isinstance(error, DocumentNotFoundError):
+        return 'not_found'
+    if isinstance(error, (MileageValidationError, DocumentValidationError)):
         return "validation"
+    if isinstance(error, DocumentError):
+        return 'unavailable'
     if isinstance(error, TransportError):
         return error.code
     if isinstance(error, StorageNotFoundError):
@@ -94,7 +99,7 @@ async def handle_validation(request, error: RequestValidationError):
         "account_id", "to_account_id", "category_id", "payee_id", "tag_ids", "description",
         "reference", "postings", "target_type", "target_id", "side", "trip_date", "miles",
         "vehicle", "start_location", "destination", "business_purpose", "notes",
-        "new_payee_name", "new_tag_name",
+        "new_payee_name", "new_tag_name", "filename", "document_id", "round_trip", "return_miles", "start", "end",
     }
     fields = [
         FieldError(field=str(item["loc"][-1]), code="invalid", message="Check this value.")

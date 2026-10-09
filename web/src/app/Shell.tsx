@@ -26,7 +26,8 @@ export function Shell() {
       <p className={styles.footer}>Bookkeeping with clarity.</p>
     </aside>
     <div className={styles.content}>
-      <header className={styles.topbar}><span>{navigation.find(([path]) => path === location.pathname)?.[1] ?? 'Page'}</span>
+      <header className={styles.topbar}><span>{navigation.find(([path]) => path === location.pathname
+        || path !== '/' && location.pathname.startsWith(path + '/'))?.[1] ?? 'Page'}</span>
         <span className="muted">{session.entity.name}</span></header>
       <main id="main" tabIndex={-1} className={styles.main} key={location.key}><Outlet /></main>
     </div>

@@ -107,48 +107,14 @@ function JournalEditor({ row, onClose }: { row: Schemas['Journal']; onClose: () 
     fields={form => <JournalFields form={form} />} />;
 }
 
-function mileageLoaded(row: Schemas['Mileage']) {
-  const values: Schemas['MileageChanges'] = { trip_date: row.trip_date, miles: row.miles, vehicle: row.vehicle,
-    start_location: row.start_location, destination: row.destination, business_purpose: row.business_purpose,
-    notes: row.notes, tag_ids: row.tag_ids, new_tag_name: '' };
-  return { values, metadata: metadata(row) };
-}
-
-function MileageFields({ form }: { form: UseFormReturn<Schemas['MileageChanges']> }) {
-  const session = useEntity();
-  const choices = useReferenceChoices(session);
-  if (choices.pending) return <LoadingState label="Loading choices…" />;
-  if (choices.error) return <ErrorNotice error={choices.error} />;
-  return <><TextField form={form} name="trip_date" label="Trip date" type="date" />
-    <TextField form={form} name="vehicle" label="Vehicle" />
-    <TextField form={form} name="miles" label="Business miles" />
-    <SelectField form={form} name="tag_ids" label="Tags" options={activeChoices(choices.tags, form.formState.defaultValues?.tag_ids ?? [])} multiple />
-    <TextField form={form} name="new_tag_name" label="New tag name (optional)" />
-    <TextField form={form} name="start_location" label="Starting location" />
-    <TextField form={form} name="destination" label="Destination" />
-    <TextField form={form} name="business_purpose" label="Business purpose" />
-    <TextField form={form} name="notes" label="Notes" /></>;
-}
-
-function MileageEditor({ row, onClose }: { row: Schemas['Mileage']; onClose: () => void }) {
-  const session = useEntity();
-  return <ProtectedEditor session={session} loaded={mileageLoaded(row)} title="Edit mileage trip" onClose={onClose}
-    save={async (id, baseline, changes) => mileageLoaded(await api.updateMileage(session, id, { baseline, changes }))}
-    remove={(id, baseline) => api.deleteMileage(session, id, baseline)}
-    loadLatest={async id => mileageLoaded(await latest(api.mileage, session, id))}
-    fields={form => <MileageFields form={form} />} />;
-}
-
-export function BookkeepingPage({ resource }: { resource: 'transactions' | 'journals' | 'mileage' }) {
+export function BookkeepingPage({ resource }: { resource: 'transactions' | 'journals' }) {
   const title = resource[0].toUpperCase() + resource.slice(1);
   return <><h1>{title}</h1><p className="lead">Review existing records and save changes for this business.</p>
-    {resource !== 'mileage' && <nav aria-label="Entries"><Link to="/transactions">Transactions</Link> · <Link to="/journals">Journals</Link></nav>}
+    <nav aria-label="Entries"><Link to="/transactions">Transactions</Link> · <Link to="/journals">Journals</Link></nav>
     {resource === 'transactions' ? <RecordList key={resource} resource={resource} title="Transactions" list={api.transactions}
-      label={row => `${row.txn_date} · ${row.description || row.kind} · ${row.amount}`} canEdit={row => !row.source_type}
+      label={row => `${row.txn_date} · ${row.description || row.kind} · ${row.amount}`} canEdit={row => !row.source_type} receiptTarget={row => !row.source_type}
       editor={(row, close) => <TransactionEditor row={row} onClose={close} />} />
-      : resource === 'journals' ? <RecordList key={resource} resource={resource} title="Journals" list={api.journals}
-        label={row => `${row.txn_date} · ${row.description || 'Journal'}`} editor={(row, close) => <JournalEditor row={row} onClose={close} />} />
-      : <RecordList key={resource} resource={resource} title="Mileage trips" list={api.mileage}
-        label={row => `${row.trip_date} · ${row.destination} · ${row.miles} miles`} editor={(row, close) => <MileageEditor row={row} onClose={close} />} />}
+      : <RecordList key={resource} resource={resource} title="Journals" list={api.journals}
+        label={row => `${row.txn_date} · ${row.description || 'Journal'}`} editor={(row, close) => <JournalEditor row={row} onClose={close} />} />}
   </>;
 }

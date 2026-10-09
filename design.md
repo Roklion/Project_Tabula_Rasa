@@ -275,7 +275,7 @@ expose a raw traceback for this configuration failure.
 
 ## Commercial shell
 
-**Current behavior** for the #277/#278/#279/#280 technical-alpha application:
+**Current behavior** for the #277/#278/#279/#280/#283/#286 technical-alpha application:
 
 - The React shell uses the visual tokens, typography and approximately 760px
   stacking boundary above. Navigation covers Dashboard, Transactions, Assets,
@@ -316,6 +316,17 @@ expose a raw traceback for this configuration failure.
 
 [Foundation conventions](docs/COMMERCIAL_FOUNDATION.md) owns technical contracts.
 [Commercial concurrency](docs/COMMERCIAL_CONCURRENCY.md) owns the #280 contract.
+**Current behavior** added by #283/#286: Mileage has a complete manual log,
+inclusive date/any-tag filtering, scoped totals/CSV, one-way/round-trip creation
+and fresh detail routes reusing the protected editor. Ordinary saved transactions
+link to receipt management with portable metadata inspection, same-origin
+downloads, multi-file attachment, upload/link progress and unresolved-file retry.
+Confirmed uploads survive link failures. Confirmed unlink removes only the
+reference; unreferenced files can be relinked. Read-only users can inspect/download;
+unconfigured document storage shows availability text without upload controls.
+Source-owned receipt workflows stay with their owners. Maps/routing and import
+remain internal-edition workflows. [Commercial mileage and receipts](docs/COMMERCIAL_WORKFLOWS.md)
+owns this slice's transport, recovery and validation contract.
 #222 adds real identity/context selection,
 #281–#286 add domain workflows, and #287 expands accessibility/browser coverage.
 The Streamlit-specific shell requirements above continue to govern the internal

@@ -17,6 +17,11 @@ class MileageChanges(DTO):
     new_tag_name: str = ''
 
 
+class MileageCreate(MileageChanges):
+    round_trip: bool = False
+    return_miles: DecimalString | None = None
+
+
 class Mileage(DTO):
     id: str
     trip_date: str

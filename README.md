@@ -59,6 +59,7 @@ The documentation index is this section of the root README. Go directly to:
 | Understand the system and data boundaries | [Architecture](docs/ARCHITECTURE.md) |
 | Implement the selected commercial browser/API/runtime stack | [Commercial web ADR](docs/adr/0002-commercial-web-runtime.md) |
 | Follow commercial package, local topology and deployment conventions | [Commercial development and deployment](docs/COMMERCIAL_WEB.md) |
+| Use and validate browser mileage and transaction receipts | [Commercial mileage and receipts](docs/COMMERCIAL_WORKFLOWS.md) |
 | Configure technical Render/Neon environments and deploy a tested image | [Technical deployment and operator checkpoint](docs/COMMERCIAL_DEPLOYMENT.md) |
 | Implement the commercial PostgreSQL accounting model | [Canonical schema ADR](docs/adr/0001-canonical-accounting-schema.md) |
 | Start PostgreSQL, run migrations, and test database infrastructure | [PostgreSQL development and operations](docs/POSTGRESQL.md) |

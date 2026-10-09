@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError, type Session } from '../../api/client';
 import { resourceKey } from '../../api/query';
 
-const affectedResources = ['accounts', 'categories', 'payees', 'tags', 'transactions', 'journals', 'mileage'];
+const affectedResources = ['accounts', 'categories', 'payees', 'tags', 'transactions', 'journals', 'mileage', 'documents'];
 
 export function useProtectedMutation<T>(session: Session, mutationFn: (data: T) => Promise<unknown>) {
   const cache = useQueryClient();

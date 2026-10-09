@@ -124,8 +124,8 @@ jobs:
           docker build --platform linux/amd64 --build-arg RELEASE_ID="$GITHUB_SHA" --build-arg SCHEMA_REVISION="$SCHEMA" -f deploy/commercial/Dockerfile -t tabula-commercial:ci .
           docker run --rm tabula-commercial:ci python -c 'import sys; from tabula_rasa.http.app import create_app; create_app(schema_only=True).openapi(); assert "streamlit" not in sys.modules'
       - run: python -m playwright install --with-deps chromium
-      - name: Run native browser concurrency tests
-        run: python -m pytest tests/postgres/test_browser_baselines.py
+      - name: Run native browser concurrency and workflow tests
+        run: python -m pytest tests/postgres/test_browser_baselines.py tests/postgres/test_browser_workflows.py
         env:
           TABULA_RASA_REQUIRE_BROWSER_TESTS: '1'
 

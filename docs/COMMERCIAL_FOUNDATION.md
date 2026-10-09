@@ -20,7 +20,9 @@ and session lifecycle to #222, deployment and its temporary hosted gate to #279,
 operations to #223, and broader browser/device quality to #287.
 [Commercial concurrency](COMMERCIAL_CONCURRENCY.md) documents #280's subsequent
 protected edit/delete endpoints and forms, loaded-token enforcement and native
-two-client browser validation. Production activation remains separate. Streamlit
+two-client browser validation. [Commercial mileage and receipts](COMMERCIAL_WORKFLOWS.md)
+documents #286/#283's subsequent list/create/detail and document-transfer workflows.
+Production activation remains separate. Streamlit
 remains the internal/reference edition.
 
 ## Transport and service composition

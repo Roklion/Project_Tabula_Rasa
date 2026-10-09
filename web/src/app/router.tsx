@@ -6,6 +6,8 @@ import { Dashboard, Accounts, PlannedPage, MissingPage, RouteError } from '../fe
 import { ReferencesPage } from '../features/concurrency/ReferenceEditors';
 import { BookkeepingPage } from '../features/concurrency/BookkeepingEditors';
 import { ManagedMergeForm } from '../features/concurrency/ManagedMergeForm';
+import { MileageDetail, MileagePage, NewMileage } from '../features/mileage/MileagePage';
+import { ReceiptsPage } from '../features/documents/ReceiptsPage';
 
 const routes = [{
   element: <ContextBoundary><Shell /></ContextBoundary>,
@@ -14,7 +16,11 @@ const routes = [{
     { index: true, element: <Dashboard /> },
     { path: 'accounts', element: <Accounts /> },
     ...(['categories', 'payees', 'tags'] as const).map(resource => ({ path: resource, element: <ReferencesPage resource={resource} /> })),
-    ...(['transactions', 'journals', 'mileage'] as const).map(resource => ({ path: resource, element: <BookkeepingPage resource={resource} /> })),
+    ...(['transactions', 'journals'] as const).map(resource => ({ path: resource, element: <BookkeepingPage resource={resource} /> })),
+    { path: 'mileage', element: <MileagePage /> },
+    { path: 'mileage/new', element: <NewMileage /> },
+    { path: 'mileage/:recordId', element: <MileageDetail /> },
+    { path: 'transactions/:recordId/receipts', element: <ReceiptsPage /> },
     ...(['payees', 'tags'] as const).map(resource => ({ path: resource + '/merge', element: <><h1>Merge {resource}</h1><ManagedMergeForm key={resource} resource={resource} /></> })),
     ...navigation.filter(([path]) => !['/', '/accounts', '/categories', '/transactions', '/mileage'].includes(path)).map(([path, name]) => ({
       path: path.slice(1), element: <PlannedPage title={name} />,
