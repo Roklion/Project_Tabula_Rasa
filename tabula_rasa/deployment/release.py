@@ -14,6 +14,48 @@ class ReleaseError(ValueError):
     """Fixed operator diagnostics only."""
 
 
+MANIFEST_TYPES = {"application/vnd.oci.image.manifest.v1+json",
+                  "application/vnd.docker.distribution.manifest.v2+json"}
+INDEX_TYPES = {"application/vnd.oci.image.index.v1+json",
+               "application/vnd.docker.distribution.manifest.list.v2+json"}
+
+
+def immutable_digest(image, repository):
+    if not isinstance(image, str) or not re.fullmatch(re.escape(repository) + r"@sha256:[0-9a-f]{64}", image):
+        raise ReleaseError("Use an immutable digest in the configured repository.")
+    return image.split("@", 1)[1]
+
+
+def registry_manifest(image, repository):
+    """Read the registry descriptor, never a local image/config ID or a tag."""
+    digest = immutable_digest(image, repository)
+    result = subprocess.run(["docker", "buildx", "imagetools", "inspect", image,
+                             "--format", "{{json .Manifest}}"], capture_output=True, check=False)
+    try:
+        manifest = json.loads(result.stdout)
+        if result.returncode or manifest["digest"] != digest:
+            raise ValueError
+        return manifest
+    except (ValueError, KeyError, TypeError):
+        raise ReleaseError("Invalid registry image metadata; inspect retained release digests.") from None
+
+
+def deployed_image(deploy, image, metadata, repository):
+    """Require both Render fields to identify the verified immutable artifact."""
+    allowed = {immutable_digest(image, repository), metadata["manifest_digest"]}
+    try:
+        reported = deploy["image"]
+        ref_digest = immutable_digest(reported["ref"], repository)
+        sha = reported["sha"]
+        if not isinstance(sha, str) or not re.fullmatch(r"(?:sha256:)?[0-9a-f]{64}", sha):
+            raise ValueError
+        digest = sha if sha.startswith("sha256:") else "sha256:" + sha
+        if ref_digest not in allowed or digest not in allowed:
+            raise ValueError
+    except (ValueError, KeyError, TypeError):
+        raise ReleaseError("Render image metadata mismatch or missing; stop and inspect provider state.") from None
+
+
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):
         return None
@@ -32,12 +74,26 @@ def api(path, token, *, body=None, github=False):
 
 
 def image_metadata(image, repository):
-    if not re.fullmatch(re.escape(repository) + r"@sha256:[0-9a-f]{64}", image):
-        raise ReleaseError("Use an immutable digest in the configured repository.")
-    pull = subprocess.run(["docker", "pull", image], capture_output=True, check=False)
+    digest = immutable_digest(image, repository)
+    manifest = registry_manifest(image, repository)
+    try:
+        if manifest["mediaType"] in INDEX_TYPES:
+            matching = [item for item in manifest["manifests"]
+                        if item.get("platform", {}).get("os") == "linux"
+                        and item.get("platform", {}).get("architecture") == "amd64"]
+            if len(matching) != 1 or matching[0]["mediaType"] not in MANIFEST_TYPES:
+                raise ValueError
+            digest = matching[0]["digest"]
+            manifest = registry_manifest(repository + "@" + digest, repository)
+        if manifest["mediaType"] not in MANIFEST_TYPES:
+            raise ValueError
+    except (ValueError, KeyError, TypeError, AttributeError):
+        raise ReleaseError("Invalid linux/amd64 registry manifest.") from None
+    runtime_image = repository + "@" + digest
+    pull = subprocess.run(["docker", "pull", "--platform", "linux/amd64", runtime_image], capture_output=True, check=False)
     if pull.returncode:
         raise ReleaseError("Image cannot be pulled; preserve registry rollback digests.")
-    result = subprocess.run(["docker", "image", "inspect", image], capture_output=True, check=False)
+    result = subprocess.run(["docker", "image", "inspect", runtime_image], capture_output=True, check=False)
     try:
         metadata = json.loads(result.stdout)[0]
         labels = metadata["Config"]["Labels"]
@@ -48,7 +104,7 @@ def image_metadata(image, repository):
             raise ValueError
     except (ValueError, KeyError, IndexError, TypeError):
         raise ReleaseError("Invalid release image metadata.") from None
-    return {"release": release, "schema": schema}
+    return {"release": release, "schema": schema, "manifest_digest": digest}
 
 
 def validated_main(release, environ):
@@ -103,24 +159,26 @@ def promote(image, environ, *, read=api, metadata=image_metadata, verify=validat
     previous_image = None
     previous = None
     if prior:
-        sha = prior.get("image", {}).get("sha", "")
-        previous_image = repository + "@" + sha
+        try:
+            previous_image = prior["image"]["ref"]
+            immutable_digest(previous_image, repository)
+        except (ValueError, KeyError, TypeError):
+            raise ReleaseError("Prior image needs a verified immutable reference; inspect provider state.") from None
         previous = metadata(previous_image, repository)
+        deployed_image(prior, previous_image, previous, repository)
         if previous["schema"] != candidate["schema"]:
             raise ReleaseError("Prior image is schema-incompatible; use reviewed maintenance/bridge procedure.")
     deployed = read(f"/services/{service}/deploys", token, body={"imageUrl": image})
     # No rollback after an uncertain create/wait: it could race a still-running deploy.
     confirmed = wait_live(service, deployed["id"], token, read=read)
-    if confirmed.get("image", {}).get("sha") != image.split("@", 1)[1]:
-        raise ReleaseError("Deployed digest mismatch; stop and inspect provider state.")
+    deployed_image(confirmed, image, candidate, repository)
     try:
         smoke_check(origin, environ["TABULA_RASA_ALPHA_USERNAME"], environ["TABULA_RASA_ALPHA_PASSWORD"], candidate["release"])
     except Exception:
         if previous_image:
             rollback = read(f"/services/{service}/deploys", token, body={"imageUrl": previous_image})
             restored = wait_live(service, rollback["id"], token, read=read)
-            if restored.get("image", {}).get("sha") != previous_image.split("@", 1)[1]:
-                raise ReleaseError("Rollback digest mismatch; stop and inspect provider state.") from None
+            deployed_image(restored, previous_image, previous, repository)
             smoke_check(origin, environ["TABULA_RASA_ALPHA_USERNAME"], environ["TABULA_RASA_ALPHA_PASSWORD"], previous["release"])
             raise ReleaseError("Smoke failed; prior compatible image restored and smoke verified.") from None
         raise ReleaseError("Initial smoke failed; no prior image exists. Restrict access and inspect.") from None
