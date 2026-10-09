@@ -9,7 +9,7 @@ export function EntitySelector({ activeId }: { activeId: string }) {
   const pending = useIsMutating() > 0 || Boolean(selection?.pending);
   if (!selection || selection.items.length < 2) return null;
   return <><label htmlFor="business-selector">Select business</label>
-    <select id="business-selector" disabled={pending} value={activeId} onChange={event => setNext(event.target.value)}>
+    <select id="business-selector" disabled={pending} value={activeId} onChange={event => { event.currentTarget.focus(); setNext(event.target.value); }}>
       {selection.items.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
     </select>
     {next && next !== activeId && <ConfirmationDialog title="Switch business" keepLabel="Keep current business"

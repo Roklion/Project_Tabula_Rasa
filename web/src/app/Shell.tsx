@@ -20,7 +20,11 @@ export function Shell() {
     if (previousPath.current !== location.pathname) main.current?.focus();
     previousPath.current = location.pathname;
   }, [location.pathname]);
-  return <div className={styles.shell}>
+  return <div className={styles.shell} onClickCapture={event => {
+    // Safari does not focus pointer-activated links; retain the actual opener
+    // for a blocked navigation's shared confirmation.
+    if (event.target instanceof Element) event.target.closest<HTMLAnchorElement>('a[href]')?.focus();
+  }}>
     <a className={styles.skip} href="#main">Skip to content</a>
     <aside className={styles.sidebar}>
       <div className={styles.brand}>Project <br />Tabula Rasa</div>

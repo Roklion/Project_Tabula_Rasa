@@ -70,7 +70,7 @@ export function ProtectedEditor<T extends FieldValues>({ session, loaded, title,
   return <section className="surface editor" aria-label={title}>
     <h2>{title}</h2><UnsavedChanges dirty={form.formState.isDirty} />
     {success && <SuccessNotice>{success}</SuccessNotice>}
-    {onClose && <button type="button" disabled={pending} onClick={() => form.formState.isDirty ? setClosing(true) : onClose()}>Back to records</button>}
+    {onClose && <button type="button" disabled={pending} onClick={event => { event.currentTarget.focus(); if (form.formState.isDirty) setClosing(true); else onClose(); }}>Back to records</button>}
     {closing && <ConfirmationDialog title="Discard draft" keepLabel="Keep editing" confirmLabel="Discard draft and close"
       onKeep={() => setClosing(false)} onConfirm={() => { form.reset(form.getValues()); onClose?.(); }}>
       Discard your unsaved changes?
@@ -82,8 +82,8 @@ export function ProtectedEditor<T extends FieldValues>({ session, loaded, title,
       else void submit('save', values);
     })}>
       <fieldset disabled={pending || review}>{fields(form)}</fieldset>
-      <div className="actions"><button type="submit" disabled={pending || review}>Save changes</button>
-        <button type="button" disabled={pending || review} onClick={() => setConfirmRemove(true)}>{removeLabel}</button></div>
+      <div className="actions"><button type="submit" disabled={pending || review} onClick={event => event.currentTarget.focus()}>Save changes</button>
+        <button type="button" disabled={pending || review} onClick={event => { event.currentTarget.focus(); setConfirmRemove(true); }}>{removeLabel}</button></div>
       {pendingSave !== undefined && <ConfirmationDialog title="Deactivate record" keepLabel="Keep editing"
         confirmLabel="Confirm deactivate" pending={pending || review} onKeep={() => setPendingSave(undefined)}
         onConfirm={() => void submit('save', pendingSave)}>

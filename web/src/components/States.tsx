@@ -30,7 +30,7 @@ export function ErrorNotice({ error, onReview }: { error: unknown; onReview?: ()
     {failure.fields.length > 0 && <ul>{failure.fields.map(field =>
       <li key={field.field}>{field.field}: Check this value.</li>)}</ul>}
     {failure.requestId && <p className="muted">Request reference: {failure.requestId}</p>}
-    {onReview && <button type="button" onClick={onReview}>{conflict ? 'Review latest record' : 'Reload'}</button>}
+    {onReview && <button type="button" onClick={event => { event.currentTarget.focus(); onReview(); }}>{conflict ? 'Review latest record' : 'Reload'}</button>}
   </div>;
 }
 
