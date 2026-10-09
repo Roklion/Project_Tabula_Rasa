@@ -7,6 +7,7 @@ import { useEntity } from '../../app/context';
 import { EmptyState, ErrorNotice, Field, LoadingState, SuccessNotice } from '../../components/States';
 import { UnsavedChanges } from '../../components/UnsavedChanges';
 import { useProtectedMutation } from '../concurrency/mutations';
+import { downloadBlob } from '../../components/downloadBlob';
 
 type PendingReceipt = { id: string; file: File; document?: Schemas['Document']; linked: boolean; error?: unknown };
 
@@ -76,8 +77,7 @@ function ReceiptWorkflow({ recordId }: { recordId: string }) {
     setBusy(true); setPhase('Downloading receipt…'); setFailure(undefined);
     try {
       const content = await api.downloadDocument(session, doc.id);
-      const url = URL.createObjectURL(content);
-      const link = document.createElement('a'); link.href = url; link.download = doc.filename; link.click(); URL.revokeObjectURL(url);
+      downloadBlob(content, doc.filename);
     } catch (error) { setFailure(error); }
     finally { setBusy(false); setPhase(''); }
   }

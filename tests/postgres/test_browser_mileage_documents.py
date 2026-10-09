@@ -35,6 +35,7 @@ def test_mileage_capture_round_trip_filter_export_detail_and_delete(commercial, 
             page.get_by_label('Starting location').fill('Office')
             page.get_by_label('Destination', exact=True).fill('Site')
             page.get_by_label('Business purpose').fill('Inspection')
+            page.get_by_label('Notes', exact=True).fill('@SUM(1)')
             page.get_by_label('New tag name (optional)').fill('Inspection')
             page.get_by_role('button', name='Save mileage trip').click()
             expect(page.get_by_role('status').filter(has_text='Mileage saved: 2 trips.')).to_be_visible()
@@ -47,6 +48,7 @@ def test_mileage_capture_round_trip_filter_export_detail_and_delete(commercial, 
                 page.get_by_role('button', name='Download filtered mileage CSV').click()
             csv = Path(download.value.path()).read_text(encoding='utf-8')
             assert 'Inspection' in csv and '14.2' in csv and '12.4' in csv
+            assert '"\'@SUM(1)"' in csv
             page.get_by_role('button', name='Edit 2026-10-08 · Site · 12.4 miles', exact=True).click()
             page.get_by_label('Notes', exact=True).fill('Reviewed')
             page.get_by_role('button', name='Save changes', exact=True).click()
@@ -125,7 +127,7 @@ def test_receipt_upload_progress_uncertain_retry_and_invalid_batch(commercial, c
             assert document_store.upload_calls == 1 and len(document_store.files) == 1
             page.get_by_role('button', name='Retry unresolved receipts').click()
             expect(page.get_by_role('status').filter(has_text='1 receipt attached.')).to_be_visible()
-            assert document_store.upload_calls == 2 and len(document_store.files) == 1
+            assert document_store.upload_calls == 1 and len(document_store.files) == 1
             with patch.object(document_store, 'fetch', side_effect=DocumentError('Synthetic download failure')):
                 page.get_by_role('link', name='Download uncertain.pdf').click()
                 expect(page.get_by_role('alert')).to_contain_text('request could not be completed')

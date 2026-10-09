@@ -83,9 +83,14 @@ def test_documents_upload_link_download_unlink_relink_without_provider_fields(da
     assert doc['id'] == 'a' * 32 and doc['byte_size'] == len(b'%PDF synthetic receipt')
     assert not {'storage_key', 'open_url', 'profile_key', 'store_kind'} & doc.keys()
     assert client.get(PREFIX + 'documents').json()['items'] == [doc]
+    assert upload(client).json() == doc
+    assert upload(client, content=b'%PDF conflicting bytes').status_code == 422
+    assert upload(client, filename='different.pdf').status_code == 422
+    assert document_store.upload_calls == 1
     before_baseline = alpha.transactions.list()[0]['baseline']
     assert client.post(path, headers=HEADERS, json={'document_id': doc['id']}).status_code == 200
     assert client.get(path).json()['items'] == [doc]
+    assert upload(client, content=b'%PDF conflicting linked bytes').status_code == 422
     assert client.get(PREFIX + 'documents').json()['items'] == []
     response = client.get(PREFIX + 'documents/' + doc['id'] + '/content')
     assert response.content == b'%PDF synthetic receipt' and response.headers['Cache-Control'] == 'no-store'

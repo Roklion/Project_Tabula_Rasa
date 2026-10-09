@@ -17,6 +17,8 @@ use one inclusive date/tag scope for the table, trip count, business-mile total
 and **Download filtered mileage CSV**. Multiple selected tags match any selected
 tag. The log preserves date, distance, vehicle, both locations, purpose, notes,
 tags and stable identity. Read-only users can inspect a trip; writers can edit it.
+CSV export prefixes formula-leading text with an apostrophe so spreadsheet
+applications treat it as literal text; the stored trip remains unchanged.
 
 **Add trip** captures the existing application-service fields. **Round trip**
 initializes an independently editable return distance and creates two independent
@@ -61,8 +63,11 @@ identify uploading versus linking while controls are disabled.
 
 Each selected file receives a stable portable ID before sending bytes. The
 browser first uploads bytes, retains the confirmed document response, then links
-its canonical ID. Confirmed links remain attached if another file fails. Counts
-distinguish attached and unresolved work. **Retry unresolved receipts** reuses
+its canonical ID. Confirmed links remain attached if another file fails.
+An explicit upload retry reuses a freshly confirmed document with matching
+filename, type, size and checksum; conflicting reuse of its ID is rejected before
+sending bytes. An unavailable inventory stops the upload for inspection/retry.
+Counts distinguish attached and unresolved work. **Retry unresolved receipts** reuses
 the same ID/file after an upload failure, or retries only linking after a confirmed
 upload. DocumentStore retains responsibility for bounded uncertain-upload
 reconciliation. There are no automatic browser mutation retries. **Cancel recovery**

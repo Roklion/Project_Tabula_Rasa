@@ -11,6 +11,8 @@ import { ProtectedEditor } from '../concurrency/ProtectedEditor';
 import { useProtectedMutation } from '../concurrency/mutations';
 import { MileageFields } from './MileageFields';
 import { mileageLoaded, type MileageDraft } from './mileageForm';
+import { mileageCsvCell } from './mileageCsv';
+import { downloadBlob } from '../../components/downloadBlob';
 
 const tripLabel = (row: Schemas['Mileage']) => `${row.trip_date} · ${row.destination} · ${row.miles} miles`;
 
@@ -26,12 +28,10 @@ export function MileagePage() {
   const rows = (trips.data?.items ?? []).filter(row => (!start || row.trip_date >= start) && (!end || row.trip_date <= end)
     && (!tagIds.length || row.tag_ids.some(id => tagIds.includes(id))));
   function download() {
-    const cell = (value: string) => '"' + value.replaceAll('"', '""') + '"';
     const data = [['ID', 'Date', 'Miles', 'From', 'Destination', 'Business purpose', 'Vehicle', 'Tags', 'Notes'],
       ...rows.map(row => [row.id, row.trip_date, row.miles, row.start_location, row.destination, row.business_purpose,
         row.vehicle, row.tag_ids.map(id => names.get(id) ?? id).join('; '), row.notes])];
-    const url = URL.createObjectURL(new Blob([data.map(row => row.map(cell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' }));
-    const link = document.createElement('a'); link.href = url; link.download = 'tabula-rasa-mileage.csv'; link.click(); URL.revokeObjectURL(url);
+    downloadBlob(new Blob([data.map(row => row.map(mileageCsvCell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' }), 'tabula-rasa-mileage.csv');
   }
   return <><h1>Mileage</h1><p className="lead">Record business travel and review your mileage log.</p>
     {session.capabilities.includes('bookkeeping:write') && <Link className="button" to="/mileage/new">Add trip</Link>}

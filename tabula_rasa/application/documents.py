@@ -260,10 +260,22 @@ class ReceiptService:
         validate_receipt_upload(filename, content)
         if not re.fullmatch('[0-9a-f]{32}', document_id):
             raise DocumentValidationError("A receipt requires a stable portable identity.")
-        document = self.documents.upload(self.profile_key, DocumentUpload(
+        upload = DocumentUpload(
             document_id, filename, mimetypes.guess_type(filename)[0] or 'application/octet-stream',
             hashlib.sha256(content).hexdigest(), content,
-        ))
+        )
+        try:
+            existing = self.document(document_id)
+        except DocumentNotFoundError:
+            pass
+        else:
+            metadata = existing.metadata
+            if (metadata.original_filename, metadata.mime_type, metadata.byte_size, metadata.sha256) != (
+                filename, upload.mime_type, len(content), upload.sha256,
+            ):
+                raise DocumentValidationError("The receipt identity is already used by a different upload.")
+            return existing
+        document = self.documents.upload(self.profile_key, upload)
         self._check_profile(document)
         return document
 
