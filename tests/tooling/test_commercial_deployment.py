@@ -13,6 +13,8 @@ ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = "ghcr.io/roklion/project_tabula_rasa/commercial"
 IMAGE = REPOSITORY + "@sha256:" + "a" * 64
 PRIOR = REPOSITORY + "@sha256:" + "b" * 64
+MANIFEST = "sha256:" + "e" * 64
+PRIOR_MANIFEST = "sha256:" + "f" * 64
 ENV = {"TABULA_RASA_ENVIRONMENT": "staging", "GITHUB_REPOSITORY": "Roklion/Project_Tabula_Rasa",
        "TABULA_RASA_PUBLIC_ORIGIN": "https://stage.example.test", "RENDER_SERVICE_ID": "srv-test",
        "RENDER_API_KEY": "synthetic-only", "TABULA_RASA_ALPHA_USERNAME": "stage", "TABULA_RASA_ALPHA_PASSWORD": "synthetic"}
@@ -20,30 +22,36 @@ ENV = {"TABULA_RASA_ENVIRONMENT": "staging", "GITHUB_REPOSITORY": "Roklion/Proje
 
 def metadata(image, repository):
     assert repository == REPOSITORY
-    return {"release": ("c" if image == IMAGE else "d") * 40, "schema": "0001_initial"}
+    return {"release": ("c" if image == IMAGE else "d") * 40, "schema": "0001_initial",
+            "manifest_digest": MANIFEST if image == IMAGE else PRIOR_MANIFEST}
 
 
-def provider(*, existing=True):
+def provider(*, existing=True, platform_sha=False):
     def read(path, token, *, body=None):
         assert token == "synthetic-only"
         if path.endswith("?limit=100"):
-            return [{"deploy": {"status": "live", "image": {"sha": "sha256:" + "b" * 64}}}] if existing else []
+            return [{"deploy": {"status": "live", "image": {"ref": PRIOR,
+                     "sha": PRIOR_MANIFEST[7:] if platform_sha else "sha256:" + "b" * 64}}}] if existing else []
         if body:
             return {"id": "dep-new" if body["imageUrl"] == IMAGE else "dep-old"}
-        return {"status": "live", "image": {"sha": "sha256:" + ("a" if path.endswith("dep-new") else "b") * 64}}
+        new = path.endswith("dep-new")
+        return {"status": "live", "image": {"ref": IMAGE if new else PRIOR,
+                "sha": (MANIFEST if new else PRIOR_MANIFEST)[7:] if platform_sha else "sha256:" + ("a" if new else "b") * 64}}
     return Mock(side_effect=read)
 
 
-def test_smoke_success_records_exact_release_without_extra_deploys():
-    read, smoke = provider(), Mock()
+@pytest.mark.parametrize("platform_sha", [False, True])
+def test_smoke_success_records_exact_release_without_extra_deploys(platform_sha):
+    read, smoke = provider(platform_sha=platform_sha), Mock()
     result = release.promote(IMAGE, ENV, read=read, metadata=metadata, verify=Mock(), smoke_check=smoke)
     assert result["image"] == IMAGE and result["status"] == "smoke_passed"
     assert sum(call.kwargs.get("body") is not None for call in read.call_args_list) == 1
     smoke.assert_called_once_with(ENV["TABULA_RASA_PUBLIC_ORIGIN"], "stage", "synthetic", "c" * 40)
 
 
-def test_failed_smoke_restores_prior_schema_compatible_digest_and_verifies_it():
-    read = provider()
+@pytest.mark.parametrize("platform_sha", [False, True])
+def test_failed_smoke_restores_prior_schema_compatible_digest_and_verifies_it(platform_sha):
+    read = provider(platform_sha=platform_sha)
     smoke = Mock(side_effect=[ValueError("private diagnostic"), None])
     with pytest.raises(release.ReleaseError, match="restored and smoke verified"):
         release.promote(IMAGE, ENV, read=read, metadata=metadata, verify=Mock(), smoke_check=smoke)
@@ -80,6 +88,73 @@ def test_uncertain_deploy_wait_never_starts_competing_rollback():
     assert sum(call.kwargs.get("body") is not None for call in read.call_args_list) == 1
 
 
+@pytest.mark.parametrize("phase", ["prior", "candidate", "rollback"])
+@pytest.mark.parametrize("image_data", [None, {}, {"ref": IMAGE}, {"sha": MANIFEST},
+                         {"ref": IMAGE, "sha": "sha256:" + "9" * 64},
+                         {"ref": "evil.test/image@" + MANIFEST, "sha": MANIFEST},
+                         {"ref": IMAGE, "sha": "private diagnostic"},
+                         {"ref": IMAGE, "sha": None}, {"ref": IMAGE + "\n", "sha": MANIFEST},
+                         {"ref": REPOSITORY + ":latest", "sha": MANIFEST}])
+def test_invalid_render_metadata_stops_at_each_verification_boundary(phase, image_data):
+    read = provider()
+    original = read.side_effect
+    def altered(path, token, **kwargs):
+        response = original(path, token, **kwargs)
+        if phase == "prior" and path.endswith("?limit=100"):
+            response[0]["deploy"]["image"] = image_data
+        elif path.endswith("dep-new" if phase == "candidate" else "dep-old") and phase != "prior":
+            response["image"] = image_data
+        return response
+    read.side_effect = altered
+    smoke = Mock(side_effect=ValueError("private diagnostic"))
+    with pytest.raises(release.ReleaseError) as failure:
+        release.promote(IMAGE, ENV, read=read, metadata=metadata, verify=Mock(), smoke_check=smoke)
+    assert "private diagnostic" not in str(failure.value)
+    assert sum(call.kwargs.get("body") is not None for call in read.call_args_list) == {
+        "prior": 0, "candidate": 1, "rollback": 2}[phase]
+    assert smoke.call_count == (1 if phase == "rollback" else 0)
+
+
+def test_unpullable_prior_and_unverified_candidate_stop_before_deploy():
+    read = provider()
+    def unpullable(image, repository):
+        if image == PRIOR:
+            raise release.ReleaseError("Image cannot be pulled")
+        return metadata(image, repository)
+    with pytest.raises(release.ReleaseError, match="cannot be pulled"):
+        release.promote(IMAGE, ENV, read=read, metadata=unpullable, verify=Mock())
+    assert not any(call.kwargs.get("body") for call in read.call_args_list)
+    read.reset_mock()
+    with pytest.raises(release.ReleaseError, match="unverified"):
+        release.promote(IMAGE, ENV, read=read, metadata=metadata,
+                        verify=Mock(side_effect=release.ReleaseError("unverified")))
+    read.assert_not_called()
+
+
+def test_uncertain_create_never_retries_or_rolls_back():
+    read = provider()
+    original = read.side_effect
+    def uncertain(path, token, **kwargs):
+        if kwargs.get("body"):
+            raise release.ReleaseError("uncertain")
+        return original(path, token, **kwargs)
+    read.side_effect = uncertain
+    smoke = Mock()
+    with pytest.raises(release.ReleaseError, match="uncertain"):
+        release.promote(IMAGE, ENV, read=read, metadata=metadata, verify=Mock(), smoke_check=smoke)
+    assert sum(call.kwargs.get("body") is not None for call in read.call_args_list) == 1
+    smoke.assert_not_called()
+
+
+def test_promotion_timeout_never_rolls_back_or_runs_smoke(monkeypatch):
+    read, smoke = provider(), Mock()
+    monkeypatch.setattr(release, "wait_live", Mock(side_effect=release.ReleaseError("Deployment timed out")))
+    with pytest.raises(release.ReleaseError, match="timed out"):
+        release.promote(IMAGE, ENV, read=read, metadata=metadata, verify=Mock(), smoke_check=smoke)
+    assert sum(call.kwargs.get("body") is not None for call in read.call_args_list) == 1
+    smoke.assert_not_called()
+
+
 @pytest.mark.parametrize("status", ["build_failed", "update_failed", "pre_deploy_failed", "canceled"])
 def test_terminal_deploy_failure_and_timeout_are_bounded(status):
     read, sleep = Mock(return_value={"status": status}), Mock()
@@ -104,6 +179,9 @@ def test_untrusted_image_references_rejected_before_docker(image, monkeypatch):
 def test_image_metadata_requires_runtime_platform_and_bounded_sha_schema(monkeypatch):
     labels = {"org.opencontainers.image.revision": "c" * 40, "io.tabula.schema": "0005_bookkeeping_cutover"}
     def run(command, **kwargs):
+        if "imagetools" in command:
+            return SimpleNamespace(returncode=0, stdout=json.dumps({"digest": IMAGE.split("@")[1],
+                                   "mediaType": "application/vnd.oci.image.manifest.v1+json"}).encode())
         payload = [{"Architecture": "amd64", "Os": "linux", "Config": {"Labels": labels}}]
         return SimpleNamespace(returncode=0, stdout=json.dumps(payload).encode())
     monkeypatch.setattr(release.subprocess, "run", run)
@@ -188,6 +266,7 @@ def test_workflow_credential_separation_serialization_and_main_only_image_build(
         return yaml.load((ROOT / ".github/workflows" / name).read_text(), Loader=yaml.BaseLoader)
     config = load("commercial-promote.yml")
     job = config["jobs"]["deploy"]
+    assert any(step.get("uses") == "docker/setup-buildx-action@v3" for step in job["steps"])
     assert job["concurrency"]["cancel-in-progress"] == "false"
     assert job["environment"] == "${{ inputs.environment }}"
     migration = next(step for step in job["steps"] if "bound migration" in step.get("name", ""))
