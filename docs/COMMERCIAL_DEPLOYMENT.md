@@ -183,14 +183,54 @@ a reviewed maintenance/drain runbook. The bridge cannot be enabled by a wildcard
 environment variable. Ordinary `upgrade` remains the #220 forward-migration
 owner, and startup/readiness never run it. Bootstrap is manual and initial only.
 
+Image verification uses authenticated Buildx registry descriptors to distinguish
+the requested OCI index (or Docker manifest list) from its single `linux/amd64`
+runtime manifest. It pulls and inspects that immutable platform manifest for
+release/schema labels and OS/architecture; attestation and other-platform
+digests do not qualify. A direct image manifest is also supported. Promotion
+continues to submit the operator's original immutable digest to Render.
+Both Render `image.ref` and `image.sha` must identify that digest or its verified
+runtime manifest in the configured repository. A SHA is accepted only as
+`sha256:` plus 64 lowercase hexadecimal characters or the same 64 characters
+without the prefix. Missing, malformed or unrelated metadata stops before smoke
+or automatic recovery; a Live status or matching `/version` alone is insufficient.
+
 Before deployment, the tool finds the current live Render image and verifies
-that its immutable digest remains pullable and declares the same schema head.
+its immutable `image.ref`, its registry relationship to `image.sha`, pullability
+and matching schema head. Rollback retains this verified reference instead of
+constructing a pull reference from Render's SHA. A prior tag-only or unverifiable
+deployment stops before a new deploy: inspect it and pin the verified retained
+release by immutable digest through the operator procedure first.
 A live candidate whose smoke fails is replaced by that prior compatible digest
-and smoke-checked. The workflow still fails, preventing claims of promotion
+and checked with the same registry/Render integrity comparison before smoke.
+The workflow still fails, preventing claims of promotion
 success. An initial deploy with no prior image stops for operator inspection.
 Render terminal deployment failure stops; inspect the retained previous live
 deployment. An uncertain POST, poll failure or timeout stops for inspection
 without retrying the deploy or racing it with rollback.
+
+### Digest verification investigation (October 9, 2026)
+
+The [first staging promotion](https://github.com/Roklion/Project_Tabula_Rasa/actions/runs/37879340937)
+stopped at digest verification before browser smoke, although the operator
+reported Live status and matching readiness/version probes. Read-only GHCR
+inspection confirmed the requested `sha256:fe1b5854f3603826e32e228e0f54bd71036454dd3f93f43b43455b2f72ddd727`
+is an OCI index containing runtime manifest
+`sha256:92a1ede162a837223ea454ae1557a5743623eea2c5db5713371886ceb588d3c8`
+and a separate attestation. The former verifier assumed Render's SHA always
+equaled the requested top-level digest, and did not inspect that relationship.
+[Render's API](https://api-docs.render.com/reference/retrieve-deploy) describes
+`image.ref` as the deployment reference and `image.sha` as its resolved SHA;
+[Buildx](https://docs.docker.com/reference/cli/docker/buildx/imagetools/inspect/)
+provides the registry descriptor and platform relationships used by the fix.
+The operator retrieved the failed deployment's image fields on October 9:
+`image.ref` retained the requested index reference above, while `image.sha`
+was the exact runtime manifest digest above. This confirms an index-versus-
+platform-manifest comparison caused the rejection, rather than a different
+deployed release. Accepting this registry-proven relationship preserves the
+artifact integrity check; attestation and unrelated digests still fail.
+After merge, rerun staging with a current CI-approved immutable image and retain
+successful hosted smoke/repeated-promotion evidence. This fix does not close #279.
 
 For manual recovery of bad application code, inspect the exact service's current
 deploy/status, select its retained schema-compatible image and dispatch that
