@@ -8,6 +8,9 @@ from tabula_rasa.receipt_manifest import ReceiptManifestError, validate_receipt_
 def safe_receipt_filename(original_name: str) -> str:
     """Normalize an upload basename to the supported portable filename format."""
     basename = str(original_name or "").replace("\\", "/").rsplit("/", 1)[-1]
+    stem, dot, extension = basename.rpartition(".")
+    if dot and not stem.strip(" ."):
+        basename = "receipt." + extension
     cleaned = re.sub(r"[^A-Za-z0-9._() -]+", "_", basename).strip(" .")
     cleaned = cleaned or "receipt"
     if len(cleaned) > 180:

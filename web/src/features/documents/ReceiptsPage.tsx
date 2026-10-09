@@ -8,6 +8,7 @@ import { EmptyState, ErrorNotice, Field, LoadingState, SuccessNotice } from '../
 import { UnsavedChanges } from '../../components/UnsavedChanges';
 import { useProtectedMutation } from '../concurrency/mutations';
 import { downloadBlob } from '../../components/downloadBlob';
+import { ConfirmationDialog } from '../../components/ConfirmationDialog';
 
 type PendingReceipt = { id: string; file: File; document?: Schemas['Document']; linked: boolean; error?: unknown };
 
@@ -61,7 +62,7 @@ function ReceiptWorkflow({ recordId }: { recordId: string }) {
   async function mutate(action: () => Promise<unknown>, success: string) {
     setBusy(true); setFailure(undefined); setMessage('');
     try { await action(); setMessage(success); setRemove(undefined); }
-    catch (error) { setFailure(error); }
+    catch (error) { setRemove(undefined); setFailure(error); }
     finally { setBusy(false); }
   }
   function filesSelected(files: File[]) {
@@ -101,10 +102,12 @@ function ReceiptWorkflow({ recordId }: { recordId: string }) {
     <section className="surface editor"><h2>Linked receipts</h2>
       {!linked.data.items.length ? <EmptyState title="No receipts attached">Attach files or link an unreferenced receipt below.</EmptyState>
         : <ul className="recordList">{linked.data.items.map(doc => <li key={doc.id}><div>{documentView(doc)}</div>
-          {writable && <button type="button" disabled={busy} onClick={() => setRemove(doc)}>Remove {doc.filename}</button>}</li>)}</ul>}
-      {remove && <div role="alertdialog" aria-label="Remove receipt" className="notice warning"><p>Remove the reference to {remove.filename}? The stored file remains available in Unreferenced receipts.</p>
-        <button type="button" disabled={busy} onClick={() => setRemove(undefined)}>Keep receipt</button>
-        <button type="button" disabled={busy || operation.isPending} onClick={() => void operation.mutateAsync(() => mutate(() => api.unlinkDocument(session, recordId, remove.id), 'Receipt reference removed. File retained.'))}>Confirm remove</button></div>}
+          {writable && <button type="button" disabled={busy} onClick={event => { event.currentTarget.focus(); setRemove(doc); }}>Remove {doc.filename}</button>}</li>)}</ul>}
+      {remove && <ConfirmationDialog title="Remove receipt" keepLabel="Keep receipt" confirmLabel="Confirm remove"
+        pending={busy || operation.isPending} onKeep={() => setRemove(undefined)}
+        onConfirm={() => void operation.mutateAsync(() => mutate(() => api.unlinkDocument(session, recordId, remove.id), 'Receipt reference removed. File retained.'))}>
+        Remove the reference to {remove.filename}? The stored file remains available in Unreferenced receipts.
+      </ConfirmationDialog>}
     </section>
     {writable && <section className="surface editor"><h2>Attach receipts</h2><p>PDF, PNG, JPG, JPEG, WEBP or HEIC; up to 20 MB per file, 200 MB per batch and 100 receipts per transaction.</p>
       <Field id="receipt-files" label="Receipt files"><input id="receipt-files" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.heic" disabled={busy || unresolved.length > 0}

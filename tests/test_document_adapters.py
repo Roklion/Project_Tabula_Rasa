@@ -49,6 +49,7 @@ def test_drive_store_is_lazy_reuses_upload_owner_and_converts_provider_details()
 
 @pytest.mark.parametrize(('filename', 'canonical'), [
     ('CON.pdf', '_CON.pdf'), ('invoice?.pdf', 'invoice_.pdf'),
+    ('.pdf', 'receipt.pdf'), (' ... .JPEG', 'receipt.JPEG'),
     ('a' * 200 + '.pdf', 'a' * 176 + '.pdf'),
     ('a' * 200 + '.JPEG', 'a' * 175 + '.JPEG'),
 ])
