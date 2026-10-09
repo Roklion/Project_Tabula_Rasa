@@ -1,4 +1,6 @@
 import { useState, type ReactNode } from 'react';
+import { ConfirmationDialog } from '../../components/ConfirmationDialog';
+import { useServerFieldErrors } from '../../components/fieldErrors';
 import { useForm, useWatch, type DefaultValues, type FieldValues, type UseFormReturn } from 'react-hook-form';
 import { useEntity } from '../../app/context';
 import { ErrorNotice, SuccessNotice } from '../../components/States';
@@ -23,6 +25,7 @@ export function CreateEditor<T extends FieldValues>({ title, initial, fields, cr
     setIdentity(crypto.randomUUID());
     setSuccess(true);
   });
+  useServerFieldErrors(form, failure, mutation.isPending);
   async function submit(values: T) {
     setFailure(undefined); setSuccess(false);
     try { await mutation.mutateAsync(values); }
@@ -35,10 +38,11 @@ export function CreateEditor<T extends FieldValues>({ title, initial, fields, cr
     <form onSubmit={form.handleSubmit(values => void submit(values))}>
       <fieldset disabled={mutation.isPending}>{fields(form)}</fieldset>
       <div className="actions"><button type="submit" disabled={mutation.isPending || !canSubmit(values)}>{title}</button>
-        <button type="button" disabled={mutation.isPending} onClick={() => form.formState.isDirty ? setClosing(true) : onClose()}>Back to records</button></div>
+        <button type="button" disabled={mutation.isPending} onClick={event => { event.currentTarget.focus(); if (form.formState.isDirty) setClosing(true); else onClose(); }}>Back to records</button></div>
     </form>
-    {closing && <div role="alertdialog" aria-label="Discard draft" className="notice warning"><p>Discard this unsaved draft?</p>
-      <button type="button" onClick={() => setClosing(false)}>Keep editing</button>
-      <button type="button" onClick={() => { form.reset(); onClose(); }}>Discard draft and close</button></div>}
+    {closing && <ConfirmationDialog title="Discard draft" keepLabel="Keep editing" confirmLabel="Discard draft and close"
+      onKeep={() => setClosing(false)} onConfirm={() => { form.reset(); onClose(); }}>
+      Discard this unsaved draft?
+    </ConfirmationDialog>}
   </section>;
 }

@@ -457,6 +457,7 @@ def test_managed_deactivation_confirms_original_baseline_and_retains_stale_draft
             expect(page.get_by_role('alertdialog', name='Deactivate record')).to_be_visible()
             assert loaded(clients[0], resource, row['id'])['active']
             page.get_by_role('button', name='Keep editing', exact=True).click()
+            expect(page.get_by_role('button', name='Save changes', exact=True)).to_be_focused()
             expect(page.get_by_label('Name', exact=True)).to_have_value('Deactivation draft')
             expect(page.get_by_label('Active', exact=True)).not_to_be_checked()
             getattr(alpha, resource).update(row['id'], name='Other writer')
@@ -467,7 +468,8 @@ def test_managed_deactivation_confirms_original_baseline_and_retains_stale_draft
             assert stale.value.status == 409
             assert stale.value.request.post_data_json['baseline'] == row['baseline']
             assert snapshot(database) == before
-            page.get_by_role('button', name='Keep editing', exact=True).click()
+            expect(page.get_by_role('alertdialog', name='Deactivate record')).to_have_count(0)
+            expect(page.get_by_role('alert')).to_contain_text('Your draft is preserved')
             expect(page.get_by_label('Name', exact=True)).to_have_value('Deactivation draft')
             page.get_by_role('button', name='Review latest record', exact=True).click()
             page.get_by_role('button', name='Discard draft and reload', exact=True).click()

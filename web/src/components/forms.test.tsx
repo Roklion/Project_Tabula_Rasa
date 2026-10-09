@@ -1,3 +1,5 @@
+import { useForm } from 'react-hook-form';
+import { applyFieldErrors } from './fieldErrors';
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { createMemoryRouter, Link, RouterProvider } from 'react-router-dom';
 import { expect, it } from 'vitest';
@@ -48,4 +50,16 @@ it('blocks navigation while dirty and offers explicit keep/discard actions', asy
   fireEvent.click(screen.getByRole('link', { name: 'Next' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Discard draft and leave' }));
   expect(await screen.findByRole('heading', { name: 'Next page' })).toBeVisible();
+});
+
+it('keeps ambiguous posting errors in the alert without marking the journal header or metadata', () => {
+  const { result } = renderHook(() => useForm({ defaultValues: {
+    txn_date: '2026-10-06', description: 'Header', postings: [{ description: 'Posting' }],
+  } }));
+  act(() => applyFieldErrors(result.current, new ApiError('validation', undefined,
+    ['description', 'baseline', 'txn_date'].map(field => ({ field, code: 'invalid', message: 'private details' })))));
+  expect(result.current.getFieldState('description').error).toBeUndefined();
+  expect(result.current.formState.errors).not.toHaveProperty('baseline');
+  expect(result.current.getFieldState('txn_date').error?.message).toBe('Check this value.');
+  expect(result.current.getValues().description).toBe('Header');
 });

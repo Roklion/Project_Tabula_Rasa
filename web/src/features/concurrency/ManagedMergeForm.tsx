@@ -49,7 +49,7 @@ function MergeEditor({ resource, rows, onClose }: { resource: 'payees' | 'tags';
   async function reloadLatest() {
     setReloading(true);
     try { reload(loaded((await list(session)).items)); setReview(false); setError(undefined); }
-    catch (failure) { setError(failure); }
+    catch (failure) { setReview(false); setError(failure); }
     finally { setReloading(false); }
   }
   const target = form.watch('target');

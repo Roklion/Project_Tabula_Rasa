@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { ConfirmationDialog } from './ConfirmationDialog';
 import { useBeforeUnload, useBlocker } from 'react-router-dom';
 
 export function UnsavedChanges({ dirty }: { dirty: boolean }) {
@@ -7,9 +8,8 @@ export function UnsavedChanges({ dirty }: { dirty: boolean }) {
     if (dirty) event.preventDefault();
   }, [dirty]));
   if (blocker.state !== 'blocked') return null;
-  return <div role="alertdialog" aria-label="Unsaved changes" aria-describedby="unsaved-message" className="notice warning">
-    <p id="unsaved-message">You have unsaved changes. Leave this page and discard the draft?</p>
-    <button type="button" autoFocus onClick={() => blocker.reset()}>Keep editing</button>
-    <button type="button" onClick={() => blocker.proceed()}>Discard draft and leave</button>
-  </div>;
+  return <ConfirmationDialog title="Unsaved changes" keepLabel="Keep editing" confirmLabel="Discard draft and leave"
+    onKeep={() => blocker.reset()} onConfirm={() => blocker.proceed()}>
+    You have unsaved changes. Leave this page and discard the draft?
+  </ConfirmationDialog>;
 }

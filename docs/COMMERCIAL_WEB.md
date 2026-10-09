@@ -304,3 +304,9 @@ Do not overwrite an existing operator UAT target, stamp a retained old schema,
 or claim that a local UUID integration database satisfies this gate. Selection
 of this stack does not activate entities or complete migration, exports,
 recovery/PITR, commercial auth, beta or Streamlit retirement requirements.
+
+## Browser quality and alpha gate
+
+[Commercial browser quality](COMMERCIAL_BROWSER_QUALITY.md) owns #287's repeatable
+Playwright/axe gate, viewport/engine matrix, synthetic fixture cleanup and the
+remaining #283/#288 receipt/staging and manual-device acceptance boundaries.
