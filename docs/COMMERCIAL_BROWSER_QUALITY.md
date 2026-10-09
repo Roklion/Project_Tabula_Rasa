@@ -3,10 +3,9 @@
 This bounded gate supports the core technical-alpha work in [EPIC #221](https://github.com/Roklion/Project_Tabula_Rasa/issues/221)
 under [initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124).
 It consumes #278's shell, #280's protected mutation path and #281/#282's core
-workflows. This slice consumes active [PR #301](https://github.com/Roklion/Project_Tabula_Rasa/pull/301)
-through `0cc7d3d38bfc9018090b251e8e2b704d373547fa`, including failed-switch draft
-preservation. That dependency's merge/review
-status remains separate from this quality slice.
+workflows from merged [PR #301](https://github.com/Roklion/Project_Tabula_Rasa/pull/301),
+including failed-switch draft preservation. This gate builds on that reviewed
+workflow baseline; remaining alpha acceptance gates are tracked below.
 
 ## Repeatable local and CI gate
 
