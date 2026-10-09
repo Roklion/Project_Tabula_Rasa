@@ -1,9 +1,11 @@
 """Process-only HTTP settings. Schema export never loads settings/secrets."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import os
 import re
 from urllib.parse import urlsplit
+
+from .alpha import HASH_PATTERN
 
 
 @dataclass(frozen=True)
@@ -12,6 +14,13 @@ class HttpSettings:
     public_origin: str
     release_id: str = "development"
     trusted_entity_id: str | None = None
+    alpha_username: str = field(default="", repr=False)
+    alpha_password_hash: str = field(default="", repr=False)
+
+    @property
+    def hosted_alpha(self):
+        origin = urlsplit(self.public_origin)
+        return bool(self.trusted_entity_id) and origin.hostname not in {"127.0.0.1", "localhost", "::1", "testserver"}
 
     def __post_init__(self):
         origin = urlsplit(self.public_origin)
@@ -26,9 +35,17 @@ class HttpSettings:
             raise ValueError("Invalid HTTP configuration.")
         if self.environment in {"staging", "production"} and origin.scheme != "https":
             raise ValueError("Hosted HTTP requires HTTPS.")
-        if self.trusted_entity_id and (
+        hosted = origin.hostname not in {"127.0.0.1", "localhost", "::1", "testserver"}
+        if self.environment == "production" and (self.trusted_entity_id or self.alpha_username or self.alpha_password_hash):
+            raise ValueError("Production rejects alpha context and credentials.")
+        if hosted and self.environment != "production":
+            if (self.environment not in {"development", "staging"} or origin.scheme != "https"
+                    or self.trusted_entity_id != "alpha-synthetic"
+                    or not re.fullmatch(r"[A-Za-z0-9._-]{1,100}", self.alpha_username)
+                    or not HASH_PATTERN.fullmatch(self.alpha_password_hash)):
+                raise ValueError("Hosted alpha requires HTTPS and explicit synthetic scope/gate configuration.")
+        elif self.trusted_entity_id and (
             self.environment not in {"development", "test"}
-            or origin.hostname not in {"127.0.0.1", "localhost", "::1", "testserver"}
             or (origin.hostname == "testserver" and self.environment != "test")
         ):
             raise ValueError("Trusted fixture context requires explicit loopback development/test.")
@@ -42,4 +59,6 @@ class HttpSettings:
             os.environ.get("TABULA_RASA_PUBLIC_ORIGIN", ""),
             os.environ.get("TABULA_RASA_RELEASE_ID", "development"),
             os.environ.get("TABULA_RASA_TRUSTED_ENTITY_ID") or None,
+            os.environ.get("TABULA_RASA_ALPHA_USERNAME", ""),
+            os.environ.get("TABULA_RASA_ALPHA_PASSWORD_HASH", ""),
         )

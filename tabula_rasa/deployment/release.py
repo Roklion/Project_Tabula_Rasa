@@ -1,0 +1,149 @@
+"""Digest promotion and bounded Render lifecycle; never retry uncertain creates."""
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import time
+from urllib.request import Request, build_opener, HTTPRedirectHandler
+from urllib.parse import urlsplit
+
+
+class ReleaseError(ValueError):
+    """Fixed operator diagnostics only."""
+
+
+class NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+def api(path, token, *, body=None, github=False):
+    base = "https://api.github.com" if github else "https://api.render.com/v1"
+    request = Request(base + path, data=json.dumps(body).encode() if body is not None else None,
+                      headers={"Authorization": "Bearer " + token, "Content-Type": "application/json",
+                               "Accept": "application/json", "User-Agent": "tabula-release"})
+    try:
+        with build_opener(NoRedirect).open(request, timeout=30) as response:
+            return json.load(response)
+    except Exception:
+        raise ReleaseError("Provider request failed or its result is uncertain; inspect before retrying.") from None
+
+
+def image_metadata(image, repository):
+    if not re.fullmatch(re.escape(repository) + r"@sha256:[0-9a-f]{64}", image):
+        raise ReleaseError("Use an immutable digest in the configured repository.")
+    pull = subprocess.run(["docker", "pull", image], capture_output=True, check=False)
+    if pull.returncode:
+        raise ReleaseError("Image cannot be pulled; preserve registry rollback digests.")
+    result = subprocess.run(["docker", "image", "inspect", image], capture_output=True, check=False)
+    try:
+        metadata = json.loads(result.stdout)[0]
+        labels = metadata["Config"]["Labels"]
+        release = labels["org.opencontainers.image.revision"]
+        schema = labels["io.tabula.schema"]
+        if (result.returncode or metadata["Architecture"] != "amd64" or metadata["Os"] != "linux"
+                or not re.fullmatch("[0-9a-f]{40}", release) or not re.fullmatch("[A-Za-z0-9_]{1,100}", schema)):
+            raise ValueError
+    except (ValueError, KeyError, IndexError, TypeError):
+        raise ReleaseError("Invalid release image metadata.") from None
+    return {"release": release, "schema": schema}
+
+
+def validated_main(release, environ):
+    ancestor = subprocess.run(["git", "merge-base", "--is-ancestor", release, "origin/main"],
+                              capture_output=True, check=False)
+    if ancestor.returncode:
+        raise ReleaseError("Release must be reachable from main.")
+    if environ.get("TABULA_RASA_ENVIRONMENT") == "development":
+        latest = subprocess.run(["git", "rev-parse", "origin/main"], capture_output=True, check=False)
+        if latest.returncode or latest.stdout.decode().strip() != release:
+            raise ReleaseError("Superseded development release; deploy the latest validated main image.")
+    repo = environ["GITHUB_REPOSITORY"]
+    runs = api(f"/repos/{repo}/actions/workflows/ci.yml/runs?head_sha={release}&event=push&branch=main&per_page=20",
+               environ["GH_TOKEN"], github=True)["workflow_runs"]
+    if not runs or runs[0].get("conclusion") != "success" or runs[0].get("head_sha") != release:
+        raise ReleaseError("Current main-revision Repository CI success is required.")
+
+
+def wait_live(service, deploy, token, *, read=api, sleep=time.sleep):
+    if not re.fullmatch("dep-[a-z0-9]+", deploy):
+        raise ReleaseError("Invalid deployment identity; inspect provider state.")
+    for _ in range(60):
+        result = read(f"/services/{service}/deploys/{deploy}", token)
+        if result.get("status") == "live":
+            return result
+        if result.get("status") in {"build_failed", "update_failed", "pre_deploy_failed", "canceled", "deactivated"}:
+            raise ReleaseError("Render deployment failed; inspect provider state and retained prior deployment.")
+        sleep(10)
+    raise ReleaseError("Deployment timed out; inspect before any further deployment.")
+
+
+def promote(image, environ, *, read=api, metadata=image_metadata, verify=validated_main, smoke_check=None):
+    from .smoke import smoke
+    smoke_check = smoke_check or smoke
+    if environ.get("TABULA_RASA_ENVIRONMENT") not in {"development", "staging"}:
+        raise ReleaseError("Only development/staging promotion is supported.")
+    repository = "ghcr.io/" + environ["GITHUB_REPOSITORY"].lower() + "/commercial"
+    candidate = metadata(image, repository)
+    verify(candidate["release"], environ)
+    origin = environ["TABULA_RASA_PUBLIC_ORIGIN"]
+    parsed = urlsplit(origin)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.path or parsed.query or parsed.fragment or parsed.username or parsed.password:
+        raise ReleaseError("An exact HTTPS origin is required.")
+    service, token = environ["RENDER_SERVICE_ID"], environ["RENDER_API_KEY"]
+    if not re.fullmatch("srv-[a-z0-9]+", service):
+        raise ReleaseError("Invalid Render service identity.")
+    deployments = read(f"/services/{service}/deploys?limit=100", token)
+    active = [item["deploy"] for item in deployments]
+    if any(item.get("status") in {"created", "queued", "build_in_progress", "update_in_progress", "pre_deploy_in_progress"} for item in active):
+        raise ReleaseError("Another deployment is in progress; inspect before proceeding.")
+    prior = next((item for item in active if item.get("status") == "live"), None)
+    previous_image = None
+    previous = None
+    if prior:
+        sha = prior.get("image", {}).get("sha", "")
+        previous_image = repository + "@" + sha
+        previous = metadata(previous_image, repository)
+        if previous["schema"] != candidate["schema"]:
+            raise ReleaseError("Prior image is schema-incompatible; use reviewed maintenance/bridge procedure.")
+    deployed = read(f"/services/{service}/deploys", token, body={"imageUrl": image})
+    # No rollback after an uncertain create/wait: it could race a still-running deploy.
+    confirmed = wait_live(service, deployed["id"], token, read=read)
+    if confirmed.get("image", {}).get("sha") != image.split("@", 1)[1]:
+        raise ReleaseError("Deployed digest mismatch; stop and inspect provider state.")
+    try:
+        smoke_check(origin, environ["TABULA_RASA_ALPHA_USERNAME"], environ["TABULA_RASA_ALPHA_PASSWORD"], candidate["release"])
+    except Exception:
+        if previous_image:
+            rollback = read(f"/services/{service}/deploys", token, body={"imageUrl": previous_image})
+            restored = wait_live(service, rollback["id"], token, read=read)
+            if restored.get("image", {}).get("sha") != previous_image.split("@", 1)[1]:
+                raise ReleaseError("Rollback digest mismatch; stop and inspect provider state.") from None
+            smoke_check(origin, environ["TABULA_RASA_ALPHA_USERNAME"], environ["TABULA_RASA_ALPHA_PASSWORD"], previous["release"])
+            raise ReleaseError("Smoke failed; prior compatible image restored and smoke verified.") from None
+        raise ReleaseError("Initial smoke failed; no prior image exists. Restrict access and inspect.") from None
+    return {"image": image, **candidate, "status": "smoke_passed"}
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("command", choices=["verify", "promote"])
+    parser.add_argument("--image", required=True)
+    args = parser.parse_args()
+    try:
+        environ = dict(os.environ)
+        if args.command == "verify":
+            metadata = image_metadata(args.image, "ghcr.io/" + environ["GITHUB_REPOSITORY"].lower() + "/commercial")
+            validated_main(metadata["release"], environ)
+            print(json.dumps(metadata, sort_keys=True))
+        else:
+            print(json.dumps(promote(args.image, environ), sort_keys=True))
+    except Exception as error:
+        message = str(error) if isinstance(error, ReleaseError) else "Release step failed; inspect configuration and provider state."
+        raise SystemExit(message) from None
+
+
+if __name__ == "__main__":
+    main()

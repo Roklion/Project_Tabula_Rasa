@@ -72,9 +72,11 @@ entity, route/body/profile key, baseline or header never proves authorization.
 operations additionally require the exact configured Origin and
 `X-CSRF-Token`. API schema/docs use the same read context guard. An absent
 resolver denies access with 401. The default trusted resolver requires a
-loopback client and explicit development/test configuration; staging/production
-reject that environment option. #279 must supply and verify its deployment
-gate before enabling hosted synthetic alpha. #222 replaces that gate before
+loopback client and explicit development/test configuration. #279 adds a fixed
+hosted synthetic scope behind its environment-specific HTTP Basic gate; public
+HTTPS configuration, credentials and bound Neon connectivity fail closed.
+Production rejects synthetic context and alpha credentials. [Technical deployment](COMMERCIAL_DEPLOYMENT.md)
+owns the operator checkpoint and outstanding real hosted verification. #222 replaces that gate before
 external beta/customer data.
 
 HTTP settings are read only from process environment. Database settings retain

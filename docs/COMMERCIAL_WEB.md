@@ -12,9 +12,11 @@ Use it together with [Development](DEVELOPMENT.md),
 
 #277/#278 now provide the runnable local HTTP/browser foundations. See
 [Foundation conventions](COMMERCIAL_FOUNDATION.md) for endpoints, context/error
-contracts, query/form primitives and test ownership. Deployment files/resources
-and hosted gating remain #279 work; this local foundation does not establish
-staging, external-beta readiness or production authority. Streamlit/Sheets
+contracts, query/form primitives and test ownership. The image, workflows and
+temporary hosted gate are implemented under #279; [Technical deployment](COMMERCIAL_DEPLOYMENT.md)
+owns setup, promotion, rollback and the outstanding hosted acceptance record.
+Repository implementation does not establish reachable staging, external-beta
+readiness or production authority. Streamlit/Sheets
 continues as the internal/reference runtime.
 
 #280 adds the [protected commercial edit/delete bridge](COMMERCIAL_CONCURRENCY.md)
@@ -163,16 +165,19 @@ npm --prefix web test
 API tests call the service boundary with fakes and native PostgreSQL; browser
 tests cover visible loading/validation/conflict and entity-cache isolation.
 #280 adds the two-loaded-client stale edit/delete and missing-baseline scenarios
-against real PostgreSQL. Full repository gates still apply before initial
-publication and terminal review; focused checks apply between those gates.
+against real PostgreSQL. Run affected tests and fast lint/type/style checks before
+publishing or pushing review fixes. Repository CI runs the full suite concurrently
+with review; its current-revision `Full test suite` check must succeed before
+review-loop completion. A full local run is exceptional diagnostic work, not a
+publication or terminal-review prerequisite. See [Development](DEVELOPMENT.md#authoritative-ci-and-required-check).
 
 ## Hosted environment contract
 
 | Environment | Runtime/data | Exposure and release |
 | --- | --- | --- |
 | Local | Vite + loopback Uvicorn + existing Docker PostgreSQL 18 | Synthetic fixture context; developer starts each process. |
-| Hosted development | Own paid Render Docker service + scoped Neon environment/roles | Synthetic data; validated `main` deploys; temporary alpha gate until #222. |
-| Retained staging | Separate paid Render Docker service + retained Neon environment/roles | Explicit commit/image promotion; synthetic acceptance data; restricted operator access until #222. This is the real persistent staging target, not local Compose or a per-test DB. |
+| Hosted development | Own Render image service + scoped Neon environment/roles | Synthetic data; validated `main` deploys; temporary alpha gate until #222. Record selected plan limitations. |
+| Retained staging | Separate Render image service + retained Neon environment/roles | Explicit commit/image promotion; synthetic acceptance data; restricted operator access until #222. This is the real persistent staging target, not local Compose or a per-test DB. |
 | Intended production | Separate Render service + distinct Neon production branch/endpoint and scoped runtime/migration access | Promote the staging-tested image digest only after identity, cutover and operations/recovery gates. Reject trusted alpha context. |
 
 For the current pre-activation stage, the operator has selected Neon Free with
@@ -183,8 +188,10 @@ the retained UAT database, and use separate isolated recovery targets. A shared
 project shares administration and capacity; branch separation does not prove
 independent project access. Formal commercial activation still requires the
 isolation/protection/objective review under #220/#258/#223 described in
-[PostgreSQL recovery](POSTGRESQL_RECOVERY.md). This does not change the paid
-Render service decision or authorize provisioning, cloning or activation.
+[PostgreSQL recovery](POSTGRESQL_RECOVERY.md). #279/#221/#124 now permit suitable
+free tiers for technical dev/staging; record capacity and idle-suspension limits
+at the [manual checkpoint](COMMERCIAL_DEPLOYMENT.md#manual-operator-checkpoint).
+This does not authorize provisioning, cloning or commercial activation.
 
 GitHub Actions builds the `linux/amd64` image into GHCR; Render image-backed
 services (`runtime: image`) consume its immutable digest. CI explicitly triggers
@@ -205,8 +212,9 @@ client-supplied profile key.
 ## Configuration and secrets boundary
 
 The HTTP environment/public-origin/release/trusted-entity settings below are
-implemented by #277 and read from process environment only. Alpha gate, deployment
-and identity settings remain #279/#222 work. They do not alter Streamlit settings.
+implemented by #277 and read from process environment only. #279 implements the
+alpha gate and deployment settings; #222 still owns commercial identity/session
+settings. They do not alter Streamlit settings.
 
 | Setting | Owner and visibility |
 | --- | --- |
@@ -216,6 +224,7 @@ and identity settings remain #279/#222 work. They do not alter Streamlit setting
 | `PORT` | Hosting process; Uvicorn binds the assigned container port. Local command explicitly selects 8000. |
 | `TABULA_RASA_DATABASE_URL` and existing pool/timeout settings | Server runtime secrets/config; current `DatabaseSettings` owns validation. URL never enters the browser, image layer, logs, error text or OpenAPI. |
 | `TABULA_RASA_MIGRATION_DATABASE_URL` | Deployment job secret only; job maps it to `TABULA_RASA_DATABASE_URL` for the existing CLI. Never injected into the running app. |
+| `TABULA_RASA_DEPLOY_DATABASE_SHA256` | Explicit selected Neon endpoint binding, checked by both runtime and migration processes. |
 | `TABULA_RASA_TEST_DATABASE_URL` | Explicit test process only; disposable native test administrator endpoint. |
 | `TABULA_RASA_TRUSTED_ENTITY_ID` | Local/test synthetic context, or fixed hosted synthetic alpha scope behind the deployment gate. Never accepted from a request; absent in production. |
 | `TABULA_RASA_ALPHA_USERNAME` / `TABULA_RASA_ALPHA_PASSWORD_HASH` | Temporary #279 server gate secrets; distinct per hosted non-production environment, never browser build values or commercial roles. |
@@ -238,10 +247,11 @@ context under #222; no fallback to a legacy profile's grant or Drive root.
 ## Deployment lifecycle and manual checkpoint (#279)
 
 Before provisioning, the operator supplies Render account/project access,
-selected paid service capacity, GHCR image access, Neon projects/roles,
+selected stage-appropriate service capacity, GHCR image access, Neon projects/roles,
 approved geographically close US regions with PostgreSQL 18, DNS/TLS ownership,
 and environment-specific secrets/deploy credentials. Verify provider support, budgets/limits and retained
 staging connectivity. These are explicit manual tasks, not completed resources.
+The exact setup and hosted evidence checklist lives in [Technical deployment](COMMERCIAL_DEPLOYMENT.md).
 An agent must stop at this checkpoint if credentials/provisioning are missing;
 do not substitute SQLite, temporary memory, another provider or production data.
 
@@ -268,12 +278,13 @@ do not substitute SQLite, temporary memory, another provider or production data.
    Incompatible schema failures stop for the operator; no automatic downgrade,
    restore or accounting-data deletion. Recovery is #259/#223.
 
-The temporary alpha HTTP Basic gate covers shell, data, document and schema
+The implemented temporary alpha HTTP Basic gate covers shell, data, document and schema
 routes over TLS. Minimal health probes are exempt for the platform; unsafe
 requests still require Origin/CSRF protection. A trusted fixture ID without the
 gate must make hosted startup fail closed. #222 replaces both the gate and
 fixture resolver before external beta/customer data. #279 records the precise
-proxy trust configuration and tests spoofed forwarding/Host inputs.
+proxy boundary: Uvicorn trusts no forwarded headers; configured Host and Origin
+remain authoritative. Spoofed forwarding/Host inputs are covered by tests.
 
 Retain staging across releases and coordinate its separate migration rehearsal
 with [the persistent staging checkpoint](SHEETS_POSTGRES_MIGRATION.md#persistent-staging-checkpoint).
