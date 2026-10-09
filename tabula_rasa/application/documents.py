@@ -10,6 +10,8 @@ from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol, TypeVar
 
+from tabula_rasa.document_names import safe_receipt_filename
+
 from tabula_rasa.document_limits import (
     MAX_RECEIPT_REFERENCES as MAX_RECEIPT_REFERENCES,
     MAX_RECEIPT_BYTES as MAX_RECEIPT_BYTES,
@@ -258,6 +260,7 @@ class ReceiptService:
     def upload(self, document_id: str, filename: str, content: bytes) -> DocumentReference:
         """Upload independently of linking; a confirmed file remains recoverable."""
         validate_receipt_upload(filename, content)
+        filename = safe_receipt_filename(filename)
         if not re.fullmatch('[0-9a-f]{32}', document_id):
             raise DocumentValidationError("A receipt requires a stable portable identity.")
         upload = DocumentUpload(

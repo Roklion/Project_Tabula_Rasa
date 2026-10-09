@@ -6,6 +6,8 @@ import json
 import secrets
 from typing import Any
 
+from tabula_rasa.document_names import safe_receipt_filename as safe_receipt_filename
+
 from tabula_rasa.application.documents import (
     DocumentValidationError,
     validate_receipt_upload as validate_document_upload,
@@ -20,27 +22,13 @@ from tabula_rasa.receipt_manifest import (
     validate_receipt_filename,
 )
 
-from .client import PathName, _escape_query_value
+from .client import _escape_query_value
 from .errors import (
     DRIVE_API_ROOT, MAX_RECEIPT_BYTES,
-    SAFE_RECEIPT_NAME_PATTERN, GoogleDriveAccessError, GoogleDriveConflictError,
+    GoogleDriveAccessError, GoogleDriveConflictError,
     GoogleDriveError, _json_response,
 )
 from .oauth import _clean_text
-
-def safe_receipt_filename(original_name: str) -> str:
-    """Return a safe Drive filename without encoding transaction identity."""
-    cleaned = SAFE_RECEIPT_NAME_PATTERN.sub("_", PathName(original_name).name).strip(
-        " ."
-    )
-    if not cleaned:
-        cleaned = "receipt"
-    cleaned = cleaned[:180]
-    try:
-        return validate_receipt_filename(cleaned, "Receipt filename")
-    except ReceiptManifestError:
-        return validate_receipt_filename(f"_{cleaned}", "Receipt filename")
-
 
 def validate_receipt_upload(
     original_name: str,

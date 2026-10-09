@@ -5,11 +5,7 @@ import { TransactionFields, JournalFields } from '../concurrency/BookkeepingEdit
 import { useReferenceChoices } from '../concurrency/useReferenceChoices';
 import { CreateEditor } from './CreateEditor';
 import { journalTotals } from './journalDraft';
-
-const today = () => {
-  const value = new Date();
-  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
-};
+import { localDate } from '../../components/localDate';
 
 export function EntryCreator({ resource }: { resource: 'transactions' | 'journals' }) {
   const session = useEntity();
@@ -18,7 +14,7 @@ export function EntryCreator({ resource }: { resource: 'transactions' | 'journal
   const close = () => navigate('/' + resource);
   if (!session.capabilities.includes('bookkeeping:write')) return <p role="alert">This business is read-only.</p>;
   if (resource === 'transactions') return <CreateEditor<Schemas['TransactionChanges']> title="Save transaction" onClose={close}
-    initial={() => ({ txn_date: today(), kind: 'Expense', amount: '', account_id: '', to_account_id: '', category_id: '',
+    initial={() => ({ txn_date: localDate(), kind: 'Expense', amount: '', account_id: '', to_account_id: '', category_id: '',
       payee_id: '', tag_ids: [], description: '', reference: '', new_payee_name: '', new_tag_name: '' })}
     canSubmit={values => !choices.pending && !choices.error && Boolean(values.account_id) &&
       choices.accounts.some(row => row.id === values.account_id && row.active) &&
@@ -28,7 +24,7 @@ export function EntryCreator({ resource }: { resource: 'transactions' | 'journal
       to_account_id: values.kind === 'Transfer' ? values.to_account_id : '', category_id: values.kind === 'Transfer' ? '' : values.category_id })}
     fields={form => <TransactionFields form={form} creating />} />;
   return <CreateEditor<Schemas['JournalChanges']> title="Save journal" onClose={close}
-    initial={() => ({ txn_date: today(), description: '', postings: ['Debit', 'Credit'].map(side => ({
+    initial={() => ({ txn_date: localDate(), description: '', postings: ['Debit', 'Credit'].map(side => ({
       id: crypto.randomUUID(), target_type: 'account', target_id: '', side, amount: '', payee_id: '', description: '' })) })}
     canSubmit={values => !choices.pending && !choices.error && journalTotals(values.postings).balanced}
     create={(values, entry_id) => api.createJournal(session, { ...values, entry_id })}

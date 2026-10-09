@@ -65,7 +65,8 @@ Each selected file receives a stable portable ID before sending bytes. The
 browser first uploads bytes, retains the confirmed document response, then links
 its canonical ID. Confirmed links remain attached if another file fails.
 An explicit upload retry reuses a freshly confirmed document with matching
-filename, type, size and checksum; conflicting reuse of its ID is rejected before
+canonical safe filename, type, size and checksum; filename normalization is shared
+with storage adapters so reserved names also reconcile on retry. Conflicting reuse of its ID is rejected before
 sending bytes. An unavailable inventory stops the upload for inspection/retry.
 Counts distinguish attached and unresolved work. **Retry unresolved receipts** reuses
 the same ID/file after an upload failure, or retries only linking after a confirmed

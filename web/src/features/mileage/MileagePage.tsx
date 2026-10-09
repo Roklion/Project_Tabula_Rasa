@@ -13,6 +13,7 @@ import { MileageFields } from './MileageFields';
 import { mileageLoaded, type MileageDraft } from './mileageForm';
 import { mileageCsvCell } from './mileageCsv';
 import { downloadBlob } from '../../components/downloadBlob';
+import { localDate } from '../../components/localDate';
 
 const tripLabel = (row: Schemas['Mileage']) => `${row.trip_date} · ${row.destination} · ${row.miles} miles`;
 
@@ -61,7 +62,7 @@ export function MileagePage() {
 
 export function NewMileage() {
   const session = useEntity();
-  const form = useForm<MileageDraft>({ defaultValues: { trip_date: new Date().toLocaleDateString('en-CA'),
+  const form = useForm<MileageDraft>({ defaultValues: { trip_date: localDate(),
     miles: '', vehicle: '', start_location: '', destination: '', business_purpose: '', notes: '', tag_ids: [], new_tag_name: '', round_trip: false } });
   const [failure, setFailure] = useState<unknown>();
   const [created, setCreated] = useState<Schemas['Mileage'][]>([]);
