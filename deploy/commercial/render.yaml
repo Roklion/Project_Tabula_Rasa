@@ -1,0 +1,58 @@
+# Operator template. Replace bootstrap tags with a validated immutable digest,
+# add private-registry credential references in Render, and review before syncing.
+# Neon is external: this declares no databases or production resources.
+services:
+  - type: web
+    name: tabula-rasa-development
+    runtime: image
+    plan: free
+    region: virginia
+    image:
+      url: ghcr.io/roklion/project_tabula_rasa/commercial:bootstrap
+    healthCheckPath: /health/ready
+    envVars:
+      - key: TABULA_RASA_ENVIRONMENT
+        value: development
+      - key: TABULA_RASA_TRUSTED_ENTITY_ID
+        value: alpha-synthetic
+      - key: TABULA_RASA_PUBLIC_ORIGIN
+        sync: false
+      - key: TABULA_RASA_DATABASE_URL
+        sync: false
+      - key: TABULA_RASA_DEPLOY_DATABASE_SHA256
+        sync: false
+      - key: TABULA_RASA_ALPHA_USERNAME
+        sync: false
+      - key: TABULA_RASA_ALPHA_PASSWORD_HASH
+        sync: false
+      - key: TABULA_RASA_DATABASE_POOL_SIZE
+        value: '2'
+      - key: TABULA_RASA_DATABASE_MAX_OVERFLOW
+        value: '0'
+  - type: web
+    name: tabula-rasa-staging
+    runtime: image
+    plan: free
+    region: virginia
+    image:
+      url: ghcr.io/roklion/project_tabula_rasa/commercial:bootstrap
+    healthCheckPath: /health/ready
+    envVars:
+      - key: TABULA_RASA_ENVIRONMENT
+        value: staging
+      - key: TABULA_RASA_TRUSTED_ENTITY_ID
+        value: alpha-synthetic
+      - key: TABULA_RASA_PUBLIC_ORIGIN
+        sync: false
+      - key: TABULA_RASA_DATABASE_URL
+        sync: false
+      - key: TABULA_RASA_DEPLOY_DATABASE_SHA256
+        sync: false
+      - key: TABULA_RASA_ALPHA_USERNAME
+        sync: false
+      - key: TABULA_RASA_ALPHA_PASSWORD_HASH
+        sync: false
+      - key: TABULA_RASA_DATABASE_POOL_SIZE
+        value: '2'
+      - key: TABULA_RASA_DATABASE_MAX_OVERFLOW
+        value: '0'

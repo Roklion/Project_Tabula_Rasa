@@ -1,0 +1,20 @@
+name: Promote commercial staging
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: Tested GHCR commercial image with immutable sha256 digest
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+  packages: read
+jobs:
+  staging:
+    if: github.ref == 'refs/heads/main' && vars.COMMERCIAL_DEPLOY_ENABLED == 'true'
+    uses: ./.github/workflows/commercial-promote.yml
+    with:
+      environment: staging
+      image: ${{ inputs.image }}
+    secrets: inherit

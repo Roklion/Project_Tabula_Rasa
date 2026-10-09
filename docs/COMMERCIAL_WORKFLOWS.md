@@ -22,11 +22,15 @@ bookkeeping mutation. Independent browser clients can select different businesse
 `GET /api/v1/entities` enumerates only resolver-supplied contexts and resolves
 their names through the ledger service. `POST /api/v1/session/entity` requires
 Origin/CSRF and write capability checks, permits only the explicit trusted
-loopback development resolver, and sets an HttpOnly, SameSite=Strict selection
+technical-alpha resolver, and sets an HttpOnly, SameSite=Strict selection
 cookie. The cookie must identify one of its configured entities; tampering cannot
 introduce another entity. Entity-qualified requests must agree with the resolved
 context before service composition. Other injected resolvers retain their existing
 selection/authorization ownership and cannot use this endpoint as a bypass.
+
+Hosted development/staging uses #279's authenticated operator gate and one fixed
+Alpha synthetic entity; Beta selection remains local-only. Unknown selection
+cookies and attempts to select Beta in hosted mode reject before service composition.
 
 This is functional technical-alpha context, not login or membership authorization.
 #222 owns authenticated memberships and context selection. Hosted deployment and

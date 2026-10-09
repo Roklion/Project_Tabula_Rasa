@@ -35,7 +35,9 @@ local Vite -> API -> PostgreSQL topology, OpenAPI/client generation, environment
 separation and #279's provider/secret/persistent-staging checkpoint. #277/#278
 now supply runnable local foundations; [Foundation conventions](COMMERCIAL_FOUNDATION.md)
 covers transport/context contracts, cache/form ownership and focused validation.
-Hosted deployment remains #279 work.
+The #279 image/workflows/gate are implemented; [Technical deployment](COMMERCIAL_DEPLOYMENT.md)
+owns the exact provider/secret checkpoint, ordered migration, smoke and rollback
+procedure. Hosted provisioning/acceptance remains pending operator execution.
 
 The HTTP runtime reuses application services and PostgreSQL adapters. Preserve
 the server-side #222 membership/context seam, #280 loaded-baseline form contract,

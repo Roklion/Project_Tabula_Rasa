@@ -58,7 +58,7 @@ manager, retry/recovery state machine, or commercial profile-permission model.
 | Persistence | Existing synchronous SQLAlchemy Core/Psycopg/Alembic PostgreSQL infrastructure; PostgreSQL 18 baseline. |
 | Contract generation | FastAPI OpenAPI export, `openapi-typescript` generation, `openapi-fetch` typed client; no handwritten duplicate TypeScript response models. |
 | Testing | Existing pytest/Ruff plus API tests; Vitest/React Testing Library for browser logic, Playwright for browser workflows. |
-| Hosting | Paid Render Docker web services; Neon managed PostgreSQL; separate environments. |
+| Hosting | Render Docker web services; suitable free tiers are permitted for technical development/staging under the stage-specific amendment below. Paid capacity and recovery guarantees remain a separate commercial activation gate. Neon managed PostgreSQL; separate environments. |
 | Release | One container per environment containing the compiled SPA and Python API. Node is build-only. |
 
 #277/#278 pin compatible stable library releases and container patch/digest
@@ -133,6 +133,15 @@ fixtures use explicit test/development composition without claiming a migrated
 profile's acceptance or activation. New customer onboarding/authorization is
 #222; legacy profile configuration is never part of the browser contract.
 See [Bookkeeping acceptance and cutover](../BOOKKEEPING_CUTOVER.md).
+
+The #299 owner-operated procedure uses this same production application and
+authorization seam with non-commercial recovery acceptance. The existing stored
+`rehearsal` cutover value supports persistent authority independently of HTTP
+environment names; it does not relax request authorization or select a different
+runtime. `open_migrated_runtime` extends the existing pool/composition owner for
+that integration. #294 supplies the separately verified NAS recovery route;
+#298 retains commercial evidence/sign-off. Neither the factory nor the named
+procedure supplies missing identity, deployment or browser workflows.
 
 Handlers validate/translate DTOs, obtain authorized context, call the existing
 service, and map committed results/errors. They do not issue SQL, compute
@@ -218,8 +227,12 @@ Start with one Uvicorn worker per container, horizontally scalable once #223
 proves the required operational behavior. Budget database pools across all
 workers/instances; sessions and durable jobs cannot live only in process memory.
 
-Use paid, continuously available Render services for hosted dev/staging and
-intended production. The 2026-10-07 operator amendment permits Neon Free for
+The 2026-10-07 stage amendment in #124/#221/#279 permits suitable free-tier
+Render/Neon capacity for technical development/staging, with persistent
+PostgreSQL and plan limitations recorded at the operator checkpoint. Use
+continuously available capacity when the intended usage requires it. Commercial
+production capacity/recovery acceptance remains separately owned by #224/#298.
+The earlier 2026-10-07 operator amendment permits Neon Free for
 the current pre-activation stage: production and retained UAT use distinct
 branches/endpoints in one Neon project, with separately scoped connection
 configuration and access controls. The production root is the #259 recovery
@@ -230,8 +243,8 @@ common operational boundary; branches are not an independent project-access
 boundary. Before commercial activation under #220/#258/#223, review and approve
 environment isolation, roles/secrets and operational blast radius; separate
 projects remain the proposed stronger isolation direction, rather than a
-prerequisite for the current Free-plan drills. This amendment changes Neon
-separation/recovery preparation only, not the paid Render runtime decision.
+prerequisite for the current Free-plan drills. The later stage amendment extends
+plan flexibility to technical Render hosting without changing provider/topology.
 See [the recovery contract](../POSTGRESQL_RECOVERY.md) for current Free-plan
 limits and the future protection/objective gates.
 Start with direct/unpooled TLS connections and the existing small application

@@ -52,7 +52,9 @@ def main(argv=None):
     parser.add_argument("--profile", required=True)
     parser.add_argument("--entity", required=True)
     parser.add_argument("--secrets", type=Path, default=PROJECT_ROOT / ".streamlit/secrets.toml")
-    parser.add_argument("--mode", choices=("rehearsal", "commercial_production"))
+    parser.add_argument("--mode", choices=("rehearsal", "commercial_production"),
+                        help="Cutover evidence policy, independent of app deployment environment. "
+                             "rehearsal also supports documented lasting owner operation.")
     parser.add_argument("--evidence", type=Path, help="Private operator evidence reference JSON; never ledger content.")
     parser.add_argument("--production-database-sha256")
     parser.add_argument("--staging-database-sha256")

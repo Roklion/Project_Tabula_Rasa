@@ -52,8 +52,11 @@ load that exact file independently of the working directory; existing process
 environment variables take precedence, including explicitly empty values.
 Values are read literally without variable interpolation. `.env.local` is
 Git-ignored; `.env` and `.env.example` are not loaded. For Neon use the UAT
-branch's direct/unpooled URL with `sslmode=require`; remove
-`channel_binding=require` if present because it is not a supported URL option.
+branch's direct/unpooled URL with `sslmode=require`; retain
+`channel_binding=require` when supplied by Neon. The configuration accepts
+PostgreSQL's `disable`, `prefer` and `require` channel-binding modes and rejects
+invalid or repeated values without retaining credential-bearing parser errors.
+See the [PostgreSQL connection-security options](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNECT-CHANNEL-BINDING).
 Installing `requirements-postgres.txt` supplies the environment-file loader.
 Deployment secret injection remains supported. The file does not change the
 active Sheets ledger or initialize database tables.
@@ -61,7 +64,11 @@ active Sheets ledger or initialize database tables.
 `TABULA_RASA_TEST_DATABASE_URL` must still be supplied explicitly in the process
 environment and must target a disposable test administrator database, never UAT
 or production. Loading local database settings does not modify process
-variables or select the test target. Explicit settings mappings bypass the file.
+variables or select the test target. An operator may store the dedicated test
+URL privately in `.env.local`, then explicitly load only that variable into a
+test command's process without printing it. A separate, empty Neon project
+using its direct TLS endpoint is suitable; its role must create and drop
+disposable `tabula_test_*` databases. Explicit settings mappings bypass the file.
 Neither CLI output nor settings repr includes
 the connection URL, username, password, SQL parameters, or private row contents.
 

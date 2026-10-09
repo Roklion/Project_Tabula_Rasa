@@ -1,0 +1,22 @@
+# Allowlist: local settings, credentials, private data and caches cannot enter a build.
+*
+!requirements-api.txt
+!requirements-postgres.txt
+!tabula_rasa/
+!tabula_rasa/**/
+!tabula_rasa/**/*.py
+!tabula_rasa/**/*.sql
+!web/
+!web/package.json
+!web/package-lock.json
+!web/index.html
+!web/tsconfig.json
+!web/vite.config.ts
+!web/src/
+!web/src/**/
+!web/src/**/*.ts
+!web/src/**/*.tsx
+!web/src/**/*.css
+!deploy/
+!deploy/commercial/
+!deploy/commercial/Dockerfile

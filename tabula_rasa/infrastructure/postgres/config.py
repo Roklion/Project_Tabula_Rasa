@@ -65,7 +65,9 @@ class DatabaseSettings:
                 url = url.set(drivername="postgresql+psycopg")
             # Operational settings have dedicated bounded options; URL options
             # are limited to transport security, never echo/logging or SQL.
-            if set(url.query) - {"sslmode", "sslrootcert", "sslcert", "sslkey"}:
+            if set(url.query) - {"sslmode", "sslrootcert", "sslcert", "sslkey", "channel_binding"}:
+                raise ValueError
+            if "channel_binding" in url.query and url.query["channel_binding"] not in {"disable", "prefer", "require"}:
                 raise ValueError
             return cls(
                 url=url,

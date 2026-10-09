@@ -52,6 +52,14 @@ remains the internal/reference edition.
   environment and document-store binding checks. Its optional legacy provider
   dependencies are installed only for that operator composition; the synthetic
   API and schema exporter do not import Streamlit, Sheets or Google clients.
+- `open_migrated_runtime` supplies the shared lifecycle for accepted migrated
+  profiles. It validates all server-configured authority/document bindings and
+  schema readiness at startup, requires an explicit authorization resolver,
+  refuses synthetic contexts and disposes failed pools. Lasting owner use keeps
+  the existing non-commercial cutover policy in a normal production app; see the
+  [owner-operated procedure](BOOKKEEPING_CUTOVER.md#owner-operated-production-procedure-299).
+  This factory does not deliver #222's login/session system or remaining browser
+  workflow slices, and its synthetic tests do not authorize live use.
 
 ## Identity and request protection seam (#222)
 
@@ -66,9 +74,11 @@ entity, route/body/profile key, baseline or header never proves authorization.
 operations additionally require the exact configured Origin and
 `X-CSRF-Token`. API schema/docs use the same read context guard. An absent
 resolver denies access with 401. The default trusted resolver requires a
-loopback client and explicit development/test configuration; staging/production
-reject that environment option. #279 must supply and verify its deployment
-gate before enabling hosted synthetic alpha. #222 replaces that gate before
+loopback client and explicit development/test configuration. #279 adds a fixed
+hosted synthetic scope behind its environment-specific HTTP Basic gate; public
+HTTPS configuration, credentials and bound Neon connectivity fail closed.
+Production rejects synthetic context and alpha credentials. [Technical deployment](COMMERCIAL_DEPLOYMENT.md)
+owns the operator checkpoint and outstanding real hosted verification. #222 replaces that gate before
 external beta/customer data.
 
 HTTP settings are read only from process environment. Database settings retain

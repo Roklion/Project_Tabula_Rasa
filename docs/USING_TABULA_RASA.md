@@ -9,6 +9,11 @@ The Streamlit edition uses Sheets. A profile configured by the operator for
 bookkeeping maintenance or PostgreSQL stops before Sheets initialization; it
 does not silently open another backend. Backend changes have no UI picker and
 follow the [controlled cutover procedure](BOOKKEEPING_CUTOVER.md).
+Lasting owner-operated PostgreSQL use follows its
+[owner-operated production procedure](BOOKKEEPING_CUTOVER.md#owner-operated-production-procedure-299)
+on the shared web/API application, with normal authorization and explicitly
+accepted recovery limitations. This does not add a backend picker to Streamlit
+or claim that unfinished web workflows or NAS protection are delivered.
 
 The separate commercial technical-alpha browser now supports editing existing
 accounts, categories, payees/tags, simple transactions, journals and mileage.

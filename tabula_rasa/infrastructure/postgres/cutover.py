@@ -11,16 +11,11 @@ from .entity_export import PostgresEntityExportRepository
 from .migration_acceptance import PostgresMigrationAcceptance, SOURCE_CONTRACT
 from .migration import validate_plan
 from .migrations import current_revision, head_revision
+from .identity import database_identity as database_identity
 
 
 class CutoverError(MigrationError):
     """Fixed operator diagnostics, without source values, URLs or credentials."""
-
-
-def database_identity(database):
-    """Opaque endpoint identity; passwords/users/query options never participate."""
-    url = database.engine.url
-    return digest([url.host, url.port or 5432, url.database])
 
 
 def evidence_reference(value):
