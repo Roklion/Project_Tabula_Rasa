@@ -12,6 +12,13 @@ class GoogleSheetsAssetRepository:
     def list(self, *, fresh=False):
         return self._storage.list_assets(_force_refresh=fresh)
 
+    def read(self, asset_id, *, fresh=False):
+        with self._storage._workbook_locks.ledger:
+            for asset in self.list(fresh=fresh):
+                if asset['id'] == asset_id:
+                    return asset, self._storage._asset_postings(asset_id)
+        raise StorageNotFoundError('Asset no longer exists')
+
     def create(self, record):
         storage = self._storage
         with storage._workbook_locks.ledger:

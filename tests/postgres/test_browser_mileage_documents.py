@@ -52,6 +52,7 @@ def test_mileage_revisit_waits_for_fresh_detail_and_surfaces_deleted_record(comm
             assert saved.value.request.post_data_json['baseline'] == updated.json()['baseline']
             expect(page.get_by_role('status').filter(has_text='Changes saved.')).to_be_visible()
             page.get_by_role('button', name='Back to records', exact=True).click()
+            expect(page.get_by_role('heading', name='Mileage', exact=True)).to_be_visible()
             deleted = client.request('DELETE', PREFIX + 'mileage/' + created['id'], headers=HEADERS,
                                     json={'baseline': saved.value.json()['baseline']})
             assert deleted.status_code == 200

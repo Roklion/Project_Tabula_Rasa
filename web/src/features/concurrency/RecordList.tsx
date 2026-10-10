@@ -6,10 +6,11 @@ import { useEntity } from '../../app/context';
 import { EmptyState, ErrorNotice, LoadingState } from '../../components/States';
 import type { Session } from '../../api/client';
 
-export function RecordList<R extends { id: string }>({ resource, title, list, label, editor, canEdit = () => true, columns = [], receiptTarget }: {
+export function RecordList<R extends { id: string }>({ resource, title, list, label, editor, canEdit = () => true, columns = [], receiptTarget, detailsTarget }: {
   resource: string; title: string; list: (session: Session, signal?: AbortSignal) => Promise<{ items: R[] }>;
   label: (row: R) => string; editor: (row: R, close: () => void) => ReactNode; canEdit?: (row: R) => boolean;
   receiptTarget?: (row: R) => boolean;
+  detailsTarget?: (row: R) => string | undefined;
   columns?: { title: string; render: (row: R, rows: R[]) => ReactNode }[];
 }) {
   const session = useEntity();
@@ -24,6 +25,7 @@ export function RecordList<R extends { id: string }>({ resource, title, list, la
         <tbody>{query.data.items.map(row => <tr key={row.id}><th scope="row">{label(row)}</th>
           {columns.map(column => <td key={column.title}>{column.render(row, query.data.items)}</td>)}<td>{canEdit(row) && session.capabilities.includes('bookkeeping:write')
           && <button type="button" onClick={() => setSelected(structuredClone(row))}>Edit {label(row)}</button>}
+          {detailsTarget?.(row) && <Link to={detailsTarget(row)!}>View {label(row)}</Link>}
           {receiptTarget?.(row) && <Link to={'/transactions/' + encodeURIComponent(row.id) + '/receipts'}>Receipts for {label(row)}</Link>}</td>
         </tr>)}</tbody></table></div>}
   </section>;

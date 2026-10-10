@@ -359,12 +359,38 @@ remain internal-edition workflows. [Commercial mileage and receipts](docs/COMMER
 owns this slice's transport, recovery and validation contract.
 [Commercial core workflows](docs/COMMERCIAL_WORKFLOWS.md) owns #281/#282 scope.
 #222 adds authenticated identity/membership context selection,
-#284/#285 add remaining domain workflows. [Browser quality](docs/COMMERCIAL_BROWSER_QUALITY.md)
+[Secondary workflows](docs/COMMERCIAL_SECONDARY_WORKFLOWS.md) delivers #284/#285.
+[Browser quality](docs/COMMERCIAL_BROWSER_QUALITY.md)
 documents #287's automated baseline and the outstanding staging, receipt and manual-device gates.
 The Streamlit-specific shell requirements above continue to govern the internal
 edition.
 
 ## Page headers, workflow groups, and messages
+
+**Current behavior — commercial secondary workflows (#284/#285):** Transactions
+links to Mixed-use expenses and Recurring expenses. Mixed-use source creation,
+editing and confirmed deletion preserve the stable source/projection pair; a
+service-calculated Ledger result previews allocation. Incomplete relationships
+remain inspection-only. Recurring lists show cadence, next/latest occurrence,
+status, attention and ID; details show durable occurrence provenance. Ordinary
+and mixed-use creation commit the schedule and initial occurrence together.
+Protected Pause/Resume/End actions require confirmation; End retains history.
+Generate due occurrences is an explicit confirmed command. Commercial page
+loads never reconcile recurring schedules; the internal edition's on-load
+behavior below remains specific to Streamlit.
+
+Assets provides a register, create/detail/edit, retirement and guarded deletion.
+Server-calculated quarterly schedules show override reasons, Posted/Pending and
+ledger IDs. Protected override/removal and Post due depreciation require
+confirmation. Terms/history locks and deletion availability come from the
+service, including immutable posted provenance. Responsive tables scroll inside
+labeled regions and forms retain the existing dirty-navigation/conflict contract.
+Completed explicit commands require returning to the list for a fresh editor.
+Detail visits wait for a fresh read before opening an editor; later background
+read failures preserve its loaded draft and baseline. Read-only views expose
+saved terms without mutation controls.
+[Commercial secondary workflows](docs/COMMERCIAL_SECONDARY_WORKFLOWS.md) owns
+scope, recovery and release boundaries.
 
 Page headers state the page purpose and place its primary workflow actions
 near the relevant content. Use tabs for current workflow divisions:

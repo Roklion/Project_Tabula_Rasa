@@ -56,6 +56,11 @@ class PostgresAssetRepository(EntityRepository):
         ), {'scope': self.entity_id, 'id': asset_id}).mappings()
         return [self.transactions.project(connection, row) for row in rows]
 
+    def read(self, asset_id, *, fresh=False):
+        with self.operation(read_only=True) as connection:
+            row = self.get_row(connection, 'fixed_assets', asset_id)
+            return self.project(connection, row), self.history(connection, asset_id)
+
     def validate_references(self, connection, data, references):
         validate_depreciation_accounts(data, references.accounts, references.categories)
         if data['payee_id'] and data['payee_id'] not in references.payees:

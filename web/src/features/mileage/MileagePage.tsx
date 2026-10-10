@@ -9,6 +9,7 @@ import { EmptyState, ErrorNotice, Field, LoadingState, SuccessNotice } from '../
 import { UnsavedChanges } from '../../components/UnsavedChanges';
 import { ProtectedEditor } from '../concurrency/ProtectedEditor';
 import { useProtectedMutation } from '../concurrency/mutations';
+import { useLoadedRecord } from '../concurrency/useLoadedRecord';
 import { MileageFields } from './MileageFields';
 import { mileageLoaded, type MileageDraft } from './mileageForm';
 import { mileageCsvCell } from './mileageCsv';
@@ -104,14 +105,10 @@ export function MileageDetail() {
 function MileageDetailQuery({ recordId }: { recordId: string }) {
   const session = useEntity();
   const navigate = useNavigate();
-  const [initialized, setInitialized] = useState(false);
   const tags = useQuery({ queryKey: resourceKey(session, 'tags'), queryFn: ({ signal }) => api.tags(session, signal) });
-  const query = useQuery({ queryKey: [...resourceKey(session, 'mileage'), recordId],
-    queryFn: ({ signal }) => api.mileageTrip(session, recordId, signal), staleTime: 0, refetchOnMount: 'always' });
-  // Wait for this visit's read, then let useLoadedForm retain the draft/baseline.
-  if (!initialized && query.isFetchedAfterMount && query.isSuccess) setInitialized(true);
-  return <><h1>Mileage trip</h1>{!initialized && (!query.isFetchedAfterMount || query.isPending) ? <LoadingState />
-    : (query.isError && !initialized) || !query.data ? <ErrorNotice error={query.error} onReview={() => void query.refetch()} />
+  const query = useLoadedRecord(session, 'mileage', recordId, api.mileageTrip);
+  return <><h1>Mileage trip</h1>{query.initializing ? <LoadingState />
+    : !query.initialized || !query.data ? <ErrorNotice error={query.error} onReview={() => void query.refetch()} />
     : session.capabilities.includes('bookkeeping:write') ? <ProtectedEditor key={recordId} session={session} loaded={mileageLoaded(query.data)} title="Edit mileage trip"
       onClose={() => navigate('/mileage')} fields={form => <MileageFields form={form} />}
       save={async (id, baseline, changes) => mileageLoaded(await api.updateMileage(session, id, { baseline, changes }))}
