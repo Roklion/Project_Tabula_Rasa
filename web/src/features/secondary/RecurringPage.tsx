@@ -1,9 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
 import type { Path, UseFormReturn } from 'react-hook-form';
 import { api, type Schemas } from '../../api/client';
-import { resourceKey } from '../../api/query';
 import { useEntity } from '../../app/context';
 import { ConfirmationDialog } from '../../components/ConfirmationDialog';
 import { ErrorNotice, Field, LoadingState, SuccessNotice } from '../../components/States';
@@ -12,6 +10,7 @@ import { SelectField, TextField } from '../concurrency/Fields';
 import { ProtectedEditor } from '../concurrency/ProtectedEditor';
 import { RecordList } from '../concurrency/RecordList';
 import { SavedFields } from '../concurrency/SavedFields';
+import { useLoadedRecord } from '../concurrency/useLoadedRecord';
 import { useProtectedMutation } from '../concurrency/mutations';
 import { CreateEditor } from '../workflows/CreateEditor';
 import { ExpenseReferences } from './ExpenseReferences';
@@ -87,9 +86,15 @@ export function NewRecurring() {
 }
 
 export function RecurringDetail() {
-  const session = useEntity(); const navigate = useNavigate(); const { recordId = '' } = useParams();
-  const query = useQuery({ queryKey: [...resourceKey(session, 'recurring'), recordId], queryFn: ({ signal }) => api.recurringSchedule(session, recordId, signal) });
-  if (!query.data) return <><h1>Recurring schedule</h1>{query.isError ? <ErrorNotice error={query.error} onReview={() => void query.refetch()} /> : <LoadingState />}</>;
+  const { recordId = '' } = useParams();
+  return <RecurringDetailQuery key={recordId} recordId={recordId} />;
+}
+
+function RecurringDetailQuery({ recordId }: { recordId: string }) {
+  const session = useEntity(); const navigate = useNavigate();
+  const query = useLoadedRecord(session, 'recurring', recordId, api.recurringSchedule);
+  if (query.initializing) return <><h1>Recurring schedule</h1><LoadingState /></>;
+  if (!query.initialized || !query.data) return <><h1>Recurring schedule</h1><ErrorNotice error={query.error} onReview={() => void query.refetch()} /></>;
   const data = query.data;
   return <><h1>Recurring schedule</h1>{<>
     <p>{data.schedule.name} · {data.schedule.status} · {data.schedule.id}</p>

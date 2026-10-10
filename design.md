@@ -386,6 +386,9 @@ confirmation. Terms/history locks and deletion availability come from the
 service, including immutable posted provenance. Responsive tables scroll inside
 labeled regions and forms retain the existing dirty-navigation/conflict contract.
 Completed explicit commands require returning to the list for a fresh editor.
+Detail visits wait for a fresh read before opening an editor; later background
+read failures preserve its loaded draft and baseline. Read-only views expose
+saved terms without mutation controls.
 [Commercial secondary workflows](docs/COMMERCIAL_SECONDARY_WORKFLOWS.md) owns
 scope, recovery and release boundaries.
 

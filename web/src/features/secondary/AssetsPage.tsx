@@ -11,6 +11,7 @@ import { SelectField, TextField } from '../concurrency/Fields';
 import { ProtectedEditor, type EditorCommand } from '../concurrency/ProtectedEditor';
 import { RecordList } from '../concurrency/RecordList';
 import { SavedFields } from '../concurrency/SavedFields';
+import { useLoadedRecord } from '../concurrency/useLoadedRecord';
 import { activeChoices, useReferenceChoices } from '../concurrency/useReferenceChoices';
 import { CreateEditor } from '../workflows/CreateEditor';
 
@@ -107,9 +108,15 @@ function AssetEditor({ detail }: { detail: Schemas['AssetDetail'] }) {
 }
 
 export function AssetDetail() {
-  const session = useEntity(); const { recordId = '' } = useParams();
-  const query = useQuery({ queryKey: [...resourceKey(session, 'assets'), recordId], queryFn: ({ signal }) => api.asset(session, recordId, signal) });
-  if (!query.data) return <><h1>Asset detail</h1>{query.isError ? <ErrorNotice error={query.error} onReview={() => void query.refetch()} /> : <LoadingState />}</>;
+  const { recordId = '' } = useParams();
+  return <AssetDetailQuery key={recordId} recordId={recordId} />;
+}
+
+function AssetDetailQuery({ recordId }: { recordId: string }) {
+  const session = useEntity();
+  const query = useLoadedRecord(session, 'assets', recordId, api.asset);
+  if (query.initializing) return <><h1>Asset detail</h1><LoadingState /></>;
+  if (!query.initialized || !query.data) return <><h1>Asset detail</h1><ErrorNotice error={query.error} onReview={() => void query.refetch()} /></>;
   const data = query.data;
   return <><h1>Asset detail</h1><Link to="/assets">Back to asset register</Link>
     {<>

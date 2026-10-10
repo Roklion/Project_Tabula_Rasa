@@ -10,6 +10,7 @@ import { TextField } from '../concurrency/Fields';
 import { ProtectedEditor } from '../concurrency/ProtectedEditor';
 import { RecordList } from '../concurrency/RecordList';
 import { SavedFields } from '../concurrency/SavedFields';
+import { useLoadedRecord } from '../concurrency/useLoadedRecord';
 import { CreateEditor } from '../workflows/CreateEditor';
 import { ExpenseReferences } from './ExpenseReferences';
 
@@ -62,9 +63,15 @@ export function NewMixedUse() {
 }
 
 export function MixedUseDetail() {
-  const session = useEntity(); const navigate = useNavigate(); const { recordId = '' } = useParams();
-  const query = useQuery({ queryKey: [...resourceKey(session, 'mixed-use'), recordId], queryFn: ({ signal }) => api.mixedUseSource(session, recordId, signal) });
-  if (!query.data) return <><h1>Mixed-use expense</h1>{query.isError ? <ErrorNotice error={query.error} onReview={() => void query.refetch()} /> : <LoadingState />}</>;
+  const { recordId = '' } = useParams();
+  return <MixedUseDetailQuery key={recordId} recordId={recordId} />;
+}
+
+function MixedUseDetailQuery({ recordId }: { recordId: string }) {
+  const session = useEntity(); const navigate = useNavigate();
+  const query = useLoadedRecord(session, 'mixed-use', recordId, api.mixedUseSource);
+  if (query.initializing) return <><h1>Mixed-use expense</h1><LoadingState /></>;
+  if (!query.initialized || !query.data) return <><h1>Mixed-use expense</h1><ErrorNotice error={query.error} onReview={() => void query.refetch()} /></>;
   const data = query.data;
   return <><h1>Mixed-use expense</h1>{<>
     <p>Source {data.id} · Projection {data.linked_transaction_id} · Allocated {data.allocated_amount}</p>

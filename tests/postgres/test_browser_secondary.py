@@ -159,6 +159,66 @@ def test_dropped_write_and_background_read_keep_loaded_draft(database, commercia
             browser.close()
 
 
+@pytest.mark.parametrize('resource,field,property_name,heading', [
+    ('assets', 'Notes', 'notes', 'Asset detail'),
+    ('mixed-use', 'Allocation rationale', 'allocation_rationale', 'Mixed-use expense'),
+    ('recurring', 'Schedule name', 'name', 'Recurring schedule'),
+])
+def test_secondary_cached_revisit_waits_for_fresh_record_and_rejects_failed_read(database, commercial, commercial_server,
+                                                                              resource, field, property_name, heading):
+    alpha, _, _, _ = commercial
+    if resource == 'assets':
+        offset = alpha.accounts.create('Accumulated depreciation', 'Other', classification='Asset')['id']
+        row = alpha.assets.create(asset_id='asset', **asset(offset))
+    elif resource == 'mixed-use':
+        row = alpha.mixed_use.create(source_id='source', linked_transaction_id='projection', **mixed())
+    else:
+        row = alpha.recurring.create_expense(schedule_id='schedule', name='Subscription', txn_date='2026-01-01', recurrence_unit='month',
+                                            account_id='cash', category_id='office', amount='10.00')['schedule']
+
+    def update():
+        if resource == 'assets':
+            return alpha.assets.update(row['id'], expected={'baseline': row['baseline']}, notes='Other client edit')
+        if resource == 'mixed-use':
+            return alpha.mixed_use.update(row['id'], expected_source={'baseline': row['baseline']}, allocation_rationale='Other client edit')
+        return alpha.recurring.update(row['id'], expected_schedule={'baseline': row['baseline']}, name='Other client edit')
+
+    endpoint = '**/api/v1/entities/alpha/' + resource + '/' + row['id']
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.goto(commercial_server + '/' + resource + '/' + row['id'])
+            expect(page.get_by_label(field, exact=True)).to_have_value(row[property_name])
+            page.get_by_role('button', name='Back to records', exact=True).click()
+            updated = update()
+            waiting = []
+            page.route(endpoint, lambda route: waiting.append(route))
+            page.go_back()
+            expect(page.get_by_role('heading', name=heading, exact=True)).to_be_visible()
+            expect(page.get_by_label(field, exact=True)).to_have_count(0)
+            expect(page.get_by_role('status').filter(has_text='Loading')).to_be_visible()
+            assert len(waiting) == 1
+            waiting.pop().continue_()
+            expect(page.get_by_label(field, exact=True)).to_have_value('Other client edit')
+            page.unroute(endpoint)
+            page.get_by_label(field, exact=True).fill('Fresh visit draft')
+            with page.expect_response(lambda response: response.request.method == 'PATCH') as saved:
+                page.get_by_role('button', name='Save changes', exact=True).click()
+            assert saved.value.status == 200 and saved.value.request.post_data_json['baseline'] == updated['baseline']
+            expect(page.get_by_role('status').filter(has_text='Changes saved.')).to_be_visible()
+            page.get_by_role('button', name='Back to records', exact=True).click()
+            before = snapshot(database)
+            page.route(endpoint, lambda route: route.abort())
+            page.go_back()
+            expect(page.get_by_role('alert')).to_be_visible()
+            expect(page.get_by_label(field, exact=True)).to_have_count(0)
+            expect(page.get_by_role('button', name='Save changes', exact=True)).to_have_count(0)
+            assert snapshot(database) == before
+        finally:
+            browser.close()
+
+
 @pytest.mark.parametrize('width', [1440, 390, 320])
 def test_secondary_forms_and_details_are_accessible(commercial, commercial_server, width):
     alpha, _, _, _ = commercial

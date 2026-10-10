@@ -5,8 +5,8 @@ Issues [#284](https://github.com/Roklion/Project_Tabula_Rasa/issues/284) and
 [EPIC #221](https://github.com/Roklion/Project_Tabula_Rasa/issues/221), under
 [initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124).
 They consume #277/#278/#280, the merged #248 recurring/mixed-use and #249 asset
-repositories, and the core commercial workflows. This implementation starts at
-PR #304 head `d8c1bbe65455412138f427481d55af3d357e539a`, retaining its mileage,
+repositories, and the core commercial workflows. This implementation builds on
+merged PR #304 at `c8069ea6344eeacca8e84d33135204d3c8a0e9c5`, retaining its mileage,
 receipt, browser-quality and protected-form integrations.
 
 These are secondary coverage slices. They do not expand #288's default first
@@ -92,6 +92,8 @@ All reads and commands use server-resolved entity context. Unsafe requests retai
 capability, Origin and CSRF checks. Edits, deletes, transitions, overrides and
 posting submit the loaded baseline; missing/stale tokens fail without mutations.
 Conflicts keep drafts and offer explicit Keep draft or Discard draft and reload.
+Each detail visit waits for its fresh read before opening an editor, including
+when cached data exists. Later background read failures preserve the loaded draft.
 Commands require saved main-form changes before confirmation. A completed command
 closes that editor's mutation surface; return to the list to load updated metadata.
 Confirmed responses establish success. Failures retain drafts and invalidate the
@@ -100,7 +102,8 @@ affected private caches, with no automatic browser retry or success readback.
 Reuse: existing application services and PostgreSQL repositories own rules and
 mutations; `CreateEditor`, `ProtectedEditor`, fields, confirmations and scoped
 query invalidation own form behavior. `ProtectedEditor` now also owns confirmed
-source commands. Read-only detail views reuse the same field presentation without
+source commands. Mileage and secondary detail routes share the fresh-read gate.
+Read-only detail views reuse the same field presentation without
 mutation controls. Asset detail reads assemble source/history together and use a
 shared domain schedule annotation, also used by the internal renderer. New code
 owns transport allowlists, responsive workflow presentation and representative
