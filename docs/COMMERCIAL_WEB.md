@@ -14,10 +14,11 @@ Use it together with [Development](DEVELOPMENT.md),
 [Foundation conventions](COMMERCIAL_FOUNDATION.md) for endpoints, context/error
 contracts, query/form primitives and test ownership. The image, workflows and
 temporary hosted gate are implemented under #279; [Technical deployment](COMMERCIAL_DEPLOYMENT.md)
-owns setup, promotion, rollback and the outstanding hosted acceptance record.
-Repository implementation does not establish reachable staging, external-beta
-readiness or production authority. Streamlit/Sheets
-continues as the internal/reference runtime.
+owns setup, promotion and rollback. Closed #279 records hosted dev/staging
+acceptance; [Technical alpha](TECHNICAL_ALPHA.md) defines #288's separate
+workflow/receipt/staging gate, evidence and controlled retirement boundary.
+Repository implementation does not establish external-beta readiness or
+production authority. Streamlit/Sheets continues as the internal/reference runtime.
 
 #280 adds the [protected commercial edit/delete bridge](COMMERCIAL_CONCURRENCY.md)
 over those foundations, carrying loaded baselines through actual browser/API

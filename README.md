@@ -63,6 +63,7 @@ The documentation index is this section of the root README. Go directly to:
 | Use recurring, mixed-use, assets and depreciation in the browser | [Commercial secondary workflows](docs/COMMERCIAL_SECONDARY_WORKFLOWS.md) |
 | Use or validate commercial entity setup, entries, ledger and reports | [Commercial core workflows](docs/COMMERCIAL_WORKFLOWS.md) |
 | Configure technical Render/Neon environments and deploy a tested image | [Technical deployment and operator checkpoint](docs/COMMERCIAL_DEPLOYMENT.md) |
+| Verify technical alpha and track the Streamlit transition | [Alpha release gate and retirement boundary](docs/TECHNICAL_ALPHA.md) |
 | Implement the commercial PostgreSQL accounting model | [Canonical schema ADR](docs/adr/0001-canonical-accounting-schema.md) |
 | Start PostgreSQL, run migrations, and test database infrastructure | [PostgreSQL development and operations](docs/POSTGRESQL.md) |
 | Implement PostgreSQL mutations and carry loaded-record baselines | [PostgreSQL concurrency convention](docs/POSTGRESQL_CONCURRENCY.md) |
