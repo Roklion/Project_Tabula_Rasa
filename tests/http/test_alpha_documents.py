@@ -152,6 +152,7 @@ def test_real_client_validates_managed_folder_metadata_without_writes(tmp_path, 
 
 
 def test_default_runtime_binds_only_trusted_alpha_context(tmp_path, monkeypatch):
+    monkeypatch.setattr("tabula_rasa.infrastructure.postgres.documents.PostgresReceiptRepository.validate_binding", Mock())
     monkeypatch.setenv(alpha_documents.FILE_ENV, write_binding(tmp_path))
     database = Mock()
     monkeypatch.setattr(composition, "open_alpha_database", lambda _: database)
@@ -176,6 +177,16 @@ def test_database_allocation_failure_retains_no_private_error(monkeypatch):
     with pytest.raises(RuntimeError, match="startup failed") as caught:
         composition.open_runtime(settings())
     assert caught.value.__context__ is None
+
+
+@pytest.mark.parametrize("interrupt", [KeyboardInterrupt, SystemExit])
+def test_startup_interrupt_propagates_after_pool_cleanup(monkeypatch, interrupt):
+    database = Mock()
+    monkeypatch.setattr(composition, "open_alpha_database", lambda _: database)
+    monkeypatch.setattr(alpha_documents, "load_alpha_document_store", Mock(side_effect=interrupt()))
+    with pytest.raises(interrupt):
+        composition.open_runtime(settings())
+    database.dispose.assert_called_once()
 
 
 def test_preflight_is_read_only_and_sanitizes_cli_failure(monkeypatch, capsys):

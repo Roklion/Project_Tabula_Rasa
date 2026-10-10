@@ -78,6 +78,10 @@ def open_runtime(settings):
                     else Database(DatabaseSettings.from_environment(required=True)))
         from .alpha_documents import load_alpha_document_store
         document_store = load_alpha_document_store(settings, dict(os.environ))
+        if document_store is not None:
+            from tabula_rasa.infrastructure.postgres.documents import PostgresReceiptRepository
+            PostgresReceiptRepository(database, document_store.entity_id,
+                store_kind="google_drive", store_scope_key=document_store.scope_key).validate_binding()
         resolver = (
             TrustedDevelopmentContext(settings.trusted_entity_id, secrets.token_urlsafe(32),
                                       hosted=settings.hosted_alpha,
@@ -98,9 +102,11 @@ def open_runtime(settings):
             for context in resolver.contexts:
                 runtime.services(context)
         return runtime
-    except BaseException:
+    except BaseException as error:
         if database is not None:
             database.dispose()
+        if not isinstance(error, Exception):
+            raise
         # Startup failures must not retain raw configuration/provider text.
     raise RuntimeError("HTTP runtime startup failed. Check configuration and dependency health.")
 

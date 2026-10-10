@@ -88,6 +88,16 @@ class PostgresReceiptRepository(EntityRepository):
                           source_id=clean_text(source_id, 'Mixed-use source', required=True),
                           expected_source=expected_source)
 
+    def validate_binding(self):
+        """Refuse startup rebinding of retained metadata, including unlinked rows."""
+        with self.operation(read_only=True) as connection:
+            mismatch = connection.scalar(text(
+                'SELECT EXISTS (SELECT 1 FROM documents WHERE entity_id=:scope '
+                'AND (store_kind<>:kind OR store_scope_key<>:binding))'
+            ), {'scope': self.entity_id, 'kind': self.store_kind, 'binding': self.store_scope_key})
+        if mismatch:
+            raise DocumentValidationError('Retained receipts require the original document-store binding.')
+
     def check_profile(self, profile_key):
         if profile_key != self.entity_id:
             raise DocumentValidationError('Receipt metadata belongs to a different business entity.')

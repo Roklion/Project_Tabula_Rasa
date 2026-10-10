@@ -158,6 +158,10 @@ grant expires/revokes. Replace the private file and restart/redeploy the approve
 image. Retain the same profile/root/Receipts identity for existing receipts.
 Changing folders does not move bytes or repair metadata; stop and inspect an
 unexpected binding change rather than declaring old documents absent.
+Startup refuses a binding that disagrees with retained PostgreSQL document rows,
+including rows whose links were removed. Files uploaded but never registered in
+PostgreSQL still require the operator to retain the original folder identity;
+this check does not discover files in a replaced folder or migrate them.
 
 Record actual Drive quotas/account capacity, shared-client blast radius, token
 expiry and byte-recovery protections privately. PostgreSQL backup/export captures

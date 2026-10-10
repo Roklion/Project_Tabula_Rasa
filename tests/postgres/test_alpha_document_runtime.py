@@ -85,3 +85,17 @@ def test_bound_default_http_receipts_restart_and_failure_isolation(database, tmp
                 provider.list_profile_receipts = original
     assert provider.uploads == 1 and provider.deletes == 0
     assert "private synthetic" not in caplog.text
+    # Retained unlinked metadata must not disappear behind another valid binding.
+    replacement = SyntheticDrive("replacement-receipts")
+    monkeypatch.setenv(alpha_documents.FILE_ENV,
+        write_binding(tmp_path, binding(environment, "replacement-receipts")))
+    monkeypatch.setattr(alpha_documents, "GoogleDriveClient", lambda *_: replacement)
+    with pytest.raises(RuntimeError, match="startup failed") as caught:
+        composition.open_runtime(configured)
+    assert caught.value.__context__ is None
+    assert replacement.uploads == 0 and provider.deletes == 0
+    # The original binding remains usable; refusal changed neither metadata nor bytes.
+    monkeypatch.setenv(alpha_documents.FILE_ENV, write_binding(tmp_path, binding(environment, profile)))
+    monkeypatch.setattr(alpha_documents, "GoogleDriveClient", factory)
+    runtime = composition.open_runtime(configured)
+    runtime.close()
