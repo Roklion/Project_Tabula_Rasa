@@ -10,6 +10,8 @@ import math
 from typing import Any
 from uuid import uuid4
 
+from tabula_rasa.errors import StorageNotFoundError
+
 from tabula_rasa.quickbooks_mileage_import import (
     mileage_fingerprint,
     missing_required_columns,
@@ -316,6 +318,12 @@ class MileageService:
             return _apply_new_tag((trip,), data.get("new_tag_name"), create_tag)
 
         return self._repository.add_trips(prepare)[0]
+
+    def get_trip(self, trip_id: str) -> MileageTrip:
+        for trip in self.list_trips(fresh=True):
+            if trip.id == trip_id:
+                return trip
+        raise StorageNotFoundError("The mileage trip no longer exists.")
 
     def create_round_trip(
         self,

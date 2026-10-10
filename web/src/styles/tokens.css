@@ -19,7 +19,7 @@ button:disabled { cursor: default; opacity: .6; }
 .muted, .lead { color: var(--secondary); }
 .lead { margin-bottom: 32px; }
 .eyebrow { color: var(--secondary); font-size: 12px; margin-bottom: 8px; }
-.surface { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 24px; }
+.surface { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 24px; overflow-wrap: anywhere; }
 .empty { padding: 32px 0; border-top: 1px solid var(--border); }
 .notice { padding: 16px; margin: 16px 0; border-radius: 4px; overflow-wrap: anywhere; }
 .notice p:last-child { margin-bottom: 0; }
@@ -43,12 +43,17 @@ thead { background: #FAFAF8; }
 .editor fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 16px; min-width: 0; }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 24px; }
 .recordList { list-style: none; padding: 0; }
-.recordList li { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.recordList li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.recordList li > span, .recordList li > div { flex: 1 1 200px; min-width: 0; }
 .recordList li span { min-width: 0; }
 .recordList li button { flex-shrink: 0; max-width: 60%; overflow-wrap: anywhere; }
 .checkbox { display: flex; gap: 8px; align-items: center; min-height: 44px; }
 .checkbox input { width: 20px; height: 20px; }
 .posting { padding: 16px; border: 1px solid var(--border); display: grid; gap: 12px; }
+.formGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 16px; margin-bottom: 16px; }
+dl { overflow-wrap: anywhere; }
+dt { font-weight: 600; }
+dd { margin: 0 0 12px; }
 .filterGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 16px; margin: 24px 0; }
 .metrics { display: flex; gap: 32px; flex-wrap: wrap; margin: 16px 0 32px; }
 .metrics dt { color: var(--secondary); }

@@ -21,25 +21,32 @@ DIST = Path(__file__).resolve().parents[2] / 'web' / 'dist'
 
 
 @pytest.fixture
+def document_store():
+    return None
+
+
+@pytest.fixture
 def browser_resolver():
     context = RequestContext('actor', 'org', 'alpha', frozenset({'bookkeeping:read', 'bookkeeping:write'}), 'browser-scope', 'csrf')
     return lambda request: context
 
 
 @pytest.fixture
-def commercial_server(database, commercial, browser_resolver):
+def commercial_server(database, commercial, browser_resolver, document_store):
     if not (DIST / 'index.html').is_file():
         if os.environ.get('TABULA_RASA_REQUIRE_BROWSER_TESTS') == '1':
             pytest.fail('Build web before running required native browser tests.')
         pytest.skip('Build web to run native browser baseline tests.')
     runtime = PostgresRuntime(database, browser_resolver,
-        service_factory=lambda context: create_postgres_services(database, context.entity_id))
+        service_factory=lambda context: create_postgres_services(database, context.entity_id,
+            **({'document_store': document_store, 'document_store_kind': 'fake'} if document_store is not None else {})))
     runtime.close = lambda: None  # The synthetic DB fixture owns this pool.
     listener = socket.socket()
     listener.bind(('127.0.0.1', 0))
     origin = f'http://127.0.0.1:{listener.getsockname()[1]}'
     app = create_app(settings=HttpSettings('test', origin), runtime_factory=lambda settings: runtime, static_dir=DIST)
-    server = uvicorn.Server(uvicorn.Config(app, access_log=False, log_level='critical'))
+    server = uvicorn.Server(uvicorn.Config(app, access_log=False, log_level='critical',
+                                         timeout_keep_alive=1, timeout_graceful_shutdown=2))
     thread = Thread(target=server.run, kwargs={'sockets': [listener]}, daemon=True)
     thread.start()
     try:

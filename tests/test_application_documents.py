@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import replace
+from unittest.mock import patch
 
 import pytest
 
@@ -84,6 +85,44 @@ class FakeReceiptRepository:
 
 def prepared(*, identity="a" * 32, name="receipt.pdf", content=b"receipt"):
     return prepare_receipt_uploads([DocumentUpload(identity, name, "application/pdf", hashlib.sha256(content).hexdigest(), content)])
+
+
+@pytest.mark.parametrize('linked', [False, True])
+def test_portable_upload_identity_reuses_confirmed_content_and_rejects_conflicts(linked):
+    store, repository = FakeDocumentStore(), FakeReceiptRepository()
+    service = ReceiptService('north', repository, store)
+    identity = 'a' * 32
+    first = service.upload(identity, 'receipt.pdf', b'original')
+    if linked:
+        service.link('txn', first)
+    assert service.upload(identity, 'receipt.pdf', b'original') == first
+    for filename, content in [('receipt.pdf', b'different'), ('changed.pdf', b'original')]:
+        with pytest.raises(DocumentValidationError, match='identity is already used'):
+            service.upload(identity, filename, content)
+    assert store.upload_calls == 1
+    assert service.download(identity)[1] == b'original'
+    # Portable identity uniqueness remains scoped to each selected profile.
+    south = ReceiptService('south', repository, store)
+    other = south.upload(identity, 'receipt.pdf', b'other profile')
+    assert other.profile_key == 'south' and south.download(identity)[1] == b'other profile'
+    assert service.download(identity)[1] == b'original'
+
+
+def test_portable_upload_reconciles_uncertain_create_and_fails_closed_on_inventory_error():
+    store, repository = FakeDocumentStore(), FakeReceiptRepository()
+    service = ReceiptService('north', repository, store)
+    identity = 'a' * 32
+    store.fail_after_create = True
+    with pytest.raises(DocumentError, match='uncertain'):
+        service.upload(identity, 'receipt.pdf', b'original')
+    with patch.object(store, 'inventory', wraps=store.inventory) as inventory:
+        assert service.upload(identity, 'receipt.pdf', b'original').metadata.document_id == identity
+        inventory.assert_called_once_with('north', fresh=True)
+    assert store.upload_calls == 1
+    with patch.object(store, 'inventory', side_effect=DocumentError('Inventory unavailable')):
+        with pytest.raises(DocumentError, match='Inventory unavailable'):
+            service.upload('b' * 32, 'receipt.pdf', b'new')
+    assert store.upload_calls == 1
 
 
 def test_receipt_link_unlink_and_unreferenced_inventory_use_neutral_adapters():

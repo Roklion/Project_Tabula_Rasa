@@ -8,6 +8,7 @@ import pytest
 from tabula_rasa.http.context import TrustedDevelopmentContext
 from tests.postgres.browser_quality_support import VIEWPORTS, assert_accessible, assert_dialog_keyboard
 from tests.postgres.test_browser_baselines import commercial_server as commercial_server
+from tests.postgres.test_http_mileage_documents import document_store as document_store
 from tests.postgres.test_http_baselines import commercial as commercial, snapshot
 
 
@@ -76,6 +77,7 @@ def test_keyboard_confirmations_conflict_and_entity_isolation(commercial, commer
             review = page.get_by_role('button', name='Review latest record', exact=True)
             memo.focus()
             review.click()
+            expect(page.get_by_role('alertdialog', name='Reload record', exact=True)).to_be_visible()
             page.keyboard.press('Escape')
             expect(review).to_be_focused()
             review.focus()
@@ -103,6 +105,7 @@ def test_keyboard_confirmations_conflict_and_entity_isolation(commercial, commer
             close = page.get_by_role('button', name='Back to records', exact=True)
             memo.focus()
             close.click()
+            expect(page.get_by_role('alertdialog', name='Discard draft', exact=True)).to_be_visible()
             page.keyboard.press('Escape')
             expect(close).to_be_focused()
             close.focus()
@@ -115,6 +118,7 @@ def test_keyboard_confirmations_conflict_and_entity_isolation(commercial, commer
             navigation = page.get_by_role('navigation', name='Main navigation').get_by_role('link', name='Transactions', exact=True)
             memo.focus()
             navigation.click()
+            expect(page.get_by_role('alertdialog', name='Unsaved changes', exact=True)).to_be_visible()
             page.keyboard.press('Escape')
             expect(navigation).to_be_focused()
             navigation.focus()

@@ -6,6 +6,8 @@ import { Accounts, PlannedPage, MissingPage, RouteError } from '../features/foun
 import { ReferencesPage } from '../features/concurrency/ReferenceEditors';
 import { BookkeepingPage } from '../features/concurrency/BookkeepingEditors';
 import { ManagedMergeForm } from '../features/concurrency/ManagedMergeForm';
+import { MileageDetail, MileagePage, NewMileage } from '../features/mileage/MileagePage';
+import { ReceiptsPage } from '../features/documents/ReceiptsPage';
 import { ReferenceCreator } from '../features/workflows/ReferenceCreators';
 import { EntryCreator } from '../features/workflows/EntryCreators';
 import { LedgerPage } from '../features/workflows/LedgerPage';
@@ -22,7 +24,11 @@ const routes = [{
     ...(['accounts', 'categories', 'payees', 'tags'] as const).map(resource => ({ path: resource + '/new', element: <ReferenceCreator key={resource} resource={resource} /> })),
     ...(['transactions', 'journals'] as const).map(resource => ({ path: resource + '/new', element: <EntryCreator key={resource} resource={resource} /> })),
     ...(['categories', 'payees', 'tags'] as const).map(resource => ({ path: resource, element: <ReferencesPage resource={resource} /> })),
-    ...(['journals', 'mileage'] as const).map(resource => ({ path: resource, element: <BookkeepingPage resource={resource} /> })),
+    { path: 'journals', element: <BookkeepingPage resource="journals" /> },
+    { path: 'mileage', element: <MileagePage /> },
+    { path: 'mileage/new', element: <NewMileage /> },
+    { path: 'mileage/:recordId', element: <MileageDetail /> },
+    { path: 'transactions/:recordId/receipts', element: <ReceiptsPage /> },
     ...(['payees', 'tags'] as const).map(resource => ({ path: resource + '/merge', element: <><h1>Merge {resource}</h1><ManagedMergeForm key={resource} resource={resource} /></> })),
     ...navigation.filter(([path]) => !['/', '/accounts', '/categories', '/transactions', '/mileage', '/reports'].includes(path)).map(([path, name]) => ({
       path: path.slice(1), element: <PlannedPage title={name} />,

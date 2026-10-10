@@ -68,7 +68,7 @@ active accounts, matching category, managed payee/tags, optional new payee/tag
 names, memo and reference. Transfers clear the category; non-transfers clear the
 destination account. New entries require the relevant setup before save is offered.
 The service validates references again inside its mutation boundary and owns
-inline reference creation. Receipt bytes and new attachments remain #283.
+inline reference creation. Receipt bytes and attachments are documented in [Mileage and receipts](COMMERCIAL_MILEAGE_RECEIPTS.md).
 
 Journal creation starts with two posting rows. Each has a stable ID, account or
 category target, debit/credit side, amount, optional payee and memo. Explicit add

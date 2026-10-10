@@ -275,7 +275,7 @@ expose a raw traceback for this configuration failure.
 
 ## Commercial shell
 
-**Current behavior** for the #277/#278/#279/#280/#281/#282 technical-alpha application:
+**Current behavior** for the #277/#278/#279/#280/#281/#282/#283/#286 technical-alpha application:
 
 - The React shell uses the visual tokens, typography and approximately 760px
   stacking boundary above. Navigation covers Dashboard, Transactions, Assets,
@@ -343,9 +343,23 @@ expose a raw traceback for this configuration failure.
 
 [Foundation conventions](docs/COMMERCIAL_FOUNDATION.md) owns technical contracts.
 [Commercial concurrency](docs/COMMERCIAL_CONCURRENCY.md) owns the #280 contract.
+**Current behavior** added by #283/#286: Mileage has a complete manual log,
+inclusive date/any-tag filtering, scoped totals/CSV, one-way/round-trip creation
+and fresh detail routes reusing the protected editor. Ordinary saved transactions
+link to receipt management with portable metadata inspection, same-origin
+downloads, multi-file attachment, upload/link progress and unresolved-file retry.
+Confirmed uploads survive link failures. Retry and cancellation notices distinguish
+confirmed uploads from unconfirmed selections and directs users to inspect
+unreferenced receipts before selecting unconfirmed files again.
+Confirmed unlink removes only the reference; unreferenced files can be relinked.
+Read-only users can inspect/download;
+unconfigured document storage shows availability text without upload controls.
+Source-owned receipt workflows stay with their owners. Maps/routing and import
+remain internal-edition workflows. [Commercial mileage and receipts](docs/COMMERCIAL_MILEAGE_RECEIPTS.md)
+owns this slice's transport, recovery and validation contract.
 [Commercial core workflows](docs/COMMERCIAL_WORKFLOWS.md) owns #281/#282 scope.
 #222 adds authenticated identity/membership context selection,
-#283–#286 add remaining domain workflows. [Browser quality](docs/COMMERCIAL_BROWSER_QUALITY.md)
+#284/#285 add remaining domain workflows. [Browser quality](docs/COMMERCIAL_BROWSER_QUALITY.md)
 documents #287's automated baseline and the outstanding staging, receipt and manual-device gates.
 The Streamlit-specific shell requirements above continue to govern the internal
 edition.

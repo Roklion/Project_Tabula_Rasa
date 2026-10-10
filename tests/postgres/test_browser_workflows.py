@@ -9,6 +9,7 @@ import pytest
 
 from tabula_rasa.http.context import TrustedDevelopmentContext
 from tests.postgres.test_browser_baselines import commercial_server as commercial_server
+from tests.postgres.test_browser_baselines import document_store as document_store
 from tests.postgres.test_http_baselines import commercial as commercial, snapshot
 
 

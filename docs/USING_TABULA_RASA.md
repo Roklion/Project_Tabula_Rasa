@@ -34,6 +34,15 @@ for the supported scope, creation/error behavior and remaining initiative work.
 These forms do not change the Streamlit workflows described below or establish
 commercial production readiness.
 
+The browser also provides the complete manual mileage list/create/detail/edit/
+delete journey, date/tag filters, totals, CSV download and round-trip capture.
+Saved ordinary transactions offer receipt attachment, inspection/download,
+unreferenced-file recovery and confirmed unlink without deleting the file when
+the business's DocumentStore is configured. Upload/link errors keep confirmed
+work and offer retry for unresolved files. See
+[Commercial mileage and receipts](COMMERCIAL_MILEAGE_RECEIPTS.md) for these browser
+workflows, their recovery behavior and remaining release boundaries.
+
 ## Sign in and select a business
 
 Enter the application password before any ledger page or workbook data is

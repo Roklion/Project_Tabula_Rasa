@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import mimetypes
+import re
 import secrets
 from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol, TypeVar
+
+from tabula_rasa.document_names import safe_receipt_filename
 
 from tabula_rasa.document_limits import (
     MAX_RECEIPT_REFERENCES as MAX_RECEIPT_REFERENCES,
@@ -27,6 +31,10 @@ class DocumentError(RuntimeError):
 
 class DocumentValidationError(DocumentError, ValueError):
     """An upload or document association is outside its supported contract."""
+
+
+class DocumentNotFoundError(DocumentError):
+    """The canonical document is unavailable in the selected profile."""
 
 
 @dataclass(frozen=True)
@@ -236,18 +244,71 @@ class ReceiptService:
         if document.profile_key != self.profile_key:
             raise DocumentValidationError("The receipt belongs to a different business profile.")
 
-    def unreferenced(self) -> ReceiptInventory:
-        associations = self.repository.associations(self.profile_key)
+    def unreferenced(self, *, fresh: bool = False) -> ReceiptInventory:
+        associations = self.repository.associations(self.profile_key, fresh=fresh)
         for association in associations:
             self._check_profile(association.document)
         referenced = {item.document.storage_key for item in associations}
-        inventory = self.documents.inventory(self.profile_key)
+        inventory = self.documents.inventory(self.profile_key, fresh=fresh)
         for document in inventory.documents:
             self._check_profile(document)
         return ReceiptInventory(
             tuple(item for item in inventory.documents if item.storage_key not in referenced),
             tuple(key for key in inventory.unverified_storage_keys if key not in referenced),
         )
+
+    def upload(self, document_id: str, filename: str, content: bytes) -> DocumentReference:
+        """Upload independently of linking; a confirmed file remains recoverable."""
+        validate_receipt_upload(filename, content)
+        filename = safe_receipt_filename(filename)
+        if not re.fullmatch('[0-9a-f]{32}', document_id):
+            raise DocumentValidationError("A receipt requires a stable portable identity.")
+        upload = DocumentUpload(
+            document_id, filename, mimetypes.guess_type(filename)[0] or 'application/octet-stream',
+            hashlib.sha256(content).hexdigest(), content,
+        )
+        try:
+            existing = self.document(document_id)
+        except DocumentNotFoundError:
+            pass
+        else:
+            metadata = existing.metadata
+            if (metadata.original_filename, metadata.mime_type, metadata.byte_size, metadata.sha256) != (
+                filename, upload.mime_type, len(content), upload.sha256,
+            ):
+                raise DocumentValidationError("The receipt identity is already used by a different upload.")
+            return existing
+        document = self.documents.upload(self.profile_key, upload)
+        self._check_profile(document)
+        return document
+
+    def document(self, document_id: str) -> DocumentReference:
+        """Resolve a canonical ID inside this profile; never accept a byte locator."""
+        associations = self.repository.associations(self.profile_key, fresh=True)
+        for association in associations:
+            self._check_profile(association.document)
+            if association.document.metadata.document_id == document_id:
+                return association.document
+        inventory = self.documents.inventory(self.profile_key, fresh=True)
+        for document in inventory.documents:
+            self._check_profile(document)
+            if document.metadata.document_id == document_id:
+                return document
+        raise DocumentNotFoundError("The receipt is not available in this business.")
+
+    def download(self, document_id: str) -> tuple[DocumentReference, bytes]:
+        document = self.document(document_id)
+        return document, self.documents.fetch(self.profile_key, document.storage_key)
+
+    def link_document(self, transaction_id: str, document_id: str) -> None:
+        self.link(transaction_id, self.document(document_id))
+
+    def unlink_document(self, transaction_id: str, document_id: str) -> None:
+        for document in self.references(transaction_id, fresh=True):
+            if document.metadata.document_id == document_id:
+                self.unlink(transaction_id, document.storage_key)
+                return
+        raise DocumentNotFoundError("The receipt is no longer linked to this transaction.")
 
     def link(self, transaction_id: str, document: DocumentReference) -> None:
         self._check_profile(document)

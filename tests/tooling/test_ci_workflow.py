@@ -74,7 +74,8 @@ def test_ci_preserves_complete_python_and_windows_coverage() -> None:
     native = next(step for step in browser["steps"] if step.get("name") == "Run native browser concurrency and core workflow tests")
     assert shlex.split(native['run']) == ['python', '-m', 'pytest',
         'tests/postgres/test_browser_baselines.py', 'tests/postgres/test_browser_workflows.py',
-        'tests/postgres/test_browser_quality.py', '--junitxml=browser-results.xml']
+        'tests/postgres/test_browser_quality.py', 'tests/postgres/test_browser_mileage_documents.py',
+        '--junitxml=browser-results.xml']
     assert native["env"]["TABULA_RASA_REQUIRE_BROWSER_TESTS"] == "1"
     installs = [step['run'] for step in browser['steps'] if 'playwright install' in step.get('run', '')]
     assert len(installs) == 2

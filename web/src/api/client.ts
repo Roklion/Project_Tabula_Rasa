@@ -112,10 +112,33 @@ export function createApi(fetcher: typeof fetch = (...args) => fetch(...args)) {
       '/api/v1/entities/{entity_id}/journals/{record_id}', { ...mutationParams(s, id), body: { baseline } }))),
     mileage: (s: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
       '/api/v1/entities/{entity_id}/mileage', listParams(s, signal)))),
+    mileageTrip: (s: Session, id: string, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
+      '/api/v1/entities/{entity_id}/mileage/{record_id}', { ...mutationParams(s, id), signal }))),
+    createMileage: (s: Session, body: Schemas['MileageCreate']) => safe(async () => unwrap(await client.POST(
+      '/api/v1/entities/{entity_id}/mileage', { ...listParams(s), body, headers: headers(s.csrf_token) }))),
     updateMileage: (s: Session, id: string, body: Schemas['MileageUpdate']) => safe(async () => unwrap(await client.PATCH(
       '/api/v1/entities/{entity_id}/mileage/{record_id}', { ...mutationParams(s, id), body }))),
     deleteMileage: (s: Session, id: string, baseline: string) => safe(async () => unwrap(await client.DELETE(
       '/api/v1/entities/{entity_id}/mileage/{record_id}', { ...mutationParams(s, id), body: { baseline } }))),
+    unreferencedDocuments: (s: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
+      '/api/v1/entities/{entity_id}/documents', listParams(s, signal)))),
+    transactionDocuments: (s: Session, id: string, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
+      '/api/v1/entities/{entity_id}/transactions/{record_id}/receipts', { ...mutationParams(s, id), signal }))),
+    uploadDocument: (s: Session, id: string, file: File) => safe(async () => unwrap(await client.PUT(
+      '/api/v1/entities/{entity_id}/documents/{document_id}/content', {
+        params: { path: { entity_id: s.entity.id, document_id: id }, query: { filename: file.name } },
+        body: '', bodySerializer: () => file, headers: { ...headers(s.csrf_token), 'Content-Type': 'application/octet-stream' },
+      }))),
+    downloadDocument: (s: Session, document_id: string) => safe(async () => unwrap(await client.GET(
+      '/api/v1/entities/{entity_id}/documents/{document_id}/content', {
+        params: { path: { entity_id: s.entity.id, document_id } }, headers: headers(), parseAs: 'blob',
+      }))),
+    linkDocument: (s: Session, id: string, document_id: string) => safe(async () => unwrap(await client.POST(
+      '/api/v1/entities/{entity_id}/transactions/{record_id}/receipts', { ...mutationParams(s, id), body: { document_id } }))),
+    unlinkDocument: (s: Session, id: string, document_id: string) => safe(async () => unwrap(await client.DELETE(
+      '/api/v1/entities/{entity_id}/transactions/{record_id}/receipts/{document_id}', {
+        params: { path: { entity_id: s.entity.id, record_id: id, document_id } }, headers: headers(s.csrf_token),
+      }))),
   };
 }
 

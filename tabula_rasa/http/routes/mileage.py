@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request
 
 from ..baselines import required_baseline
 from ..errors import ERROR_RESPONSES
-from ..models.mileage import Mileage, MileageList, MileageUpdate, mileage_response
+from ..models.mileage import Mileage, MileageCreate, MileageList, MileageUpdate, mileage_response
 from ..models.mutations import MutationResult, ProtectedMutation
 from .services import Context, service_operation
 
@@ -10,9 +10,24 @@ router = APIRouter(prefix='/api/v1/entities/{entity_id}/mileage', tags=['Mileage
 
 
 @router.get('', response_model=MileageList, operation_id='list_mileage')
-def list_mileage(entity_id: str, request: Request, context: Context):
+def list_mileage(entity_id: str, request: Request, context: Context, start: str | None = None, end: str | None = None):
     with service_operation(request, context, 'mileage') as service:
-        return MileageList(items=[mileage_response(trip) for trip in service.list_trips(fresh=True)])
+        return MileageList(items=[mileage_response(trip) for trip in service.list_trips(start=start, end=end, fresh=True)])
+
+
+@router.get('/{record_id}', response_model=Mileage, operation_id='get_mileage')
+def get_mileage(entity_id: str, record_id: str, request: Request, context: Context):
+    with service_operation(request, context, 'mileage') as service:
+        return mileage_response(service.get_trip(record_id))
+
+
+@router.post('', response_model=MileageList, status_code=201, operation_id='create_mileage')
+def create_mileage(entity_id: str, body: MileageCreate, request: Request, context: Context):
+    with service_operation(request, context, 'mileage') as service:
+        data = body.model_dump(exclude={'round_trip', 'return_miles'})
+        trips = (service.create_round_trip(return_miles=body.return_miles, **data)
+                 if body.round_trip else (service.create_trip(**data),))
+        return MileageList(items=[mileage_response(trip) for trip in trips])
 
 
 @router.patch('/{record_id}', response_model=Mileage, operation_id='update_mileage')
