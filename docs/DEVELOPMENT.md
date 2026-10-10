@@ -37,7 +37,9 @@ now supply runnable local foundations; [Foundation conventions](COMMERCIAL_FOUND
 covers transport/context contracts, cache/form ownership and focused validation.
 The #279 image/workflows/gate are implemented; [Technical deployment](COMMERCIAL_DEPLOYMENT.md)
 owns the exact provider/secret checkpoint, ordered migration, smoke and rollback
-procedure. Hosted provisioning/acceptance remains pending operator execution.
+procedure. #279 records hosted acceptance; [Technical alpha](TECHNICAL_ALPHA.md)
+owns #288's staged core workflow matrix, browser release gate, rollback rehearsal,
+remaining hosted/manual prerequisites and Streamlit retirement boundary.
 
 The HTTP runtime reuses application services and PostgreSQL adapters. Preserve
 the server-side #222 membership/context seam, #280 loaded-baseline form contract,

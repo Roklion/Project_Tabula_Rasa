@@ -42,6 +42,9 @@ the business's DocumentStore is configured. Upload/link errors keep confirmed
 work and offer retry for unresolved files. See
 [Commercial mileage and receipts](COMMERCIAL_MILEAGE_RECEIPTS.md) for these browser
 workflows, their recovery behavior and remaining release boundaries.
+The [technical-alpha release guide](TECHNICAL_ALPHA.md) lists the exact staged
+workflow coverage, outstanding hosted receipt/rollback/manual evidence and
+remaining internal-edition workflows during the Streamlit transition.
 
 ## Sign in and select a business
 

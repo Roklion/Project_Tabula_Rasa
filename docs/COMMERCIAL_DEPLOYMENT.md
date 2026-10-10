@@ -29,9 +29,13 @@ from main. Promotion checks the image's repository, OS/architecture, release
 metadata, main ancestry and latest matching main-push CI success. Keep SHA tags
 and associated digests needed for rollback; never prune active/rollback releases.
 
-Resources and hosted acceptance are **pending operator setup**. Local native
-tests and a local container prove implementation only; they do not satisfy the
-reachable-development/staging or retained-Neon/browser acceptance criteria.
+Closed [#279](https://github.com/Roklion/Project_Tabula_Rasa/issues/279) records
+hosted development/staging acceptance on October 9, 2026, including retained
+Neon UAT and successful [staging promotion](https://github.com/Roklion/Project_Tabula_Rasa/actions/runs/37951248477).
+The setup instructions below remain the operator contract for new/reconfigured
+environments. Local native tests and a local container prove implementation only.
+#288's complete core workflow/real-provider receipt gate, compatible rollback
+rehearsal and manual-device evidence remain separate in [Technical alpha](TECHNICAL_ALPHA.md).
 On October 8, 2026, the operator approved reuse of the existing retained UAT
 database for staging. Confirm its exact endpoint binding, current forward schema
 and runtime/migration role custody before connecting the commercial service;
@@ -230,7 +234,8 @@ platform-manifest comparison caused the rejection, rather than a different
 deployed release. Accepting this registry-proven relationship preserves the
 artifact integrity check; attestation and unrelated digests still fail.
 After merge, rerun staging with a current CI-approved immutable image and retain
-successful hosted smoke/repeated-promotion evidence. This fix does not close #279.
+successful hosted smoke/repeated-promotion evidence. Subsequent hosted acceptance
+is recorded in closed #279; the investigation alone did not establish it.
 
 For manual recovery of bad application code, inspect the exact service's current
 deploy/status, select its retained schema-compatible image and dispatch that
@@ -246,14 +251,17 @@ schema is incompatible, stop, restrict traffic/drain writers and use #220's
 reviewed forward repair or [recovery guide](POSTGRESQL_RECOVERY.md). Database
 restore/PITR and commercial recovery acceptance stay with #223/#298.
 
-## Hosted acceptance record still required
+## Hosted evidence and technical-alpha handoff
 
 After operator setup and explicitly authorized publishing/deployment, record
 safe dev/staging origins, target fingerprint references, image digest/SHA/head,
 successful ordered migration and browser smoke runs, repeated promotion,
-and a controlled compatible application rollback. Verify runtime DML versus
+and a controlled compatible application rollback under #288. Verify runtime DML versus
 migration-role privilege separation and actual provider ingress/gate behavior.
 Keep target credentials and private evidence private. Free-tier limits must be
-part of that record. These hosted checks remain outstanding until run against
-the real retained environments; this implementation does not close #279,
-complete #288, retire Streamlit or activate commercial production.
+part of that record. #279's reachable dev/staging, retained PostgreSQL and hosted
+smoke acceptance are recorded in its closed issue. Refresh the selected alpha
+candidate's evidence and use [#288's release contract](TECHNICAL_ALPHA.md) for the
+complete workflow suite, real document binding, rollback rehearsal and manual
+acceptance. #279's completion does not complete #288, retire Streamlit or activate
+commercial production.

@@ -360,7 +360,9 @@ owns this slice's transport, recovery and validation contract.
 [Commercial core workflows](docs/COMMERCIAL_WORKFLOWS.md) owns #281/#282 scope.
 #222 adds authenticated identity/membership context selection,
 #284/#285 add remaining domain workflows. [Browser quality](docs/COMMERCIAL_BROWSER_QUALITY.md)
-documents #287's automated baseline and the outstanding staging, receipt and manual-device gates.
+documents #287's completed automated baseline. [Technical alpha](docs/TECHNICAL_ALPHA.md)
+defines the release/routing matrix and outstanding hosted receipt binding,
+staging, rollback and manual-device gates; no internal workflow is retired.
 The Streamlit-specific shell requirements above continue to govern the internal
 edition.
 
