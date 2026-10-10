@@ -170,8 +170,9 @@ def post_depreciation(entity_id: str, record_id: str, body: AssetPost, request: 
 def override_depreciation(entity_id: str, record_id: str, sequence: int, body: AssetOverride, request: Request, context: Context):
     with service_operation(request, context, 'assets') as service:
         from tabula_rasa.ledger_validation import iso_date
+        as_of = min(date.fromisoformat(iso_date(body.as_of_date)), date.today())
         return asset_response(service.override(record_id, sequence, body.amount, body.reason,
-                                               as_of_date=date.fromisoformat(iso_date(body.as_of_date)),
+                                               as_of_date=as_of,
                                                expected=required_baseline(body.baseline)))
 
 

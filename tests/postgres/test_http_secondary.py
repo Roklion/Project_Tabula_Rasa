@@ -1,6 +1,7 @@
 """Secondary slices through HTTP/services/native PostgreSQL, with two entities."""
 
 from copy import deepcopy
+from datetime import date
 
 import pytest
 from sqlalchemy import text
@@ -189,6 +190,31 @@ def test_asset_schedule_override_posting_immutability_duplicate_prevention_and_i
     assert snapshot(database) == before
     changed = client.patch(PREFIX + 'assets/asset', headers=HEADERS, json={'baseline': current['baseline'], 'changes': {**changes, 'notes': 'Descriptive correction'}})
     assert changed.status_code == 200 and changed.json()['baseline'] != current['baseline']
+
+
+@pytest.mark.parametrize('requested_date', ['2026-06-30', '2026-12-31'])
+def test_asset_override_cannot_advance_server_clock(database, commercial, monkeypatch, requested_date):
+    from tabula_rasa.http.routes import secondary
+
+    class ServerDate(date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 6, 30)
+
+    monkeypatch.setattr(secondary, 'date', ServerDate)
+    alpha, beta, (client, _), _ = commercial
+    offset = alpha.accounts.create('Accumulated depreciation', 'Other', classification='Asset')['id']
+    row = create(client, 'assets', asset(offset, asset_id='asset'))
+    payload = {'baseline': row['baseline'], 'amount': '10.00', 'reason': 'Correction', 'as_of_date': requested_date}
+    before = snapshot(database)
+    rejected = client.put(PREFIX + 'assets/asset/overrides/3', headers=HEADERS, json=payload)
+    assert rejected.status_code == 422
+    assert snapshot(database) == before
+    assert client.get(PREFIX + 'assets/asset').json()['asset']['baseline'] == row['baseline']
+    due = client.put(PREFIX + 'assets/asset/overrides/2', headers=HEADERS, json=payload)
+    assert due.status_code == 200, due.text
+    assert client.get(PREFIX + 'assets/asset').json()['schedule'][1]['override_reason'] == 'Correction'
+    assert not beta.assets.list() and not beta.transactions.list()
 
 
 def test_reconciliation_failure_reports_attention_without_false_generation(commercial):

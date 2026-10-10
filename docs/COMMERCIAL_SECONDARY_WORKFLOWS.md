@@ -77,7 +77,9 @@ PostgreSQL commits all requested periods atomically; a later-period failure
 leaves no partial posting. Repeating a confirmed action after a fresh load skips
 already-posted periods.
 
-Before posting, due/past period overrides require an amount and reason. Removing
+Before posting, due/past period overrides require an amount and reason. The API
+caps the requested as-of date at the server's current date so a browser clock
+cannot make a future quarter eligible. Removing
 the final override restores editable schedule terms. Saved overrides or postings
 prevent permanent deletion; posted history locks terms, overrides and posting
 accounts. Descriptive fields remain editable. Retirement requires confirmation,
