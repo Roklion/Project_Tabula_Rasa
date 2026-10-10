@@ -161,6 +161,8 @@ def test_default_runtime_preserves_local_selection_and_fixed_hosted_scope(monkey
     from unittest.mock import Mock
     from tabula_rasa.http import composition
 
+    monkeypatch.delenv("TABULA_RASA_ALPHA_DOCUMENTS_FILE", raising=False)
+
     database = Mock()
     monkeypatch.setattr(composition, "open_alpha_database", lambda _: database)
     monkeypatch.setattr(composition, "Database", lambda _: database)

@@ -116,6 +116,16 @@ The workflow's short-lived `GITHUB_TOKEN` pulls the private package and reads CI
 evidence. Render keeps a separately configured registry read credential. Render
 stores `TABULA_RASA_ALPHA_PASSWORD_HASH`, never a browser build constant.
 
+Essential receipts additionally require a service-specific secret file at runtime,
+selected through `TABULA_RASA_ALPHA_DOCUMENTS_FILE`. Follow
+[Hosted synthetic receipt storage](ALPHA_DOCUMENT_STORAGE.md) for the exact
+TOML contract, independent staging grant/root and read-only preflight. The API
+image includes the existing Drive client's `requests` dependency and runs in
+group 1000 to read Render's runtime secret mount. Keep Drive grants out of
+GitHub deployment/gate credentials and browser assets. This optional binding
+does not alter database promotion or authority policy; configured invalid
+bindings stop startup, while absent bindings leave receipts unavailable.
+
 To compute the non-secret binding from an explicitly exported URL (without
 loading `.env.local`), run from root:
 

@@ -744,6 +744,16 @@ permission model.
 
 ## Commercial browser/API runtime decision (#276)
 
+Hosted synthetic Drive composition (#288) reuses the profile-owned
+`infrastructure/drive_composition.py`, `GoogleDriveDocumentStore` and
+`EntityDocumentStore` with PostgreSQL receipt metadata. The default HTTP runtime
+loads one explicit environment/origin/entity-bound server file, never legacy
+profile/Streamlit configuration. Its fixed synthetic gate cannot authorize a
+private migrated profile. The same small Drive composition owner also serves
+legacy and migrated-profile services. See
+[Hosted synthetic receipt storage](ALPHA_DOCUMENT_STORAGE.md) for configuration,
+preflight, custody and evidence boundaries.
+
 [ADR 0002: Commercial web stack and runtime topology](adr/0002-commercial-web-runtime.md)
 selects React/TypeScript with Vite, React Router, TanStack Query and React Hook
 Form; FastAPI/Pydantic/Uvicorn over the existing Python services; and a

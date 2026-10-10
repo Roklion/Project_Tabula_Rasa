@@ -6,6 +6,12 @@ same profile OAuth grant authorizes both APIs. See
 [Architecture](ARCHITECTURE.md) for the credential boundaries and
 [Setup](SETUP.md) for initial profile creation.
 
+The HTTP technical-alpha runtime uses the same Drive client with a separately
+authorized synthetic profile and storage root. Follow
+[Hosted synthetic receipt storage](ALPHA_DOCUMENT_STORAGE.md) for its explicit
+server secret-file loader and read-only preflight. Streamlit Secrets export does
+not configure the Render API runtime.
+
 ## Configuration model
 
 One shared Google Cloud OAuth application serves all profiles. Each profile

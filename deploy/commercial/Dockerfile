@@ -11,7 +11,8 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PORT=10000
 COPY requirements-api.txt requirements-postgres.txt ./
 RUN pip install --no-cache-dir -r requirements-api.txt -r requirements-postgres.txt \
-    && useradd --uid 10001 --create-home app
+    && groupadd --gid 1000 render-secrets \
+    && useradd --uid 10001 --gid 1000 --create-home app
 COPY tabula_rasa ./tabula_rasa
 COPY --from=browser /build/web/dist ./web/dist
 ARG RELEASE_ID

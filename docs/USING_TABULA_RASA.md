@@ -45,6 +45,10 @@ workflows, their recovery behavior and remaining release boundaries.
 The [technical-alpha release guide](TECHNICAL_ALPHA.md) lists the exact staged
 workflow coverage, outstanding hosted receipt/rollback/manual evidence and
 remaining internal-edition workflows during the Streamlit transition.
+Hosted synthetic receipts require the operator's separate
+[Drive binding setup](ALPHA_DOCUMENT_STORAGE.md); ordinary browser users cannot
+select grants or folders. Configuring that dependency does not establish completed
+staging acceptance or alter the reference-only unlink behavior.
 
 ## Sign in and select a business
 

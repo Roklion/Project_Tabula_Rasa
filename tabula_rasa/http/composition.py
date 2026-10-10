@@ -72,26 +72,37 @@ class PostgresRuntime:
 def open_runtime(settings):
     if settings.trusted_entity_id and settings.trusted_entity_id != "alpha-synthetic":
         raise RuntimeError("Default trusted runtime requires the explicit alpha-synthetic fixture.")
-    database = (open_alpha_database(dict(os.environ)) if settings.hosted_alpha
-                else Database(DatabaseSettings.from_environment(required=True)))
+    database = None
     try:
+        database = (open_alpha_database(dict(os.environ)) if settings.hosted_alpha
+                    else Database(DatabaseSettings.from_environment(required=True)))
+        from .alpha_documents import load_alpha_document_store
+        document_store = load_alpha_document_store(settings, dict(os.environ))
         resolver = (
             TrustedDevelopmentContext(settings.trusted_entity_id, secrets.token_urlsafe(32),
                                       hosted=settings.hosted_alpha,
                                       entity_ids=() if settings.hosted_alpha else ('beta-synthetic',))
             if settings.trusted_entity_id else DenyContext()
         )
-        runtime = PostgresRuntime(database, resolver, service_factory=
-            lambda context: create_postgres_services(database, context.entity_id))
+        def services(context):
+            if document_store is None:
+                return create_postgres_services(database, context.entity_id)
+            if context.entity_id != document_store.entity_id or not context.trusted_development:
+                raise StorageValidationError(code="forbidden")
+            return create_postgres_services(database, context.entity_id,
+                document_store=document_store, document_store_kind="google_drive")
+
+        runtime = PostgresRuntime(database, resolver, service_factory=services)
         if settings.trusted_entity_id:
             # Only explicit seed tooling creates synthetic entities.
             for context in resolver.contexts:
                 runtime.services(context)
         return runtime
     except BaseException:
-        database.dispose()
+        if database is not None:
+            database.dispose()
         # Startup failures must not retain raw configuration/provider text.
-        raise RuntimeError("HTTP runtime startup failed. Check configuration and dependency health.") from None
+    raise RuntimeError("HTTP runtime startup failed. Check configuration and dependency health.")
 
 
 def open_migrated_runtime(settings, *, resolve_context, entity_profiles, profile_secrets, database_settings=None):
