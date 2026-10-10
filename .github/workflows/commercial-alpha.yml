@@ -40,6 +40,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           python -c 'import os,re; from tabula_rasa.deployment.release import validated_main; release=os.environ["RELEASE"]; assert re.fullmatch("[0-9a-f]{40}", release); validated_main(release, dict(os.environ))'
+      - name: Check out validated release
+        run: |
+          git checkout --detach "$RELEASE"
+          test "$(git rev-parse HEAD)" = "$RELEASE"
       - name: Install bounded release browser suite
         run: |
           python -m pip install playwright==1.62.0

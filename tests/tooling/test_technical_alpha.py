@@ -1,6 +1,9 @@
 """Release tooling fails closed before touching retained synthetic staging."""
 
 from pathlib import Path
+import os
+import shutil
+import subprocess
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -104,3 +107,35 @@ def test_staging_gate_shares_promotion_lock_and_has_no_admin_credentials():
     for secret in ('MIGRATION_DATABASE_URL', 'TEST_DATABASE_URL', 'RENDER_API_KEY', 'DATABASE_URL'):
         assert secret not in payload
     assert 'alpha --release' in payload and '--allow-synthetic-writes' in payload
+
+
+@pytest.mark.parametrize('release_exists', [True, False])
+def test_gate_selects_approved_ancestor_and_stops_on_checkout_failure(tmp_path, release_exists):
+    root = Path(__file__).resolve().parents[2]
+    workflow = yaml.load((root / '.github/workflows/commercial-alpha.yml').read_text(), Loader=yaml.BaseLoader)
+    steps = workflow['jobs']['alpha']['steps']
+    validation = next(step for step in steps if 'validated_main' in step.get('run', ''))
+    selection = next(step for step in steps if step.get('name') == 'Check out validated release')
+    gate = next(step for step in steps if 'python -m tabula_rasa.deployment.alpha' in step.get('run', ''))
+    assert steps.index(validation) < steps.index(selection) < steps.index(gate)
+
+    def git(*args):
+        return subprocess.run(['git', *args], cwd=tmp_path, check=True, capture_output=True, text=True).stdout.strip()
+
+    git('init', '-b', 'main')
+    for version in ('selected', 'newer-main'):
+        (tmp_path / 'journey.txt').write_text(version)
+        git('add', 'journey.txt')
+        git('-c', 'user.name=Alpha test', '-c', 'user.email=alpha@example.test',
+            '-c', 'commit.gpgsign=false', 'commit', '-m', version)
+        if version == 'selected':
+            release = git('rev-parse', 'HEAD')
+    newer_main = git('rev-parse', 'HEAD')
+    assert release != newer_main
+    git_path = Path(shutil.which('git'))
+    bash = str(git_path.parent.parent / 'bin/bash.exe') if os.name == 'nt' else shutil.which('bash')
+    result = subprocess.run([bash, '-e', '-c', selection['run']], cwd=tmp_path,
+        env={**os.environ, 'RELEASE': release if release_exists else 'f' * 40}, capture_output=True, text=True)
+    assert (result.returncode == 0) == release_exists
+    assert git('rev-parse', 'HEAD') == (release if release_exists else newer_main)
+    assert (tmp_path / 'journey.txt').read_text() == ('selected' if release_exists else 'newer-main')

@@ -43,6 +43,9 @@ journey. `.github/workflows/commercial-alpha.yml` adds an explicitly dispatched
 promotion, has read-only GitHub permissions and receives only staging origin and
 alpha gate credentials. It has no database, migration or Render admin credential.
 It does not deploy, migrate or run ordinary pytest against retained staging.
+After validating the selected main release's CI, the workflow checks out that
+exact SHA and verifies `HEAD` before importing or running its alpha journey.
+Newer `main` journey code cannot establish evidence for an older deployed release.
 
 Before dispatch:
 
@@ -63,7 +66,9 @@ Before dispatch:
    Dispatch on `main` with the exact deployed SHA and `allow_synthetic_writes=true`.
 
 For an authorized manual invocation, privately export the same staging origin,
-username/password and `TABULA_RASA_ENVIRONMENT=staging`, then run from root:
+username/password and `TABULA_RASA_ENVIRONMENT=staging`, then run from the root
+of a clean checkout at that exact release SHA. Verify `git rev-parse HEAD` matches
+the selected release; the checkout must include this alpha gate:
 
 ```powershell
 python -m pip install playwright==1.62.0
