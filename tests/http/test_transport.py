@@ -240,6 +240,12 @@ def test_hashed_asset_cache_and_html_revalidation(runtime, tmp_path):
     (tmp_path / "assets" / "app-hash.js").write_text("export const value = 1;")
     with TestClient(create_app(settings=SETTINGS, runtime_factory=lambda settings: runtime, static_dir=tmp_path)) as client:
         assert client.get("/assets/app-hash.js").headers["Cache-Control"] == "public, max-age=31536000, immutable"
+        for path in ('/assets', '/assets/new', '/assets/synthetic-id'):
+            response = client.get(path, headers={'Accept': 'text/html'})
+            assert response.status_code == 200
+            assert response.headers['Cache-Control'] == 'no-cache'
+        assert client.get('/assets/missing.js', headers={'Accept': 'text/html'}).status_code == 404
+        assert client.get('/assets/synthetic-id').status_code == 404
         assert client.get("/accounts", headers={"Accept": "text/html"}).headers["Cache-Control"] == "no-cache"
 
 

@@ -100,6 +100,11 @@ async def handle_validation(request, error: RequestValidationError):
         "reference", "postings", "target_type", "target_id", "side", "trip_date", "miles",
         "vehicle", "start_location", "destination", "business_purpose", "notes",
         "new_payee_name", "new_tag_name", "filename", "document_id", "round_trip", "return_miles", "start", "end",
+        "total_expense", "business_use_percentage", "allocation_rationale", "source_id", "linked_transaction_id",
+        "schedule_id", "source_kind", "recurrence_unit", "recurrence_interval", "start_date", "end_date",
+        "asset_id", "asset_type", "acquisition_date", "depreciation_start_date", "cost_basis", "salvage_value",
+        "useful_life_quarters", "depreciation_expense_account_id", "accumulated_depreciation_account_id",
+        "source_transaction_id", "status", "retired_date", "through_date", "as_of_date", "sequence", "reason",
     }
     fields = [
         FieldError(field=str(item["loc"][-1]), code="invalid", message="Check this value.")

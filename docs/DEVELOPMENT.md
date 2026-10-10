@@ -46,6 +46,11 @@ the server-side #222 membership/context seam, #280 loaded-baseline form contract
 and #223 health/request/job seams. Keep ordinary development and tests synthetic;
 the current Streamlit/Sheets setup and validation gates continue to apply.
 
+[Secondary workflows](COMMERCIAL_SECONDARY_WORKFLOWS.md) covers #284 recurring/
+mixed-use and #285 assets/depreciation. Their native browser/API coverage extends
+the existing compiled-app/disposable-PostgreSQL fixture. Generation and posting
+are explicit commands; page loads remain read-only and #223 retains durable jobs.
+
 ## Local main-branch push guard
 
 The tracked .githooks/pre-push hook blocks pushes that would update remote

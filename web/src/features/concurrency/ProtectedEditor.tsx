@@ -9,6 +9,7 @@ import { ErrorNotice, SuccessNotice } from '../../components/States';
 import { UnsavedChanges } from '../../components/UnsavedChanges';
 
 export type LoadMetadata = { id: string; baseline: string };
+export type EditorCommand = { label: string; description: string; run: (id: string, baseline: string) => Promise<string> };
 
 export function ReloadPrompt({ pending, onKeep, onReload }: { pending: boolean; onKeep: () => void; onReload: () => void }) {
   return <ConfirmationDialog title="Reload record" keepLabel="Keep draft" confirmLabel="Discard draft and reload"
@@ -17,12 +18,14 @@ export function ReloadPrompt({ pending, onKeep, onReload }: { pending: boolean; 
   </ConfirmationDialog>;
 }
 
-export function ProtectedEditor<T extends FieldValues>({ session, loaded, title, fields, save, remove, removeLabel = 'Delete', confirmSave, loadLatest, onClose }: {
+export function ProtectedEditor<T extends FieldValues>({ session, loaded, title, fields, save, remove, removeLabel = 'Delete', confirmSave, loadLatest, onClose, commands = [], commandFields, saveConfirmation }: {
   session: Session; loaded: LoadedForm<T, LoadMetadata>; title: string;
   fields: (form: UseFormReturn<T>) => ReactNode;
   save: (id: string, baseline: string, changes: T) => Promise<LoadedForm<T, LoadMetadata>>;
-  remove: (id: string, baseline: string) => Promise<unknown>;
+  remove?: (id: string, baseline: string) => Promise<unknown>;
+  commands?: EditorCommand[]; commandFields?: ReactNode;
   confirmSave?: (values: T, defaults: Partial<T>) => boolean;
+  saveConfirmation?: { title: string; confirmLabel: string; description: string };
   removeLabel?: string; loadLatest: (id: string) => Promise<LoadedForm<T, LoadMetadata>>;
   onClose?: () => void;
 }) {
@@ -35,25 +38,30 @@ export function ProtectedEditor<T extends FieldValues>({ session, loaded, title,
   const [removed, setRemoved] = useState(false);
   const [reloading, setReloading] = useState(false);
   const [closing, setClosing] = useState(false);
-  const mutation = useProtectedMutation(session, async (command: { action: 'save' | 'remove'; values?: T }) => {
+  const [pendingCommand, setPendingCommand] = useState<EditorCommand>();
+  const mutation = useProtectedMutation(session, async (command: { action: 'save' | 'remove' | 'command'; values?: T; command?: EditorCommand }) => {
     if (!metadata.baseline) throw new ApiError('baseline_required');
     if (command.action === 'remove') {
-      await remove(metadata.id, metadata.baseline);
+      await remove!(metadata.id, metadata.baseline);
       setRemoved(true);
       form.reset(form.getValues());
       setSuccess(removeLabel === 'Deactivate' ? 'Account deactivated.' : 'Record deleted.');
+    } else if (command.action === 'command') {
+      setSuccess(await command.command!.run(metadata.id, metadata.baseline));
+      setRemoved(true);
+      form.reset(form.getValues());
     } else {
       const next = await save(metadata.id, metadata.baseline, command.values!);
       reload(next);
       setSuccess('Changes saved.');
     }
-    setConfirmRemove(false); setPendingSave(undefined);
+    setConfirmRemove(false); setPendingSave(undefined); setPendingCommand(undefined);
   });
-  async function submit(action: 'save' | 'remove', values?: T) {
+  async function submit(action: 'save' | 'remove' | 'command', values?: T, command?: EditorCommand) {
     setFailure(undefined); setSuccess('');
-    try { await mutation.mutateAsync({ action, values }); }
+    try { await mutation.mutateAsync({ action, values, command }); }
     catch (error) {
-      setConfirmRemove(false); setPendingSave(undefined);
+      setConfirmRemove(false); setPendingSave(undefined); setPendingCommand(undefined);
       setFailure(error);
     }
   }
@@ -83,11 +91,22 @@ export function ProtectedEditor<T extends FieldValues>({ session, loaded, title,
     })}>
       <fieldset disabled={pending || review}>{fields(form)}</fieldset>
       <div className="actions"><button type="submit" disabled={pending || review} onClick={event => event.currentTarget.focus()}>Save changes</button>
-        <button type="button" disabled={pending || review} onClick={event => { event.currentTarget.focus(); setConfirmRemove(true); }}>{removeLabel}</button></div>
-      {pendingSave !== undefined && <ConfirmationDialog title="Deactivate record" keepLabel="Keep editing"
-        confirmLabel="Confirm deactivate" pending={pending || review} onKeep={() => setPendingSave(undefined)}
+        {remove && <button type="button" disabled={pending || review} onClick={event => { event.currentTarget.focus(); setConfirmRemove(true); }}>{removeLabel}</button>}</div>
+      {commands.length > 0 && <fieldset disabled={pending || review}>
+        <legend>Explicit actions</legend>{commandFields}
+        <p className="muted">Save any draft changes before an action. After completion, return to the records to load the updated state.</p>
+        <div className="actions">{commands.map(command => <button key={command.label} type="button" disabled={form.formState.isDirty}
+          onClick={event => { event.currentTarget.focus(); setPendingCommand(command); }}>{command.label}</button>)}</div>
+      </fieldset>}
+      {pendingCommand && <ConfirmationDialog title={pendingCommand.label} keepLabel="Keep record"
+        confirmLabel={'Confirm ' + pendingCommand.label.toLowerCase()} pending={pending || review}
+        onKeep={() => setPendingCommand(undefined)} onConfirm={() => void submit('command', undefined, pendingCommand)}>
+        {pendingCommand.description} The saved record must still match the one you loaded.
+      </ConfirmationDialog>}
+      {pendingSave !== undefined && <ConfirmationDialog title={saveConfirmation?.title ?? 'Deactivate record'} keepLabel="Keep editing"
+        confirmLabel={saveConfirmation?.confirmLabel ?? 'Confirm deactivate'} pending={pending || review} onKeep={() => setPendingSave(undefined)}
         onConfirm={() => void submit('save', pendingSave)}>
-        Deactivate this record and save your changes? The saved record must still match the one you loaded.
+        {saveConfirmation?.description ?? 'Deactivate this record and save your changes?'} The saved record must still match the one you loaded.
       </ConfirmationDialog>}
       {confirmRemove && <ConfirmationDialog title={removeLabel + ' record'} keepLabel="Keep record"
         confirmLabel={'Confirm ' + removeLabel.toLowerCase()} pending={pending || review}

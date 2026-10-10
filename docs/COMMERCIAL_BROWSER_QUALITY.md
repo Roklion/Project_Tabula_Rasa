@@ -30,7 +30,7 @@ npm --prefix web run lint
 npm --prefix web test
 npm --prefix web run test:e2e
 $env:TABULA_RASA_REQUIRE_BROWSER_TESTS = '1'
-python -m pytest tests/postgres/test_browser_baselines.py tests/postgres/test_browser_workflows.py tests/postgres/test_browser_quality.py tests/postgres/test_browser_mileage_documents.py tests/postgres/test_browser_alpha.py --junitxml=browser-results.xml
+python -m pytest tests/postgres/test_browser_baselines.py tests/postgres/test_browser_workflows.py tests/postgres/test_browser_quality.py tests/postgres/test_browser_mileage_documents.py tests/postgres/test_browser_secondary.py tests/postgres/test_browser_alpha.py --junitxml=browser-results.xml
 ```
 
 The test endpoint must support creation/removal of disposable databases. Tests
@@ -85,8 +85,9 @@ PostgreSQL. #287's bounded automated baseline is complete. #288's
 path for retained staging; real hosted DocumentStore binding, staging execution,
 rollback and manual-device evidence remain outstanding. Its shared journey is
 also required in native CI through `test_browser_alpha.py`.
-Recurring/mixed-use and assets remain #284/#285; manual mileage is complete under
-#286. None is promoted into the default first alpha matrix.
+Recurring/mixed-use and assets are implemented under #284/#285 with their own
+[secondary workflow gate](COMMERCIAL_SECONDARY_WORKFLOWS.md); manual mileage is
+complete under #286. None is promoted into the default first alpha matrix.
 
 For alpha acceptance, record tested versions of the latest two stable Chrome,
 Edge, Firefox and Safari releases plus current/previous iOS Safari and Android

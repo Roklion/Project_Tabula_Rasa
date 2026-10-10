@@ -231,6 +231,525 @@
         "title": "AccountUpdate",
         "type": "object"
       },
+      "Allocation": {
+        "additionalProperties": false,
+        "properties": {
+          "allocated_amount": {
+            "maxLength": 100,
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Allocated Amount",
+            "type": "string"
+          },
+          "business_use_percentage": {
+            "maxLength": 100,
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Business Use Percentage",
+            "type": "string"
+          },
+          "total_expense": {
+            "maxLength": 100,
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Total Expense",
+            "type": "string"
+          }
+        },
+        "required": [
+          "total_expense",
+          "business_use_percentage",
+          "allocated_amount"
+        ],
+        "title": "Allocation",
+        "type": "object"
+      },
+      "AllocationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "business_use_percentage": {
+            "maxLength": 100,
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Business Use Percentage",
+            "type": "string"
+          },
+          "total_expense": {
+            "maxLength": 100,
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Total Expense",
+            "type": "string"
+          }
+        },
+        "required": [
+          "total_expense",
+          "business_use_percentage"
+        ],
+        "title": "AllocationRequest",
+        "type": "object"
+      },
+      "Asset": {
+        "additionalProperties": false,
+        "properties": {
+          "accumulated_depreciation_account_id": {
+            "default": "",
+            "title": "Accumulated Depreciation Account Id",
+            "type": "string"
+          },
+          "acquisition_date": {
+            "title": "Acquisition Date",
+            "type": "string"
+          },
+          "asset_type": {
+            "title": "Asset Type",
+            "type": "string"
+          },
+          "baseline": {
+            "title": "Baseline",
+            "type": "string"
+          },
+          "cost_basis": {
+            "maxLength": 100,
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Cost Basis",
+            "type": "string"
+          },
+          "depreciation_expense_account_id": {
+            "default": "",
+            "title": "Depreciation Expense Account Id",
+            "type": "string"
+          },
+          "depreciation_method": {
+            "title": "Depreciation Method",
+            "type": "string"
+          },
+          "depreciation_start_date": {
+            "title": "Depreciation Start Date",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "default": "",
+            "title": "Notes",
+            "type": "string"
+          },
+          "payee_id": {
+            "default": "",
+            "title": "Payee Id",
+            "type": "string"
+          },
+          "reference": {
+            "default": "",
+            "title": "Reference",
+            "type": "string"
+          },
+          "retired_date": {
+            "default": "",
+            "title": "Retired Date",
+            "type": "string"
+          },
+          "salvage_value": {
+            "default": "0.00",
+            "maxLength": 100,
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Salvage Value",
+            "type": "string"
+          },
+          "source_transaction_id": {
+            "default": "",
+            "title": "Source Transaction Id",
+            "type": "string"
+          },
+          "status": {
+            "default": "active",
+            "title": "Status",
+            "type": "string"
+          },
+          "tag_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tag Ids",
+            "type": "array"
+          },
+          "useful_life_quarters": {
+            "title": "Useful Life Quarters",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "asset_type",
+          "acquisition_date",
+          "depreciation_start_date",
+          "cost_basis",
+          "useful_life_quarters",
+          "id",
+          "depreciation_method",
+          "baseline"
+        ],
+        "title": "Asset",
+        "type": "object"
+      },
+      "AssetChanges": {
+        "additionalProperties": false,
+        "properties": {
+          "accumulated_depreciation_account_id": {
+            "default": "",
+            "title": "Accumulated Depreciation Account Id",
+            "type": "string"
+          },
+          "acquisition_date": {
+            "title": "Acquisition Date",
+            "type": "string"
+          },
+          "asset_type": {
+            "title": "Asset Type",
+            "type": "string"
+          },
+          "cost_basis": {
+            "maxLength": 100,
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Cost Basis",
+            "type": "string"
+          },
+          "depreciation_expense_account_id": {
+            "default": "",
+            "title": "Depreciation Expense Account Id",
+            "type": "string"
+          },
+          "depreciation_start_date": {
+            "title": "Depreciation Start Date",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "default": "",
+            "title": "Notes",
+            "type": "string"
+          },
+          "payee_id": {
+            "default": "",
+            "title": "Payee Id",
+            "type": "string"
+          },
+          "reference": {
+            "default": "",
+            "title": "Reference",
+            "type": "string"
+          },
+          "retired_date": {
+            "default": "",
+            "title": "Retired Date",
+            "type": "string"
+          },
+          "salvage_value": {
+            "default": "0.00",
+            "maxLength": 100,
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Salvage Value",
+            "type": "string"
+          },
+          "source_transaction_id": {
+            "default": "",
+            "title": "Source Transaction Id",
+            "type": "string"
+          },
+          "status": {
+            "default": "active",
+            "title": "Status",
+            "type": "string"
+          },
+          "tag_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tag Ids",
+            "type": "array"
+          },
+          "useful_life_quarters": {
+            "title": "Useful Life Quarters",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "asset_type",
+          "acquisition_date",
+          "depreciation_start_date",
+          "cost_basis",
+          "useful_life_quarters"
+        ],
+        "title": "AssetChanges",
+        "type": "object"
+      },
+      "AssetCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "accumulated_depreciation_account_id": {
+            "default": "",
+            "title": "Accumulated Depreciation Account Id",
+            "type": "string"
+          },
+          "acquisition_date": {
+            "title": "Acquisition Date",
+            "type": "string"
+          },
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "asset_type": {
+            "title": "Asset Type",
+            "type": "string"
+          },
+          "cost_basis": {
+            "maxLength": 100,
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Cost Basis",
+            "type": "string"
+          },
+          "depreciation_expense_account_id": {
+            "default": "",
+            "title": "Depreciation Expense Account Id",
+            "type": "string"
+          },
+          "depreciation_start_date": {
+            "title": "Depreciation Start Date",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "default": "",
+            "title": "Notes",
+            "type": "string"
+          },
+          "payee_id": {
+            "default": "",
+            "title": "Payee Id",
+            "type": "string"
+          },
+          "reference": {
+            "default": "",
+            "title": "Reference",
+            "type": "string"
+          },
+          "salvage_value": {
+            "default": "0.00",
+            "maxLength": 100,
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Salvage Value",
+            "type": "string"
+          },
+          "source_transaction_id": {
+            "default": "",
+            "title": "Source Transaction Id",
+            "type": "string"
+          },
+          "tag_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tag Ids",
+            "type": "array"
+          },
+          "useful_life_quarters": {
+            "title": "Useful Life Quarters",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "asset_type",
+          "acquisition_date",
+          "depreciation_start_date",
+          "cost_basis",
+          "useful_life_quarters",
+          "asset_id"
+        ],
+        "title": "AssetCreate",
+        "type": "object"
+      },
+      "AssetDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "asset": {
+            "$ref": "#/components/schemas/Asset"
+          },
+          "can_delete": {
+            "title": "Can Delete",
+            "type": "boolean"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/Occurrence"
+            },
+            "title": "History",
+            "type": "array"
+          },
+          "posting_accounts_locked": {
+            "title": "Posting Accounts Locked",
+            "type": "boolean"
+          },
+          "schedule": {
+            "items": {
+              "$ref": "#/components/schemas/DepreciationPeriod"
+            },
+            "title": "Schedule",
+            "type": "array"
+          },
+          "terms_locked": {
+            "title": "Terms Locked",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "asset",
+          "schedule",
+          "history",
+          "terms_locked",
+          "posting_accounts_locked",
+          "can_delete"
+        ],
+        "title": "AssetDetail",
+        "type": "object"
+      },
+      "AssetList": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Asset"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "AssetList",
+        "type": "object"
+      },
+      "AssetOverride": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "maxLength": 100,
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Amount",
+            "type": "string"
+          },
+          "as_of_date": {
+            "title": "As Of Date",
+            "type": "string"
+          },
+          "baseline": {
+            "maxLength": 4096,
+            "title": "Baseline",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "baseline",
+          "amount",
+          "reason",
+          "as_of_date"
+        ],
+        "title": "AssetOverride",
+        "type": "object"
+      },
+      "AssetPost": {
+        "additionalProperties": false,
+        "properties": {
+          "baseline": {
+            "maxLength": 4096,
+            "title": "Baseline",
+            "type": "string"
+          },
+          "through_date": {
+            "title": "Through Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "baseline",
+          "through_date"
+        ],
+        "title": "AssetPost",
+        "type": "object"
+      },
+      "AssetPostResult": {
+        "additionalProperties": false,
+        "properties": {
+          "entry_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Entry Ids",
+            "type": "array"
+          },
+          "posted_count": {
+            "title": "Posted Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "posted_count",
+          "entry_ids"
+        ],
+        "title": "AssetPostResult",
+        "type": "object"
+      },
+      "AssetTypes": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "AssetTypes",
+        "type": "object"
+      },
+      "AssetUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "baseline": {
+            "maxLength": 4096,
+            "title": "Baseline",
+            "type": "string"
+          },
+          "changes": {
+            "$ref": "#/components/schemas/AssetChanges"
+          }
+        },
+        "required": [
+          "baseline",
+          "changes"
+        ],
+        "title": "AssetUpdate",
+        "type": "object"
+      },
       "BalanceRow": {
         "additionalProperties": false,
         "properties": {
@@ -483,6 +1002,66 @@
           "changes"
         ],
         "title": "CategoryUpdate",
+        "type": "object"
+      },
+      "DepreciationPeriod": {
+        "additionalProperties": false,
+        "properties": {
+          "cumulative_depreciation": {
+            "maxLength": 100,
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Cumulative Depreciation",
+            "type": "string"
+          },
+          "depreciation_amount": {
+            "maxLength": 100,
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Depreciation Amount",
+            "type": "string"
+          },
+          "is_override": {
+            "title": "Is Override",
+            "type": "boolean"
+          },
+          "journal_entry_id": {
+            "title": "Journal Entry Id",
+            "type": "string"
+          },
+          "override_reason": {
+            "title": "Override Reason",
+            "type": "string"
+          },
+          "posting_status": {
+            "title": "Posting Status",
+            "type": "string"
+          },
+          "remaining_book_value": {
+            "maxLength": 100,
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Remaining Book Value",
+            "type": "string"
+          },
+          "scheduled_date": {
+            "title": "Scheduled Date",
+            "type": "string"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sequence",
+          "scheduled_date",
+          "depreciation_amount",
+          "cumulative_depreciation",
+          "remaining_book_value",
+          "is_override",
+          "override_reason",
+          "posting_status",
+          "journal_entry_id"
+        ],
+        "title": "DepreciationPeriod",
         "type": "object"
       },
       "Document": {
@@ -1386,6 +1965,319 @@
         "title": "MileageUpdate",
         "type": "object"
       },
+      "MixedUse": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "allocated_amount": {
+            "maxLength": 100,
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Allocated Amount",
+            "type": "string"
+          },
+          "allocation_rationale": {
+            "title": "Allocation Rationale",
+            "type": "string"
+          },
+          "baseline": {
+            "title": "Baseline",
+            "type": "string"
+          },
+          "business_use_percentage": {
+            "maxLength": 100,
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Business Use Percentage",
+            "type": "string"
+          },
+          "category_id": {
+            "title": "Category Id",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "ledger_status": {
+            "title": "Ledger Status",
+            "type": "string"
+          },
+          "linked_transaction_id": {
+            "title": "Linked Transaction Id",
+            "type": "string"
+          },
+          "new_payee_name": {
+            "default": "",
+            "title": "New Payee Name",
+            "type": "string"
+          },
+          "new_tag_name": {
+            "default": "",
+            "title": "New Tag Name",
+            "type": "string"
+          },
+          "payee_id": {
+            "default": "",
+            "title": "Payee Id",
+            "type": "string"
+          },
+          "recurring_occurrence_type": {
+            "title": "Recurring Occurrence Type",
+            "type": "string"
+          },
+          "recurring_schedule_id": {
+            "title": "Recurring Schedule Id",
+            "type": "string"
+          },
+          "recurring_scheduled_date": {
+            "title": "Recurring Scheduled Date",
+            "type": "string"
+          },
+          "reference": {
+            "default": "",
+            "title": "Reference",
+            "type": "string"
+          },
+          "tag_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tag Ids",
+            "type": "array"
+          },
+          "total_expense": {
+            "maxLength": 100,
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Total Expense",
+            "type": "string"
+          },
+          "txn_date": {
+            "title": "Txn Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "txn_date",
+          "account_id",
+          "category_id",
+          "total_expense",
+          "business_use_percentage",
+          "allocation_rationale",
+          "id",
+          "linked_transaction_id",
+          "allocated_amount",
+          "ledger_status",
+          "recurring_schedule_id",
+          "recurring_scheduled_date",
+          "recurring_occurrence_type",
+          "baseline"
+        ],
+        "title": "MixedUse",
+        "type": "object"
+      },
+      "MixedUseChanges": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "allocation_rationale": {
+            "title": "Allocation Rationale",
+            "type": "string"
+          },
+          "business_use_percentage": {
+            "maxLength": 100,
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Business Use Percentage",
+            "type": "string"
+          },
+          "category_id": {
+            "title": "Category Id",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "new_payee_name": {
+            "default": "",
+            "title": "New Payee Name",
+            "type": "string"
+          },
+          "new_tag_name": {
+            "default": "",
+            "title": "New Tag Name",
+            "type": "string"
+          },
+          "payee_id": {
+            "default": "",
+            "title": "Payee Id",
+            "type": "string"
+          },
+          "reference": {
+            "default": "",
+            "title": "Reference",
+            "type": "string"
+          },
+          "tag_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tag Ids",
+            "type": "array"
+          },
+          "total_expense": {
+            "maxLength": 100,
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Total Expense",
+            "type": "string"
+          },
+          "txn_date": {
+            "title": "Txn Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "txn_date",
+          "account_id",
+          "category_id",
+          "total_expense",
+          "business_use_percentage",
+          "allocation_rationale"
+        ],
+        "title": "MixedUseChanges",
+        "type": "object"
+      },
+      "MixedUseCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "allocation_rationale": {
+            "title": "Allocation Rationale",
+            "type": "string"
+          },
+          "business_use_percentage": {
+            "maxLength": 100,
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Business Use Percentage",
+            "type": "string"
+          },
+          "category_id": {
+            "title": "Category Id",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "linked_transaction_id": {
+            "title": "Linked Transaction Id",
+            "type": "string"
+          },
+          "new_payee_name": {
+            "default": "",
+            "title": "New Payee Name",
+            "type": "string"
+          },
+          "new_tag_name": {
+            "default": "",
+            "title": "New Tag Name",
+            "type": "string"
+          },
+          "payee_id": {
+            "default": "",
+            "title": "Payee Id",
+            "type": "string"
+          },
+          "reference": {
+            "default": "",
+            "title": "Reference",
+            "type": "string"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "tag_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tag Ids",
+            "type": "array"
+          },
+          "total_expense": {
+            "maxLength": 100,
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Total Expense",
+            "type": "string"
+          },
+          "txn_date": {
+            "title": "Txn Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "txn_date",
+          "account_id",
+          "category_id",
+          "total_expense",
+          "business_use_percentage",
+          "allocation_rationale",
+          "source_id",
+          "linked_transaction_id"
+        ],
+        "title": "MixedUseCreate",
+        "type": "object"
+      },
+      "MixedUseList": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MixedUse"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "MixedUseList",
+        "type": "object"
+      },
+      "MixedUseUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "baseline": {
+            "maxLength": 4096,
+            "title": "Baseline",
+            "type": "string"
+          },
+          "changes": {
+            "$ref": "#/components/schemas/MixedUseChanges"
+          }
+        },
+        "required": [
+          "baseline",
+          "changes"
+        ],
+        "title": "MixedUseUpdate",
+        "type": "object"
+      },
       "MutationResult": {
         "additionalProperties": false,
         "properties": {
@@ -1409,6 +2301,57 @@
           "status"
         ],
         "title": "MutationResult",
+        "type": "object"
+      },
+      "Occurrence": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "maxLength": 100,
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Amount",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "recurring_occurrence_type": {
+            "title": "Recurring Occurrence Type",
+            "type": "string"
+          },
+          "recurring_schedule_id": {
+            "title": "Recurring Schedule Id",
+            "type": "string"
+          },
+          "recurring_scheduled_date": {
+            "title": "Recurring Scheduled Date",
+            "type": "string"
+          },
+          "source_id": {
+            "default": "",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "source_type": {
+            "default": "",
+            "title": "Source Type",
+            "type": "string"
+          },
+          "txn_date": {
+            "title": "Txn Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "txn_date",
+          "amount",
+          "recurring_schedule_id",
+          "recurring_scheduled_date",
+          "recurring_occurrence_type"
+        ],
+        "title": "Occurrence",
         "type": "object"
       },
       "Posting": {
@@ -1500,6 +2443,407 @@
           "baseline"
         ],
         "title": "ProtectedMutation",
+        "type": "object"
+      },
+      "ReconcileRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "through_date": {
+            "title": "Through Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "through_date"
+        ],
+        "title": "ReconcileRequest",
+        "type": "object"
+      },
+      "ReconcileResult": {
+        "additionalProperties": false,
+        "properties": {
+          "attention_count": {
+            "title": "Attention Count",
+            "type": "integer"
+          },
+          "generated_count": {
+            "title": "Generated Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "generated_count",
+          "attention_count"
+        ],
+        "title": "ReconcileResult",
+        "type": "object"
+      },
+      "Recurring": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "allocation_rationale": {
+            "default": "",
+            "title": "Allocation Rationale",
+            "type": "string"
+          },
+          "amount": {
+            "default": "0.00",
+            "title": "Amount",
+            "type": "string"
+          },
+          "attention_code": {
+            "title": "Attention Code",
+            "type": "string"
+          },
+          "attention_message": {
+            "title": "Attention Message",
+            "type": "string"
+          },
+          "baseline": {
+            "title": "Baseline",
+            "type": "string"
+          },
+          "business_use_percentage": {
+            "default": "",
+            "title": "Business Use Percentage",
+            "type": "string"
+          },
+          "category_id": {
+            "title": "Category Id",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "end_date": {
+            "default": "",
+            "title": "End Date",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "latest_current_occurrence_date": {
+            "title": "Latest Current Occurrence Date",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "next_due_date": {
+            "title": "Next Due Date",
+            "type": "string"
+          },
+          "payee_id": {
+            "default": "",
+            "title": "Payee Id",
+            "type": "string"
+          },
+          "recurrence_interval": {
+            "default": "1",
+            "title": "Recurrence Interval",
+            "type": "string"
+          },
+          "recurrence_unit": {
+            "title": "Recurrence Unit",
+            "type": "string"
+          },
+          "reference": {
+            "default": "",
+            "title": "Reference",
+            "type": "string"
+          },
+          "source_kind": {
+            "title": "Source Kind",
+            "type": "string"
+          },
+          "start_date": {
+            "title": "Start Date",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tag_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tag Ids",
+            "type": "array"
+          },
+          "total_expense": {
+            "default": "",
+            "title": "Total Expense",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "recurrence_unit",
+          "account_id",
+          "category_id",
+          "id",
+          "start_date",
+          "source_kind",
+          "status",
+          "next_due_date",
+          "latest_current_occurrence_date",
+          "attention_code",
+          "attention_message",
+          "baseline"
+        ],
+        "title": "Recurring",
+        "type": "object"
+      },
+      "RecurringChanges": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "allocation_rationale": {
+            "default": "",
+            "title": "Allocation Rationale",
+            "type": "string"
+          },
+          "amount": {
+            "default": "0.00",
+            "title": "Amount",
+            "type": "string"
+          },
+          "business_use_percentage": {
+            "default": "",
+            "title": "Business Use Percentage",
+            "type": "string"
+          },
+          "category_id": {
+            "title": "Category Id",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "end_date": {
+            "default": "",
+            "title": "End Date",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "payee_id": {
+            "default": "",
+            "title": "Payee Id",
+            "type": "string"
+          },
+          "recurrence_interval": {
+            "default": "1",
+            "title": "Recurrence Interval",
+            "type": "string"
+          },
+          "recurrence_unit": {
+            "title": "Recurrence Unit",
+            "type": "string"
+          },
+          "reference": {
+            "default": "",
+            "title": "Reference",
+            "type": "string"
+          },
+          "tag_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tag Ids",
+            "type": "array"
+          },
+          "total_expense": {
+            "default": "",
+            "title": "Total Expense",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "recurrence_unit",
+          "account_id",
+          "category_id"
+        ],
+        "title": "RecurringChanges",
+        "type": "object"
+      },
+      "RecurringCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "allocation_rationale": {
+            "default": "",
+            "title": "Allocation Rationale",
+            "type": "string"
+          },
+          "amount": {
+            "default": "0.00",
+            "title": "Amount",
+            "type": "string"
+          },
+          "business_use_percentage": {
+            "default": "",
+            "title": "Business Use Percentage",
+            "type": "string"
+          },
+          "category_id": {
+            "title": "Category Id",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "end_date": {
+            "default": "",
+            "title": "End Date",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "payee_id": {
+            "default": "",
+            "title": "Payee Id",
+            "type": "string"
+          },
+          "recurrence_interval": {
+            "default": "1",
+            "title": "Recurrence Interval",
+            "type": "string"
+          },
+          "recurrence_unit": {
+            "title": "Recurrence Unit",
+            "type": "string"
+          },
+          "reference": {
+            "default": "",
+            "title": "Reference",
+            "type": "string"
+          },
+          "schedule_id": {
+            "title": "Schedule Id",
+            "type": "string"
+          },
+          "source_kind": {
+            "default": "transaction",
+            "title": "Source Kind",
+            "type": "string"
+          },
+          "start_date": {
+            "title": "Start Date",
+            "type": "string"
+          },
+          "tag_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tag Ids",
+            "type": "array"
+          },
+          "total_expense": {
+            "default": "",
+            "title": "Total Expense",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "recurrence_unit",
+          "account_id",
+          "category_id",
+          "schedule_id",
+          "start_date"
+        ],
+        "title": "RecurringCreate",
+        "type": "object"
+      },
+      "RecurringDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "mixed_sources": {
+            "items": {
+              "$ref": "#/components/schemas/MixedUse"
+            },
+            "title": "Mixed Sources",
+            "type": "array"
+          },
+          "occurrences": {
+            "items": {
+              "$ref": "#/components/schemas/Occurrence"
+            },
+            "title": "Occurrences",
+            "type": "array"
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/Recurring"
+          }
+        },
+        "required": [
+          "schedule",
+          "occurrences",
+          "mixed_sources"
+        ],
+        "title": "RecurringDetail",
+        "type": "object"
+      },
+      "RecurringList": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Recurring"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "RecurringList",
+        "type": "object"
+      },
+      "RecurringUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "baseline": {
+            "maxLength": 4096,
+            "title": "Baseline",
+            "type": "string"
+          },
+          "changes": {
+            "$ref": "#/components/schemas/RecurringChanges"
+          }
+        },
+        "required": [
+          "baseline",
+          "changes"
+        ],
+        "title": "RecurringUpdate",
         "type": "object"
       },
       "ReportSummary": {
@@ -2419,6 +3763,1048 @@
         "summary": "Deactivate Account",
         "tags": [
           "Accounts"
+        ]
+      }
+    },
+    "/api/v1/entities/{entity_id}/assets": {
+      "get": {
+        "operationId": "list_assets",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "List Assets",
+        "tags": [
+          "Secondary bookkeeping"
+        ]
+      },
+      "post": {
+        "operationId": "create_asset",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Asset"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Create Asset",
+        "tags": [
+          "Secondary bookkeeping"
+        ]
+      }
+    },
+    "/api/v1/entities/{entity_id}/assets/types": {
+      "get": {
+        "operationId": "asset_types",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetTypes"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Asset Types",
+        "tags": [
+          "Secondary bookkeeping"
+        ]
+      }
+    },
+    "/api/v1/entities/{entity_id}/assets/{record_id}": {
+      "delete": {
+        "operationId": "delete_asset",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProtectedMutation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MutationResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Delete Asset",
+        "tags": [
+          "Secondary bookkeeping"
+        ]
+      },
+      "get": {
+        "operationId": "get_asset",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Get Asset",
+        "tags": [
+          "Secondary bookkeeping"
+        ]
+      },
+      "patch": {
+        "operationId": "update_asset",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Asset"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Update Asset",
+        "tags": [
+          "Secondary bookkeeping"
+        ]
+      }
+    },
+    "/api/v1/entities/{entity_id}/assets/{record_id}/overrides/{sequence}": {
+      "delete": {
+        "operationId": "remove_depreciation_override",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sequence",
+            "required": true,
+            "schema": {
+              "title": "Sequence",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProtectedMutation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Asset"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Remove Depreciation Override",
+        "tags": [
+          "Secondary bookkeeping"
+        ]
+      },
+      "put": {
+        "operationId": "override_depreciation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sequence",
+            "required": true,
+            "schema": {
+              "title": "Sequence",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetOverride"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Asset"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Override Depreciation",
+        "tags": [
+          "Secondary bookkeeping"
+        ]
+      }
+    },
+    "/api/v1/entities/{entity_id}/assets/{record_id}/post": {
+      "post": {
+        "operationId": "post_depreciation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetPost"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetPostResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Post Depreciation",
+        "tags": [
+          "Secondary bookkeeping"
         ]
       }
     },
@@ -4474,6 +6860,679 @@
         ]
       }
     },
+    "/api/v1/entities/{entity_id}/mixed-use": {
+      "get": {
+        "operationId": "list_mixed_use",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MixedUseList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "List Mixed Use",
+        "tags": [
+          "Secondary bookkeeping"
+        ]
+      },
+      "post": {
+        "operationId": "create_mixed_use",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MixedUseCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MixedUse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Create Mixed Use",
+        "tags": [
+          "Secondary bookkeeping"
+        ]
+      }
+    },
+    "/api/v1/entities/{entity_id}/mixed-use/allocation": {
+      "post": {
+        "operationId": "preview_allocation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AllocationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Allocation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Preview Allocation",
+        "tags": [
+          "Secondary bookkeeping"
+        ]
+      }
+    },
+    "/api/v1/entities/{entity_id}/mixed-use/{record_id}": {
+      "delete": {
+        "operationId": "delete_mixed_use",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProtectedMutation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MutationResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Delete Mixed Use",
+        "tags": [
+          "Secondary bookkeeping"
+        ]
+      },
+      "get": {
+        "operationId": "get_mixed_use",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MixedUse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Get Mixed Use",
+        "tags": [
+          "Secondary bookkeeping"
+        ]
+      },
+      "patch": {
+        "operationId": "update_mixed_use",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MixedUseUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MixedUse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Update Mixed Use",
+        "tags": [
+          "Secondary bookkeeping"
+        ]
+      }
+    },
     "/api/v1/entities/{entity_id}/payees": {
       "get": {
         "operationId": "list_payees",
@@ -5044,6 +8103,690 @@
         "summary": "Merge Reference",
         "tags": [
           "Payees"
+        ]
+      }
+    },
+    "/api/v1/entities/{entity_id}/recurring": {
+      "get": {
+        "operationId": "list_recurring",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecurringList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "List Recurring",
+        "tags": [
+          "Secondary bookkeeping"
+        ]
+      },
+      "post": {
+        "operationId": "create_recurring",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecurringCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Recurring"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Create Recurring",
+        "tags": [
+          "Secondary bookkeeping"
+        ]
+      }
+    },
+    "/api/v1/entities/{entity_id}/recurring/reconcile": {
+      "post": {
+        "operationId": "reconcile_recurring",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReconcileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconcileResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Reconcile Recurring",
+        "tags": [
+          "Secondary bookkeeping"
+        ]
+      }
+    },
+    "/api/v1/entities/{entity_id}/recurring/{record_id}": {
+      "get": {
+        "operationId": "get_recurring",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecurringDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Get Recurring",
+        "tags": [
+          "Secondary bookkeeping"
+        ]
+      },
+      "patch": {
+        "operationId": "update_recurring",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecurringUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Recurring"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Update Recurring",
+        "tags": [
+          "Secondary bookkeeping"
+        ]
+      }
+    },
+    "/api/v1/entities/{entity_id}/recurring/{record_id}/{transition}": {
+      "post": {
+        "operationId": "transition_recurring",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "transition",
+            "required": true,
+            "schema": {
+              "title": "Transition",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProtectedMutation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Recurring"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Transition Recurring",
+        "tags": [
+          "Secondary bookkeeping"
         ]
       }
     },
