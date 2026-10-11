@@ -68,12 +68,13 @@ def test_code_pkce_verified_identity_and_bounded_transport(oidc):
 
 
 @pytest.mark.parametrize('change', [dict(iss='https://wrong.test'), dict(aud='wrong'), dict(nonce='wrong'),
-    dict(exp=int(time()) - 120), dict(iat=int(time()) + 120), dict(nbf=int(time()) + 120),
-    dict(auth_time=int(time()) - 600), dict(auth_time=True), dict(azp='wrong'),
+    dict(exp=lambda: int(time()) - 120), dict(iat=lambda: int(time()) + 120), dict(nbf=lambda: int(time()) + 120),
+    dict(auth_time=lambda: int(time()) - 600), dict(auth_time=True), dict(azp='wrong'),
     dict(aud=['client', 'other']), dict(sub=''), dict(at_hash='wrong')])
 def test_invalid_signed_claims_fail_closed_without_provider_material(oidc, change):
     provider, transaction, claims, _, _ = oidc
-    claims.update(change)
+    # Resolve relative times at execution, not collection before a long suite.
+    claims.update({key: value() if callable(value) else value for key, value in change.items()})
     with pytest.raises(IdentityError) as caught:
         provider.verify('synthetic-code', transaction)
     assert caught.value.code == 'unauthorized'

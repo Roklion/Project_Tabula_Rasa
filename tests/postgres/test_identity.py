@@ -122,6 +122,29 @@ def test_single_use_browser_bound_login_and_expiry(database):
         sessions.consume_login(raw, transaction.state)
 
 
+def test_selection_joins_one_connection_and_rejects_foreign_entity(database):
+    from sqlalchemy import event
+    setup(database)
+    sessions = PostgresSessionRepository(database, 'test', 'a' * 64)
+    sessions.configure()
+    raw, original = sessions.issue(verified())
+    checkouts = []
+    def checkout(*args):
+        checkouts.append(True)
+    event.listen(database.engine, 'checkout', checkout)
+    try:
+        assert sessions.select(raw, 'alpha').selected == original.selected
+        assert len(checkouts) == 1
+        checkouts.clear()
+        with pytest.raises(IdentityError) as caught:
+            sessions.select(raw, 'beta')
+        assert caught.value.code == 'forbidden'
+        assert len(checkouts) == 1
+    finally:
+        event.remove(database.engine, 'checkout', checkout)
+    assert sessions.validate(raw).selected == original.selected
+
+
 def test_concurrent_owner_removals_and_callback_consumption(database):
     from concurrent.futures import ThreadPoolExecutor
     from threading import Barrier

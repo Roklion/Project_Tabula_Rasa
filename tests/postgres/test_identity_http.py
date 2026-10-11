@@ -1,5 +1,6 @@
 from unittest.mock import Mock
 
+import pytest
 from fastapi.testclient import TestClient
 
 from tabula_rasa.application.identity import IdentityError
@@ -52,11 +53,11 @@ def test_login_callback_cookie_contract_and_no_entity_setup(database):
         factory.assert_not_called()
 
 
-def test_hosted_cookie_attributes_and_injected_fixture_rejection():
-    import pytest
+@pytest.mark.parametrize('origin', ['https://named.example.test', 'HTTPS://named.example.test'])
+def test_hosted_cookie_attributes_and_injected_fixture_rejection(origin):
     from tabula_rasa.http.context import TrustedDevelopmentContext
     from starlette.responses import Response
-    settings = HttpSettings('staging', 'https://named.example.test', access_mode='named_user')
+    settings = HttpSettings('staging', origin, access_mode='named_user')
     auth = NamedIdentity(settings, Mock(), Mock())
     response = Response()
     auth.set_cookie(response, auth.session_cookie, 'synthetic', 43200)

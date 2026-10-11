@@ -1,5 +1,7 @@
 """Cookie transport and named context; provider/storage details stay composed outside."""
 
+from urllib.parse import urlsplit
+
 from tabula_rasa.application.identity import IdentityError, capabilities
 
 from .context import RequestContext
@@ -9,7 +11,7 @@ from .models.common import EntityInfo, SessionInfo, SetupSessionInfo
 class NamedIdentity:
     def __init__(self, settings, sessions, provider):
         self.settings, self.sessions, self.provider = settings, sessions, provider
-        self.secure = settings.public_origin.startswith("https://")
+        self.secure = urlsplit(settings.public_origin).scheme == "https"
         prefix = "__Host-tabula_" if self.secure else "tabula_dev_"
         self.session_cookie, self.login_cookie, self.csrf_cookie = (prefix + name for name in ("session", "login", "csrf"))
 
