@@ -275,6 +275,25 @@ expose a raw traceback for this configuration failure.
 
 ## Commercial shell
 
+**Current behavior** for the #311/#312 opt-in named-user foundation:
+
+- Pending identity displays a loading state before any private feature is
+  mounted. Missing/expired/revoked identity offers Sign in through the hosted
+  provider. Failed callbacks show a clean sign-in failure page without provider
+  query values. Authenticated users without active business access see Workspace
+  setup required, an owner-contact instruction and Sign out, not an empty ledger.
+- Named sessions show the existing business shell with a labeled Sign out
+  control. Session loss or authorization-storage outage unmounts private queries,
+  drafts and receipt views; confirmed identity/scope/version changes remount the
+  existing private boundary. Visible tabs recheck on focus/pageshow/visibility
+  and every 60 seconds. Same-origin sign-out signals contain no private data.
+- Logout clears the local browser even when server revocation cannot be
+  confirmed, and displays a safe failure instead of claiming durable success.
+  Read-only and setup users can inspect identity and sign out without ledger
+  write permission. [Named-user authentication](docs/NAMED_USER_AUTH.md) owns the
+  operator settings, session policy and remaining release gates. Organization
+  onboarding and commercial switching UI remain subsequent epic slices.
+
 **Current behavior** for the #277/#278/#279/#280/#281/#282/#283/#286 technical-alpha application:
 
 - The React shell uses the visual tokens, typography and approximately 760px

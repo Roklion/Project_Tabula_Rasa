@@ -16,6 +16,7 @@ class HttpSettings:
     trusted_entity_id: str | None = None
     alpha_username: str = field(default="", repr=False)
     alpha_password_hash: str = field(default="", repr=False)
+    access_mode: str = "restricted_alpha"
 
     @property
     def hosted_alpha(self):
@@ -33,12 +34,19 @@ class HttpSettings:
         )
         if not valid:
             raise ValueError("Invalid HTTP configuration.")
+        if self.access_mode not in {"restricted_alpha", "named_user"}:
+            raise ValueError("An explicit supported access mode is required.")
+        if self.access_mode == "named_user" and (self.trusted_entity_id or self.alpha_username or self.alpha_password_hash):
+            raise ValueError("Named-user mode rejects synthetic context and alpha credentials.")
         if self.environment in {"staging", "production"} and origin.scheme != "https":
             raise ValueError("Hosted HTTP requires HTTPS.")
         hosted = origin.hostname not in {"127.0.0.1", "localhost", "::1", "testserver"}
+        if self.access_mode == "named_user" and (hosted and origin.scheme != "https"
+                or origin.hostname == "testserver" and self.environment != "test"):
+            raise ValueError("Named-user cookies require HTTPS except explicit loopback development/test.")
         if self.environment == "production" and (self.trusted_entity_id or self.alpha_username or self.alpha_password_hash):
             raise ValueError("Production rejects alpha context and credentials.")
-        if hosted and self.environment != "production":
+        if hosted and self.environment != "production" and self.access_mode != "named_user":
             if (self.environment not in {"development", "staging"} or origin.scheme != "https"
                     or self.trusted_entity_id != "alpha-synthetic"
                     or not re.fullmatch(r"[A-Za-z0-9._-]{1,100}", self.alpha_username)
@@ -61,4 +69,5 @@ class HttpSettings:
             os.environ.get("TABULA_RASA_TRUSTED_ENTITY_ID") or None,
             os.environ.get("TABULA_RASA_ALPHA_USERNAME", ""),
             os.environ.get("TABULA_RASA_ALPHA_PASSWORD_HASH", ""),
+            os.environ.get("TABULA_RASA_ACCESS_MODE", "restricted_alpha"),
         )

@@ -36,10 +36,11 @@ def translate_database_errors():
 class PostgresRuntime:
     """One pool; compose a fresh service graph after resolving each request."""
 
-    def __init__(self, database, resolver, *, service_factory):
+    def __init__(self, database, resolver, *, service_factory, identity=None):
         self.database = database
         self.resolve_context = resolver
         self.service_factory = service_factory
+        self.identity = identity
 
     def services(self, context) -> ApplicationServices:
         with translate_database_errors():
@@ -66,7 +67,11 @@ class PostgresRuntime:
         return health.get("connected") is True and health.get("revision") == head_revision()
 
     def close(self):
-        self.database.dispose()
+        try:
+            if self.identity is not None:
+                self.identity.close()
+        finally:
+            self.database.dispose()
 
 
 def open_runtime(settings):
@@ -82,12 +87,22 @@ def open_runtime(settings):
             from tabula_rasa.infrastructure.postgres.documents import PostgresReceiptRepository
             PostgresReceiptRepository(database, document_store.entity_id,
                 store_kind="google_drive", store_scope_key=document_store.scope_key).validate_binding()
+        identity = None
         resolver = (
             TrustedDevelopmentContext(settings.trusted_entity_id, secrets.token_urlsafe(32),
                                       hosted=settings.hosted_alpha,
                                       entity_ids=() if settings.hosted_alpha else ('beta-synthetic',))
             if settings.trusted_entity_id else DenyContext()
         )
+        if settings.access_mode == "named_user":
+            from tabula_rasa.infrastructure.oidc import OidcProvider, OidcSettings
+            from tabula_rasa.infrastructure.postgres.sessions import PostgresSessionRepository
+            from .identity import NamedIdentity
+            oidc = OidcSettings.from_environment(settings, dict(os.environ))
+            sessions = PostgresSessionRepository(database, settings.environment, oidc.configuration_hash)
+            sessions.configure()
+            identity = NamedIdentity(settings, sessions, OidcProvider(oidc))
+            resolver = identity
         def services(context):
             if document_store is None:
                 return create_postgres_services(database, context.entity_id)
@@ -96,7 +111,7 @@ def open_runtime(settings):
             return create_postgres_services(database, context.entity_id,
                 document_store=document_store, document_store_kind="google_drive")
 
-        runtime = PostgresRuntime(database, resolver, service_factory=services)
+        runtime = PostgresRuntime(database, resolver, service_factory=services, identity=identity)
         if settings.trusted_entity_id:
             # Only explicit seed tooling creates synthetic entities.
             for context in resolver.contexts:
@@ -127,7 +142,9 @@ def open_migrated_runtime(settings, *, resolve_context, entity_profiles, profile
         database = Database(database_settings or DatabaseSettings.from_environment(required=True))
         services = MigratedProfileServices(database, entity_profiles=entity_profiles, secrets=profile_secrets)
         services.validate()
-        runtime = PostgresRuntime(database, resolve_context, service_factory=services)
+        from .identity import NamedIdentity
+        runtime = PostgresRuntime(database, resolve_context, service_factory=services,
+                                  identity=resolve_context if isinstance(resolve_context, NamedIdentity) else None)
         if not runtime.ready():
             raise RuntimeError("The migrated database is not ready.")
         return runtime

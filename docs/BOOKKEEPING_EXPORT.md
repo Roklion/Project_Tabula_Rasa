@@ -1,7 +1,9 @@
 # Complete PostgreSQL bookkeeping export
 
 Revision `0005_bookkeeping_cutover` adds operator authority/evidence controls
-outside the portable bookkeeping inventory. The existing v1 exports from
+outside the portable bookkeeping inventory. Revisions
+`0006_identity_control_plane` and `0007_identity_sessions` add separate identity
+and durable authentication tables, also outside this inventory. Existing v1 exports from
 `0004_mileage_order` remain valid; the exporter reports the observed supported
 revision and validates the same exact collection/field coverage. Migrated
 document ID mappings are included in provenance validation. The
@@ -75,7 +77,7 @@ completeness, relationships and accounting meaning beyond JSON Schema.
 | Manifest field | Meaning |
 | --- | --- |
 | `format`, `format_version` | `tabula-rasa-bookkeeping`, integer `1`; independent of Sheets/archive format 13 |
-| `database_schema_version` | Observed supported PostgreSQL revision (`0004_mileage_order` or `0005_bookkeeping_cutover`; both have the same v1 bookkeeping inventory) |
+| `database_schema_version` | Observed supported PostgreSQL revision (`0004_mileage_order` through `0007_identity_sessions`; all have the same v1 bookkeeping inventory, excluding identity/session records) |
 | `entity_id` | Explicit selected business entity; also present on every entity-local record |
 | `snapshot_at` | Database transaction-start instant in UTC; all reads use that transaction's coherent snapshot |
 | `counts` | Count for every included canonical collection, including zero counts |

@@ -10,6 +10,10 @@ child ticket. This guide owns the operator checklist, threat acceptance cases
 and handoff. **Selection is documented; real identity is not implemented or
 hosted-verified by #310.**
 
+The #311/#312 local implementation and deployment/revocation procedure are in
+[Named-user authentication](NAMED_USER_AUTH.md). Native and synthetic-provider
+evidence does not replace the #313 action-policy or #321 hosted rollout gates.
+
 ## Stages and migration boundary
 
 | Mode | Allowed identity/data boundary | Exit or transition requirement |
@@ -122,8 +126,11 @@ uses synthetic names, safe statuses and release/check IDs only.
 
 These names must be validated and documented as implemented in #312/#321,
 rather than silently becoming optional fallbacks. Provider client-secret
-rotation interrupts new logins until configured coherently; verified app
-sessions retain their ordinary deadlines unless explicitly revoked.
+rotation requires a coordinated worker restart and invalidates this environment's
+issued sessions/login transactions. User credential changes/forced resets revoke
+that user's sessions across organizations; do not revoke other users for a
+user-specific change. This follows the maintainer's #310 decision and supersedes
+the earlier retain-sessions suggestion. See [rotation and recovery](NAMED_USER_AUTH.md#revocation-and-owner-recovery).
 Issuer/client changes require reauthentication and explicit binding migration;
 never remap existing users by email. Restoring PostgreSQL/control-plane state
 must invalidate restored sessions/login transactions before ingress reopens

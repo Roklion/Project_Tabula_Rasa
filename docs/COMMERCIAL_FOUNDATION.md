@@ -32,7 +32,10 @@ remains the internal/reference edition.
   calendar dates; instants are UTC; exact decimal values are strings.
 - `GET /api/v1/session` returns safe server-resolved actor, organization, business,
   capabilities, cache scope and CSRF data. This currently describes an explicit
-  trusted synthetic context, not commercial login or memberships.
+  trusted synthetic context in restricted alpha. Opt-in named mode now reports
+  `ready` or authenticated `needs_setup` through the durable membership/session
+  resolver; see [Named-user authentication](NAMED_USER_AUTH.md). The complete
+  action-policy and external-release gates remain separate.
 - `GET /api/v1/entities/{entity_id}/accounts?active_only=false` delegates to
   `AccountService.list`. `POST` delegates directly to `AccountService.create`
   and returns 201 only after that service confirms the operation.

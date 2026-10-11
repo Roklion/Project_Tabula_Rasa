@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useEntity } from './context';
 import styles from './Shell.module.css';
 
 import { navigation } from './navigation';
 import { EntitySelector } from './EntitySelection';
+import { AuthContext } from './authContext';
 
 export function Shell() {
   const session = useEntity();
+  const auth = useContext(AuthContext);
   const location = useLocation();
   const workflowName = location.pathname.startsWith('/mixed-use') ? 'Mixed-use expenses'
     : location.pathname.startsWith('/recurring') ? 'Recurring expenses' : undefined;
@@ -41,6 +43,7 @@ export function Shell() {
         {navigation.map(([path, name]) => <NavLink key={path} to={path} end={path === '/'}>{name}</NavLink>)}
       </nav>
       <p className={styles.footer}>Bookkeeping with clarity.</p>
+      {!session.trusted_development && <button onClick={auth.logout}>Sign out</button>}
     </aside>
     <div className={styles.content}>
       <header className={styles.topbar}><span>{workflowName ?? navigation.find(([path]) => path === location.pathname

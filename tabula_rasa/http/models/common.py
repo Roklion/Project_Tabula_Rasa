@@ -1,4 +1,5 @@
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -65,6 +66,7 @@ class EntitySelection(DTO):
 
 
 class SessionInfo(DTO):
+    state: Literal["ready"] = "ready"
     actor_id: str
     organization_id: str
     entity: EntityInfo
@@ -72,3 +74,14 @@ class SessionInfo(DTO):
     cache_scope: str
     csrf_token: str
     trusted_development: bool
+
+
+class SetupSessionInfo(DTO):
+    state: Literal["needs_setup"] = "needs_setup"
+    actor_id: str
+    organization_id: None = None
+    entity: None = None
+    capabilities: list[str] = []
+    cache_scope: str
+    csrf_token: str
+    trusted_development: Literal[False] = False

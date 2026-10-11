@@ -2,6 +2,7 @@ import createClient from 'openapi-fetch';
 import type { components, paths } from './schema';
 
 export type Session = components['schemas']['SessionInfo'];
+export type SessionState = Session | components['schemas']['SetupSessionInfo'];
 export type Account = components['schemas']['Account'];
 export type AccountCreate = components['schemas']['AccountCreate'];
 export type ErrorCode = components['schemas']['ErrorCode'];
@@ -19,6 +20,8 @@ export class ApiError extends Error {
 export function unwrap<T>(result: { data?: T; error?: Envelope; response: Response }): T {
   if (result.error) {
     const error = result.error;
+    if (['unauthorized', 'forbidden', 'unavailable'].includes(error.error.code))
+      window.dispatchEvent(new Event('tabula:identity-check'));
     throw new ApiError(error.error.code, error.request_id, error.error.fields ?? []);
   }
   if (!result.response.ok || result.data === undefined) {
@@ -38,6 +41,7 @@ export function createApi(fetcher: typeof fetch = (...args) => fetch(...args)) {
     try { return await call(); }
     catch (error) {
       if (error instanceof ApiError || (error instanceof DOMException && error.name === 'AbortError')) throw error;
+      window.dispatchEvent(new Event('tabula:identity-check'));
       throw new ApiError('unavailable');
     }
   };
@@ -47,6 +51,14 @@ export function createApi(fetcher: typeof fetch = (...args) => fetch(...args)) {
   const createParams = (session: Session) => ({ ...listParams(session), headers: headers(session.csrf_token) });
   return {
     session: (signal?: AbortSignal) => safe(async () => unwrap(await client.GET('/api/v1/session', { signal, headers: headers() }))),
+    logout: (s: SessionState) => safe(async () => {
+      const result = await client.POST('/api/v1/auth/logout', { headers: headers(s.csrf_token) });
+      if (!result.response.ok) throw new ApiError(result.error?.error.code ?? 'unavailable');
+    }),
+    activity: (s: SessionState) => safe(async () => {
+      const result = await client.POST('/api/v1/auth/activity', { headers: headers(s.csrf_token) });
+      if (!result.response.ok) throw new ApiError(result.error?.error.code ?? 'unavailable');
+    }),
     entities: (signal?: AbortSignal) => safe(async () => unwrap(await client.GET('/api/v1/entities', { signal, headers: headers() }))),
     selectEntity: (s: Session, entity_id: string) => safe(async () => unwrap(await client.POST('/api/v1/session/entity',
       { body: { entity_id }, headers: headers(s.csrf_token) }))),
@@ -150,9 +162,9 @@ export function createApi(fetcher: typeof fetch = (...args) => fetch(...args)) {
         params: { path: { entity_id: s.entity.id, document_id: id }, query: { filename: file.name } },
         body: '', bodySerializer: () => file, headers: { ...headers(s.csrf_token), 'Content-Type': 'application/octet-stream' },
       }))),
-    downloadDocument: (s: Session, document_id: string) => safe(async () => unwrap(await client.GET(
+    downloadDocument: (s: Session, document_id: string, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
       '/api/v1/entities/{entity_id}/documents/{document_id}/content', {
-        params: { path: { entity_id: s.entity.id, document_id } }, headers: headers(), parseAs: 'blob',
+        params: { path: { entity_id: s.entity.id, document_id } }, headers: headers(), parseAs: 'blob', signal,
       }))),
     linkDocument: (s: Session, id: string, document_id: string) => safe(async () => unwrap(await client.POST(
       '/api/v1/entities/{entity_id}/transactions/{record_id}/receipts', { ...mutationParams(s, id), body: { document_id } }))),
