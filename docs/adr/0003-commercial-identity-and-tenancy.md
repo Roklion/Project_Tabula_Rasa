@@ -116,11 +116,49 @@ entitlements are introduced.
 | `bookkeeping:write`: normal CRUD, receipt upload/link/unlink, explicit recurring/depreciation posting | Yes | Yes | Yes | Yes | No |
 | `bookkeeping:import`: supported bulk bookkeeping imports | Yes | Yes | No | Yes | No |
 | `bookkeeping:export`: complete entity export/bulk handoff | Yes | Yes | No | Yes | No |
-| `entity:manage`: create another business, edit business/setup defaults | Yes | Yes | No | No | No |
-| `organization:manage`: workspace name/settings | Yes | Yes | No | No | No |
+| `entity:manage`: create another business, edit business/setup defaults | Yes | No | No | No | No |
+| `organization:manage`: workspace name/settings | Yes | No | No | No | No |
 | `members:manage`: list/invite/change/remove non-owners | Yes | Yes, restricted below | No | No | No |
-| `connections:manage`: connect/reconnect/disconnect external grants; inspect safe status | Yes | Yes | No | No | No |
+| `connections:manage`: connect/reconnect/disconnect external grants; inspect safe status | Yes | No | No | No | No |
 | `ownership:manage`: grant/revoke Owner, transfer ownership | Yes | No | No | No | No |
+| `backup:create` / `backup:download`: business recovery artifacts, separate from bookkeeping exports | Yes | No | No | No | No |
+| `recovery:authorize`: destructive restore, ledger migration and privileged business recovery | Yes | No | No | No | No |
+
+The Business Owner role is distinct from an ordinary user permitted to view or
+update entries. Owner-only administration and recovery authority cannot be
+inferred from Admin/Editor/Accountant status or a selected business. Existing
+bookkeeping import/export permissions remain distinct from backup and restore.
+The recovery capabilities above define authorization requirements, not new
+endpoints or permission to execute a migration. Preserve fresh authentication,
+profile/entity isolation, current backup validation, restoration to a new blank
+workbook and refusal to restore over the configured live workbook.
+
+Business Owners authorize recovery affecting their business. Platform operators
+execute approved infrastructure recovery without automatically becoming tenant
+Owners or gaining bookkeeping access. Tenant roles do not grant deployment
+credentials, local profile secrets or service-wide restore authority. #223 owns
+the separate service-wide incident/recovery procedure and its operator approval
+and audit requirements; a tenant Owner's approval cannot authorize changes to
+other businesses. There is no shared-password or synthetic break-glass login
+to books. Business recovery approval must identify the affected business,
+requested operation and authorized operator before destructive execution.
+At execution, verify that the approving Owner remains active and authorized for
+the affected business; otherwise stop and obtain a new authorized approval.
+Approval covers one execution of that operation, not standing recovery access;
+reconfirm current Owner authorization if execution is deferred or its scope or
+operator changes. #223 records approval and execution together in the recovery
+audit; no reusable bearer approval credential is implied.
+
+During transition, loopback-only Streamlit Business Profiles administration is
+a separate restricted internal operator interface. Commercial login, tenant
+roles and the business selector never unlock local credential/profile
+administration. Preserve its existing password, administrator reauthentication
+and loopback restrictions. Keep this listener out of public reverse-proxy and
+ingress routes: a loopback bind does not make a publicly relayed request local,
+and forwarded headers cannot grant administrator access.
+#319 coordinates retirement after in-app login,
+business creation and management fully replace its supported functions and
+the replacement is verified; do not retain it as a commercial bypass.
 
 Import requires `bookkeeping:write` AND `bookkeeping:import`; complete export
 requires `bookkeeping:read` AND `bookkeeping:export`. All other rows with a
@@ -285,15 +323,26 @@ without confirmation. Clearing an already expired/revoked session is
 idempotent and grants no private authority.
 [ZITADEL end-session contract](https://zitadel.com/docs/apis/openidoauth/endpoints#end_session_endpoint).
 
-Provider-only password reset/disable is **not** claimed to instantly revoke
-application cookies. Suspected compromise recovery must first disable/revoke
-the internal user and sessions, then recover/revoke provider credentials and
-verify a fresh login before re-enabling. #315/#321 must supply and rehearse this
-local administrative procedure before external beta. Uncoordinated provider
-changes have a maximum remaining application lifetime of 12 hours; do not
-substitute that bound for incident response. Automatic provider event ingestion
-is deferred unless release requirements demand it; never accept unsigned
-webhooks.
+Credential or key changes must revoke affected application sessions and require
+fresh login. User password/factor changes, forced account reset/recovery and
+provider compromise revoke that user's sessions across all organizations;
+unrelated users retain their sessions. Environment-wide OIDC client credentials,
+session security material or trusted provider signing-key changes revoke that
+environment's affected sessions and pending login transactions. Opaque sessions
+have no signing key; do not introduce one solely for rotation. Membership
+removal/demotion changes the affected organization's authority on the next
+request; global user disable blocks every organization and revokes all sessions.
+
+#312/#315/#321 must provide a verified provider event or coordinated operator
+revocation path for credential changes, including resets performed through
+hosted recovery. Never accept unsigned/unverified events or treat a JWKS cache
+refresh as proof that application sessions were revoked. Revoke application
+sessions as part of controlled rotation; if an external change cannot be
+reconciled safely, suspend affected access until revocation is confirmed.
+Suspected compromise recovery disables/revokes first, then recovers provider
+credentials and verifies fresh login before re-enabling. The ordinary 12-hour
+deadline is not a substitute for this invalidation requirement. #321 must
+rehearse both per-user and environment-wide changes before named hosted use.
 
 During an identity-provider outage new login/reauthentication fails closed.
 An already verified, unexpired application session may continue **only** with

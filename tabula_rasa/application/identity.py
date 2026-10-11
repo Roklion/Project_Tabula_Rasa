@@ -13,9 +13,10 @@ class IdentityError(Exception):
 READ = frozenset({'bookkeeping:read'})
 WRITE = READ | {'bookkeeping:write'}
 HANDOFF = WRITE | {'bookkeeping:import', 'bookkeeping:export'}
-ADMIN = HANDOFF | {'entity:manage', 'organization:manage', 'members:manage', 'connections:manage'}
+ADMIN = HANDOFF | {'members:manage'}
 ROLE_CAPABILITIES = {
-    'owner': ADMIN | {'ownership:manage', 'backup:create', 'backup:download',
+    'owner': ADMIN | {'entity:manage', 'organization:manage', 'connections:manage',
+                      'ownership:manage', 'backup:create', 'backup:download',
                       'restore:execute', 'migration:execute', 'recovery:authorize', 'business:admin'},
     'admin': ADMIN, 'editor': WRITE, 'accountant': HANDOFF, 'read_only': READ,
 }

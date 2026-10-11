@@ -28,7 +28,13 @@ Legacy Streamlit remains within its existing restricted deployment-wide-password
 profile-scoped Sheets/Drive boundary. Do not weaken its password, administrator
 reauthentication, loopback-only OAuth or backup rules. Do not retrofit a second
 Streamlit commercial ACL system for #13. #222 replaces that security model in
-the new runtime; disposition of #13 follows verified replacement.
+the new runtime; disposition of #13 follows verified replacement. Business
+Profiles administration remains a separate loopback-only internal operator
+interface during transition: commercial login or selecting a business does not
+unlock local credential/profile administration. #319 retires that interface
+once in-app login, business creation and management fully replace its supported
+functions and the replacement is verified. Do not expose it as a commercial
+fallback or remove its restrictions before that checkpoint.
 
 Named login does not migrate books or claim all configured profiles. #319's
 explicit dry-run/apply maps an approved internal user/org to existing canonical
@@ -38,8 +44,10 @@ No new session or identity provider can silently activate PostgreSQL authority
 or restore stale Sheets after target divergence.
 
 #312/#321 must introduce an explicit access mode contract:
-`restricted_alpha` versus `named`; missing/unknown mode denies startup.
-Production only permits `named`. Named mode rejects every alpha credential,
+`restricted_alpha` versus `named_user`; unknown mode denies startup.
+Named hosted deployments must explicitly select `named_user`; the existing
+restricted-alpha compatibility default is not a production admission gate.
+Named mode rejects every alpha credential,
 trusted entity, synthetic resolver and alpha-only document configuration,
 including on hosted development/staging. Existing `HttpSettings` currently
 requires alpha configuration on hosted dev/staging: extend that validation for
@@ -114,7 +122,7 @@ uses synthetic names, safe statuses and release/check IDs only.
 
 | Future setting / registration | Contract and owner |
 | --- | --- |
-| `TABULA_RASA_ACCESS_MODE` | #312/#321: explicit `named` or `restricted_alpha`, with the fail-closed stage rules above. |
+| `TABULA_RASA_ACCESS_MODE` | #312/#321: explicit `named_user` or `restricted_alpha`, with the stage rules above. |
 | `TABULA_RASA_PUBLIC_ORIGIN` | Existing exact origin, e.g. synthetic `https://stage.example.test`; loopback development uses `http://127.0.0.1:5173`. No path/trailing slash. |
 | `TABULA_RASA_OIDC_ISSUER` | #312: exact operator-approved environment issuer; use its verified discovery endpoints, never a browser-selected URL. |
 | `TABULA_RASA_OIDC_CLIENT_ID` / `TABULA_RASA_OIDC_CLIENT_SECRET` | #312: dedicated environment Web client; secret is server-only and hidden in settings repr/errors. |
@@ -126,15 +134,38 @@ uses synthetic names, safe statuses and release/check IDs only.
 
 These names must be validated and documented as implemented in #312/#321,
 rather than silently becoming optional fallbacks. Provider client-secret
-rotation requires a coordinated worker restart and invalidates this environment's
-issued sessions/login transactions. User credential changes/forced resets revoke
-that user's sessions across organizations; do not revoke other users for a
-user-specific change. This follows the maintainer's #310 decision and supersedes
-the earlier retain-sessions suggestion. See [rotation and recovery](NAMED_USER_AUTH.md#revocation-and-owner-recovery).
+rotation interrupts new logins until configured coherently and revokes affected
+application sessions and pending login transactions. User credential changes,
+forced resets/recovery and compromise revoke that user's sessions across
+organizations; environment-wide identity/session security or trusted provider
+key changes revoke affected sessions within that environment. Require fresh
+login, preserve unrelated users/environment isolation, and verify revocation
+through the ADR's coordinated operator or authenticated provider-event path.
+The implemented path requires a coordinated worker restart; see
+[rotation and recovery](NAMED_USER_AUTH.md#revocation-and-owner-recovery).
 Issuer/client changes require reauthentication and explicit binding migration;
 never remap existing users by email. Restoring PostgreSQL/control-plane state
 must invalidate restored sessions/login transactions before ingress reopens
 (#223): restored revoked credentials must not become live again.
+
+## Business recovery and operator authority (#223/#313/#319)
+
+Follow the ADR's explicit Owner-only backup, recovery, entity/workspace and
+connection administration capabilities. Ordinary bookkeeping imports/exports
+retain their separate role rules; a complete export is not destructive restore
+authority. Business Owners approve backup/download, destructive restore,
+migration and privileged recovery for their own businesses. Platform operators
+execute approved infrastructure recovery without implicit ownership or ledger
+access. Record business, operation, owner approval and operator identity before
+destructive business recovery. At execution, verify the approving Owner is still
+active and authorized for the business; otherwise stop for a new authorized
+approval. Approval covers one execution; reconfirm current
+Owner authorization after deferral or a scope/operator change and record the
+execution with that approval. Keep the legacy administrator's loopback listener
+outside public proxy/ingress routes; forwarded headers confer no local authority.
+#223 separately owns service-wide incident
+approval and audit. Tenant roles never grant deployment/local profile secrets.
+No new recovery/admin endpoint or live execution is authorized by this contract.
 
 ## Invitation and ownership policy (#315/#316)
 
@@ -209,6 +240,9 @@ are requirements for downstream executable tests, **not tests delivered in #310*
 | T14: account/entity switch, revoked tab, slow prior-scope response, logout → another login | Cancel queries/unmount drafts/uploads, revoke object URLs, clear selections; old responses never populate a new ScopeBoundary. No private persistent browser cache. Successful permitted multi-org switching remains usable. | #312/#314/#317/#320 |
 | T15: production/external accidentally configured alpha; restored session replay; unsafe rollback | Reject synthetic/Basic/development cookie configuration, reject restored sessions before ingress, and never roll external deployment back to an alpha bypass image. Safe schema-compatible named-session rollback is rehearsed. | #312/#321/#223 |
 | T16: private route added without policy; privileged valid request bypasses baseline/accounting checks | Route inventory test requires declared identity/capability policy before composition on every private route/byte/export family. Authorized stale edits still fail; valid bookkeeping retains invariants. | #313/#320 |
+| T17: non-owner backup/restore/migration/admin request or platform operator treated as tenant Owner | Owner succeeds only within the approved business and supported recovery procedure; other tenant roles deny owner-only capabilities. Infrastructure operator authority alone grants no business access. Preserve blank-target restore and current backup validation; record owner approval separately from execution. | #313/#319/#223 |
+| T18: credential/key change, forced reset or provider recovery with old sessions | User change revokes that user's sessions in every organization; unrelated users remain authorized. Environment-wide change revokes affected sessions/login transactions in that environment only. Copied old cookies deny after confirmed revocation; fresh named login succeeds. Provider events must be authenticated or use coordinated operator revocation; no deadline-only fallback. | #312/#315/#321 |
+| T19: commercial user reaches legacy profile administration or premature retirement | Login, role and business selection confer no legacy local credential access. Existing loopback/operator restrictions persist until replacement login/creation/management is verified; after retirement the legacy administration surface is unavailable. | #319/#320/#321 |
 
 Denials and assertions must use synthetic data. Captured logs/HTTP errors must
 exclude email, authorization codes, cookies, provider tokens, invitation
@@ -229,7 +263,7 @@ separate operator-authorized evidence, not mocked proof.
 | [#317](https://github.com/Roklion/Project_Tabula_Rasa/issues/317) | #312/#316 and #314 shell; #315 acceptance when available | needs_setup to first ledger journey; start-fresh separated from operator migration. Optional invite/connection steps only when ready. Browser recovery/accessibility/cache evidence. |
 | [#318](https://github.com/Roklion/Project_Tabula_Rasa/issues/318) | #311/#313 connection capability; existing profile-scoped Google OAuth and DocumentStore | Authorized org/entity metadata + protected secret references, bind before bytes, safe connect/status/revoke. Login tokens never replace Google grants; object-store selection/recovery stays #223. |
 | [#319](https://github.com/Roklion/Project_Tabula_Rasa/issues/319) | #311/#313 and #318 as relevant; existing migrated authority/entity-profile binding | Explicit approved legacy ownership dry-run/idempotent mapping with two-profile/native restart evidence. No remigration or live execution; #303 consumes result. |
-| [#320](https://github.com/Roklion/Project_Tabula_Rasa/issues/320) | Start with #313 policy; complete alongside covered slices | Execute T01–T16 with real disposable PostgreSQL + HTTP/browser, route inventory, synthetic safe evidence/gap register. Provider-hosted cases require #321 checkpoint; #224 decides beta. |
+| [#320](https://github.com/Roklion/Project_Tabula_Rasa/issues/320) | Start with #313 policy; complete alongside covered slices | Execute T01–T19 with real disposable PostgreSQL + HTTP/browser, route inventory, synthetic safe evidence/gap register. Provider-hosted cases require #321 checkpoint; #224 decides beta. |
 | [#321](https://github.com/Roklion/Project_Tabula_Rasa/issues/321) | #312–#314/#320 plus stage/provider checklist, Render/Neon release path | Named synthetic-user staging, cookie/login/logout/revoke/switch/bytes/export/outage and compatible rollback evidence. Reject alpha in named mode; coordinate #288/#303/#223/#224 without authorizing their unfinished gates. |
 
 The safe order is decision → #311/#312 → #313 → independent #314/#315/#316/

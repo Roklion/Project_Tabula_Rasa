@@ -94,8 +94,10 @@ Credential changes/forced resets must call the trusted
 `revoke_user_sessions(user_id)` operation before declaring local recovery
 complete. An authenticated user can use CSRF-protected
 `POST /api/v1/auth/revoke-all`; others' sessions are unaffected. Provider-only
-password/MFA resets do not notify this app automatically: without local
-revocation, existing sessions remain bounded by their ordinary deadlines.
+password/MFA resets do not notify this app automatically. Coordinate local
+revocation with provider recovery and verify that copied credentials fail;
+ordinary session deadlines are not a substitute. If an external change cannot
+be reconciled safely, suspend affected access until revocation is confirmed.
 
 Issuer, client, client-secret, public-origin or session-generation changes
 increment the durable environment epoch on coordinated named-runtime startup.
