@@ -64,6 +64,9 @@ test('representative account form and table reflow with long labels', async ({ p
 });
 
 test('shared global styles leave every existing route family reachable', async ({ page }) => {
+  // This sweep loads and captures 48 pages; hosted runners need more than the
+  // single-page default budget. Keep each assertion's normal failure timeout.
+  test.setTimeout(120_000);
   for (const width of [1440, 320]) {
     await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
     for (const route of ['/', '/reports', '/transactions', '/transactions/new', '/journals/new', '/journals',
