@@ -192,7 +192,20 @@ bookkeeping DTOs or application logs.
 6. Discard provider access/ID tokens after verified mapping. Do not persist
    refresh tokens, put them in cookies, or make them bookkeeping bearer tokens.
 
-PKCE remains enabled alongside confidential-client authentication.
+PKCE remains enabled alongside confidential-client authentication. In the
+ZITADEL Web application choose **Basic Auth** (`client_secret_basic`), not the
+public-client **PKCE** (`none`) authentication option. Send the S256 challenge
+on authorization and the matching verifier with HTTP Basic client credentials
+on the token request. These are separate checks: ZITADEL's
+[client verification](https://github.com/zitadel/zitadel/blob/ad835efbc3f6115ab4f84230616b018d4d5b4c54/internal/api/oidc/client.go#L216)
+checks the Basic client secret, while its
+[code-exchange implementation](https://github.com/zitadel/zitadel/blob/ad835efbc3f6115ab4f84230616b018d4d5b4c54/internal/api/oidc/token_code.go#L126)
+checks a supplied challenge even for authenticated clients. The provider's
+[Web application overview](https://zitadel.com/docs/guides/manage/console/applications-overview#web)
+also recommends PKCE with a client secret. #312/#321 must verify this combined
+exchange on their configured hosted client, including rejection of an incorrect
+verifier and missing/incorrect client secret; source evidence is not hosted
+acceptance evidence.
 [ZITADEL code flow](https://zitadel.com/docs/guides/integrate/login/oidc/login-users),
 [client authentication](https://zitadel.com/docs/apis/openidoauth/authn-methods),
 [OIDC validation](https://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation)

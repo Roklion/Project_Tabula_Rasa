@@ -66,8 +66,12 @@ uses synthetic names, safe statuses and release/check IDs only.
    callback, fixture user or session database is valid for production.
    Instance separation protects login/recovery policy as well as client secrets.
 3. Create a project and **Web OIDC application** for each environment, using
-   code flow with S256 PKCE and `client_secret_basic`. Use hosted login rather
-   than operating a custom login service. Verify discovery issuer/JWKS and
+   code flow with S256 PKCE and `client_secret_basic`: choose **Basic Auth**
+   for the Web client's authentication method; FastAPI separately sends the S256
+   challenge/verifier. Do not choose the public-client **PKCE** (`none`) option.
+   Verify the combined exchange and wrong-verifier/wrong-or-missing-secret
+   rejection as described in [ADR 0003](adr/0003-commercial-identity-and-tenancy.md).
+   Use hosted login rather than operating a custom login service. Verify discovery issuer/JWKS and
    configured signing algorithm support. Do not configure provider organization
    roles as application bookkeeping permissions.
 4. Register only exact origins/URLs in the table below. No wildcard callbacks,
