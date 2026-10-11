@@ -85,6 +85,21 @@ def test_document_identity_locator_conflict_and_failure_keep_uploaded_bytes(data
     assert repo.register_document(document) == document
 
 
+def test_retained_binding_check_uses_only_selected_entity(database):
+    alpha, beta, store = setup(database)
+    alpha.receipts.process_recovery({'transaction_id': 'txn', 'receipts': prepared()})
+    document, = alpha.receipts.references('txn')
+    alpha.receipts.unlink('txn', document.storage_key)
+    alpha.receipts.repository.validate_binding()
+    for kind, scope in [('fake', 'other-folder'), ('other-provider', store.scope_key)]:
+        with pytest.raises(DocumentValidationError, match='original document-store binding'):
+            PostgresReceiptRepository(database, 'alpha', store_kind=kind, store_scope_key=scope).validate_binding()
+        # No beta metadata: alpha's persisted scope must not constrain beta.
+        PostgresReceiptRepository(database, 'beta', store_kind=kind, store_scope_key=scope).validate_binding()
+    beta.receipts.repository.validate_binding()
+    assert store.delete_calls == 0
+
+
 def test_invalid_integrity_metadata_is_refused_without_a_partial_link(database):
     alpha, _, _ = setup(database)
     document = DocumentReference('alpha', DocumentMetadata(

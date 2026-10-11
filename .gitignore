@@ -10,6 +10,7 @@ __pycache__/
 .streamlit/secrets*.toml
 .streamlit/*.json
 tabula-rasa-streamlit-secrets-*.toml
+tabula-rasa-alpha-documents-*.toml
 *service-account*.json
 *service_account*.json
 google-credentials*.json

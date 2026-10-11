@@ -9,7 +9,7 @@ from tabula_rasa.business_profiles import (
     select_profile_secrets,
 )
 from tabula_rasa.infrastructure.google_sheets import GoogleSheetsLedgerSetupRepository
-from tabula_rasa.infrastructure.google_drive_documents import GoogleDriveDocumentStore
+from tabula_rasa.infrastructure.drive_composition import create_drive_document_store
 from tabula_rasa.infrastructure.google_sheets_mileage import GoogleSheetsMileageRepository
 from tabula_rasa.infrastructure.google_sheets_receipts import GoogleSheetsReceiptRepository
 from tabula_rasa.infrastructure.google_sheets_reporting import GoogleSheetsLedgerQueryRepository
@@ -68,18 +68,8 @@ def _backend_configuration(profile_key, secrets, *, explicit=False):
 
 
 def _document_store(profile_key, selected_secrets, secrets, drive_client_factory):
-    drive_settings = selected_secrets.get("google_drive")
-    receipt_folder = drive_settings.get("receipt_folder") if isinstance(drive_settings, Mapping) else None
-    folder_id = str(receipt_folder.get("id", "")) if isinstance(receipt_folder, Mapping) else ""
-
-    def create_drive_client():
-        from tabula_rasa.google_drive import GoogleDriveClient, GoogleDriveConfigurationError, load_oauth_config
-        if not isinstance(drive_settings, Mapping):
-            raise GoogleDriveConfigurationError("Google Drive is not connected for this business profile.")
-        return GoogleDriveClient(load_oauth_config(secrets), drive_settings)
-
-    return GoogleDriveDocumentStore(profile_key, folder_id,
-                                    drive_client_factory if drive_client_factory is not None else create_drive_client)
+    return create_drive_document_store(profile_key, selected_secrets, secrets,
+                                       client_factory=drive_client_factory)
 
 
 def create_application(profile_key, secrets, *, database=None, drive_client_factory=None):

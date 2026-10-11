@@ -52,15 +52,15 @@ Before dispatch:
 1. Promote the selected current-CI-approved immutable main image through #279.
    Record image index/runtime-manifest digests, exact release SHA, schema revision,
    migration/promotion run and private target-binding reference.
-2. Supply an explicitly authorized, durable, staging-scoped DocumentStore via
-   the existing `create_app` runtime/service-composition seam. Preserve portable
-   IDs and store/entity scope. The default `open_runtime` has **no byte store**;
-   its availability screen cannot satisfy the required receipt workflow. Do not
-   inject production profile grants, substitute an in-memory provider or silently
-   omit receipts. #233/#251/#283 already implement the layer, metadata and UI/API;
-   a new provider or hosted binding needs a narrow tracked implementation before
-   this prerequisite can be marked complete. Document-byte recovery/versioning
-   remains #223, with customer retention/lifecycle under #224.
+2. Configure the default runtime's durable Google Drive binding using
+   [Hosted synthetic receipt storage](ALPHA_DOCUMENT_STORAGE.md). It loads only
+   the explicitly supplied `TABULA_RASA_ALPHA_DOCUMENTS_FILE`, validates the exact
+   environment/origin/entity and independent synthetic profile/folders, and
+   composes the existing #233/#251/#283 services. Without that file, receipts
+   remain unavailable; the availability screen cannot satisfy this gate. Do not
+   inject production grants or substitute an in-memory provider. Run the same
+   binding's read-only preflight and retain private setup evidence. Document-byte
+   recovery/versioning remains #223, with customer retention/lifecycle under #224.
 3. Confirm this is restricted synthetic staging, pause manual promotions/writers,
    record accepted provider limits and authorize the bounded creates/removals.
    Dispatch on `main` with the exact deployed SHA and `allow_synthetic_writes=true`.
@@ -123,11 +123,11 @@ for inspection under existing #279 rules.
 | Workflow | Browser/API availability | Remaining internal/reference path and tracker |
 | --- | --- | --- |
 | Accounts/categories/payees/tags, ordinary transactions/journals, ledger/core reports | Implemented new-stack routes; no redirect to legacy UI | Streamlit remains a behavioral reference for unmigrated Sheets profiles. #281/#282 are complete. |
-| Ordinary transaction receipts | Implemented, available only with configured DocumentStore | Hosted provider binding above remains an explicit #288 prerequisite; source-owned receipt flows remain internal. |
-| Recurring schedules and mixed-use sources/projections | Implemented under #284: create/edit, schedule state changes, explicit reconciliation and source/projection management | Outside the default alpha. Internal copy/conversion and source receipts remain internal; durable generation independent of page loads is #223. See [secondary workflows](COMMERCIAL_SECONDARY_WORKFLOWS.md). |
-| Fixed assets and depreciation | Implemented under #285: register/detail/edit, schedules, explicit due posting, overrides and retirement | Outside the default alpha. Source receipts remain internal; additional mixed-use asset behavior remains #121. See [secondary workflows](COMMERCIAL_SECONDARY_WORKFLOWS.md). |
-| Manual mileage log/filter/CSV/detail | Implemented under #286 | Maps/routing and QuickBooks import remain internal; record them as explicit #221 follow-up scope before their migration or retirement. |
-| Transaction CSV/QuickBooks imports, bulk actions, filtered financial CSV/report download, category template import | Not exposed by current browser routes | Explicit #221 follow-up scope is needed; #282's core CRUD/read completion does not establish these paths. |
+| Ordinary transaction receipts | Implemented; default hosted runtime accepts the explicit Drive binding above | Operator grant/folder installation and real-provider verification remain required; mixed-use source receipts are draft TA-5 below. Asset acquisition receipts stay on the ordinary acquisition transaction. |
+| Recurring schedules and mixed-use sources/projections | Implemented under #284: create/edit, schedule state changes, explicit reconciliation and source/projection management | Outside the default alpha. Internal copy/conversion: draft TA-6; mixed-use source receipts: draft TA-5. Templates do not own receipts. Durable generation independent of page loads remains #223. See [secondary workflows](COMMERCIAL_SECONDARY_WORKFLOWS.md). |
+| Fixed assets and depreciation | Implemented under #285: register/detail/edit, schedules, explicit due posting, overrides and retirement | Outside the default alpha. Acquisition transaction owns receipts; generated depreciation has no independent receipt/copy/import action. Additional mixed-use asset behavior remains #121. See [secondary workflows](COMMERCIAL_SECONDARY_WORKFLOWS.md). |
+| Manual mileage log/filter/CSV/detail | Implemented under #286 | Maps/routing: draft TA-7; QuickBooks import: draft TA-8. Existing #158 owns proposed mileage bulk workflows; its commercial adapter scope must be recorded before enabling them. |
+| Transaction CSV/QuickBooks imports; financial bulk actions/copy; financial CSV/report download; category template import | Not exposed by current browser routes | Draft TA-1, TA-2, TA-3 and TA-4 respectively; #282's core CRUD/read completion does not establish these paths. |
 | Sheets workbook/backup administration and restore | `/data` is an availability page; no live-ledger fallback | #220/#261 preserve frozen format-13 internal recovery; #223 owns operational backup/recovery; #260 supplies complete PostgreSQL operator export and #224 owns customer delivery. |
 | Google/profile/local credential administration | Not a commercial browser workflow | #222 owns native onboarding/authorization; #303 consumes authorized owner bindings. Do not port deployment-password/all-profile access as commercial identity. |
 
@@ -135,6 +135,10 @@ Unticketed narrow gaps above are an explicit remaining tracker task, not a claim
 that broad parent issues have already implemented them. Creating GitHub issues
 requires GitHub-write authorization. #288 must link the resulting narrow tickets
 or an explicit owner-approved retirement decision before acceptance.
+The [ready-to-post transition tracker drafts](TECHNICAL_ALPHA_TRACKING_DRAFTS.md)
+enumerate each uncovered workflow, existing owners and bounded acceptance scope.
+Draft IDs are local references, **not GitHub issue numbers**. Publication/linking
+or owner-approved exclusions remain operator work; none is silently retired.
 
 Choose one authoritative backend per entity through the existing cutover contract.
 An unmigrated Sheets entity keeps its authorized internal runtime. A PostgreSQL
@@ -170,7 +174,7 @@ changes. Reference private records without publishing their contents.
 | #279 hosted prerequisites | Closed issue #279 records independently configured Render dev/staging, retained Neon UAT and successful staging promotion [37951248477](https://github.com/Roklion/Project_Tabula_Rasa/actions/runs/37951248477). Reverify the selected alpha candidate. |
 | Release / schema / image / binding | Record exact SHA, both digest forms, forward schema revision and private environment binding reference. |
 | Current required CI / reviews | Link the candidate's successful Full test suite and satisfied review conditions; earlier green heads do not qualify. |
-| Essential staging DocumentStore | Pending hosted binding and real-provider verification; default runtime is unconfigured. |
+| Essential staging DocumentStore | Runtime file loader, Drive adapter composition and read-only preflight implemented. Operator grant/folder installation and real-provider verification remain pending. |
 | Staging six-case alpha suite | Pending authorized execution; retain run marker, workflow URL and all case results. |
 | Application rollback rehearsal | Pending compatible prior/candidate staging deployments and smoke links. |
 | Manual browser/device pass | Pending named tester/date, actual browser versions/devices, touch/keyboard, zoom/reflow, visible focus and screen-reader observations per #287. Track material findings before acceptance. |

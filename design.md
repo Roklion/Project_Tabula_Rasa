@@ -362,8 +362,13 @@ owns this slice's transport, recovery and validation contract.
 [Secondary workflows](docs/COMMERCIAL_SECONDARY_WORKFLOWS.md) delivers #284/#285.
 [Browser quality](docs/COMMERCIAL_BROWSER_QUALITY.md)
 documents #287's completed automated baseline. [Technical alpha](docs/TECHNICAL_ALPHA.md)
-defines the release/routing matrix and outstanding hosted receipt binding,
+defines the release/routing matrix and outstanding hosted receipt configuration,
 staging, rollback and manual-device gates; no internal workflow is retired.
+The default hosted synthetic runtime can bind the existing receipt UI through
+the explicit server-only [Drive file configuration](docs/ALPHA_DOCUMENT_STORAGE.md).
+Absent configuration retains the availability screen; invalid supplied bindings
+stop startup. No credential controls or Google authorization routes are added to
+the commercial browser.
 The Streamlit-specific shell requirements above continue to govern the internal
 edition.
 

@@ -122,7 +122,7 @@ jobs:
         run: |
           SCHEMA=$(python -c 'from tabula_rasa.infrastructure.postgres.migrations import head_revision; print(head_revision())')
           docker build --platform linux/amd64 --build-arg RELEASE_ID="$GITHUB_SHA" --build-arg SCHEMA_REVISION="$SCHEMA" -f deploy/commercial/Dockerfile -t tabula-commercial:ci .
-          docker run --rm tabula-commercial:ci python -c 'import sys; from tabula_rasa.http.app import create_app; create_app(schema_only=True).openapi(); assert "streamlit" not in sys.modules'
+          docker run --rm tabula-commercial:ci python -c 'import sys; from tabula_rasa.http.app import create_app; from tabula_rasa.http.alpha_documents import load_alpha_document_store; create_app(schema_only=True).openapi(); assert not {"streamlit", "gspread", "tabula_rasa.storage"}.intersection(sys.modules)'
       - run: python -m playwright install --with-deps chromium firefox webkit
       - name: Run native browser concurrency and core workflow tests
         run: python -m pytest tests/postgres/test_browser_baselines.py tests/postgres/test_browser_workflows.py tests/postgres/test_browser_quality.py tests/postgres/test_browser_mileage_documents.py tests/postgres/test_browser_secondary.py tests/postgres/test_browser_alpha.py --junitxml=browser-results.xml
