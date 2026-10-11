@@ -286,8 +286,19 @@ def run(environ, release, *, allow_writes=False):
                             options = dict(base_url=origin, http_credentials={'username': username, 'password': password},
                                            viewport={'width': width, 'height': height})
                             with operation('context_open'):
-                                with browser.new_context(**options) as context, browser.new_context(**options) as peer:
-                                    journey(context, peer, origin=origin, entity='alpha-synthetic', marker=f'Alpha-{run_id}-{engine}-{width}')
+                                # Context exits can raise while unwinding a labeled failure.
+                                journey_error = None
+                                try:
+                                    with browser.new_context(**options) as context, browser.new_context(**options) as peer:
+                                        try:
+                                            journey(context, peer, origin=origin, entity='alpha-synthetic', marker=f'Alpha-{run_id}-{engine}-{width}')
+                                        except AlphaError as error:
+                                            journey_error = error
+                                            raise
+                                except Exception:
+                                    if journey_error is not None:
+                                        raise journey_error from None
+                                    raise
                             print(json.dumps({'run': run_id, 'engine': engine, 'width': width, 'height': height, 'status': 'passed'}), flush=True)
                     except Exception:
                         failed = True

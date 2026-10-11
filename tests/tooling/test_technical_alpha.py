@@ -148,6 +148,41 @@ def test_success_runs_every_engine_viewport_and_both_smokes(monkeypatch, capsys)
     assert all(row['status'] == 'passed' for row in records[1:])
 
 
+@pytest.mark.parametrize('journey_fails', [True, False])
+@pytest.mark.parametrize('closing_context', [0, 1])
+def test_context_teardown_preserves_journey_failure(monkeypatch, capsys, journey_fails, closing_context):
+    import playwright.sync_api
+    manager = MagicMock()
+    monkeypatch.setattr(playwright.sync_api, 'sync_playwright', Mock(return_value=manager))
+    browser = manager.__enter__.return_value.firefox.launch.return_value
+    contexts = [MagicMock(), MagicMock()]
+    browser.new_context.side_effect = contexts
+    contexts[closing_context].__exit__.side_effect = RuntimeError('PRIVATE teardown payload')
+    monkeypatch.setattr(alpha, 'ENGINES', ('firefox',))
+    monkeypatch.setattr(alpha, 'WIDTHS', (390,))
+    smoke = Mock()
+    monkeypatch.setattr(alpha, 'smoke', smoke)
+
+    def journey(*args, **kwargs):
+        if journey_fails:
+            with alpha.operation('receipt_attach'):
+                raise RuntimeError('PRIVATE journey payload')
+
+    monkeypatch.setattr(alpha, 'journey', journey)
+    with pytest.raises(alpha.AlphaError) as result:
+        alpha.run(ENV, RELEASE, allow_writes=True)
+    expected = 'receipt_attach' if journey_fails else 'context_open'
+    assert result.value.operation == expected and result.value.__context__ is None
+    records = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert records[-1]['operation'] == expected and records[-1]['status'] == 'failed'
+    assert not any(row['status'] == 'passed' for row in records)
+    assert 'PRIVATE' not in json.dumps(records) + ''.join(traceback.format_exception(result.value))
+    assert smoke.call_count == 1
+    browser.close.assert_called_once()
+    for context in contexts:
+        context.__exit__.assert_called_once()
+
+
 def test_invalid_release_never_enters_diagnostics(monkeypatch, capsys):
     smoke = Mock()
     monkeypatch.setattr(alpha, 'smoke', smoke)
