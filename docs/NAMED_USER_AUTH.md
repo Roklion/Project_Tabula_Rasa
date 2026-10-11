@@ -84,7 +84,10 @@ it does not claim a copied credential was revoked.
 Membership roles are Owner, Admin, Editor, Accountant and Read-only. Role/state
 changes increment the authorization version. Missing/inactive membership,
 suspended organizations, inactive ownership, disabled users and unknown roles
-grant no entity context. Active organizations require an active Owner; native
+grant no entity context for that business. If the selected business loses access
+but another authorized business remains, validation persists an available
+authorized selection and the browser replaces its private scope. Only users
+with no available business receive needs_setup. Active organizations require an active Owner; native
 deferred constraints and serialized organization locks protect role changes,
 membership removals, user disable and reactivation. Transfer ownership first,
 or explicitly suspend the organization before removing its last active Owner.

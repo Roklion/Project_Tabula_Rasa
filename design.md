@@ -287,6 +287,10 @@ expose a raw traceback for this configuration failure.
   drafts and receipt views; confirmed identity/scope/version changes remount the
   existing private boundary. Visible tabs recheck on focus/pageshow/visibility
   and every 60 seconds. Same-origin sign-out signals contain no private data.
+- If selected business access is removed while another authorized business
+  remains, session validation selects an available authorized business and the
+  private boundary remounts. Workspace setup required appears only when no
+  available business remains.
 - Logout clears the local browser even when server revocation cannot be
   confirmed, and displays a safe failure instead of claiming durable success.
   Read-only and setup users can inspect identity and sign out without ledger

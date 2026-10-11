@@ -116,8 +116,14 @@ class PostgresSessionRepository:
                 {'hash': credential_hash(raw), 'env': self.environment, 'epoch': self._epoch(connection), 'now': now}).mappings().first()
             if row is None:
                 raise IdentityError('unauthorized')
-            selected = next((item for item in entity_access(connection, row['user_id'])
+            choices = entity_access(connection, row['user_id'])
+            selected = next((item for item in choices
                              if item.entity_id == row['entity_id'] and item.organization_id == row['organization_id']), None)
+            if selected is None and choices:
+                selected = choices[0]
+                connection.execute(text('''UPDATE identity_sessions SET organization_id=:org,entity_id=:entity
+                    WHERE credential_hash=:hash'''),
+                    {'org': selected.organization_id, 'entity': selected.entity_id, 'hash': row['credential_hash']})
             if foreground:
                 connection.execute(text('UPDATE identity_sessions SET idle_expires_at=:expiry WHERE credential_hash=:hash'),
                     {'expiry': min(now + timedelta(minutes=30), row['absolute_expires_at']), 'hash': row['credential_hash']})

@@ -93,3 +93,25 @@ it('unmounts private UI even when server-side logout cannot be confirmed', async
   expect(screen.queryByText('Private ledger')).not.toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Sign in' })).toBeVisible();
 });
+
+it('replaces private scope when validation recovers to another authorized business', async () => {
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  vi.spyOn(api, 'session').mockResolvedValueOnce({ ...session, trusted_development: false })
+    .mockResolvedValue({ ...session, organization_id: 'other-org',
+      entity: { id: 'beta', name: 'Beta' }, trusted_development: false });
+  vi.spyOn(api, 'entities').mockResolvedValue({ items: [session.entity, { id: 'beta', name: 'Beta' }] });
+  const caches: QueryClient[] = [];
+  function Feature() {
+    const cache = useQueryClient();
+    if (!caches.includes(cache)) caches.push(cache);
+    return <input aria-label="Recovery draft" defaultValue="" />;
+  }
+  render(<ContextBoundary><Feature /></ContextBoundary>);
+  fireEvent.change(await screen.findByLabelText('Recovery draft'), { target: { value: 'Alpha draft' } });
+  caches[0].setQueryData(['private'], 'Alpha cached data');
+  fireEvent(window, new Event('focus'));
+  await waitFor(() => expect(caches).toHaveLength(2));
+  expect(screen.getByLabelText('Recovery draft')).toHaveValue('');
+  await waitFor(() => expect(caches[0].getQueryCache().getAll()).toHaveLength(0));
+  expect(caches[1].getQueryData(['private'])).toBeUndefined();
+});

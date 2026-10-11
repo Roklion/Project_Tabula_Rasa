@@ -122,6 +122,35 @@ def test_single_use_browser_bound_login_and_expiry(database):
         sessions.consume_login(raw, transaction.state)
 
 
+@pytest.mark.parametrize('loss', ['membership', 'organization', 'entity'])
+def test_lost_selection_recovers_only_to_remaining_authorized_workspace(database, loss):
+    repo, alice, bob, a, b = setup(database)
+    repo.set_membership(b, alice.id, 'read_only')
+    sessions = PostgresSessionRepository(database, 'test', 'a' * 64)
+    sessions.configure()
+    raw, _ = sessions.issue(verified())
+    original = sessions.select(raw, 'alpha')
+    if loss == 'membership':
+        repo.set_membership(a, bob.id, 'owner')
+        repo.set_membership(a, alice.id, 'owner', active=False)
+    elif loss == 'organization':
+        repo.set_organization_state(a, 'suspended')
+    else:
+        with database.transaction() as connection:
+            connection.execute(text("UPDATE organization_entities SET state='inactive' WHERE entity_id='alpha'"))
+    recovered = sessions.validate(raw)
+    assert recovered.selected.entity_id == 'beta'
+    assert recovered.selected.organization_id == b and recovered.selected.role == 'read_only'
+    assert recovered.cache_id == original.cache_id
+    with database.transaction(read_only=True) as connection:
+        assert connection.scalar(text('SELECT entity_id FROM identity_sessions')) == 'beta'
+    assert sessions.validate(raw).selected == recovered.selected
+    assert {item.entity_id for item in repo.allowed_entities(bob.id)} == (
+        {'alpha', 'beta'} if loss == 'membership' else {'beta'})
+    repo.set_membership(b, alice.id, 'read_only', active=False)
+    assert sessions.validate(raw).selected is None
+
+
 def test_selection_joins_one_connection_and_rejects_foreign_entity(database):
     from sqlalchemy import event
     setup(database)
