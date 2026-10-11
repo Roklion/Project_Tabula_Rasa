@@ -71,8 +71,11 @@ uses synthetic names, safe statuses and release/check IDs only.
    challenge/verifier. Do not choose the public-client **PKCE** (`none`) option.
    Verify the combined exchange and wrong-verifier/wrong-or-missing-secret
    rejection as described in [ADR 0003](adr/0003-commercial-identity-and-tenancy.md).
-   Use hosted login rather than operating a custom login service. Verify discovery issuer/JWKS and
-   configured signing algorithm support. Do not configure provider organization
+   Use hosted login rather than operating a custom login service. Verify discovery issuer/JWKS,
+   configured signing algorithm support and the mandatory UserInfo request:
+   with the default code-flow client, its subject must match the validated ID
+   token and its email must be nonempty with boolean `email_verified=true`.
+   Do not depend on optional email claims inside the ID token. Do not configure provider organization
    roles as application bookkeeping permissions.
 4. Register only exact origins/URLs in the table below. No wildcard callbacks,
    transient preview hosts or forwarded-host construction. Keep same-origin
@@ -184,7 +187,7 @@ are requirements for downstream executable tests, **not tests delivered in #310*
 | ID / attack | Required observable result | Primary owner |
 | --- | --- | --- |
 | T01: anonymous, forged/tampered, expired, revoked or wrong-environment cookie | Private APIs/bytes deny 401 before any ledger/document/secret composition; safe request ID, no credential/private echo. Valid fresh login succeeds and persists across worker/restart. | #312/#320 |
-| T02: wrong issuer/audience/algorithm/signature/nonce/state, reused code, unverified email or stale auth_time | No app session/membership created; concurrent callbacks consume at most once. Changed email never takes over an existing internal identity. | #311/#312 |
+| T02: wrong issuer/audience/algorithm/signature/nonce/state, reused code, unverified email or stale auth_time | No app session/membership created; concurrent callbacks consume at most once. Default code-flow login succeeds using mandatory UserInfo with matching subject and verified email; missing/malformed email claims, false email_verified, subject mismatch or UserInfo failure deny login. Changed email never takes over an existing internal identity. | #311/#312 |
 | T03: forged entity in route/body/header/selection cookie | Uniform safe 403 for foreign/missing/inactive ownership; no existence leak, services or grants bound. An authorized selector succeeds only after server validation. | #313/#320 |
 | T04: role value or provider role claim changed by client | Server's current role matrix wins. Read-only cannot mutate/upload/import/export; it can read permitted receipts, inspect session, switch and log out. Unknown action/role denies. | #313/#314 |
 | T05: member demoted/removed, user disabled or org suspended with an open session | Next protected request after committed change denies/reduces authority. Version changes replace browser scope on its next check; visible tabs recheck within 60 seconds/focus. Other authorized orgs remain independently accessible. | #313/#315/#314 |

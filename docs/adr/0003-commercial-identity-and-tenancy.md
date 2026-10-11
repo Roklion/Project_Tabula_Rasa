@@ -179,9 +179,13 @@ bookkeeping DTOs or application logs.
 4. Validate the ID token's signature with configured algorithm allowlist and
    issuer JWKS, exact issuer, audience/authorized-party rules, expiry,
    issued-at/not-before when present, nonce and `auth_time`. Require nonempty
-   subject, verified email and authentication no more than five minutes old;
-   clock tolerance is at most 60 seconds. UserInfo, if used, must match that
-   subject. Unknown keys allow one bounded JWKS refresh; failure denies login.
+   subject and authentication no more than five minutes old; clock tolerance
+   is at most 60 seconds. Fetch the configured issuer's discovery-derived
+   UserInfo endpoint with the exchanged access token, require its subject to
+   exactly match the validated ID-token subject, and require a nonempty email
+   and boolean `email_verified=true` before mapping the user or issuing a
+   session. Missing/malformed claims, subject mismatch or UserInfo failure
+   denies login. Unknown keys allow one bounded JWKS refresh; failure denies login.
    Token `jku`, request headers and browser parameters never select an issuer,
    key URL, algorithm or callback.
 5. Resolve/create the internal user through the unique binding; disabled users
@@ -213,7 +217,14 @@ and [OAuth security BCP](https://www.rfc-editor.org/rfc/rfc9700.html)
 provide the protocol basis; the timing/storage policy above is our application
 decision.
 
-Only configured HTTPS discovery/JWKS/token endpoints are contacted. Bound
+ZITADEL's default code flow supplies email verification through UserInfo rather
+than guaranteeing those claims in the ID token. The UserInfo request above is
+mandatory; do not depend on the optional provider setting that copies UserInfo
+claims into ID tokens. #312/#321 must verify the default client configuration
+and subject/verified-email rejection cases.
+[ZITADEL claims matrix](https://zitadel.com/docs/apis/openidoauth/claims).
+
+Only configured HTTPS discovery/JWKS/token/UserInfo endpoints are contacted. Bound
 timeouts and response sizes; reject redirect-to-untrusted-host fetches.
 Canonical callback is `PUBLIC_ORIGIN + /api/v1/auth/callback`; canonical
 post-logout destination is `PUBLIC_ORIGIN + /signed-out`. No wildcards, preview
