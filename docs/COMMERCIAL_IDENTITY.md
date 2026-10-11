@@ -149,7 +149,9 @@ authority. Business Owners approve backup/download, destructive restore,
 migration and privileged recovery for their own businesses. Platform operators
 execute approved infrastructure recovery without implicit ownership or ledger
 access. Record business, operation, owner approval and operator identity before
-destructive business recovery. Approval covers one execution; reconfirm current
+destructive business recovery. At execution, verify the approving Owner is still
+active and authorized for the business; otherwise stop for a new authorized
+approval. Approval covers one execution; reconfirm current
 Owner authorization after deferral or a scope/operator change and record the
 execution with that approval. Keep the legacy administrator's loopback listener
 outside public proxy/ingress routes; forwarded headers confer no local authority.

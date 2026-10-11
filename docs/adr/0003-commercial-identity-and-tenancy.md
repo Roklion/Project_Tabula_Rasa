@@ -142,6 +142,8 @@ and audit requirements; a tenant Owner's approval cannot authorize changes to
 other businesses. There is no shared-password or synthetic break-glass login
 to books. Business recovery approval must identify the affected business,
 requested operation and authorized operator before destructive execution.
+At execution, verify that the approving Owner remains active and authorized for
+the affected business; otherwise stop and obtain a new authorized approval.
 Approval covers one execution of that operation, not standing recovery access;
 reconfirm current Owner authorization if execution is deferred or its scope or
 operator changes. #223 records approval and execution together in the recovery
