@@ -326,8 +326,10 @@ or refresh tokens in localStorage or ledger query state. Store/revoke sessions
 durably under #222; the browser receives only safe identity/context and a
 session-bound CSRF token. Unsafe browser requests require the CSRF header and
 validated Origin; OAuth callbacks use the provider flow's state/nonce checks.
-Exact expiration, provider callback and recovery policies remain #222. Plain
-loopback development uses an explicitly separate non-Secure development cookie;
+[ADR 0003](0003-commercial-identity-and-tenancy.md) now selects #310's provider,
+expiration, callback, recovery and role contract. [Commercial identity](../COMMERCIAL_IDENTITY.md)
+owns operator setup and #311–#321 handoff; runtime implementation remains there.
+Plain loopback development uses an explicitly separate non-Secure development cookie;
 never relax hosted cookie policy because local HTTP needs it.
 
 Before #222, #277 tests/local development may inject a fixed trusted synthetic

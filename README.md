@@ -58,6 +58,8 @@ The documentation index is this section of the root README. Go directly to:
 | --- | --- |
 | Understand the system and data boundaries | [Architecture](docs/ARCHITECTURE.md) |
 | Implement the selected commercial browser/API/runtime stack | [Commercial web ADR](docs/adr/0002-commercial-web-runtime.md) |
+| Select identity, sessions, roles and tenant authorization | [Commercial identity ADR](docs/adr/0003-commercial-identity-and-tenancy.md) |
+| Prepare identity-provider setup and #311–#321 security handoff | [Commercial identity](docs/COMMERCIAL_IDENTITY.md) |
 | Follow commercial package, local topology and deployment conventions | [Commercial development and deployment](docs/COMMERCIAL_WEB.md) |
 | Use and validate browser mileage and transaction receipts | [Commercial mileage and receipts](docs/COMMERCIAL_MILEAGE_RECEIPTS.md) |
 | Use recurring, mixed-use, assets and depreciation in the browser | [Commercial secondary workflows](docs/COMMERCIAL_SECONDARY_WORKFLOWS.md) |

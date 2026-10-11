@@ -783,6 +783,17 @@ restricted synthetic alpha access and #279's persistent staging/manual setup
 checkpoint. Production authority/recovery and external beta retain the separate
 #220/#222/#223/#224 gates.
 
+## Commercial identity decision (#310)
+
+[ADR 0003](adr/0003-commercial-identity-and-tenancy.md) selects ZITADEL Cloud
+hosted OIDC login, durable opaque PostgreSQL sessions, stable internal users,
+organization-wide memberships and five server-owned roles. It extends the
+existing RequestContext/session/ScopeBoundary seams and canonical business
+entities; it does not install login or alter current Streamlit/Sheets access.
+[Commercial identity](COMMERCIAL_IDENTITY.md) owns the operator checkpoints,
+threat cases and #311–#321 handoff under #222/#124. Restricted synthetic alpha,
+lasting owner cutover and external beta keep their independent stage gates.
+
 ## Implementation map
 
 Whole-profile acceptance extends migration reconciliation with complete export

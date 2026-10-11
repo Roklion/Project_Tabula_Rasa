@@ -148,6 +148,17 @@ separate disposable administrator URL; never point the test suite at retained
 Neon staging/production. The one-time fixture is synthetic and deployment-wide,
 not a migrated business or an authority switch.
 
+## Named identity handoff (#310)
+
+[ADR 0003](adr/0003-commercial-identity-and-tenancy.md) selects ZITADEL hosted
+OIDC plus durable opaque PostgreSQL sessions. [Commercial identity](COMMERCIAL_IDENTITY.md)
+owns the exact provider/callback/mail/recovery checkpoints, future named versus
+restricted-alpha mode rules and #321 rollout. No identity settings are
+implemented by #310. Today's hosted development/staging path below continues
+to require the restricted synthetic Basic gate; #312/#321 must add the named
+path without weakening that gate. External beta and lasting live owner use
+must use normal named authorization and their separate acceptance gates.
+
 ## Ingress, alpha access and session boundary
 
 Render terminates HTTPS and owns external HTTP-to-HTTPS routing. Confirm that
