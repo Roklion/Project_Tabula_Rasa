@@ -41,7 +41,7 @@ button:hover, .button:hover { background: var(--hover); }
 .action-secondary:hover { background: var(--hover); border-color: var(--border-strong); }
 .action-destructive { background: var(--error); color: var(--surface-primary); border-color: var(--error); }
 .action-destructive:hover { background: var(--error-surface); color: var(--error); border-color: var(--error); }
-button:disabled, .button[aria-disabled="true"] { cursor: default; opacity: 1; color: var(--neutral); background: var(--neutral-surface); border-color: var(--border-default); }
+button:disabled, button:disabled:hover, .button[aria-disabled="true"], .button[aria-disabled="true"]:hover { cursor: default; opacity: 1; color: var(--neutral); background: var(--neutral-surface); border-color: var(--border-default); }
 /* Dark outline supplies contrast; the lighter design token supplies the halo. */
 :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus); }
 .muted, .lead { color: var(--secondary); }

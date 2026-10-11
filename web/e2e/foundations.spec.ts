@@ -126,6 +126,31 @@ test('account create keeps keyboard, error, pending and confirmed-success behavi
   await expect(name).toHaveValue('');
 });
 
+test('disabled action tones stay neutral under the pointer', async ({ page }) => {
+  await page.goto('/accounts/new');
+  await expect(page.getByRole('heading', { name: 'Create account', exact: true })).toBeVisible();
+  // Exercise the shared stylesheet contract with the native markup emitted by
+  // ActionButton, including pending (disabled + aria-busy) actions.
+  await page.evaluate(() => {
+    for (const tone of ['primary', 'secondary', 'destructive']) {
+      const button = document.createElement('button');
+      button.className = `action-${tone}`;
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+      button.textContent = `Pending ${tone}`;
+      document.querySelector('main')!.append(button);
+    }
+  });
+  for (const tone of ['primary', 'secondary', 'destructive']) {
+    const button = page.getByRole('button', { name: `Pending ${tone}`, exact: true });
+    await button.hover();
+    await expect(button).toBeDisabled();
+    await expect(button).toHaveCSS('background-color', 'rgb(241, 242, 241)');
+    await expect(button).toHaveCSS('color', 'rgb(98, 102, 107)');
+    await expect(button).toHaveCSS('border-top-color', 'rgb(221, 222, 217)');
+  }
+});
+
 test('native multiple selectors retain multiline geometry and keyboard selection', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 844 });
   await page.goto('/transactions');
