@@ -87,8 +87,15 @@ inspect that run before another attempt. There is no broad cleanup, database
 reset, byte deletion, simulated rollback or private-data capture. #223 owns
 disposition of retained synthetic artifacts.
 
-Output contains only random run marker, release, engine, viewport and status.
-Browser/provider errors are suppressed into bounded guidance. No screenshots,
+Output contains only random run marker, release, engine, viewport, fixed operation
+label and status. A failed case records its engine, width/height and operation
+(for example, `receipt_download`, `receipt_bytes`, `receipt_unlink` or
+`receipt_relink`). Configuration and shared smoke failures have no journey
+engine/viewport and use their own operation labels. Receipt completion assertions
+and download initiation wait at most 30 seconds, matching the browser action
+budget rather than the five-second default assertion budget. A timeout still
+stops the gate without retrying; inspect the retained run before another attempt.
+Browser/provider exceptions are suppressed into bounded guidance. No screenshots,
 traces, response bodies, credentials, ledger data or receipts enter Actions
 artifacts/logs. A failed case fails the gate. `alpha_browser_passed` establishes
 the bounded staging suite only; it is not complete #288 acceptance.

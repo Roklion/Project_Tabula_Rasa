@@ -1,11 +1,13 @@
 """Release tooling fails closed before touching retained synthetic staging."""
 
 from pathlib import Path
+import json
 import os
 import shutil
 import subprocess
+import traceback
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 import yaml
@@ -50,8 +52,9 @@ def test_missing_document_store_stops_before_any_browser_create():
             'capabilities': ['bookkeeping:read', 'bookkeeping:write'], 'csrf_token': 'csrf'}),
         SimpleNamespace(status=503),
     ]
-    with pytest.raises(alpha.AlphaError, match='DocumentStore'):
+    with pytest.raises(alpha.AlphaError) as result:
         alpha.journey(context, Mock(), origin=ENV['TABULA_RASA_PUBLIC_ORIGIN'], entity='alpha-synthetic', marker='synthetic')
+    assert result.value.operation == 'preflight'
     context.new_page.assert_not_called()
     assert [call[0] for call in context.request.method_calls] == ['get', 'get']
 
@@ -74,7 +77,120 @@ def test_raw_browser_provider_failures_never_reach_cli_output(monkeypatch, capsy
     with pytest.raises(SystemExit) as result:
         alpha.main(['--release', RELEASE, '--allow-synthetic-writes'])
     assert 'secret' not in str(result.value) and 'private' not in str(result.value)
+    assert result.value.__suppress_context__
+    assert 'secret URL' not in ''.join(traceback.format_exception(result.value))
     assert not capsys.readouterr().out
+
+
+def test_nested_operation_preserves_label_without_exception_payload():
+    with pytest.raises(alpha.AlphaError) as result:
+        with alpha.operation('context_open'), alpha.operation('receipt_download'):
+            raise RuntimeError('secret URL, private receipt and raw response')
+    assert result.value.operation == 'receipt_download'
+    assert 'secret' not in str(result.value)
+    assert result.value.__suppress_context__
+    assert 'secret URL' not in ''.join(traceback.format_exception(result.value))
+    assert alpha.AlphaError('ignored', operation='private payload').operation is None
+
+
+@pytest.mark.parametrize('failure', ['initial_smoke', 'browser_launch', 'context_open', 'receipt_download', 'browser_close', 'final_smoke'])
+def test_failure_diagnostics_identify_only_safe_execution_context(monkeypatch, capsys, failure):
+    import playwright.sync_api
+    manager = MagicMock()
+    monkeypatch.setattr(playwright.sync_api, 'sync_playwright', Mock(return_value=manager))
+    browser = manager.__enter__.return_value.firefox.launch.return_value
+    monkeypatch.setattr(alpha, 'ENGINES', ('firefox',))
+    monkeypatch.setattr(alpha, 'WIDTHS', (390,))
+    secret = RuntimeError('PRIVATE provider response, credential and receipt')
+    monkeypatch.setattr(alpha, 'smoke', Mock(side_effect=[None, secret] if failure == 'final_smoke'
+        else secret if failure == 'initial_smoke' else None))
+    if failure == 'browser_launch':
+        manager.__enter__.return_value.firefox.launch.side_effect = secret
+    if failure == 'context_open':
+        browser.new_context.side_effect = secret
+
+    def journey(*args, **kwargs):
+        if failure == 'receipt_download':
+            with alpha.operation('receipt_download'):
+                raise secret
+
+    monkeypatch.setattr(alpha, 'journey', journey)
+    # A secondary teardown failure must not mask receipt_download.
+    if failure in {'receipt_download', 'browser_close'}:
+        browser.close.side_effect = secret
+    with pytest.raises(alpha.AlphaError) as result:
+        alpha.run(ENV, RELEASE, allow_writes=True)
+    assert result.value.operation == failure and result.value.__context__ is None
+    records = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    diagnostic = records[-1]
+    shared = failure in {'initial_smoke', 'final_smoke'}
+    viewport = shared or failure == 'browser_launch'
+    assert diagnostic == {'run': records[0]['run'], 'release': RELEASE, 'status': 'failed', 'operation': failure,
+        'engine': None if shared else 'firefox', 'width': None if viewport else 390,
+        'height': None if viewport else 844}
+    assert len(diagnostic['run']) == 32
+    assert 'PRIVATE' not in json.dumps(records)
+
+
+def test_success_runs_every_engine_viewport_and_both_smokes(monkeypatch, capsys):
+    import playwright.sync_api
+    manager = MagicMock()
+    monkeypatch.setattr(playwright.sync_api, 'sync_playwright', Mock(return_value=manager))
+    smoke, journey = Mock(), Mock()
+    monkeypatch.setattr(alpha, 'smoke', smoke)
+    monkeypatch.setattr(alpha, 'journey', journey)
+    result = alpha.run(ENV, RELEASE, allow_writes=True)
+    assert result['status'] == 'alpha_browser_passed' and result['release'] == RELEASE
+    assert smoke.call_count == 2 and journey.call_count == 6
+    records = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert {(row['engine'], row['width'], row['height']) for row in records[1:]} == {
+        (engine, width, 1000 if width == 1440 else 844) for engine in alpha.ENGINES for width in alpha.WIDTHS}
+    assert all(row['status'] == 'passed' for row in records[1:])
+
+
+@pytest.mark.parametrize('journey_fails', [True, False])
+@pytest.mark.parametrize('closing_context', [0, 1])
+def test_context_teardown_preserves_journey_failure(monkeypatch, capsys, journey_fails, closing_context):
+    import playwright.sync_api
+    manager = MagicMock()
+    monkeypatch.setattr(playwright.sync_api, 'sync_playwright', Mock(return_value=manager))
+    browser = manager.__enter__.return_value.firefox.launch.return_value
+    contexts = [MagicMock(), MagicMock()]
+    browser.new_context.side_effect = contexts
+    contexts[closing_context].__exit__.side_effect = RuntimeError('PRIVATE teardown payload')
+    monkeypatch.setattr(alpha, 'ENGINES', ('firefox',))
+    monkeypatch.setattr(alpha, 'WIDTHS', (390,))
+    smoke = Mock()
+    monkeypatch.setattr(alpha, 'smoke', smoke)
+
+    def journey(*args, **kwargs):
+        if journey_fails:
+            with alpha.operation('receipt_attach'):
+                raise RuntimeError('PRIVATE journey payload')
+
+    monkeypatch.setattr(alpha, 'journey', journey)
+    with pytest.raises(alpha.AlphaError) as result:
+        alpha.run(ENV, RELEASE, allow_writes=True)
+    expected = 'receipt_attach' if journey_fails else 'context_open'
+    assert result.value.operation == expected and result.value.__context__ is None
+    records = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert records[-1]['operation'] == expected and records[-1]['status'] == 'failed'
+    assert not any(row['status'] == 'passed' for row in records)
+    assert 'PRIVATE' not in json.dumps(records) + ''.join(traceback.format_exception(result.value))
+    assert smoke.call_count == 1
+    browser.close.assert_called_once()
+    for context in contexts:
+        context.__exit__.assert_called_once()
+
+
+def test_invalid_release_never_enters_diagnostics(monkeypatch, capsys):
+    smoke = Mock()
+    monkeypatch.setattr(alpha, 'smoke', smoke)
+    with pytest.raises(alpha.AlphaError):
+        alpha.run(ENV, 'PRIVATE invalid release', allow_writes=True)
+    record = json.loads(capsys.readouterr().out)
+    assert record['release'] is None and record['operation'] == 'configuration'
+    smoke.assert_not_called()
 
 
 def test_preflight_returns_only_selected_scope_and_csrf_headers():
