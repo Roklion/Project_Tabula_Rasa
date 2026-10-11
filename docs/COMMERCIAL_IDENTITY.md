@@ -149,7 +149,11 @@ authority. Business Owners approve backup/download, destructive restore,
 migration and privileged recovery for their own businesses. Platform operators
 execute approved infrastructure recovery without implicit ownership or ledger
 access. Record business, operation, owner approval and operator identity before
-destructive business recovery; #223 separately owns service-wide incident
+destructive business recovery. Approval covers one execution; reconfirm current
+Owner authorization after deferral or a scope/operator change and record the
+execution with that approval. Keep the legacy administrator's loopback listener
+outside public proxy/ingress routes; forwarded headers confer no local authority.
+#223 separately owns service-wide incident
 approval and audit. Tenant roles never grant deployment/local profile secrets.
 No new recovery/admin endpoint or live execution is authorized by this contract.
 

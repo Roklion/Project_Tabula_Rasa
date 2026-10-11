@@ -142,12 +142,19 @@ and audit requirements; a tenant Owner's approval cannot authorize changes to
 other businesses. There is no shared-password or synthetic break-glass login
 to books. Business recovery approval must identify the affected business,
 requested operation and authorized operator before destructive execution.
+Approval covers one execution of that operation, not standing recovery access;
+reconfirm current Owner authorization if execution is deferred or its scope or
+operator changes. #223 records approval and execution together in the recovery
+audit; no reusable bearer approval credential is implied.
 
 During transition, loopback-only Streamlit Business Profiles administration is
 a separate restricted internal operator interface. Commercial login, tenant
 roles and the business selector never unlock local credential/profile
 administration. Preserve its existing password, administrator reauthentication
-and loopback restrictions. #319 coordinates retirement after in-app login,
+and loopback restrictions. Keep this listener out of public reverse-proxy and
+ingress routes: a loopback bind does not make a publicly relayed request local,
+and forwarded headers cannot grant administrator access.
+#319 coordinates retirement after in-app login,
 business creation and management fully replace its supported functions and
 the replacement is verified; do not retain it as a commercial bypass.
 
