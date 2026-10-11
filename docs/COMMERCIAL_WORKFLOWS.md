@@ -45,6 +45,13 @@ provider controls, schema migration or entity creation are exposed in the browse
 Accounts, Categories, Payees and Tags expose **Add** links, labeled create forms
 and tables. Accounts include type, classification, opening balance, parent and
 status. Categories include kind and parent. Payees/tags show active/inactive status.
+Accounts groups its Add action with the page heading. Account and parent names
+wrap in the table; each neutral **Edit** action retains the full account name
+for assistive technology. Narrow tables scroll inside a keyboard-focusable
+region. Create forms distinguish the blue primary save action from the neutral
+back action, keep keyboard focus visible and show legible disabled controls
+while a save is pending. [UI foundations](COMMERCIAL_UI_FOUNDATIONS.md) records
+the shared visual contract and bounded evidence under #325/#323.
 Creation, normalization, hierarchy/reference validation and persistence delegate
 to the existing entity-scoped application services. Parent names are displayed
 without treating table position or a display name as a mutation key.

@@ -1,9 +1,10 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { ActionButton, type ActionTone } from './VisualPrimitives';
 
-export function ConfirmationDialog({ title, children, keepLabel, confirmLabel, onKeep, onConfirm, pending = false }: {
+export function ConfirmationDialog({ title, children, keepLabel, confirmLabel, onKeep, onConfirm, pending = false, confirmTone = 'primary' }: {
   title: string; children: ReactNode; keepLabel: string; confirmLabel: string;
-  onKeep: () => void; onConfirm: () => void; pending?: boolean;
+  onKeep: () => void; onConfirm: () => void; pending?: boolean; confirmTone?: ActionTone;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const description = useId();
@@ -29,7 +30,7 @@ export function ConfirmationDialog({ title, children, keepLabel, confirmLabel, o
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     }}>
     <p id={description}>{children}</p>
-    <div className="actions"><button type="button" disabled={pending} onClick={onKeep}>{keepLabel}</button>
-      <button type="button" disabled={pending} onClick={onConfirm}>{confirmLabel}</button></div>
+    <div className="actions"><ActionButton disabled={pending} onClick={onKeep}>{keepLabel}</ActionButton>
+      <ActionButton tone={confirmTone} pending={pending} onClick={onConfirm}>{confirmLabel}</ActionButton></div>
   </dialog>, document.body);
 }
