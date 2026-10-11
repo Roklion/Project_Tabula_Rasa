@@ -143,9 +143,11 @@ role, inviter and lifecycle. Acceptance requires a freshly provider-verified
 email from login within five minutes matching the intended address; never a
 client-supplied email. Define email comparison as trimmed, case-insensitive
 comparison with **no** plus-tag/dot rewriting. It is an invitation recipient
-check, not user identity or automatic account linking. Store any pending
-credential only in short-lived server-held workflow state if reauthentication
-is needed, and clear it on completion/expiry.
+check, not user identity or automatic account linking. If fresh authentication
+is needed, discard the submitted invitation credential and ask the recipient
+to paste it again after login. Do not retain the raw credential in process
+memory, login transactions, cookies or other pending workflow state; the
+durable invitation record retains only its hash and lifecycle.
 
 Transactionally check current inviter/acceptor authority, invitation expiry/
 revocation and permitted role, consume once and create/reactivate the unique
@@ -190,9 +192,9 @@ are requirements for downstream executable tests, **not tests delivered in #310*
 | T07: session fixation, stolen old cookie or callback replay | Login replaces/revokes old session, new CSRF/cache ID; single-use login transaction. Copy of revoked cookie denies on another worker after restart. | #312 |
 | T08: missing/foreign/null Origin, missing/wrong CSRF, redirect/forwarded-Host spoof | Every unsafe command denies before effects, including logout/switch/bootstrap/invite; only state/nonce-bound callback is exempt. No open redirect, wildcard client, token URL or caller-selected issuer fetch. | #312/#313 |
 | T09: provider timeout/unknown JWKS key/mail failure | No new/unverified login, silent fallback or bypass of idle/absolute expiry. Valid existing local session follows ADR deadlines and fresh local authorization; provider-only recovery does not claim app revocation. | #312/#321 |
-| T10: database/authorization outage or uncertain logout | Safe 503 and private view unmounted; no cached allow/fixture fallback. Copied cookie is not claimed revoked until DB confirmation. Revocation/recovery retry succeeds when service returns. | #312/#313/#321 |
+| T10: database/authorization outage or uncertain logout | Safe 503 and private view unmounted; no cached allow/fixture fallback. Origin/CSRF-valid logout clears the local cookie even on DB failure; a copied cookie is not claimed revoked until DB confirmation. Fresh login and authenticated revoke-all/operator recovery succeed when service returns. | #312/#313/#321 |
 | T11: Admin self-promotion, owner removal/demotion races or provider-admin claim | Admin grant limits enforced; at least one active Owner or explicitly suspended org. Test concurrent last-owner changes and user-disable effects in real PostgreSQL. | #311/#315 |
-| T12: replayed/expired/revoked/wrong-recipient invite or inviter loses authority | No unauthorized activation/role escalation. Correct verified recipient accepts once, duplicate submission creates no duplicate membership. Existing-member acceptance does not promote. | #315 |
+| T12: replayed/expired/revoked/wrong-recipient invite or inviter loses authority | No unauthorized activation/role escalation. Correct verified recipient accepts once, duplicate submission creates no duplicate membership. Existing-member acceptance does not promote. Stale authentication requires fresh login and credential re-entry, including when a different worker handles acceptance; no pending raw credential is retained. | #315 |
 | T13: bootstrap retry/foreign org, arbitrary claim of old profile/entity | Acting user owns only their new workspace; no duplicate defaults/org or unauthorized legacy claim. #319 explicit mapping preserves original entity/book IDs and independent grants after restart. | #316/#319 |
 | T14: account/entity switch, revoked tab, slow prior-scope response, logout → another login | Cancel queries/unmount drafts/uploads, revoke object URLs, clear selections; old responses never populate a new ScopeBoundary. No private persistent browser cache. Successful permitted multi-org switching remains usable. | #312/#314/#317/#320 |
 | T15: production/external accidentally configured alpha; restored session replay; unsafe rollback | Reject synthetic/Basic/development cookie configuration, reject restored sessions before ingress, and never roll external deployment back to an alpha bypass image. Safe schema-compatible named-session rollback is rehearsed. | #312/#321/#223 |

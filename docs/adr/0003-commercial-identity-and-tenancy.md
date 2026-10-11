@@ -263,12 +263,15 @@ login uses `max_age=0` and validates freshness. Optional provider sign-out uses
 the configured end-session endpoint with `client_id`, exact registered return
 URI and fresh logout state; do not add an ID-token hint to a URL or retain an
 ID token solely for logout. Provider sign-out failure cannot undo a confirmed
-local revoke. A database failure during logout returns safe unavailable status,
-unmounts the private browser view and offers same-origin logout retry or
-operator revoke guidance. Retain the HttpOnly cookie for that retry until
-revocation can be confirmed; do not claim that a copied server session was
-revoked. Clearing an already expired/revoked session is idempotent and grants
-no private authority.
+local revoke. An Origin/CSRF-validated logout clears the local session cookie
+with matching attributes and unmounts private browser state even if database
+revocation fails. Return safe unavailable status in that failure case and
+explain that server revocation is unconfirmed; clearing this browser's cookie
+does not revoke a copied session credential. Offer fresh named login and the
+authenticated revoke-all or operator-revoke procedure when service returns;
+do not retain a usable cookie solely for retry or report durable logout success
+without confirmation. Clearing an already expired/revoked session is
+idempotent and grants no private authority.
 [ZITADEL end-session contract](https://zitadel.com/docs/apis/openidoauth/endpoints#end_session_endpoint).
 
 Provider-only password reset/disable is **not** claimed to instantly revoke
