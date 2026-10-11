@@ -41,6 +41,12 @@ procedure. #279 records hosted acceptance; [Technical alpha](TECHNICAL_ALPHA.md)
 owns #288's staged core workflow matrix, browser release gate, rollback rehearsal,
 remaining hosted/manual prerequisites and Streamlit retirement boundary.
 
+[Identity ADR 0003](adr/0003-commercial-identity-and-tenancy.md) and
+[Commercial identity](COMMERCIAL_IDENTITY.md) freeze #310's provider, session,
+role and tenant-context contract for #311–#321. They are implementation/setup
+contracts; named identity and hosted tenant acceptance are not delivered by
+that documentation change.
+
 The HTTP runtime reuses application services and PostgreSQL adapters. Preserve
 the server-side #222 membership/context seam, #280 loaded-baseline form contract,
 and #223 health/request/job seams. Keep ordinary development and tests synthetic;

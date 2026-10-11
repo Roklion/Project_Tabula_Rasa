@@ -246,6 +246,7 @@ def test_receipt_upload_progress_uncertain_retry_and_invalid_batch(commercial, c
             page.get_by_role('button', name='Retry unresolved receipts').click()
             expect(page.get_by_role('status').filter(has_text='1 receipt attached.')).to_be_visible()
             assert document_store.upload_calls == 1 and len(document_store.files) == 1
+            expect(page.get_by_role('heading', name='No unreferenced receipts')).to_be_visible()
             with patch.object(document_store, 'fetch', side_effect=DocumentError('Synthetic download failure')):
                 page.get_by_role('link', name='Download uncertain.pdf').click()
                 expect(page.get_by_role('alert')).to_contain_text('request could not be completed')

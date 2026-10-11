@@ -65,6 +65,14 @@ remains the internal/reference edition.
 
 ## Identity and request protection seam (#222)
 
+[ADR 0003](adr/0003-commercial-identity-and-tenancy.md) selects the named OIDC
+identity, durable session, role and server-membership contract. Follow
+[Commercial identity](COMMERCIAL_IDENTITY.md) for its staged implementation,
+operator checkpoints and testable threat model. #312 extends session DTOs for
+users without an entity; #313 replaces the broad method-based write rule with
+explicit action capabilities while retaining Origin/CSRF. Those extensions
+remain follow-on work; the behavior below describes today's foundation.
+
 Inject a `runtime_factory(settings)` into `create_app`. Its resolver receives a
 Starlette request and returns the immutable `RequestContext`. #222 must resolve
 active membership and capabilities server-side on every call before service or
