@@ -6,6 +6,7 @@ import { useEntity } from '../../app/context';
 import { ErrorNotice, SuccessNotice } from '../../components/States';
 import { UnsavedChanges } from '../../components/UnsavedChanges';
 import { useProtectedMutation } from '../concurrency/mutations';
+import { ActionButton, SectionHeader } from '../../components/VisualPrimitives';
 
 export function CreateEditor<T extends FieldValues>({ title, initial, fields, create, onClose, canSubmit = () => true }: {
   title: string; initial: () => T; fields: (form: UseFormReturn<T>) => ReactNode;
@@ -31,14 +32,14 @@ export function CreateEditor<T extends FieldValues>({ title, initial, fields, cr
     try { await mutation.mutateAsync(values); }
     catch (error) { setFailure(error); }
   }
-  return <section className="surface editor" aria-label={title}><h2>{title}</h2>
+  return <section className="surface editor" aria-label={title}><SectionHeader title={title} />
     <UnsavedChanges dirty={form.formState.isDirty} />
     {success && <SuccessNotice>Record created.</SuccessNotice>}
     {failure !== undefined && <ErrorNotice error={failure} />}
     <form onSubmit={form.handleSubmit(values => void submit(values))}>
       <fieldset disabled={mutation.isPending}>{fields(form)}</fieldset>
-      <div className="actions"><button type="submit" disabled={mutation.isPending || !canSubmit(values)}>{title}</button>
-        <button type="button" disabled={mutation.isPending} onClick={event => { event.currentTarget.focus(); if (form.formState.isDirty) setClosing(true); else onClose(); }}>Back to records</button></div>
+      <div className="actions"><ActionButton tone="primary" type="submit" pending={mutation.isPending} disabled={!canSubmit(values)}>{title}</ActionButton>
+        <ActionButton disabled={mutation.isPending} onClick={event => { event.currentTarget.focus(); if (form.formState.isDirty) setClosing(true); else onClose(); }}>Back to records</ActionButton></div>
     </form>
     {closing && <ConfirmationDialog title="Discard draft" keepLabel="Keep editing" confirmLabel="Discard draft and close"
       onKeep={() => setClosing(false)} onConfirm={() => { form.reset(); onClose(); }}>
