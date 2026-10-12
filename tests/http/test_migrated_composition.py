@@ -8,6 +8,13 @@ from tabula_rasa.http.migrated import MigratedProfileServices
 from tabula_rasa.http.composition import open_migrated_runtime
 from tabula_rasa.http.config import HttpSettings
 from tabula_rasa.http.context import RequestContext
+from tabula_rasa.http.identity import NamedIdentity
+
+
+def named_resolver(settings, database):
+    from sqlalchemy.engine import make_url
+    database.engine.url = make_url('postgresql+psycopg://test@127.0.0.1/test')
+    return NamedIdentity(settings, SimpleNamespace(database=database, environment=settings.environment), Mock())
 
 
 def test_migrated_binding_enters_existing_cutover_and_document_composition(monkeypatch):
@@ -82,9 +89,11 @@ def test_migrated_startup_disposes_pool_and_does_not_retain_private_errors(monke
     monkeypatch.setattr("tabula_rasa.http.composition.Database", allocate)
     monkeypatch.setattr(MigratedProfileServices, "validate", Mock(
         side_effect=ValueError("private synthetic binding") if failure == "binding" else None))
+    settings = HttpSettings("production", "https://owner.example.test", access_mode='named_user')
+    resolver = named_resolver(settings, database)
     with pytest.raises(RuntimeError, match="Migrated HTTP runtime startup failed") as caught:
-        open_migrated_runtime(HttpSettings("production", "https://owner.example.test"),
-            resolve_context=lambda request: None, entity_profiles={"alpha": "alpha"},
+        open_migrated_runtime(settings,
+            resolve_context=resolver, entity_profiles={"alpha": "alpha"},
             profile_secrets={}, database_settings=object())
     assert caught.value.__context__ is None
     assert "private" not in str(caught.value)
@@ -103,8 +112,9 @@ def test_shared_production_factory_validates_all_bindings_and_preserves_request_
     secrets = {"bookkeeping_backends": {profile: {
         "backend": "postgres", "entity_id": profile, "mode": "rehearsal",
     } for profile in services}}
-    resolver = Mock()
-    runtime = open_migrated_runtime(HttpSettings("production", "https://owner.example.test"),
+    settings = HttpSettings("production", "https://owner.example.test", access_mode='named_user')
+    resolver = named_resolver(settings, database)
+    runtime = open_migrated_runtime(settings,
         resolve_context=resolver, entity_profiles={profile: profile for profile in services},
         profile_secrets=secrets, database_settings=object())
     assert factory.call_count == 2
@@ -115,3 +125,37 @@ def test_shared_production_factory_validates_all_bindings_and_preserves_request_
         factory.assert_called_with(profile, secrets, database=database)
     runtime.close()
     database.dispose.assert_called_once()
+
+
+@pytest.mark.parametrize('mismatch', ['database', 'environment'])
+def test_named_control_plane_must_match_ledger_before_private_binding(monkeypatch, mismatch):
+    from sqlalchemy.engine import make_url
+    database, identity_database = Mock(), Mock()
+    database.engine.url = make_url('postgresql+psycopg://test@127.0.0.1/test')
+    settings = HttpSettings('production', 'https://owner.example.test', access_mode='named_user')
+    resolver = named_resolver(settings, identity_database)
+    if mismatch == 'database':
+        identity_database.engine.url = database.engine.url.set(database='different')
+    else:
+        resolver.sessions.environment = 'staging'
+    monkeypatch.setattr('tabula_rasa.http.composition.Database', Mock(return_value=database))
+    binding = Mock()
+    monkeypatch.setattr('tabula_rasa.http.migrated.MigratedProfileServices', binding)
+    with pytest.raises(RuntimeError, match='startup failed'):
+        open_migrated_runtime(settings, resolve_context=resolver,
+            entity_profiles={'alpha': 'alpha'}, profile_secrets={}, database_settings=object())
+    binding.assert_not_called()
+    database.dispose.assert_called_once()
+
+
+@pytest.mark.parametrize('mode', ['named_user', 'restricted_alpha'])
+def test_production_cannot_bind_secrets_with_an_arbitrary_resolver(monkeypatch, mode):
+    database, binding = Mock(), Mock()
+    monkeypatch.setattr('tabula_rasa.http.composition.Database', database)
+    monkeypatch.setattr('tabula_rasa.http.migrated.MigratedProfileServices', binding)
+    with pytest.raises(RuntimeError, match='authorization resolver'):
+        open_migrated_runtime(HttpSettings('production', 'https://owner.example.test', access_mode=mode),
+            resolve_context=lambda _: RequestContext('actor', 'org', 'alpha', frozenset({'bookkeeping:read'}), 'scope', 'csrf'),
+            entity_profiles={'alpha': 'alpha'}, profile_secrets={})
+    database.assert_not_called()
+    binding.assert_not_called()

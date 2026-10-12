@@ -133,16 +133,23 @@ def open_migrated_runtime(settings, *, resolve_context, entity_profiles, profile
     trusted configuration. Cutover policy never selects an identity resolver.
     This factory neither activates authority nor enables the synthetic resolver.
     """
-    if settings.trusted_entity_id or not callable(resolve_context):
+    from .identity import NamedIdentity
+    commercial = settings.environment == 'production' or settings.access_mode == 'named_user'
+    if (settings.trusted_entity_id or not callable(resolve_context)
+            or commercial and (not isinstance(resolve_context, NamedIdentity) or resolve_context.settings != settings)):
         raise RuntimeError("Migrated runtime requires an explicit authorization resolver without fixture context.")
     from .migrated import MigratedProfileServices
 
     database = None
     try:
         database = Database(database_settings or DatabaseSettings.from_environment(required=True))
+        if commercial:
+            from tabula_rasa.infrastructure.postgres.identity import database_identity
+            if (resolve_context.sessions.environment != settings.environment
+                    or database_identity(resolve_context.sessions.database) != database_identity(database)):
+                raise RuntimeError('Identity and ledger database bindings must agree.')
         services = MigratedProfileServices(database, entity_profiles=entity_profiles, secrets=profile_secrets)
         services.validate()
-        from .identity import NamedIdentity
         runtime = PostgresRuntime(database, resolve_context, service_factory=services,
                                   identity=resolve_context if isinstance(resolve_context, NamedIdentity) else None)
         if not runtime.ready():

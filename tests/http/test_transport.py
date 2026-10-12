@@ -1,4 +1,5 @@
 from contextlib import nullcontext
+from datetime import datetime, timedelta, timezone
 import json
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -7,11 +8,13 @@ from fastapi.testclient import TestClient
 import pytest
 
 from tabula_rasa.errors import StorageConflictError, StorageError, StorageNotFoundError, StorageValidationError
+from tabula_rasa.application.identity import AuthenticatedSession, EntityAccess
 from tabula_rasa.http.app import create_app
 from tabula_rasa.http.composition import PostgresRuntime
 from tabula_rasa.http.config import HttpSettings
 from tabula_rasa.http.context import DenyContext, RequestContext, TrustedDevelopmentContext
 from tabula_rasa.http.export_openapi import export_schema
+from tabula_rasa.http.identity import NamedIdentity
 from tabula_rasa.infrastructure.postgres.runtime import DatabaseError
 
 SETTINGS = HttpSettings("test", "http://testserver", "test-release")
@@ -101,6 +104,11 @@ def test_unsafe_origin_and_csrf_rejected(client, runtime, headers):
 def test_canonical_origin_accepts_browser_mutations_without_relaxing_scope(runtime, configured, canonical):
     settings = HttpSettings('test', configured, access_mode='named_user')
     assert settings.public_origin == canonical
+    now = datetime.now(timezone.utc)
+    sessions = Mock()
+    sessions.validate.return_value = AuthenticatedSession('actor', 'session-1', 'test-csrf', now,
+        now + timedelta(hours=12), EntityAccess('alpha', 'organization', 'Alpha', 'editor', 1))
+    runtime.identity = runtime.resolve_context = NamedIdentity(settings, sessions, Mock())
     with TestClient(create_app(settings=settings, runtime_factory=lambda _: runtime), base_url=canonical) as client:
         payload = {'name': 'Bank', 'type': 'Bank'}
         headers = {'Origin': canonical, 'X-CSRF-Token': 'test-csrf'}

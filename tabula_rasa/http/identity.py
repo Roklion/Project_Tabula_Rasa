@@ -2,7 +2,7 @@
 
 from urllib.parse import urlsplit
 
-from tabula_rasa.application.identity import IdentityError, capabilities
+from tabula_rasa.application.identity import AuthenticatedSession, IdentityError, capabilities
 
 from .context import RequestContext
 from .models.common import EntityInfo, SessionInfo, SetupSessionInfo
@@ -16,7 +16,11 @@ class NamedIdentity:
         self.session_cookie, self.login_cookie, self.csrf_cookie = (prefix + name for name in ("session", "login", "csrf"))
 
     def authenticated(self, request, *, foreground=False):
-        return self.sessions.validate(request.cookies.get(self.session_cookie, ""), foreground=foreground)
+        session = getattr(request.state, 'named_session', None)
+        if foreground or not isinstance(session, AuthenticatedSession):
+            session = self.sessions.validate(request.cookies.get(self.session_cookie, ""), foreground=foreground)
+            request.state.named_session = session
+        return session
 
     def __call__(self, request):
         # Only Origin/CSRF-protected explicit foreground activity renews idle.

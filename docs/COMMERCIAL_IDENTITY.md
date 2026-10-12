@@ -271,6 +271,16 @@ The safe order is decision → #311/#312 → #313 → independent #314/#315/#316
 test scaffolding can overlap; not every Wave 3 ticket blocks beginning staging
 integration. No child invents a different cookie, role or authorization model.
 
+## Implemented server authorization (#313)
+
+The [server authorization policy and API inventory](API_AUTHORIZATION.md) owns
+the implemented central route gate, distinct privileged capabilities, denial
+behavior, synthetic compatibility and native integration evidence. It consumes
+#311/#312 and preserves the independent #319 legacy-admin, #341 support and
+#298/#303 recovery/authority checkpoints. Follow-on slices must register their
+actions before exposing new operations; this does not complete #320/#321 or
+authorize external beta under #124/#224.
+
 ## Evidence and outstanding decisions
 
 #310 supplies the ADR, capability policy, executable-test requirements and

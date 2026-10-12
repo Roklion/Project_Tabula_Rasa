@@ -293,7 +293,12 @@ Before an actual live execution, the authorized operator must:
 ### Shared production runtime composition
 
 The deployed app factory uses `create_app` and its existing `runtime_factory`
-seam. Bind migrated entities using `open_migrated_runtime`:
+seam. Bind migrated entities using `open_migrated_runtime`. Production and
+named-user mode require the configured `NamedIdentity` session/membership
+resolver, with the same environment and database target as the ledger. Startup
+rejects a different control-plane target before binding profile credentials.
+Follow the [authorization contract](API_AUTHORIZATION.md); a custom lambda
+returning a plausible context is not a production authentication mechanism.
 
 ```python
 from functools import partial
@@ -301,7 +306,7 @@ from tabula_rasa.http.app import create_app
 from tabula_rasa.http.composition import open_migrated_runtime
 
 # These are supplied by normal server deployment/identity configuration.
-# The resolver authenticates the request and authorizes its entity/capabilities.
+# NamedIdentity validates durable sessions and current membership/selection.
 def build_app(authenticated_resolver, entity_profiles, profile_secrets):
     return create_app(runtime_factory=partial(
         open_migrated_runtime,
@@ -318,7 +323,7 @@ all configured authority/document bindings and current schema readiness, and
 closes the pool on failure/shutdown. Requests compose fresh scoped services
 through `MigratedProfileServices` and `create_application`. All normal
 identity, capability, entity, Host, Origin and CSRF checks remain in force.
-The factory refuses the synthetic fixture option; migrated service binding also
+The factory refuses arbitrary production resolvers and the synthetic fixture option; migrated service binding also
 refuses a `trusted_development` context. Setting `rehearsal` or a database URL
 does not authenticate anyone. No new login, owner authorization bypass,
 domain engine, source loader, scheduler or recovery state machine is introduced.

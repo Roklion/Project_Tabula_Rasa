@@ -1,0 +1,151 @@
+# Server authorization and protected operation inventory
+
+Issue [#313](https://github.com/Roklion/Project_Tabula_Rasa/issues/313) is Wave 2
+of [identity EPIC #222](https://github.com/Roklion/Project_Tabula_Rasa/issues/222)
+within [initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124).
+It builds on #311/#312 named sessions and the
+[ADR 0003 role contract](adr/0003-commercial-identity-and-tenancy.md).
+This gate does not authorize external beta, hosted provider setup, migration,
+or production recovery. #314–#321, #223 operations and #224 release requirements
+retain their separate acceptance and operator checkpoints.
+
+## Request boundary
+
+Every registered private FastAPI operation receives the application-wide
+`authorize_request` dependency. Entity operations resolve a freshly validated
+opaque session through `NamedIdentity`, which obtains current active user,
+organization, membership, role and canonical entity ownership from PostgreSQL.
+The frozen `RequestContext` is reused only within that request. A revocation
+can stop all later requests; an already authorized in-flight request may finish.
+
+The server-held selection must agree with the route entity. Paths, headers,
+cookies, query parameters and body fields never grant organization/entity or
+role authority. Cross-organization and absent entity selectors return the same
+403 envelope. Missing/expired/revoked identity returns 401; unavailable
+authorization storage returns 503. An unknown record within a permitted entity
+can return 404. No failure falls back to synthetic authority or cached rights.
+
+Action checks run before handlers bind bookkeeping services, document stores,
+profile secrets or uploads. Authorized unsafe methods also require the exact
+configured Origin and session synchronizer token, including read-only allocation
+previews. Loaded-baseline validation and accounting/domain invariants continue
+independently after authorization. Private responses retain `Cache-Control:
+no-store`. Structured authorization-denial signals contain fixed event/failure
+codes, registered route templates and safe request/correlation IDs; they exclude
+raw selectors, identity claims, credentials and bookkeeping/document content.
+
+Production and `named_user` mode require the composed `NamedIdentity` resolver;
+injecting a plausible `RequestContext` with `trusted_development=False` cannot
+replace it. Restricted synthetic alpha remains available only under its existing
+explicit loopback/hosted gate. It cannot open a migrated profile.
+
+## Action and role matrix
+
+`application/identity.py` owns the five roles. The immutable
+`application/authorization.py` registry owns action requirements. Requirements
+are cumulative: import needs read, write and import; complete export needs read
+and export. Tenant capabilities alone never confer independent operator or
+one-execution recovery approval.
+
+| Action | Required capabilities beyond ordinary read | Tenant roles |
+| --- | --- | --- |
+| `read` | None | Owner, Admin, Editor, Accountant, Read-only |
+| `write` | `bookkeeping:write` | Owner, Admin, Editor, Accountant |
+| `import` | `bookkeeping:write`, `bookkeeping:import` | Owner, Admin, Accountant |
+| `export` | `bookkeeping:export` | Owner, Admin, Accountant |
+| `entity_manage` | `entity:manage` | Owner |
+| `organization_manage` | `organization:manage` | Owner |
+| `members_manage` | `members:manage` | Owner; Admin restricted to non-owner/non-admin targets under #315 |
+| `ownership_manage` | `ownership:manage` | Owner; fresh authentication and last-owner rules also apply |
+| `connections_manage` | `connections:manage` | Owner; fresh authentication also applies under #318 |
+| `backup_create`, `backup_list`, `backup_download` | Corresponding `backup:create`, `backup:list`, `backup:download` | Owner |
+| `business_admin` | `business:admin` | Owner; never the legacy local administrator |
+| `archive_recover`, `restore`, `migration`, `cutover`, `ledger_reset` | Corresponding `archive:recover`, `restore:execute`, `migration:execute`, `cutover:execute`, `ledger:reset`, plus `recovery:authorize`, `platform:operate`, `recovery:approved` | Owner approval is necessary; no tenant session can execute these alone |
+| `audit_inspect` | `platform:operate`, `audit:inspect` (no ordinary read grant) | No tenant role; privileged support policy remains #341 |
+| `legacy_admin` | `local:admin` (no ordinary read grant) | No tenant role; separate loopback/operator boundary remains #319 |
+
+`platform:operate`, `recovery:approved`, `audit:inspect` and `local:admin` are
+deny-by-default requirements, absent from all tenant roles. This registry does
+not provision platform operators, mint approval credentials or expose support
+actions. #341/#298/#303 must supply their independent, scoped approval and
+execution procedures before any future adapter can execute recovery. Recovery
+approval must identify the actor, affected entity, source/target, operation,
+operator and permitted execution; revalidate active Owner authority at execution.
+Preserve maintenance/source-freeze/evidence, current archive/checksum validation,
+blank restore targets and live-target refusal. Never pass arbitrary client
+capability strings to `authorize_action`.
+
+Internal control-plane repository methods remain trusted building blocks.
+There is no HTTP membership/ownership administration in this slice. #315 must
+enforce target-role restrictions and fresh authentication at its mutation
+boundary; existing native constraints already serialize last-active-owner
+changes. Unclaimed entities have no membership-derived access, and canonical
+ownership constraints prevent ambiguous cross-organization associations.
+
+## Exposed operation inventory
+
+`http/authorization.py::ROUTE_POLICIES` enumerates each operation ID and exact
+HTTP method. No unsafe-method-to-write fallback exists for registered routes.
+
+| Current entity resources/commands | Action |
+| --- | --- |
+| Accounts, categories, payees, tags, transactions, journals: list/read | `read` |
+| Accounts/reference and transaction/journal create, update, delete, deactivate, merge | `write` |
+| Mileage list/detail; ledger and report summary | `read` |
+| Mileage create/update/delete | `write` |
+| Unreferenced document inventory, transaction receipts, receipt bytes | `read` |
+| Receipt upload/link/unlink | `write` |
+| Mixed-use list/detail; POST allocation preview | `read` |
+| Mixed-use create/update/delete | `write` |
+| Recurring list/detail | `read` |
+| Recurring create/update, explicit reconciliation and state transition | `write` |
+| Asset types/list/detail | `read` |
+| Assets create/update/delete, explicit depreciation posting and override changes | `write` |
+
+Login and callback are the only public authentication protocol operations.
+Session inspection, permitted-entity discovery/selection, activity and
+user-wide revocation receive central session/CSRF checks before their handlers,
+using the same validator and immutable request-local session snapshot. They do
+not require bookkeeping-write permission. Needs-setup
+sessions can inspect identity and sign out without composing an unscoped ledger.
+The logout-context endpoint returns only the HttpOnly logout synchronizer copy,
+never identity, membership or bookkeeping authority. Logout retains its
+documented local-clearing behavior during a storage outage
+without claiming confirmed server revocation. Framework API docs/OpenAPI keep
+their existing protected middleware; health/version and the public browser
+shell contain no private bookkeeping data.
+
+Complete bookkeeping export/import, entity setup, backup/list/download,
+archive recovery/restore, migration/cutover/reset, credentials/connections,
+organization/profile administration and audit/support are **not exposed HTTP
+operations in this revision**. Existing operator CLIs remain internal and keep
+their current independent target, maintenance, evidence and approval boundaries.
+No role check turns them into public endpoints. Later HTTP/worker/support slices
+must register the distinct action, authorize before resource/secret binding,
+and apply their domain and operator preconditions. Login grants no access to
+Streamlit's loopback-only Business Profiles/local Account settings.
+
+## Adding an operation and verification
+
+Register an explicit operation ID, exact method, action and entity/identity scope
+before adding a private route. Unknown/mismatched actions deny at request time;
+the build-time route audit rejects missing policies, duplicate IDs, mismatched
+scopes/methods, missing shared guards and non-FastAPI private routes. It examines
+effective included-router metadata, including inherited dependencies/prefixes.
+Do not assign a read action to bulk export or reuse a sibling operation ID.
+
+The route inventory test independently compares effective entity routes with
+generated OpenAPI and exercises each route for anonymous, foreign and absent
+capability denials, plus read-only denial of every mutation. Tests also attach
+a future handler without a context parameter and verify the central guard
+stops it. Synthetic test-only bulk adapters verify distinct import/export roles;
+they are absent from the shipped schema.
+
+Native PostgreSQL/HTTP coverage exercises two users/organizations, fresh issued
+session role changes/removal/disable/suspension/expiry/revocation, permitted reads
+and writes, stale baselines, allocation previews, colliding document identities,
+forged discovery/selection and unavailable authorization. Migrated-runtime tests
+verify that the identity and ledger database/environment agree before binding
+profile secrets and that accepted cutover/document bindings survive named-session
+restart without crossing profiles. These synthetic tests do not provide #321's
+hosted ZITADEL evidence or complete #320/#224 acceptance.

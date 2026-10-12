@@ -32,6 +32,7 @@ def test_logout_bootstrap_during_outage_preserves_origin_csrf_and_cookie_isolati
     auth.sessions.revoke.side_effect = IdentityError('unavailable')
     runtime = Mock()
     runtime.identity = auth
+    runtime.resolve_context = auth
     with TestClient(create_app(settings=settings, runtime_factory=lambda _: runtime), base_url=settings.public_origin) as client:
         for csrf in ('alice-logout', 'bob-logout'):
             client.cookies.set(auth.session_cookie, 'synthetic-session', domain='127.0.0.1', path='/')
@@ -145,7 +146,8 @@ def test_middleware_identity_denial_uses_cookie_and_event_handler(code, status, 
     auth = NamedIdentity(settings, Mock(), Mock())
     runtime = Mock()
     runtime.identity = auth
-    runtime.resolve_context.side_effect = IdentityError(code)
+    auth.sessions.validate.side_effect = IdentityError(code)
+    runtime.resolve_context = auth
     app = create_app(settings=settings, runtime_factory=lambda _: runtime)
     with TestClient(app, base_url=settings.public_origin) as client:
         client.cookies.set(auth.session_cookie, 'synthetic-session', domain='127.0.0.1', path='/')
