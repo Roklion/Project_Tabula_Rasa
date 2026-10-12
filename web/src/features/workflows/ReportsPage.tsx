@@ -38,7 +38,7 @@ export function ReportsPage({ dashboard = false }: { dashboard?: boolean }) {
         onStart={value => setFilters({ ...filters, start: value || undefined })} onEnd={value => setFilters({ ...filters, end: value || undefined })} /></div>
       <ActionButton onClick={() => setFilters({})}>Clear dates</ActionButton>
     </section>
-    {query.isPending ? <LoadingState label="Loading reports…" /> : query.isError ? <ErrorNotice error={query.error} onReview={() => void query.refetch()} /> : report && <div className="reportSections">
+    {query.isPending ? <LoadingState label="Loading reports…" /> : query.isError ? <ErrorNotice operation="read" error={query.error} onReview={() => void query.refetch()} /> : report && <div className="reportSections">
       <section aria-label="Profit and loss" className="reportSection"><SectionHeader title="Profit and loss"
         description={<>Inclusive period: {filters.start || 'All prior dates'} through {filters.end || 'latest date'}. Transfers and mileage do not affect income or expenses.</>} />
         <dl className="metrics reportMetrics"><Metric label="Income" value={report.profit_loss.income} /><Metric label="Expenses" value={report.profit_loss.expenses} />

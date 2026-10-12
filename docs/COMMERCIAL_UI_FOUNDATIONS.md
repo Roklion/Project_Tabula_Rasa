@@ -140,7 +140,7 @@ identity, retry or navigation-blocking state machine was introduced.
 surfaces. `revision.json` records HEAD, uncommitted status, browser project and
 viewport; a clean status identifies the exact tested revision. Before screenshots
 were captured from #325's merge `e29605d` before source edits. Local outputs remain
-ignored in `web/test-results/326-328-before` and `web/test-results/326-328-after`;
+ignored in `web/test-results/326-328-before` and `web/test-results/326-328-final`;
 retain both and attach sanitized evidence when publishing. Do not commit generated
 validation output. Native listbox wrapping varies across engines; full selection
 summaries make long selected labels readable in every engine.
@@ -152,7 +152,7 @@ npm --prefix web run build
 npm --prefix web run lint
 npm --prefix web test
 $env:TABULA_RASA_SMOKE_PORT = '5186'
-npm --prefix web run test:e2e -- --workers=2 --output=test-results/326-328-after
+npm --prefix web run test:e2e -- --workers=2 --output=test-results/326-328-final
 git diff --check
 git diff origin/main --stat
 ```
@@ -161,7 +161,8 @@ Checks cover keyboard scrolling, WCAG axe checks on representative core surfaces
 normal ordinary row weight, exact large/negative/zero decimals, current links,
 menu closing/focus restoration, dirty cancellation, read-only affordances,
 whole-journal search/grouping, source ownership, transport filters and reset,
-report scope/equation/error/loading behavior. The existing foundation sweep
+report scope/equation/error/loading behavior. Read-failure notices offer Reload without implying an editable draft; write
+failures retain their existing draft-preservation guidance. The existing foundation sweep
 continues to cover every route family. Inspect the PNGs as well as the assertions;
 local managed-browser evidence does not certify real devices, hosted acceptance,
 CI/reviewer completion or the entire design initiative.

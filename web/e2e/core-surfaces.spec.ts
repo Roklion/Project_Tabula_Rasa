@@ -26,9 +26,16 @@ const owned = { ...ordinary, id: 'mixed', record_id: 'mixed', source_type: 'mixe
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/v1/**', route => {
-    const path = new URL(route.request().url()).pathname;
+    const url = new URL(route.request().url());
+    const path = url.pathname;
+    const items = [ordinary, journal, owned].filter(row =>
+      (!url.searchParams.get('start') || row.txn_date >= url.searchParams.get('start')!)
+      && (!url.searchParams.get('end') || row.txn_date <= url.searchParams.get('end')!)
+      && (!url.searchParams.get('kind') || url.searchParams.get('kind') === 'All' || row.kind === url.searchParams.get('kind'))
+      && (!url.searchParams.has('tag_ids') || row.tags.some(tag => tag === ordinary.tags[0])));
+
     const json = path.endsWith('/session') ? session : path === '/api/v1/entities' ? { items: [session.entity] }
-      : path.endsWith('/reports/summary') ? report : path.endsWith('/ledger') ? { items: [ordinary, journal, owned] }
+      : path.endsWith('/reports/summary') ? report : path.endsWith('/ledger') ? { items }
         : { items: path.endsWith('/accounts') ? [account] : path.endsWith('/tags') ? [{ id: 'tag', name: ordinary.tags[0], active: true, baseline: 'synthetic' }] : [] };
     return route.fulfill({ json });
   });
@@ -147,6 +154,7 @@ test('ledger filters retain transport scope, reset defaults, complete-entry sear
   await filters.getByLabel('Tags', { exact: true }).selectOption('tag');
   const params = new URL((await tagged).url()).searchParams;
   await expect(filters.getByText('Selected: ' + longName, { exact: true })).toBeVisible();
+  await expect(page.getByRole('status')).toHaveText('0 matching entries');
   await page.screenshot({ path: test.info().outputPath('ledger-selected-filters.png'), fullPage: true });
   expect(params.get('start')).toBe('2026-10-01'); expect(params.get('end')).toBe('2026-10-31');
   expect(params.get('kind')).toBe('Journal'); expect(params.getAll('account_ids')).toEqual(['account']);
@@ -211,9 +219,15 @@ test('reports distinguish loading, zero, unavailable values and failed reads', a
   await page.route('**/reports/summary*', route => route.fulfill({ status: 503, json: { error: { code: 'unavailable' }, request_id: 'synthetic-failure' } }));
   await page.reload();
   await expect(page.getByRole('alert')).toContainText('synthetic-failure');
+  await expect(page.getByRole('alert')).toContainText('data could not be loaded');
+  await expect(page.getByRole('alert')).not.toContainText('draft');
   await expect(page.locator('dd')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Reload' })).toBeVisible();
   await page.screenshot({ path: test.info().outputPath('reports-error.png'), fullPage: true });
+  await page.route('**/ledger*', route => route.fulfill({ status: 503, json: { error: { code: 'unavailable' } } }));
+  await page.goto('/transactions');
+  await expect(page.getByRole('alert')).toContainText('data could not be loaded');
+  await expect(page.getByRole('alert')).not.toContainText('draft');
 });
 
 test('read-only scope retains navigation and inspection without create or edit affordances', async ({ page }) => {

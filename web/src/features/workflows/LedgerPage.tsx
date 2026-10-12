@@ -72,7 +72,7 @@ export function LedgerPage() {
       {!query.isPending && !query.isError && <p role="status">{rows.length} matching entries</p>}
       {choices.error && <ErrorNotice error={choices.error} />}
       {failure !== undefined && <ErrorNotice error={failure} />}
-      {query.isPending ? <LoadingState label="Loading ledger…" /> : query.isError ? <ErrorNotice error={query.error} onReview={() => void query.refetch()} />
+      {query.isPending ? <LoadingState label="Loading ledger…" /> : query.isError ? <ErrorNotice operation="read" error={query.error} onReview={() => void query.refetch()} />
         : rows.length === 0 ? <EmptyState title="No matching entries">Add an entry or adjust the filters.</EmptyState>
         : <TableRegion label="Ledger"><table className="ledgerTable"><caption>Business ledger</caption>
           <thead><tr>{['Date', 'Type', 'Account', 'To account', 'Category', 'Payee', 'Amount', 'Debit', 'Credit', 'Tags', 'Description', 'Receipt', 'Reference', 'ID', 'Actions'].map(name => <th scope="col" className={['Amount', 'Debit', 'Credit', 'Receipt'].includes(name) ? 'amount' : undefined} key={name}>{name}</th>)}</tr></thead>
