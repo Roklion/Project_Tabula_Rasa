@@ -5,7 +5,7 @@ from sqlalchemy import text
 
 from tabula_rasa.application.identity import IdentityError, VerifiedIdentity, capabilities
 from tabula_rasa.infrastructure.postgres.control_plane import PostgresIdentityRepository
-from tabula_rasa.infrastructure.postgres.sessions import PostgresSessionRepository
+from tabula_rasa.infrastructure.postgres.sessions import PostgresSessionRepository, credential_hash
 from tabula_rasa.infrastructure.postgres.runtime import DatabaseError
 from alembic import command
 from tabula_rasa.infrastructure.postgres.migrations import migration_config, upgrade
@@ -145,6 +145,39 @@ def test_durable_session_epochs_expiry_and_subject_revocation(database):
         rotated.validate(fresh)
     with pytest.raises(IdentityError):
         sessions.validate(fresh)  # Old worker cannot continue on stale config.
+
+
+def test_session_retention_preserves_active_users_and_other_environments(database):
+    setup(database)
+    now = [datetime.now(timezone.utc)]
+    sessions = PostgresSessionRepository(database, 'test', 'a' * 64, clock=lambda: now[0])
+    other = PostgresSessionRepository(database, 'staging', 'b' * 64, clock=lambda: now[0])
+    sessions.configure()
+    other.configure()
+    expired, _ = sessions.issue(verified(now=now[0]))
+    foreign, _ = other.issue(verified(now=now[0]))
+    now[0] += timedelta(minutes=30)
+    active, _ = sessions.issue(verified('bob', now=now[0]))
+    revoked, _ = sessions.issue(verified(now=now[0]))
+    replacement, _ = sessions.issue(verified(now=now[0]), previous=revoked)
+    absolute, _ = sessions.issue(verified(now=now[0]))
+    with database.transaction() as connection:
+        connection.execute(text('''UPDATE identity_sessions SET absolute_expires_at=:expiry,
+            idle_expires_at=:expiry WHERE credential_hash=:hash'''),
+            {'expiry': now[0] + timedelta(seconds=1), 'hash': credential_hash(absolute)})
+    now[0] += timedelta(seconds=1)
+    sessions.issue(verified(now=now[0]))
+    with database.transaction(read_only=True) as connection:
+        assert connection.scalar(text('SELECT count(*) FROM identity_sessions')) == 4
+        assert connection.scalar(text("SELECT count(*) FROM identity_sessions WHERE environment='staging'")) == 1
+    assert sessions.validate(active).selected.entity_id == 'beta'
+    assert sessions.validate(replacement).selected.entity_id == 'alpha'
+    for raw in (expired, revoked, absolute):
+        with pytest.raises(IdentityError) as caught:
+            sessions.validate(raw)
+        assert caught.value.code == 'unauthorized'
+    with pytest.raises(IdentityError):
+        other.validate(foreign)  # Retained foreign row still cannot authorize.
 
 
 def test_single_use_browser_bound_login_and_expiry(database):

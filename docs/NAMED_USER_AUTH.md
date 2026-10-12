@@ -45,7 +45,11 @@ transaction. Return paths are only `/` and `/onboarding`. The code callback
 consumes it before exchange; failures require starting a new login. The server
 prunes expired and consumed login transactions in the same environment when a
 new login starts, including clients without a previous login cookie. Active
-attempts and other environments are preserved. It checks signed RS256 identity,
+attempts and other environments are preserved. Successful session issuance also
+prunes revoked sessions and sessions at their idle or absolute expiry boundary
+in the same environment; active sessions and other environments are preserved.
+Expiry and revocation are still enforced on every protected request, independently
+of this cleanup. It checks signed RS256 identity,
 issuer, audience/authorized party, nonce, fresh
 authentication time, expiry and mandatory matching-subject verified-email
 UserInfo. Discovery/JWKS/endpoints are restricted to the configured HTTPS issuer

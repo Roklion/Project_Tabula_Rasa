@@ -100,6 +100,9 @@ class PostgresSessionRepository:
                 connection.execute(text('''UPDATE identity_sessions SET revoked_at=:now
                     WHERE credential_hash=:hash AND environment=:env'''),
                     {'hash': previous_hash, 'env': self.environment, 'now': now})
+            connection.execute(text('''DELETE FROM identity_sessions WHERE environment=:env
+                AND (revoked_at IS NOT NULL OR idle_expires_at<=:now OR absolute_expires_at<=:now)'''),
+                {'env': self.environment, 'now': now})
             connection.execute(text('''INSERT INTO identity_sessions(credential_hash,environment,environment_epoch,user_id,
                 binding_id,user_epoch,csrf_token,cache_id,created_at,authenticated_at,idle_expires_at,absolute_expires_at,
                 organization_id,entity_id) VALUES (:hash,:env,:epoch,:user,:binding,:user_epoch,:csrf,:cache,:now,:auth,
