@@ -12,6 +12,8 @@ export function ContextBoundary({ children }: { children: ReactNode }) {
   const [state, setState] = useState<{ session?: SessionState; error?: unknown; signedOut?: boolean }>(
     () => window.location.pathname === '/signed-out' ? { signedOut: true } : {});
   const identityGeneration = useRef(0);
+  // Retain no private identity/entity data after a failed authority check.
+  const logoutContext = useRef<{ csrf_token: string } | undefined>(undefined);
   const [generation, setGeneration] = useState(0);
   const [entities, setEntities] = useState<Schemas['EntityInfo'][]>([]);
   const [entityError, setEntityError] = useState<unknown>();
@@ -32,6 +34,7 @@ export function ContextBoundary({ children }: { children: ReactNode }) {
             identityGeneration.current++;
             setEntities([]); setEntityError(undefined); setSelectionError(undefined);
           }
+          logoutContext.current = { csrf_token: session.csrf_token };
           setState({ session });
         }
       } catch (error) {
@@ -50,6 +53,7 @@ export function ContextBoundary({ children }: { children: ReactNode }) {
     const channel = typeof BroadcastChannel === 'undefined' ? undefined : new BroadcastChannel('tabula-auth');
     if (channel) channel.onmessage = event => {
       if (event.data !== 'signed-out') return;
+      logoutContext.current = undefined;
       identityGeneration.current++; setEntities([]); setEntityError(undefined); setSelectionError(undefined);
       setState({ signedOut: true });
     };
@@ -69,15 +73,15 @@ export function ContextBoundary({ children }: { children: ReactNode }) {
     };
   }, [state.session]);
   async function logout() {
-    const session = state.session;
-    if (!session) return;
+    const context = logoutContext.current;
+    logoutContext.current = undefined;
     // Unmount immediately; server failure never keeps private drafts on screen.
     identityGeneration.current++;
     setEntities([]); setEntityError(undefined); setSelectionError(undefined);
     setState({ signedOut: true });
     const channel = typeof BroadcastChannel === 'undefined' ? undefined : new BroadcastChannel('tabula-auth');
     channel?.postMessage('signed-out'); channel?.close();
-    try { await api.logout(session); }
+    try { await api.logout(context); }
     catch (error) { setState({ error, signedOut: true }); }
   }
   useEffect(() => {
@@ -87,6 +91,7 @@ export function ContextBoundary({ children }: { children: ReactNode }) {
     api.session(controller.signal).then(
       session => {
         if (!controller.signal.aborted && expected === identityGeneration.current) {
+          logoutContext.current = { csrf_token: session.csrf_token };
           setState({ session });
           if (session.state === 'needs_setup') { setEntities([]); return; }
           api.entities(controller.signal).then(
@@ -106,6 +111,7 @@ export function ContextBoundary({ children }: { children: ReactNode }) {
       <a href="/api/v1/auth/login">Sign in</a></main>;
   if (state.error) return <main className="standalone"><h1>Project Tabula Rasa</h1>
     <ErrorNotice error={state.error} onReview={() => { setState({}); setGeneration(value => value + 1); }} />
+    <button onClick={() => void logout()}>Sign out</button>
   </main>;
   if (!state.session) return <main className="standalone"><LoadingState label="Loading business context…" /></main>;
   if (state.session.state === 'needs_setup') return <main className="standalone"><h1>Workspace setup required</h1>
@@ -118,7 +124,10 @@ export function ContextBoundary({ children }: { children: ReactNode }) {
     setSelectionError(undefined);
     try {
       const session = await api.selectEntity(state.session, id);
-      if (expected === identityGeneration.current) setState({ session });
+      if (expected === identityGeneration.current) {
+        logoutContext.current = { csrf_token: session.csrf_token };
+        setState({ session });
+      }
     }
     catch (error) { setSelectionError(error); }
     finally { setSwitching(false); }

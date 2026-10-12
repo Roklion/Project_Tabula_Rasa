@@ -293,6 +293,9 @@ expose a raw traceback for this configuration failure.
   available business remains.
 - Logout clears the local browser even when server revocation cannot be
   confirmed, and displays a safe failure instead of claiming durable success.
+  Authorization failure screens retain Sign out without restoring private UI;
+  a reload during storage outage can obtain logout-only CSRF through a same-origin
+  read. Network failure remains visible and does not claim cookie clearing.
   Read-only and setup users can inspect identity and sign out without ledger
   write permission. [Named-user authentication](docs/NAMED_USER_AUTH.md) owns the
   operator settings, session policy and remaining release gates. Organization

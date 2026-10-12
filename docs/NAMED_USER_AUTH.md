@@ -53,6 +53,10 @@ Ownership associates with existing canonical `business_entities`; it does not
 create an alternate ledger, rebaseline records, or change cutover provenance.
 Repository operations are internal trusted building blocks, not public
 administration endpoints; future callers must enforce #313/#315 action policy.
+Forward revision `0008_owner_lock_scope` keeps organization-owner serialization
+on user state updates/deletion, not login display-metadata or revocation-epoch
+updates. Membership owner locks and deferred last-active-owner checks remain.
+It changes no bookkeeping fields or portable-export inventory.
 
 Hosted opaque session/login cookies use `__Host-tabula_session` and
 `__Host-tabula_login`: Secure, HttpOnly, SameSite=Lax, Path=/, no Domain. Loopback
@@ -60,6 +64,14 @@ HTTP uses distinct `tabula_dev_*` names. A matching HttpOnly host-only CSRF copy
 (`__Host-tabula_csrf`) permits Origin/CSRF-valid logout to clear cookies even
 when PostgreSQL is unavailable. That copy grants no bookkeeping authority.
 Other unsafe routes use the freshly validated session's synchronizer token.
+The failure screen retains only logout CSRF, not private session/entity data,
+and offers Sign out. After an initial reload during an outage, the browser reads
+`GET /api/v1/auth/logout-context` with `X-Tabula-Logout: 1` to obtain only this
+cookie's logout token without querying authorization storage. This no-store,
+same-origin-only read rejects foreign Origin/Fetch-Metadata and grants no access
+or renewal; CORS remains disabled. The following logout POST still requires
+exact Origin and matching CSRF. A network/server outage that prevents cookie
+clearing is reported as unavailable, never as confirmed server revocation.
 
 Only session credential hashes are stored. Sessions survive worker restarts,
 expire after 30 minutes idle or 12 hours absolute, and are freshly checked on

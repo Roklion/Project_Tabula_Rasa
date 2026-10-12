@@ -25,6 +25,36 @@ def client_for(database):
     return TestClient(app, base_url=settings.public_origin), auth, factory
 
 
+def test_logout_bootstrap_during_outage_preserves_origin_csrf_and_cookie_isolation():
+    settings = HttpSettings('test', 'http://127.0.0.1', access_mode='named_user')
+    auth = NamedIdentity(settings, Mock(), Mock())
+    auth.sessions.validate.side_effect = IdentityError('unavailable')
+    auth.sessions.revoke.side_effect = IdentityError('unavailable')
+    runtime = Mock()
+    runtime.identity = auth
+    with TestClient(create_app(settings=settings, runtime_factory=lambda _: runtime), base_url=settings.public_origin) as client:
+        for csrf in ('alice-logout', 'bob-logout'):
+            client.cookies.set(auth.session_cookie, 'synthetic-session', domain='127.0.0.1', path='/')
+            client.cookies.set(auth.csrf_cookie, csrf, domain='127.0.0.1', path='/')
+            for headers in ({}, {'x-tabula-logout': '1', 'origin': 'https://evil.test'},
+                            {'x-tabula-logout': '1', 'sec-fetch-site': 'cross-site'}):
+                assert client.get('/api/v1/auth/logout-context', headers=headers).status_code == 403
+            response = client.get('/api/v1/auth/logout-context', headers={'x-tabula-logout': '1', 'sec-fetch-site': 'same-origin'})
+            assert response.status_code == 200 and response.json() == {'csrf_token': csrf}
+            assert response.headers['cache-control'] == 'no-store'
+            assert 'access-control-allow-origin' not in response.headers
+            auth.sessions.validate.assert_not_called()
+            auth.sessions.revoke.assert_not_called()
+            headers = {'origin': settings.public_origin, 'x-csrf-token': csrf}
+            assert client.post('/api/v1/auth/logout', headers={**headers, 'origin': 'https://evil.test'}).status_code == 403
+            assert client.post('/api/v1/auth/logout', headers={**headers, 'x-csrf-token': 'wrong'}).status_code == 403
+            assert client.post('/api/v1/auth/logout', headers=headers).status_code == 503
+            assert auth.session_cookie not in client.cookies and auth.csrf_cookie not in client.cookies
+            auth.sessions.revoke.reset_mock()
+        assert client.get('/api/v1/auth/logout-context', headers={'x-tabula-logout': '1'}).status_code == 401
+        runtime.services.assert_not_called()
+
+
 def test_login_callback_cookie_contract_and_no_entity_setup(database):
     client, auth, factory = client_for(database)
     auth.provider.authorization_url.return_value = 'https://id.example.test/authorize'

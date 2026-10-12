@@ -115,3 +115,39 @@ it('replaces private scope when validation recovers to another authorized busine
   await waitFor(() => expect(caches[0].getQueryCache().getAll()).toHaveLength(0));
   expect(caches[1].getQueryData(['private'])).toBeUndefined();
 });
+
+it('offers outage logout with only the retained CSRF token after clearing private scope', async () => {
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  vi.spyOn(api, 'session').mockResolvedValueOnce({ ...session, trusted_development: false })
+    .mockRejectedValue(new ApiError('unavailable'));
+  vi.spyOn(api, 'entities').mockResolvedValue({ items: [session.entity] });
+  const logout = vi.spyOn(api, 'logout').mockRejectedValue(new ApiError('unavailable'));
+  let cache: QueryClient | undefined;
+  function Feature() {
+    cache = useQueryClient();
+    return <input aria-label="Outage draft" defaultValue="Private draft" />;
+  }
+  render(<ContextBoundary><Feature /></ContextBoundary>);
+  await screen.findByLabelText('Outage draft');
+  cache!.setQueryData(['private'], 'Private ledger');
+  fireEvent(window, new Event('focus'));
+  const signOut = await screen.findByRole('button', { name: 'Sign out' });
+  expect(screen.queryByLabelText('Outage draft')).not.toBeInTheDocument();
+  await waitFor(() => expect(cache!.getQueryCache().getAll()).toHaveLength(0));
+  fireEvent.click(signOut);
+  await screen.findByRole('link', { name: 'Sign in' });
+  expect(logout).toHaveBeenCalledWith({ csrf_token: session.csrf_token });
+  expect(screen.getByRole('alert')).toBeVisible();
+});
+
+it('offers logout bootstrap on an initial outage without composing private UI', async () => {
+  vi.spyOn(api, 'session').mockRejectedValue(new ApiError('unavailable'));
+  const entities = vi.spyOn(api, 'entities');
+  const logout = vi.spyOn(api, 'logout').mockResolvedValue(undefined);
+  render(<ContextBoundary><p>Private ledger</p></ContextBoundary>);
+  fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+  await screen.findByRole('link', { name: 'Sign in' });
+  expect(logout).toHaveBeenCalledWith(undefined);
+  expect(screen.queryByText('Private ledger')).not.toBeInTheDocument();
+  expect(entities).not.toHaveBeenCalled();
+});

@@ -65,6 +65,10 @@ class EntitySelection(DTO):
     entity_id: str
 
 
+class LogoutContext(DTO):
+    csrf_token: str
+
+
 class SessionInfo(DTO):
     state: Literal["ready"] = "ready"
     actor_id: str

@@ -4,6 +4,28 @@ import { ApiError, createApi } from './client';
 import { session } from '../test/fixtures';
 
 describe('typed client', () => {
+  it('bootstraps only logout CSRF on reload and still reports unconfirmed revocation', async () => {
+    const requests: Request[] = [];
+    const client = createApi((async (request: Request) => {
+      requests.push(request);
+      return request.method === 'GET'
+        ? new Response(JSON.stringify({ csrf_token: 'logout-only' }), { status: 200 })
+        : new Response(JSON.stringify({ error: { code: 'unavailable' } }), { status: 503 });
+    }) as typeof fetch);
+    await expect(client.logout()).rejects.toMatchObject({ code: 'unavailable' });
+    expect(requests).toHaveLength(2);
+    expect(requests[0].url).toContain('/api/v1/auth/logout-context');
+    expect(requests[0].headers.get('X-Tabula-Logout')).toBe('1');
+    expect(requests[0].credentials).toBe('same-origin');
+    expect(requests[1].headers.get('X-CSRF-Token')).toBe('logout-only');
+  });
+
+  it('does not send logout when its CSRF bootstrap fails', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ error: { code: 'forbidden' } }), { status: 403 }));
+    await expect(createApi(fetcher as typeof fetch).logout()).rejects.toMatchObject({ code: 'forbidden' });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
   it('uses same-origin scoped routes, credentials and CSRF without retrying a failed save', async () => {
     const requests: Request[] = [];
     const fetcher = vi.fn(async (request: Request) => {

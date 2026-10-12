@@ -4,6 +4,7 @@ from starlette.responses import RedirectResponse, Response
 from tabula_rasa.application.identity import IdentityError
 from ..context import require_csrf
 from ..errors import ERROR_RESPONSES, TransportError, error_response
+from ..models.common import LogoutContext
 
 router = APIRouter(responses=ERROR_RESPONSES, tags=["Authentication"])
 
@@ -47,6 +48,21 @@ def callback(request: Request):
     auth.clear(response, login_only=True)
     response.headers['Referrer-Policy'] = 'no-referrer'
     return response
+
+
+@router.get("/api/v1/auth/logout-context", response_model=LogoutContext, operation_id="logout_context")
+def logout_context(request: Request):
+    auth = identity(request)
+    # A same-origin read of the logout-only cookie, not an authenticated session.
+    # The custom header requires preflight cross-origin; this API grants no CORS.
+    if (request.headers.get("x-tabula-logout") != "1"
+            or request.headers.get("sec-fetch-site", "same-origin") != "same-origin"
+            or request.headers.get("origin", auth.settings.public_origin) != auth.settings.public_origin):
+        raise TransportError("forbidden")
+    token = request.cookies.get(auth.csrf_cookie, "")
+    if not token:
+        raise TransportError("unauthorized")
+    return LogoutContext(csrf_token=token)
 
 
 @router.post("/api/v1/auth/logout", status_code=204, operation_id="logout")

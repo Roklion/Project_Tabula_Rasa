@@ -51,8 +51,11 @@ export function createApi(fetcher: typeof fetch = (...args) => fetch(...args)) {
   const createParams = (session: Session) => ({ ...listParams(session), headers: headers(session.csrf_token) });
   return {
     session: (signal?: AbortSignal) => safe(async () => unwrap(await client.GET('/api/v1/session', { signal, headers: headers() }))),
-    logout: (s: SessionState) => safe(async () => {
-      const result = await client.POST('/api/v1/auth/logout', { headers: headers(s.csrf_token) });
+    logout: (s?: Pick<SessionState, 'csrf_token'>) => safe(async () => {
+      const context = s ?? unwrap(await client.GET('/api/v1/auth/logout-context', {
+        headers: { ...headers(), 'X-Tabula-Logout': '1' },
+      }));
+      const result = await client.POST('/api/v1/auth/logout', { headers: headers(context.csrf_token) });
       if (!result.response.ok) throw new ApiError(result.error?.error.code ?? 'unavailable');
     }),
     activity: (s: SessionState) => safe(async () => {

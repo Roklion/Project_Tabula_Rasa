@@ -6,6 +6,7 @@ from sqlalchemy import text
 from tabula_rasa.application.identity import IdentityError, VerifiedIdentity, capabilities
 from tabula_rasa.infrastructure.postgres.control_plane import PostgresIdentityRepository
 from tabula_rasa.infrastructure.postgres.sessions import PostgresSessionRepository
+from tabula_rasa.infrastructure.postgres.runtime import DatabaseError
 from alembic import command
 from tabula_rasa.infrastructure.postgres.migrations import migration_config, upgrade
 from tests.postgres._support import entity
@@ -74,6 +75,41 @@ def test_last_active_owner_guards_all_state_paths(database):
     repo.set_membership(a, bob.id, 'admin')
     with pytest.raises(IdentityError):
         repo.set_organization_state(a, 'active')
+
+
+def test_login_metadata_does_not_wait_for_unrelated_organization_lock(empty_database):
+    database = empty_database
+    with database.engine.begin() as connection:
+        command.upgrade(migration_config(connection), '0007_identity_sessions')
+    repo, alice, bob, a, b = setup(database)
+    with database.engine.begin() as holding:
+        holding.execute(text('SELECT id FROM organizations WHERE id=:org FOR UPDATE'), {'org': a})
+        with pytest.raises(DatabaseError) as caught:
+            with database.transaction() as connection:
+                connection.execute(text("SET LOCAL lock_timeout = '500ms'"))
+                repo.resolve_user(verified())
+        assert caught.value.code == 'unavailable'
+    upgrade(database)
+    # A separate administrative transaction owns A's organization lock. Metadata
+    # login must still complete; state changes must keep owner serialization.
+    with database.engine.connect() as holding:
+        transaction = holding.begin()
+        try:
+            holding.execute(text('SELECT id FROM organizations WHERE id=:org FOR UPDATE'), {'org': a})
+            with database.transaction() as connection:
+                connection.execute(text("SET LOCAL lock_timeout = '500ms'"))
+                assert repo.resolve_user(verified()).id == alice.id
+                assert repo.resolve_user(verified('bob')).id == bob.id
+            with pytest.raises(DatabaseError) as caught:
+                with database.transaction() as connection:
+                    connection.execute(text("SET LOCAL lock_timeout = '500ms'"))
+                    connection.execute(text("UPDATE identity_users SET state='disabled' WHERE id=:user"), {'user': alice.id})
+            # DatabaseError's safe code; no driver exception or private SQL.
+            assert caught.value.code == 'unavailable'
+        finally:
+            transaction.rollback()
+    assert [item.organization_id for item in repo.allowed_entities(alice.id)] == [a]
+    assert [item.organization_id for item in repo.allowed_entities(bob.id)] == [b]
 
 
 def test_durable_session_epochs_expiry_and_subject_revocation(database):
