@@ -63,6 +63,22 @@ category service has no independent inactive flag. Payees/tags support rename,
 active status, multi-source merge and the service's guarded remove/deactivate
 result. Inactive historical references remain resolvable.
 
+## Workflow navigation and actions
+
+The sidebar indicates the current destination with a leading rule and weight,
+as well as color. Transactions remains current while visiting Journals,
+Mixed-use expenses, Recurring expenses, Payees or Tags. Their shared **Entries**
+navigation wraps on narrow screens and identifies the current route, including
+create/detail/merge screens. These are ordinary links: unsaved changes still
+require keep/discard, cancellation restores the opener, and successful navigation
+closes the mobile menu and focuses main content. Server business context and
+capability checks retain their existing owners under #222.
+
+Dashboard groups primary **View ledger** and neutral **Set up accounts** links
+beside its heading. Transactions groups primary **Add transaction** and neutral
+**Add journal**; the other entry lists group their existing Add link with the
+heading. Inline informational links remain underlined.
+
 ## Transactions and journals
 
 **Transactions** shows the combined ledger with **Add transaction** and **Add
@@ -109,12 +125,22 @@ matching and OR-within-tag matching. The browser exposes From, To, Type, Account
 and Tags (Accounts also offers labeled Income/Expense category targets),
 complete-entry sort/order controls and a logical result count, plus case-insensitive search of displayed text and journal posting text.
 Search does not match amounts, dates or receipt contents. The initial view covers
-all dates, newest first; **Clear filters** restores it.
+all dates, newest first; **Clear filters** restores it, including empty search,
+all target/tag/type selections and Date/Descending ordering. Related filters
+align on desktop and stack on narrow screens. Accounts/Tags are labeled native
+listboxes with multi-selection guidance; full selected labels are displayed
+below them even when the browser truncates an option. **Clear search** appears
+for nonblank text and preserves the other filters.
 
 The table resolves historical names and hierarchy paths, includes transfer
 destinations, receipt counts, references and stable IDs, and groups journal
 postings below their parent with Debit/Credit values. It scrolls within its region
-on narrow screens; posting rows have no separate edit/delete action.
+on narrow screens within the named, keyboard-focusable **Ledger** region;
+posting rows have no separate edit/delete action. Ordinary rows use normal weight,
+while journal groups have a visible boundary and subordinate postings. Amount,
+Debit/Credit and receipt-count headings align with their values. Long names,
+tags, memos and identities wrap. Short **Edit** / **Receipts** controls retain
+complete record descriptions as their accessible names.
 
 Dashboard and Reports use `GET .../reports/summary` over one fresh service snapshot.
 `ReportingService` owns profit/loss, balance-sheet sections, hierarchy rollups,
@@ -127,6 +153,17 @@ does not recompute accounting totals. Profit/loss uses the selected From/To
 period; the balance sheet uses To as its as-of date. The separately labeled
 **Current account balances · all dates** view includes inactive accounts and
 opening balances. Transfers and mileage do not affect income or expenses.
+
+The shared **Report period** controls explain those scopes, and **Clear dates**
+returns to all dates. Profit/loss, balance-sheet metrics/equation and all-date
+balances are separate sections. Values retain server precision and signs with
+tabular numerals; comparable numeric table columns align right. Negative net
+income/current earnings keep their minus sign and use red. Empty statement groups
+and account balances have explicit text. Missing values display an em dash and
+unavailable feedback, not a fabricated zero; loading and errors show their shared
+status/reload controls without displaying invented summaries. The equation status
+includes the server's difference when nonzero. This remains the existing summary
+catalog, without extra charts or browser accounting calculations.
 
 Confirmed and uncertain mutations invalidate the selected context's reference,
 entry, ledger and report queries. Loading, empty, validation, conflict and failure
