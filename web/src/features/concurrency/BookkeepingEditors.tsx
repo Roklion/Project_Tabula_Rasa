@@ -1,3 +1,4 @@
+import { PageHeader } from '../../components/VisualPrimitives';
 import { Link } from 'react-router-dom';
 import { useFieldArray, type UseFormReturn } from 'react-hook-form';
 import { api, type Schemas } from '../../api/client';
@@ -116,9 +117,8 @@ export function JournalEditor({ row, onClose }: { row: Schemas['Journal']; onClo
 export function BookkeepingPage({ resource }: { resource: 'transactions' | 'journals' }) {
   const session = useEntity();
   const title = resource[0].toUpperCase() + resource.slice(1);
-  return <><h1>{title}</h1><p className="lead">Review existing records and save changes for this business.</p>
-    <nav aria-label="Entries"><Link to="/transactions">Transactions</Link> · <Link to="/journals">Journals</Link></nav>
-    {session.capabilities.includes('bookkeeping:write') && <Link className="button" to={'/' + resource + '/new'}>Add {resource === 'transactions' ? 'transaction' : 'journal'}</Link>}
+  return <><PageHeader title={title} description="Review existing records and save changes for this business."
+    actions={session.capabilities.includes('bookkeeping:write') && <Link className="button" to={'/' + resource + '/new'}>Add {resource === 'transactions' ? 'transaction' : 'journal'}</Link>} />
     {resource === 'transactions' ? <RecordList key={resource} resource={resource} title="Transactions" list={api.transactions}
       label={row => `${row.txn_date} · ${row.description || row.kind} · ${row.amount}`} canEdit={row => !row.source_type} receiptTarget={row => !row.source_type}
       editor={(row, close) => <TransactionEditor row={row} onClose={close} />} />

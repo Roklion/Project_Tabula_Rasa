@@ -1,4 +1,6 @@
-import { Fragment, useState } from 'react';
+import { DateRangeFields } from '../../components/DateRangeFields';
+import { ActionButton, PageHeader, TableRegion } from '../../components/VisualPrimitives';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, type Schemas } from '../../api/client';
@@ -42,39 +44,42 @@ export function LedgerPage() {
     const compared = left < right ? -1 : left > right ? 1 : 0;
     return descending ? -compared : compared;
   });
+  const selectedTargets = [...choices.accounts.filter(row => filters.account_ids.includes(row.id)).map(row => row.name),
+    ...choices.categories.filter(row => filters.category_ids.includes(row.id)).map(row => `${row.kind} category · ${row.name}`)];
+  const selectedTags = choices.tags.filter(row => filters.tag_ids.includes(row.id)).map(row => row.name);
   const multi = (element: HTMLSelectElement) => Array.from(element.selectedOptions, option => option.value);
-  return <><h1>Transactions</h1><p className="lead">Simple transactions and complete journals for {session.entity.name}.</p>
-    <nav aria-label="Entries"><Link to="/transactions">Transactions</Link> · <Link to="/journals">Journals</Link> · <Link to="/mixed-use">Mixed-use expenses</Link> · <Link to="/recurring">Recurring expenses</Link> · <Link to="/payees">Payees</Link> · <Link to="/tags">Tags</Link></nav>
+  return <><PageHeader title="Transactions" description={<>Simple transactions and complete journals for {session.entity.name}.</>}
+    actions={!loadingRecord && !selected && session.capabilities.includes('bookkeeping:write') && <>
+      <Link className="button" to="/transactions/new">Add transaction</Link><Link to="/journals/new" className="button action-secondary">Add journal</Link></>} />
     {loadingRecord ? <LoadingState label="Loading record…" /> : selected ? 'transaction' in selected ? <TransactionEditor row={selected.transaction} onClose={() => setSelected(undefined)} />
       : <JournalEditor row={selected.journal} onClose={() => setSelected(undefined)} /> : <>
-      {session.capabilities.includes('bookkeeping:write') && <div className="actions"><Link className="button" to="/transactions/new">Add transaction</Link><Link to="/journals/new" className="button">Add journal</Link></div>}
-      <div className="filterGrid" aria-label="Ledger filters">
-        <Field id="from" label="From"><input id="from" type="date" value={filters.start ?? ''} onChange={event => setFilters({ ...filters, start: event.target.value || undefined })} /></Field>
-        <Field id="to" label="To"><input id="to" type="date" value={filters.end ?? ''} onChange={event => setFilters({ ...filters, end: event.target.value || undefined })} /></Field>
+      <section className="surface ledgerFilters" aria-label="Ledger filters"><h2>Filter ledger</h2>
+      <div className="filterGrid ledgerFilterGrid">
+        <DateRangeFields prefix="ledger" start={filters.start} end={filters.end}
+          onStart={value => setFilters({ ...filters, start: value || undefined })} onEnd={value => setFilters({ ...filters, end: value || undefined })} />
         <Field id="kind" label="Type"><select id="kind" value={filters.kind} onChange={event => setFilters({ ...filters, kind: event.target.value as Kind })}>{['All', 'Income', 'Expense', 'Transfer', 'Journal'].map(kind => <option key={kind}>{kind}</option>)}</select></Field>
-        <Field id="account-filter" label="Accounts"><select id="account-filter" multiple value={[...filters.account_ids.map(id => 'account:' + id), ...filters.category_ids.map(id => 'category:' + id)]} onChange={event => {
+        <Field id="account-filter" label="Accounts"><select id="account-filter" multiple size={4} aria-describedby="account-filter-help" value={[...filters.account_ids.map(id => 'account:' + id), ...filters.category_ids.map(id => 'category:' + id)]} onChange={event => {
           const targets = multi(event.target);
           setFilters({ ...filters, account_ids: targets.filter(id => id.startsWith('account:')).map(id => id.slice(8)),
             category_ids: targets.filter(id => id.startsWith('category:')).map(id => id.slice(9)) });
-        }}>{choices.accounts.map(row => <option key={row.id} value={'account:' + row.id}>{row.name}{row.active ? '' : ' (Inactive)'}</option>)}{choices.categories.map(row => <option key={'category:' + row.id} value={'category:' + row.id}>{row.kind} category · {row.name}</option>)}</select></Field>
-        <Field id="tag-filter" label="Tags"><select id="tag-filter" multiple value={filters.tag_ids} onChange={event => setFilters({ ...filters, tag_ids: multi(event.target) })}>{choices.tags.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></Field>
-        <Field id="search" label="Search transactions"><input id="search" value={search} onChange={event => setSearch(event.target.value)} /></Field>
-        {search.trim() && <button type="button" onClick={() => setSearch('')}>Clear search</button>}
+        }}>{choices.accounts.map(row => <option key={row.id} value={'account:' + row.id}>{row.name}{row.active ? '' : ' (Inactive)'}</option>)}{choices.categories.map(row => <option key={'category:' + row.id} value={'category:' + row.id}>{row.kind} category · {row.name}</option>)}</select><p id="account-filter-help" className="fieldHint">Accounts and category targets. Select multiple with Ctrl/Command or Shift; no selection includes all.</p>{selectedTargets.length > 0 && <p className="fieldHint">Selected: {selectedTargets.join('; ')}</p>}</Field>
+        <Field id="tag-filter" label="Tags"><select id="tag-filter" multiple size={4} aria-describedby="tag-filter-help" value={filters.tag_ids} onChange={event => setFilters({ ...filters, tag_ids: multi(event.target) })}>{choices.tags.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select><p id="tag-filter-help" className="fieldHint">Matches any selected tag. Select multiple with Ctrl/Command or Shift; no selection includes all.</p>{selectedTags.length > 0 && <p className="fieldHint">Selected: {selectedTags.join('; ')}</p>}</Field>
+        <div className="ledgerSearch"><Field id="search" label="Search transactions"><input id="search" type="search" value={search} onChange={event => setSearch(event.target.value)} /></Field>
+        {search.trim() && <ActionButton onClick={() => setSearch('')}>Clear search</ActionButton>}</div>
         <Field id="sort-field" label="Sort entries by"><select id="sort-field" value={sortField} onChange={event => setSortField(event.target.value as keyof typeof sortFields)}>{Object.keys(sortFields).map(field => <option key={field}>{field}</option>)}</select></Field>
         <Field id="entry-order" label="Entry order"><select id="entry-order" value={descending ? 'Descending' : 'Ascending'} onChange={event => setDescending(event.target.value === 'Descending')}><option>Descending</option><option>Ascending</option></select></Field>
-        <button type="button" onClick={() => { setFilters({ kind: 'All', account_ids: [], category_ids: [], tag_ids: [] }); setSearch(''); setSortField('Date'); setDescending(true); }}>Clear filters</button>
-      </div>
+      </div><div className="actions filterActions"><ActionButton onClick={() => { setFilters({ kind: 'All', account_ids: [], category_ids: [], tag_ids: [] }); setSearch(''); setSortField('Date'); setDescending(true); }}>Clear filters</ActionButton></div></section>
       {!query.isPending && !query.isError && <p role="status">{rows.length} matching entries</p>}
       {choices.error && <ErrorNotice error={choices.error} />}
       {failure !== undefined && <ErrorNotice error={failure} />}
       {query.isPending ? <LoadingState label="Loading ledger…" /> : query.isError ? <ErrorNotice error={query.error} onReview={() => void query.refetch()} />
         : rows.length === 0 ? <EmptyState title="No matching entries">Add an entry or adjust the filters.</EmptyState>
-        : <div className="tableScroll" role="region" aria-label="Ledger" tabIndex={0}><table><caption>Business ledger</caption>
-          <thead><tr>{['Date', 'Type', 'Account', 'To account', 'Category', 'Payee', 'Amount', 'Debit', 'Credit', 'Tags', 'Description', 'Receipt', 'Reference', 'ID', 'Actions'].map(name => <th scope="col" key={name}>{name}</th>)}</tr></thead>
-          <tbody>{rows.map(row => <Fragment key={row.id}><tr><td>{row.txn_date}</td><th scope="row">{row.kind}{row.source_type === 'mixed_use_expense' ? ' · Mixed-use' : ''}</th><td>{row.account}</td><td>{row.to_account}</td><td>{row.category}</td><td>{row.payee}</td><td className="amount">{row.amount}</td><td /><td /><td>{row.tags.join(', ')}</td><td>{row.description}</td><td>{row.receipt_count ? `${row.receipt_count} receipt(s)` : ''}</td><td>{row.reference}</td><td>{row.record_id}</td>
-            <td>{row.entry_type === 'transaction' && !row.source_type && <Link to={'/transactions/' + encodeURIComponent(row.record_id) + '/receipts'}>Receipts for {row.txn_date} · {row.description || row.kind} · {row.amount}</Link>}{row.source_type === 'mixed_use_expense' ? <Link to="/mixed-use">Manage mixed-use expense</Link> : row.source_type === 'depreciation' ? <Link to="/assets">Manage in Assets</Link> : row.source_type ? 'Managed by ' + row.source_type : session.capabilities.includes('bookkeeping:write') && <button type="button" disabled={loadingRecord} onClick={() => void edit(row)}>Edit {row.txn_date} · {row.description || row.kind} · {row.amount}</button>}</td></tr>
-            {row.postings.map((line, index) => <tr key={index} className="postingRow"><td /><th scope="row">↳ Posting</th><td>{line.target}</td><td /><td /><td>{line.payee}</td><td /><td className="amount">{line.side === 'Debit' ? line.amount : ''}</td><td className="amount">{line.side === 'Credit' ? line.amount : ''}</td><td /><td>{line.description}</td><td colSpan={4} /></tr>)}
-          </Fragment>)}</tbody></table></div>}
+        : <TableRegion label="Ledger"><table className="ledgerTable"><caption>Business ledger</caption>
+          <thead><tr>{['Date', 'Type', 'Account', 'To account', 'Category', 'Payee', 'Amount', 'Debit', 'Credit', 'Tags', 'Description', 'Receipt', 'Reference', 'ID', 'Actions'].map(name => <th scope="col" className={['Amount', 'Debit', 'Credit', 'Receipt'].includes(name) ? 'amount' : undefined} key={name}>{name}</th>)}</tr></thead>
+          {rows.map(row => <tbody key={row.id} className={row.entry_type === 'journal' ? 'journalGroup' : undefined}><tr><td>{row.txn_date}</td><th scope="row" className="tableText">{row.kind}{row.source_type === 'mixed_use_expense' ? ' · Mixed-use' : ''}</th><td className="tableText">{row.account}</td><td className="tableText">{row.to_account}</td><td className="tableText">{row.category}</td><td className="tableText">{row.payee}</td><td className="amount">{row.amount}</td><td /><td /><td className="tableText">{row.tags.join(', ')}</td><td className="tableText">{row.description}</td><td className="amount">{row.receipt_count ? `${row.receipt_count} receipt(s)` : ''}</td><td className="tableText">{row.reference}</td><td className="ledgerIdentity">{row.record_id}</td>
+            <td className="tableActions"><div className="rowActions">{row.entry_type === 'transaction' && !row.source_type && <Link className="button action-secondary" to={'/transactions/' + encodeURIComponent(row.record_id) + '/receipts'} aria-label={`Receipts for ${row.txn_date} · ${row.description || row.kind} · ${row.amount}`}>Receipts</Link>}{row.source_type === 'mixed_use_expense' ? <Link to="/mixed-use">Manage mixed-use expense</Link> : row.source_type === 'depreciation' ? <Link to="/assets">Manage in Assets</Link> : row.source_type ? 'Managed by ' + row.source_type : session.capabilities.includes('bookkeeping:write') && <ActionButton disabled={loadingRecord} aria-label={`Edit ${row.txn_date} · ${row.description || row.kind} · ${row.amount}`} onClick={() => void edit(row)}>Edit</ActionButton>}</div></td></tr>
+            {row.postings.map((line, index) => <tr key={index} className="postingRow"><td /><th scope="row">↳ Posting</th><td className="tableText">{line.target}</td><td /><td /><td className="tableText">{line.payee}</td><td /><td className="amount">{line.side === 'Debit' ? line.amount : ''}</td><td className="amount">{line.side === 'Credit' ? line.amount : ''}</td><td /><td className="tableText">{line.description}</td><td colSpan={4} /></tr>)}
+          </tbody>)}</table></TableRegion>}
     </>}
   </>;
 }

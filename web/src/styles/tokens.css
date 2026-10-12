@@ -117,3 +117,41 @@ dd { margin: 0 0 var(--space-3); }
   :focus-visible { outline-color: Highlight; }
   .field [aria-invalid="true"] { border: 2px solid CanvasText; }
 }
+
+/* Shared route links expose current state through shape and weight as well as color. */
+.workflowNav { margin-bottom: var(--space-6); border-bottom: 1px solid var(--border-default); }
+.workflowNav ul { display: flex; flex-wrap: wrap; gap: var(--space-1); list-style: none; margin: 0; padding: 0 0 var(--space-2); }
+.workflowNav li { min-width: 0; max-width: 100%; }
+.workflowNav a { display: flex; align-items: center; min-height: var(--control-height); padding: var(--space-2) var(--space-3); border-radius: var(--radius-control); border-bottom: 3px solid transparent; color: var(--text-secondary); text-decoration: none; }
+.workflowNav a:hover { background: var(--surface-hover); }
+.workflowNav a[aria-current] { background: var(--surface-selected); color: var(--interactive-primary); font-weight: var(--weight-heading); border-bottom-color: currentColor; }
+.fieldHint { overflow-wrap: anywhere; color: var(--text-secondary); font-size: var(--type-secondary); margin: 0; }
+.periodControls { margin-bottom: var(--space-8); }
+.periodControls .formGrid { max-width: 640px; }
+.reportSections { display: grid; gap: var(--space-8); }
+.reportSection { min-width: 0; border-top: 1px solid var(--border-default); padding-top: var(--space-6); }
+.reportMetrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: var(--space-6); }
+.reportMetrics dd { overflow-wrap: anywhere; }
+.reportSection .tableScroll + .tableScroll { margin-top: var(--space-4); }
+.tableEmpty { white-space: normal; color: var(--text-secondary); padding-block: var(--space-4); }
+.ledgerFilters { margin-bottom: var(--space-6); }
+.ledgerFilterGrid { grid-template-columns: repeat(6, minmax(0, 1fr)); margin: var(--space-4) 0; align-items: start; }
+.ledgerFilterGrid > .field { grid-column: span 2; align-content: start; }
+.ledgerFilterGrid > .field:has(select[multiple]), .ledgerFilterGrid > .field:has(#sort-field), .ledgerFilterGrid > .field:has(#entry-order) { grid-column: span 3; }
+.ledgerSearch { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-2); }
+.ledgerSearch .field { flex: 1 1 220px; }
+.filterActions { margin-top: var(--space-4); }
+.ledgerTable .tableText { min-width: 140px; max-width: 280px; }
+.ledgerIdentity { white-space: normal; overflow-wrap: anywhere; min-width: 160px; max-width: 220px; }
+.tableActions { min-width: 180px; max-width: 240px; white-space: normal; }
+.rowActions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.journalGroup { border-top: 2px solid var(--border-strong); }
+.journalGroup > tr:first-child > th { font-weight: var(--weight-heading); }
+.postingRow th { color: var(--text-secondary); }
+@media (max-width: 760px) {
+  .ledgerFilterGrid { grid-template-columns: minmax(0, 1fr); }
+  .ledgerFilterGrid > .field, .ledgerFilterGrid > .field:has(select[multiple]), .ledgerFilterGrid > .field:has(#sort-field), .ledgerFilterGrid > .field:has(#entry-order) { grid-column: 1; }
+}
+
+.ledgerFilterGrid select[multiple] { height: calc(4 * var(--space-8)); }
+.ledgerFilterGrid select[multiple] option { white-space: normal; overflow-wrap: anywhere; }

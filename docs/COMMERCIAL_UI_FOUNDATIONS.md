@@ -105,3 +105,63 @@ assets, mixed-use, recurring, mileage, receipts and the current Data & backup
 availability surface. Inspect retained screenshots as well as test results;
 automated success alone is not visual sign-off. Managed engines do not establish
 real-device or full accessibility certification.
+
+
+## Wave 1: navigation, reports and ledger (#326–#328)
+
+This slice of #323 under #124 consumes the merged #325 foundation. It keeps the
+commercial summary catalog and real route navigation; Streamlit tabs, monthly
+charts, recent-activity widgets, bulk selection and separate as-of controls are
+not implicitly migrated. Identity/session/onboarding remain #314/#317; #329/#330
+own remaining form/secondary presentation and #331 owns integrated acceptance.
+Hosted alpha, provider/rollback/device and external-beta gates remain independent.
+
+| Design requirement | Shared implementation / preserved owner |
+| --- | --- |
+| Visible current route; semantic navigation; narrow wrapping | `navigation.ts` route inventory; `WorkflowNav` link list; `Shell` main-route marker and existing menu/focus ownership |
+| One dominant action and grouped alternatives | Existing `PageHeader`, primary `.button`, neutral `.action-secondary`; Dashboard View ledger / Set up accounts and Transactions Add transaction / Add journal |
+| Clear financial scopes and hierarchy | Actual router-mounted `ReportsPage`; `DateRangeFields` shared with ledger; `SectionHeader`, `.reportSections` and `.reportMetrics` |
+| Exact values; non-color-only states | Server decimal strings remain intact; sign-based net/earnings styling; textual equation/difference/unavailable states; explicit empty groups |
+| Compact readable financial tables | `TableRegion`, `.tableText`, `.amount`, normal body weight; journal group boundary and subordinate postings; stable logical entry IDs and source owner links |
+| Aligned accessible filters; return to default scope | Shared fields with `.ledgerFilterGrid`, multiline equal-height native listboxes, selection guidance and full selected-label summaries; existing query/search/sort/reset handlers |
+| No page overflow at desktop/390px/320px | Wrapping controls/navigation/labels and named keyboard-scrolling table regions; all accounting columns retained |
+
+Reuse map: inspected Shell/router/navigation, shared primitives/fields/tokens,
+router-mounted ReportsPage/LedgerPage, the unused foundation Dashboard,
+RecordList, reference/bookkeeping editors, mixed-use/recurring and mileage routes,
+loaded forms, scope boundary and guarded navigation. Reused their original
+state/query/mutation owners; extended shared headers/table hooks and styling.
+New logic is limited to route-group selection, a native date-control adapter,
+and report/ledger presentation. No parallel accounting, persistence, form,
+identity, retry or navigation-blocking state machine was introduced.
+
+`web/e2e/core-surfaces.spec.ts` retains synthetic dashboard/report/ledger PNGs at
+1440x1000, 390x844 and 320x844 plus report loading/zero/unavailable/error and menu
+surfaces. `revision.json` records HEAD, uncommitted status, browser project and
+viewport; a clean status identifies the exact tested revision. Before screenshots
+were captured from #325's merge `e29605d` before source edits. Local outputs remain
+ignored in `web/test-results/326-328-before` and `web/test-results/326-328-after`;
+retain both and attach sanitized evidence when publishing. Do not commit generated
+validation output. Native listbox wrapping varies across engines; full selection
+summaries make long selected labels readable in every engine.
+
+Reproduce from the worktree root (unused loopback port required):
+
+```powershell
+npm --prefix web run build
+npm --prefix web run lint
+npm --prefix web test
+$env:TABULA_RASA_SMOKE_PORT = '5186'
+npm --prefix web run test:e2e -- --workers=2 --output=test-results/326-328-after
+git diff --check
+git diff origin/main --stat
+```
+
+Checks cover keyboard scrolling, WCAG axe checks on representative core surfaces,
+normal ordinary row weight, exact large/negative/zero decimals, current links,
+menu closing/focus restoration, dirty cancellation, read-only affordances,
+whole-journal search/grouping, source ownership, transport filters and reset,
+report scope/equation/error/loading behavior. The existing foundation sweep
+continues to cover every route family. Inspect the PNGs as well as the assertions;
+local managed-browser evidence does not certify real devices, hosted acceptance,
+CI/reviewer completion or the entire design initiative.

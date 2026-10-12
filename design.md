@@ -359,6 +359,51 @@ foundations for later page slices, not completion of the full design epic.
 The compact [requirement/implementation audit](docs/COMMERCIAL_UI_FOUNDATIONS.md)
 records commercial/Streamlit conflicts, reuse owners, hooks and visual evidence.
 
+**Current behavior — commercial core presentation (#326–#328, EPIC #323 / initiative #124):**
+The shell marks the current main destination with weight and a leading rule as
+well as color. Transactions remains the current main workflow for Journals,
+Mixed-use expenses, Recurring expenses, Payees and Tags. These routes share a
+wrapping, labeled navigation list with a visible current link, including create,
+detail and merge routes. Mileage shares View mileage log / Add trip navigation;
+Add trip remains capability-gated. These are real guarded route links, not ARIA
+tabs. A cancelled dirty navigation retains the draft, menu and initiating focus;
+a completed navigation closes the menu and focuses main content.
+
+Page headers group related actions. Dashboard's primary View ledger and neutral
+Set up accounts are styled links; Transactions uses primary Add transaction and
+neutral Add journal. Journals, Payees/Tags, Mixed-use and Recurring lists reuse
+the shared header with their existing capability-gated Add action. Informational
+inline links retain their underlining.
+
+Dashboard/Reports share labeled period controls and Clear dates, separated
+Profit and loss / Balance sheet / all-date balances sections, responsive metric
+groups, ordinary row weight and aligned numeric headings/cells. From/To are
+inclusive; To is the balance-sheet as-of boundary. The all-date section is
+explicitly independent of those controls. Decimal strings retain server signs
+and precision. Negative net/current earnings retain a minus sign and use red;
+missing values show an em dash/unavailable status, never an invented zero.
+Empty statement groups and account balances explain their absence; loading and
+failed reads do not fabricate summary values. The accounting-equation message
+shows balanced, difference (including the reported value), or unavailable text.
+No report, chart or client accounting calculation is added; the Streamlit page
+contracts below do not expand the commercial summary endpoint's scope.
+
+The combined ledger uses a labeled filter surface: From/To/Type, then Accounts
+and Tags, search with conditional Clear search, complete-entry sort/order and
+Clear filters. Desktop related controls align; narrow controls stack. Native
+multiline listboxes have equal deliberate height, selection instructions and
+full selected-label summaries (native option wrapping varies by browser).
+Clear filters restores all dates/types/targets/tags, empty search and Date /
+Descending ordering. The keyboard-focusable Ledger region contains horizontal
+overflow; accounting columns and stable IDs remain available. Names, tags and
+memos wrap; ordinary rows stay normal weight. Each journal has one parent/group
+with subordinate Debit/Credit postings and no posting mutation actions.
+Ordinary Edit/Receipts controls use short visible labels and complete record
+labels for assistive technology; source-owned rows retain their owner links.
+[UI foundations](docs/COMMERCIAL_UI_FOUNDATIONS.md) records the reuse map and
+synthetic before/after evidence. #329/#330 remaining surface work, #331 integrated
+acceptance, #222 identity/onboarding and #288 hosted/device gates remain separate.
+
 [Foundation conventions](docs/COMMERCIAL_FOUNDATION.md) owns technical contracts.
 [Commercial concurrency](docs/COMMERCIAL_CONCURRENCY.md) owns the #280 contract.
 **Current behavior** added by #283/#286: Mileage has a complete manual log,
