@@ -367,6 +367,24 @@ expose a raw traceback for this configuration failure.
   blocked navigation keeps its initiating link available. Declared top-level
   validation errors are associated with their labeled fields and generic messages.
 
+**Current behavior — shared commercial visual foundation (#325):** The React
+stylesheet owns the full palette, type roles and spacing grid above. Primary
+surfaces use 16px padding. Native single-line controls have a 44px minimum;
+multiple selects remain multiline listboxes (128px minimum), and textareas are
+vertically resizable (112px minimum). Disabled controls retain legible neutral
+text. Keyboard focus combines a contrasting primary outline with the focus halo.
+Create forms share primary submit/secondary back actions and section headers;
+confirmation dialogs share action tones, with permanent deletion explicitly red.
+Accounts demonstrates the shared page header, primary Add link, neutral Edit
+action and keyboard-scrollable table region. Long account/parent names wrap;
+Edit's accessible name identifies the full account. Table body cells, including
+row headers, use ordinary weight; column headings retain emphasis. Financial
+values use tabular numerals, and Accounts aligns the opening-balance heading
+with its values. Shared metrics use 28px values and ordinary labels. These are
+foundations for later page slices, not completion of the full design epic.
+The compact [requirement/implementation audit](docs/COMMERCIAL_UI_FOUNDATIONS.md)
+records commercial/Streamlit conflicts, reuse owners, hooks and visual evidence.
+
 [Foundation conventions](docs/COMMERCIAL_FOUNDATION.md) owns technical contracts.
 [Commercial concurrency](docs/COMMERCIAL_CONCURRENCY.md) owns the #280 contract.
 **Current behavior** added by #283/#286: Mileage has a complete manual log,

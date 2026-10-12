@@ -146,6 +146,11 @@ the SPA; unknown API paths, non-HTML requests and missing assets retain errors.
 
 ## Browser ownership and form conventions
 
+[Commercial UI foundations](COMMERCIAL_UI_FOUNDATIONS.md) documents #325's
+design audit, shared tokens/action/header/table hooks and representative consumers
+under #323/#124. These presentation primitives extend the owners below without
+replacing form, query, context or workflow state.
+
 `src/api/schema.d.ts` is generated from committed OpenAPI; feature code imports
 these types rather than redefining transport records. `createApi` uses relative
 same-origin requests, includes credentials, propagates read cancellation and

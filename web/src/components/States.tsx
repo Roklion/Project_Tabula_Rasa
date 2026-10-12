@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { ApiError } from '../api/client';
 
 export function LoadingState({ label = 'Loading…' }: { label?: string }) {
-  return <p role="status" aria-live="polite">{label}</p>;
+  return <p role="status" aria-live="polite" className="notice neutral">{label}</p>;
 }
 
 export function EmptyState({ title, children }: { title: string; children?: ReactNode }) {

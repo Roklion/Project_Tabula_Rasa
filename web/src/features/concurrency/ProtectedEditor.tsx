@@ -109,6 +109,7 @@ export function ProtectedEditor<T extends FieldValues>({ session, loaded, title,
         {saveConfirmation?.description ?? 'Deactivate this record and save your changes?'} The saved record must still match the one you loaded.
       </ConfirmationDialog>}
       {confirmRemove && <ConfirmationDialog title={removeLabel + ' record'} keepLabel="Keep record"
+        confirmTone={removeLabel === 'Delete' ? 'destructive' : 'primary'}
         confirmLabel={'Confirm ' + removeLabel.toLowerCase()} pending={pending || review}
         onKeep={() => setConfirmRemove(false)} onConfirm={() => void submit('remove')}>
         {removeLabel === 'Delete' ? 'Permanently delete this record?' : 'Deactivate this account?'} The saved record must still match the one you loaded.
