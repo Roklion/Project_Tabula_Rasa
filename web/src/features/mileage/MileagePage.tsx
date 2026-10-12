@@ -1,3 +1,4 @@
+import { PageHeader } from '../../components/VisualPrimitives';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -35,8 +36,7 @@ export function MileagePage() {
         row.vehicle, row.tag_ids.map(id => names.get(id) ?? id).join('; '), row.notes])];
     downloadBlob(new Blob([data.map(row => row.map(mileageCsvCell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' }), 'tabula-rasa-mileage.csv');
   }
-  return <><h1>Mileage</h1><p className="lead">Record business travel and review your mileage log.</p>
-    {session.capabilities.includes('bookkeeping:write') && <Link className="button" to="/mileage/new">Add trip</Link>}
+  return <><PageHeader title="Mileage" description="Record business travel and review your mileage log." />
     <section className="surface editor" aria-label="Mileage filters"><h2>View &amp; edit mileage log</h2><div className="formGrid">
       <Field id="from" label="From"><input id="from" type="date" value={start} onChange={e => setStart(e.target.value)} /></Field>
       <Field id="to" label="To"><input id="to" type="date" value={end} onChange={e => setEnd(e.target.value)} /></Field>
@@ -73,7 +73,7 @@ export function NewMileage() {
     setCreated(response.items); form.reset(values);
   });
   if (!session.capabilities.includes('bookkeeping:write')) return <ErrorNotice error={new ApiError('forbidden')} />;
-  return <><h1>Add trip</h1><Link to="/mileage">View mileage log</Link><UnsavedChanges dirty={form.formState.isDirty} />
+  return <><PageHeader title="Add trip" /><UnsavedChanges dirty={form.formState.isDirty} />
     {created.length ? <><SuccessNotice>Mileage saved: {created.length} {created.length === 1 ? 'trip' : 'trips'}.</SuccessNotice>
       {created.map(row => <p key={row.id}><Link to={'/mileage/' + encodeURIComponent(row.id)}>{tripLabel(row)}</Link></p>)}</> :
       <form className="surface editor" onSubmit={form.handleSubmit(async values => {

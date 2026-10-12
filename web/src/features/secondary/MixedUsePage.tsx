@@ -1,3 +1,4 @@
+import { PageHeader } from '../../components/VisualPrimitives';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useWatch, type UseFormReturn } from 'react-hook-form';
@@ -42,9 +43,8 @@ function MixedFields({ form, creating = false }: { form: UseFormReturn<Draft>; c
 
 export function MixedUsePage() {
   const session = useEntity();
-  return <><h1>Mixed-use expenses</h1><p className="lead">Manage the authoritative source; the ledger receives only its business allocation.</p>
-    <Link to="/transactions">Back to Transactions</Link>
-    {session.capabilities.includes('bookkeeping:write') && <Link className="button" to="/mixed-use/new">Add mixed-use expense</Link>}
+  return <><PageHeader title="Mixed-use expenses" description="Manage the authoritative source; the ledger receives only its business allocation."
+    actions={session.capabilities.includes('bookkeeping:write') && <Link className="button" to="/mixed-use/new">Add mixed-use expense</Link>} />
     <RecordList resource="mixed-use" title="Mixed-use Expense Log" list={api.mixedUse} label={row => row.txn_date + ' · ' + (row.description || row.id)}
       canEdit={() => false} editor={() => null} detailsTarget={row => row.ledger_status === 'linked' ? '/mixed-use/' + encodeURIComponent(row.id) : undefined}
       columns={[{ title: 'Total', render: row => row.total_expense }, { title: 'Business %', render: row => row.business_use_percentage },

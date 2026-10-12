@@ -1,3 +1,4 @@
+import { PageHeader } from '../../components/VisualPrimitives';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { Path, UseFormReturn } from 'react-hook-form';
@@ -65,9 +66,8 @@ function GenerateOccurrences() {
 
 export function RecurringPage() {
   const session = useEntity();
-  return <><h1>Recurring expenses</h1><p className="lead">Templates affect future occurrences. Existing expenses retain their provenance.</p>
-    <Link to="/transactions">Back to Transactions</Link>
-    {session.capabilities.includes('bookkeeping:write') && <Link className="button" to="/recurring/new">Add recurring expense</Link>}
+  return <><PageHeader title="Recurring expenses" description="Templates affect future occurrences. Existing expenses retain their provenance."
+    actions={session.capabilities.includes('bookkeeping:write') && <Link className="button" to="/recurring/new">Add recurring expense</Link>} />
     <RecordList resource="recurring" title="Recurring schedules" list={api.recurring} label={row => row.name} canEdit={() => false} editor={() => null}
       detailsTarget={row => '/recurring/' + encodeURIComponent(row.id)} columns={[
         { title: 'Cadence', render: row => row.recurrence_interval + ' ' + row.recurrence_unit }, { title: 'Next due', render: row => row.next_due_date || 'None' },

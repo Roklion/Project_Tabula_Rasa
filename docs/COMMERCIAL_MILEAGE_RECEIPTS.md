@@ -12,7 +12,12 @@ beta or commercial activation. Existing deployment/cutover gates still apply.
 
 ## Mileage
 
-Open **Mileage** to view the business's log. **From**, **To** and **Filter by tags**
+Open **Mileage** to view the business's log. Shared **View mileage log** /
+**Add trip** route links show the current workflow with weight and an underline,
+wrap on narrow screens and retain the dirty-navigation confirmation. Add trip
+is visible only to writers; detail routes remain associated with the log.
+
+**From**, **To** and **Filter by tags**
 use one inclusive date/tag scope for the table, trip count, business-mile total
 and **Download filtered mileage CSV**. Multiple selected tags match any selected
 tag. The log preserves date, distance, vehicle, both locations, purpose, notes,
@@ -49,8 +54,8 @@ The entity-qualified transport provides:
 
 ## Transaction receipts
 
-Choose **Receipts for …** on a saved ordinary transaction. The page shows linked
-files, filename/size/type/integrity inspection and same-origin downloads. Receipt
+Choose **Receipts** on a saved ordinary transaction; its accessible name includes
+the full record description. The page shows linked files, filename/size/type/integrity inspection and same-origin downloads. Receipt
 actions for source-owned mixed-use/depreciation rows remain with their respective
 source workflows; this slice does not provide a generic bypass for those rows.
 

@@ -1,3 +1,4 @@
+import { PageHeader } from '../../components/VisualPrimitives';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api, type Account, type Schemas } from '../../api/client';
@@ -112,9 +113,8 @@ function ManagedEditor({ row, resource, onClose }: { row: Schemas['ManagedRefere
 export function ReferencesPage({ resource }: { resource: 'categories' | 'payees' | 'tags' }) {
   const session = useEntity();
   const title = resource[0].toUpperCase() + resource.slice(1);
-  return <><h1>{title}</h1><p className="lead">Review existing records and save changes for this business.</p>
-    <nav aria-label="Reference data"><Link to="/categories">Categories</Link> · <Link to="/payees">Payees</Link> · <Link to="/tags">Tags</Link></nav>
-    {session.capabilities.includes('bookkeeping:write') && <Link className="button" to={'/' + resource + '/new'}>Add {resource === 'categories' ? 'category' : resource === 'payees' ? 'payee' : 'tag'}</Link>}
+  return <><PageHeader title={title} description="Review existing records and save changes for this business."
+    actions={session.capabilities.includes('bookkeeping:write') && <Link className="button" to={'/' + resource + '/new'}>Add {resource === 'categories' ? 'category' : resource === 'payees' ? 'payee' : 'tag'}</Link>} />
     {resource === 'categories'
       ? <RecordList resource={resource} title="Categories" list={api.categories} label={row => row.name}
           columns={[{ title: 'Kind', render: row => row.kind }, { title: 'Parent category', render: (row, rows) => rows.find(parent => parent.id === row.parent_id)?.name ?? '—' }]}
