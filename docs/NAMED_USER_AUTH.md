@@ -43,7 +43,10 @@ remain operator checkpoints. No provider resource is provisioned by this code.
 `GET /api/v1/auth/login` starts a five-minute durable browser-bound one-time
 transaction. Return paths are only `/` and `/onboarding`. The code callback
 consumes it before exchange; failures require starting a new login. The server
-checks signed RS256 identity, issuer, audience/authorized party, nonce, fresh
+prunes expired and consumed login transactions in the same environment when a
+new login starts, including clients without a previous login cookie. Active
+attempts and other environments are preserved. It checks signed RS256 identity,
+issuer, audience/authorized party, nonce, fresh
 authentication time, expiry and mandatory matching-subject verified-email
 UserInfo. Discovery/JWKS/endpoints are restricted to the configured HTTPS issuer
 host; response size, network timeouts and unknown-key refresh are bounded.
@@ -90,7 +93,9 @@ permission. The React boundary shows pending/sign-in/setup/failure states,
 rechecks visible identity at least every 60 seconds and on focus/visibility/
 pageshow, and unmounts private caches/drafts on authoritative loss or outage.
 Confirmed scope changes remount the existing private query boundary; logout is
-broadcast across same-origin tabs without private payloads. Failed logout clears
+broadcast across same-origin tabs without private payloads. A received sign-out
+invalidates pending session responses as well as an already loaded private scope,
+so a late initial response cannot reopen a signed-out tab. Failed logout clears
 the local cookie but reports 503 if durable revocation cannot be confirmed;
 it does not claim a copied credential was revoked.
 

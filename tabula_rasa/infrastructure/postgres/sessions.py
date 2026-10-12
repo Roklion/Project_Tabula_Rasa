@@ -48,8 +48,14 @@ class PostgresSessionRepository:
             raise IdentityError('forbidden')
         raw = secrets.token_urlsafe(32)
         transaction = LoginTransaction(secrets.token_urlsafe(32), secrets.token_urlsafe(32), secrets.token_urlsafe(48), return_path)
+        now = self.clock()
         with identity_operation(self.database) as connection:
             epoch = self._epoch(connection)
+            # Public login attempts must not retain abandoned or consumed secrets
+            # indefinitely. Other environments keep their own retention boundary.
+            connection.execute(text('''DELETE FROM identity_login_transactions
+                WHERE environment=:env AND (expires_at<=:now OR consumed_at IS NOT NULL)'''),
+                {'env': self.environment, 'now': now})
             if previous:
                 try:
                     previous_hash = credential_hash(previous)
@@ -62,7 +68,7 @@ class PostgresSessionRepository:
                 VALUES (:hash,:env,:epoch,:state,:nonce,:verifier,:path,:expiry)'''),
                 {'hash': credential_hash(raw), 'env': self.environment, 'epoch': epoch, 'state': transaction.state,
                  'nonce': transaction.nonce, 'verifier': transaction.verifier, 'path': return_path,
-                 'expiry': self.clock() + timedelta(minutes=5)})
+                 'expiry': now + timedelta(minutes=5)})
         return raw, transaction
 
     def consume_login(self, raw, state):

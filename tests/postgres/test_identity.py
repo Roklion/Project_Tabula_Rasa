@@ -158,6 +158,35 @@ def test_single_use_browser_bound_login_and_expiry(database):
         sessions.consume_login(raw, transaction.state)
 
 
+def test_login_retention_prunes_only_finished_attempts_in_its_environment(database):
+    now = [datetime.now(timezone.utc)]
+    sessions = PostgresSessionRepository(database, 'test', 'a' * 64, clock=lambda: now[0])
+    other = PostgresSessionRepository(database, 'staging', 'b' * 64, clock=lambda: now[0])
+    sessions.configure()
+    other.configure()
+    expired, expired_transaction = sessions.begin_login('/')
+    foreign, foreign_transaction = other.begin_login('/')
+    now[0] += timedelta(minutes=5)
+    # The expiry boundary is inclusive; another environment is unaffected.
+    active, active_transaction = sessions.begin_login('/')
+    with database.transaction(read_only=True) as connection:
+        assert connection.scalar(text('SELECT count(*) FROM identity_login_transactions')) == 2
+    consumed, consumed_transaction = sessions.begin_login('/')
+    sessions.consume_login(consumed, consumed_transaction.state)
+    sessions.begin_login('/onboarding')  # No previous cookie is required to prune.
+    with database.transaction(read_only=True) as connection:
+        assert connection.scalar(text('SELECT count(*) FROM identity_login_transactions')) == 3
+        assert connection.scalar(text("SELECT count(*) FROM identity_login_transactions WHERE environment='staging'")) == 1
+    for raw, transaction in ((expired, expired_transaction), (consumed, consumed_transaction)):
+        with pytest.raises(IdentityError) as caught:
+            sessions.consume_login(raw, transaction.state)
+        assert caught.value.code == 'unauthorized'
+    assert sessions.consume_login(active, active_transaction.state) == active_transaction
+    # The other environment's expired row remained stored, but grants no login.
+    with pytest.raises(IdentityError):
+        other.consume_login(foreign, foreign_transaction.state)
+
+
 @pytest.mark.parametrize('loss', ['membership', 'organization', 'entity'])
 def test_lost_selection_recovers_only_to_remaining_authorized_workspace(database, loss):
     repo, alice, bob, a, b = setup(database)

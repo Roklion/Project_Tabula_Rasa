@@ -12,6 +12,7 @@ export function ContextBoundary({ children }: { children: ReactNode }) {
   const [state, setState] = useState<{ session?: SessionState; error?: unknown; signedOut?: boolean }>(
     () => window.location.pathname === '/signed-out' ? { signedOut: true } : {});
   const identityGeneration = useRef(0);
+  const authChannel = useRef<BroadcastChannel | undefined>(undefined);
   // Retain no private identity/entity data after a failed authority check.
   const logoutContext = useRef<{ csrf_token: string } | undefined>(undefined);
   const [generation, setGeneration] = useState(0);
@@ -19,6 +20,19 @@ export function ContextBoundary({ children }: { children: ReactNode }) {
   const [entityError, setEntityError] = useState<unknown>();
   const [switching, setSwitching] = useState(false);
   const [selectionError, setSelectionError] = useState<unknown>();
+  useEffect(() => {
+    // Listen while initial/retry loading is pending, too: a late response must
+    // not restore private authority after another tab has signed out.
+    const channel = typeof BroadcastChannel === 'undefined' ? undefined : new BroadcastChannel('tabula-auth');
+    authChannel.current = channel;
+    if (channel) channel.onmessage = event => {
+      if (event.data !== 'signed-out') return;
+      logoutContext.current = undefined;
+      identityGeneration.current++; setEntities([]); setEntityError(undefined); setSelectionError(undefined);
+      setState({ signedOut: true });
+    };
+    return () => { channel?.close(); authChannel.current = undefined; };
+  }, []);
   useEffect(() => {
     if (!state.session || state.session.trusted_development) return;
     const controller = new AbortController();
@@ -50,13 +64,6 @@ export function ContextBoundary({ children }: { children: ReactNode }) {
       lastActivity = Date.now();
       void api.activity(state.session!).catch(() => void check());
     };
-    const channel = typeof BroadcastChannel === 'undefined' ? undefined : new BroadcastChannel('tabula-auth');
-    if (channel) channel.onmessage = event => {
-      if (event.data !== 'signed-out') return;
-      logoutContext.current = undefined;
-      identityGeneration.current++; setEntities([]); setEntityError(undefined); setSelectionError(undefined);
-      setState({ signedOut: true });
-    };
     const timer = window.setInterval(() => void check(), 60_000);
     window.addEventListener('focus', check);
     window.addEventListener('pageshow', check);
@@ -65,7 +72,7 @@ export function ContextBoundary({ children }: { children: ReactNode }) {
     window.addEventListener('pointerdown', activity);
     window.addEventListener('keydown', activity);
     return () => {
-      controller.abort(); channel?.close(); window.clearInterval(timer);
+      controller.abort(); window.clearInterval(timer);
       window.removeEventListener('focus', check); window.removeEventListener('pageshow', check);
       window.removeEventListener('tabula:identity-check', check);
       document.removeEventListener('visibilitychange', check);
@@ -79,8 +86,9 @@ export function ContextBoundary({ children }: { children: ReactNode }) {
     identityGeneration.current++;
     setEntities([]); setEntityError(undefined); setSelectionError(undefined);
     setState({ signedOut: true });
-    const channel = typeof BroadcastChannel === 'undefined' ? undefined : new BroadcastChannel('tabula-auth');
-    channel?.postMessage('signed-out'); channel?.close();
+    // Use the listener's channel so this tab does not receive its own message
+    // and erase a subsequent server-revocation failure notice.
+    authChannel.current?.postMessage('signed-out');
     try { await api.logout(context); }
     catch (error) { setState({ error, signedOut: true }); }
   }

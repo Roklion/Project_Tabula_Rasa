@@ -1,6 +1,6 @@
 import { useContext, useState } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { api, ApiError } from '../api/client';
 import { resourceKey } from '../api/query';
@@ -10,7 +10,60 @@ import { EntitySelectionContext } from './entitySelectionContext';
 import { useEntity } from './context';
 import { AuthContext } from './authContext';
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+function authChannel() {
+  const channels: { onmessage?: (event: { data: string }) => void; close: ReturnType<typeof vi.fn> }[] = [];
+  vi.stubGlobal('BroadcastChannel', class {
+    onmessage?: (event: { data: string }) => void;
+    close = vi.fn();
+    postMessage = vi.fn();
+    constructor(name: string) { expect(name).toBe('tabula-auth'); channels.push(this); }
+  });
+  return channels;
+}
+
+it.each(['resolve', 'reject'])('ignores a late initial session %s after cross-tab logout', async outcome => {
+  const channels = authChannel();
+  let resolve!: (value: typeof session) => void;
+  let reject!: (error: unknown) => void;
+  vi.spyOn(api, 'session').mockReturnValue(new Promise((done, fail) => { resolve = done; reject = fail; }));
+  const entities = vi.spyOn(api, 'entities');
+  const view = render(<ContextBoundary><p>Private ledger</p></ContextBoundary>);
+  expect(channels).toHaveLength(1);
+  act(() => channels[0].onmessage?.({ data: 'unrelated' }));
+  expect(screen.queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument();
+  act(() => channels[0].onmessage?.({ data: 'signed-out' }));
+  expect(screen.getByRole('link', { name: 'Sign in' })).toBeVisible();
+  await act(async () => {
+    if (outcome === 'resolve') resolve({ ...session, trusted_development: false });
+    else reject(new ApiError('unavailable'));
+  });
+  expect(screen.getByRole('link', { name: 'Sign in' })).toBeVisible();
+  expect(screen.queryByText('Private ledger')).not.toBeInTheDocument();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(entities).not.toHaveBeenCalled();
+  view.unmount();
+  expect(channels[0].close).toHaveBeenCalledOnce();
+});
+
+it('clears an existing private scope on cross-tab logout', async () => {
+  const channels = authChannel();
+  vi.spyOn(api, 'session').mockResolvedValue({ ...session, trusted_development: false });
+  vi.spyOn(api, 'entities').mockResolvedValue({ items: [session.entity] });
+  let cache: QueryClient | undefined;
+  function Feature() {
+    cache = useQueryClient();
+    return <input aria-label="Cross-tab draft" defaultValue="Private draft" />;
+  }
+  render(<ContextBoundary><Feature /></ContextBoundary>);
+  await screen.findByLabelText('Cross-tab draft');
+  cache!.setQueryData(['private'], 'Private ledger');
+  act(() => channels[0].onmessage?.({ data: 'signed-out' }));
+  expect(screen.getByRole('link', { name: 'Sign in' })).toBeVisible();
+  expect(screen.queryByLabelText('Cross-tab draft')).not.toBeInTheDocument();
+  await waitFor(() => expect(cache!.getQueryCache().getAll()).toHaveLength(0));
+});
 
 it('preserves the private scope after a failed switch and replaces it only after confirmation', async () => {
   const beta = { ...session, entity: { id: 'beta', name: 'Beta' } };

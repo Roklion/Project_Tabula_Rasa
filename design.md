@@ -286,7 +286,8 @@ expose a raw traceback for this configuration failure.
   control. Session loss or authorization-storage outage unmounts private queries,
   drafts and receipt views; confirmed identity/scope/version changes remount the
   existing private boundary. Visible tabs recheck on focus/pageshow/visibility
-  and every 60 seconds. Same-origin sign-out signals contain no private data.
+  and every 60 seconds. Same-origin sign-out signals contain no private data;
+  they invalidate pending initial session responses as well as loaded private UI.
 - If selected business access is removed while another authorized business
   remains, session validation selects an available authorized business and the
   private boundary remounts. Workspace setup required appears only when no
