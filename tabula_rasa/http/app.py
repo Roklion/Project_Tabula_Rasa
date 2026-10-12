@@ -94,7 +94,9 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
                     await run_in_threadpool(resolve_context, request)
                 if response is None:
                     response = await call_next(request)
-        except (TransportError, IdentityError) as error:
+        except IdentityError as error:
+            response = await identity_error(request, error)
+        except TransportError as error:
             response = error_response(request, error.code)
         except Exception:
             # Do not emit exception repr/tracebacks: they may contain SQL or draft values.
