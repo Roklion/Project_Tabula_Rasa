@@ -25,6 +25,10 @@ class HttpSettings:
 
     def __post_init__(self):
         origin = urlsplit(self.public_origin)
+        try:
+            port = origin.port
+        except ValueError:
+            raise ValueError("Invalid HTTP configuration.") from None
         valid = (
             self.environment in {"development", "test", "staging", "production"}
             and origin.scheme in {"http", "https"} and bool(origin.hostname)
@@ -34,6 +38,13 @@ class HttpSettings:
         )
         if not valid:
             raise ValueError("Invalid HTTP configuration.")
+        # Share the browser's origin spelling across CSRF, Host and OIDC
+        # callback/configuration binding; do not relax incoming Origin checks.
+        host = origin.hostname
+        if ':' in host:
+            host = '[' + host + ']'
+        suffix = f':{port}' if port is not None and port != {'http': 80, 'https': 443}[origin.scheme] else ''
+        object.__setattr__(self, 'public_origin', f'{origin.scheme}://{host}{suffix}')
         if self.access_mode not in {"restricted_alpha", "named_user"}:
             raise ValueError("An explicit supported access mode is required.")
         if self.access_mode == "named_user" and (self.trusted_entity_id or self.alpha_username or self.alpha_password_hash):

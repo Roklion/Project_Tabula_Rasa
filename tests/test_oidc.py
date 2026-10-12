@@ -8,6 +8,16 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 from tabula_rasa.application.identity import IdentityError, LoginTransaction
 from tabula_rasa.infrastructure.oidc import OidcProvider, OidcSettings
+from tabula_rasa.http.config import HttpSettings
+
+
+def test_provider_callback_and_configuration_use_canonical_public_origin():
+    environment = dict(TABULA_RASA_OIDC_ISSUER='https://id.example.test', TABULA_RASA_OIDC_CLIENT_ID='client',
+                       TABULA_RASA_OIDC_CLIENT_SECRET='secret', TABULA_RASA_SESSION_GENERATION='g' * 32)
+    variants = [OidcSettings.from_environment(HttpSettings('test', origin, access_mode='named_user'), environment)
+                for origin in ('HTTPS://NAMED.example.test:443', 'https://named.example.test')]
+    assert variants[0].callback == variants[1].callback == 'https://named.example.test/api/v1/auth/callback'
+    assert variants[0].configuration_hash == variants[1].configuration_hash
 
 
 class ProviderResponse:

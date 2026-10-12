@@ -32,6 +32,9 @@ at the HTTP guard as well as rejecting synthetic configuration. Restricted
 alpha remains a separate explicit fixture mode; it grants no named membership.
 Use separate provider clients, secrets and databases for each environment.
 Register exactly `<public origin>/api/v1/auth/callback` without wildcard URLs.
+HTTP settings canonicalize scheme/hostname case and omit default ports before
+binding the Host guard, exact browser Origin/CSRF check and OIDC callback.
+Non-default ports remain part of the origin; foreign origins are still refused.
 Provider accounts, region/plan, MFA/recovery, mail and authorized secret setup
 remain operator checkpoints. No provider resource is provisioned by this code.
 
