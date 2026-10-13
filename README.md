@@ -1,9 +1,12 @@
 # Project Tabula Rasa
 
-Project Tabula Rasa is a private, Google Sheets-backed bookkeeping application for one
-person or a small group of businesses. Each business profile has an isolated
-ledger workbook and Google credential set while sharing one Streamlit
-deployment.
+**Project Owner:** Heathcote Advisory LLC
+
+Project Tabula Rasa is a bookkeeping and financial management application designed for individuals and businesses to manage accounts, transactions, expenses, assets, receipts, mileage, and financial reporting.
+
+The project is transitioning from its original Streamlit and Google Sheets architecture to a modern React frontend, FastAPI backend, and PostgreSQL database, with support for multi-tenant data isolation, authenticated access, and scalable deployment.
+
+The new architecture is under active development, while the legacy Streamlit application remains available during the transition.
 
 The application supports:
 
@@ -114,6 +117,14 @@ See the [development guide](docs/DEVELOPMENT.md#required-validation) for local
 validation, CI coverage, required-check administration, failure diagnosis and
 test isolation.
 
-## Authors
+## Ownership and License
 
-- Roklion
+**Project Owner:** Heathcote Advisory LLC
+
+**Copyright © 2026 Heathcote Advisory LLC. All rights reserved.**
+
+The source code of Project Tabula Rasa is publicly available for inspection and reference purposes.
+
+No license is granted to copy, modify, distribute, sublicense, or commercially exploit this software without prior written permission from Heathcote Advisory LLC, except as permitted by applicable law or GitHub's Terms of Service.
+
+For licensing or commercial-use inquiries, contact the project owner.
