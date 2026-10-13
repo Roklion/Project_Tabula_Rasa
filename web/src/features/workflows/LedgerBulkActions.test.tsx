@@ -68,6 +68,32 @@ it('requires acknowledgement and shows the complete count and total before perma
   expect(remove.mock.calls[0][1].transaction_ids).toEqual(['one', 'two']);
 });
 
+it.each(['update', 'delete'] as const)('locks the preserved selection after an uncertain bulk %s', async action => {
+  const write = vi.spyOn(api, action === 'update' ? 'bulkUpdateTransactions' : 'bulkDeleteTransactions')
+    .mockRejectedValue(new ApiError('unavailable'));
+  setup();
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Apply Tags to all selected' }));
+  if (action === 'update') {
+    await userEvent.click(screen.getByRole('button', { name: 'Review selected changes' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm selected changes' }));
+  } else {
+    await userEvent.click(screen.getByRole('button', { name: 'Permanently delete selected' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'I understand that this cannot be undone.' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm permanent deletion' }));
+  }
+  await screen.findByRole('alert');
+  expect(screen.getByRole('checkbox', { name: 'Apply Tags to all selected' })).toBeChecked();
+  expect(screen.getByLabelText('Tags')).toHaveValue(['tag']);
+  for (const name of ['Copy transaction', 'Review selected changes', 'Permanently delete selected']) {
+    const button = screen.getByRole('button', { name });
+    expect(button).toBeDisabled();
+    await userEvent.click(button);
+  }
+  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  expect(write).toHaveBeenCalledOnce();
+  expect(write.mock.calls[0][1].expected).toEqual([{ id: 'one', baseline: 'original-baseline' }]);
+});
+
 it('blocks the whole journal/projection selection and only copies exactly one ordinary record', async () => {
   const prepare = vi.spyOn(api, 'prepareTransactionCopy').mockResolvedValue({ txn_date: row.txn_date, kind: row.kind,
     amount: row.amount, account_id: row.account_id, to_account_id: '', category_id: row.category_id,

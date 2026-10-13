@@ -56,7 +56,7 @@ export function LedgerBulkActions({ selected, loaded, onCopy, onApplied, onActio
     <p role="status">{selected.length} selected logical record(s)</p>
     {protectedSelection && <p>Journal selections support export only. Mixed-use and depreciation entries are managed through their source workflows. Select only ordinary transactions to copy, change or delete.</p>}
     {result && <SuccessNotice>{result}</SuccessNotice>}{failure !== undefined && <><ErrorNotice error={failure} /><p>Leave Bulk mode and select records again to review fresh values before another attempt.</p></>}
-    <fieldset disabled={mutation.isPending || protectedSelection || selected.length === 0 || choices.pending || Boolean(choices.error)}>
+    <fieldset disabled={failure !== undefined || mutation.isPending || protectedSelection || selected.length === 0 || choices.pending || Boolean(choices.error)}>
       <ActionButton disabled={selected.length !== 1} onClick={() => void apply('copy')}>Copy transaction</ActionButton>
       <h3>Apply changes</h3><p>Only checked fields change. Tags replace the complete set.</p>
       {categoryKind ? <Field id="bulk-category" label="Category"><label><input type="checkbox" checked={'category_id' in changes} onChange={event => setChanges(event.target.checked ? { ...changes, category_id: shared(transactions, 'category_id') ?? '' } : without(changes, 'category_id'))} /> Apply Category to all selected</label>

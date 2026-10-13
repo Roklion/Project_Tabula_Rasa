@@ -113,7 +113,8 @@ missing baselines, stale rows and protected sources reject the entire operation.
 PostgreSQL bulk mutations are atomic, with no silent subset application. Failed
 mutations invalidate affected cached views and preserve the complete submitted
 selection/draft for review, even when refreshed data no longer contains a selected
-row. Leave Bulk mode and load a fresh selection before another attempt. Confirmed
+row. Actions remain disabled after failure. Leave Bulk mode and load a fresh
+selection before another attempt. Confirmed
 success closes Bulk mode and retains its result/count on the ledger; uncertainty
 requires inspection before another command.
 

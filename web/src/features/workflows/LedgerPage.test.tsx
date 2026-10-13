@@ -152,6 +152,30 @@ it('shows the confirmed bulk result after clearing the selection and refreshing 
   expect(update).toHaveBeenCalledOnce();
 });
 
+it('requires leaving failed Bulk mode and loading a fresh selection before another command', async () => {
+  const update = vi.spyOn(api, 'bulkUpdateTransactions').mockRejectedValueOnce(new ApiError('unavailable'))
+    .mockResolvedValue({ status: 'fully_applied', count: '1' });
+  await setup();
+  await userEvent.click(selectFirst());
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Apply Payee to all selected' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Review selected changes' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Confirm selected changes' }));
+  await screen.findByRole('alert');
+  expect(screen.getByRole('button', { name: 'Review selected changes' })).toBeDisabled();
+  await userEvent.click(screen.getByRole('button', { name: 'Leave Bulk mode' }));
+  vi.mocked(api.transactions).mockResolvedValue({ items: [{ ...first, baseline: 'refreshed-baseline' }, second] });
+  await userEvent.click(screen.getByRole('button', { name: 'Bulk actions' }));
+  await screen.findByRole('button', { name: 'Leave Bulk mode' });
+  expectNoSelection();
+  await userEvent.click(selectFirst());
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Apply Payee to all selected' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Review selected changes' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Confirm selected changes' }));
+  await screen.findByText('1 transaction(s) updated.');
+  expect(update).toHaveBeenCalledTimes(2);
+  expect(update.mock.calls[1][1].expected).toEqual([{ id: 'one', baseline: 'refreshed-baseline' }]);
+});
+
 it('retains the entire failed selection when refresh removes one selected record', async () => {
   const update = vi.spyOn(api, 'bulkUpdateTransactions').mockRejectedValue(new ApiError('stale'));
   await setup();
