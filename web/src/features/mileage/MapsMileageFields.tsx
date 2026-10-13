@@ -73,10 +73,6 @@ export function MapsMileageFields({ form, children }: { form: UseFormReturn<Mile
   const error = form.getFieldState('maps_reviewed', form.formState).error?.message;
   const routeCurrent = !!route?.outbound_miles && (!roundTrip || !!route.return_miles);
   return <>
-    <TextField form={form} name="miles" label="Business miles" inputMode="decimal" onChange={reviewAgain} />
-    {roundTrip && <TextField form={form} name="return_miles" label="Return business miles" inputMode="decimal" onChange={reviewAgain} />}
-    {children}
-    {googleContent && <p role="note" translate="no" aria-label="Google Maps attribution">Google Maps</p>}
     {maps?.browser_api_key && <><MapsAddress browserKey={maps.browser_api_key} regionCode={maps.region_code ?? null} label="Starting location lookup" onSelect={selectOrigin} onClear={clearOrigin} />
       <MapsAddress browserKey={maps.browser_api_key} regionCode={maps.region_code ?? null} label="Destination lookup" onSelect={selectDestination} onClear={clearDestination} />
       <p className="muted">Google suggestions are used for route lookup. Review or edit the location text to record below.</p></>}
@@ -91,6 +87,10 @@ export function MapsMileageFields({ form, children }: { form: UseFormReturn<Mile
     {(route?.error_code || failure) && <p role="alert">{route?.outbound_miles ? 'Outbound mileage was calculated, but the return route failed. ' : ''}
       {route?.error_code === 'quota' ? 'Google Maps quota has been reached. ' : route?.error_code === 'no_route' ? 'Google Maps did not return a usable route. ' : 'Google Maps routing is unavailable. '}
       Enter miles manually or try Calculate mileage again.</p>}
+    <TextField form={form} name="miles" label="Business miles" inputMode="decimal" onChange={reviewAgain} />
+    {roundTrip && <TextField form={form} name="return_miles" label="Return business miles" inputMode="decimal" onChange={reviewAgain} />}
+    {children}
+    {googleContent && <p role="note" translate="no" aria-label="Google Maps attribution">Google Maps</p>}
     {googleContent && <label className="checkbox"><input type="checkbox" {...form.register('maps_reviewed', {
       validate: value => !googleContent || value === true || 'Review and confirm the recorded locations and mileage before saving.',
     })} /> I reviewed the recorded locations and mileage</label>}{googleContent && error && <p role="alert">{error}</p>}

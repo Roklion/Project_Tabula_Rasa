@@ -147,6 +147,8 @@ def test_maps_confirmed_round_trip_and_manual_return_persist_only_after_save(map
             page.goto(commercial_server + '/mileage/new')
             page.get_by_label('Business purpose', exact=True).fill('Client inspection')
             page.get_by_role('checkbox', name='Round trip', exact=True).check()
+            assert page.get_by_role('button', name='Calculate mileage', exact=True).evaluate(
+                "button => !!(button.compareDocumentPosition(document.querySelector('input[name=miles]')) & Node.DOCUMENT_POSITION_FOLLOWING)")
             for label, value in [('Starting location lookup', 'Office'), ('Destination lookup', 'Client')]:
                 page.get_by_role('textbox', name=label, exact=True).fill(value)
                 page.get_by_role('button', name='Choose ' + label, exact=True).click()
