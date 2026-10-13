@@ -75,7 +75,7 @@ def test_complete_selected_journal_and_full_financial_downloads(commercial, comm
                 page.get_by_role('button', name='Export selected', exact=True).click()
             rows = csv_rows(Path(download.value.path()).read_bytes())[1]
             assert [row['Type'] for row in rows] == ['Journal', '↳ Posting', '↳ Posting']
-            assert rows[1]['Debit'] == rows[2]['Credit'] == '12.5'
+            assert rows[1]['Debit'] == rows[2]['Credit'] == '12.50'
             page.get_by_label('Search transactions').fill('not present')
             expect(page.get_by_role('checkbox')).to_have_count(0)
             page.goto(commercial_server + '/data')
