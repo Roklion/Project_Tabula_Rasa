@@ -50,7 +50,7 @@ def test_full_csv_formats_preserve_transaction_scope_leaf_names_tags_and_posting
     columns, transactions = csv_rows(exports["transactions"])
     assert columns == TRANSACTION_COLUMNS
     assert [row["ID"] for row in transactions] == ["simple", "transfer"]
-    assert transactions[0]["Amount"] == "12.5" and transactions[1]["Amount"] == "100.0"
+    assert transactions[0]["Amount"] == "12.50" and transactions[1]["Amount"] == "100.00"
     assert transactions[0]["Account"] == "Alpha"  # Full export retains leaf names, including inactive targets.
     assert transactions[1]["Type"] == "Transfer" and transactions[1]["Category"] == ""
     assert transactions[1]["To account"] == "Parent"
@@ -122,4 +122,21 @@ def test_all_formula_leading_text_remains_literal_while_numeric_signs_are_preser
     normalized_tag = text.strip()
     expected_tag = "'" + normalized_tag if normalized_tag[0] in '=+-@\ufeff' else normalized_tag
     assert full["Tags"] == selected["Tags"] == expected_tag
-    assert full["Amount"] == selected["Amount"] == "-12.5"
+    assert full["Amount"] == selected["Amount"] == "-12.50"
+
+
+@pytest.mark.parametrize("amount", ["90071992547409.91", "-90071992547409.91"])
+def test_csv_money_retains_exact_cents_beyond_float_precision(amount):
+    snapshot = financial_snapshot()
+    transaction = replace(snapshot.transactions[0], amount=Decimal(amount))
+    journal = replace(snapshot.journals[0], postings=tuple(
+        replace(line, amount=abs(Decimal(amount))) for line in snapshot.journals[0].postings))
+    snapshot = replace(snapshot, transactions=(transaction,), journals=(journal,))
+    exports = financial_csv_exports(snapshot)
+    assert csv_rows(exports["transactions"])[1][0]["Amount"] == amount
+    postings = csv_rows(exports["journals"])[1]
+    assert postings[0]["Debit"] == postings[1]["Credit"] == amount.lstrip('-')
+    rows = csv_rows(selected_ledger_csv(query(snapshot), ["simple", "journal:shared-journal"]))[1]
+    assert rows[0]["Amount"] == amount
+    assert rows[1]["Amount"] == rows[2]["Debit"] == rows[3]["Credit"] == amount.lstrip('-')
+    assert rows[2]["Amount"] == rows[3]["Amount"] == ""

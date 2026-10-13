@@ -33,7 +33,7 @@ def frame_csv(frame):
 def prepare_financial_csv_exports(*, transactions, journals, accounts, categories, tags):
     """Retain leaf names, transaction signs and every ordered journal posting."""
     transaction_frame = ledger_frame(
-        transactions, accounts, categories, display_paths=False, tags=tags,
+        transactions, accounts, categories, display_paths=False, tags=tags, preserve_amounts=True,
     )
     output = io.StringIO(newline="")
     writer = csv.DictWriter(output, fieldnames=JOURNAL_COLUMNS)
@@ -85,9 +85,9 @@ def selected_ledger_csv(query, entry_ids):
         raise StorageNotFoundError("Refresh the ledger and select the entries again.")
     by_id = {row["id"]: row for row in combine_ledger_entries(transactions, journals)}
     entries = [by_id[identity] for identity in requested]
-    summaries = ledger_summary_frame(entries, accounts, categories).to_dict("records")
+    summaries = ledger_summary_frame(entries, accounts, categories, preserve_amounts=True).to_dict("records")
     for row, entry in zip(summaries, entries, strict=True):
         row["Type"] = transaction_type_label(row["Type"], entry)
         row["Receipt"] = "📎" if entry.get("receipt_count") else ""
-    frame, _ = flatten_ledger_entries(entries, summaries, accounts, categories)
+    frame, _ = flatten_ledger_entries(entries, summaries, accounts, categories, preserve_amounts=True)
     return frame_csv(frame)

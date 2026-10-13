@@ -15,14 +15,14 @@ def test_downloads_preserve_financial_scope_and_whole_journals_with_two_entities
     before = client.get(PREFIX + 'reports/summary').json()
     full = csv_rows(client.get(PREFIX + 'exports/transactions.csv').content)[1]
     assert {row['ID'] for row in full} == {'expense', 'transfer'}
-    assert next(row for row in full if row['ID'] == 'transfer')['Amount'] == '100.0'
+    assert next(row for row in full if row['ID'] == 'transfer')['Amount'] == '100.00'
     journals = csv_rows(client.get(PREFIX + 'exports/journal-postings.csv').content)[1]
     assert len(journals) == 2 and {row['Entry ID'] for row in journals} == {'journal'}
     result = client.get(PREFIX + 'ledger/selected.csv', params=[('entry_ids', 'journal:journal'), ('entry_ids', 'expense')])
     assert result.status_code == 200
     selected = csv_rows(result.content)[1]
     assert [row['Type'] for row in selected] == ['Journal', '↳ Posting', '↳ Posting', 'Expense']
-    assert selected[1]['Debit'] == '12.5' and selected[2]['Credit'] == '12.5'
+    assert selected[1]['Debit'] == '12.50' and selected[2]['Credit'] == '12.50'
     assert client.get(PREFIX + 'reports/summary').json() == before  # Export never mutates or recategorizes accounting.
     runtime = client.app.state.runtime
     original = runtime.resolve_context

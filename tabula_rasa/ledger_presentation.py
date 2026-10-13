@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from decimal import Decimal
 
 import pandas as pd
 
@@ -76,6 +77,7 @@ def ledger_frame(
     *,
     display_paths: bool = True,
     tags: Sequence[Mapping[str, object]] | Mapping[str, object] | None = None,
+    preserve_amounts: bool = False,
 ) -> pd.DataFrame:
     account_names = (
         hierarchy_paths(accounts)
@@ -99,7 +101,7 @@ def ledger_frame(
             "Payee": transaction.get("payee", ""),
             "Description": transaction.get("description", ""),
             "Reference": transaction.get("reference", ""),
-            "Amount": float(transaction["amount"]),
+            "Amount": Decimal(str(transaction["amount"])) if preserve_amounts else float(transaction["amount"]),
         }
         if tags is not None:
             row["Tags"] = _tag_names(transaction, tags)
