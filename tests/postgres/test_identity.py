@@ -140,11 +140,49 @@ def test_durable_session_epochs_expiry_and_subject_revocation(database):
         sessions.validate(raw_b)
     fresh, _ = sessions.issue(verified('bob', now=now[0]))
     rotated = PostgresSessionRepository(database, 'test', 'b' * 64)
+    with pytest.raises(IdentityError):
+        rotated.configure()  # Runtime startup cannot authorize a rotation.
+    assert sessions.validate(fresh).user_id == bob.id
+    assert rotated.rotate_configuration(1) == 2
     rotated.configure()
+    with pytest.raises(IdentityError):
+        sessions.configure()  # An old deployment restart cannot reverse it.
+    with pytest.raises(IdentityError):
+        sessions.rotate_configuration(1)  # Nor can a stale operator command.
+    rotated.configure()
+    with database.transaction(read_only=True) as connection:
+        assert connection.scalar(text("SELECT epoch FROM identity_environments WHERE environment='test'")) == 2
     with pytest.raises(IdentityError):
         rotated.validate(fresh)
     with pytest.raises(IdentityError):
         sessions.validate(fresh)  # Old worker cannot continue on stale config.
+
+
+def test_explicit_rotation_preserves_other_environment_and_rejects_stale_operator(database):
+    setup(database)
+    original = PostgresSessionRepository(database, 'test', 'a' * 64)
+    other = PostgresSessionRepository(database, 'staging', 'b' * 64)
+    original.configure()
+    other.configure()
+    old_session, _ = original.issue(verified())
+    foreign_session, foreign = other.issue(verified('bob'))
+    pending, transaction = original.begin_login('/')
+    rotated = PostgresSessionRepository(database, 'test', 'c' * 64)
+    assert rotated.rotate_configuration(1) == 2
+    new_session, new = rotated.issue(verified())
+    for operation in (original.configure, lambda: original.issue(verified()),
+                      lambda: rotated.validate(old_session),
+                      lambda: rotated.consume_login(pending, transaction.state),
+                      lambda: original.rotate_configuration(1),
+                      lambda: rotated.rotate_configuration(2)):
+        with pytest.raises(IdentityError):
+            operation()
+    assert rotated.validate(new_session) == new
+    assert other.validate(foreign_session) == foreign
+    other.configure()
+    with database.transaction(read_only=True) as connection:
+        assert dict(connection.execute(text('SELECT environment,epoch FROM identity_environments')).all()) == {
+            'test': 2, 'staging': 1}
 
 
 def test_session_retention_preserves_active_users_and_other_environments(database):
