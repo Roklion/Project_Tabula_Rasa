@@ -114,6 +114,7 @@ it('does not compose private UI for needs-setup or failed initial identity', asy
 });
 
 it('clears private cache and drafts after authoritative session failure on focus', async () => {
+  const listeners = vi.spyOn(window, 'addEventListener');
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
   vi.spyOn(api, 'session').mockResolvedValueOnce({ ...session, trusted_development: false })
     .mockRejectedValue(new ApiError('unauthorized'));
@@ -125,6 +126,8 @@ it('clears private cache and drafts after authoritative session failure on focus
   }
   render(<ContextBoundary><Feature /></ContextBoundary>);
   await screen.findByLabelText('Private draft');
+  // The draft can render before the parent's passive effects attach listeners.
+  await waitFor(() => expect(listeners).toHaveBeenCalledWith('focus', expect.any(Function)));
   cache!.setQueryData(['receipt'], 'Private cached receipt');
   fireEvent(window, new Event('focus'));
   await screen.findByRole('link', { name: 'Sign in' });

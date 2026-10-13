@@ -10,6 +10,7 @@ import { useProtectedMutation } from '../concurrency/mutations';
 import { downloadBlob } from '../../components/downloadBlob';
 import { ConfirmationDialog } from '../../components/ConfirmationDialog';
 import { useLoadedRecord } from '../concurrency/useLoadedRecord';
+import { ActionButton, PageHeader, SectionHeader } from '../../components/VisualPrimitives';
 
 type PendingReceipt = { id: string; file: File; document?: Schemas['Document']; linked: boolean; error?: unknown };
 
@@ -170,19 +171,22 @@ function ReceiptWorkflow({ recordId, initialSource }: { recordId: string; initia
   }
   function documentView(doc: Schemas['Document']) {
     return <><span>{doc.filename} · {doc.byte_size === null ? 'Size unverified' : `${doc.byte_size} bytes`}</span>
-      <details><summary>Inspect {doc.filename}</summary><dl><dt>File type</dt><dd>{doc.mime_type || 'Unverified'}</dd>
+      <details className="receiptMetadata"><summary>Inspect {doc.filename}</summary><dl><dt>File type</dt><dd>{doc.mime_type || 'Unverified'}</dd>
         <dt>Document ID</dt><dd>{doc.id}</dd><dt>SHA-256</dt><dd>{doc.sha256 || 'Unverified'}</dd></dl></details>
       {!doc.sha256 && <p className="muted">Integrity metadata is incomplete.</p>}
-      <a aria-disabled={busy} href={`/api/v1/entities/${encodeURIComponent(session.entity.id)}/documents/${encodeURIComponent(doc.id)}/content`}
-        onClick={event => { event.preventDefault(); void download(doc); }}>Download {doc.filename}</a></>;
+      <a className="button action-secondary" aria-label={'Download ' + doc.filename} aria-disabled={busy} href={`/api/v1/entities/${encodeURIComponent(session.entity.id)}/documents/${encodeURIComponent(doc.id)}/content`}
+        onClick={event => { event.preventDefault(); void download(doc); }}>Download</a></>;
   }
   if (linked.isPending) return <LoadingState label="Loading receipts…" />;
-  if (linked.isError) return <><h1>{mixed ? 'Mixed-use receipts' : 'Receipts'}</h1><Link to={back}>{backLabel}</Link><ErrorNotice error={linked.error} onReview={() => void linked.refetch()} />
-    <p>Receipt storage must be configured for this business before receipts are available.</p></>;
-  return <><h1>{mixed ? 'Mixed-use receipts' : 'Receipts'}</h1><p className="lead">{source ? `${source.txn_date} · ${source.description || 'Mixed-use expense'} · Total ${source.total_expense} · Allocated ${source.allocated_amount}` : row ? `${row.txn_date} · ${row.description || row.kind} · ${row.amount}` : 'Saved transaction'}</p>
+  if (linked.isError) return <><PageHeader title={mixed ? 'Mixed-use receipts' : 'Receipts'} actions={<Link className="button action-secondary" to={back}>{backLabel}</Link>} />
+    <section className="surface"><SectionHeader title="Receipts unavailable" description="Receipt storage must be configured for this business before receipts are available." />
+      <ErrorNotice error={linked.error} operation="read" onReview={() => void linked.refetch()} /></section></>;
+  return <><PageHeader title={mixed ? 'Mixed-use receipts' : 'Receipts'} description={source ? `${source.txn_date} · ${source.description || 'Mixed-use expense'} · Total ${source.total_expense} · Allocated ${source.allocated_amount}` : row ? `${row.txn_date} · ${row.description || row.kind} · ${row.amount}` : 'Saved transaction'}
+    actions={<Link className="button action-secondary" to={back}>{backLabel}</Link>} />
     {source && <p>Receipts belong to source {source.id}. The linked ledger projection uses the same references.
       {source.recurring_schedule_id && ' This occurrence owns its receipts; the recurring template has none.'}</p>}
-    <Link to={back}>{backLabel}</Link><UnsavedChanges dirty={unresolved.length > 0 || busy} />
+    <UnsavedChanges dirty={unresolved.length > 0 || busy} />
+    {!writable && <p className="notice neutral">Read-only access: inspect and download receipts for this {mixed ? 'source' : 'transaction'}.</p>}
     {mixed && writable && <><button type="button" disabled={busy || reloading} onClick={() => setReview(true)}>Review latest source</button>
       {reviewRequired && <p role="alert">The source changed or is unavailable. Review the latest saved source before changing receipt references. Pending files are retained.</p>}
       {review && <ConfirmationDialog title="Review source" keepLabel="Keep loaded source" confirmLabel="Reload source"
@@ -193,28 +197,29 @@ function ReceiptWorkflow({ recordId, initialSource }: { recordId: string; initia
     {message && (unresolved.length || message.startsWith('Recovery cancelled.') ? <p role="alert" className="notice warning">{message}</p> : <SuccessNotice>{message}</SuccessNotice>)}
     {busy && <><LoadingState label={phase || 'Updating receipts…'} />
       {(phase.startsWith('Uploading') || phase.startsWith('Linking')) && <progress aria-label="Receipt upload progress" />}</>}
-    <section className="surface editor"><h2>Linked receipts</h2>
+    <section className="surface editor"><SectionHeader title="Linked receipts" description="Removing a receipt reference retains its stored file in Unreferenced receipts." />
       {!linked.data.items.length ? <EmptyState title="No receipts attached">Attach files or link an unreferenced receipt below.</EmptyState>
         : <ul className="recordList">{linked.data.items.map(doc => <li key={doc.id}><div>{documentView(doc)}</div>
-          {writable && <button type="button" disabled={blocked} onClick={event => { event.currentTarget.focus(); setRemove(doc); }}>Remove {doc.filename}</button>}</li>)}</ul>}
+          {writable && <ActionButton aria-label={'Remove ' + doc.filename} disabled={blocked} onClick={event => { event.currentTarget.focus(); setRemove(doc); }}>Remove receipt</ActionButton>}</li>)}</ul>}
       {remove && <ConfirmationDialog title="Remove receipt" keepLabel="Keep receipt" confirmLabel="Confirm remove"
         pending={busy || operation.isPending} onKeep={() => setRemove(undefined)}
         onConfirm={() => void operation.mutateAsync(() => mutate(() => unlink(remove.id), 'Receipt reference removed. File retained.'))}>
         Remove the reference to {remove.filename}? The stored file remains available in Unreferenced receipts.
       </ConfirmationDialog>}
     </section>
-    {writable && <section className="surface editor"><h2>Attach receipts</h2><p>PDF, PNG, JPG, JPEG, WEBP or HEIC; up to 20 MB per file, 200 MB per batch and 100 receipts per {mixed ? 'source' : 'transaction'}.</p>
+    {writable && <section className="surface editor"><SectionHeader title="Attach receipts" description={`PDF, PNG, JPG, JPEG, WEBP or HEIC; up to 20 MB per file, 200 MB per batch and 100 receipts per ${mixed ? 'source' : 'transaction'}.`} />
       <Field id="receipt-files" label="Receipt files"><input id="receipt-files" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.heic" disabled={blocked || unresolved.length > 0}
         onChange={event => { filesSelected(Array.from(event.target.files ?? [])); event.target.value = ''; }} /></Field>
-      {pending.map(item => <div key={item.id}><p>{item.file.name}: {item.linked ? 'Attached' : item.document ? 'Uploaded; link pending' : 'Upload pending'}</p>
-        {item.error !== undefined && <ErrorNotice error={item.error} />}</div>)}
-      <div className="actions"><button type="button" disabled={blocked || operation.isPending || !unresolved.length} onClick={() => void operation.mutateAsync(transfer)}>{pending.some(item => item.error !== undefined) ? 'Retry unresolved receipts' : 'Attach selected receipts'}</button>
-        {!!unresolved.length && <button type="button" disabled={busy} onClick={cancelRecovery}>Cancel recovery</button>}</div>
+      {!!pending.length && <ul className="receiptQueue" aria-label="Selected receipts">{pending.map(item => <li key={item.id}><p>{item.file.name}: {item.linked ? 'Attached' : item.document ? 'Uploaded; link pending' : 'Upload pending'}</p>
+        {item.error !== undefined && <ErrorNotice error={item.error} />}</li>)}</ul>}
+      <div className="actions formActions"><ActionButton tone="primary" pending={busy || operation.isPending} disabled={blocked || !unresolved.length} onClick={() => void operation.mutateAsync(transfer)}>{pending.some(item => item.error !== undefined) ? 'Retry unresolved receipts' : 'Attach selected receipts'}</ActionButton>
+        {!!unresolved.length && <ActionButton disabled={busy} onClick={cancelRecovery}>Cancel recovery</ActionButton>}</div>
     </section>}
-    <section className="surface editor"><h2>Unreferenced receipts</h2>{inventory.isPending ? <LoadingState /> : inventory.isError ? <ErrorNotice error={inventory.error} onReview={() => void inventory.refetch()} /> : <>
-      {!!inventory.data.needing_integrity && <p role="alert">{inventory.data.needing_integrity} files need integrity metadata before they can be linked.</p>}
+    <section className="surface editor"><SectionHeader title="Unreferenced receipts" description="Confirmed uploads remain available here when linking fails or a reference is removed. Inspect this list before selecting an unconfirmed file again." />
+      {inventory.isPending ? <LoadingState /> : inventory.isError ? <ErrorNotice error={inventory.error} operation="read" onReview={() => void inventory.refetch()} /> : <>
+      {!!inventory.data.needing_integrity && <p role="alert" className="notice warning">{inventory.data.needing_integrity} files need integrity metadata before they can be linked.</p>}
       {!inventory.data.items.length ? <EmptyState title="No unreferenced receipts" /> : <ul className="recordList">{inventory.data.items.map(doc => <li key={doc.id}><div>{documentView(doc)}</div>
-        {writable && <button type="button" disabled={blocked || operation.isPending || unresolved.length > 0} onClick={() => void operation.mutateAsync(() => mutate(() => link(doc.id), 'Receipt linked.'))}>Link {doc.filename}</button>}</li>)}</ul>}
+        {writable && <ActionButton aria-label={'Link ' + doc.filename} disabled={blocked || operation.isPending || unresolved.length > 0} onClick={() => void operation.mutateAsync(() => mutate(() => link(doc.id), 'Receipt linked.'))}>Link receipt</ActionButton>}</li>)}</ul>}
     </>}</section>
   </>;
 }

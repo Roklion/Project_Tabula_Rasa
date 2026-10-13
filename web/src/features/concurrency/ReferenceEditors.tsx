@@ -1,4 +1,4 @@
-import { PageHeader } from '../../components/VisualPrimitives';
+import { FormSection, PageHeader } from '../../components/VisualPrimitives';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api, type Account, type Schemas } from '../../api/client';
@@ -36,7 +36,7 @@ export function AccountFields({ form, excludeId, creating = false }: { form: Use
   const root = hasChildren(accounts.data?.items ?? [], excludeId ?? '');
       const classification = form.formState.defaultValues?.classification ?? form.getValues('classification') ?? 'Asset';
       const fixed = fixedClassifications[form.watch('type') ?? ''];
-      return <><TextField form={form} name="name" label="Account name" />
+      return <><FormSection title="Account details"><TextField form={form} name="name" label="Account name" />
       <SelectField form={form} name="type" label="Type" options={options(['Bank', 'Cash', 'Credit card', 'Short-term debt', 'Equity', 'Other'].filter(type => !root || !fixedClassifications[type] || fixedClassifications[type] === classification))}
         onChange={() => {
           const classification = fixedClassifications[form.getValues('type') ?? ''];
@@ -47,14 +47,14 @@ export function AccountFields({ form, excludeId, creating = false }: { form: Use
         }} />
       <SelectField form={form} name="classification" label="Classification" options={options(root ? [classification] : fixed ? [fixed] : ['Asset', 'Liability', 'Equity'])}
         onChange={() => form.setValue('parent_id', '', { shouldDirty: true })} />
-      {root && <p className="muted">Move child accounts before changing classification.</p>}
-      <TextField form={form} name="opening_balance" label="Opening balance" />
-      <p className="muted">Asset opening balances are normally positive. Liability and equity opening ledger balances are normally negative.</p>
+      {root && <p className="fieldHint formSpan">Move child accounts before changing classification.</p>}</FormSection>
+      <FormSection title="Opening balance and hierarchy"><TextField form={form} name="opening_balance" label="Opening balance" inputMode="decimal"
+        hint="Asset opening balances are normally positive. Liability and equity opening ledger balances are normally negative." />
       <SelectField form={form} name="parent_id" label="Parent account" options={[{ id: '', name: 'No parent' },
         ...eligibleParents(accounts.data?.items ?? [], excludeId ?? '', item => item.classification === form.watch('classification'))]} />
       {!creating && form.formState.defaultValues?.active
         ? <p className="muted">Active. Use Deactivate to review and confirm deactivation.</p>
-        : !creating && <ActiveField form={form} name="active" />}</>;
+        : !creating && <ActiveField form={form} name="active" />}</FormSection></>;
 
 }
 
@@ -75,12 +75,12 @@ function categoryLoaded(row: Schemas['Category']) {
 export function CategoryFields({ form, excludeId }: { form: UseFormReturn<Schemas['CategoryChanges']>; excludeId?: string }) {
   const session = useEntity();
   const categories = useQuery({ queryKey: resourceKey(session, 'categories'), queryFn: ({ signal }) => api.categories(session, signal) });
-  return <><TextField form={form} name="name" label="Category name" />
+  return <FormSection title="Category details"><TextField form={form} name="name" label="Category name" />
       <SelectField form={form} name="kind" label="Kind" options={options(hasChildren(categories.data?.items ?? [], excludeId ?? '') ? [form.formState.defaultValues?.kind ?? form.getValues('kind') ?? 'Expense'] : ['Income', 'Expense'])}
         onChange={() => form.setValue('parent_id', '', { shouldDirty: true })} />
       {hasChildren(categories.data?.items ?? [], excludeId ?? '') && <p className="muted">Move child categories before changing kind.</p>}
       <SelectField form={form} name="parent_id" label="Parent category" options={[{ id: '', name: 'No parent' },
-        ...eligibleParents(categories.data?.items ?? [], excludeId ?? '', item => item.kind === form.watch('kind'))]} /></>;
+        ...eligibleParents(categories.data?.items ?? [], excludeId ?? '', item => item.kind === form.watch('kind'))]} /></FormSection>;
 }
 
 function CategoryEditor({ row, onClose }: { row: Schemas['Category']; onClose: () => void }) {
@@ -107,7 +107,7 @@ function ManagedEditor({ row, resource, onClose }: { row: Schemas['ManagedRefere
     save={async (id, baseline, changes) => managedLoaded(await save(session, id, { baseline, changes }))}
     remove={(id, baseline) => remove(session, id, baseline)}
     loadLatest={async id => managedLoaded(await latest(list, session, id))}
-    fields={form => <><TextField form={form} name="name" label="Name" /><ActiveField form={form} name="active" /></>} />;
+    fields={form => <FormSection title="Record details"><TextField form={form} name="name" label="Name" /><ActiveField form={form} name="active" /></FormSection>} />;
 }
 
 export function ReferencesPage({ resource }: { resource: 'categories' | 'payees' | 'tags' }) {
@@ -117,11 +117,11 @@ export function ReferencesPage({ resource }: { resource: 'categories' | 'payees'
     actions={session.capabilities.includes('bookkeeping:write') && <Link className="button" to={'/' + resource + '/new'}>Add {resource === 'categories' ? 'category' : resource === 'payees' ? 'payee' : 'tag'}</Link>} />
     {resource === 'categories'
       ? <RecordList resource={resource} title="Categories" list={api.categories} label={row => row.name}
-          columns={[{ title: 'Kind', render: row => row.kind }, { title: 'Parent category', render: (row, rows) => rows.find(parent => parent.id === row.parent_id)?.name ?? '—' }]}
+          columns={[{ title: 'Kind', render: row => row.kind }, { title: 'Parent category', className: 'tableText', render: (row, rows) => rows.find(parent => parent.id === row.parent_id)?.name ?? '—' }]}
           editor={(row, close) => <CategoryEditor row={row} onClose={close} />} />
       : <><RecordList key={resource} resource={resource} title={title} list={resource === 'payees' ? api.payees : api.tags} label={row => row.name}
           columns={[{ title: 'Status', render: row => row.active ? 'Active' : 'Inactive' }]}
           editor={(row, close) => <ManagedEditor row={row} resource={resource} onClose={close} />} />
-        <Link to={'/' + resource + '/merge'}>Merge {resource}</Link></>}
+        <div className="actions"><Link className="button action-secondary" to={'/' + resource + '/merge'}>Merge {resource}</Link></div></>}
   </>;
 }

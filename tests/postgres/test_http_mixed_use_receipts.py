@@ -184,7 +184,8 @@ def test_generated_mixed_occurrences_own_receipts_and_inconsistent_pairs_refuse_
     document = upload(client).json()
     assert link(client, generated, document['id']).status_code == 200
     assert client.get(PREFIX + 'mixed-use/' + initial['id'] + '/receipts').json()['items'] == []
-    assert client.get(PREFIX + 'recurring/schedule/receipts').status_code == 404
+    # The command router may match this path, but no receipt GET is supported.
+    assert client.get(PREFIX + 'recurring/schedule/receipts').status_code in {404, 405}
     assert 'receipt_references' not in client.get(PREFIX + 'recurring/schedule').json()['schedule']
     # An explicitly incomplete imported relationship cannot be repaired through receipts.
     with database.transaction() as connection:

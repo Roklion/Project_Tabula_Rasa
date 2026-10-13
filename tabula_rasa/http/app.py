@@ -9,7 +9,7 @@ from time import perf_counter
 from uuid import uuid4
 
 from anyio import CapacityLimiter, to_thread
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException
@@ -23,6 +23,7 @@ from tabula_rasa.application.documents import DocumentError
 from tabula_rasa.application.identity import IdentityError
 from .composition import open_runtime
 from .config import HttpSettings
+from .authorization import authorize_request, validate_routes
 from .errors import (
     TransportError, error_response, handle_error, handle_http_error, handle_validation,
 )
@@ -50,6 +51,7 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
         title="Tabula Rasa commercial API", version="1.0.0",
         lifespan=None if schema_only else lifespan,
         docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json",
+        dependencies=[Depends(authorize_request)],
     )
     app.add_exception_handler(TransportError, handle_error)
     app.add_exception_handler(StorageError, handle_error)
@@ -58,9 +60,9 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
     async def identity_error(request, error):
         response = error_response(request, error.code)
         request.state.security_event = "identity_denied"
-        # A denial may belong to an older credential than the browser now owns.
-        # Only explicit login/logout transitions mutate the shared cookie names.
-        # The browser still unmounts private state on an unauthorized response.
+        # Passive denials must not delete cookies by name: a delayed response
+        # could erase credentials issued by a newer successful callback.
+        # Server validation denies stale credentials; explicit logout clears.
         return response
     app.add_exception_handler(IdentityError, identity_error)
     app.add_exception_handler(RequestValidationError, handle_validation)
@@ -166,4 +168,5 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
                 raise HTTPException(404)
             return FileResponse(assets / "index.html", headers={"Cache-Control": "no-cache"})
 
+    validate_routes(app)
     return app

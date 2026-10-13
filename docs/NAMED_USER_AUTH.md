@@ -4,7 +4,7 @@ This implements the #311/#312 foundation within [commercial identity](COMMERCIAL
 and ADR 0003. It does not complete #222, authorize external beta, claim a hosted
 provider rehearsal, or enable the separate legacy-profile migration. The
 Streamlit administrator remains a loopback-only operator surface. #313 owns
-the complete action-policy gate; #314–#321 own the remaining commercial journey
+the [complete action-policy gate](API_AUTHORIZATION.md); #314–#321 own the remaining commercial journey
 and rollout checks. Do not expose this foundation as a production-ready ledger
 before those gates are satisfied.
 
@@ -41,6 +41,11 @@ Provider accounts, region/plan, MFA/recovery, mail and authorized secret setup
 remain operator checkpoints. No provider resource is provisioned by this code.
 
 ## Login and browser lifecycle
+
+Signed-out, session-unavailable and workspace-setup-required views consume the
+shared commercial headers, surfaces and native action controls. They retain
+the context boundary's private-view removal, reload and sign-out behavior;
+visual consistency does not complete #314 workspace selection or #317 onboarding.
 
 The infrastructure adapter uses pinned Authlib 1.7.2 (BSD-3-Clause, Python 3.10+)
 and its joserfc 1.7.5 JOSE implementation. Authlib owns authorization-code/PKCE
@@ -90,6 +95,9 @@ HTTP uses distinct `tabula_dev_*` names. A matching HttpOnly host-only CSRF copy
 (`__Host-tabula_csrf`) permits Origin/CSRF-valid logout to clear cookies even
 when PostgreSQL is unavailable. That copy grants no bookkeeping authority.
 Other unsafe routes use the freshly validated session's synchronizer token.
+Passive identity denials return no cookie deletion: a delayed 401 must not erase
+a newer session installed by a successful callback. Stale cookies still fail
+fresh server validation; explicit logout/revoke-all clear the browser cookies.
 The failure screen retains only logout CSRF, not private session/entity data,
 and offers Sign out. After an initial reload during an outage, the browser reads
 `GET /api/v1/auth/logout-context` with `X-Tabula-Logout: 1` to obtain only this
@@ -158,6 +166,10 @@ on every worker before completing the operation. This follows the #310 owner
 decision: client-secret rotation revokes sessions, superseding the ADR's former
 retain-sessions suggestion.
 
+The [server action matrix and exposed-route inventory](API_AUTHORIZATION.md)
+enforce role-specific authority before private service/document binding.
+Production/migrated HTTP uses the named membership resolver, and identity/ledger
+database and environment bindings must agree before profile grants are bound.
 Recovery/backup/destructive restore/migration authorization is Owner-only;
 platform operators execute separately authorized recovery. Do not synthesize
 an in-app break-glass identity. Application and provider grants are unrelated

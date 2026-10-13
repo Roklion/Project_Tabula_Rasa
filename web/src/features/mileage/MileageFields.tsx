@@ -8,19 +8,21 @@ import { SelectField, TextField } from '../concurrency/Fields';
 import { activeChoices } from '../concurrency/useReferenceChoices';
 import type { MileageDraft } from './mileageForm';
 import { MapsMileageFields } from './MapsMileageFields';
+import { FormSection } from '../../components/VisualPrimitives';
 
 export function MileageFields({ form }: { form: UseFormReturn<MileageDraft> }) {
   const session = useEntity();
   const tags = useQuery({ queryKey: resourceKey(session, 'tags'), queryFn: ({ signal }) => api.tags(session, signal) });
-  return <>
+  return <><FormSection title="Trip details">
     <TextField form={form} name="trip_date" label="Trip date" type="date" />
     <TextField form={form} name="vehicle" label="Vehicle" />
-    <MapsMileageFields key={JSON.stringify(form.formState.defaultValues)} form={form}>
+    </FormSection><FormSection title="Route and purpose" description="Enter locations and mileage manually or review optional Maps suggestions.">
+    <MapsMileageFields key={JSON.stringify(form.formState.defaultValues)} form={form} children={null} />
+    <TextField form={form} name="business_purpose" label="Business purpose" multiline />
+    <TextField form={form} name="notes" label="Notes" multiline />
+    </FormSection><FormSection title="Tags">
     {tags.isPending ? <LoadingState label="Loading tags…" /> : tags.isError ? <ErrorNotice error={tags.error} onReview={() => void tags.refetch()} />
       : <SelectField form={form} name="tag_ids" label="Tags" options={activeChoices(tags.data.items, form.formState.defaultValues?.tag_ids ?? [])} multiple />}
     <TextField form={form} name="new_tag_name" label="New tag name (optional)" />
-    </MapsMileageFields>
-    <TextField form={form} name="business_purpose" label="Business purpose" />
-    <TextField form={form} name="notes" label="Notes" />
-  </>;
+    </FormSection></>;
 }

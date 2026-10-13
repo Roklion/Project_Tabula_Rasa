@@ -73,8 +73,8 @@ export function MapsMileageFields({ form, children }: { form: UseFormReturn<Mile
   const error = form.getFieldState('maps_reviewed', form.formState).error?.message;
   const routeCurrent = !!route?.outbound_miles && (!roundTrip || !!route.return_miles);
   return <>
-    <TextField form={form} name="miles" label="Business miles" onChange={reviewAgain} />
-    {roundTrip && <TextField form={form} name="return_miles" label="Return business miles" onChange={reviewAgain} />}
+    <TextField form={form} name="miles" label="Business miles" inputMode="decimal" onChange={reviewAgain} />
+    {roundTrip && <TextField form={form} name="return_miles" label="Return business miles" inputMode="decimal" onChange={reviewAgain} />}
     {children}
     {googleContent && <p role="note" translate="no" aria-label="Google Maps attribution">Google Maps</p>}
     {maps?.browser_api_key && <><MapsAddress browserKey={maps.browser_api_key} regionCode={maps.region_code ?? null} label="Starting location lookup" onSelect={selectOrigin} onClear={clearOrigin} />

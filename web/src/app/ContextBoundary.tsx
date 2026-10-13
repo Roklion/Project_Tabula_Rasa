@@ -4,6 +4,7 @@ import { ErrorNotice, LoadingState } from '../components/States';
 import { ScopeBoundary } from './ScopeBoundary';
 import { EntitySelectionContext } from './entitySelectionContext';
 import { AuthContext } from './authContext';
+import { ActionButton, PageHeader } from '../components/VisualPrimitives';
 
 const authorityKey = (session: SessionState) => JSON.stringify([session.actor_id, session.cache_scope,
   session.organization_id, session.entity?.id, session.capabilities]);
@@ -113,18 +114,18 @@ export function ContextBoundary({ children }: { children: ReactNode }) {
     return () => controller.abort();
   }, [generation]);
   if (state.signedOut || state.error instanceof ApiError && state.error.code === 'unauthorized')
-    return <main className="standalone"><h1>Project Tabula Rasa</h1><p>You are signed out. Sign in to continue.</p>
+    return <main className="standalone"><section className="surface"><PageHeader title="Project Tabula Rasa" description="You are signed out. Sign in to continue." />
       {state.error !== undefined && <ErrorNotice error={state.error} />}
       {window.location.pathname === '/signed-out' && <p>Sign-in did not complete. You can try again.</p>}
-      <a href="/api/v1/auth/login">Sign in</a></main>;
-  if (state.error) return <main className="standalone"><h1>Project Tabula Rasa</h1>
-    <ErrorNotice error={state.error} onReview={() => { setState({}); setGeneration(value => value + 1); }} />
-    <button onClick={() => void logout()}>Sign out</button>
-  </main>;
+      <div className="actions"><a className="button" href="/api/v1/auth/login">Sign in</a></div></section></main>;
+  if (state.error) return <main className="standalone"><section className="surface"><PageHeader title="Project Tabula Rasa" />
+    <ErrorNotice error={state.error} operation="read" onReview={() => { setState({}); setGeneration(value => value + 1); }} />
+    <div className="actions"><ActionButton onClick={() => void logout()}>Sign out</ActionButton></div>
+  </section></main>;
   if (!state.session) return <main className="standalone"><LoadingState label="Loading business context…" /></main>;
-  if (state.session.state === 'needs_setup') return <main className="standalone"><h1>Workspace setup required</h1>
-    <p>You are signed in, but no active business is selected. Ask your organization owner to arrange access.</p>
-    <button onClick={() => void logout()}>Sign out</button></main>;
+  if (state.session.state === 'needs_setup') return <main className="standalone"><section className="surface"><PageHeader title="Workspace setup required"
+    description="You are signed in, but no active business is selected. Ask your organization owner to arrange access." />
+    <div className="actions"><ActionButton onClick={() => void logout()}>Sign out</ActionButton></div></section></main>;
   async function select(id: string) {
     if (!state.session || state.session.state === 'needs_setup') return;
     setSwitching(true);
