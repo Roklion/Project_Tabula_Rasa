@@ -30,6 +30,8 @@ Never set `TABULA_RASA_TRUSTED_ENTITY_ID` or alpha Basic credentials in named
 mode. Production and named mode reject injected trusted-development contexts
 at the HTTP guard as well as rejecting synthetic configuration. Restricted
 alpha remains a separate explicit fixture mode; it grants no named membership.
+The migrated-runtime factory rejects a named identity resolver unless named-user
+mode is explicit, before allocating a database.
 Use separate provider clients, secrets and databases for each environment.
 Register exactly `<public origin>/api/v1/auth/callback` without wildcard URLs.
 HTTP settings canonicalize scheme/hostname case and omit default ports before
@@ -47,6 +49,12 @@ claim validation. Each exchange owns a separate client; provider tokens are not
 shared between users. The adapter retains bounded transport, issuer-host endpoint
 restrictions and the application's freshness, subject and verified-email policy.
 PyJWT is a development-only independent signer for synthetic provider tests.
+
+An unauthorized private response clears private browser views but does not delete
+shared authentication cookies: a delayed response may belong to a session older
+than a login completed in another tab. Explicit login/logout transitions own
+cookie replacement and deletion. Retaining a rejected cookie grants no authority;
+every later request still validates its durable session.
 
 `GET /api/v1/auth/login` starts a five-minute durable browser-bound one-time
 transaction. Return paths are only `/` and `/onboarding`. The code callback
@@ -138,11 +146,17 @@ ordinary session deadlines are not a substitute. If an external change cannot
 be reconciled safely, suspend affected access until revocation is confirmed.
 
 Issuer, client, client-secret, public-origin or session-generation changes
-increment the durable environment epoch on coordinated named-runtime startup.
-Drain old workers and restart all workers together with the same new
-configuration: old workers cannot validate sessions after rotation, but an
-old deployment restarted with old configuration must not be allowed to
-reconfigure the environment. Verify that previously issued credentials fail
+require explicit operator rotation of the durable environment epoch. Startup
+initializes an empty environment or validates its existing configuration; a
+mismatch fails closed and cannot replace the durable hash.
+Drain all workers, read the current epoch for the selected environment from
+`identity_environments` through the authorized operator database connection,
+and supply the new named-user settings and database URL in the process
+environment. Run `python scripts/rotate_identity_configuration.py --expected-epoch N`
+with that observed epoch, then restart all workers with the new configuration.
+The command bypasses `.env.local` database fallback and refuses stale epochs,
+unchanged configurations and uninitialized environments. A restarted old release
+cannot reconfigure the environment or issue sessions. Verify previously issued credentials fail
 on every worker before completing the operation. This follows the #310 owner
 decision: client-secret rotation revokes sessions, superseding the ADR's former
 retain-sessions suggestion.

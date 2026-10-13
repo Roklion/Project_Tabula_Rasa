@@ -26,14 +26,27 @@ class PostgresSessionRepository:
         self.identity = PostgresIdentityRepository(database)
 
     def configure(self):
-        # Run at explicit named-runtime startup. Old workers cannot validate or
-        # issue under the old epoch after a coordinated configuration rotation.
+        # Startup may initialize an empty environment, never rotate an existing
+        # one. A stale release restart must not replace the operator's decision.
         with identity_operation(self.database) as connection:
             connection.execute(text('''INSERT INTO identity_environments(environment,configuration_hash) VALUES (:env,:hash)
-                ON CONFLICT (environment) DO UPDATE SET configuration_hash=EXCLUDED.configuration_hash,
-                epoch=identity_environments.epoch+1
-                WHERE identity_environments.configuration_hash<>EXCLUDED.configuration_hash'''),
+                ON CONFLICT (environment) DO NOTHING'''),
                 {'env': self.environment, 'hash': self.configuration_hash})
+            self._epoch(connection)
+
+    def rotate_configuration(self, expected_epoch):
+        """Explicit operator operation; compare-and-set prevents stale rotation."""
+        if type(expected_epoch) is not int or expected_epoch < 1:
+            raise IdentityError('forbidden')
+        with identity_operation(self.database) as connection:
+            epoch = connection.scalar(text('''UPDATE identity_environments
+                SET configuration_hash=:hash, epoch=epoch+1
+                WHERE environment=:env AND epoch=:expected AND configuration_hash<>:hash
+                RETURNING epoch'''),
+                {'env': self.environment, 'hash': self.configuration_hash, 'expected': expected_epoch})
+            if epoch is None:
+                raise IdentityError('concurrent_write')
+            return epoch
 
     def _epoch(self, connection):
         epoch = connection.scalar(text('''SELECT epoch FROM identity_environments

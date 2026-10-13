@@ -100,6 +100,16 @@ def test_migrated_startup_disposes_pool_and_does_not_retain_private_errors(monke
     assert database.dispose.call_count == (0 if failure == "allocation" else 1)
 
 
+def test_migrated_named_identity_requires_explicit_access_mode_before_allocation(monkeypatch):
+    allocate = Mock()
+    monkeypatch.setattr("tabula_rasa.http.composition.Database", allocate)
+    settings = HttpSettings("production", "https://owner.example.test")
+    resolver = NamedIdentity(settings, Mock(), Mock())
+    with pytest.raises(RuntimeError, match="explicit named-user access mode"):
+        open_migrated_runtime(settings, resolve_context=resolver, entity_profiles={}, profile_secrets={})
+    allocate.assert_not_called()
+
+
 def test_shared_production_factory_validates_all_bindings_and_preserves_request_scopes(monkeypatch):
     from tabula_rasa.infrastructure.postgres.migrations import head_revision
 
@@ -119,6 +129,7 @@ def test_shared_production_factory_validates_all_bindings_and_preserves_request_
         profile_secrets=secrets, database_settings=object())
     assert factory.call_count == 2
     assert runtime.resolve_context is resolver and runtime.ready()
+    assert runtime.identity is resolver
     for profile in services:
         context = RequestContext("actor", "org", profile, frozenset({"bookkeeping:read"}), "session", "csrf")
         assert runtime.services(context) is services[profile]

@@ -138,6 +138,8 @@ def open_migrated_runtime(settings, *, resolve_context, entity_profiles, profile
     if (settings.trusted_entity_id or not callable(resolve_context)
             or commercial and (not isinstance(resolve_context, NamedIdentity) or resolve_context.settings != settings)):
         raise RuntimeError("Migrated runtime requires an explicit authorization resolver without fixture context.")
+    if isinstance(resolve_context, NamedIdentity) and settings.access_mode != "named_user":
+        raise RuntimeError("Named identity requires explicit named-user access mode.")
     from .migrated import MigratedProfileServices
 
     database = None
