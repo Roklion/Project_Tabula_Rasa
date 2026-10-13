@@ -20,13 +20,14 @@ from .alpha import PUBLIC_PROBES, gate_response
 from tabula_rasa.errors import StorageError
 from tabula_rasa.application.mileage import MileageValidationError
 from tabula_rasa.application.documents import DocumentError
+from tabula_rasa.application.identity import IdentityError
 from .composition import open_runtime
 from .config import HttpSettings
 from .errors import (
     TransportError, error_response, handle_error, handle_http_error, handle_validation,
 )
 from .models.common import Health, Version
-from .routes import accounting, accounts, documents, mileage, references, reporting, secondary, session
+from .routes import accounting, accounts, auth, documents, mileage, references, reporting, secondary, session
 
 logger = logging.getLogger("tabula_rasa.http")
 
@@ -54,6 +55,14 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
     app.add_exception_handler(StorageError, handle_error)
     app.add_exception_handler(MileageValidationError, handle_error)
     app.add_exception_handler(DocumentError, handle_error)
+    async def identity_error(request, error):
+        response = error_response(request, error.code)
+        request.state.security_event = "identity_denied"
+        # A denial may belong to an older credential than the browser now owns.
+        # Only explicit login/logout transitions mutate the shared cookie names.
+        # The browser still unmounts private state on an unauthorized response.
+        return response
+    app.add_exception_handler(IdentityError, identity_error)
     app.add_exception_handler(RequestValidationError, handle_validation)
     app.add_exception_handler(HTTPException, handle_http_error)
 
@@ -83,6 +92,8 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
                     await run_in_threadpool(resolve_context, request)
                 if response is None:
                     response = await call_next(request)
+        except IdentityError as error:
+            response = await identity_error(request, error)
         except TransportError as error:
             response = error_response(request, error.code)
         except Exception:
@@ -103,6 +114,7 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
             "duration_ms": round((perf_counter() - started) * 1000, 2),
             "release": configured.release_id if configured else "schema",
             "failure_code": getattr(request.state, "failure_code", None),
+            "security_event": getattr(request.state, "security_event", None),
         }, sort_keys=True))
         return response
 
@@ -125,6 +137,7 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
         return Version(release=request.app.state.settings.release_id)
 
     app.include_router(session.router)
+    app.include_router(auth.router)
     app.include_router(accounts.router)
     app.include_router(references.categories)
     app.include_router(references.payees)

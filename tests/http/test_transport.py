@@ -91,6 +91,36 @@ def test_unsafe_origin_and_csrf_rejected(client, runtime, headers):
     runtime.services.assert_not_called()
 
 
+@pytest.mark.parametrize('configured,canonical', [
+    ('HTTPS://NAMED.example.test', 'https://named.example.test'),
+    ('https://named.example.test:443', 'https://named.example.test'),
+    ('https://named.example.test:8443', 'https://named.example.test:8443'),
+    ('HTTP://LOCALHOST:80', 'http://localhost'),
+    ('http://[::1]:8000', 'http://[::1]:8000'),
+])
+def test_canonical_origin_accepts_browser_mutations_without_relaxing_scope(runtime, configured, canonical):
+    settings = HttpSettings('test', configured, access_mode='named_user')
+    assert settings.public_origin == canonical
+    with TestClient(create_app(settings=settings, runtime_factory=lambda _: runtime), base_url=canonical) as client:
+        payload = {'name': 'Bank', 'type': 'Bank'}
+        headers = {'Origin': canonical, 'X-CSRF-Token': 'test-csrf'}
+        assert client.post('/api/v1/entities/alpha/accounts', json=payload, headers=headers).status_code == 201
+        runtime.services.reset_mock()
+        for origin in ('https://foreign.test', 'null', ''):
+            assert client.post('/api/v1/entities/alpha/accounts', json=payload,
+                headers={**headers, 'Origin': origin}).status_code == 403
+        assert client.post('/api/v1/entities/beta/accounts', json=payload, headers=headers).status_code == 403
+        assert client.post('/api/v1/entities/alpha/accounts', json=payload,
+            headers={**headers, 'X-CSRF-Token': 'wrong'}).status_code == 403
+        runtime.services.assert_not_called()
+
+
+@pytest.mark.parametrize('origin', ['https://named.example.test:invalid', 'https://named.example.test:65536'])
+def test_invalid_origin_port_rejected(origin):
+    with pytest.raises(ValueError, match='Invalid HTTP configuration'):
+        HttpSettings('test', origin, access_mode='named_user')
+
+
 def test_capability_enforcement(client, runtime):
     runtime.resolve_context = lambda request: RequestContext("actor", "org", "alpha",
         frozenset({"bookkeeping:read"}), "scope", "test-csrf")

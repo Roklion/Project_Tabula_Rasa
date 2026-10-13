@@ -9,7 +9,7 @@ from sqlalchemy import text
 from tabula_rasa.errors import StorageValidationError
 from tabula_rasa.infrastructure.postgres.concurrency import AggregateKey
 from tabula_rasa.infrastructure.postgres.config import DatabaseSettings
-from tabula_rasa.infrastructure.postgres.migrations import current_revision, downgrade, upgrade, head_revision
+from tabula_rasa.infrastructure.postgres.migrations import current_revision, upgrade, head_revision
 from tabula_rasa.infrastructure.postgres.operations import repository_operation
 from tabula_rasa.infrastructure.postgres.runtime import Database
 from tests.postgres._support import (
@@ -251,8 +251,12 @@ def test_secondary_references_reject_foreign_entity_only_identifiers(database, s
     assert load_baseline(database, AggregateKey("beta", "mixed_use", "source")) == before
 
 
-def test_initial_baseline_contains_all_domain_history_guards(database):
-    downgrade(database, "0001_initial", allow_destructive=True)
+def test_initial_baseline_contains_all_domain_history_guards(empty_database):
+    from alembic import command
+    from tabula_rasa.infrastructure.postgres.migrations import migration_config
+    database = empty_database
+    with database.engine.begin() as connection:
+        command.upgrade(migration_config(connection), '0001_initial')
     with database.transaction(read_only=True) as connection:
         assert current_revision(connection) == "0001_initial"
         functions = set(connection.scalars(text("SELECT proname FROM pg_proc WHERE pronamespace='public'::regnamespace")))

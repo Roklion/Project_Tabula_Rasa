@@ -8,6 +8,7 @@ from tabula_rasa.http.migrated import MigratedProfileServices
 from tabula_rasa.http.composition import open_migrated_runtime
 from tabula_rasa.http.config import HttpSettings
 from tabula_rasa.http.context import RequestContext
+from tabula_rasa.http.identity import NamedIdentity
 
 
 def test_migrated_binding_enters_existing_cutover_and_document_composition(monkeypatch):
@@ -91,7 +92,18 @@ def test_migrated_startup_disposes_pool_and_does_not_retain_private_errors(monke
     assert database.dispose.call_count == (0 if failure == "allocation" else 1)
 
 
-def test_shared_production_factory_validates_all_bindings_and_preserves_request_scopes(monkeypatch):
+def test_migrated_named_identity_requires_explicit_access_mode_before_allocation(monkeypatch):
+    allocate = Mock()
+    monkeypatch.setattr("tabula_rasa.http.composition.Database", allocate)
+    settings = HttpSettings("production", "https://owner.example.test")
+    resolver = NamedIdentity(settings, Mock(), Mock())
+    with pytest.raises(RuntimeError, match="explicit named-user access mode"):
+        open_migrated_runtime(settings, resolve_context=resolver, entity_profiles={}, profile_secrets={})
+    allocate.assert_not_called()
+
+
+@pytest.mark.parametrize("named", [False, True])
+def test_shared_production_factory_validates_all_bindings_and_preserves_request_scopes(monkeypatch, named):
     from tabula_rasa.infrastructure.postgres.migrations import head_revision
 
     database = Mock()
@@ -103,12 +115,15 @@ def test_shared_production_factory_validates_all_bindings_and_preserves_request_
     secrets = {"bookkeeping_backends": {profile: {
         "backend": "postgres", "entity_id": profile, "mode": "rehearsal",
     } for profile in services}}
-    resolver = Mock()
-    runtime = open_migrated_runtime(HttpSettings("production", "https://owner.example.test"),
+    settings = HttpSettings("production", "https://owner.example.test",
+                            access_mode="named_user" if named else "restricted_alpha")
+    resolver = NamedIdentity(settings, Mock(), Mock()) if named else Mock()
+    runtime = open_migrated_runtime(settings,
         resolve_context=resolver, entity_profiles={profile: profile for profile in services},
         profile_secrets=secrets, database_settings=object())
     assert factory.call_count == 2
     assert runtime.resolve_context is resolver and runtime.ready()
+    assert runtime.identity is (resolver if named else None)
     for profile in services:
         context = RequestContext("actor", "org", profile, frozenset({"bookkeeping:read"}), "session", "csrf")
         assert runtime.services(context) is services[profile]

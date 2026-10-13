@@ -356,6 +356,15 @@ verification, not an email-only ownership reassignment or hidden app backdoor.
 
 ## Immutable context and authorization boundary (#313/#314)
 
+Implementation note (#311/#312): the maintainer's #310 recovery decision requires
+user credential changes/forced resets to revoke the affected user's sessions in
+all organizations, and provider/client/session configuration or key changes to
+revoke this environment's sessions. Owner-only recovery authority and the
+separate loopback operator surface remain intact. Concrete configuration,
+coordinated rotation and the additional logout-only HttpOnly CSRF cookie are
+documented in [Named-user authentication](../NAMED_USER_AUTH.md). These
+implementation notes do not replace #313's exhaustive action authorization.
+
 Reuse `http/context.py`, application-scoped `PostgresRuntime` and
 `create_app(runtime_factory=...)`. Resolve an authenticated session first.
 For an entity operation, join the requested canonical entity to its active
