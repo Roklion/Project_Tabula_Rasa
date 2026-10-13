@@ -1,3 +1,5 @@
+from base64 import b64decode, urlsafe_b64encode
+from hashlib import sha256
 import json
 from time import time
 from urllib.parse import parse_qs, urlsplit
@@ -71,8 +73,11 @@ def test_code_pkce_verified_identity_and_bounded_transport(oidc):
     result = provider.verify('synthetic-code', transaction)
     assert result.subject == 'alice'
     token_call = next(call for call in calls if call[0] == 'POST')
-    assert token_call[2]['data']['code_verifier'] == transaction.verifier
-    assert token_call[2]['auth'] == ('client', 'secret')
+    body = parse_qs(token_call[2]['data'])
+    assert body['code_verifier'] == [transaction.verifier]
+    assert body['grant_type'] == ['authorization_code']
+    assert body['redirect_uri'] == [provider.settings.callback]
+    assert b64decode(token_call[2]['headers']['Authorization'].split()[1]) == b'client:secret'
     assert all(call[2]['allow_redirects'] is False and call[2]['timeout'] == (3, 5) for call in calls)
     assert 'synthetic@example.test' not in repr(result)
 
@@ -111,17 +116,65 @@ def test_unknown_key_refresh_and_untrusted_endpoint_rejected(oidc):
             provider._endpoint(endpoint)
 
 
-@pytest.mark.parametrize('attack', ['algorithm', 'signature', 'unknown_key'])
+@pytest.mark.parametrize('attack', ['algorithm', 'signature', 'unknown_key', 'embedded_key', 'unsigned'])
 def test_algorithm_signature_and_unknown_key_fail_closed(oidc, attack):
     provider, transaction, claims, _, calls = oidc
     if attack == 'algorithm':
         token = jwt.encode(claims, 'synthetic-hmac-secret' * 3, algorithm='HS256', headers={'kid': 'key'})
+    elif attack == 'unsigned':
+        token = jwt.encode(claims, key=None, algorithm='none', headers={'kid': 'key'})
     else:
         key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-        token = jwt.encode(claims, key, algorithm='RS256', headers={'kid': 'foreign' if attack == 'unknown_key' else 'key'})
+        headers = {'kid': 'foreign' if attack == 'unknown_key' else 'key'}
+        if attack == 'embedded_key':
+            headers['jwk'] = json.loads(jwt.algorithms.RSAAlgorithm.to_jwk(key.public_key()))
+        token = jwt.encode(claims, key, algorithm='RS256', headers=headers)
     provider.transport.token_override = token
     with pytest.raises(IdentityError) as caught:
         provider.verify('code', transaction)
     assert caught.value.code == 'unauthorized' and caught.value.__context__ is None
     if attack == 'unknown_key':
         assert sum(url.endswith('/keys') for _, url, _ in calls) == 2
+
+
+@pytest.mark.parametrize('field,required', [
+    ('id_token_signing_alg_values_supported', 'RS256'),
+    ('code_challenge_methods_supported', 'S256'),
+    ('token_endpoint_auth_methods_supported', 'client_secret_basic'),
+])
+@pytest.mark.parametrize('invalid', [None, 7, True, 'substring', [], [None], ['unsupported']])
+def test_discovery_capabilities_require_arrays_of_strings(oidc, field, required, invalid):
+    provider, transaction, _, _, _ = oidc
+    original = provider._json
+    def malformed(method, url, **kwargs):
+        data = original(method, url, **kwargs)
+        if url.endswith('openid-configuration'):
+            data[field] = required if invalid == 'substring' else invalid
+        return data
+    provider._json = malformed
+    with pytest.raises(IdentityError) as caught:
+        provider.authorization_url(transaction)
+    assert caught.value.code == 'unavailable'
+    assert provider._metadata is None
+
+
+def test_authlib_valid_hash_multi_audience_and_exchange_isolation(oidc):
+    provider, transaction, claims, info, calls = oidc
+    claims.update(aud=['client', 'other'], azp='client',
+                  at_hash=urlsafe_b64encode(sha256(b'synthetic-access').digest()[:16]).rstrip(b'=').decode())
+    assert provider.verify('first-code', transaction).subject == 'alice'
+    claims['sub'] = info['sub'] = 'bob'
+    assert provider.verify('second-code', transaction).subject == 'bob'
+    token_calls = [call for call in calls if call[0] == 'POST']
+    assert [parse_qs(call[2]['data'])['code'] for call in token_calls] == [['first-code'], ['second-code']]
+    assert all(call[2]['headers']['Authorization'].startswith('Basic ') for call in token_calls)
+
+
+@pytest.mark.parametrize('change', [dict(nonce=None), dict(auth_time='recent'), dict(at_hash=''), dict(aud=None)])
+def test_authlib_rejects_malformed_claims(oidc, change):
+    provider, transaction, claims, _, _ = oidc
+    claims.update(change)
+    with pytest.raises(IdentityError) as caught:
+        provider.verify('code', transaction)
+    assert caught.value.code == 'unauthorized'
+    assert caught.value.__context__ is None

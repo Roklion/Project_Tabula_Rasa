@@ -40,6 +40,14 @@ remain operator checkpoints. No provider resource is provisioned by this code.
 
 ## Login and browser lifecycle
 
+The infrastructure adapter uses pinned Authlib 1.7.2 (BSD-3-Clause, Python 3.10+)
+and its joserfc 1.7.5 JOSE implementation. Authlib owns authorization-code/PKCE
+request preparation, client authentication, bearer UserInfo requests and OIDC
+claim validation. Each exchange owns a separate client; provider tokens are not
+shared between users. The adapter retains bounded transport, issuer-host endpoint
+restrictions and the application's freshness, subject and verified-email policy.
+PyJWT is a development-only independent signer for synthetic provider tests.
+
 `GET /api/v1/auth/login` starts a five-minute durable browser-bound one-time
 transaction. Return paths are only `/` and `/onboarding`. The code callback
 consumes it before exchange; failures require starting a new login. The server

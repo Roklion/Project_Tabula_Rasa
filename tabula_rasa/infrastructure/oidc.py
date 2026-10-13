@@ -1,18 +1,19 @@
 """Bounded OIDC code/PKCE verification; provider material never reaches services."""
 
-from base64 import urlsafe_b64encode
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from hashlib import sha256
-from hmac import compare_digest
 import json
 from math import isfinite
 from threading import RLock
 from time import time
-from urllib.parse import quote, urlencode, urlsplit
+from urllib.parse import urlsplit
 
-import jwt
 import requests
+from authlib.integrations.requests_client import OAuth2Session
+from authlib.oidc.core import CodeIDToken
+from joserfc import jwt
+from joserfc.jwk import RSAKey
 
 from tabula_rasa.application.identity import IdentityError, VerifiedIdentity
 
@@ -49,6 +50,24 @@ class OidcSettings:
         return cls(*(environment.get('TABULA_RASA_' + key, '') for key in
                      ('OIDC_ISSUER', 'OIDC_CLIENT_ID', 'OIDC_CLIENT_SECRET', 'SESSION_GENERATION')),
                    settings.environment, settings.public_origin)
+
+
+class _BoundedOAuthSession(OAuth2Session):
+    """Let Authlib prepare protocol requests; retain the existing I/O boundary."""
+    def __init__(self, provider):
+        settings = provider.settings
+        super().__init__(settings.client_id, settings.client_secret,
+                         redirect_uri=settings.callback, scope='openid email profile',
+                         token_endpoint_auth_method='client_secret_basic', code_challenge_method='S256')
+        self.trust_env = False
+        self.provider = provider
+
+    def send(self, request, **kwargs):
+        data = self.provider._json(request.method, request.url, headers=dict(request.headers), data=request.body)
+        response = requests.Response()
+        response.status_code = 200
+        response._content = json.dumps(data).encode()
+        return response
 
 
 class OidcProvider:
@@ -101,23 +120,23 @@ class OidcProvider:
                     if not isinstance(data.get(key), str):
                         raise IdentityError('unavailable')
                     self._endpoint(data[key])
-                if ('RS256' not in data.get('id_token_signing_alg_values_supported', [])
-                        or 'S256' not in data.get('code_challenge_methods_supported', [])
-                        or 'client_secret_basic' not in data.get('token_endpoint_auth_methods_supported', [])):
-                    raise IdentityError('unavailable')
+                for key, required in (('id_token_signing_alg_values_supported', 'RS256'),
+                                      ('code_challenge_methods_supported', 'S256'),
+                                      ('token_endpoint_auth_methods_supported', 'client_secret_basic')):
+                    values = data.get(key)
+                    if not isinstance(values, list) or not all(isinstance(value, str) for value in values) or required not in values:
+                        raise IdentityError('unavailable')
                 self._metadata, self._metadata_deadline = data, time() + 300
             return self._metadata
 
     def authorization_url(self, transaction):
-        challenge = urlsafe_b64encode(sha256(transaction.verifier.encode('ascii')).digest()).rstrip(b'=').decode()
-        return self.metadata()['authorization_endpoint'] + '?' + urlencode({
-            'client_id': self.settings.client_id, 'redirect_uri': self.settings.callback,
-            'response_type': 'code', 'scope': 'openid email profile', 'state': transaction.state,
-            'nonce': transaction.nonce, 'code_challenge': challenge, 'code_challenge_method': 'S256', 'max_age': '0',
-        })
+        with _BoundedOAuthSession(self) as client:
+            url, _ = client.create_authorization_url(self.metadata()['authorization_endpoint'],
+                state=transaction.state, nonce=transaction.nonce, code_verifier=transaction.verifier, max_age=0)
+            return url
 
-    def _key(self, token):
-        header = jwt.get_unverified_header(token)
+    def _key(self, signature):
+        header = signature.headers()
         if header.get('alg') != 'RS256' or not isinstance(header.get('kid'), str) or len(header['kid']) > 256:
             raise IdentityError('unauthorized')
         with self._lock:
@@ -131,40 +150,44 @@ class OidcProvider:
                            and key.get('kty') == 'RSA' and key.get('use', 'sig') == 'sig'
                            and key.get('alg', 'RS256') == 'RS256' and 'verify' in key.get('key_ops', ['verify'])]
                 if len(matches) == 1:
-                    return jwt.PyJWK.from_dict(matches[0], algorithm='RS256').key
+                    return RSAKey.import_key(matches[0])
         raise IdentityError('unauthorized')
 
     def verify(self, code, transaction):
         try:
             if not isinstance(code, str) or not 1 <= len(code) <= 4096:
                 raise IdentityError('unauthorized')
-            data = self._json('POST', self.metadata()['token_endpoint'],
-                auth=(quote(self.settings.client_id, safe=''), quote(self.settings.client_secret, safe='')),
-                data={'grant_type': 'authorization_code', 'code': code, 'redirect_uri': self.settings.callback,
-                      'code_verifier': transaction.verifier})
+            # Each exchange owns its client/token state; no user token is shared
+            # across callbacks or retained by the long-lived provider adapter.
+            with _BoundedOAuthSession(self) as client:
+                data = client.fetch_token(self.metadata()['token_endpoint'], grant_type='authorization_code',
+                    code=code, code_verifier=transaction.verifier)
             token, access = data.get('id_token'), data.get('access_token')
             if (not isinstance(token, str) or len(token) > 32768 or not isinstance(access, str)
                     or not access or len(access) > 32768 or data.get('token_type', '').lower() != 'bearer'):
                 raise IdentityError('unauthorized')
-            claims = jwt.decode(token, self._key(token), algorithms=['RS256'], issuer=self.settings.issuer,
-                audience=self.settings.client_id, leeway=60,
-                options={'require': ['iss', 'sub', 'aud', 'exp', 'iat', 'nonce', 'auth_time']})
+            decoded = jwt.decode(token, self._key, algorithms=['RS256'])
+            claims = CodeIDToken(decoded.claims, decoded.header,
+                options={'iss': {'essential': True, 'value': self.settings.issuer},
+                         'aud': {'essential': True, 'value': self.settings.client_id},
+                         'nonce': {'essential': True}, 'auth_time': {'essential': True}},
+                params={'client_id': self.settings.client_id, 'nonce': transaction.nonce, 'access_token': access})
+            claims.validate(leeway=60)
             for key in ('exp', 'iat', 'auth_time', 'nbf'):
                 if key in claims and (type(claims[key]) not in {int, float} or not isfinite(claims[key])):
                     raise IdentityError('unauthorized')
             now = time()
             if (not isinstance(claims['sub'], str) or not claims['sub'].strip() or len(claims['sub']) > 1024
-                    or not isinstance(claims['nonce'], str)
-                    or not compare_digest(claims['nonce'].encode(), transaction.nonce.encode())
                     or not now - 300 <= claims['auth_time'] <= now + 60
                     or (isinstance(claims['aud'], list) and len(claims['aud']) > 1 and 'azp' not in claims)
                     or ('azp' in claims and claims['azp'] != self.settings.client_id)):
                 raise IdentityError('unauthorized')
             if 'at_hash' in claims:
-                expected = urlsafe_b64encode(sha256(access.encode('ascii')).digest()[:16]).rstrip(b'=').decode()
-                if claims['at_hash'] != expected:
+                if not isinstance(claims['at_hash'], str) or not claims['at_hash']:
                     raise IdentityError('unauthorized')
-            info = self._json('GET', self.metadata()['userinfo_endpoint'], headers={'Authorization': 'Bearer ' + access})
+            with _BoundedOAuthSession(self) as client:
+                client.token = {'access_token': access, 'token_type': 'Bearer'}
+                info = client.get(self.metadata()['userinfo_endpoint']).json()
             if (info.get('sub') != claims['sub'] or info.get('email_verified') is not True
                     or not isinstance(info.get('email'), str) or not info['email'].strip() or len(info['email']) > 320):
                 raise IdentityError('unauthorized')

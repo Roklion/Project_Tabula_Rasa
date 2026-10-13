@@ -4,4 +4,5 @@ pydantic==2.13.5
 uvicorn==0.54.0
 pandas==2.3.3
 requests==2.34.2
-PyJWT[crypto]==2.15.1
+Authlib==1.7.2
+joserfc==1.7.5
