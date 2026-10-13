@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, ApiError, type Schemas } from '../../api/client';
@@ -52,6 +52,12 @@ function ReceiptWorkflow({ recordId, initialSource }: { recordId: string; initia
   const mixed = initialSource !== undefined;
   const back = mixed ? '/mixed-use/' + encodeURIComponent(recordId) : '/transactions';
   const backLabel = mixed ? 'Back to mixed-use expense' : 'Back to transactions';
+  const transport = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    transport.current = controller;
+    return () => { controller.abort(); transport.current = null; };
+  }, []);
   const operation = useProtectedMutation(session, (action: () => Promise<void>) => action());
   const [pending, setPending] = useState<PendingReceipt[]>([]);
   const [busy, setBusy] = useState(false);
@@ -99,10 +105,13 @@ function ReceiptWorkflow({ recordId, initialSource }: { recordId: string; initia
     finally { setReloading(false); }
   }
   async function transfer() {
+    const controller = transport.current;
+    if (!controller || controller.signal.aborted) return;
     setBusy(true); setFailure(undefined); setMessage('');
     const next = [...pending];
     try {
       for (let index = 0; index < next.length; index++) {
+        if (controller.signal.aborted) return;
         const item = { ...next[index] };
         if (item.linked) continue;
         item.error = undefined;
@@ -111,6 +120,9 @@ function ReceiptWorkflow({ recordId, initialSource }: { recordId: string; initia
             setPhase('Uploading ' + item.file.name + '…');
             item.document = await api.uploadDocument(session, item.id, item.file);
           }
+          // A confirmed upload survives scope loss as an unreferenced receipt.
+          // Do not continue linking/uploading after this private view unmounts.
+          if (controller.signal.aborted) return;
           setPhase('Linking ' + item.file.name + '…');
           await link(item.document.id);
           item.linked = true;
@@ -147,10 +159,12 @@ function ReceiptWorkflow({ recordId, initialSource }: { recordId: string; initia
   }
   async function download(doc: Schemas['Document']) {
     if (busy) return;
+    const controller = transport.current;
+    if (!controller || controller.signal.aborted) return;
     setBusy(true); setPhase('Downloading receipt…'); setFailure(undefined);
     try {
-      const content = await api.downloadDocument(session, doc.id);
-      downloadBlob(content, doc.filename);
+      const content = await api.downloadDocument(session, doc.id, controller.signal);
+      if (!controller.signal.aborted) downloadBlob(content, doc.filename);
     } catch (error) { setFailure(error); }
     finally { setBusy(false); setPhase(''); }
   }

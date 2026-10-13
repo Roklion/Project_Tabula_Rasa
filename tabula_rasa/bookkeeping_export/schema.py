@@ -12,8 +12,11 @@ FORMAT_VERSION = 1
 # A new database revision requires a completeness review for this format.
 # 0005 adds only operator authority/evidence, not bookkeeping fields. The v1
 # inventory remains complete; cutover controls are deployment records.
-SUPPORTED_DATABASE_REVISION = "0005_bookkeeping_cutover"
-SUPPORTED_DATABASE_REVISIONS = ("0004_mileage_order", SUPPORTED_DATABASE_REVISION)
+# Identity control-plane tables contain no canonical bookkeeping fields and
+# intentionally do not travel in entity exports or restore artifacts.
+SUPPORTED_DATABASE_REVISION = "0008_owner_lock_scope"
+SUPPORTED_DATABASE_REVISIONS = ("0004_mileage_order", "0005_bookkeeping_cutover",
+                                "0006_identity_control_plane", "0007_identity_sessions", SUPPORTED_DATABASE_REVISION)
 ROOT = "id:text created_at:instant updated_at:instant incarnation_id:text version:integer"
 
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useEntity } from './context';
 import styles from './Shell.module.css';
@@ -6,9 +6,11 @@ import styles from './Shell.module.css';
 import { entryRoutes, isEntryRoute, matchesRoute, mileageRoutes, navigation, referenceRoutes } from './navigation';
 import { WorkflowNav } from '../components/WorkflowNav';
 import { EntitySelector } from './EntitySelection';
+import { AuthContext } from './authContext';
 
 export function Shell() {
   const session = useEntity();
+  const auth = useContext(AuthContext);
   const location = useLocation();
   const workflowName = entryRoutes.find(route => matchesRoute(location.pathname, route.path))?.label;
   const [menu, setMenu] = useState({ location, open: false });
@@ -42,6 +44,7 @@ export function Shell() {
           : path === '/transactions' && isEntryRoute(location.pathname) ? 'true' : undefined}>{name}</Link>)}
       </nav>
       <p className={styles.footer}>Bookkeeping with clarity.</p>
+      {!session.trusted_development && <button onClick={auth.logout}>Sign out</button>}
     </aside>
     <div className={styles.content}>
       <header className={styles.topbar}><span>{workflowName ?? navigation.find(([path]) => matchesRoute(location.pathname, path))?.[1] ?? 'Page'}</span>

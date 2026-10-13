@@ -12,6 +12,13 @@ maintenance, activation and rollback procedure are documented in
 [Bookkeeping acceptance and cutover](BOOKKEEPING_CUTOVER.md). Forward revision
 `0005_bookkeeping_cutover` adds operator controls without rewriting the retained
 schema baseline or changing the canonical export v1 bookkeeping inventory.
+Identity revisions `0006_identity_control_plane` and `0007_identity_sessions`
+attach organization ownership to retained canonical entities and add durable
+authentication state without copying or rebaselining ledger records. Revision
+`0008_owner_lock_scope` narrows user owner locks to state updates/deletion,
+preserving membership and last-active-owner invariants. These revisions are
+forward-only: recover with an approved compatible procedure instead of a
+destructive identity downgrade. See [Named-user authentication](NAMED_USER_AUTH.md).
 
 ## Access and migration tools
 

@@ -36,11 +36,12 @@ def translate_database_errors():
 class PostgresRuntime:
     """One pool; compose a fresh service graph after resolving each request."""
 
-    def __init__(self, database, resolver, *, service_factory, maps=None):
+    def __init__(self, database, resolver, *, service_factory, maps=None, identity=None):
         self.database = database
         self.resolve_context = resolver
         self.service_factory = service_factory
         self.maps = maps
+        self.identity = identity
 
     def services(self, context) -> ApplicationServices:
         with translate_database_errors():
@@ -67,9 +68,15 @@ class PostgresRuntime:
         return health.get("connected") is True and health.get("revision") == head_revision()
 
     def close(self):
-        if self.maps is not None:
-            self.maps.close()
-        self.database.dispose()
+        try:
+            if self.identity is not None:
+                self.identity.close()
+        finally:
+            try:
+                if self.maps is not None:
+                    self.maps.close()
+            finally:
+                self.database.dispose()
 
 
 def open_runtime(settings):
@@ -85,12 +92,22 @@ def open_runtime(settings):
             from tabula_rasa.infrastructure.postgres.documents import PostgresReceiptRepository
             PostgresReceiptRepository(database, document_store.entity_id,
                 store_kind="google_drive", store_scope_key=document_store.scope_key).validate_binding()
+        identity = None
         resolver = (
             TrustedDevelopmentContext(settings.trusted_entity_id, secrets.token_urlsafe(32),
                                       hosted=settings.hosted_alpha,
                                       entity_ids=() if settings.hosted_alpha else ('beta-synthetic',))
             if settings.trusted_entity_id else DenyContext()
         )
+        if settings.access_mode == "named_user":
+            from tabula_rasa.infrastructure.oidc import OidcProvider, OidcSettings
+            from tabula_rasa.infrastructure.postgres.sessions import PostgresSessionRepository
+            from .identity import NamedIdentity
+            oidc = OidcSettings.from_environment(settings, dict(os.environ))
+            sessions = PostgresSessionRepository(database, settings.environment, oidc.configuration_hash)
+            sessions.configure()
+            identity = NamedIdentity(settings, sessions, OidcProvider(oidc))
+            resolver = identity
         def services(context):
             if document_store is None:
                 return create_postgres_services(database, context.entity_id)
@@ -101,7 +118,7 @@ def open_runtime(settings):
 
         from .maps import environment_maps
         runtime = PostgresRuntime(database, resolver, service_factory=services,
-                                  maps=environment_maps(dict(os.environ)))
+                                  maps=environment_maps(dict(os.environ)), identity=identity)
         if settings.trusted_entity_id:
             # Only explicit seed tooling creates synthetic entities.
             for context in resolver.contexts:
@@ -125,6 +142,9 @@ def open_migrated_runtime(settings, *, resolve_context, entity_profiles, profile
     """
     if settings.trusted_entity_id or not callable(resolve_context):
         raise RuntimeError("Migrated runtime requires an explicit authorization resolver without fixture context.")
+    from .identity import NamedIdentity
+    if isinstance(resolve_context, NamedIdentity) and settings.access_mode != "named_user":
+        raise RuntimeError("Named identity requires explicit named-user access mode.")
     from .migrated import MigratedProfileServices
 
     database = None
@@ -134,7 +154,8 @@ def open_migrated_runtime(settings, *, resolve_context, entity_profiles, profile
         services.validate()
         from .maps import load_mileage_maps
         runtime = PostgresRuntime(database, resolve_context, service_factory=services,
-                                  maps=load_mileage_maps(profile_secrets))
+                                  maps=load_mileage_maps(profile_secrets),
+                                  identity=resolve_context if isinstance(resolve_context, NamedIdentity) else None)
         if not runtime.ready():
             raise RuntimeError("The migrated database is not ready.")
         return runtime

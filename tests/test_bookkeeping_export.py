@@ -123,7 +123,8 @@ def test_manifest_rejects_unsupported_versions_dates_and_byte_boundary():
             validate_artifact(changed, entity_id="alpha")
 
 
-@pytest.mark.parametrize("revision", ["0004_mileage_order", "0005_bookkeeping_cutover"])
+@pytest.mark.parametrize("revision", ["0004_mileage_order", "0005_bookkeeping_cutover",
+                                      "0006_identity_control_plane", "0007_identity_sessions", "0008_owner_lock_scope"])
 def test_control_plane_revision_preserves_the_existing_v1_portable_inventory(revision):
     from jsonschema import Draft202012Validator
     from tabula_rasa.bookkeeping_export.schema import json_schema

@@ -125,7 +125,7 @@ jobs:
           docker run --rm tabula-commercial:ci python -c 'import sys; from tabula_rasa.http.app import create_app; from tabula_rasa.http.alpha_documents import load_alpha_document_store; create_app(schema_only=True).openapi(); assert not {"streamlit", "gspread", "tabula_rasa.storage"}.intersection(sys.modules)'
       - run: python -m playwright install --with-deps chromium firefox webkit
       - name: Run native browser concurrency and core workflow tests
-        run: python -m pytest tests/postgres/test_browser_baselines.py tests/postgres/test_browser_workflows.py tests/postgres/test_browser_quality.py tests/postgres/test_browser_mileage_documents.py tests/postgres/test_browser_secondary.py tests/postgres/test_browser_alpha.py tests/postgres/test_browser_workflow_ports.py --junitxml=browser-results.xml
+        run: python -m pytest tests/postgres/test_browser_baselines.py tests/postgres/test_browser_workflows.py tests/postgres/test_browser_quality.py tests/postgres/test_browser_mileage_documents.py tests/postgres/test_browser_secondary.py tests/postgres/test_browser_alpha.py tests/postgres/test_browser_workflow_ports.py tests/postgres/test_identity_browser.py --junitxml=browser-results.xml
         env:
           TABULA_RASA_REQUIRE_BROWSER_TESTS: '1'
       - name: Upload bounded browser gate results
