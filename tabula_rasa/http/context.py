@@ -6,6 +6,9 @@ from typing import Protocol
 
 from fastapi import Request
 
+from tabula_rasa.application.authorization import authorize_action
+from tabula_rasa.application.identity import IdentityError
+
 from .errors import TransportError
 
 
@@ -36,7 +39,7 @@ class TrustedDevelopmentContext:
         self.hosted = hosted
         self.context = RequestContext(
             "synthetic-operator", "synthetic", entity_id,
-            frozenset({"bookkeeping:read", "bookkeeping:write"}),
+            frozenset({"bookkeeping:read", "bookkeeping:write", "bookkeeping:import"}),
             "development:" + entity_id, csrf_token, True,
         )
         from dataclasses import replace
@@ -61,22 +64,48 @@ class TrustedDevelopmentContext:
         return self.contexts
 
 
+def require_named_resolver(request):
+    runtime = request.app.state.runtime
+    settings = request.app.state.settings
+    # Commercial composition cannot replace membership resolution with a lambda
+    # returning a plausible non-synthetic context.
+    if settings.environment == 'production' or settings.access_mode == 'named_user':
+        from .identity import NamedIdentity
+        if (not isinstance(runtime.resolve_context, NamedIdentity)
+                or getattr(runtime, 'identity', None) is not runtime.resolve_context
+                or runtime.identity.settings != settings):
+            request.state.security_event = 'authorization_denied'
+            raise TransportError('forbidden')
+
+
 def resolve_context(request: Request) -> RequestContext:
-    context = request.app.state.runtime.resolve_context(request)
+    require_named_resolver(request)
+    runtime = request.app.state.runtime
+    settings = request.app.state.settings
+    context = getattr(request.state, 'authorized_context', None)
+    if context is None:
+        context = runtime.resolve_context(request)
     if not isinstance(context, RequestContext):
         raise TransportError("unauthorized")
-    settings = request.app.state.settings
     if context.trusted_development and (settings.environment == "production" or settings.access_mode == "named_user"):
         raise TransportError("forbidden")
     requested = request.path_params.get("entity_id")
     if requested is not None and requested != context.entity_id:
+        request.state.security_event = 'authorization_denied'
         raise TransportError("forbidden")
     unsafe = request.method not in {"GET", "HEAD", "OPTIONS"}
-    capability = "bookkeeping:write" if unsafe else "bookkeeping:read"
-    if capability not in context.capabilities:
-        raise TransportError("forbidden")
+    from .authorization import route_policy
+    # Middleware preflight and API documentation have no matched APIRoute yet;
+    # they may inspect context, but the handler guard must still check its action.
+    action = route_policy(request).action if request.scope.get('route') is not None else 'read'
+    try:
+        authorize_action(context.capabilities, action)
+    except IdentityError:
+        request.state.security_event = 'authorization_denied'
+        raise TransportError('forbidden') from None
     if unsafe:
         require_csrf(request, context.csrf_token)
+    request.state.authorized_context = context
     return context
 
 
@@ -84,4 +113,5 @@ def require_csrf(request, expected):
     csrf = request.headers.get("x-csrf-token", "")
     if (request.headers.get("origin", "") != request.app.state.settings.public_origin
             or not csrf or not expected or not compare_digest(csrf.encode(), expected.encode())):
+        request.state.security_event = 'authorization_denied'
         raise TransportError("forbidden")

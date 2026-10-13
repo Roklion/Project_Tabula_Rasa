@@ -15,7 +15,12 @@ capability.
 ## Imports in Data & backup
 
 **Data & backup** (`/data`) has independent uploaders for Tabula Rasa transactions,
-QuickBooks transactions and QuickBooks mileage. Staging a file does not write.
+QuickBooks transactions and QuickBooks mileage. Preparation, preview and import
+require the selected business's import grant (Owner, Admin or Accountant), in
+addition to read/write access. Editor access alone does not expose uploaders.
+The existing restricted synthetic development context also permits imports;
+its loopback/hosted gate and prohibition on migrated profiles remain in force.
+Staging a file does not write.
 Source tables show at most 20 Tabula Rasa CSV rows or 50 QuickBooks rows.
 Changing files/options invalidates their earlier preparation. An explicit import
 action commits only the selected file to the selected business. Files are UTF-8

@@ -11,9 +11,9 @@ export function DataBackupPage() {
   const [mileageDirty, setMileageDirty] = useState(false);
   return <><PageHeader title="Data & backup" description={<>Imports for {session.entity.name}.</>} />
     <UnsavedChanges dirty={transactionDirty || mileageDirty} />
-    {session.capabilities.includes('bookkeeping:write') ? <>
+    {['bookkeeping:read', 'bookkeeping:write', 'bookkeeping:import'].every(capability => session.capabilities.includes(capability)) ? <>
       <TransactionImportsPage onDirtyChange={setTransactionDirty} />
       <MileageImport onDirtyChange={setMileageDirty} />
-    </> : <p>Importing requires write access to this business.</p>}
+    </> : <p>Importing requires import access to this business (Owner, Admin or Accountant).</p>}
   </>;
 }

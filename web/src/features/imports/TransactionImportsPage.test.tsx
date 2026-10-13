@@ -43,6 +43,17 @@ it('keeps uploaders independent and performs writes only from explicit import ac
   await waitFor(() => expect(importQb).toHaveBeenCalledWith(session, file, true));
 });
 
+it('withholds all uploaders when ordinary write access lacks import permission', async () => {
+  vi.mocked(api.session).mockResolvedValue({ ...session, capabilities: ['bookkeeping:read', 'bookkeeping:write'] });
+  const prepare = vi.spyOn(api, 'prepareTransactionCsv');
+  render(<RouterProvider router={createTestRouter(['/data'])} />);
+  expect(await screen.findByText('Importing requires import access to this business (Owner, Admin or Accountant).')).toBeVisible();
+  expect(screen.queryByLabelText('Transaction CSV file')).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('QuickBooks export')).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('QuickBooks mileage CSV')).not.toBeInTheDocument();
+  expect(prepare).not.toHaveBeenCalled();
+});
+
 it('blocks conversion errors and invalid rows while retaining source diagnostics', async () => {
   const importQb = vi.spyOn(api, 'importQuickBooksTransactions');
   vi.spyOn(api, 'previewQuickBooksTransactions').mockResolvedValue({ ...qb,

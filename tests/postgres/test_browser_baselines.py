@@ -28,7 +28,7 @@ def document_store():
 @pytest.fixture
 def browser_resolver():
     # Explicit loopback fixture: no named session/activity endpoint is composed.
-    context = RequestContext('actor', 'org', 'alpha', frozenset({'bookkeeping:read', 'bookkeeping:write'}),
+    context = RequestContext('actor', 'org', 'alpha', frozenset({'bookkeeping:read', 'bookkeeping:write', 'bookkeeping:import'}),
                              'browser-scope', 'csrf', trusted_development=True)
     return lambda request: context
 

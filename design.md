@@ -467,7 +467,9 @@ edition.
 
 **Current behavior — existing workflow ports (#357/#358/#362/#364):** Data &
 backup contains separate Tabula Rasa CSV, QuickBooks transaction and QuickBooks
-mileage uploaders, scoped to the selected business. File preparation/preview is
+mileage uploaders, scoped to the selected business. Uploaders require read, write
+and import access (Owner, Admin or Accountant); Editor access alone is insufficient.
+File preparation/preview is
 read-only; explicit commands submit the selected source again for fresh validation.
 Tabula Rasa CSV preserves its first-20-source-row presentation and Income/Expense
 contract. QuickBooks transactions preserve CSV/General Ledger XLSX/ZIP conversion,

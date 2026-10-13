@@ -35,7 +35,7 @@ def test_quickbooks_preview_has_no_writes_and_commit_preserves_duplicates_transf
     transfers = [row for row in alpha.transactions.list() if row["kind"] == "Transfer"]
     assert len(transfers) == 1 and transfers[0]["to_account_id"] == "bank" and transfers[0]["category_id"] == ""
     # Equal source batches in a separately authorized entity retain their own identities.
-    beta_context = RequestContext("actor", "org", "beta", frozenset({"bookkeeping:read", "bookkeeping:write"}), "beta-scope", "csrf")
+    beta_context = RequestContext("actor", "org", "beta", frozenset({"bookkeeping:read", "bookkeeping:write", "bookkeeping:import"}), "beta-scope", "csrf")
     other.app.state.runtime.resolve_context = lambda request: beta_context
     beta_result = other.post(PREFIX.replace("/alpha/", "/beta/") + "imports/quickbooks", headers=UPLOAD_HEADERS,
                              content=content, params={"filename": "transactions.csv"})
