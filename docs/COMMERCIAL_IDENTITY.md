@@ -10,6 +10,10 @@ child ticket. This guide owns the operator checklist, threat acceptance cases
 and handoff. **Selection is documented; real identity is not implemented or
 hosted-verified by #310.**
 
+The #311/#312 local implementation and deployment/revocation procedure are in
+[Named-user authentication](NAMED_USER_AUTH.md). Native and synthetic-provider
+evidence does not replace the #313 action-policy or #321 hosted rollout gates.
+
 ## Stages and migration boundary
 
 | Mode | Allowed identity/data boundary | Exit or transition requirement |
@@ -40,8 +44,10 @@ No new session or identity provider can silently activate PostgreSQL authority
 or restore stale Sheets after target divergence.
 
 #312/#321 must introduce an explicit access mode contract:
-`restricted_alpha` versus `named`; missing/unknown mode denies startup.
-Production only permits `named`. Named mode rejects every alpha credential,
+`restricted_alpha` versus `named_user`; unknown mode denies startup.
+Named hosted deployments must explicitly select `named_user`; the existing
+restricted-alpha compatibility default is not a production admission gate.
+Named mode rejects every alpha credential,
 trusted entity, synthetic resolver and alpha-only document configuration,
 including on hosted development/staging. Existing `HttpSettings` currently
 requires alpha configuration on hosted dev/staging: extend that validation for
@@ -116,7 +122,7 @@ uses synthetic names, safe statuses and release/check IDs only.
 
 | Future setting / registration | Contract and owner |
 | --- | --- |
-| `TABULA_RASA_ACCESS_MODE` | #312/#321: explicit `named` or `restricted_alpha`, with the fail-closed stage rules above. |
+| `TABULA_RASA_ACCESS_MODE` | #312/#321: explicit `named_user` or `restricted_alpha`, with the stage rules above. |
 | `TABULA_RASA_PUBLIC_ORIGIN` | Existing exact origin, e.g. synthetic `https://stage.example.test`; loopback development uses `http://127.0.0.1:5173`. No path/trailing slash. |
 | `TABULA_RASA_OIDC_ISSUER` | #312: exact operator-approved environment issuer; use its verified discovery endpoints, never a browser-selected URL. |
 | `TABULA_RASA_OIDC_CLIENT_ID` / `TABULA_RASA_OIDC_CLIENT_SECRET` | #312: dedicated environment Web client; secret is server-only and hidden in settings repr/errors. |
@@ -135,6 +141,8 @@ organizations; environment-wide identity/session security or trusted provider
 key changes revoke affected sessions within that environment. Require fresh
 login, preserve unrelated users/environment isolation, and verify revocation
 through the ADR's coordinated operator or authenticated provider-event path.
+The implemented path requires a coordinated worker restart; see
+[rotation and recovery](NAMED_USER_AUTH.md#revocation-and-owner-recovery).
 Issuer/client changes require reauthentication and explicit binding migration;
 never remap existing users by email. Restoring PostgreSQL/control-plane state
 must invalidate restored sessions/login transactions before ingress reopens

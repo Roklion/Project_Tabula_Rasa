@@ -65,6 +65,9 @@ def resolve_context(request: Request) -> RequestContext:
     context = request.app.state.runtime.resolve_context(request)
     if not isinstance(context, RequestContext):
         raise TransportError("unauthorized")
+    settings = request.app.state.settings
+    if context.trusted_development and (settings.environment == "production" or settings.access_mode == "named_user"):
+        raise TransportError("forbidden")
     requested = request.path_params.get("entity_id")
     if requested is not None and requested != context.entity_id:
         raise TransportError("forbidden")
@@ -73,10 +76,12 @@ def resolve_context(request: Request) -> RequestContext:
     if capability not in context.capabilities:
         raise TransportError("forbidden")
     if unsafe:
-        origin = request.headers.get("origin", "")
-        csrf = request.headers.get("x-csrf-token", "")
-        if (origin != request.app.state.settings.public_origin
-                or not csrf or not context.csrf_token
-                or not compare_digest(csrf.encode(), context.csrf_token.encode())):
-            raise TransportError("forbidden")
+        require_csrf(request, context.csrf_token)
     return context
+
+
+def require_csrf(request, expected):
+    csrf = request.headers.get("x-csrf-token", "")
+    if (request.headers.get("origin", "") != request.app.state.settings.public_origin
+            or not csrf or not expected or not compare_digest(csrf.encode(), expected.encode())):
+        raise TransportError("forbidden")
